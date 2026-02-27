@@ -358,6 +358,7 @@ dependencies {
     implementation 'io.reactivex.rxjava3:rxjava:3.1.12'
     implementation 'com.github.pircbotx:pircbotx:2.3.1'
     implementation 'com.github.ben-manes.caffeine:caffeine'
+    implementation 'it.unimi.dsi:fastutil:8.5.18'
 
     implementation "io.github.andrewauclair:modern-docking-api:1.4.1"
     implementation "io.github.andrewauclair:modern-docking-single-app:1.4.1"
@@ -489,10 +490,64 @@ tasks.register('pitestIgnoreCompatibility', JavaExec) {
     }
 }
 
+tasks.register('pitestExecutorLifecycle', JavaExec) {
+    group = 'verification'
+    description = 'Runs PIT mutation checks for executor ownership and lifecycle shutdown paths.'
+    dependsOn(tasks.named('testClasses'))
+    classpath = configurations.mutationTestTool
+    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
+
+    def reportDirProvider = layout.buildDirectory.dir('reports/pitest/executor-lifecycle')
+    inputs.files(sourceSets.main.output, sourceSets.test.output, configurations.testRuntimeClasspath)
+    outputs.dir(reportDirProvider)
+
+    doFirst {
+        String testClasspath =
+            files(
+                sourceSets.main.output,
+                sourceSets.test.output,
+                sourceSets.main.runtimeClasspath,
+                sourceSets.test.runtimeClasspath
+            ).asPath
+        String mutableCodePaths =
+            sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
+        args = [
+            "--reportDir=${reportDirProvider.get().asFile.absolutePath}",
+            '--outputFormats=HTML,XML',
+            '--targetClasses=cafe.woden.ircclient.config.ExecutorConfig*',
+            '--targetClasses=cafe.woden.ircclient.util.VirtualThreads*',
+            '--targetClasses=cafe.woden.ircclient.util.RxVirtualSchedulers*',
+            '--targetClasses=cafe.woden.ircclient.ui.logviewer.LogViewerPanel',
+            '--targetClasses=cafe.woden.ircclient.ui.interceptors.InterceptorPanel',
+            '--targetClasses=cafe.woden.ircclient.ui.settings.PreferencesDialog',
+            '--targetClasses=cafe.woden.ircclient.ui.MessageInputSpellcheckLifecycle',
+            '--targetClasses=cafe.woden.ircclient.irc.ZncPlaybackCaptureCoordinator',
+            '--targetClasses=cafe.woden.ircclient.irc.ZncPlaybackCaptureLifecycle',
+            '--targetTests=cafe.woden.ircclient.config.ExecutorConfigTest*',
+            '--targetTests=cafe.woden.ircclient.config.ExecutorConfigIntegrationTest*',
+            '--targetTests=cafe.woden.ircclient.util.VirtualThreadsLifecycleTest*',
+            '--targetTests=cafe.woden.ircclient.util.VirtualThreadsLifecycleIntegrationTest*',
+            '--targetTests=cafe.woden.ircclient.util.RxVirtualSchedulersLifecycleIntegrationTest*',
+            '--targetTests=cafe.woden.ircclient.ui.logviewer.LogViewerPanelExecutorLifecycleTest*',
+            '--targetTests=cafe.woden.ircclient.ui.interceptors.InterceptorPanelExecutorLifecycleTest*',
+            '--targetTests=cafe.woden.ircclient.ui.settings.PreferencesDialogConstructorTest*',
+            '--targetTests=cafe.woden.ircclient.ui.MessageInputSpellcheckLifecycleIntegrationTest*',
+            '--targetTests=cafe.woden.ircclient.irc.ZncPlaybackCaptureLifecycleIntegrationTest*',
+            "--sourceDirs=${file('src/main/java').absolutePath}",
+            "--mutableCodePaths=${mutableCodePaths}",
+            "--classPath=${testClasspath}",
+            '--threads=4',
+            '--testPlugin=junit5',
+            '--verbose=true',
+            '--failWhenNoMutations=false'
+        ]
+    }
+}
+
 tasks.register('mutationTest') {
     group = 'verification'
     description = 'Alias for focused PIT mutation checks.'
-    dependsOn(tasks.named('pitestIgnoreCompatibility'))
+    dependsOn(tasks.named('pitestIgnoreCompatibility'), tasks.named('pitestExecutorLifecycle'))
 }
 
 tasks.register('themeValidate', Test) {

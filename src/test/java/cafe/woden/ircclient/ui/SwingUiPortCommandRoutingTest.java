@@ -122,16 +122,30 @@ class SwingUiPortCommandRoutingTest {
         .when(transcripts)
         .closeTarget(target);
 
+    doAnswer(
+            inv -> {
+              record("chat.onTargetClosed", steps, onEdtByStep);
+              return null;
+            })
+        .when(chat)
+        .onTargetClosed(target);
+
     Thread caller = new Thread(() -> ui.closeTarget(target), "ui-port-caller-close");
     caller.start();
     caller.join();
     flushEdt();
 
     assertEquals(
-        List.of("serverTree.removeTarget", "chat.clearTopic", "transcripts.closeTarget"), steps);
+        List.of(
+            "serverTree.removeTarget",
+            "chat.clearTopic",
+            "transcripts.closeTarget",
+            "chat.onTargetClosed"),
+        steps);
     assertEquals(Boolean.TRUE, onEdtByStep.get("serverTree.removeTarget"));
     assertEquals(Boolean.TRUE, onEdtByStep.get("chat.clearTopic"));
     assertEquals(Boolean.TRUE, onEdtByStep.get("transcripts.closeTarget"));
+    assertEquals(Boolean.TRUE, onEdtByStep.get("chat.onTargetClosed"));
   }
 
   @Test

@@ -10,6 +10,7 @@ import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.model.RegexFlag;
 import cafe.woden.ircclient.model.RegexSpec;
 import cafe.woden.ircclient.model.TagSpec;
+import jakarta.annotation.PreDestroy;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
@@ -92,6 +93,13 @@ public class FilterEngine implements PropertyChangeListener {
     this.compiled = new AtomicReference<>(compile(bus != null ? bus.get() : null));
     if (this.bus != null) {
       this.bus.addListener(this);
+    }
+  }
+
+  @PreDestroy
+  void shutdown() {
+    if (bus != null) {
+      bus.removeListener(this);
     }
   }
 

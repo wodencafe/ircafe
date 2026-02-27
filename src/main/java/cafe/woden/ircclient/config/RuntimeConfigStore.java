@@ -4228,6 +4228,128 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberChatHistoryAutoLoadWheelDebounceMs(int debounceMs) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(100, Math.min(30_000, debounceMs));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryAutoLoadWheelDebounceMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history wheel debounce setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryLoadOlderChunkSize(int chunkSize) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(1, Math.min(500, chunkSize));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryLoadOlderChunkSize", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history load-older chunk-size setting to '{}'",
+          file,
+          e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryLoadOlderChunkDelayMs(int chunkDelayMs) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(0, Math.min(1_000, chunkDelayMs));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryLoadOlderChunkDelayMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history load-older chunk-delay setting to '{}'",
+          file,
+          e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryRemoteRequestTimeoutSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(1, Math.min(120, seconds));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryRemoteRequestTimeoutSeconds", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history remote-timeout setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryRemoteZncPlaybackTimeoutSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(1, Math.min(300, seconds));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryRemoteZncPlaybackTimeoutSeconds", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history remote ZNC-timeout setting to '{}'",
+          file,
+          e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryRemoteZncPlaybackWindowMinutes(int minutes) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(1, Math.min(1440, minutes));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryRemoteZncPlaybackWindowMinutes", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history remote ZNC window setting to '{}'",
+          file,
+          e);
+    }
+  }
+
   public synchronized void rememberCommandHistoryMaxSize(int maxSize) {
     try {
       if (file.toString().isBlank()) return;
@@ -4245,6 +4367,28 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist command history max size setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatTranscriptMaxLinesPerTarget(int maxLines) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(0, maxLines);
+      if (v > 200_000) v = 200_000;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatTranscriptMaxLinesPerTarget", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat transcript max-lines-per-target setting to '{}'",
+          file,
+          e);
     }
   }
 

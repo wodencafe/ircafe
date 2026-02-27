@@ -12,15 +12,14 @@ import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState.QueryMode;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.jmolecules.architecture.layered.ApplicationLayer;
@@ -32,8 +31,10 @@ import org.springframework.stereotype.Component;
 public class MediatorHistoryIngestOrchestrator {
   private static final Duration LIVE_REQUEST_MAX_AGE = Duration.ofMinutes(2);
   private static final String HISTORY_STATUS_TAG = "(history)";
-  private static final int HISTORY_RENDER_DEDUP_MAX = 50_000;
+  private static final int HISTORY_RENDER_DEDUP_MAX = 20_000;
   private static final long HISTORY_RENDER_DEDUP_TTL_MS = 10L * 60L * 1000L;
+  private static final long TEXT_FINGERPRINT_SEED = 0xcbf29ce484222325L;
+  private static final long TEXT_FINGERPRINT_PRIME = 0x100000001b3L;
 
   private final UiPort ui;
   private final ChatHistoryIngestionPort chatHistoryIngestionPort;
@@ -43,9 +44,11 @@ public class MediatorHistoryIngestOrchestrator {
   private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState;
   private final ChatTranscriptHistoryPort transcripts;
   private final IrcClientService irc;
-  private final Object historyRenderDedupLock = new Object();
-  private final LinkedHashMap<HistoryRenderKey, Long> recentRenderedHistory =
-      new LinkedHashMap<>(512, 0.75f, true);
+  private final Cache<HistoryRenderKey, Boolean> recentRenderedHistory =
+      Caffeine.newBuilder()
+          .maximumSize(HISTORY_RENDER_DEDUP_MAX)
+          .expireAfterAccess(Duration.ofMillis(HISTORY_RENDER_DEDUP_TTL_MS))
+          .build();
 
   public MediatorHistoryIngestOrchestrator(
       UiPort ui,
@@ -350,37 +353,8 @@ public class MediatorHistoryIngestOrchestrator {
 
   private boolean alreadyRenderedRecently(TargetRef target, HistoryFingerprint fp) {
     if (target == null || fp == null) return false;
-    long now = System.currentTimeMillis();
     HistoryRenderKey key = new HistoryRenderKey(target, fp);
-    synchronized (historyRenderDedupLock) {
-      pruneHistoryRenderDedup(now);
-      Long prev = recentRenderedHistory.get(key);
-      if (prev != null) {
-        recentRenderedHistory.put(key, now);
-        return true;
-      }
-      recentRenderedHistory.put(key, now);
-      while (recentRenderedHistory.size() > HISTORY_RENDER_DEDUP_MAX) {
-        Iterator<HistoryRenderKey> it = recentRenderedHistory.keySet().iterator();
-        if (!it.hasNext()) break;
-        it.next();
-        it.remove();
-      }
-      return false;
-    }
-  }
-
-  private void pruneHistoryRenderDedup(long now) {
-    Iterator<Map.Entry<HistoryRenderKey, Long>> it = recentRenderedHistory.entrySet().iterator();
-    while (it.hasNext()) {
-      Map.Entry<HistoryRenderKey, Long> e = it.next();
-      Long seenAt = e.getValue();
-      if (seenAt != null && (now - seenAt) > HISTORY_RENDER_DEDUP_TTL_MS) {
-        it.remove();
-        continue;
-      }
-      break;
-    }
+    return recentRenderedHistory.asMap().putIfAbsent(key, Boolean.TRUE) != null;
   }
 
   private record LiveRenderResult(TargetRef target, int displayedCount) {}
@@ -388,15 +362,26 @@ public class MediatorHistoryIngestOrchestrator {
   private record HistoryRenderKey(TargetRef target, HistoryFingerprint fingerprint) {}
 
   private record HistoryFingerprint(
-      long tsEpochMs, ChatHistoryEntry.Kind kind, String from, String text) {
+      long tsEpochMs, ChatHistoryEntry.Kind kind, String from, long textFingerprint, int textLength) {
     static HistoryFingerprint from(ChatHistoryEntry entry) {
       if (entry == null) {
-        return new HistoryFingerprint(0L, ChatHistoryEntry.Kind.PRIVMSG, "", "");
+        return new HistoryFingerprint(0L, ChatHistoryEntry.Kind.PRIVMSG, "", 0L, 0);
       }
       long ts = entry.at() == null ? 0L : entry.at().toEpochMilli();
       ChatHistoryEntry.Kind k = entry.kind() == null ? ChatHistoryEntry.Kind.PRIVMSG : entry.kind();
+      String text = Objects.toString(entry.text(), "");
       return new HistoryFingerprint(
-          ts, k, Objects.toString(entry.from(), ""), Objects.toString(entry.text(), ""));
+          ts, k, Objects.toString(entry.from(), ""), computeTextFingerprint(text), text.length());
     }
+  }
+
+  private static long computeTextFingerprint(String text) {
+    String value = Objects.toString(text, "");
+    long hash = TEXT_FINGERPRINT_SEED;
+    for (int i = 0; i < value.length(); i++) {
+      hash ^= value.charAt(i);
+      hash *= TEXT_FINGERPRINT_PRIME;
+    }
+    return hash;
   }
 }

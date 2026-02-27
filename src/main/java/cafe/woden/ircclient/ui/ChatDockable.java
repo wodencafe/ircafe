@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UserActionRequest;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
@@ -40,12 +41,14 @@ import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
 import java.awt.*;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
 import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -63,6 +66,7 @@ import org.springframework.stereotype.Component;
 public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public static final String ID = "chat";
+  private static final int MAX_DRAFT_TARGETS = 512;
 
   private final ServerTreeDockable serverTree;
 
@@ -81,7 +85,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final FlowableProcessor<PrivateMessageRequest> openPrivate =
       PublishProcessor.<PrivateMessageRequest>create().toSerialized();
 
-  private final Map<TargetRef, String> draftByTarget = new HashMap<>();
+  private final Map<TargetRef, String> draftByTarget =
+      new LinkedHashMap<>(256, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<TargetRef, String> eldest) {
+          return size() > MAX_DRAFT_TARGETS;
+        }
+      };
 
   // Center content swaps between transcript and UI-only per-server views.
   private final JPanel centerCards = new JPanel(new CardLayout());
@@ -165,7 +175,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       SpringRuntimeEventsService springRuntimeEventsService,
       UiSettingsBus settingsBus,
       SpellcheckSettingsBus spellcheckSettingsBus,
-      CommandHistoryStore commandHistoryStore) {
+      CommandHistoryStore commandHistoryStore,
+      @Qualifier(ExecutorConfig.UI_LOG_VIEWER_EXECUTOR) ExecutorService logViewerExecutor,
+      @Qualifier(ExecutorConfig.UI_INTERCEPTOR_REFRESH_EXECUTOR)
+          ExecutorService interceptorRefreshExecutor) {
     super(settingsBus);
 
     this.serverTree = serverTree;
@@ -211,7 +224,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             monitorListService,
             dccTransferStore,
             chatLogViewerService,
-            activationBus);
+            activationBus,
+            logViewerExecutor,
+            interceptorRefreshExecutor);
     this.notificationsPanel = centerViewBundle.notificationsPanel();
     this.ignoresPanel = centerViewBundle.ignoresPanel();
 
@@ -357,7 +372,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       MonitorListService monitorListService,
       DccTransferStore dccTransferStore,
       ChatLogViewerService chatLogViewerService,
-      TargetActivationBus activationBus) {
+      TargetActivationBus activationBus,
+      ExecutorService logViewerExecutor,
+      ExecutorService interceptorRefreshExecutor) {
     NotificationsPanel notificationsPanel = createNotificationsPanel(notificationStore);
     ChatChannelListCoordinator channelListCoordinator =
         createChannelListCoordinator(serverTree, outboundBus, userListStore, usersDock);
@@ -367,9 +384,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     DccTransfersPanel dccTransfersPanel =
         createDccTransfersPanel(dccTransferStore, activationBus, outboundBus);
     configureMonitorPanelCommandEmission(activationBus, outboundBus);
-    LogViewerPanel logViewerPanel = createLogViewerPanel(chatLogViewerService);
+    LogViewerPanel logViewerPanel = createLogViewerPanel(chatLogViewerService, logViewerExecutor);
     IgnoresPanel ignoresPanel = createIgnoresPanel(ignoreListDialog);
-    InterceptorPanel interceptorPanel = new InterceptorPanel(this.interceptorStore);
+    InterceptorPanel interceptorPanel =
+        new InterceptorPanel(this.interceptorStore, interceptorRefreshExecutor);
     ChatInterceptorCoordinator interceptorCoordinator =
         createInterceptorCoordinator(interceptorPanel);
     interceptorCoordinator.bind(disposables);
@@ -675,13 +693,15 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         });
   }
 
-  private LogViewerPanel createLogViewerPanel(ChatLogViewerService chatLogViewerService) {
+  private LogViewerPanel createLogViewerPanel(
+      ChatLogViewerService chatLogViewerService, ExecutorService logViewerExecutor) {
     return new LogViewerPanel(
         java.util.Objects.requireNonNull(chatLogViewerService, "chatLogViewerService"),
         sid ->
             (this.serverTree == null)
                 ? java.util.List.of()
-                : this.serverTree.openChannelsForServer(sid));
+                : this.serverTree.openChannelsForServer(sid),
+        logViewerExecutor);
   }
 
   private IgnoresPanel createIgnoresPanel(IgnoreListDialog ignoreListDialog) {
@@ -855,6 +875,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public void clearPrivateMessageOnlineStates(String serverId) {
     monitorCoordinator.clearPrivateMessageOnlineStates(serverId);
+    readMarkerCoordinator.clearServer(serverId);
   }
 
   public Flowable<PrivateMessageRequest> privateMessageRequests() {
@@ -863,6 +884,12 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public Flowable<UserActionRequest> userActionRequests() {
     return userActions.onBackpressureBuffer();
+  }
+
+  public void onTargetClosed(TargetRef target) {
+    if (target == null) return;
+    draftByTarget.remove(target);
+    readMarkerCoordinator.onTargetClosed(target);
   }
 
   private void promptIgnore(TargetRef ctx, String nick, boolean removing, boolean soft) {
@@ -1008,6 +1035,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     } catch (Exception ignored) {
     }
     try {
+      inputPanel.shutdownResources();
+    } catch (Exception ignored) {
+    }
+    try {
       disposables.dispose();
     } catch (Exception ignored) {
     }
@@ -1025,6 +1056,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     }
     try {
       interceptorPanel.close();
+    } catch (Exception ignored) {
+    }
+    try {
+      readMarkerCoordinator.clearAll();
     } catch (Exception ignored) {
     }
     // Ensure decorator listeners/subscriptions are removed when Spring disposes this dock.

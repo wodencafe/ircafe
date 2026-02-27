@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.architecture;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.assignableTo;
+import static com.tngtech.archunit.core.domain.JavaCall.Predicates.target;
+import static com.tngtech.archunit.core.domain.properties.HasOwner.Predicates.With.owner;
 
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
 import com.tngtech.archunit.base.DescribedPredicate;
@@ -318,4 +321,33 @@ class ArchitectureGuardrailsTest {
               "cafe.woden.ircclient.logging..")
           .because(
               "diagnostics support should stay independent from app internals while integrating only via app::api plus config/model/util/notify seams");
+
+  @ArchTest
+  static final ArchRule only_virtual_threads_factory_should_depend_on_executors =
+      noClasses()
+          .that()
+          .doNotHaveFullyQualifiedName("cafe.woden.ircclient.util.VirtualThreads")
+          .should()
+          .dependOnClassesThat()
+          .haveFullyQualifiedName("java.util.concurrent.Executors")
+          .because(
+              "raw Executors factories should stay centralized in VirtualThreads so executor ownership, naming, and shutdown policies remain consistent");
+
+  @ArchTest
+  static final ArchRule only_virtual_threads_factory_should_call_thread_of_virtual =
+      noClasses()
+          .that()
+          .doNotHaveFullyQualifiedName("cafe.woden.ircclient.util.VirtualThreads")
+          .should()
+          .callMethod(Thread.class, "ofVirtual")
+          .because(
+              "virtual-thread creation should stay centralized in VirtualThreads to keep thread naming and policy consistent");
+
+  @ArchTest
+  static final ArchRule app_should_not_construct_threads_directly =
+      noClasses()
+          .should()
+          .callConstructorWhere(target(owner(assignableTo(Thread.class))))
+          .because(
+              "direct new Thread(...) creation should be avoided in favor of VirtualThreads helpers");
 }

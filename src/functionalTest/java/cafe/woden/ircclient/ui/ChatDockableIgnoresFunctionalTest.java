@@ -29,6 +29,7 @@ import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Flowable;
 import java.awt.Component;
 import java.awt.Container;
@@ -136,7 +137,11 @@ class ChatDockableIgnoresFunctionalTest {
                     null,
                     settingsBus,
                     spellcheckSettingsBus,
-                    commandHistoryStore)));
+                    commandHistoryStore,
+                    VirtualThreads.newSingleThreadExecutor(
+                        "test-chat-ignores-log-viewer"),
+                    VirtualThreads.newSingleThreadExecutor(
+                        "test-chat-ignores-interceptor"))));
 
     ChatDockable chat = holder.get();
     MessageInputPanel inputPanel = onEdtCall(() -> findFirst(chat, MessageInputPanel.class));

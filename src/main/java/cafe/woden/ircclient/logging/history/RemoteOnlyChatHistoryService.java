@@ -49,7 +49,11 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private static final Logger log = LoggerFactory.getLogger(RemoteOnlyChatHistoryService.class);
 
   private static final int DEFAULT_PAGE_SIZE = 75;
-  private static final Duration REMOTE_TIMEOUT = Duration.ofSeconds(6);
+  private static final int DEFAULT_LOAD_OLDER_INSERT_CHUNK_SIZE = 20;
+  private static final int DEFAULT_LOAD_OLDER_CHUNK_DELAY_MS = 10;
+  private static final int DEFAULT_REMOTE_TIMEOUT_SECONDS = 6;
+  private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_TIMEOUT_SECONDS = 18;
+  private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_WINDOW_MINUTES = 360;
 
   private final IrcClientService irc;
   private final ChatHistoryBatchBus batchBus;
@@ -368,49 +372,202 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
               target,
               limit,
               res -> {
+                List<LogLine> lines =
+                    (res == null || res.linesOldestFirst() == null)
+                        ? List.of()
+                        : res.linesOldestFirst();
+                boolean hasMore = res != null && res.hasMore();
                 try {
                   // Explicit batch boundary so filtered placeholders/hints don't "bridge" across
                   // separate paging operations.
                   transcripts.beginHistoryInsertBatch(target);
 
                   int insertAt = transcripts.loadOlderInsertOffset(target);
-                  int pos = insertAt;
-                  int inserted = 0;
-                  for (LogLine line : res.linesOldestFirst()) {
-                    pos = insertLineFromHistoryAt(target, pos, line);
-                    inserted++;
-                  }
-
-                  if (inserted > 0) {
-                    try {
-                      transcripts.ensureHistoryDivider(target, pos, "Earlier messages");
-                    } catch (Exception ignored) {
-                    }
-                  }
-
-                  if (res.hasMore()) {
-                    transcripts.setLoadOlderMessagesControlState(
-                        target, LoadOlderControlState.READY);
-                  } else {
-                    transcripts.setLoadOlderMessagesControlState(
-                        target, LoadOlderControlState.EXHAUSTED);
-                  }
+                  int chunkSize = configuredLoadOlderChunkSize();
+                  int chunkDelayMs = configuredLoadOlderChunkDelayMs();
+                  prependOlderLinesInChunks(
+                      target,
+                      lines,
+                      0,
+                      insertAt,
+                      0,
+                      hasMore,
+                      anchor,
+                      chunkSize,
+                      chunkDelayMs);
                 } catch (Exception e) {
                   // Fail open: allow retry.
                   transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
-                } finally {
                   try {
                     transcripts.endHistoryInsertBatch(target);
                   } catch (Exception ignored) {
                   }
                   if (anchor != null) {
-                    SwingUtilities.invokeLater(anchor::restoreIfNeeded);
+                    SwingUtilities.invokeLater(anchor::restoreAfterFinalInsertIfNeeded);
                   }
                 }
               });
 
           return true;
         });
+  }
+
+  private void prependOlderLinesInChunks(
+      TargetRef target,
+      List<LogLine> lines,
+      int startIndex,
+      int insertAt,
+      int insertedSoFar,
+      boolean hasMore,
+      ScrollAnchor anchor,
+      int chunkSize,
+      int chunkDelayMs) {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(
+          () ->
+              prependOlderLinesInChunks(
+                  target,
+                  lines,
+                  startIndex,
+                  insertAt,
+                  insertedSoFar,
+                  hasMore,
+                  anchor,
+                  chunkSize,
+                  chunkDelayMs));
+      return;
+    }
+
+    boolean finished = false;
+    try {
+      int endExclusive = Math.min(lines.size(), startIndex + Math.max(1, chunkSize));
+      int pos = insertAt;
+      int inserted = insertedSoFar;
+      for (int i = startIndex; i < endExclusive; i++) {
+        pos = insertLineFromHistoryAt(target, pos, lines.get(i));
+        inserted++;
+      }
+
+      if (anchor != null) {
+        anchor.restoreDuringInsertIfNeeded();
+      }
+
+      if (endExclusive < lines.size()) {
+        final int nextIndex = endExclusive;
+        final int nextPos = pos;
+        final int nextInserted = inserted;
+        scheduleNextChunk(
+            chunkDelayMs,
+            () ->
+                prependOlderLinesInChunks(
+                    target,
+                    lines,
+                    nextIndex,
+                    nextPos,
+                    nextInserted,
+                    hasMore,
+                    anchor,
+                    chunkSize,
+                    chunkDelayMs));
+        return;
+      }
+
+      finished = true;
+      if (inserted > 0) {
+        try {
+          transcripts.ensureHistoryDivider(target, pos, "Earlier messages");
+        } catch (Exception ignored) {
+        }
+      }
+      transcripts.setLoadOlderMessagesControlState(
+          target, hasMore ? LoadOlderControlState.READY : LoadOlderControlState.EXHAUSTED);
+    } catch (Exception e) {
+      finished = true;
+      transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
+    } finally {
+      if (!finished) return;
+      try {
+        transcripts.endHistoryInsertBatch(target);
+      } catch (Exception ignored) {
+      }
+      if (anchor != null) {
+        SwingUtilities.invokeLater(anchor::restoreAfterFinalInsertIfNeeded);
+      }
+    }
+  }
+
+  private int configuredLoadOlderChunkSize() {
+    int v = 0;
+    try {
+      v = transcripts.chatHistoryLoadOlderChunkSize();
+    } catch (Exception ignored) {
+      v = 0;
+    }
+    if (v <= 0) v = DEFAULT_LOAD_OLDER_INSERT_CHUNK_SIZE;
+    if (v > 500) v = 500;
+    return v;
+  }
+
+  private int configuredLoadOlderChunkDelayMs() {
+    int v = 0;
+    try {
+      v = transcripts.chatHistoryLoadOlderChunkDelayMs();
+    } catch (Exception ignored) {
+      v = 0;
+    }
+    if (v < 0) v = DEFAULT_LOAD_OLDER_CHUNK_DELAY_MS;
+    if (v > 1_000) v = 1_000;
+    return v;
+  }
+
+  private Duration configuredRemoteTimeout() {
+    int seconds = 0;
+    try {
+      seconds = transcripts.chatHistoryRemoteRequestTimeoutSeconds();
+    } catch (Exception ignored) {
+      seconds = 0;
+    }
+    if (seconds <= 0) seconds = DEFAULT_REMOTE_TIMEOUT_SECONDS;
+    if (seconds > 120) seconds = 120;
+    return Duration.ofSeconds(seconds);
+  }
+
+  private Duration configuredRemoteZncPlaybackTimeout() {
+    int seconds = 0;
+    try {
+      seconds = transcripts.chatHistoryRemoteZncPlaybackTimeoutSeconds();
+    } catch (Exception ignored) {
+      seconds = 0;
+    }
+    if (seconds <= 0) seconds = DEFAULT_REMOTE_ZNC_PLAYBACK_TIMEOUT_SECONDS;
+    if (seconds > 300) seconds = 300;
+    return Duration.ofSeconds(seconds);
+  }
+
+  private Duration configuredRemoteZncPlaybackWindow() {
+    int minutes = 0;
+    try {
+      minutes = transcripts.chatHistoryRemoteZncPlaybackWindowMinutes();
+    } catch (Exception ignored) {
+      minutes = 0;
+    }
+    if (minutes <= 0) minutes = DEFAULT_REMOTE_ZNC_PLAYBACK_WINDOW_MINUTES;
+    if (minutes > 1440) minutes = 1440;
+    return Duration.ofMinutes(minutes);
+  }
+
+  private static void scheduleNextChunk(int delayMs, Runnable task) {
+    if (task == null) return;
+    int safeDelayMs = Math.max(0, Math.min(1_000, delayMs));
+    javax.swing.Timer timer =
+        new javax.swing.Timer(
+            safeDelayMs,
+            e -> {
+              ((javax.swing.Timer) e.getSource()).stop();
+              task.run();
+            });
+    timer.setRepeats(false);
+    timer.start();
   }
 
   private long seedCursorEpochMs(TargetRef target) {
@@ -451,15 +608,18 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
     boolean useChatHistory = irc.isChatHistoryAvailable(sid);
     boolean useZnc = !useChatHistory && irc.isZncPlaybackAvailable(sid);
+    Duration remoteTimeout = configuredRemoteTimeout();
+    Duration remoteZncPlaybackTimeout = configuredRemoteZncPlaybackTimeout();
+    Duration remoteZncPlaybackWindow = configuredRemoteZncPlaybackWindow();
 
     if (useChatHistory) {
-      var wait = batchBus.awaitNext(sid, tgt, REMOTE_TIMEOUT);
+      var wait = batchBus.awaitNext(sid, tgt, remoteTimeout);
       try {
         Completable send = irc.requestChatHistoryBefore(sid, tgt, beforeExclusive, limit);
         if (send != null) {
           try {
             boolean completed =
-                send.blockingAwait(REMOTE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+                send.blockingAwait(remoteTimeout.toMillis(), TimeUnit.MILLISECONDS);
             if (!completed) {
               log.debug(
                   "remote CHATHISTORY request timed out for {} / {} while awaiting completion",
@@ -475,7 +635,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
       ChatHistoryBatchBus.BatchEvent ev;
       try {
-        ev = wait.get(REMOTE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+        ev = wait.get(remoteTimeout.toMillis(), TimeUnit.MILLISECONDS);
       } catch (TimeoutException te) {
         return new LoadOlderResult(List.of(), cur, true);
       } catch (Exception e) {
@@ -536,17 +696,17 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       }
 
       // ZNC playback is time-window based; request a backward window ending at beforeExclusive.
-      Duration window = Duration.ofHours(6);
+      Duration window = remoteZncPlaybackWindow;
       Instant end = Instant.ofEpochMilli(beforeExclusive);
       Instant start = end.minus(window);
 
-      var wait = zncPlaybackBus.awaitNext(sid, tgt, REMOTE_TIMEOUT);
+      var wait = zncPlaybackBus.awaitNext(sid, tgt, remoteZncPlaybackTimeout);
       try {
         Completable send = irc.requestZncPlaybackRange(sid, tgt, start, end);
         if (send != null) {
           try {
             boolean completed =
-                send.blockingAwait(REMOTE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+                send.blockingAwait(remoteZncPlaybackTimeout.toMillis(), TimeUnit.MILLISECONDS);
             if (!completed) {
               log.debug(
                   "remote ZNC playback request timed out for {} / {} while awaiting completion",
@@ -565,7 +725,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
       ZncPlaybackBus.PlaybackEvent pev;
       try {
-        pev = wait.get(REMOTE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+        pev = wait.get(remoteZncPlaybackTimeout.toMillis(), TimeUnit.MILLISECONDS);
       } catch (TimeoutException te) {
         return new LoadOlderResult(List.of(), cur, true);
       } catch (Exception e) {
@@ -705,13 +865,19 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private static final class ScrollAnchor {
     private final JViewport viewport;
     private final Point beforePos;
+    private final int beforeViewHeight;
     private final Position anchor;
     private final int intraLineDeltaY;
 
     private ScrollAnchor(
-        JViewport viewport, Point beforePos, Position anchor, int intraLineDeltaY) {
+        JViewport viewport,
+        Point beforePos,
+        int beforeViewHeight,
+        Position anchor,
+        int intraLineDeltaY) {
       this.viewport = viewport;
       this.beforePos = beforePos;
+      this.beforeViewHeight = beforeViewHeight;
       this.anchor = anchor;
       this.intraLineDeltaY = intraLineDeltaY;
     }
@@ -729,6 +895,8 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
         Point p = vp.getViewPosition();
         if (p == null) p = new Point(0, 0);
+        int viewHeight = view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
+        if (viewHeight < 0) viewHeight = 0;
 
         int anchorOffset = text.viewToModel2D(new Point(p));
         if (anchorOffset < 0) anchorOffset = 0;
@@ -751,40 +919,54 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
         int deltaY = p.y - rectY;
         if (deltaY < 0) deltaY = 0;
 
-        return new ScrollAnchor(vp, new Point(p), pos, deltaY);
+        return new ScrollAnchor(vp, new Point(p), viewHeight, pos, deltaY);
       } catch (Exception ignored) {
         return null;
       }
     }
 
-    void restoreIfNeeded() {
+    void restoreDuringInsertIfNeeded() {
+      restoreIfNeeded(false);
+    }
+
+    void restoreAfterFinalInsertIfNeeded() {
+      restoreIfNeeded(true);
+    }
+
+    private void restoreIfNeeded(boolean preciseAnchor) {
       try {
         if (viewport == null) return;
         var view = viewport.getView();
         if (view == null) return;
         if (!(view instanceof javax.swing.text.JTextComponent text)) return;
 
-        if (beforePos == null || beforePos.y <= 0) return;
-        if (anchor == null) return;
-
-        int off = anchor.getOffset();
-        if (off < 0) off = 0;
-        Document doc = text.getDocument();
-        if (doc != null && off > doc.getLength()) off = doc.getLength();
-
-        Rectangle r;
-        try {
-          r = text.modelToView2D(off).getBounds();
-        } catch (Exception e) {
-          return;
-        }
-        if (r == null) return;
-
-        int newY = r.y + intraLineDeltaY;
-
-        int viewH = view.getPreferredSize() != null ? view.getPreferredSize().height : r.y;
+        int viewH = view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
+        if (viewH < 0) viewH = 0;
         int extentH = viewport.getExtentSize() != null ? viewport.getExtentSize().height : 0;
         int maxY = Math.max(0, viewH - extentH);
+
+        if (beforePos == null) return;
+
+        int currentViewHeight = view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
+        if (currentViewHeight < 0) currentViewHeight = 0;
+        int prependedHeightDelta = Math.max(0, currentViewHeight - beforeViewHeight);
+
+        int newY = beforePos.y + prependedHeightDelta;
+        if (preciseAnchor && anchor != null) {
+          int off = anchor.getOffset();
+          if (off < 0) off = 0;
+          Document doc = text.getDocument();
+          if (doc != null && off > doc.getLength()) off = doc.getLength();
+          try {
+            Rectangle r = text.modelToView2D(off).getBounds();
+            if (r != null) {
+              int anchorY = r.y + intraLineDeltaY;
+              newY = Math.max(anchorY, beforePos.y + prependedHeightDelta);
+            }
+          } catch (Exception ignored) {
+          }
+        }
+
         if (newY > maxY) newY = maxY;
         if (newY < 0) newY = 0;
 

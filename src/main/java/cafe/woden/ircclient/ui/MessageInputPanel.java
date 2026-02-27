@@ -55,6 +55,7 @@ public class MessageInputPanel extends JPanel {
   private final MessageInputHistorySupport historySupport;
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
   private final PropertyChangeListener spellcheckSettingsListener = this::onSpellcheckChanged;
+  private boolean shutdown;
 
   public MessageInputPanel(UiSettingsBus settingsBus, CommandHistoryStore historyStore) {
     this(settingsBus, historyStore, null);
@@ -384,6 +385,18 @@ public class MessageInputPanel extends JPanel {
       spellcheckSettingsBus.removeListener(spellcheckSettingsListener);
     if (settingsBus != null) settingsBus.removeListener(settingsListener);
     super.removeNotify();
+  }
+
+  public void shutdownResources() {
+    if (shutdown) return;
+    shutdown = true;
+    hintPopupSupport.shutdown();
+    nickCompletionSupport.shutdown();
+    spellcheckSupport.shutdown();
+    typingSupport.onRemoveNotify();
+    if (spellcheckSettingsBus != null)
+      spellcheckSettingsBus.removeListener(spellcheckSettingsListener);
+    if (settingsBus != null) settingsBus.removeListener(settingsListener);
   }
 
   private void onSettingsChanged(PropertyChangeEvent evt) {

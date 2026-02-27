@@ -3,7 +3,8 @@ package cafe.woden.ircclient.irc;
 import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
 import java.time.Instant;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -29,6 +30,7 @@ import org.slf4j.LoggerFactory;
 final class PircbotxAwayNotifyInputParser extends InputParser {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxAwayNotifyInputParser.class);
+  private static final int MAX_ACCOUNT_TAG_KEYS = 8_192;
 
   private final String serverId;
   private final Consumer<ServerIrcEvent> sink;
@@ -37,7 +39,14 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
   private final Ircv3StsPolicyService stsPolicies;
 
   // Deduplicate high-frequency account-tag observations (which can appear on every PRIVMSG).
-  private final Map<String, String> lastAccountTagByNickLower = new HashMap<>();
+  private final Map<String, String> lastAccountTagByNickLower =
+      Collections.synchronizedMap(
+          new LinkedHashMap<>(256, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+              return size() > MAX_ACCOUNT_TAG_KEYS;
+            }
+          });
 
   PircbotxAwayNotifyInputParser(
       PircBotX bot,

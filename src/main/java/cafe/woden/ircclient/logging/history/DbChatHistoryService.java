@@ -42,6 +42,11 @@ public final class DbChatHistoryService implements ChatHistoryService {
   private static final Logger log = LoggerFactory.getLogger(DbChatHistoryService.class);
 
   private static final int DEFAULT_PAGE_SIZE = 200;
+  private static final int DEFAULT_LOAD_OLDER_INSERT_CHUNK_SIZE = 20;
+  private static final int DEFAULT_LOAD_OLDER_CHUNK_DELAY_MS = 10;
+  private static final int DEFAULT_REMOTE_REQUEST_TIMEOUT_SECONDS = 6;
+  private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_TIMEOUT_SECONDS = 18;
+  private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_WINDOW_MINUTES = 360;
 
   private static final DateTimeFormatter HISTORY_DIVIDER_DATE_FMT =
       DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM);
@@ -55,10 +60,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
   //  - Fall back to ZNC playback (znc.in/playback) when available
   private final IrcClientService irc;
   private final ChatHistoryIngestBus ingestBus;
-
-  private static final Duration CHATHISTORY_REMOTE_FILL_TIMEOUT = Duration.ofSeconds(4);
-  private static final Duration ZNC_PLAYBACK_REMOTE_FILL_TIMEOUT = Duration.ofSeconds(18);
-  private static final Duration ZNC_PLAYBACK_WINDOW = Duration.ofHours(6);
 
   private final ConcurrentHashMap<TargetRef, LogCursor> oldestCursor = new ConcurrentHashMap<>();
 
@@ -301,9 +302,11 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
     if (!canChatHistory && !canZncPlayback) return false;
 
+    final Duration requestTimeout = configuredRemoteRequestTimeout();
+    final Duration zncPlaybackTimeout = configuredRemoteZncPlaybackTimeout();
+    final Duration zncPlaybackWindow = configuredRemoteZncPlaybackWindow();
     // ZNC playback completion is best-effort and may take longer than CHATHISTORY.
-    final Duration timeout =
-        canZncPlayback ? ZNC_PLAYBACK_REMOTE_FILL_TIMEOUT : CHATHISTORY_REMOTE_FILL_TIMEOUT;
+    final Duration timeout = canZncPlayback ? zncPlaybackTimeout : requestTimeout;
 
     try {
       var waiter = ingestBus.awaitNext(serverId, target, timeout);
@@ -324,7 +327,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
       // Fall back to ZNC playback if CHATHISTORY isn't usable or the send failed.
       if (!requested && canZncPlayback) {
         try {
-          irc.requestZncPlaybackBefore(serverId, target, beforeExclusive, ZNC_PLAYBACK_WINDOW)
+          irc.requestZncPlaybackBefore(serverId, target, beforeExclusive, zncPlaybackWindow)
               .blockingAwait();
           requested = true;
         } catch (Exception e) {
@@ -339,7 +342,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
       }
 
       try {
-        waiter.get(timeout.toMillis() + 250, TimeUnit.MILLISECONDS);
+        waiter.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
       } catch (Exception e) {
         // Timeout is okay; we'll just re-query DB and return whatever we have.
         log.debug("Remote history ingest wait timed out for {} / {}", serverId, target);
@@ -349,6 +352,66 @@ public final class DbChatHistoryService implements ChatHistoryService {
       log.debug("Remote history coordination failed for {} / {}", serverId, target, e);
       return false;
     }
+  }
+
+  private int configuredLoadOlderChunkSize() {
+    int v = 0;
+    try {
+      v = transcripts.chatHistoryLoadOlderChunkSize();
+    } catch (Exception ignored) {
+      v = 0;
+    }
+    if (v <= 0) v = DEFAULT_LOAD_OLDER_INSERT_CHUNK_SIZE;
+    if (v > 500) v = 500;
+    return v;
+  }
+
+  private int configuredLoadOlderChunkDelayMs() {
+    int v = 0;
+    try {
+      v = transcripts.chatHistoryLoadOlderChunkDelayMs();
+    } catch (Exception ignored) {
+      v = 0;
+    }
+    if (v < 0) v = DEFAULT_LOAD_OLDER_CHUNK_DELAY_MS;
+    if (v > 1_000) v = 1_000;
+    return v;
+  }
+
+  private Duration configuredRemoteRequestTimeout() {
+    int seconds = 0;
+    try {
+      seconds = transcripts.chatHistoryRemoteRequestTimeoutSeconds();
+    } catch (Exception ignored) {
+      seconds = 0;
+    }
+    if (seconds <= 0) seconds = DEFAULT_REMOTE_REQUEST_TIMEOUT_SECONDS;
+    if (seconds > 120) seconds = 120;
+    return Duration.ofSeconds(seconds);
+  }
+
+  private Duration configuredRemoteZncPlaybackTimeout() {
+    int seconds = 0;
+    try {
+      seconds = transcripts.chatHistoryRemoteZncPlaybackTimeoutSeconds();
+    } catch (Exception ignored) {
+      seconds = 0;
+    }
+    if (seconds <= 0) seconds = DEFAULT_REMOTE_ZNC_PLAYBACK_TIMEOUT_SECONDS;
+    if (seconds > 300) seconds = 300;
+    return Duration.ofSeconds(seconds);
+  }
+
+  private Duration configuredRemoteZncPlaybackWindow() {
+    int minutes = 0;
+    try {
+      minutes = transcripts.chatHistoryRemoteZncPlaybackWindowMinutes();
+    } catch (Exception ignored) {
+      minutes = 0;
+    }
+    if (minutes <= 0) minutes = DEFAULT_REMOTE_ZNC_PLAYBACK_WINDOW_MINUTES;
+    if (minutes > 1440) minutes = 1440;
+    return Duration.ofMinutes(minutes);
   }
 
   @Override
@@ -539,8 +602,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
           // Flip to LOADING immediately.
           transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.LOADING);
 
-          // If the user isn't pinned to y=0, preserve their viewport anchor while we prepend lines
-          // above.
+          // Preserve the viewport anchor while we prepend lines above the current view.
           final ScrollAnchor anchor = ScrollAnchor.capture(control);
 
           int pageSize = DEFAULT_PAGE_SIZE;
@@ -555,36 +617,30 @@ public final class DbChatHistoryService implements ChatHistoryService {
               target,
               limit,
               res -> {
+                List<LogLine> lines =
+                    (res == null || res.linesOldestFirst() == null)
+                        ? List.of()
+                        : res.linesOldestFirst();
+                boolean hasMore = res != null && res.hasMore();
                 try {
                   // Explicit batch boundary so filtered placeholders/hints don't "bridge" across
                   // separate paging operations.
                   transcripts.beginHistoryInsertBatch(target);
 
                   int insertAt = transcripts.loadOlderInsertOffset(target);
-                  int pos = insertAt;
-                  for (LogLine line : res.linesOldestFirst()) {
-                    pos = insertLineFromHistoryAt(target, pos, line);
-                  }
-
-                  if (res.hasMore()) {
-                    transcripts.setLoadOlderMessagesControlState(
-                        target, LoadOlderControlState.READY);
-                  } else {
-                    transcripts.setLoadOlderMessagesControlState(
-                        target, LoadOlderControlState.EXHAUSTED);
-                  }
+                  int chunkSize = configuredLoadOlderChunkSize();
+                  int chunkDelayMs = configuredLoadOlderChunkDelayMs();
+                  prependOlderLinesInChunks(
+                      target, lines, 0, insertAt, hasMore, anchor, chunkSize, chunkDelayMs);
                 } catch (Exception e) {
                   // Fail open: allow retry.
                   transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
-                } finally {
                   try {
                     transcripts.endHistoryInsertBatch(target);
                   } catch (Exception ignored) {
                   }
                   if (anchor != null) {
-                    // Run after document/layout updates so preferred size reflects the inserted
-                    // content.
-                    SwingUtilities.invokeLater(anchor::restoreIfNeeded);
+                    SwingUtilities.invokeLater(anchor::restoreAfterFinalInsertIfNeeded);
                   }
                 }
               });
@@ -593,16 +649,95 @@ public final class DbChatHistoryService implements ChatHistoryService {
         });
   }
 
+  private void prependOlderLinesInChunks(
+      TargetRef target,
+      List<LogLine> lines,
+      int startIndex,
+      int insertAt,
+      boolean hasMore,
+      ScrollAnchor anchor,
+      int chunkSize,
+      int chunkDelayMs) {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(
+          () ->
+              prependOlderLinesInChunks(
+                  target, lines, startIndex, insertAt, hasMore, anchor, chunkSize, chunkDelayMs));
+      return;
+    }
+
+    boolean finished = false;
+    try {
+      int endExclusive = Math.min(lines.size(), startIndex + Math.max(1, chunkSize));
+      int pos = insertAt;
+      for (int i = startIndex; i < endExclusive; i++) {
+        pos = insertLineFromHistoryAt(target, pos, lines.get(i));
+      }
+
+      if (anchor != null) {
+        anchor.restoreDuringInsertIfNeeded();
+      }
+
+      if (endExclusive < lines.size()) {
+        final int nextIndex = endExclusive;
+        final int nextPos = pos;
+        scheduleNextChunk(
+            chunkDelayMs,
+            () ->
+                prependOlderLinesInChunks(
+                    target, lines, nextIndex, nextPos, hasMore, anchor, chunkSize, chunkDelayMs));
+        return;
+      }
+
+      finished = true;
+      transcripts.setLoadOlderMessagesControlState(
+          target, hasMore ? LoadOlderControlState.READY : LoadOlderControlState.EXHAUSTED);
+    } catch (Exception e) {
+      finished = true;
+      transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
+    } finally {
+      if (!finished) return;
+      try {
+        transcripts.endHistoryInsertBatch(target);
+      } catch (Exception ignored) {
+      }
+      if (anchor != null) {
+        // Run once more after document/layout settles from the final chunk.
+        SwingUtilities.invokeLater(anchor::restoreAfterFinalInsertIfNeeded);
+      }
+    }
+  }
+
+  private static void scheduleNextChunk(int delayMs, Runnable task) {
+    if (task == null) return;
+    int safeDelayMs = Math.max(0, Math.min(1_000, delayMs));
+    javax.swing.Timer timer =
+        new javax.swing.Timer(
+            safeDelayMs,
+            e -> {
+              ((javax.swing.Timer) e.getSource()).stop();
+              task.run();
+            });
+    timer.setRepeats(false);
+    timer.start();
+  }
+
   private static final class ScrollAnchor {
     private final JViewport viewport;
     private final Point beforePos;
+    private final int beforeViewHeight;
     private final Position anchor;
     private final int intraLineDeltaY;
 
     private ScrollAnchor(
-        JViewport viewport, Point beforePos, Position anchor, int intraLineDeltaY) {
+        JViewport viewport,
+        Point beforePos,
+        int beforeViewHeight,
+        Position anchor,
+        int intraLineDeltaY) {
       this.viewport = viewport;
       this.beforePos = beforePos;
+      this.beforeViewHeight = beforeViewHeight;
       this.anchor = anchor;
       this.intraLineDeltaY = intraLineDeltaY;
     }
@@ -620,6 +755,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
         Point p = vp.getViewPosition();
         if (p == null) p = new Point(0, 0);
+        int viewHeight = view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
+        if (viewHeight < 0) viewHeight = 0;
 
         // Find the first visible model position for the top-left of the viewport.
         int anchorOffset = text.viewToModel2D(new Point(p));
@@ -644,43 +781,56 @@ public final class DbChatHistoryService implements ChatHistoryService {
         int deltaY = p.y - rectY;
         if (deltaY < 0) deltaY = 0;
 
-        return new ScrollAnchor(vp, new Point(p), pos, deltaY);
+        return new ScrollAnchor(vp, new Point(p), viewHeight, pos, deltaY);
       } catch (Exception ignored) {
         return null;
       }
     }
 
-    void restoreIfNeeded() {
+    void restoreDuringInsertIfNeeded() {
+      restoreIfNeeded(false);
+    }
+
+    void restoreAfterFinalInsertIfNeeded() {
+      restoreIfNeeded(true);
+    }
+
+    private void restoreIfNeeded(boolean preciseAnchor) {
       try {
         if (viewport == null) return;
         var view = viewport.getView();
         if (view == null) return;
         if (!(view instanceof javax.swing.text.JTextComponent text)) return;
 
-        // If the user was pinned at the very top (y=0), keep them there so they can see newly
-        // loaded lines.
-        if (beforePos == null || beforePos.y <= 0) return;
-
-        if (anchor == null) return;
-
-        int off = anchor.getOffset();
-        if (off < 0) off = 0;
-        Document doc = text.getDocument();
-        if (doc != null && off > doc.getLength()) off = doc.getLength();
-
-        Rectangle r;
-        try {
-          r = text.modelToView2D(off).getBounds();
-        } catch (Exception e) {
-          return;
-        }
-        if (r == null) return;
-
-        int newY = r.y + intraLineDeltaY;
-
-        int viewH = view.getPreferredSize() != null ? view.getPreferredSize().height : r.y;
+        int viewH = view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
+        if (viewH < 0) viewH = 0;
         int extentH = viewport.getExtentSize() != null ? viewport.getExtentSize().height : 0;
         int maxY = Math.max(0, viewH - extentH);
+
+        if (beforePos == null) return;
+
+        int currentViewHeight = view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
+        if (currentViewHeight < 0) currentViewHeight = 0;
+        int prependedHeightDelta = Math.max(0, currentViewHeight - beforeViewHeight);
+
+        int newY = beforePos.y + prependedHeightDelta;
+        if (preciseAnchor && anchor != null) {
+          int off = anchor.getOffset();
+          if (off < 0) off = 0;
+          Document doc = text.getDocument();
+          if (doc != null && off > doc.getLength()) off = doc.getLength();
+          try {
+            Rectangle r = text.modelToView2D(off).getBounds();
+            if (r != null) {
+              int anchorY = r.y + intraLineDeltaY;
+              // When pinned at top before prepend, model-position anchoring can track the control row.
+              // Keep at least the height-delta offset so the prior top message remains visible.
+              newY = Math.max(anchorY, beforePos.y + prependedHeightDelta);
+            }
+          } catch (Exception ignored) {
+          }
+        }
+
         if (newY > maxY) newY = maxY;
         if (newY < 0) newY = 0;
 

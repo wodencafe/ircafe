@@ -4,7 +4,7 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import java.time.Instant;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
@@ -16,6 +16,7 @@ import java.util.function.Supplier;
 final class ChatReadMarkerCoordinator {
 
   private static final long READ_MARKER_SEND_COOLDOWN_MS = 3000L;
+  private static final int MAX_TRACKED_TARGET_STATES = 1024;
 
   private final ChatTranscriptStore transcripts;
   private final IrcClientService irc;
@@ -25,9 +26,9 @@ final class ChatReadMarkerCoordinator {
   private final BooleanSupplier transcriptAtBottomSupplier;
   private final LongSupplier currentTimeMillis;
 
-  private final Map<TargetRef, ViewState> stateByTarget = new HashMap<>();
+  private final Map<TargetRef, ViewState> stateByTarget = newBoundedTargetMap();
   private final ViewState fallbackState = new ViewState();
-  private final Map<TargetRef, Long> lastReadMarkerSentAtByTarget = new HashMap<>();
+  private final Map<TargetRef, Long> lastReadMarkerSentAtByTarget = newBoundedTargetMap();
 
   private static final class ViewState {
     private boolean followTail = true;
@@ -110,6 +111,26 @@ final class ChatReadMarkerCoordinator {
     }
   }
 
+  void onTargetClosed(TargetRef target) {
+    if (target == null) return;
+    stateByTarget.remove(target);
+    lastReadMarkerSentAtByTarget.remove(target);
+  }
+
+  void clearServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    stateByTarget.entrySet().removeIf(e -> Objects.equals(serverIdOf(e.getKey()), sid));
+    lastReadMarkerSentAtByTarget
+        .entrySet()
+        .removeIf(e -> Objects.equals(serverIdOf(e.getKey()), sid));
+  }
+
+  void clearAll() {
+    stateByTarget.clear();
+    lastReadMarkerSentAtByTarget.clear();
+  }
+
   private ViewState state() {
     TargetRef activeTarget = activeTargetSupplier.get();
     if (activeTarget == null) return fallbackState;
@@ -133,5 +154,19 @@ final class ChatReadMarkerCoordinator {
       }
     } catch (Exception ignored) {
     }
+  }
+
+  private static String serverIdOf(TargetRef target) {
+    if (target == null) return "";
+    return Objects.toString(target.serverId(), "").trim();
+  }
+
+  private static <V> Map<TargetRef, V> newBoundedTargetMap() {
+    return new LinkedHashMap<>(128, 0.75f, true) {
+      @Override
+      protected boolean removeEldestEntry(Map.Entry<TargetRef, V> eldest) {
+        return size() > MAX_TRACKED_TARGET_STATES;
+      }
+    };
   }
 }

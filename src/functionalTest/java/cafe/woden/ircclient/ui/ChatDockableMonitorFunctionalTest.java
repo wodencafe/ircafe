@@ -30,6 +30,7 @@ import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Flowable;
 import java.awt.Component;
 import java.awt.Container;
@@ -161,7 +162,9 @@ class ChatDockableMonitorFunctionalTest {
                     springRuntimeEventsService,
                     settingsBus,
                     spellcheckSettingsBus,
-                    commandHistoryStore));
+                    commandHistoryStore,
+                    VirtualThreads.newSingleThreadExecutor("test-chat-monitor-log-viewer"),
+                    VirtualThreads.newSingleThreadExecutor("test-chat-monitor-interceptor")));
 
     ChatDockable chat = holder.chat;
     MonitorPanel monitorPanel = findFirst(chat, MonitorPanel.class);

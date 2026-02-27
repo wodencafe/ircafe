@@ -202,6 +202,18 @@ class MessageInputSpellcheckSupportTest {
     assertEquals("the cat", input.getText());
   }
 
+  @Test
+  void shutdownDisposesSpellcheckSubscription() throws Exception {
+    MessageInputSpellcheckSupport support =
+        new MessageInputSpellcheckSupport(new JTextField("teh"), SpellcheckSettings.defaults());
+
+    support.shutdown();
+
+    assertTrue(spellcheckSubscription(support).isDisposed());
+    assertDoesNotThrow(support::shutdown);
+    assertDoesNotThrow(support::onDraftChanged);
+  }
+
   private static void invokeCreateChecker(String languageTag) throws Exception {
     var method =
         MessageInputSpellcheckSupport.class.getDeclaredMethod("createChecker", String.class);
@@ -283,5 +295,12 @@ class MessageInputSpellcheckSupportTest {
 
   private static int checkerCacheSizeForCurrentThread() throws Exception {
     return checkerCacheByThread().get().size();
+  }
+
+  private static io.reactivex.rxjava3.disposables.Disposable spellcheckSubscription(
+      MessageInputSpellcheckSupport support) throws Exception {
+    var field = MessageInputSpellcheckSupport.class.getDeclaredField("spellcheckSubscription");
+    field.setAccessible(true);
+    return (io.reactivex.rxjava3.disposables.Disposable) field.get(support);
   }
 }

@@ -183,6 +183,42 @@ public class ChatHistoryTranscriptPortAdapter implements ChatHistoryTranscriptPo
     return s != null ? s.chatHistoryPageSize() : 0;
   }
 
+  @Override
+  public int chatHistoryAutoLoadWheelDebounceMs() {
+    UiSettings s = settingsBus != null ? settingsBus.get() : null;
+    return s != null ? s.chatHistoryAutoLoadWheelDebounceMs() : 0;
+  }
+
+  @Override
+  public int chatHistoryLoadOlderChunkSize() {
+    UiSettings s = settingsBus != null ? settingsBus.get() : null;
+    return s != null ? s.chatHistoryLoadOlderChunkSize() : 0;
+  }
+
+  @Override
+  public int chatHistoryLoadOlderChunkDelayMs() {
+    UiSettings s = settingsBus != null ? settingsBus.get() : null;
+    return s != null ? s.chatHistoryLoadOlderChunkDelayMs() : 0;
+  }
+
+  @Override
+  public int chatHistoryRemoteRequestTimeoutSeconds() {
+    UiSettings s = settingsBus != null ? settingsBus.get() : null;
+    return s != null ? s.chatHistoryRemoteRequestTimeoutSeconds() : 0;
+  }
+
+  @Override
+  public int chatHistoryRemoteZncPlaybackTimeoutSeconds() {
+    UiSettings s = settingsBus != null ? settingsBus.get() : null;
+    return s != null ? s.chatHistoryRemoteZncPlaybackTimeoutSeconds() : 0;
+  }
+
+  @Override
+  public int chatHistoryRemoteZncPlaybackWindowMinutes() {
+    UiSettings s = settingsBus != null ? settingsBus.get() : null;
+    return s != null ? s.chatHistoryRemoteZncPlaybackWindowMinutes() : 0;
+  }
+
   private static LoadOlderMessagesComponent.State toUiState(LoadOlderControlState state) {
     if (state == null) return LoadOlderMessagesComponent.State.READY;
     return switch (state) {

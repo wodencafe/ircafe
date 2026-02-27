@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
 import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
 import java.lang.reflect.Field;
@@ -146,6 +147,7 @@ final class MessageInputNickCompletionSupport {
 
   private boolean installed;
   private boolean pendingSuffixListenerInstalled;
+  private boolean lafListenerInstalled;
 
   private final PropertyChangeListener lafListener =
       evt -> {
@@ -153,6 +155,9 @@ final class MessageInputNickCompletionSupport {
         markUiDirty();
         SwingUtilities.invokeLater(this::refreshAutoCompletionUi);
       };
+
+  private final HierarchyListener lafCleanupHierarchyListener =
+      this::onOwnerHierarchyChangedForLafCleanup;
 
   MessageInputNickCompletionSupport(
       JComponent owner, JTextField input, MessageInputUndoSupport undoSupport) {
@@ -230,6 +235,10 @@ final class MessageInputNickCompletionSupport {
     List<String> cleaned = cleanNickList(nicks);
     nickSnapshot = cleaned;
     rebuildCompletionModel(cleaned);
+  }
+
+  void shutdown() {
+    removeLafRefreshListeners();
   }
 
   private void rebuildCompletionModel(List<String> nicks) {
@@ -665,23 +674,39 @@ final class MessageInputNickCompletionSupport {
   private record SlashCommand(String command, String summary) {}
 
   private void installAutoCompletionUiRefreshOnLafChange() {
+    if (lafListenerInstalled) return;
+    lafListenerInstalled = true;
     try {
       UIManager.addPropertyChangeListener(lafListener);
     } catch (Exception ignored) {
     }
 
     // Remove listener when the owner component is disposed.
-    owner.addHierarchyListener(
-        evt -> {
-          long flags = evt.getChangeFlags();
-          if ((flags & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
-          if (owner.isDisplayable()) return;
-          try {
-            UIManager.removePropertyChangeListener(lafListener);
-          } catch (Exception ex) {
-            log.warn("[MessageInputNickCompletionSupport] remove LAF listener failed", ex);
-          }
-        });
+    try {
+      owner.addHierarchyListener(lafCleanupHierarchyListener);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onOwnerHierarchyChangedForLafCleanup(HierarchyEvent evt) {
+    long flags = evt.getChangeFlags();
+    if ((flags & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0) return;
+    if (owner.isDisplayable()) return;
+    removeLafRefreshListeners();
+  }
+
+  private void removeLafRefreshListeners() {
+    if (!lafListenerInstalled) return;
+    lafListenerInstalled = false;
+    try {
+      UIManager.removePropertyChangeListener(lafListener);
+    } catch (Exception ex) {
+      log.warn("[MessageInputNickCompletionSupport] remove LAF listener failed", ex);
+    }
+    try {
+      owner.removeHierarchyListener(lafCleanupHierarchyListener);
+    } catch (Exception ignored) {
+    }
   }
 
   private void refreshAutoCompletionUi() {

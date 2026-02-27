@@ -63,10 +63,8 @@ public class InterceptorStore implements InterceptorIngestPort {
   private final ExecutorService actionScriptExecutor;
 
   private final int maxHitsPerInterceptor;
-  private final ExecutorService ingestExecutor =
-      VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-store");
-  private final ExecutorService persistExecutor =
-      VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-persist");
+  private final ExecutorService ingestExecutor;
+  private final ExecutorService persistExecutor;
   private final AtomicLong persistRequestSeq = new AtomicLong(0L);
   private final AtomicReference<Map<String, List<InterceptorDefinition>>> pendingPersistSnapshot =
       new AtomicReference<>();
@@ -87,18 +85,31 @@ public class InterceptorStore implements InterceptorIngestPort {
       RuntimeConfigStore runtimeConfig,
       NotificationSoundService notificationSoundService,
       @Lazy TrayNotificationsPort trayNotificationService,
-      @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService actionScriptExecutor) {
+      @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService actionScriptExecutor,
+      @Qualifier(ExecutorConfig.INTERCEPTOR_STORE_INGEST_EXECUTOR) ExecutorService ingestExecutor,
+      @Qualifier(ExecutorConfig.INTERCEPTOR_STORE_PERSIST_EXECUTOR)
+          ExecutorService persistExecutor) {
     this(
         runtimeConfig,
         notificationSoundService,
         trayNotificationService,
         actionScriptExecutor,
+        ingestExecutor,
+        persistExecutor,
         DEFAULT_MAX_HITS_PER_INTERCEPTOR,
         true);
   }
 
   InterceptorStore(int maxHitsPerInterceptor) {
-    this(null, null, null, null, maxHitsPerInterceptor, false);
+    this(
+        null,
+        null,
+        null,
+        null,
+        VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-store"),
+        VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-persist"),
+        maxHitsPerInterceptor,
+        false);
   }
 
   private InterceptorStore(
@@ -106,12 +117,16 @@ public class InterceptorStore implements InterceptorIngestPort {
       NotificationSoundService notificationSoundService,
       TrayNotificationsPort trayNotificationService,
       ExecutorService actionScriptExecutor,
+      ExecutorService ingestExecutor,
+      ExecutorService persistExecutor,
       int maxHitsPerInterceptor,
       boolean loadFromRuntimeConfig) {
     this.runtimeConfig = runtimeConfig;
     this.notificationSoundService = notificationSoundService;
     this.trayNotificationService = trayNotificationService;
     this.actionScriptExecutor = actionScriptExecutor;
+    this.ingestExecutor = Objects.requireNonNull(ingestExecutor, "ingestExecutor");
+    this.persistExecutor = Objects.requireNonNull(persistExecutor, "persistExecutor");
     this.maxHitsPerInterceptor = Math.max(200, maxHitsPerInterceptor);
 
     if (loadFromRuntimeConfig) {

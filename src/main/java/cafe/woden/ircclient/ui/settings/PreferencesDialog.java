@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.commands.HexChatCommandAliasImporter;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.PushyProperties;
@@ -43,7 +44,6 @@ import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.DialogCloseableScopeDecorator;
 import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
-import cafe.woden.ircclient.util.VirtualThreads;
 import com.formdev.flatlaf.FlatClientProperties;
 import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.subjects.PublishSubject;
@@ -132,6 +132,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import net.miginfocom.swing.MigLayout;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -171,6 +172,8 @@ public class PreferencesDialog {
   private final UserCommandAliasesBus userCommandAliasesBus;
   private final NotificationSoundService notificationSoundService;
   private final ServerDialogs serverDialogs;
+  private final ExecutorService pushyTestExecutor;
+  private final ExecutorService notificationRuleTestExecutor;
 
   private JDialog dialog;
 
@@ -199,7 +202,11 @@ public class PreferencesDialog {
       IrcEventNotificationRulesBus ircEventNotificationRulesBus,
       UserCommandAliasesBus userCommandAliasesBus,
       NotificationSoundService notificationSoundService,
-      ServerDialogs serverDialogs) {
+      ServerDialogs serverDialogs,
+      @Qualifier(ExecutorConfig.PREFERENCES_PUSHY_TEST_EXECUTOR)
+          ExecutorService pushyTestExecutor,
+      @Qualifier(ExecutorConfig.PREFERENCES_NOTIFICATION_RULE_TEST_EXECUTOR)
+          ExecutorService notificationRuleTestExecutor) {
     this.settingsBus = settingsBus;
     this.themeManager = themeManager;
     this.accentSettingsBus = accentSettingsBus;
@@ -225,6 +232,15 @@ public class PreferencesDialog {
     this.userCommandAliasesBus = userCommandAliasesBus;
     this.notificationSoundService = notificationSoundService;
     this.serverDialogs = serverDialogs;
+    this.pushyTestExecutor = Objects.requireNonNull(pushyTestExecutor, "pushyTestExecutor");
+    this.notificationRuleTestExecutor =
+        Objects.requireNonNull(notificationRuleTestExecutor, "notificationRuleTestExecutor");
+    if (this.pushyTestExecutor.isShutdown()) {
+      throw new IllegalArgumentException("pushyTestExecutor must be active");
+    }
+    if (this.notificationRuleTestExecutor.isShutdown()) {
+      throw new IllegalArgumentException("notificationRuleTestExecutor must be active");
+    }
   }
 
   public void open(Window owner) {
@@ -1198,8 +1214,22 @@ public class PreferencesDialog {
 
           int historyInitialLoadV = ((Number) history.initialLoadLines.getValue()).intValue();
           int historyPageSizeV = ((Number) history.pageSize.getValue()).intValue();
+          int historyAutoLoadWheelDebounceMsV =
+              ((Number) history.autoLoadWheelDebounceMs.getValue()).intValue();
+          int historyLoadOlderChunkSizeV =
+              ((Number) history.loadOlderChunkSize.getValue()).intValue();
+          int historyLoadOlderChunkDelayMsV =
+              ((Number) history.loadOlderChunkDelayMs.getValue()).intValue();
+          int historyRemoteRequestTimeoutSecondsV =
+              ((Number) history.remoteRequestTimeoutSeconds.getValue()).intValue();
+          int historyRemoteZncPlaybackTimeoutSecondsV =
+              ((Number) history.remoteZncPlaybackTimeoutSeconds.getValue()).intValue();
+          int historyRemoteZncPlaybackWindowMinutesV =
+              ((Number) history.remoteZncPlaybackWindowMinutes.getValue()).intValue();
           int commandHistoryMaxSizeV =
               ((Number) history.commandHistoryMaxSize.getValue()).intValue();
+          int chatTranscriptMaxLinesPerTargetV =
+              ((Number) history.chatTranscriptMaxLinesPerTarget.getValue()).intValue();
           MemoryUsageDisplayMode memoryUsageDisplayModeV =
               memoryUsageDisplayMode.getSelectedItem() instanceof MemoryUsageDisplayMode mode
                   ? mode
@@ -1479,7 +1509,14 @@ public class PreferencesDialog {
                   timestampsIncludePresenceMessagesV,
                   historyInitialLoadV,
                   historyPageSizeV,
+                  historyAutoLoadWheelDebounceMsV,
+                  historyLoadOlderChunkSizeV,
+                  historyLoadOlderChunkDelayMsV,
+                  historyRemoteRequestTimeoutSecondsV,
+                  historyRemoteZncPlaybackTimeoutSecondsV,
+                  historyRemoteZncPlaybackWindowMinutesV,
                   commandHistoryMaxSizeV,
+                  chatTranscriptMaxLinesPerTargetV,
                   outgoingColorEnabledV,
                   outgoingHexV,
                   userhostEnabledV,
@@ -1663,7 +1700,20 @@ public class PreferencesDialog {
 
           runtimeConfig.rememberChatHistoryInitialLoadLines(next.chatHistoryInitialLoadLines());
           runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
+          runtimeConfig.rememberChatHistoryAutoLoadWheelDebounceMs(
+              next.chatHistoryAutoLoadWheelDebounceMs());
+          runtimeConfig.rememberChatHistoryLoadOlderChunkSize(next.chatHistoryLoadOlderChunkSize());
+          runtimeConfig.rememberChatHistoryLoadOlderChunkDelayMs(
+              next.chatHistoryLoadOlderChunkDelayMs());
+          runtimeConfig.rememberChatHistoryRemoteRequestTimeoutSeconds(
+              next.chatHistoryRemoteRequestTimeoutSeconds());
+          runtimeConfig.rememberChatHistoryRemoteZncPlaybackTimeoutSeconds(
+              next.chatHistoryRemoteZncPlaybackTimeoutSeconds());
+          runtimeConfig.rememberChatHistoryRemoteZncPlaybackWindowMinutes(
+              next.chatHistoryRemoteZncPlaybackWindowMinutes());
           runtimeConfig.rememberCommandHistoryMaxSize(next.commandHistoryMaxSize());
+          runtimeConfig.rememberChatTranscriptMaxLinesPerTarget(
+              next.chatTranscriptMaxLinesPerTarget());
 
           applyFilterSettingsFromUi(filters);
           runtimeConfig.rememberChatLoggingEnabled(logging.enabled.isSelected());
@@ -3345,8 +3395,6 @@ public class PreferencesDialog {
           }
         };
 
-    ExecutorService pushyTestExec = VirtualThreads.newSingleThreadExecutor("ircafe-pushy-test");
-    closeables.add(() -> pushyTestExec.shutdownNow());
     pushyTest.addActionListener(
         e -> {
           PushyTargetMode mode =
@@ -3385,7 +3433,7 @@ public class PreferencesDialog {
           pushyTestStatus.setText("Sending test push…");
           pushyTestStatus.setForeground(UIManager.getColor("Label.foreground"));
 
-          pushyTestExec.submit(
+          pushyTestExecutor.submit(
               () -> {
                 PushyNotificationService.PushResult result =
                     pushyNotificationService != null
@@ -4397,16 +4445,59 @@ public class PreferencesDialog {
     historyPageSize.setToolTipText(
         "How many lines to fetch per click when you use 'Load older messages…' inside the transcript.");
 
+    JSpinner historyAutoLoadWheelDebounceMs =
+        numberSpinner(current.chatHistoryAutoLoadWheelDebounceMs(), 100, 30_000, 100, closeables);
+    historyAutoLoadWheelDebounceMs.setToolTipText(
+        "Debounce for wheel-up auto 'Load older' trigger at top of transcript.\n"
+            + "Higher = fewer accidental/rapid requests.");
+
+    JSpinner historyLoadOlderChunkSize =
+        numberSpinner(current.chatHistoryLoadOlderChunkSize(), 1, 500, 1, closeables);
+    historyLoadOlderChunkSize.setToolTipText(
+        "How many history lines are inserted per EDT chunk during 'Load older'.\n"
+            + "Lower = smoother UI, higher = faster completion.");
+
+    JSpinner historyLoadOlderChunkDelayMs =
+        numberSpinner(current.chatHistoryLoadOlderChunkDelayMs(), 0, 1_000, 5, closeables);
+    historyLoadOlderChunkDelayMs.setToolTipText(
+        "Delay between insert chunks in milliseconds.\n"
+            + "Increase if transcript still feels stuttery while loading.");
+
+    JSpinner historyRemoteRequestTimeoutSeconds =
+        numberSpinner(current.chatHistoryRemoteRequestTimeoutSeconds(), 1, 120, 1, closeables);
+    historyRemoteRequestTimeoutSeconds.setToolTipText(
+        "Timeout for remote CHATHISTORY request/response waits (seconds).");
+
+    JSpinner historyRemoteZncPlaybackTimeoutSeconds =
+        numberSpinner(
+            current.chatHistoryRemoteZncPlaybackTimeoutSeconds(), 1, 300, 1, closeables);
+    historyRemoteZncPlaybackTimeoutSeconds.setToolTipText(
+        "Timeout for remote ZNC playback capture waits (seconds).");
+
+    JSpinner historyRemoteZncPlaybackWindowMinutes =
+        numberSpinner(current.chatHistoryRemoteZncPlaybackWindowMinutes(), 1, 1440, 5, closeables);
+    historyRemoteZncPlaybackWindowMinutes.setToolTipText(
+        "Requested ZNC playback lookback window per fetch (minutes).");
+
     JSpinner commandHistoryMaxSize =
         numberSpinner(current.commandHistoryMaxSize(), 1, 500, 25, closeables);
     commandHistoryMaxSize.setToolTipText(
         "Max entries kept for Up/Down command history in the input bar.\n"
             + "This history is in-memory only; it does not persist across restarts.");
 
+    JSpinner chatTranscriptMaxLinesPerTarget =
+        numberSpinner(current.chatTranscriptMaxLinesPerTarget(), 0, 200_000, 250, closeables);
+    chatTranscriptMaxLinesPerTarget.setToolTipText(
+        "Max live lines kept per target (channel/query/status) in memory.\n"
+            + "When exceeded, oldest lines are trimmed automatically.\n"
+            + "Set to 0 to disable trimming.");
+
     JTextArea historyInfo =
         new JTextArea(
             "Chat history settings (requires chat logging to be enabled).\n"
-                + "These affect how many messages are pulled from the database when opening a transcript or paging older history.");
+                + "These affect how many messages are pulled from the database when opening a transcript or paging older history.\n"
+                + "Advanced controls tune smoothness and remote-history responsiveness.\n"
+                + "Live transcript retention controls in-memory growth while targets stay open.");
     historyInfo.setEditable(false);
     historyInfo.setLineWrap(true);
     historyInfo.setWrapStyleWord(true);
@@ -4425,11 +4516,35 @@ public class PreferencesDialog {
     historyPanel.add(historyInitialLoadLines, "w 110!");
     historyPanel.add(new JLabel("Page size (Load older):"));
     historyPanel.add(historyPageSize, "w 110!");
+    historyPanel.add(new JLabel("Auto-load wheel debounce (ms):"));
+    historyPanel.add(historyAutoLoadWheelDebounceMs, "w 110!");
+    historyPanel.add(new JLabel("Load older chunk size (lines):"));
+    historyPanel.add(historyLoadOlderChunkSize, "w 110!");
+    historyPanel.add(new JLabel("Load older chunk delay (ms):"));
+    historyPanel.add(historyLoadOlderChunkDelayMs, "w 110!");
+    historyPanel.add(new JLabel("Remote request timeout (sec):"));
+    historyPanel.add(historyRemoteRequestTimeoutSeconds, "w 110!");
+    historyPanel.add(new JLabel("ZNC playback timeout (sec):"));
+    historyPanel.add(historyRemoteZncPlaybackTimeoutSeconds, "w 110!");
+    historyPanel.add(new JLabel("ZNC playback window (min):"));
+    historyPanel.add(historyRemoteZncPlaybackWindowMinutes, "w 110!");
     historyPanel.add(new JLabel("Input command history (max):"));
     historyPanel.add(commandHistoryMaxSize, "w 110!");
+    historyPanel.add(new JLabel("Live transcript max lines/target:"));
+    historyPanel.add(chatTranscriptMaxLinesPerTarget, "w 110!");
 
     return new HistoryControls(
-        historyInitialLoadLines, historyPageSize, commandHistoryMaxSize, historyPanel);
+        historyInitialLoadLines,
+        historyPageSize,
+        historyAutoLoadWheelDebounceMs,
+        historyLoadOlderChunkSize,
+        historyLoadOlderChunkDelayMs,
+        historyRemoteRequestTimeoutSeconds,
+        historyRemoteZncPlaybackTimeoutSeconds,
+        historyRemoteZncPlaybackWindowMinutes,
+        commandHistoryMaxSize,
+        chatTranscriptMaxLinesPerTarget,
+        historyPanel);
   }
 
   private LoggingControls buildLoggingControls(
@@ -6378,7 +6493,7 @@ public class PreferencesDialog {
     testOutput.setWrapStyleWord(true);
 
     JLabel testStatus = new JLabel(" ");
-    RuleTestRunner testRunner = new RuleTestRunner();
+    RuleTestRunner testRunner = new RuleTestRunner(notificationRuleTestExecutor);
     closeables.add(testRunner);
 
     return new NotificationRulesControls(
@@ -8269,8 +8384,8 @@ public class PreferencesDialog {
     private final ExecutorService exec;
     private final AtomicLong seq = new AtomicLong();
 
-    RuleTestRunner() {
-      this.exec = VirtualThreads.newSingleThreadExecutor("ircafe-notification-rule-test");
+    RuleTestRunner(ExecutorService exec) {
+      this.exec = Objects.requireNonNull(exec, "exec");
     }
 
     void runTest(NotificationRulesControls controls) {
@@ -8304,7 +8419,7 @@ public class PreferencesDialog {
 
     @Override
     public void close() {
-      exec.shutdownNow();
+      seq.incrementAndGet();
     }
   }
 
@@ -10199,7 +10314,17 @@ public class PreferencesDialog {
       JPanel panel) {}
 
   private record HistoryControls(
-      JSpinner initialLoadLines, JSpinner pageSize, JSpinner commandHistoryMaxSize, JPanel panel) {}
+      JSpinner initialLoadLines,
+      JSpinner pageSize,
+      JSpinner autoLoadWheelDebounceMs,
+      JSpinner loadOlderChunkSize,
+      JSpinner loadOlderChunkDelayMs,
+      JSpinner remoteRequestTimeoutSeconds,
+      JSpinner remoteZncPlaybackTimeoutSeconds,
+      JSpinner remoteZncPlaybackWindowMinutes,
+      JSpinner commandHistoryMaxSize,
+      JSpinner chatTranscriptMaxLinesPerTarget,
+      JPanel panel) {}
 
   private record LoggingControls(
       JCheckBox enabled,

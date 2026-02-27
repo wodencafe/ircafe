@@ -36,8 +36,8 @@ public final class ZncPlaybackCaptureCoordinator {
   /** Safety cap to prevent an in-flight capture from hanging forever. */
   private static final Duration MAX_CAPTURE_TIME = Duration.ofSeconds(15);
 
-  private static final ScheduledExecutorService scheduler =
-      VirtualThreads.newSingleThreadScheduledExecutor("znc-playback-capture");
+  private static final Object SCHEDULER_LOCK = new Object();
+  private static ScheduledExecutorService scheduler;
 
   private final AtomicReference<CaptureSession> active = new AtomicReference<>(null);
 
@@ -65,10 +65,11 @@ public final class ZncPlaybackCaptureCoordinator {
     session.emit = emit;
 
     session.maxTimeout =
-        scheduler.schedule(
-            () -> timeoutIfStillActive(session, "max-time"),
-            MAX_CAPTURE_TIME.toMillis(),
-            TimeUnit.MILLISECONDS);
+        scheduler()
+            .schedule(
+                () -> timeoutIfStillActive(session, "max-time"),
+                MAX_CAPTURE_TIME.toMillis(),
+                TimeUnit.MILLISECONDS);
 
     scheduleQuietTimeout(session);
 
@@ -199,10 +200,32 @@ public final class ZncPlaybackCaptureCoordinator {
     if (prev != null) prev.cancel(false);
 
     s.quietTimeout =
-        scheduler.schedule(
-            () -> timeoutIfStillActive(s, "quiet-time"),
-            QUIET_TIME.toMillis(),
-            TimeUnit.MILLISECONDS);
+        scheduler()
+            .schedule(
+                () -> timeoutIfStillActive(s, "quiet-time"),
+                QUIET_TIME.toMillis(),
+                TimeUnit.MILLISECONDS);
+  }
+
+  static void shutdownSharedScheduler() {
+    synchronized (SCHEDULER_LOCK) {
+      if (scheduler != null) {
+        try {
+          scheduler.shutdownNow();
+        } catch (Exception ignored) {
+        }
+      }
+      scheduler = null;
+    }
+  }
+
+  private static ScheduledExecutorService scheduler() {
+    synchronized (SCHEDULER_LOCK) {
+      if (scheduler == null || scheduler.isShutdown() || scheduler.isTerminated()) {
+        scheduler = VirtualThreads.newSingleThreadScheduledExecutor("znc-playback-capture");
+      }
+      return scheduler;
+    }
   }
 
   private void cancelInternal(CaptureSession s, String reason) {

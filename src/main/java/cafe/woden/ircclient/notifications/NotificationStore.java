@@ -5,11 +5,13 @@ import cafe.woden.ircclient.app.api.UiSettingsPort;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.jmolecules.architecture.layered.ApplicationLayer;
@@ -63,6 +65,8 @@ public class NotificationStore {
 
   /** Default cooldown to avoid spamming rule-match notifications. */
   public static final int DEFAULT_RULE_MATCH_COOLDOWN_SECONDS = 15;
+  private static final Duration RULE_MATCH_KEY_TTL = Duration.ofHours(24);
+  private static final int MAX_RULE_MATCH_KEYS = 50_000;
 
   private final int maxEventsPerServer;
   private final UiSettingsPort uiSettingsPort;
@@ -377,6 +381,7 @@ public class NotificationStore {
 
   private boolean allowRuleMatch(RuleMatchKey key, Instant now) {
     if (key == null || now == null) return false;
+    pruneRuleMatchCooldownKeys(now);
 
     long cooldownMs = (long) currentRuleMatchCooldownSeconds() * 1000L;
     final boolean[] allowed = new boolean[] {false};
@@ -392,6 +397,37 @@ public class NotificationStore {
         });
 
     return allowed[0];
+  }
+
+  private void pruneRuleMatchCooldownKeys(Instant now) {
+    Instant cutoff = now.minus(RULE_MATCH_KEY_TTL);
+    lastRuleMatchAt
+        .entrySet()
+        .removeIf(
+            e ->
+                e == null
+                    || e.getKey() == null
+                    || e.getValue() == null
+                    || e.getValue().isBefore(cutoff));
+
+    int size = lastRuleMatchAt.size();
+    if (size <= MAX_RULE_MATCH_KEYS) return;
+
+    int toRemove = size - MAX_RULE_MATCH_KEYS;
+    for (int i = 0; i < toRemove; i++) {
+      RuleMatchKey oldestKey = null;
+      Instant oldestAt = null;
+      for (Map.Entry<RuleMatchKey, Instant> e : lastRuleMatchAt.entrySet()) {
+        if (e == null || e.getKey() == null) continue;
+        Instant at = e.getValue();
+        if (at == null || oldestAt == null || at.isBefore(oldestAt)) {
+          oldestAt = at;
+          oldestKey = e.getKey();
+        }
+      }
+      if (oldestKey == null) break;
+      lastRuleMatchAt.remove(oldestKey);
+    }
   }
 
   private void clearRuleMatchCooldownForChannel(String serverId, String channel) {

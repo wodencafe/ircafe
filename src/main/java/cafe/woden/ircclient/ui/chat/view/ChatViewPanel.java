@@ -114,7 +114,14 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
     // "Infinite scroll" helper: if the user tries to wheel-scroll up past the very top,
     // trigger the embedded "Load older messages…" control (if present).
-    decorators.add(ChatAutoLoadOlderScrollDecorator.decorate(scroll, chat));
+    decorators.add(
+        ChatAutoLoadOlderScrollDecorator.decorate(
+            scroll,
+            chat,
+            () -> {
+              UiSettings s = this.settingsBus != null ? this.settingsBus.get() : null;
+              return s != null ? s.chatHistoryAutoLoadWheelDebounceMs() : 2000;
+            }));
 
     add(scroll, BorderLayout.CENTER);
   }

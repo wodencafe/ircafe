@@ -37,6 +37,7 @@ final class MessageInputHintPopupSupport {
   private String hintPopupShownText = "";
   private int hintPopupX = Integer.MIN_VALUE;
   private int hintPopupY = Integer.MIN_VALUE;
+  private boolean listenersInstalled;
 
   private final ComponentAdapter hintAnchorListener =
       new ComponentAdapter() {
@@ -93,11 +94,32 @@ final class MessageInputHintPopupSupport {
   }
 
   void installListeners() {
+    if (listenersInstalled) return;
+    listenersInstalled = true;
     // Match the previous behavior: listeners are installed once and live for the component
     // lifetime.
     input.addComponentListener(hintAnchorListener);
     owner.addComponentListener(hintAnchorListener);
     owner.addHierarchyListener(hierarchyListener);
+  }
+
+  void shutdown() {
+    if (listenersInstalled) {
+      listenersInstalled = false;
+      try {
+        input.removeComponentListener(hintAnchorListener);
+      } catch (Exception ignored) {
+      }
+      try {
+        owner.removeComponentListener(hintAnchorListener);
+      } catch (Exception ignored) {
+      }
+      try {
+        owner.removeHierarchyListener(hierarchyListener);
+      } catch (Exception ignored) {
+      }
+    }
+    hideHintPopup();
   }
 
   void hide() {

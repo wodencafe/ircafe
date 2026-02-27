@@ -1,5 +1,9 @@
 package cafe.woden.ircclient.irc.enrichment;
 
+import it.unimi.dsi.fastutil.objects.Object2IntLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
+import it.unimi.dsi.fastutil.objects.Object2LongLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Object2LongMap;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -9,7 +13,6 @@ import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -38,7 +41,11 @@ public final class UserInfoEnrichmentPlanner {
   private static final Duration WHO_CHANNEL_MIN_CMD_INTERVAL = Duration.ofSeconds(30);
   private static final int WHO_CHANNEL_MAX_COMMANDS_PER_MINUTE = 2;
   private static final Duration WHO_CHANNEL_TARGET_COOLDOWN = Duration.ofMinutes(10);
+  private static final Duration PROBE_STATE_TTL = Duration.ofHours(24);
+  private static final int MAX_TRACKED_TARGET_STATE_PER_KIND = 8_192;
   private static final long NO_WAKE_NEEDED_MS = Long.MAX_VALUE;
+  private static final long MISSING_EPOCH_MILLIS = Long.MIN_VALUE;
+  private static final int MISSING_COUNT = Integer.MIN_VALUE;
 
   public enum ProbeKind {
     WHO_CHANNEL,
@@ -240,7 +247,7 @@ public final class UserInfoEnrichmentPlanner {
 
       // Ambiguous result: we initiated WHOIS, it completed, but we didn't learn an account
       // and we still haven't seen any 330 on this connection. Back off aggressively.
-      int miss = ps.ambiguousWhoisMissCountByNickLower.getOrDefault(key, 0) + 1;
+      int miss = ps.ambiguousWhoisMissCountByNickLower.getOrZero(key) + 1;
       ps.ambiguousWhoisMissCountByNickLower.put(key, miss);
 
       Duration base = cfg.whoisNickCooldown;
@@ -258,7 +265,7 @@ public final class UserInfoEnrichmentPlanner {
       }
       if (backoff.compareTo(max) > 0) backoff = max;
 
-      ps.snoozeUntilByNickLower.put(key, at.plus(backoff));
+      ps.snoozeUntilByNickLower.putInstant(key, at.plus(backoff));
     }
   }
 
@@ -402,17 +409,17 @@ public final class UserInfoEnrichmentPlanner {
         return Optional.empty();
       if (ps.queue.isEmpty()) return Optional.empty();
 
+      long nowEpochMs = now.toEpochMilli();
       var it = ps.queue.iterator();
       while (it.hasNext()) {
         String channel = it.next();
         String key = channel.toLowerCase(Locale.ROOT);
-        Instant last = ps.lastNickRequestAt.get(key);
-        if (last != null
-            && Duration.between(last, now).compareTo(WHO_CHANNEL_TARGET_COOLDOWN) < 0) {
+        long lastEpochMs = ps.lastNickRequestAt.getEpochMillis(key);
+        if (isStillCoolingDown(nowEpochMs, lastEpochMs, WHO_CHANNEL_TARGET_COOLDOWN)) {
           continue;
         }
         it.remove();
-        ps.lastNickRequestAt.put(key, now);
+        ps.lastNickRequestAt.putEpochMillis(key, nowEpochMs);
         noteSent(ps, now);
         return Optional.of(
             new PlannedCommand(ProbeKind.WHO_CHANNEL, serverId, java.util.List.of(channel)));
@@ -432,17 +439,18 @@ public final class UserInfoEnrichmentPlanner {
         return Optional.empty();
       if (ps.queue.isEmpty()) return Optional.empty();
 
+      long nowEpochMs = now.toEpochMilli();
       batch = new ArrayList<>(cfg.userhostMaxNicksPerCommand);
       var it = ps.queue.iterator();
       while (it.hasNext() && batch.size() < cfg.userhostMaxNicksPerCommand) {
         String nick = it.next();
         String key = nick.toLowerCase(Locale.ROOT);
-        Instant last = ps.lastNickRequestAt.get(key);
-        if (last != null && Duration.between(last, now).compareTo(cfg.userhostNickCooldown) < 0) {
+        long lastEpochMs = ps.lastNickRequestAt.getEpochMillis(key);
+        if (isStillCoolingDown(nowEpochMs, lastEpochMs, cfg.userhostNickCooldown)) {
           continue;
         }
         it.remove();
-        ps.lastNickRequestAt.put(key, now);
+        ps.lastNickRequestAt.putEpochMillis(key, nowEpochMs);
         batch.add(nick);
       }
 
@@ -463,21 +471,22 @@ public final class UserInfoEnrichmentPlanner {
         return Optional.empty();
       if (ps.queue.isEmpty()) return Optional.empty();
 
+      long nowEpochMs = now.toEpochMilli();
       chosen = new ArrayList<>(1);
       var it = ps.queue.iterator();
       while (it.hasNext() && chosen.isEmpty()) {
         String nick = it.next();
         String key = nick.toLowerCase(Locale.ROOT);
-        Instant snooze = ps.snoozeUntilByNickLower.get(key);
-        if (snooze != null && now.isBefore(snooze)) {
+        long snoozeUntilEpochMs = ps.snoozeUntilByNickLower.getEpochMillis(key);
+        if (snoozeUntilEpochMs != MISSING_EPOCH_MILLIS && nowEpochMs < snoozeUntilEpochMs) {
           continue;
         }
-        Instant last = ps.lastNickRequestAt.get(key);
-        if (last != null && Duration.between(last, now).compareTo(cfg.whoisNickCooldown) < 0) {
+        long lastEpochMs = ps.lastNickRequestAt.getEpochMillis(key);
+        if (isStillCoolingDown(nowEpochMs, lastEpochMs, cfg.whoisNickCooldown)) {
           continue;
         }
         it.remove();
-        ps.lastNickRequestAt.put(key, now);
+        ps.lastNickRequestAt.putEpochMillis(key, nowEpochMs);
         chosen.add(nick);
       }
 
@@ -492,6 +501,9 @@ public final class UserInfoEnrichmentPlanner {
         && Duration.between(ps.cmdTimes.peekFirst(), now).toSeconds() >= 60) {
       ps.cmdTimes.removeFirst();
     }
+    ps.lastNickRequestAt.removeIfBefore(now.minus(PROBE_STATE_TTL));
+    ps.snoozeUntilByNickLower.removeIfNotAfter(now);
+    ps.ambiguousWhoisMissCountByNickLower.removeKeysNotPresentIn(ps.snoozeUntilByNickLower);
   }
 
   private static boolean canSend(
@@ -506,59 +518,60 @@ public final class UserInfoEnrichmentPlanner {
       Duration minInterval,
       int maxPerMinute,
       Duration targetCooldown,
-      Map<String, Instant> notBeforeByNickLower) {
+      BoundedNickInstantStore notBeforeByNickLower) {
     if (ps.queue.isEmpty()) return NO_WAKE_NEEDED_MS;
+    long nowEpochMs = now.toEpochMilli();
 
-    Instant nextRateAllowedAt = now;
+    long nextRateAllowedAtEpochMs = nowEpochMs;
     if (ps.lastCmdAt != null) {
-      Instant afterMinInterval = ps.lastCmdAt.plus(minInterval);
-      if (afterMinInterval.isAfter(nextRateAllowedAt)) {
-        nextRateAllowedAt = afterMinInterval;
+      long afterMinIntervalEpochMs =
+          safeAddEpochMillis(ps.lastCmdAt.toEpochMilli(), Math.max(0L, minInterval.toMillis()));
+      if (afterMinIntervalEpochMs > nextRateAllowedAtEpochMs) {
+        nextRateAllowedAtEpochMs = afterMinIntervalEpochMs;
       }
     }
     if (ps.cmdTimes.size() >= maxPerMinute && ps.cmdTimes.peekFirst() != null) {
-      Instant afterRateWindow = ps.cmdTimes.peekFirst().plusSeconds(60);
-      if (afterRateWindow.isAfter(nextRateAllowedAt)) {
-        nextRateAllowedAt = afterRateWindow;
+      long afterRateWindowEpochMs = safeAddEpochMillis(ps.cmdTimes.peekFirst().toEpochMilli(), 60_000L);
+      if (afterRateWindowEpochMs > nextRateAllowedAtEpochMs) {
+        nextRateAllowedAtEpochMs = afterRateWindowEpochMs;
       }
     }
 
-    Instant earliestTargetReadyAt = null;
+    long earliestTargetReadyAtEpochMs = Long.MAX_VALUE;
+    boolean foundReadyAt = false;
+    long targetCooldownMs = Math.max(0L, targetCooldown.toMillis());
     for (String target : ps.queue) {
       String key = Objects.toString(target, "").trim().toLowerCase(Locale.ROOT);
       if (key.isEmpty()) continue;
 
-      Instant readyAt = now;
-      Instant last = ps.lastNickRequestAt.get(key);
-      if (last != null) {
-        Instant afterCooldown = last.plus(targetCooldown);
-        if (afterCooldown.isAfter(readyAt)) {
-          readyAt = afterCooldown;
+      long readyAtEpochMs = nowEpochMs;
+      long lastEpochMs = ps.lastNickRequestAt.getEpochMillis(key);
+      if (lastEpochMs != MISSING_EPOCH_MILLIS) {
+        long afterCooldownEpochMs = safeAddEpochMillis(lastEpochMs, targetCooldownMs);
+        if (afterCooldownEpochMs > readyAtEpochMs) {
+          readyAtEpochMs = afterCooldownEpochMs;
         }
       }
       if (notBeforeByNickLower != null) {
-        Instant notBefore = notBeforeByNickLower.get(key);
-        if (notBefore != null && notBefore.isAfter(readyAt)) {
-          readyAt = notBefore;
+        long notBeforeEpochMs = notBeforeByNickLower.getEpochMillis(key);
+        if (notBeforeEpochMs != MISSING_EPOCH_MILLIS && notBeforeEpochMs > readyAtEpochMs) {
+          readyAtEpochMs = notBeforeEpochMs;
         }
       }
 
-      if (earliestTargetReadyAt == null || readyAt.isBefore(earliestTargetReadyAt)) {
-        earliestTargetReadyAt = readyAt;
-        if (!readyAt.isAfter(now)) {
+      if (!foundReadyAt || readyAtEpochMs < earliestTargetReadyAtEpochMs) {
+        earliestTargetReadyAtEpochMs = readyAtEpochMs;
+        foundReadyAt = true;
+        if (readyAtEpochMs <= nowEpochMs) {
           break;
         }
       }
     }
 
-    if (earliestTargetReadyAt == null) return NO_WAKE_NEEDED_MS;
+    if (!foundReadyAt) return NO_WAKE_NEEDED_MS;
 
-    Instant wakeAt =
-        nextRateAllowedAt.isAfter(earliestTargetReadyAt)
-            ? nextRateAllowedAt
-            : earliestTargetReadyAt;
-    long delayMs = Duration.between(now, wakeAt).toMillis();
-    return Math.max(0L, delayMs);
+    long wakeAtEpochMs = Math.max(nextRateAllowedAtEpochMs, earliestTargetReadyAtEpochMs);
+    return Math.max(0L, wakeAtEpochMs - nowEpochMs);
   }
 
   private static void noteSent(ProbeState ps, Instant at) {
@@ -568,6 +581,18 @@ public final class UserInfoEnrichmentPlanner {
 
   private static String norm(String s) {
     return Objects.toString(s, "").trim();
+  }
+
+  private static boolean isStillCoolingDown(long nowEpochMs, long lastEpochMs, Duration cooldown) {
+    if (lastEpochMs == MISSING_EPOCH_MILLIS) return false;
+    long cooldownMs = Math.max(0L, cooldown.toMillis());
+    return nowEpochMs < safeAddEpochMillis(lastEpochMs, cooldownMs);
+  }
+
+  private static long safeAddEpochMillis(long baseEpochMs, long deltaMs) {
+    if (deltaMs <= 0L) return baseEpochMs;
+    if (Long.MAX_VALUE - baseEpochMs < deltaMs) return Long.MAX_VALUE;
+    return baseEpochMs + deltaMs;
   }
 
   private static final class ServerState {
@@ -588,14 +613,126 @@ public final class UserInfoEnrichmentPlanner {
 
   private static final class ProbeState {
     final Set<String> queue = new LinkedHashSet<>();
-    final Map<String, Instant> lastNickRequestAt = new ConcurrentHashMap<>();
+    final BoundedNickInstantStore lastNickRequestAt =
+        new BoundedNickInstantStore(MAX_TRACKED_TARGET_STATE_PER_KIND);
     // When WHOIS account information is ambiguous (e.g., no 330 ever seen), apply a soft snooze so
     // we
     // do not hammer WHOIS forever for the same nick. Keys are lowercase nick.
-    final Map<String, Instant> snoozeUntilByNickLower = new ConcurrentHashMap<>();
-    final Map<String, Integer> ambiguousWhoisMissCountByNickLower = new ConcurrentHashMap<>();
+    final BoundedNickInstantStore snoozeUntilByNickLower =
+        new BoundedNickInstantStore(MAX_TRACKED_TARGET_STATE_PER_KIND);
+    final BoundedNickIntStore ambiguousWhoisMissCountByNickLower =
+        new BoundedNickIntStore(MAX_TRACKED_TARGET_STATE_PER_KIND);
     final Deque<Instant> cmdTimes = new ArrayDeque<>();
     Instant lastCmdAt;
+  }
+
+  private static final class BoundedNickInstantStore {
+    private final int maxSize;
+    private final Object2LongLinkedOpenHashMap<String> byNickLower;
+
+    BoundedNickInstantStore(int maxSize) {
+      this.maxSize = Math.max(1, maxSize);
+      this.byNickLower = new Object2LongLinkedOpenHashMap<>(256, 0.75f);
+      this.byNickLower.defaultReturnValue(MISSING_EPOCH_MILLIS);
+    }
+
+    long getEpochMillis(String nickLower) {
+      if (nickLower == null || nickLower.isBlank()) return MISSING_EPOCH_MILLIS;
+      return byNickLower.getAndMoveToLast(nickLower);
+    }
+
+    void putInstant(String nickLower, Instant at) {
+      if (at == null) return;
+      putEpochMillis(nickLower, at.toEpochMilli());
+    }
+
+    void putEpochMillis(String nickLower, long atEpochMs) {
+      if (nickLower == null || nickLower.isBlank()) return;
+      byNickLower.putAndMoveToLast(nickLower, atEpochMs);
+      trimToMax();
+    }
+
+    void remove(String nickLower) {
+      if (nickLower == null || nickLower.isBlank()) return;
+      byNickLower.removeLong(nickLower);
+    }
+
+    boolean containsKey(String nickLower) {
+      if (nickLower == null || nickLower.isBlank()) return false;
+      return byNickLower.containsKey(nickLower);
+    }
+
+    void removeIfBefore(Instant cutoff) {
+      if (cutoff == null) return;
+      long cutoffEpochMs = cutoff.toEpochMilli();
+      var it = byNickLower.object2LongEntrySet().fastIterator();
+      while (it.hasNext()) {
+        Object2LongMap.Entry<String> entry = it.next();
+        if (entry.getLongValue() < cutoffEpochMs) it.remove();
+      }
+    }
+
+    void removeIfNotAfter(Instant threshold) {
+      if (threshold == null) return;
+      long thresholdEpochMs = threshold.toEpochMilli();
+      var it = byNickLower.object2LongEntrySet().fastIterator();
+      while (it.hasNext()) {
+        Object2LongMap.Entry<String> entry = it.next();
+        if (entry.getLongValue() <= thresholdEpochMs) it.remove();
+      }
+    }
+
+    private void trimToMax() {
+      while (byNickLower.size() > maxSize) {
+        byNickLower.removeFirstLong();
+      }
+    }
+  }
+
+  private static final class BoundedNickIntStore {
+    private final int maxSize;
+    private final Object2IntLinkedOpenHashMap<String> byNickLower;
+
+    BoundedNickIntStore(int maxSize) {
+      this.maxSize = Math.max(1, maxSize);
+      this.byNickLower = new Object2IntLinkedOpenHashMap<>(256, 0.75f);
+      this.byNickLower.defaultReturnValue(MISSING_COUNT);
+    }
+
+    int getOrZero(String nickLower) {
+      if (nickLower == null || nickLower.isBlank()) return 0;
+      int value = byNickLower.getAndMoveToLast(nickLower);
+      return value == MISSING_COUNT ? 0 : value;
+    }
+
+    void put(String nickLower, int value) {
+      if (nickLower == null || nickLower.isBlank()) return;
+      byNickLower.putAndMoveToLast(nickLower, value);
+      trimToMax();
+    }
+
+    void remove(String nickLower) {
+      if (nickLower == null || nickLower.isBlank()) return;
+      byNickLower.removeInt(nickLower);
+    }
+
+    void removeKeysNotPresentIn(BoundedNickInstantStore allowedKeys) {
+      if (allowedKeys == null) {
+        byNickLower.clear();
+        return;
+      }
+      var it = byNickLower.object2IntEntrySet().fastIterator();
+      while (it.hasNext()) {
+        Object2IntMap.Entry<String> entry = it.next();
+        if (!allowedKeys.containsKey(entry.getKey())) it.remove();
+      }
+    }
+
+    private void trimToMax() {
+      while (byNickLower.size() > maxSize) {
+        byNickLower.removeFirstInt();
+      }
+    }
   }
 
   /**

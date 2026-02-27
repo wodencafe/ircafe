@@ -9,6 +9,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -38,8 +39,8 @@ public class UserhostQueryService {
   // USERHOST typically allows up to 5 nick arguments.
   private static final int ABSOLUTE_MAX_NICKS_PER_CMD = 5;
 
-  // Conservative defaults (can be overridden via preferences/config):
-
+  private static final Duration LAST_REQUEST_TRACKING_TTL = Duration.ofHours(24);
+  private static final int MAX_TRACKED_NICK_REQUESTS_PER_SERVER = 8_192;
   private static final long NO_WAKE_NEEDED_MS = Long.MAX_VALUE;
 
   private final IrcClientService irc;
@@ -182,6 +183,10 @@ public class UserhostQueryService {
         && Duration.between(st.cmdTimes.peekFirst(), now).toSeconds() >= 60) {
       st.cmdTimes.removeFirst();
     }
+    Instant cutoff = now.minus(LAST_REQUEST_TRACKING_TTL);
+    st.lastNickRequestAt
+        .entrySet()
+        .removeIf(e -> e.getValue() == null || e.getValue().isBefore(cutoff));
   }
 
   private boolean canSendNow(ServerState st, Instant now, UserhostConfig cfg) {
@@ -266,6 +271,15 @@ public class UserhostQueryService {
     return Objects.toString(s, "").trim();
   }
 
+  private static Map<String, Instant> newBoundedLastRequestMap() {
+    return new LinkedHashMap<>(256, 0.75f, true) {
+      @Override
+      protected boolean removeEldestEntry(Map.Entry<String, Instant> eldest) {
+        return size() > MAX_TRACKED_NICK_REQUESTS_PER_SERVER;
+      }
+    };
+  }
+
   private UserhostConfig config() {
     IrcRuntimeSettingsProvider provider = settingsProvider.getIfAvailable();
     IrcRuntimeSettings s = provider != null ? provider.current() : IrcRuntimeSettings.defaults();
@@ -290,7 +304,7 @@ public class UserhostQueryService {
 
   private static final class ServerState {
     final Set<String> queue = new LinkedHashSet<>();
-    final Map<String, Instant> lastNickRequestAt = new ConcurrentHashMap<>();
+    final Map<String, Instant> lastNickRequestAt = newBoundedLastRequestMap();
     final Deque<Instant> cmdTimes = new ArrayDeque<>();
     Instant lastCmdAt;
   }

@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -90,12 +91,14 @@ public final class JfrDiagnosticsPanel extends JPanel {
   private final JButton clearSelectedRowButton = new JButton();
   private final JButton detailsButton = new JButton();
   private final JButton refreshButton = new JButton();
+  private final JButton exportMemoryBundleButton = new JButton();
   private final CircularGauge cpuGauge = new CircularGauge("CPU");
   private final CircularGauge heapGauge = new CircularGauge("Heap");
   private final CircularGauge gcGauge = new CircularGauge("GC Rate");
 
   private boolean syncingControls;
   private boolean stateListenerRegistered;
+  private volatile boolean exportInProgress;
 
   public JfrDiagnosticsPanel(JfrRuntimeEventsService service) {
     super(new BorderLayout(0, 8));
@@ -192,11 +195,12 @@ public final class JfrDiagnosticsPanel extends JPanel {
             });
 
     JPanel controls =
-        new JPanel(new MigLayout("insets 0, fillx, wrap 5", "[]4[]4[]4[]push[]", "[]"));
+        new JPanel(new MigLayout("insets 0, fillx, wrap 6", "[]4[]4[]4[]4[]push[]", "[]"));
     controls.add(refreshButton);
     controls.add(detailsButton);
     controls.add(clearSelectedRowButton);
     controls.add(clearAllRowsButton);
+    controls.add(exportMemoryBundleButton);
     controls.add(rowsLabel, "alignx right");
 
     JScrollPane scroll = new JScrollPane(table);
@@ -219,6 +223,11 @@ public final class JfrDiagnosticsPanel extends JPanel {
         clearSelectedRowButton, "close", "Remove the selected event row", "Remove selected row");
     configureEventActionButton(
         clearAllRowsButton, "trash", "Clear all event rows", "Clear all rows");
+    configureEventActionButton(
+        exportMemoryBundleButton,
+        "copy",
+        "Capture and export a memory diagnostics bundle (JFR, histogram, heap dump)",
+        "Export memory diagnostics bundle");
   }
 
   private void configureEventActionButton(
@@ -309,6 +318,7 @@ public final class JfrDiagnosticsPanel extends JPanel {
           refreshNow();
         });
     clearSelectedRowButton.addActionListener(e -> removeSelectedRow());
+    exportMemoryBundleButton.addActionListener(e -> exportMemoryDiagnosticsBundle());
   }
 
   private void installTableInteractions() {
@@ -327,6 +337,9 @@ public final class JfrDiagnosticsPanel extends JPanel {
               service.clearEvents();
               refreshNow();
             });
+    popup
+        .add(new javax.swing.JMenuItem("Export Memory Bundle"))
+        .addActionListener(e -> exportMemoryDiagnosticsBundle());
 
     table.addMouseListener(
         new MouseAdapter() {
@@ -458,6 +471,7 @@ public final class JfrDiagnosticsPanel extends JPanel {
     pauseRowsCheck.setEnabled(available);
     clearAllRowsButton.setEnabled(available);
     refreshButton.setEnabled(available);
+    exportMemoryBundleButton.setEnabled(available && !exportInProgress);
   }
 
   private void setSummaryUnavailable(String streamStatusText) {
@@ -521,6 +535,7 @@ public final class JfrDiagnosticsPanel extends JPanel {
     boolean hasSelection = selectedEvent() != null;
     detailsButton.setEnabled(hasSelection);
     clearSelectedRowButton.setEnabled(hasSelection && service != null);
+    exportMemoryBundleButton.setEnabled(service != null && !exportInProgress);
   }
 
   private RuntimeDiagnosticEvent selectedEvent() {
@@ -548,6 +563,81 @@ public final class JfrDiagnosticsPanel extends JPanel {
         content,
         "Event Details",
         JOptionPane.INFORMATION_MESSAGE);
+  }
+
+  private void exportMemoryDiagnosticsBundle() {
+    if (service == null || exportInProgress) return;
+    Object[] options = {"Light Bundle (Recommended)", "Full Bundle (With Heap Dump)", "Cancel"};
+    int choice =
+        JOptionPane.showOptionDialog(
+            SwingUtilities.getWindowAncestor(this),
+            "Export a memory diagnostics bundle now?\n\n"
+                + "Light bundle: runtime summary + class histogram + short JFR snapshot.\n"
+                + "Full bundle: includes a live heap dump (larger and slower).",
+            "Export Memory Bundle",
+            JOptionPane.DEFAULT_OPTION,
+            JOptionPane.WARNING_MESSAGE,
+            null,
+            options,
+            options[0]);
+    if (choice < 0 || choice >= 2) return;
+    boolean includeHeapDump = choice == 1;
+
+    setExportInProgress(true);
+    CompletableFuture
+        .supplyAsync(() -> service.captureMemoryDiagnosticsBundle(includeHeapDump))
+        .whenComplete(
+            (report, error) ->
+                SwingUtilities.invokeLater(
+                    () -> {
+                      setExportInProgress(false);
+                      if (error != null) {
+                        showMultilineDialog(
+                            "Export Error",
+                            "Memory diagnostics export failed:\n\n"
+                                + Objects.toString(error.getMessage(), ""),
+                            JOptionPane.ERROR_MESSAGE);
+                        return;
+                      }
+
+                      if (report == null) {
+                        showMultilineDialog(
+                            "Export Error",
+                            "Memory diagnostics export failed: no report was returned.",
+                            JOptionPane.ERROR_MESSAGE);
+                        return;
+                      }
+
+                      if (report.success()) {
+                        showMultilineDialog(
+                            "Export Complete", report.summary(), JOptionPane.INFORMATION_MESSAGE);
+                      } else {
+                        showMultilineDialog(
+                            "Export Error", report.summary(), JOptionPane.ERROR_MESSAGE);
+                      }
+                    }));
+  }
+
+  private void setExportInProgress(boolean inProgress) {
+    exportInProgress = inProgress;
+    exportMemoryBundleButton.setEnabled(service != null && !exportInProgress);
+    exportMemoryBundleButton.setToolTipText(
+        inProgress
+            ? "Export in progress..."
+            : "Capture and export a memory diagnostics bundle (JFR, histogram, heap dump)");
+    exportMemoryBundleButton.repaint();
+  }
+
+  private void showMultilineDialog(String title, String body, int messageType) {
+    JTextArea text = new JTextArea(Objects.toString(body, ""));
+    text.setEditable(false);
+    text.setLineWrap(true);
+    text.setWrapStyleWord(true);
+    text.setCaretPosition(0);
+    JScrollPane scroll = new JScrollPane(text);
+    scroll.setPreferredSize(new Dimension(860, 520));
+    JOptionPane.showMessageDialog(
+        SwingUtilities.getWindowAncestor(this), scroll, title, messageType);
   }
 
   private static JPanel buildDetailPanel(RuntimeDiagnosticEvent event) {

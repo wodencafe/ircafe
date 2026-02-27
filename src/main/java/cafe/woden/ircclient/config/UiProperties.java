@@ -40,7 +40,14 @@ public record UiProperties(
     Boolean chatMessageTimestampsEnabled,
     Integer chatHistoryInitialLoadLines,
     Integer chatHistoryPageSize,
+    Integer chatHistoryAutoLoadWheelDebounceMs,
+    Integer chatHistoryLoadOlderChunkSize,
+    Integer chatHistoryLoadOlderChunkDelayMs,
+    Integer chatHistoryRemoteRequestTimeoutSeconds,
+    Integer chatHistoryRemoteZncPlaybackTimeoutSeconds,
+    Integer chatHistoryRemoteZncPlaybackWindowMinutes,
     Integer commandHistoryMaxSize,
+    Integer chatTranscriptMaxLinesPerTarget,
     String memoryUsageDisplayMode,
     Integer memoryUsageWarningNearMaxPercent,
     Boolean memoryUsageWarningTooltipEnabled,
@@ -632,6 +639,69 @@ public record UiProperties(
 
     if (chatHistoryPageSize == null || chatHistoryPageSize <= 0) {
       chatHistoryPageSize = 200;
+    }
+    if (chatHistoryAutoLoadWheelDebounceMs == null || chatHistoryAutoLoadWheelDebounceMs <= 0) {
+      chatHistoryAutoLoadWheelDebounceMs = 2000;
+    }
+    if (chatHistoryAutoLoadWheelDebounceMs < 100) {
+      chatHistoryAutoLoadWheelDebounceMs = 100;
+    }
+    if (chatHistoryAutoLoadWheelDebounceMs > 30_000) {
+      chatHistoryAutoLoadWheelDebounceMs = 30_000;
+    }
+    if (chatHistoryLoadOlderChunkSize == null || chatHistoryLoadOlderChunkSize <= 0) {
+      chatHistoryLoadOlderChunkSize = 20;
+    }
+    if (chatHistoryLoadOlderChunkSize < 1) {
+      chatHistoryLoadOlderChunkSize = 1;
+    }
+    if (chatHistoryLoadOlderChunkSize > 500) {
+      chatHistoryLoadOlderChunkSize = 500;
+    }
+    if (chatHistoryLoadOlderChunkDelayMs == null || chatHistoryLoadOlderChunkDelayMs < 0) {
+      chatHistoryLoadOlderChunkDelayMs = 10;
+    }
+    if (chatHistoryLoadOlderChunkDelayMs > 1_000) {
+      chatHistoryLoadOlderChunkDelayMs = 1_000;
+    }
+    if (chatHistoryRemoteRequestTimeoutSeconds == null || chatHistoryRemoteRequestTimeoutSeconds <= 0) {
+      chatHistoryRemoteRequestTimeoutSeconds = 6;
+    }
+    if (chatHistoryRemoteRequestTimeoutSeconds < 1) {
+      chatHistoryRemoteRequestTimeoutSeconds = 1;
+    }
+    if (chatHistoryRemoteRequestTimeoutSeconds > 120) {
+      chatHistoryRemoteRequestTimeoutSeconds = 120;
+    }
+    if (chatHistoryRemoteZncPlaybackTimeoutSeconds == null
+        || chatHistoryRemoteZncPlaybackTimeoutSeconds <= 0) {
+      chatHistoryRemoteZncPlaybackTimeoutSeconds = 18;
+    }
+    if (chatHistoryRemoteZncPlaybackTimeoutSeconds < 1) {
+      chatHistoryRemoteZncPlaybackTimeoutSeconds = 1;
+    }
+    if (chatHistoryRemoteZncPlaybackTimeoutSeconds > 300) {
+      chatHistoryRemoteZncPlaybackTimeoutSeconds = 300;
+    }
+    if (chatHistoryRemoteZncPlaybackWindowMinutes == null
+        || chatHistoryRemoteZncPlaybackWindowMinutes <= 0) {
+      chatHistoryRemoteZncPlaybackWindowMinutes = 360;
+    }
+    if (chatHistoryRemoteZncPlaybackWindowMinutes < 1) {
+      chatHistoryRemoteZncPlaybackWindowMinutes = 1;
+    }
+    if (chatHistoryRemoteZncPlaybackWindowMinutes > 1440) {
+      chatHistoryRemoteZncPlaybackWindowMinutes = 1440;
+    }
+    // Live per-target transcript retention cap. 0 disables trimming.
+    if (chatTranscriptMaxLinesPerTarget == null) {
+      chatTranscriptMaxLinesPerTarget = 4000;
+    }
+    if (chatTranscriptMaxLinesPerTarget < 0) {
+      chatTranscriptMaxLinesPerTarget = 0;
+    }
+    if (chatTranscriptMaxLinesPerTarget > 200_000) {
+      chatTranscriptMaxLinesPerTarget = 200_000;
     }
 
     // Outgoing message color default: disabled.

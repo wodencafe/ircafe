@@ -306,6 +306,7 @@ public class SwingUiPort implements UiPort {
           serverTree.removeTarget(target);
           chat.clearTopic(target);
           transcripts.closeTarget(target);
+          chat.onTargetClosed(target);
         });
   }
 

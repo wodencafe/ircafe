@@ -33,6 +33,22 @@ ircafe:
 
     # How many lines to fetch per click for the in-transcript "Load older messages..." button.
     chatHistoryPageSize: 200
+    # Debounce window for wheel-up auto-load at top of transcript (milliseconds).
+    chatHistoryAutoLoadWheelDebounceMs: 2000
+    # How many lines to insert per EDT chunk while loading older messages.
+    chatHistoryLoadOlderChunkSize: 20
+    # Delay between load-older insert chunks (milliseconds).
+    chatHistoryLoadOlderChunkDelayMs: 10
+    # Timeout waiting for remote CHATHISTORY ingest (seconds).
+    chatHistoryRemoteRequestTimeoutSeconds: 6
+    # Timeout waiting for remote ZNC playback ingest (seconds).
+    chatHistoryRemoteZncPlaybackTimeoutSeconds: 18
+    # Backward request window for ZNC playback fallback (minutes).
+    chatHistoryRemoteZncPlaybackWindowMinutes: 360
+
+    # Max live in-memory transcript lines kept per target (channel/query/status).
+    # 0 disables trimming (unbounded growth while targets stay open).
+    chatTranscriptMaxLinesPerTarget: 4000
 
     # Outgoing message custom color (lines you send that are locally echoed into the transcript).
     # Default: false

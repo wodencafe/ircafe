@@ -28,6 +28,7 @@ import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Flowable;
 import java.awt.Component;
 import java.awt.Container;
@@ -130,7 +131,11 @@ class ChatDockableIgnoresMockVerifyTest {
                     null,
                     settingsBus,
                     spellcheckSettingsBus,
-                    commandHistoryStore)));
+                    commandHistoryStore,
+                    VirtualThreads.newSingleThreadExecutor(
+                        "test-chat-dockable-ignores-log-viewer"),
+                    VirtualThreads.newSingleThreadExecutor(
+                        "test-chat-dockable-ignores-interceptor"))));
 
     return new Fixture(holder.get(), transcripts, ignoreListDialog);
   }

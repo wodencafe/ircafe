@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -137,6 +138,18 @@ class MessageInputNickCompletionSupportTest {
     input.setCaretPosition(4);
 
     assertFalse(shouldForcePopupInsteadOfImmediateCompletion(support, "helo", 4));
+  }
+
+  @Test
+  void shutdownIsIdempotentAfterInstall() {
+    JTextField input = new JTextField();
+    MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(new JPanel(), input, undoSupport);
+    support.install();
+
+    assertDoesNotThrow(support::shutdown);
+    assertDoesNotThrow(support::shutdown);
   }
 
   private static MessageInputNickCompletionSupport newSupport(List<String> nicks) {

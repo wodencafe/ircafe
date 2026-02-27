@@ -37,6 +37,16 @@ public class ExecutorConfig {
   public static final String CHATHISTORY_INGEST_BUS_SCHEDULER = "chathistoryIngestBusScheduler";
   public static final String CHATHISTORY_BATCH_BUS_SCHEDULER = "chathistoryBatchBusScheduler";
   public static final String ZNC_PLAYBACK_BUS_SCHEDULER = "zncPlaybackBusScheduler";
+  public static final String JFR_RUNTIME_EVENTS_SAMPLER_SCHEDULER =
+      "jfrRuntimeEventsSamplerScheduler";
+  public static final String INTERCEPTOR_STORE_INGEST_EXECUTOR = "interceptorStoreIngestExecutor";
+  public static final String INTERCEPTOR_STORE_PERSIST_EXECUTOR =
+      "interceptorStorePersistExecutor";
+  public static final String UI_LOG_VIEWER_EXECUTOR = "uiLogViewerExecutor";
+  public static final String UI_INTERCEPTOR_REFRESH_EXECUTOR = "uiInterceptorRefreshExecutor";
+  public static final String PREFERENCES_PUSHY_TEST_EXECUTOR = "preferencesPushyTestExecutor";
+  public static final String PREFERENCES_NOTIFICATION_RULE_TEST_EXECUTOR =
+      "preferencesNotificationRuleTestExecutor";
 
   @Bean(name = TARGET_COORDINATOR_MAINTENANCE_EXECUTOR, destroyMethod = "shutdown")
   public ExecutorService targetCoordinatorMaintenanceExecutor() {
@@ -141,5 +151,40 @@ public class ExecutorConfig {
   @Bean(name = ZNC_PLAYBACK_BUS_SCHEDULER, destroyMethod = "shutdown")
   public ScheduledExecutorService zncPlaybackBusScheduler() {
     return VirtualThreads.newSingleThreadScheduledExecutor("ircafe-znc-playback-bus");
+  }
+
+  @Bean(name = JFR_RUNTIME_EVENTS_SAMPLER_SCHEDULER, destroyMethod = "shutdown")
+  public ScheduledExecutorService jfrRuntimeEventsSamplerScheduler() {
+    return VirtualThreads.newSingleThreadScheduledExecutor("ircafe-jfr-event-sampler");
+  }
+
+  @Bean(name = INTERCEPTOR_STORE_INGEST_EXECUTOR, destroyMethod = "shutdown")
+  public ExecutorService interceptorStoreIngestExecutor() {
+    return VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-store");
+  }
+
+  @Bean(name = INTERCEPTOR_STORE_PERSIST_EXECUTOR, destroyMethod = "shutdown")
+  public ExecutorService interceptorStorePersistExecutor() {
+    return VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-persist");
+  }
+
+  @Bean(name = UI_LOG_VIEWER_EXECUTOR, destroyMethod = "shutdown")
+  public ExecutorService uiLogViewerExecutor() {
+    return VirtualThreads.newSingleThreadExecutor("ircafe-log-viewer");
+  }
+
+  @Bean(name = UI_INTERCEPTOR_REFRESH_EXECUTOR, destroyMethod = "shutdown")
+  public ExecutorService uiInterceptorRefreshExecutor() {
+    return VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-panel-refresh");
+  }
+
+  @Bean(name = PREFERENCES_PUSHY_TEST_EXECUTOR, destroyMethod = "shutdown")
+  public ExecutorService preferencesPushyTestExecutor() {
+    return VirtualThreads.newSingleThreadExecutor("ircafe-pushy-test");
+  }
+
+  @Bean(name = PREFERENCES_NOTIFICATION_RULE_TEST_EXECUTOR, destroyMethod = "shutdown")
+  public ExecutorService preferencesNotificationRuleTestExecutor() {
+    return VirtualThreads.newSingleThreadExecutor("ircafe-notification-rule-test");
   }
 }

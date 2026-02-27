@@ -39,6 +39,7 @@ import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Flowable;
 import java.awt.Cursor;
 import java.lang.reflect.Field;
@@ -181,7 +182,11 @@ class ChannelListLoggingDecoratorFunctionalTest {
                     springRuntimeEventsService,
                     settingsBus,
                     spellcheckSettingsBus,
-                    commandHistoryStore));
+                    commandHistoryStore,
+                    VirtualThreads.newSingleThreadExecutor(
+                        "test-channel-list-log-viewer"),
+                    VirtualThreads.newSingleThreadExecutor(
+                        "test-channel-list-interceptor")));
     ChatDockable chat = holder.chat;
 
     SwingUiPort swingUiPort =
