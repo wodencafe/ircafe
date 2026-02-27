@@ -4289,6 +4289,44 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberChatHistoryLoadOlderChunkEdtBudgetMs(int chunkEdtBudgetMs) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(1, Math.min(33, chunkEdtBudgetMs));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryLoadOlderChunkEdtBudgetMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history load-older EDT budget setting to '{}'",
+          file,
+          e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryDeferRichTextDuringBatch(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryDeferRichTextDuringBatch", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history deferred-rich-text setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberChatHistoryRemoteRequestTimeoutSeconds(int seconds) {
     try {
       if (file.toString().isBlank()) return;

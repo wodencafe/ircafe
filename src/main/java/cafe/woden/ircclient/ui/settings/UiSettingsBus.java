@@ -175,7 +175,13 @@ public class UiSettingsBus {
                 : 20,
             props.chatHistoryLoadOlderChunkDelayMs() != null
                 ? props.chatHistoryLoadOlderChunkDelayMs()
-                : 10,
+                : 0,
+            props.chatHistoryLoadOlderChunkEdtBudgetMs() != null
+                ? props.chatHistoryLoadOlderChunkEdtBudgetMs()
+                : 6,
+            props.chatHistoryDeferRichTextDuringBatch() != null
+                ? props.chatHistoryDeferRichTextDuringBatch()
+                : false,
             props.chatHistoryRemoteRequestTimeoutSeconds() != null
                 ? props.chatHistoryRemoteRequestTimeoutSeconds()
                 : 6,

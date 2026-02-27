@@ -202,6 +202,12 @@ public class ChatHistoryTranscriptPortAdapter implements ChatHistoryTranscriptPo
   }
 
   @Override
+  public int chatHistoryLoadOlderChunkEdtBudgetMs() {
+    UiSettings s = settingsBus != null ? settingsBus.get() : null;
+    return s != null ? s.chatHistoryLoadOlderChunkEdtBudgetMs() : 0;
+  }
+
+  @Override
   public int chatHistoryRemoteRequestTimeoutSeconds() {
     UiSettings s = settingsBus != null ? settingsBus.get() : null;
     return s != null ? s.chatHistoryRemoteRequestTimeoutSeconds() : 0;

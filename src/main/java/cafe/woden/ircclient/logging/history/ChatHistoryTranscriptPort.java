@@ -90,6 +90,8 @@ public interface ChatHistoryTranscriptPort {
 
   int chatHistoryLoadOlderChunkDelayMs();
 
+  int chatHistoryLoadOlderChunkEdtBudgetMs();
+
   int chatHistoryRemoteRequestTimeoutSeconds();
 
   int chatHistoryRemoteZncPlaybackTimeoutSeconds();

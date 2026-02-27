@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
@@ -51,6 +52,8 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private static final int DEFAULT_PAGE_SIZE = 75;
   private static final int DEFAULT_LOAD_OLDER_INSERT_CHUNK_SIZE = 20;
   private static final int DEFAULT_LOAD_OLDER_CHUNK_DELAY_MS = 10;
+  private static final int DEFAULT_LOAD_OLDER_CHUNK_EDT_BUDGET_MS = 6;
+  private static final int MIN_LOAD_OLDER_LINES_PER_CHUNK = 2;
   private static final int DEFAULT_REMOTE_TIMEOUT_SECONDS = 6;
   private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_TIMEOUT_SECONDS = 18;
   private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_WINDOW_MINUTES = 360;
@@ -68,6 +71,8 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private final ConcurrentHashMap<TargetRef, Boolean> handlerInstalled = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<TargetRef, DocumentListener> docListeners =
       new ConcurrentHashMap<>();
+  private final AtomicLong loadOlderRequestSeq = new AtomicLong(0);
+  private final AtomicLong loadOlderInsertSeq = new AtomicLong(0);
 
   public RemoteOnlyChatHistoryService(
       IrcClientService irc,
@@ -305,11 +310,26 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
     final int pageSize = Math.max(1, limit);
     if (Boolean.TRUE.equals(inFlight.putIfAbsent(target, Boolean.TRUE))) {
+      log.info(
+          "[TEMP-LOAD-OLDER][REMOTE] request-rejected reason=in-flight target={} limit={} cursorTs={} cursorId={}",
+          target,
+          pageSize,
+          oldestCursor.getOrDefault(target, new LogCursor(0, 0)).tsEpochMs(),
+          oldestCursor.getOrDefault(target, new LogCursor(0, 0)).id());
       callback.accept(
           new LoadOlderResult(
               List.of(), oldestCursor.getOrDefault(target, new LogCursor(0, 0)), true));
       return;
     }
+    final long requestId = loadOlderRequestSeq.incrementAndGet();
+    LogCursor requestCursor = oldestCursor.getOrDefault(target, new LogCursor(0, 0));
+    log.info(
+        "[TEMP-LOAD-OLDER][REMOTE] request-start id={} target={} limit={} cursorTs={} cursorId={}",
+        requestId,
+        target,
+        pageSize,
+        requestCursor.tsEpochMs(),
+        requestCursor.id());
 
     exec.execute(
         () -> {
@@ -324,7 +344,23 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
             } catch (Exception ignored) {
             }
 
-            SwingUtilities.invokeLater(() -> callback.accept(res));
+            LoadOlderResult safeRes =
+                res != null
+                    ? res
+                    : new LoadOlderResult(
+                        List.of(), oldestCursor.getOrDefault(target, new LogCursor(0, 0)), true);
+            List<LogLine> safeLines =
+                safeRes.linesOldestFirst() == null ? List.of() : safeRes.linesOldestFirst();
+            LogCursor next = safeRes.newOldestCursor();
+            log.info(
+                "[TEMP-LOAD-OLDER][REMOTE] request-result id={} target={} lines={} hasMore={} nextCursorTs={} nextCursorId={}",
+                requestId,
+                target,
+                safeLines.size(),
+                safeRes.hasMore(),
+                next != null ? next.tsEpochMs() : -1,
+                next != null ? next.id() : -1);
+            SwingUtilities.invokeLater(() -> callback.accept(safeRes));
           } finally {
             inFlight.remove(target);
           }
@@ -367,6 +403,12 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
             pageSize = DEFAULT_PAGE_SIZE;
           }
           final int limit = Math.max(1, pageSize);
+          final long insertId = loadOlderInsertSeq.incrementAndGet();
+          log.info(
+              "[TEMP-LOAD-OLDER][REMOTE] insert-start id={} target={} limit={}",
+              insertId,
+              target,
+              limit);
 
           loadOlder(
               target,
@@ -385,6 +427,16 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
                   int insertAt = transcripts.loadOlderInsertOffset(target);
                   int chunkSize = configuredLoadOlderChunkSize();
                   int chunkDelayMs = configuredLoadOlderChunkDelayMs();
+                  int chunkEdtBudgetMs = configuredLoadOlderChunkEdtBudgetMs();
+                  log.info(
+                      "[TEMP-LOAD-OLDER][REMOTE] insert-received id={} target={} lines={} hasMore={} chunkSize={} chunkDelayMs={} chunkBudgetMs={}",
+                      insertId,
+                      target,
+                      lines.size(),
+                      hasMore,
+                      chunkSize,
+                      chunkDelayMs,
+                      chunkEdtBudgetMs);
                   prependOlderLinesInChunks(
                       target,
                       lines,
@@ -394,7 +446,10 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
                       hasMore,
                       anchor,
                       chunkSize,
-                      chunkDelayMs);
+                      chunkDelayMs,
+                      chunkEdtBudgetMs,
+                      insertId,
+                      1);
                 } catch (Exception e) {
                   // Fail open: allow retry.
                   transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
@@ -421,7 +476,10 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       boolean hasMore,
       ScrollAnchor anchor,
       int chunkSize,
-      int chunkDelayMs) {
+      int chunkDelayMs,
+      int chunkEdtBudgetMs,
+      long insertId,
+      int chunkNumber) {
     if (!SwingUtilities.isEventDispatchThread()) {
       SwingUtilities.invokeLater(
           () ->
@@ -434,41 +492,69 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
                   hasMore,
                   anchor,
                   chunkSize,
-                  chunkDelayMs));
+                  chunkDelayMs,
+                  chunkEdtBudgetMs,
+                  insertId,
+                  chunkNumber));
       return;
     }
 
     boolean finished = false;
     try {
-      int endExclusive = Math.min(lines.size(), startIndex + Math.max(1, chunkSize));
+      int maxLines = Math.max(1, chunkSize);
+      long budgetNs =
+          TimeUnit.MILLISECONDS.toNanos(Math.max(1, Math.min(33, chunkEdtBudgetMs)));
+      int minLinesBeforeBudget = Math.min(maxLines, Math.max(1, MIN_LOAD_OLDER_LINES_PER_CHUNK));
+      long chunkStartNs = System.nanoTime();
+      long deadlineNs = System.nanoTime() + budgetNs;
       int pos = insertAt;
       int inserted = insertedSoFar;
-      for (int i = startIndex; i < endExclusive; i++) {
-        pos = insertLineFromHistoryAt(target, pos, lines.get(i));
+      int nextIndex = startIndex;
+      int insertedThisChunk = 0;
+      while (nextIndex < lines.size() && insertedThisChunk < maxLines) {
+        pos = insertLineFromHistoryAt(target, pos, lines.get(nextIndex));
+        nextIndex++;
         inserted++;
+        insertedThisChunk++;
+        if (insertedThisChunk >= minLinesBeforeBudget && System.nanoTime() >= deadlineNs) break;
       }
+      long elapsedNs = Math.max(0L, System.nanoTime() - chunkStartNs);
+      int nextDelayMs = effectiveInterChunkDelayMs(chunkDelayMs, elapsedNs);
+      log.info(
+          "[TEMP-LOAD-OLDER][REMOTE] insert-chunk id={} target={} chunk={} insertedChunk={} insertedTotal={} totalLines={} elapsedMs={} nextDelayMs={}",
+          insertId,
+          target,
+          chunkNumber,
+          insertedThisChunk,
+          inserted,
+          lines.size(),
+          TimeUnit.NANOSECONDS.toMillis(elapsedNs),
+          nextDelayMs);
 
       if (anchor != null) {
         anchor.restoreDuringInsertIfNeeded();
       }
 
-      if (endExclusive < lines.size()) {
-        final int nextIndex = endExclusive;
+      if (nextIndex < lines.size()) {
+        final int nextIndexFinal = nextIndex;
         final int nextPos = pos;
         final int nextInserted = inserted;
         scheduleNextChunk(
-            chunkDelayMs,
+            nextDelayMs,
             () ->
                 prependOlderLinesInChunks(
                     target,
                     lines,
-                    nextIndex,
+                    nextIndexFinal,
                     nextPos,
                     nextInserted,
                     hasMore,
                     anchor,
                     chunkSize,
-                    chunkDelayMs));
+                    chunkDelayMs,
+                    chunkEdtBudgetMs,
+                    insertId,
+                    chunkNumber + 1));
         return;
       }
 
@@ -481,9 +567,21 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       }
       transcripts.setLoadOlderMessagesControlState(
           target, hasMore ? LoadOlderControlState.READY : LoadOlderControlState.EXHAUSTED);
+      log.info(
+          "[TEMP-LOAD-OLDER][REMOTE] insert-finish id={} target={} insertedTotal={} totalLines={} hasMore={}",
+          insertId,
+          target,
+          inserted,
+          lines.size(),
+          hasMore);
     } catch (Exception e) {
       finished = true;
       transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
+      log.info(
+          "[TEMP-LOAD-OLDER][REMOTE] insert-error id={} target={} message={}",
+          insertId,
+          target,
+          e.toString());
     } finally {
       if (!finished) return;
       try {
@@ -517,6 +615,19 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     }
     if (v < 0) v = DEFAULT_LOAD_OLDER_CHUNK_DELAY_MS;
     if (v > 1_000) v = 1_000;
+    return v;
+  }
+
+  private int configuredLoadOlderChunkEdtBudgetMs() {
+    int v = 0;
+    try {
+      v = transcripts.chatHistoryLoadOlderChunkEdtBudgetMs();
+    } catch (Exception ignored) {
+      v = 0;
+    }
+    if (v <= 0) v = DEFAULT_LOAD_OLDER_CHUNK_EDT_BUDGET_MS;
+    if (v < 1) v = 1;
+    if (v > 33) v = 33;
     return v;
   }
 
@@ -559,6 +670,10 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private static void scheduleNextChunk(int delayMs, Runnable task) {
     if (task == null) return;
     int safeDelayMs = Math.max(0, Math.min(1_000, delayMs));
+    if (safeDelayMs == 0) {
+      SwingUtilities.invokeLater(task);
+      return;
+    }
     javax.swing.Timer timer =
         new javax.swing.Timer(
             safeDelayMs,
@@ -568,6 +683,13 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
             });
     timer.setRepeats(false);
     timer.start();
+  }
+
+  private static int effectiveInterChunkDelayMs(int configuredDelayMs, long elapsedNs) {
+    int safeDelayMs = Math.max(0, Math.min(1_000, configuredDelayMs));
+    long elapsedMs = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(Math.max(0L, elapsedNs)));
+    if (elapsedMs >= safeDelayMs) return 0;
+    return (int) (safeDelayMs - elapsedMs);
   }
 
   private long seedCursorEpochMs(TargetRef target) {

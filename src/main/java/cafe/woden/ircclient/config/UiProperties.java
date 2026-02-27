@@ -43,6 +43,8 @@ public record UiProperties(
     Integer chatHistoryAutoLoadWheelDebounceMs,
     Integer chatHistoryLoadOlderChunkSize,
     Integer chatHistoryLoadOlderChunkDelayMs,
+    Integer chatHistoryLoadOlderChunkEdtBudgetMs,
+    Boolean chatHistoryDeferRichTextDuringBatch,
     Integer chatHistoryRemoteRequestTimeoutSeconds,
     Integer chatHistoryRemoteZncPlaybackTimeoutSeconds,
     Integer chatHistoryRemoteZncPlaybackWindowMinutes,
@@ -659,10 +661,22 @@ public record UiProperties(
       chatHistoryLoadOlderChunkSize = 500;
     }
     if (chatHistoryLoadOlderChunkDelayMs == null || chatHistoryLoadOlderChunkDelayMs < 0) {
-      chatHistoryLoadOlderChunkDelayMs = 10;
+      chatHistoryLoadOlderChunkDelayMs = 0;
     }
     if (chatHistoryLoadOlderChunkDelayMs > 1_000) {
       chatHistoryLoadOlderChunkDelayMs = 1_000;
+    }
+    if (chatHistoryLoadOlderChunkEdtBudgetMs == null || chatHistoryLoadOlderChunkEdtBudgetMs <= 0) {
+      chatHistoryLoadOlderChunkEdtBudgetMs = 6;
+    }
+    if (chatHistoryLoadOlderChunkEdtBudgetMs < 1) {
+      chatHistoryLoadOlderChunkEdtBudgetMs = 1;
+    }
+    if (chatHistoryLoadOlderChunkEdtBudgetMs > 33) {
+      chatHistoryLoadOlderChunkEdtBudgetMs = 33;
+    }
+    if (chatHistoryDeferRichTextDuringBatch == null) {
+      chatHistoryDeferRichTextDuringBatch = false;
     }
     if (chatHistoryRemoteRequestTimeoutSeconds == null || chatHistoryRemoteRequestTimeoutSeconds <= 0) {
       chatHistoryRemoteRequestTimeoutSeconds = 6;

@@ -140,6 +140,8 @@ class TrayNotificationServiceTest {
         20,
         10,
         6,
+        false,
+        6,
         18,
         360,
         500,

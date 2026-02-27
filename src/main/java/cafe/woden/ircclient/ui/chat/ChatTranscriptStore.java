@@ -568,6 +568,18 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
   }
 
+  private boolean shouldDeferRichTextDuringHistoryBatch(TargetRef ref) {
+    if (ref == null) return false;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null || !st.historyInsertBatchActive) return false;
+    try {
+      UiSettings s = uiSettings != null ? uiSettings.get() : null;
+      return s != null && s.chatHistoryDeferRichTextDuringBatch();
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
   private void onFilteredLineAppend(
       TargetRef ref, String previewText, LineMeta hiddenMeta, FilterEngine.Match match) {
     if (ref == null) return;
@@ -1898,7 +1910,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       }
 
       AttributeSet base = msgStyle2;
-      renderer.insertRichText(doc, ref, text, base);
+      if (renderer != null && !shouldDeferRichTextDuringHistoryBatch(ref)) {
+        renderer.insertRichText(doc, ref, text, base);
+      } else {
+        doc.insertString(doc.getLength(), text == null ? "" : text, base);
+      }
 
       if (tailComponent != null) {
         SimpleAttributeSet a = new SimpleAttributeSet(tailAttrs != null ? tailAttrs : msgStyle2);
@@ -2280,7 +2296,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         pos += 1;
       }
 
-      if (renderer != null) {
+      if (renderer != null && !shouldDeferRichTextDuringHistoryBatch(ref)) {
         pos = renderer.insertRichTextAt(doc, ref, a, ms, pos);
       } else {
         doc.insertString(pos, a, ms);
@@ -2632,7 +2648,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         pos += prefix.length();
       }
 
-      if (renderer != null) {
+      if (renderer != null && !shouldDeferRichTextDuringHistoryBatch(ref)) {
         pos = renderer.insertRichTextAt(doc, ref, text, msgStyle2, pos);
       } else {
         String t = text == null ? "" : text;

@@ -38,7 +38,11 @@ ircafe:
     # How many lines to insert per EDT chunk while loading older messages.
     chatHistoryLoadOlderChunkSize: 20
     # Delay between load-older insert chunks (milliseconds).
-    chatHistoryLoadOlderChunkDelayMs: 10
+    chatHistoryLoadOlderChunkDelayMs: 0
+    # EDT work-time budget per load-older chunk (milliseconds).
+    chatHistoryLoadOlderChunkEdtBudgetMs: 6
+    # If enabled, history batch loads skip rich URL/mention parsing for faster insertion.
+    chatHistoryDeferRichTextDuringBatch: false
     # Timeout waiting for remote CHATHISTORY ingest (seconds).
     chatHistoryRemoteRequestTimeoutSeconds: 6
     # Timeout waiting for remote ZNC playback ingest (seconds).

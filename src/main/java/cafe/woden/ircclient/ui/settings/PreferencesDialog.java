@@ -1220,6 +1220,9 @@ public class PreferencesDialog {
               ((Number) history.loadOlderChunkSize.getValue()).intValue();
           int historyLoadOlderChunkDelayMsV =
               ((Number) history.loadOlderChunkDelayMs.getValue()).intValue();
+          int historyLoadOlderChunkEdtBudgetMsV =
+              ((Number) history.loadOlderChunkEdtBudgetMs.getValue()).intValue();
+          boolean historyDeferRichTextDuringBatchV = history.deferRichTextDuringBatch.isSelected();
           int historyRemoteRequestTimeoutSecondsV =
               ((Number) history.remoteRequestTimeoutSeconds.getValue()).intValue();
           int historyRemoteZncPlaybackTimeoutSecondsV =
@@ -1512,6 +1515,8 @@ public class PreferencesDialog {
                   historyAutoLoadWheelDebounceMsV,
                   historyLoadOlderChunkSizeV,
                   historyLoadOlderChunkDelayMsV,
+                  historyLoadOlderChunkEdtBudgetMsV,
+                  historyDeferRichTextDuringBatchV,
                   historyRemoteRequestTimeoutSecondsV,
                   historyRemoteZncPlaybackTimeoutSecondsV,
                   historyRemoteZncPlaybackWindowMinutesV,
@@ -1705,6 +1710,10 @@ public class PreferencesDialog {
           runtimeConfig.rememberChatHistoryLoadOlderChunkSize(next.chatHistoryLoadOlderChunkSize());
           runtimeConfig.rememberChatHistoryLoadOlderChunkDelayMs(
               next.chatHistoryLoadOlderChunkDelayMs());
+          runtimeConfig.rememberChatHistoryLoadOlderChunkEdtBudgetMs(
+              next.chatHistoryLoadOlderChunkEdtBudgetMs());
+          runtimeConfig.rememberChatHistoryDeferRichTextDuringBatch(
+              next.chatHistoryDeferRichTextDuringBatch());
           runtimeConfig.rememberChatHistoryRemoteRequestTimeoutSeconds(
               next.chatHistoryRemoteRequestTimeoutSeconds());
           runtimeConfig.rememberChatHistoryRemoteZncPlaybackTimeoutSeconds(
@@ -4441,7 +4450,7 @@ public class PreferencesDialog {
             + "Set to 0 to disable history prefill.");
 
     JSpinner historyPageSize =
-        numberSpinner(current.chatHistoryPageSize(), 50, 10_000, 50, closeables);
+        numberSpinner(current.chatHistoryPageSize(), 1, 10_000, 10, closeables);
     historyPageSize.setToolTipText(
         "How many lines to fetch per click when you use 'Load older messages…' inside the transcript.");
 
@@ -4462,6 +4471,19 @@ public class PreferencesDialog {
     historyLoadOlderChunkDelayMs.setToolTipText(
         "Delay between insert chunks in milliseconds.\n"
             + "Increase if transcript still feels stuttery while loading.");
+
+    JSpinner historyLoadOlderChunkEdtBudgetMs =
+        numberSpinner(current.chatHistoryLoadOlderChunkEdtBudgetMs(), 1, 33, 1, closeables);
+    historyLoadOlderChunkEdtBudgetMs.setToolTipText(
+        "Per-chunk EDT work budget in milliseconds during 'Load older'.\n"
+            + "Lower = smoother UI, higher = faster completion.");
+
+    JCheckBox historyDeferRichTextDuringBatch =
+        new JCheckBox("Defer rich-text parsing during history batch");
+    historyDeferRichTextDuringBatch.setSelected(current.chatHistoryDeferRichTextDuringBatch());
+    historyDeferRichTextDuringBatch.setToolTipText(
+        "When enabled, history loads skip expensive URL/mention rich parsing while inserting.\n"
+            + "This improves smoothness, but history text appears with simpler styling.");
 
     JSpinner historyRemoteRequestTimeoutSeconds =
         numberSpinner(current.chatHistoryRemoteRequestTimeoutSeconds(), 1, 120, 1, closeables);
@@ -4522,6 +4544,10 @@ public class PreferencesDialog {
     historyPanel.add(historyLoadOlderChunkSize, "w 110!");
     historyPanel.add(new JLabel("Load older chunk delay (ms):"));
     historyPanel.add(historyLoadOlderChunkDelayMs, "w 110!");
+    historyPanel.add(new JLabel("Load older EDT budget (ms):"));
+    historyPanel.add(historyLoadOlderChunkEdtBudgetMs, "w 110!");
+    historyPanel.add(new JLabel("History batch rendering:"));
+    historyPanel.add(historyDeferRichTextDuringBatch, "growx");
     historyPanel.add(new JLabel("Remote request timeout (sec):"));
     historyPanel.add(historyRemoteRequestTimeoutSeconds, "w 110!");
     historyPanel.add(new JLabel("ZNC playback timeout (sec):"));
@@ -4539,6 +4565,8 @@ public class PreferencesDialog {
         historyAutoLoadWheelDebounceMs,
         historyLoadOlderChunkSize,
         historyLoadOlderChunkDelayMs,
+        historyLoadOlderChunkEdtBudgetMs,
+        historyDeferRichTextDuringBatch,
         historyRemoteRequestTimeoutSeconds,
         historyRemoteZncPlaybackTimeoutSeconds,
         historyRemoteZncPlaybackWindowMinutes,
@@ -10319,6 +10347,8 @@ public class PreferencesDialog {
       JSpinner autoLoadWheelDebounceMs,
       JSpinner loadOlderChunkSize,
       JSpinner loadOlderChunkDelayMs,
+      JSpinner loadOlderChunkEdtBudgetMs,
+      JCheckBox deferRichTextDuringBatch,
       JSpinner remoteRequestTimeoutSeconds,
       JSpinner remoteZncPlaybackTimeoutSeconds,
       JSpinner remoteZncPlaybackWindowMinutes,

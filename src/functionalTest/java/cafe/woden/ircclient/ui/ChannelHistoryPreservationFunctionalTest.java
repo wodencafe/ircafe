@@ -556,6 +556,11 @@ class ChannelHistoryPreservationFunctionalTest {
     }
 
     @Override
+    public int chatHistoryLoadOlderChunkEdtBudgetMs() {
+      return 6;
+    }
+
+    @Override
     public int chatHistoryRemoteRequestTimeoutSeconds() {
       return 6;
     }
