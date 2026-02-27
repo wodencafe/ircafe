@@ -2,7 +2,9 @@ package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import jakarta.annotation.PreDestroy;
 import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -14,12 +16,24 @@ import org.springframework.stereotype.Component;
 @Component
 public class CommandHistoryStore {
 
+  private final UiSettingsBus settingsBus;
+  private final PropertyChangeListener settingsListener = this::onSettingsChanged;
   private volatile int maxSize;
   private final Deque<String> history = new ArrayDeque<>();
 
   public CommandHistoryStore(@Lazy UiSettingsBus settingsBus) {
+    this.settingsBus = settingsBus;
     this.maxSize = clampMax(settingsBus.get().commandHistoryMaxSize());
-    settingsBus.addListener(this::onSettingsChanged);
+    if (this.settingsBus != null) {
+      this.settingsBus.addListener(settingsListener);
+    }
+  }
+
+  @PreDestroy
+  void shutdown() {
+    if (settingsBus != null) {
+      settingsBus.removeListener(settingsListener);
+    }
   }
 
   private void onSettingsChanged(PropertyChangeEvent evt) {

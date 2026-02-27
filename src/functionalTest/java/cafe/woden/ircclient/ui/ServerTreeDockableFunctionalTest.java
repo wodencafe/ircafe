@@ -77,6 +77,31 @@ class ServerTreeDockableFunctionalTest {
   }
 
   @Test
+  void selectingIgnoresBuiltInNodePublishesIgnoresTarget() throws Exception {
+    ServerTreeDockable dockable = newDockable();
+    CopyOnWriteArrayList<TargetRef> selectedTargets = new CopyOnWriteArrayList<>();
+    Disposable sub = dockable.selectionStream().subscribe(selectedTargets::add);
+
+    try {
+      TargetRef ignores = TargetRef.ignores("libera");
+
+      onEdt(
+          () -> {
+            dockable.ensureNode(ignores);
+            dockable.selectTarget(ignores);
+          });
+      flushEdt();
+
+      waitFor(() -> !selectedTargets.isEmpty(), Duration.ofSeconds(2));
+      assertEquals(ignores, selectedTargets.getLast());
+    } finally {
+      sub.dispose();
+      onEdt(dockable::shutdown);
+      flushEdt();
+    }
+  }
+
+  @Test
   void closeNodeActionOnChannelPublishesDetachRequest() throws Exception {
     ServerTreeDockable dockable = newDockable();
     CopyOnWriteArrayList<TargetRef> detached = new CopyOnWriteArrayList<>();

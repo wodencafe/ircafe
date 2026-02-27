@@ -71,15 +71,11 @@ public class UiSettingsBus {
         tray != null && Boolean.TRUE.equals(tray.notifyConnectionState());
 
     boolean trayNotifyOnlyWhenUnfocused =
-        tray == null
-            || tray.notifyOnlyWhenUnfocused() == null
-            || Boolean.TRUE.equals(tray.notifyOnlyWhenUnfocused());
+        tray != null && Boolean.TRUE.equals(tray.notifyOnlyWhenUnfocused());
     boolean trayNotifyOnlyWhenMinimizedOrHidden =
         tray != null && Boolean.TRUE.equals(tray.notifyOnlyWhenMinimizedOrHidden());
     boolean trayNotifySuppressWhenTargetActive =
-        tray == null
-            || tray.notifySuppressWhenTargetActive() == null
-            || Boolean.TRUE.equals(tray.notifySuppressWhenTargetActive());
+        tray != null && Boolean.TRUE.equals(tray.notifySuppressWhenTargetActive());
 
     boolean trayLinuxDbusActionsEnabled =
         tray == null
@@ -171,7 +167,34 @@ public class UiSettingsBus {
             timestampsIncludePresenceMessages,
             props.chatHistoryInitialLoadLines() != null ? props.chatHistoryInitialLoadLines() : 100,
             props.chatHistoryPageSize() != null ? props.chatHistoryPageSize() : 200,
+            props.chatHistoryAutoLoadWheelDebounceMs() != null
+                ? props.chatHistoryAutoLoadWheelDebounceMs()
+                : 2000,
+            props.chatHistoryLoadOlderChunkSize() != null
+                ? props.chatHistoryLoadOlderChunkSize()
+                : 20,
+            props.chatHistoryLoadOlderChunkDelayMs() != null
+                ? props.chatHistoryLoadOlderChunkDelayMs()
+                : 0,
+            props.chatHistoryLoadOlderChunkEdtBudgetMs() != null
+                ? props.chatHistoryLoadOlderChunkEdtBudgetMs()
+                : 6,
+            props.chatHistoryDeferRichTextDuringBatch() != null
+                ? props.chatHistoryDeferRichTextDuringBatch()
+                : false,
+            props.chatHistoryRemoteRequestTimeoutSeconds() != null
+                ? props.chatHistoryRemoteRequestTimeoutSeconds()
+                : 6,
+            props.chatHistoryRemoteZncPlaybackTimeoutSeconds() != null
+                ? props.chatHistoryRemoteZncPlaybackTimeoutSeconds()
+                : 18,
+            props.chatHistoryRemoteZncPlaybackWindowMinutes() != null
+                ? props.chatHistoryRemoteZncPlaybackWindowMinutes()
+                : 360,
             props.commandHistoryMaxSize() != null ? props.commandHistoryMaxSize() : 500,
+            props.chatTranscriptMaxLinesPerTarget() != null
+                ? props.chatTranscriptMaxLinesPerTarget()
+                : 4000,
             props.clientLineColorEnabled(),
             props.clientLineColor(),
 

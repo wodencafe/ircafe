@@ -6,7 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import cafe.woden.ircclient.irc.IrcEvent.AccountState;
 import cafe.woden.ircclient.irc.IrcEvent.AwayState;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -80,5 +82,24 @@ class UserListStoreTest {
     assertEquals(
         Set.of("##chat", "##chat-overflow"), store.channelsContainingNick(serverId, "QUINSMITH"));
     assertTrue(store.channelsContainingNick(serverId, "nobody").isEmpty());
+  }
+
+  @Test
+  void learnedHostmaskCacheIsHardCappedPerServer() throws Exception {
+    UserListStore store = new UserListStore();
+    String serverId = "libera";
+
+    for (int i = 0; i < 22_500; i++) {
+      String nick = "nick" + i;
+      store.updateHostmaskAcrossChannels(serverId, nick, nick + "!u@" + i + ".example");
+    }
+
+    Field field = UserListStore.class.getDeclaredField("hostmaskByServerAndNickLower");
+    field.setAccessible(true);
+    @SuppressWarnings("unchecked")
+    Map<String, Map<String, String>> byServer = (Map<String, Map<String, String>>) field.get(store);
+
+    Map<String, String> byNick = byServer.get(serverId);
+    assertTrue(byNick != null && byNick.size() <= 20_000);
   }
 }

@@ -8,7 +8,11 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
+import java.lang.reflect.Field;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class NotificationStoreTest {
@@ -18,11 +22,12 @@ class NotificationStoreTest {
     NotificationStore store = new NotificationStore();
     TargetRef chan = new TargetRef("libera", "#ircafe");
 
-    store.recordHighlight(chan, "alice");
+    store.recordHighlight(chan, "alice", "alice: ping");
     store.recordRuleMatch(chan, "bob", "Rule A", "match snippet");
     store.recordIrcEvent("libera", "#ircafe", "carol", "Topic changed", "new topic body");
 
     assertEquals(1, store.listAll("libera").size());
+    assertEquals("alice: ping", store.listAll("libera").getFirst().snippet());
     assertEquals(1, store.listAllRuleMatches("libera").size());
     assertEquals(1, store.listAllIrcEventRules("libera").size());
     assertEquals(3, store.count("libera"));
@@ -71,5 +76,30 @@ class NotificationStoreTest {
     store.recordRuleMatch(chan, "alice", "Rule A", "second");
 
     assertEquals(2, store.listAllRuleMatches("libera").size());
+  }
+
+  @Test
+  void staleRuleMatchCooldownKeysArePrunedBeforeCooldownCheck() throws Exception {
+    NotificationStore store = new NotificationStore();
+    for (int i = 0; i < 32; i++) {
+      store.recordRuleMatch(
+          new TargetRef("libera", "#chan" + i), "nick" + i, "Rule " + i, "seed " + i);
+    }
+
+    Field field = NotificationStore.class.getDeclaredField("lastRuleMatchAt");
+    field.setAccessible(true);
+    @SuppressWarnings("unchecked")
+    Map<Object, Instant> cooldownMap = (Map<Object, Instant>) field.get(store);
+    cooldownMap.replaceAll((k, v) -> Instant.now().minus(Duration.ofDays(2)));
+    int before = cooldownMap.size();
+    assertTrue(before >= 30);
+
+    TargetRef fresh = new TargetRef("libera", "#fresh");
+    int beforeEvents = store.listAllRuleMatches("libera").size();
+    store.recordRuleMatch(fresh, "alice", "Rule Fresh", "after-prune");
+    store.recordRuleMatch(fresh, "alice", "Rule Fresh", "blocked-by-cooldown");
+
+    assertEquals(beforeEvents + 1, store.listAllRuleMatches("libera").size());
+    assertTrue(cooldownMap.size() <= 2);
   }
 }

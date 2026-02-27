@@ -86,7 +86,7 @@ final class ChatTypingCoordinator {
       return;
     }
 
-    if (!"draft/reply".equals(cap) && !"draft/react".equals(cap)) {
+    if (!"draft/reply".equals(cap) && !"draft/react".equals(cap) && !"draft/unreact".equals(cap)) {
       return;
     }
 

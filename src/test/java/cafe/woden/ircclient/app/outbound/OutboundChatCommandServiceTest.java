@@ -25,7 +25,7 @@ import cafe.woden.ircclient.app.state.PendingEchoMessageState;
 import cafe.woden.ircclient.app.state.PendingInviteState;
 import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -51,7 +51,7 @@ class OutboundChatCommandServiceTest {
       mock(PendingEchoMessageState.class);
   private final PendingInviteState pendingInviteState = mock(PendingInviteState.class);
   private final WhoisRoutingState whoisRoutingState = mock(WhoisRoutingState.class);
-  private final IgnoreListService ignoreListService = mock(IgnoreListService.class);
+  private final IgnoreListCommandPort ignoreListService = mock(IgnoreListCommandPort.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundChatCommandService service =
@@ -588,6 +588,25 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void unreactCommandSendsTaggedTagmsgAndRemovesLocalReactionWhenEchoUnavailable() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
+    when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(irc.sendRaw("libera", "@+draft/unreact=:+1:;+draft/reply=abc123 TAGMSG #ircafe"))
+        .thenReturn(Completable.complete());
+
+    service.handleUnreactMessage(disposables, "abc123", ":+1:");
+
+    verify(irc).sendRaw("libera", "@+draft/unreact=:+1:;+draft/reply=abc123 TAGMSG #ircafe");
+    verify(ui)
+        .removeMessageReaction(eq(chan), any(Instant.class), eq("me"), eq("abc123"), eq(":+1:"));
+  }
+
+  @Test
   void editCommandSendsTaggedPrivmsgAndAppliesLocalEditWhenEchoUnavailable() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
@@ -727,6 +746,83 @@ class OutboundChatCommandServiceTest {
         .appendStatus(chan, "(help)", "/dcc msg <nick> <text>  (alias: /dccmsg <nick> <text>)");
     verify(ui).appendStatus(chan, "(help)", "/dcc close <nick>  /dcc list  /dcc panel");
     verify(ui).appendStatus(chan, "(help)", "UI: right-click a nick and use the DCC submenu.");
+  }
+
+  @Test
+  void inviteBlockAddsMaskAndRemovesInviteWhenNickIsPresent() {
+    TargetRef status = new TargetRef("libera", "status");
+    PendingInviteState.PendingInvite invite =
+        new PendingInviteState.PendingInvite(
+            12L,
+            Instant.parse("2026-02-16T00:00:00Z"),
+            Instant.parse("2026-02-16T00:00:00Z"),
+            "libera",
+            "#ircafe",
+            "alice",
+            "me",
+            "",
+            true,
+            1);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(pendingInviteState.latestForServer("libera")).thenReturn(invite);
+    when(ignoreListService.addMask("libera", "alice")).thenReturn(true);
+
+    service.handleInviteBlock("last");
+
+    verify(ignoreListService).addMask("libera", "alice");
+    verify(pendingInviteState).remove(12L);
+    verify(ui).appendStatus(status, "(invite)", "Blocked invites from alice (alice!*@*).");
+  }
+
+  @Test
+  void inviteBlockReportsAlreadyBlockingWhenMaskAlreadyExists() {
+    TargetRef status = new TargetRef("libera", "status");
+    PendingInviteState.PendingInvite invite =
+        new PendingInviteState.PendingInvite(
+            27L,
+            Instant.parse("2026-02-16T00:00:00Z"),
+            Instant.parse("2026-02-16T00:00:00Z"),
+            "libera",
+            "#ircafe",
+            "alice",
+            "me",
+            "",
+            true,
+            1);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(pendingInviteState.latestForServer("libera")).thenReturn(invite);
+    when(ignoreListService.addMask("libera", "alice")).thenReturn(false);
+
+    service.handleInviteBlock("last");
+
+    verify(ignoreListService).addMask("libera", "alice");
+    verify(pendingInviteState).remove(27L);
+    verify(ui).appendStatus(status, "(invite)", "Already blocking alice (alice!*@*).");
+  }
+
+  @Test
+  void inviteBlockRejectsServerInviteWithoutNick() {
+    TargetRef status = new TargetRef("libera", "status");
+    PendingInviteState.PendingInvite invite =
+        new PendingInviteState.PendingInvite(
+            31L,
+            Instant.parse("2026-02-16T00:00:00Z"),
+            Instant.parse("2026-02-16T00:00:00Z"),
+            "libera",
+            "#ircafe",
+            "server",
+            "me",
+            "",
+            true,
+            1);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(pendingInviteState.latestForServer("libera")).thenReturn(invite);
+
+    service.handleInviteBlock("last");
+
+    verify(ignoreListService, never()).addMask(anyString(), anyString());
+    verify(pendingInviteState, never()).remove(anyLong());
+    verify(ui).appendStatus(status, "(invite)", "No inviter nick available for invite #31.");
   }
 
   @Test

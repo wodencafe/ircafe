@@ -505,6 +505,10 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     } catch (Exception ignored) {
     }
     try {
+      inputPanel.shutdownResources();
+    } catch (Exception ignored) {
+    }
+    try {
       disposables.dispose();
     } catch (Exception ignored) {
     }

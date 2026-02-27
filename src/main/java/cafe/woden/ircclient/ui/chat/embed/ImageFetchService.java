@@ -32,6 +32,8 @@ public class ImageFetchService {
   // IMDb/Amazon posters and some modern sites regularly exceed 8 MiB. We still keep a ceiling to
   // avoid runaway memory usage, but allow larger images.
   public static final int MAX_BYTES = 20 * 1024 * 1024; // 20 MiB
+  private static final int MAX_CACHE_KEYS = 2048;
+  private static final int CACHE_PRUNE_MAX_REMOVALS = 256;
 
   private final ConcurrentMap<String, SoftReference<byte[]>> cache = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Single<byte[]>> inflight = new ConcurrentHashMap<>();
@@ -63,7 +65,11 @@ public class ImageFetchService {
         k ->
             Single.fromCallable(() -> download(sid, base))
                 .subscribeOn(RxVirtualSchedulers.io())
-                .doOnSuccess(bytes -> cache.put(k, new SoftReference<>(bytes)))
+                .doOnSuccess(
+                    bytes -> {
+                      cache.put(k, new SoftReference<>(bytes));
+                      pruneCacheKeysIfNeeded();
+                    })
                 .doOnError(
                     err ->
                         log.warn(
@@ -77,6 +83,25 @@ public class ImageFetchService {
   private byte[] getCached(String key) {
     SoftReference<byte[]> ref = cache.get(key);
     return ref != null ? ref.get() : null;
+  }
+
+  private void pruneCacheKeysIfNeeded() {
+    int size = cache.size();
+    if (size <= MAX_CACHE_KEYS) {
+      return;
+    }
+
+    int removed = 0;
+    for (Map.Entry<String, SoftReference<byte[]>> e : cache.entrySet()) {
+      if (removed >= CACHE_PRUNE_MAX_REMOVALS) break;
+      SoftReference<byte[]> ref = e.getValue();
+      byte[] value = ref != null ? ref.get() : null;
+      if (value == null || cache.size() > MAX_CACHE_KEYS) {
+        if (cache.remove(e.getKey(), ref)) {
+          removed++;
+        }
+      }
+    }
   }
 
   private static String normalizeKey(String url) {

@@ -118,8 +118,10 @@ final class PircbotxConnectionState {
   final AtomicLong multilineOfferedMaxLines = new AtomicLong(0L);
   final AtomicLong draftMultilineOfferedMaxBytes = new AtomicLong(0L);
   final AtomicLong draftMultilineOfferedMaxLines = new AtomicLong(0L);
+  final AtomicBoolean draftChannelContextCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftReplyCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftReactCapAcked = new AtomicBoolean(false);
+  final AtomicBoolean draftUnreactCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftMessageEditCapAcked = new AtomicBoolean(false);
   final AtomicBoolean draftMessageRedactionCapAcked = new AtomicBoolean(false);
   final AtomicBoolean messageTagsCapAcked = new AtomicBoolean(false);
@@ -204,8 +206,10 @@ final class PircbotxConnectionState {
     multilineOfferedMaxLines.set(0L);
     draftMultilineOfferedMaxBytes.set(0L);
     draftMultilineOfferedMaxLines.set(0L);
+    draftChannelContextCapAcked.set(false);
     draftReplyCapAcked.set(false);
     draftReactCapAcked.set(false);
+    draftUnreactCapAcked.set(false);
     draftMessageEditCapAcked.set(false);
     draftMessageRedactionCapAcked.set(false);
     messageTagsCapAcked.set(false);

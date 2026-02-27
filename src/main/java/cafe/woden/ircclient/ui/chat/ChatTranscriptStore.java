@@ -23,6 +23,7 @@ import cafe.woden.ircclient.ui.filter.FilterContext;
 import cafe.woden.ircclient.ui.filter.FilterEngine;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import jakarta.annotation.PreDestroy;
 import java.awt.Color;
 import java.awt.Font;
 import java.beans.PropertyChangeEvent;
@@ -55,6 +56,8 @@ import org.springframework.stereotype.Component;
 public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
   private static final int RESTYLE_ELEMENTS_PER_SLICE = 180;
+  private static final int DEFAULT_TRANSCRIPT_MAX_LINES_PER_TARGET = 4000;
+  private static final int MAX_TRANSCRIPT_LINES_PER_TARGET = 200_000;
 
   /**
    * Step 5.2: Safety cap for history/backfill. After this many filtered placeholder/hint runs are
@@ -104,6 +107,13 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     if (this.nickColorSettings != null) {
       this.nickColorSettings.addListener(nickColorSettingsListener);
+    }
+  }
+
+  @PreDestroy
+  void shutdown() {
+    if (nickColorSettings != null) {
+      nickColorSettings.removeListener(nickColorSettingsListener);
     }
   }
 
@@ -558,6 +568,18 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
   }
 
+  private boolean shouldDeferRichTextDuringHistoryBatch(TargetRef ref) {
+    if (ref == null) return false;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null || !st.historyInsertBatchActive) return false;
+    try {
+      UiSettings s = uiSettings != null ? uiSettings.get() : null;
+      return s != null && s.chatHistoryDeferRichTextDuringBatch();
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
   private void onFilteredLineAppend(
       TargetRef ref, String previewText, LineMeta hiddenMeta, FilterEngine.Match match) {
     if (ref == null) return;
@@ -642,6 +664,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       comp.addFilteredLine(previewText);
     } catch (Exception ignored) {
     }
+    enforceTranscriptLineCap(ref, doc);
   }
 
   private void onFilteredLineHintAppend(
@@ -706,6 +729,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       comp.addFilteredLine();
     } catch (Exception ignored) {
     }
+    enforceTranscriptLineCap(ref, doc);
   }
 
   /**
@@ -832,6 +856,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     // Hidden lines don't take up any visible space beyond the placeholder itself,
     // so the insertion offset only advances when we had to create a new placeholder.
+    int trimmed = enforceTranscriptLineCap(ref, doc);
+    if (trimmed > 0) {
+      insertAt = Math.max(0, insertAt - trimmed);
+    }
     return Math.max(0, insertAt);
   }
 
@@ -927,6 +955,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     } catch (Exception ignored) {
     }
 
+    int trimmed = enforceTranscriptLineCap(ref, doc);
+    if (trimmed > 0) {
+      insertAt = Math.max(0, insertAt - trimmed);
+    }
     return Math.max(0, insertAt);
   }
 
@@ -1006,6 +1038,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     } catch (Exception ignored) {
     }
 
+    int trimmed = enforceTranscriptLineCap(ref, doc);
+    if (trimmed > 0) {
+      insertAt = Math.max(0, insertAt - trimmed);
+    }
     return Math.max(0, insertAt);
   }
 
@@ -1501,6 +1537,16 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     applyMessageReactionInternal(ref, doc, st, targetMessageId, reaction, fromNick, tsEpochMs);
   }
 
+  public synchronized void removeMessageReaction(
+      TargetRef ref, String targetMessageId, String reaction, String fromNick, long tsEpochMs) {
+    if (ref == null) return;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null || st == null) return;
+    removeMessageReactionInternal(ref, doc, st, targetMessageId, reaction, fromNick, tsEpochMs);
+  }
+
   public synchronized boolean applyMessageEdit(
       TargetRef ref,
       String targetMessageId,
@@ -1623,6 +1669,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     StyledDocument doc = docs.get(ref);
     try {
       doc.insertString(doc.getLength(), text, styles.message());
+      enforceTranscriptLineCap(ref, doc);
     } catch (Exception ignored) {
     }
   }
@@ -1716,6 +1763,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         AttributeSet base = withFilterMatch(withLineMeta(styles.presence(), meta), m);
         renderer.insertRichText(doc, ref, event.displayText(), base);
         doc.insertString(doc.getLength(), "\n", tsStyle);
+        enforceTranscriptLineCap(ref, doc);
       } catch (Exception ignored2) {
       }
       return;
@@ -1756,6 +1804,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     if (!block.folded && block.entries.size() == 2) {
       foldBlock(doc, block);
     }
+    enforceTranscriptLineCap(ref, doc);
   }
 
   public synchronized void appendLine(
@@ -1861,7 +1910,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       }
 
       AttributeSet base = msgStyle2;
-      renderer.insertRichText(doc, ref, text, base);
+      if (renderer != null && !shouldDeferRichTextDuringHistoryBatch(ref)) {
+        renderer.insertRichText(doc, ref, text, base);
+      } else {
+        doc.insertString(doc.getLength(), text == null ? "" : text, base);
+      }
 
       if (tailComponent != null) {
         SimpleAttributeSet a = new SimpleAttributeSet(tailAttrs != null ? tailAttrs : msgStyle2);
@@ -1876,6 +1929,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       doc.insertString(doc.getLength(), "\n", tsStyle);
 
       if (!allowEmbeds) {
+        enforceTranscriptLineCap(ref, doc);
         return;
       }
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
@@ -1884,6 +1938,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
         linkPreviews.appendPreviews(ref, doc, text);
       }
+      enforceTranscriptLineCap(ref, doc);
     } catch (Exception ignored) {
     }
   }
@@ -2241,7 +2296,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         pos += 1;
       }
 
-      if (renderer != null) {
+      if (renderer != null && !shouldDeferRichTextDuringHistoryBatch(ref)) {
         pos = renderer.insertRichTextAt(doc, ref, a, ms, pos);
       } else {
         doc.insertString(pos, a, ms);
@@ -2255,6 +2310,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     int delta = doc.getLength() - beforeLen;
     shiftCurrentPresenceBlock(ref, insertionStart, delta);
+    int trimmed = enforceTranscriptLineCap(ref, doc);
+    if (trimmed > 0) {
+      pos = Math.max(0, pos - trimmed);
+    }
     return pos;
   }
 
@@ -2488,6 +2547,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     int delta = doc.getLength() - beforeLen;
     shiftCurrentPresenceBlock(ref, offFinal, delta);
+    int trimmed = enforceTranscriptLineCap(ref, doc);
+    if (trimmed > 0) {
+      pos = Math.max(0, pos - trimmed);
+    }
     return pos;
   }
 
@@ -2585,7 +2648,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         pos += prefix.length();
       }
 
-      if (renderer != null) {
+      if (renderer != null && !shouldDeferRichTextDuringHistoryBatch(ref)) {
         pos = renderer.insertRichTextAt(doc, ref, text, msgStyle2, pos);
       } else {
         String t = text == null ? "" : text;
@@ -2605,6 +2668,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     int delta = doc.getLength() - beforeLen;
     shiftCurrentPresenceBlock(ref, insertionStart, delta);
+    int trimmed = enforceTranscriptLineCap(ref, doc);
+    if (trimmed > 0) {
+      pos = Math.max(0, pos - trimmed);
+    }
     return pos;
   }
 
@@ -3053,6 +3120,41 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     if (lineStart < 0) {
       return;
     }
+    insertReactionControlForMessage(ref, doc, st, targetMsgId, lineStart, state, tsEpochMs);
+  }
+
+  private void removeMessageReactionInternal(
+      TargetRef ref,
+      StyledDocument doc,
+      TranscriptState st,
+      String targetMessageId,
+      String reaction,
+      String fromNick,
+      long tsEpochMs) {
+    if (ref == null || doc == null || st == null) return;
+    String targetMsgId = normalizeMessageId(targetMessageId);
+    String reactionToken = Objects.toString(reaction, "").trim();
+    String nick = Objects.toString(fromNick, "").trim();
+    if (targetMsgId.isEmpty() || reactionToken.isEmpty() || nick.isEmpty()) return;
+
+    ReactionState state = st.reactionsByTargetMsgId.get(targetMsgId);
+    if (state == null) return;
+    state.forget(reactionToken, nick);
+    if (state.isEmpty()) {
+      clearReactionStateForMessage(ref, doc, st, targetMsgId);
+      return;
+    }
+
+    if (state.control != null && state.control.component != null) {
+      try {
+        state.control.component.setReactions(state.reactionsSnapshot());
+      } catch (Exception ignored) {
+      }
+      return;
+    }
+
+    int lineStart = findLineStartByMessageId(doc, targetMsgId);
+    if (lineStart < 0) return;
     insertReactionControlForMessage(ref, doc, st, targetMsgId, lineStart, state, tsEpochMs);
   }
 
@@ -3575,6 +3677,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       doc.insertString(doc.getLength(), "\n", tsAttrs);
     } catch (Exception ignored) {
     }
+    enforceTranscriptLineCap(ref, doc);
   }
 
   public void appendSpoilerChatFromHistory(
@@ -3664,6 +3767,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       doc.insertString(doc.getLength(), "\n", tsAttrs);
     } catch (Exception ignored) {
     }
+    enforceTranscriptLineCap(ref, doc);
   }
 
   private boolean revealSpoilerInPlace(
@@ -3955,6 +4059,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       doc.insertString(doc.getLength(), "\n", tsStyle);
 
       if (!allowEmbeds) {
+        enforceTranscriptLineCap(ref, doc);
         return;
       }
 
@@ -3965,6 +4070,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
         linkPreviews.appendPreviews(ref, doc, a);
       }
+      enforceTranscriptLineCap(ref, doc);
     } catch (Exception ignored) {
     }
 
@@ -4205,6 +4311,88 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       }
     } catch (Exception ignored) {
     }
+  }
+
+  private int transcriptMaxLinesPerTarget() {
+    try {
+      UiSettings s = uiSettings != null ? uiSettings.get() : null;
+      int v =
+          (s != null)
+              ? s.chatTranscriptMaxLinesPerTarget()
+              : DEFAULT_TRANSCRIPT_MAX_LINES_PER_TARGET;
+      if (v < 0) return 0;
+      return Math.min(MAX_TRANSCRIPT_LINES_PER_TARGET, v);
+    } catch (Exception ignored) {
+      return DEFAULT_TRANSCRIPT_MAX_LINES_PER_TARGET;
+    }
+  }
+
+  private static int logicalLineCount(StyledDocument doc) {
+    if (doc == null) return 0;
+    try {
+      Element root = doc.getDefaultRootElement();
+      if (root == null) return 0;
+      int count = Math.max(0, root.getElementCount());
+      int len = doc.getLength();
+      if (count > 0 && len > 0) {
+        String last = doc.getText(len - 1, 1);
+        if ("\n".equals(last)) {
+          count = Math.max(0, count - 1);
+        }
+      }
+      return count;
+    } catch (Exception ignored) {
+      return 0;
+    }
+  }
+
+  private int enforceTranscriptLineCap(TargetRef ref, StyledDocument doc) {
+    if (ref == null || doc == null) return 0;
+
+    int maxLines = transcriptMaxLinesPerTarget();
+    if (maxLines <= 0) return 0;
+
+    int lineCount = logicalLineCount(doc);
+    if (lineCount <= maxLines) return 0;
+
+    int trimLines = lineCount - maxLines;
+    try {
+      Element root = doc.getDefaultRootElement();
+      if (root == null || trimLines <= 0) return 0;
+      int idx = Math.min(root.getElementCount() - 1, trimLines - 1);
+      if (idx < 0) return 0;
+      Element lastTrimmed = root.getElement(idx);
+      if (lastTrimmed == null) return 0;
+      int removeLen = Math.max(0, Math.min(lastTrimmed.getEndOffset(), doc.getLength()));
+      if (removeLen <= 0) return 0;
+
+      doc.remove(0, removeLen);
+      resetStateAfterHeadTrim(ref);
+      return removeLen;
+    } catch (Exception ignored) {
+      return 0;
+    }
+  }
+
+  private void resetStateAfterHeadTrim(TargetRef ref) {
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null) return;
+
+    st.earliestEpochMsSeen = null;
+    st.currentPresenceBlock = null;
+    st.currentFilteredRun = null;
+    st.currentFilteredHintRun = null;
+    st.currentFilteredRunInsert = null;
+    st.currentFilteredHintRunInsert = null;
+    st.historyInsertBatchActive = false;
+    st.historyInsertPlaceholderRunsCreated = 0;
+    st.historyInsertHintRunsCreated = 0;
+    st.historyInsertOverflowRun = null;
+    st.loadOlderControl = null;
+    st.historyDivider = null;
+    st.pendingHistoryDividerLabel = null;
+    st.readMarker = null;
+    st.reactionsByTargetMsgId.clear();
   }
 
   private void foldBlock(StyledDocument doc, PresenceBlock block) {
@@ -4469,6 +4657,18 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       String n = Objects.toString(nick, "").trim();
       if (token.isEmpty() || n.isEmpty()) return;
       nicksByReaction.computeIfAbsent(token, k -> new LinkedHashSet<>()).add(n);
+    }
+
+    void forget(String reaction, String nick) {
+      String token = Objects.toString(reaction, "").trim();
+      String n = Objects.toString(nick, "").trim();
+      if (token.isEmpty() || n.isEmpty()) return;
+      LinkedHashSet<String> nicks = nicksByReaction.get(token);
+      if (nicks == null) return;
+      nicks.remove(n);
+      if (nicks.isEmpty()) {
+        nicksByReaction.remove(token);
+      }
     }
 
     boolean isEmpty() {

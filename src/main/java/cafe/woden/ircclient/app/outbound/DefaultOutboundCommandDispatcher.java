@@ -153,6 +153,9 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       case ParsedInput.ReactMessage cmd ->
           outboundChatCommandService.handleReactMessage(
               disposables, cmd.messageId(), cmd.reaction());
+      case ParsedInput.UnreactMessage cmd ->
+          outboundChatCommandService.handleUnreactMessage(
+              disposables, cmd.messageId(), cmd.reaction());
       case ParsedInput.EditMessage cmd ->
           outboundChatCommandService.handleEditMessage(disposables, cmd.messageId(), cmd.body());
       case ParsedInput.RedactMessage cmd ->

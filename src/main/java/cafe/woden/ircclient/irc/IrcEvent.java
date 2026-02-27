@@ -48,6 +48,7 @@ public sealed interface IrcEvent
         IrcEvent.ReadMarkerObserved,
         IrcEvent.MessageReplyObserved,
         IrcEvent.MessageReactObserved,
+        IrcEvent.MessageUnreactObserved,
         IrcEvent.MessageRedactionObserved,
         IrcEvent.Ircv3CapabilityChanged,
         IrcEvent.WhoisResult,
@@ -519,6 +520,11 @@ public sealed interface IrcEvent
 
   /** Observed IRCv3 draft/react tag. */
   record MessageReactObserved(
+      Instant at, String from, String target, String reaction, String messageId)
+      implements IrcEvent {}
+
+  /** Observed IRCv3 draft/unreact tag. */
+  record MessageUnreactObserved(
       Instant at, String from, String target, String reaction, String messageId)
       implements IrcEvent {}
 

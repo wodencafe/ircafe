@@ -21,6 +21,7 @@ import org.springframework.stereotype.Component;
 public class TrayService {
 
   private static final Logger log = LoggerFactory.getLogger(TrayService.class);
+  private static final int CLOSE_HINT_STATUS_DURATION_MS = 8_000;
 
   private final UiSettingsBus settingsBus;
   private final ObjectProvider<MainFrame> frameProvider;
@@ -31,6 +32,8 @@ public class TrayService {
   private final AtomicBoolean installed = new AtomicBoolean(false);
   private final AtomicBoolean exitRequested = new AtomicBoolean(false);
   private final AtomicBoolean closeBalloonShown = new AtomicBoolean(false);
+  private final javax.swing.Timer closeHintStatusClearTimer =
+      new javax.swing.Timer(CLOSE_HINT_STATUS_DURATION_MS, e -> clearTrayStatus());
 
   private volatile SystemTray systemTray;
   private volatile MenuItem showHideItem;
@@ -46,6 +49,7 @@ public class TrayService {
     this.trayNotificationServiceProvider = trayNotificationServiceProvider;
     this.shutdownCoordinator = shutdownCoordinator;
     this.runtimeConfigStore = runtimeConfigStore;
+    this.closeHintStatusClearTimer.setRepeats(false);
     try {
       closeBalloonShown.set(runtimeConfigStore.readTrayCloseToTrayHintShown(false));
     } catch (Exception ignored) {
@@ -150,6 +154,7 @@ public class TrayService {
   }
 
   public void remove() {
+    stopCloseHintStatusClearTimer();
     SystemTray tray = this.systemTray;
     this.systemTray = null;
     this.showHideItem = null;
@@ -230,18 +235,7 @@ public class TrayService {
     // Set a short-lived status hint instead (non-intrusive, works everywhere).
     try {
       tray.setStatus("Still running in tray");
-      java.util.Timer timer = new java.util.Timer("tray-status-clear", true);
-      timer.schedule(
-          new java.util.TimerTask() {
-            @Override
-            public void run() {
-              try {
-                tray.setStatus(null);
-              } catch (Throwable ignored) {
-              }
-            }
-          },
-          8_000L);
+      restartCloseHintStatusClearTimer();
     } catch (Throwable ignored) {
     }
   }
@@ -263,6 +257,31 @@ public class TrayService {
       remove();
     } finally {
       shutdownCoordinator.shutdown();
+    }
+  }
+
+  private void restartCloseHintStatusClearTimer() {
+    if (SwingUtilities.isEventDispatchThread()) {
+      closeHintStatusClearTimer.restart();
+      return;
+    }
+    SwingUtilities.invokeLater(closeHintStatusClearTimer::restart);
+  }
+
+  private void stopCloseHintStatusClearTimer() {
+    if (SwingUtilities.isEventDispatchThread()) {
+      closeHintStatusClearTimer.stop();
+      return;
+    }
+    SwingUtilities.invokeLater(closeHintStatusClearTimer::stop);
+  }
+
+  private void clearTrayStatus() {
+    SystemTray tray = this.systemTray;
+    if (tray == null) return;
+    try {
+      tray.setStatus(null);
+    } catch (Throwable ignored) {
     }
   }
 }

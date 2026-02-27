@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.ignore;
 
+import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
+import java.util.List;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -8,15 +11,8 @@ import org.springframework.stereotype.Component;
  * lists.
  */
 @Component
-public class InboundIgnorePolicy {
-
-  public enum Decision {
-    ALLOW,
-
-    SOFT_SPOILER,
-
-    HARD_DROP
-  }
+@ApplicationLayer
+public class InboundIgnorePolicy implements InboundIgnorePolicyPort {
 
   private final IgnoreListService ignoreListService;
   private final IgnoreStatusService ignoreStatusService;
@@ -27,15 +23,15 @@ public class InboundIgnorePolicy {
     this.ignoreStatusService = ignoreStatusService;
   }
 
-  /**
-   * Decide how a message from a sender should be handled.
-   *
-   * @param serverId server id
-   * @param fromNick sender nick
-   * @param hostmask optional full hostmask (nick!ident@host) if already known; may be null
-   * @param isCtcp whether this is a CTCP request/reply (hard ignore can optionally exclude CTCP)
-   */
-  public Decision decide(String serverId, String fromNick, String hostmask, boolean isCtcp) {
+  @Override
+  public Decision decide(
+      String serverId,
+      String fromNick,
+      String hostmask,
+      boolean isCtcp,
+      List<String> inboundLevels,
+      String inboundChannel,
+      String inboundText) {
     if (ignoreListService == null) return Decision.ALLOW;
 
     String sid = Objects.toString(serverId, "").trim();
@@ -48,7 +44,8 @@ public class InboundIgnorePolicy {
     IgnoreStatusService.Status st =
         (ignoreStatusService == null)
             ? new IgnoreStatusService.Status(false, false, false, "")
-            : ignoreStatusService.status(sid, nick, hostmask);
+            : ignoreStatusService.status(
+                sid, nick, hostmask, inboundLevels, inboundChannel, inboundText);
 
     if (st.hard()) {
       if (!isCtcp || ignoreListService.hardIgnoreIncludesCtcp()) {

@@ -306,6 +306,7 @@ public class SwingUiPort implements UiPort {
           serverTree.removeTarget(target);
           chat.clearTopic(target);
           transcripts.closeTarget(target);
+          chat.onTargetClosed(target);
         });
   }
 
@@ -336,8 +337,13 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void recordHighlight(TargetRef target, String fromNick) {
+    recordHighlight(target, fromNick, "");
+  }
+
+  @Override
+  public void recordHighlight(TargetRef target, String fromNick, String snippet) {
     // Not a UI action; no need to marshal to the EDT.
-    notificationStore.recordHighlight(target, fromNick);
+    notificationStore.recordHighlight(target, fromNick, snippet);
   }
 
   @Override
@@ -348,11 +354,6 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void clearUnread(TargetRef target) {
-    // Visiting a channel clears any stored highlight notifications for that channel.
-    if (target != null && target.isChannel()) {
-      // Not a UI action; no need to marshal to the EDT.
-      notificationStore.clearChannel(target);
-    }
     onEdt(() -> serverTree.clearUnread(target));
   }
 
@@ -863,6 +864,13 @@ public class SwingUiPort implements UiPort {
       TargetRef target, Instant at, String fromNick, String targetMessageId, String reaction) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     onEdt(() -> transcripts.applyMessageReaction(target, targetMessageId, reaction, fromNick, ts));
+  }
+
+  @Override
+  public void removeMessageReaction(
+      TargetRef target, Instant at, String fromNick, String targetMessageId, String reaction) {
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    onEdt(() -> transcripts.removeMessageReaction(target, targetMessageId, reaction, fromNick, ts));
   }
 
   @Override

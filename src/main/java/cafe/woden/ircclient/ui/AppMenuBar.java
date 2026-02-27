@@ -157,6 +157,10 @@ public class AppMenuBar extends JMenuBar {
   private Timer warningTooltipHideTimer;
   private long lastWarningAtMs;
   private boolean warningThresholdActive;
+  private PropertyChangeListener uiSettingsListener;
+  private PropertyChangeListener dccTransfersVisibilityListener;
+  private PropertyChangeListener applicationRootVisibilityListener;
+  private boolean externalListenersInstalled;
 
   public AppMenuBar(
       PreferencesDialog preferencesDialog,
@@ -605,7 +609,7 @@ public class AppMenuBar extends JMenuBar {
               (id, mi) -> mi.setSelected(ThemeIdUtils.normalizeThemeId(id).equals(currentTheme)));
         };
     syncThemeChecks.run();
-    PropertyChangeListener themeListener =
+    uiSettingsListener =
         evt -> {
           if (UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) {
             syncThemeChecks.run();
@@ -618,7 +622,6 @@ public class AppMenuBar extends JMenuBar {
             refreshMemoryUsage();
           }
         };
-    settingsBus.addListener(themeListener);
 
     settings.add(themeMenu);
 
@@ -697,9 +700,8 @@ public class AppMenuBar extends JMenuBar {
     showDccNodes.setSelected(serverTree.isDccTransfersNodesVisible());
     showDccNodes.addActionListener(
         e -> serverTree.setDccTransfersNodesVisible(showDccNodes.isSelected()));
-    serverTree.addPropertyChangeListener(
-        ServerTreeDockable.PROP_DCC_TRANSFERS_NODES_VISIBLE,
-        evt -> showDccNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+    dccTransfersVisibilityListener =
+        evt -> showDccNodes.setSelected(Boolean.TRUE.equals(evt.getNewValue()));
 
     JMenu currentServerNodes = new JMenu("Current Server Nodes");
     JCheckBoxMenuItem showServerNode = new JCheckBoxMenuItem("Show Server Node");
@@ -783,9 +785,8 @@ public class AppMenuBar extends JMenuBar {
     showApplicationRoot.setSelected(serverTree.isApplicationRootVisible());
     showApplicationRoot.addActionListener(
         e -> serverTree.setApplicationRootVisible(showApplicationRoot.isSelected()));
-    serverTree.addPropertyChangeListener(
-        ServerTreeDockable.PROP_APPLICATION_ROOT_VISIBLE,
-        evt -> showApplicationRoot.setSelected(Boolean.TRUE.equals(evt.getNewValue())));
+    applicationRootVisibilityListener =
+        evt -> showApplicationRoot.setSelected(Boolean.TRUE.equals(evt.getNewValue()));
 
     JMenuItem openSelectedNodeDock = new JMenuItem("Open Selected Node in Chat Dock");
     openSelectedNodeDock.setAccelerator(
@@ -888,6 +889,43 @@ public class AppMenuBar extends JMenuBar {
     add(memoryWidget);
 
     installMenuPopupThemeSync(file, servers, edit, insert, settings, window, help);
+    installExternalListeners();
+  }
+
+  private void installExternalListeners() {
+    if (externalListenersInstalled) return;
+    if (settingsBus != null && uiSettingsListener != null) {
+      settingsBus.addListener(uiSettingsListener);
+    }
+    if (serverTree != null) {
+      if (dccTransfersVisibilityListener != null) {
+        serverTree.addPropertyChangeListener(
+            ServerTreeDockable.PROP_DCC_TRANSFERS_NODES_VISIBLE, dccTransfersVisibilityListener);
+      }
+      if (applicationRootVisibilityListener != null) {
+        serverTree.addPropertyChangeListener(
+            ServerTreeDockable.PROP_APPLICATION_ROOT_VISIBLE, applicationRootVisibilityListener);
+      }
+    }
+    externalListenersInstalled = true;
+  }
+
+  private void uninstallExternalListeners() {
+    if (!externalListenersInstalled) return;
+    if (settingsBus != null && uiSettingsListener != null) {
+      settingsBus.removeListener(uiSettingsListener);
+    }
+    if (serverTree != null) {
+      if (dccTransfersVisibilityListener != null) {
+        serverTree.removePropertyChangeListener(
+            ServerTreeDockable.PROP_DCC_TRANSFERS_NODES_VISIBLE, dccTransfersVisibilityListener);
+      }
+      if (applicationRootVisibilityListener != null) {
+        serverTree.removePropertyChangeListener(
+            ServerTreeDockable.PROP_APPLICATION_ROOT_VISIBLE, applicationRootVisibilityListener);
+      }
+    }
+    externalListenersInstalled = false;
   }
 
   private static void installMenuPopupThemeSync(JMenu... menus) {
@@ -916,6 +954,7 @@ public class AppMenuBar extends JMenuBar {
   @Override
   public void addNotify() {
     super.addNotify();
+    installExternalListeners();
     updateMemoryButtonStyleForCurrentMode();
     updateMemoryButtonHeightForCurrentMode();
     updateMemoryIndicatorSizeForCurrentMode();
@@ -928,6 +967,7 @@ public class AppMenuBar extends JMenuBar {
   public void removeNotify() {
     memoryTimer.stop();
     hideWarningTooltip();
+    uninstallExternalListeners();
     if (warningTooltipHideTimer != null) {
       warningTooltipHideTimer.stop();
     }

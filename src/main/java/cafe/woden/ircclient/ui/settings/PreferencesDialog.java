@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.commands.HexChatCommandAliasImporter;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
+import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.PushyProperties;
@@ -43,7 +44,6 @@ import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.DialogCloseableScopeDecorator;
 import cafe.woden.ircclient.ui.util.MouseWheelDecorator;
-import cafe.woden.ircclient.util.VirtualThreads;
 import com.formdev.flatlaf.FlatClientProperties;
 import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.subjects.PublishSubject;
@@ -132,6 +132,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import net.miginfocom.swing.MigLayout;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -171,6 +172,8 @@ public class PreferencesDialog {
   private final UserCommandAliasesBus userCommandAliasesBus;
   private final NotificationSoundService notificationSoundService;
   private final ServerDialogs serverDialogs;
+  private final ExecutorService pushyTestExecutor;
+  private final ExecutorService notificationRuleTestExecutor;
 
   private JDialog dialog;
 
@@ -199,7 +202,10 @@ public class PreferencesDialog {
       IrcEventNotificationRulesBus ircEventNotificationRulesBus,
       UserCommandAliasesBus userCommandAliasesBus,
       NotificationSoundService notificationSoundService,
-      ServerDialogs serverDialogs) {
+      ServerDialogs serverDialogs,
+      @Qualifier(ExecutorConfig.PREFERENCES_PUSHY_TEST_EXECUTOR) ExecutorService pushyTestExecutor,
+      @Qualifier(ExecutorConfig.PREFERENCES_NOTIFICATION_RULE_TEST_EXECUTOR)
+          ExecutorService notificationRuleTestExecutor) {
     this.settingsBus = settingsBus;
     this.themeManager = themeManager;
     this.accentSettingsBus = accentSettingsBus;
@@ -225,6 +231,15 @@ public class PreferencesDialog {
     this.userCommandAliasesBus = userCommandAliasesBus;
     this.notificationSoundService = notificationSoundService;
     this.serverDialogs = serverDialogs;
+    this.pushyTestExecutor = Objects.requireNonNull(pushyTestExecutor, "pushyTestExecutor");
+    this.notificationRuleTestExecutor =
+        Objects.requireNonNull(notificationRuleTestExecutor, "notificationRuleTestExecutor");
+    if (this.pushyTestExecutor.isShutdown()) {
+      throw new IllegalArgumentException("pushyTestExecutor must be active");
+    }
+    if (this.notificationRuleTestExecutor.isShutdown()) {
+      throw new IllegalArgumentException("notificationRuleTestExecutor must be active");
+    }
   }
 
   public void open(Window owner) {
@@ -828,8 +843,7 @@ public class PreferencesDialog {
         pushySettingsBus != null
             ? pushySettingsBus.get()
             : new PushyProperties(false, null, null, null, null, null, null, null);
-    TrayControls trayControls =
-        buildTrayControls(current, soundSettings, pushySettings, closeables);
+    TrayControls trayControls = buildTrayControls(current, soundSettings, pushySettings);
 
     ImageEmbedControls imageEmbeds = buildImageEmbedControls(current, closeables);
     LinkPreviewControls linkPreviews = buildLinkPreviewControls(current);
@@ -848,6 +862,7 @@ public class PreferencesDialog {
     JCheckBox typingIndicatorsReceiveEnabled = buildTypingIndicatorsReceiveCheckbox(current);
     JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle =
         buildTypingTreeIndicatorStyleCombo(current);
+    JSpinner serverTreeUnreadBadgeScalePercent = buildServerTreeUnreadBadgeScalePercentSpinner();
     Ircv3CapabilitiesControls ircv3Capabilities = buildIrcv3CapabilitiesControls();
     NickColorControls nickColors = buildNickColorControls(owner, closeables);
 
@@ -905,6 +920,7 @@ public class PreferencesDialog {
             typingIndicatorsSendEnabled,
             typingIndicatorsReceiveEnabled,
             typingTreeIndicatorStyle,
+            serverTreeUnreadBadgeScalePercent,
             ircv3Capabilities);
     JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
@@ -1187,6 +1203,10 @@ public class PreferencesDialog {
           boolean typingIndicatorsReceiveEnabledV = typingIndicatorsReceiveEnabled.isSelected();
           String typingIndicatorsTreeStyleV =
               typingTreeIndicatorStyleValue(typingTreeIndicatorStyle);
+          int serverTreeUnreadBadgeScalePercentV =
+              ((Number) serverTreeUnreadBadgeScalePercent.getValue()).intValue();
+          if (serverTreeUnreadBadgeScalePercentV < 50) serverTreeUnreadBadgeScalePercentV = 50;
+          if (serverTreeUnreadBadgeScalePercentV > 150) serverTreeUnreadBadgeScalePercentV = 150;
           Map<String, Boolean> ircv3CapabilitiesV = ircv3Capabilities.snapshot();
 
           boolean nickColoringEnabledV = nickColors.enabled.isSelected();
@@ -1198,8 +1218,25 @@ public class PreferencesDialog {
 
           int historyInitialLoadV = ((Number) history.initialLoadLines.getValue()).intValue();
           int historyPageSizeV = ((Number) history.pageSize.getValue()).intValue();
+          int historyAutoLoadWheelDebounceMsV =
+              ((Number) history.autoLoadWheelDebounceMs.getValue()).intValue();
+          int historyLoadOlderChunkSizeV =
+              ((Number) history.loadOlderChunkSize.getValue()).intValue();
+          int historyLoadOlderChunkDelayMsV =
+              ((Number) history.loadOlderChunkDelayMs.getValue()).intValue();
+          int historyLoadOlderChunkEdtBudgetMsV =
+              ((Number) history.loadOlderChunkEdtBudgetMs.getValue()).intValue();
+          boolean historyDeferRichTextDuringBatchV = history.deferRichTextDuringBatch.isSelected();
+          int historyRemoteRequestTimeoutSecondsV =
+              ((Number) history.remoteRequestTimeoutSeconds.getValue()).intValue();
+          int historyRemoteZncPlaybackTimeoutSecondsV =
+              ((Number) history.remoteZncPlaybackTimeoutSeconds.getValue()).intValue();
+          int historyRemoteZncPlaybackWindowMinutesV =
+              ((Number) history.remoteZncPlaybackWindowMinutes.getValue()).intValue();
           int commandHistoryMaxSizeV =
               ((Number) history.commandHistoryMaxSize.getValue()).intValue();
+          int chatTranscriptMaxLinesPerTargetV =
+              ((Number) history.chatTranscriptMaxLinesPerTarget.getValue()).intValue();
           MemoryUsageDisplayMode memoryUsageDisplayModeV =
               memoryUsageDisplayMode.getSelectedItem() instanceof MemoryUsageDisplayMode mode
                   ? mode
@@ -1479,7 +1516,16 @@ public class PreferencesDialog {
                   timestampsIncludePresenceMessagesV,
                   historyInitialLoadV,
                   historyPageSizeV,
+                  historyAutoLoadWheelDebounceMsV,
+                  historyLoadOlderChunkSizeV,
+                  historyLoadOlderChunkDelayMsV,
+                  historyLoadOlderChunkEdtBudgetMsV,
+                  historyDeferRichTextDuringBatchV,
+                  historyRemoteRequestTimeoutSecondsV,
+                  historyRemoteZncPlaybackTimeoutSecondsV,
+                  historyRemoteZncPlaybackWindowMinutesV,
                   commandHistoryMaxSizeV,
+                  chatTranscriptMaxLinesPerTargetV,
                   outgoingColorEnabledV,
                   outgoingHexV,
                   userhostEnabledV,
@@ -1523,6 +1569,8 @@ public class PreferencesDialog {
 
           boolean themeChanged = !next.theme().equalsIgnoreCase(prev.theme());
 
+          runtimeConfig.rememberServerTreeUnreadBadgeScalePercent(
+              serverTreeUnreadBadgeScalePercentV);
           settingsBus.set(next);
           if (spellcheckSettingsBus != null) {
             spellcheckSettingsBus.set(nextSpellcheck);
@@ -1531,241 +1579,271 @@ public class PreferencesDialog {
           if (accentSettingsBus != null) {
             accentSettingsBus.set(nextAccent);
           }
-          runtimeConfig.rememberAccentColor(nextAccent.accentColor());
-          runtimeConfig.rememberAccentStrength(nextAccent.strength());
+          runtimeConfig.beginMutationBatch();
+          try {
+            runtimeConfig.rememberAccentColor(nextAccent.accentColor());
+            runtimeConfig.rememberAccentStrength(nextAccent.strength());
 
-          if (tweakSettingsBus != null) {
-            tweakSettingsBus.set(nextTweaks);
+            if (tweakSettingsBus != null) {
+              tweakSettingsBus.set(nextTweaks);
+            }
+
+            if (chatThemeSettingsBus != null && chatThemeChanged) {
+              chatThemeSettingsBus.set(nextChatTheme);
+            }
+            runtimeConfig.rememberUiDensity(nextTweaks.densityId());
+            runtimeConfig.rememberCornerRadius(nextTweaks.cornerRadius());
+            runtimeConfig.rememberUiFontOverrideEnabled(nextTweaks.uiFontOverrideEnabled());
+            runtimeConfig.rememberUiFontFamily(nextTweaks.uiFontFamily());
+            runtimeConfig.rememberUiFontSize(nextTweaks.uiFontSize());
+
+            runtimeConfig.rememberUiSettings(
+                next.theme(), next.chatFontFamily(), next.chatFontSize());
+            runtimeConfig.rememberMemoryUsageDisplayMode(next.memoryUsageDisplayMode().token());
+            runtimeConfig.rememberMemoryUsageWarningNearMaxPercent(
+                next.memoryUsageWarningNearMaxPercent());
+            runtimeConfig.rememberMemoryUsageWarningTooltipEnabled(
+                next.memoryUsageWarningTooltipEnabled());
+            runtimeConfig.rememberMemoryUsageWarningToastEnabled(
+                next.memoryUsageWarningToastEnabled());
+            runtimeConfig.rememberMemoryUsageWarningPushyEnabled(
+                next.memoryUsageWarningPushyEnabled());
+            runtimeConfig.rememberMemoryUsageWarningSoundEnabled(
+                next.memoryUsageWarningSoundEnabled());
+            // Chat theme (transcript-only palette)
+            runtimeConfig.rememberChatThemePreset(nextChatTheme.preset().name());
+            runtimeConfig.rememberChatTimestampColor(nextChatTheme.timestampColor());
+            runtimeConfig.rememberChatSystemColor(nextChatTheme.systemColor());
+            runtimeConfig.rememberChatMessageColor(nextChatTheme.messageColor());
+            runtimeConfig.rememberChatNoticeColor(nextChatTheme.noticeColor());
+            runtimeConfig.rememberChatActionColor(nextChatTheme.actionColor());
+            runtimeConfig.rememberChatErrorColor(nextChatTheme.errorColor());
+            runtimeConfig.rememberChatPresenceColor(nextChatTheme.presenceColor());
+            runtimeConfig.rememberChatMentionBgColor(nextChatTheme.mentionBgColor());
+            runtimeConfig.rememberChatMentionStrength(nextChatTheme.mentionStrength());
+            runtimeConfig.rememberAutoConnectOnStart(next.autoConnectOnStart());
+            runtimeConfig.rememberLaunchJvmJavaCommand(launchJavaCommandV);
+            runtimeConfig.rememberLaunchJvmXmsMiB(launchXmsMiBV);
+            runtimeConfig.rememberLaunchJvmXmxMiB(launchXmxMiBV);
+            runtimeConfig.rememberLaunchJvmGc(launchGcV);
+            runtimeConfig.rememberLaunchJvmArgs(launchArgsV);
+            runtimeConfig.rememberTrayEnabled(next.trayEnabled());
+            runtimeConfig.rememberTrayCloseToTray(next.trayCloseToTray());
+            runtimeConfig.rememberTrayMinimizeToTray(next.trayMinimizeToTray());
+            runtimeConfig.rememberTrayStartMinimized(next.trayStartMinimized());
+            runtimeConfig.rememberTrayNotifyHighlights(next.trayNotifyHighlights());
+            runtimeConfig.rememberTrayNotifyPrivateMessages(next.trayNotifyPrivateMessages());
+            runtimeConfig.rememberTrayNotifyConnectionState(next.trayNotifyConnectionState());
+            runtimeConfig.rememberTrayNotifyOnlyWhenUnfocused(next.trayNotifyOnlyWhenUnfocused());
+            runtimeConfig.rememberTrayNotifyOnlyWhenMinimizedOrHidden(
+                next.trayNotifyOnlyWhenMinimizedOrHidden());
+            runtimeConfig.rememberTrayNotifySuppressWhenTargetActive(
+                next.trayNotifySuppressWhenTargetActive());
+            runtimeConfig.rememberTrayLinuxDbusActionsEnabled(next.trayLinuxDbusActionsEnabled());
+            runtimeConfig.rememberTrayNotificationBackend(
+                next.trayNotificationBackendMode().token());
+
+            if (notificationSoundSettingsBus != null) {
+              notificationSoundSettingsBus.set(
+                  new NotificationSoundSettings(
+                      trayNotificationSoundsEnabledV,
+                      trayNotificationSoundIdV,
+                      trayNotificationSoundUseCustomV,
+                      trayNotificationSoundCustomPathV));
+            }
+            runtimeConfig.rememberTrayNotificationSoundsEnabled(trayNotificationSoundsEnabledV);
+            runtimeConfig.rememberTrayNotificationSound(trayNotificationSoundIdV);
+            runtimeConfig.rememberTrayNotificationSoundUseCustom(trayNotificationSoundUseCustomV);
+            runtimeConfig.rememberTrayNotificationSoundCustomPath(trayNotificationSoundCustomPathV);
+            if (pushySettingsBus != null) {
+              pushySettingsBus.set(pushyNext);
+            }
+            runtimeConfig.rememberPushySettings(pushyNext);
+
+            if (trayService != null) {
+              trayService.applySettings();
+            }
+            runtimeConfig.rememberImageEmbedsEnabled(next.imageEmbedsEnabled());
+            runtimeConfig.rememberImageEmbedsCollapsedByDefault(
+                next.imageEmbedsCollapsedByDefault());
+            runtimeConfig.rememberImageEmbedsMaxWidthPx(next.imageEmbedsMaxWidthPx());
+            runtimeConfig.rememberImageEmbedsMaxHeightPx(next.imageEmbedsMaxHeightPx());
+            runtimeConfig.rememberImageEmbedsAnimateGifs(next.imageEmbedsAnimateGifs());
+            runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
+            runtimeConfig.rememberLinkPreviewsCollapsedByDefault(
+                next.linkPreviewsCollapsedByDefault());
+            runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
+            runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(
+                next.ctcpRequestsInActiveTargetEnabled());
+            runtimeConfig.rememberCtcpAutoRepliesEnabled(ctcpAutoRepliesEnabledV);
+            runtimeConfig.rememberCtcpAutoReplyVersionEnabled(ctcpAutoReplyVersionEnabledV);
+            runtimeConfig.rememberCtcpAutoReplyPingEnabled(ctcpAutoReplyPingEnabledV);
+            runtimeConfig.rememberCtcpAutoReplyTimeEnabled(ctcpAutoReplyTimeEnabledV);
+            runtimeConfig.rememberTypingIndicatorsEnabled(next.typingIndicatorsEnabled());
+            runtimeConfig.rememberTypingIndicatorsReceiveEnabled(
+                next.typingIndicatorsReceiveEnabled());
+            runtimeConfig.rememberTypingTreeIndicatorStyle(next.typingIndicatorsTreeStyle());
+            runtimeConfig.rememberSpellcheckEnabled(nextSpellcheck.enabled());
+            runtimeConfig.rememberSpellcheckUnderlineEnabled(nextSpellcheck.underlineEnabled());
+            runtimeConfig.rememberSpellcheckSuggestOnTabEnabled(
+                nextSpellcheck.suggestOnTabEnabled());
+            runtimeConfig.rememberSpellcheckLanguageTag(nextSpellcheck.languageTag());
+            runtimeConfig.rememberSpellcheckCustomDictionary(nextSpellcheck.customDictionary());
+            runtimeConfig.rememberSpellcheckCompletionPreset(nextSpellcheck.completionPreset());
+            runtimeConfig.rememberSpellcheckCustomMinPrefixCompletionTokenLength(
+                nextSpellcheck.customMinPrefixCompletionTokenLength());
+            runtimeConfig.rememberSpellcheckCustomMaxPrefixCompletionExtraChars(
+                nextSpellcheck.customMaxPrefixCompletionExtraChars());
+            runtimeConfig.rememberSpellcheckCustomMaxPrefixLexiconCandidates(
+                nextSpellcheck.customMaxPrefixLexiconCandidates());
+            runtimeConfig.rememberSpellcheckCustomPrefixCompletionBonusScore(
+                nextSpellcheck.customPrefixCompletionBonusScore());
+            runtimeConfig.rememberSpellcheckCustomSourceOrderWeight(
+                nextSpellcheck.customSourceOrderWeight());
+            persistIrcv3Capabilities(ircv3CapabilitiesV);
+
+            if (nickColorSettingsBus != null) {
+              nickColorSettingsBus.set(
+                  new NickColorSettings(nickColoringEnabledV, nickColorMinContrastV));
+            }
+            runtimeConfig.rememberNickColoringEnabled(nickColoringEnabledV);
+            runtimeConfig.rememberNickColorMinContrast(nickColorMinContrastV);
+            runtimeConfig.rememberTimestampsEnabled(next.timestampsEnabled());
+            runtimeConfig.rememberTimestampFormat(next.timestampFormat());
+            runtimeConfig.rememberTimestampsIncludeChatMessages(
+                next.timestampsIncludeChatMessages());
+            runtimeConfig.rememberTimestampsIncludePresenceMessages(
+                next.timestampsIncludePresenceMessages());
+
+            runtimeConfig.rememberChatHistoryInitialLoadLines(next.chatHistoryInitialLoadLines());
+            runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
+            runtimeConfig.rememberChatHistoryAutoLoadWheelDebounceMs(
+                next.chatHistoryAutoLoadWheelDebounceMs());
+            runtimeConfig.rememberChatHistoryLoadOlderChunkSize(
+                next.chatHistoryLoadOlderChunkSize());
+            runtimeConfig.rememberChatHistoryLoadOlderChunkDelayMs(
+                next.chatHistoryLoadOlderChunkDelayMs());
+            runtimeConfig.rememberChatHistoryLoadOlderChunkEdtBudgetMs(
+                next.chatHistoryLoadOlderChunkEdtBudgetMs());
+            runtimeConfig.rememberChatHistoryDeferRichTextDuringBatch(
+                next.chatHistoryDeferRichTextDuringBatch());
+            runtimeConfig.rememberChatHistoryRemoteRequestTimeoutSeconds(
+                next.chatHistoryRemoteRequestTimeoutSeconds());
+            runtimeConfig.rememberChatHistoryRemoteZncPlaybackTimeoutSeconds(
+                next.chatHistoryRemoteZncPlaybackTimeoutSeconds());
+            runtimeConfig.rememberChatHistoryRemoteZncPlaybackWindowMinutes(
+                next.chatHistoryRemoteZncPlaybackWindowMinutes());
+            runtimeConfig.rememberCommandHistoryMaxSize(next.commandHistoryMaxSize());
+            runtimeConfig.rememberChatTranscriptMaxLinesPerTarget(
+                next.chatTranscriptMaxLinesPerTarget());
+
+            applyFilterSettingsFromUi(filters);
+            runtimeConfig.rememberChatLoggingEnabled(logging.enabled.isSelected());
+            runtimeConfig.rememberChatLoggingLogSoftIgnoredLines(
+                logging.logSoftIgnored.isSelected());
+            runtimeConfig.rememberChatLoggingLogPrivateMessages(
+                logging.logPrivateMessages.isSelected());
+            runtimeConfig.rememberChatLoggingSavePrivateMessageList(
+                logging.savePrivateMessageList.isSelected());
+            runtimeConfig.rememberChatLoggingDbFileBaseName(logging.dbBaseName.getText());
+            runtimeConfig.rememberChatLoggingDbNextToRuntimeConfig(
+                logging.dbNextToConfig.isSelected());
+
+            runtimeConfig.rememberChatLoggingKeepForever(logging.keepForever.isSelected());
+            runtimeConfig.rememberChatLoggingRetentionDays(
+                ((Number) logging.retentionDays.getValue()).intValue());
+            runtimeConfig.rememberChatLoggingWriterQueueMax(
+                ((Number) logging.writerQueueMax.getValue()).intValue());
+            runtimeConfig.rememberChatLoggingWriterBatchSize(
+                ((Number) logging.writerBatchSize.getValue()).intValue());
+
+            runtimeConfig.rememberClientLineColorEnabled(next.clientLineColorEnabled());
+            runtimeConfig.rememberClientLineColor(next.clientLineColor());
+
+            runtimeConfig.rememberNotificationRuleCooldownSeconds(
+                next.notificationRuleCooldownSeconds());
+            runtimeConfig.rememberNotificationRules(notificationRulesV);
+            runtimeConfig.rememberIrcEventNotificationRules(ircEventNotificationRulesV);
+            if (ircEventNotificationRulesBus != null) {
+              ircEventNotificationRulesBus.set(ircEventNotificationRulesV);
+            }
+            runtimeConfig.rememberUserCommandAliases(userCommandAliasesV);
+            runtimeConfig.rememberUnknownCommandAsRawEnabled(unknownCommandAsRawEnabledV);
+            if (userCommandAliasesBus != null) {
+              userCommandAliasesBus.set(userCommandAliasesV);
+              userCommandAliasesBus.setUnknownCommandAsRawEnabled(unknownCommandAsRawEnabledV);
+            }
+            runtimeConfig.rememberAppDiagnosticsAssertjSwingEnabled(
+                diagnosticsAssertjSwingEnabledV);
+            runtimeConfig.rememberAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(
+                diagnosticsAssertjSwingFreezeWatchdogEnabledV);
+            runtimeConfig.rememberAppDiagnosticsAssertjSwingFreezeThresholdMs(
+                diagnosticsAssertjSwingFreezeThresholdMsV);
+            runtimeConfig.rememberAppDiagnosticsAssertjSwingWatchdogPollMs(
+                diagnosticsAssertjSwingWatchdogPollMsV);
+            runtimeConfig.rememberAppDiagnosticsAssertjSwingFallbackViolationReportMs(
+                diagnosticsAssertjSwingFallbackViolationReportMsV);
+            runtimeConfig.rememberAppDiagnosticsAssertjSwingIssuePlaySound(
+                diagnosticsAssertjSwingOnIssuePlaySoundV);
+            runtimeConfig.rememberAppDiagnosticsAssertjSwingIssueShowNotification(
+                diagnosticsAssertjSwingOnIssueShowNotificationV);
+            runtimeConfig.rememberAppDiagnosticsJhiccupEnabled(diagnosticsJhiccupEnabledV);
+            runtimeConfig.rememberAppDiagnosticsJhiccupJarPath(diagnosticsJhiccupJarPathV);
+            runtimeConfig.rememberAppDiagnosticsJhiccupJavaCommand(
+                diagnosticsJhiccupJavaCommandRawV);
+            runtimeConfig.rememberAppDiagnosticsJhiccupArgs(diagnosticsJhiccupArgsV);
+            if (diagnosticsChangedV) {
+              JOptionPane.showMessageDialog(
+                  dialog,
+                  "Diagnostics settings were saved.\nRestart IRCafe to apply AssertJ Swing / jHiccup startup changes.",
+                  "Restart required",
+                  JOptionPane.INFORMATION_MESSAGE);
+            }
+
+            runtimeConfig.rememberUserhostDiscoveryEnabled(next.userhostDiscoveryEnabled());
+            runtimeConfig.rememberUserhostMinIntervalSeconds(next.userhostMinIntervalSeconds());
+            runtimeConfig.rememberUserhostMaxCommandsPerMinute(next.userhostMaxCommandsPerMinute());
+            runtimeConfig.rememberUserhostNickCooldownMinutes(next.userhostNickCooldownMinutes());
+            runtimeConfig.rememberUserhostMaxNicksPerCommand(next.userhostMaxNicksPerCommand());
+            runtimeConfig.rememberUserInfoEnrichmentEnabled(next.userInfoEnrichmentEnabled());
+            runtimeConfig.rememberUserInfoEnrichmentWhoisFallbackEnabled(
+                next.userInfoEnrichmentWhoisFallbackEnabled());
+
+            runtimeConfig.rememberUserInfoEnrichmentUserhostMinIntervalSeconds(
+                next.userInfoEnrichmentUserhostMinIntervalSeconds());
+            runtimeConfig.rememberUserInfoEnrichmentUserhostMaxCommandsPerMinute(
+                next.userInfoEnrichmentUserhostMaxCommandsPerMinute());
+            runtimeConfig.rememberUserInfoEnrichmentUserhostNickCooldownMinutes(
+                next.userInfoEnrichmentUserhostNickCooldownMinutes());
+            runtimeConfig.rememberUserInfoEnrichmentUserhostMaxNicksPerCommand(
+                next.userInfoEnrichmentUserhostMaxNicksPerCommand());
+
+            runtimeConfig.rememberUserInfoEnrichmentWhoisMinIntervalSeconds(
+                next.userInfoEnrichmentWhoisMinIntervalSeconds());
+            runtimeConfig.rememberUserInfoEnrichmentWhoisNickCooldownMinutes(
+                next.userInfoEnrichmentWhoisNickCooldownMinutes());
+
+            runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshEnabled(
+                next.userInfoEnrichmentPeriodicRefreshEnabled());
+            runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshIntervalSeconds(
+                next.userInfoEnrichmentPeriodicRefreshIntervalSeconds());
+            runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshNicksPerTick(
+                next.userInfoEnrichmentPeriodicRefreshNicksPerTick());
+            runtimeConfig.rememberMonitorIsonPollIntervalSeconds(
+                next.monitorIsonFallbackPollIntervalSeconds());
+            runtimeConfig.rememberClientProxy(proxyCfg);
+            NetProxyContext.configure(proxyCfg);
+            runtimeConfig.rememberClientHeartbeat(heartbeatCfg);
+            NetHeartbeatContext.configure(heartbeatCfg);
+            if (ircClientService != null) {
+              ircClientService.rescheduleActiveHeartbeats();
+            }
+            boolean trustAllTlsV = trustAllTlsCertificates.isSelected();
+            runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);
+            NetTlsContext.configure(trustAllTlsV);
+          } finally {
+            runtimeConfig.endMutationBatch();
           }
-
-          if (chatThemeSettingsBus != null && chatThemeChanged) {
-            chatThemeSettingsBus.set(nextChatTheme);
-          }
-          runtimeConfig.rememberUiDensity(nextTweaks.densityId());
-          runtimeConfig.rememberCornerRadius(nextTweaks.cornerRadius());
-          runtimeConfig.rememberUiFontOverrideEnabled(nextTweaks.uiFontOverrideEnabled());
-          runtimeConfig.rememberUiFontFamily(nextTweaks.uiFontFamily());
-          runtimeConfig.rememberUiFontSize(nextTweaks.uiFontSize());
-
-          runtimeConfig.rememberUiSettings(
-              next.theme(), next.chatFontFamily(), next.chatFontSize());
-          runtimeConfig.rememberMemoryUsageDisplayMode(next.memoryUsageDisplayMode().token());
-          runtimeConfig.rememberMemoryUsageWarningNearMaxPercent(
-              next.memoryUsageWarningNearMaxPercent());
-          runtimeConfig.rememberMemoryUsageWarningTooltipEnabled(
-              next.memoryUsageWarningTooltipEnabled());
-          runtimeConfig.rememberMemoryUsageWarningToastEnabled(
-              next.memoryUsageWarningToastEnabled());
-          runtimeConfig.rememberMemoryUsageWarningPushyEnabled(
-              next.memoryUsageWarningPushyEnabled());
-          runtimeConfig.rememberMemoryUsageWarningSoundEnabled(
-              next.memoryUsageWarningSoundEnabled());
-          // Chat theme (transcript-only palette)
-          runtimeConfig.rememberChatThemePreset(nextChatTheme.preset().name());
-          runtimeConfig.rememberChatTimestampColor(nextChatTheme.timestampColor());
-          runtimeConfig.rememberChatSystemColor(nextChatTheme.systemColor());
-          runtimeConfig.rememberChatMessageColor(nextChatTheme.messageColor());
-          runtimeConfig.rememberChatNoticeColor(nextChatTheme.noticeColor());
-          runtimeConfig.rememberChatActionColor(nextChatTheme.actionColor());
-          runtimeConfig.rememberChatErrorColor(nextChatTheme.errorColor());
-          runtimeConfig.rememberChatPresenceColor(nextChatTheme.presenceColor());
-          runtimeConfig.rememberChatMentionBgColor(nextChatTheme.mentionBgColor());
-          runtimeConfig.rememberChatMentionStrength(nextChatTheme.mentionStrength());
-          runtimeConfig.rememberAutoConnectOnStart(next.autoConnectOnStart());
-          runtimeConfig.rememberLaunchJvmJavaCommand(launchJavaCommandV);
-          runtimeConfig.rememberLaunchJvmXmsMiB(launchXmsMiBV);
-          runtimeConfig.rememberLaunchJvmXmxMiB(launchXmxMiBV);
-          runtimeConfig.rememberLaunchJvmGc(launchGcV);
-          runtimeConfig.rememberLaunchJvmArgs(launchArgsV);
-          runtimeConfig.rememberTrayEnabled(next.trayEnabled());
-          runtimeConfig.rememberTrayCloseToTray(next.trayCloseToTray());
-          runtimeConfig.rememberTrayMinimizeToTray(next.trayMinimizeToTray());
-          runtimeConfig.rememberTrayStartMinimized(next.trayStartMinimized());
-          runtimeConfig.rememberTrayNotifyHighlights(next.trayNotifyHighlights());
-          runtimeConfig.rememberTrayNotifyPrivateMessages(next.trayNotifyPrivateMessages());
-          runtimeConfig.rememberTrayNotifyConnectionState(next.trayNotifyConnectionState());
-          runtimeConfig.rememberTrayNotifyOnlyWhenUnfocused(next.trayNotifyOnlyWhenUnfocused());
-          runtimeConfig.rememberTrayNotifyOnlyWhenMinimizedOrHidden(
-              next.trayNotifyOnlyWhenMinimizedOrHidden());
-          runtimeConfig.rememberTrayNotifySuppressWhenTargetActive(
-              next.trayNotifySuppressWhenTargetActive());
-          runtimeConfig.rememberTrayLinuxDbusActionsEnabled(next.trayLinuxDbusActionsEnabled());
-          runtimeConfig.rememberTrayNotificationBackend(next.trayNotificationBackendMode().token());
-
-          if (notificationSoundSettingsBus != null) {
-            notificationSoundSettingsBus.set(
-                new NotificationSoundSettings(
-                    trayNotificationSoundsEnabledV,
-                    trayNotificationSoundIdV,
-                    trayNotificationSoundUseCustomV,
-                    trayNotificationSoundCustomPathV));
-          }
-          runtimeConfig.rememberTrayNotificationSoundsEnabled(trayNotificationSoundsEnabledV);
-          runtimeConfig.rememberTrayNotificationSound(trayNotificationSoundIdV);
-          runtimeConfig.rememberTrayNotificationSoundUseCustom(trayNotificationSoundUseCustomV);
-          runtimeConfig.rememberTrayNotificationSoundCustomPath(trayNotificationSoundCustomPathV);
-          if (pushySettingsBus != null) {
-            pushySettingsBus.set(pushyNext);
-          }
-          runtimeConfig.rememberPushySettings(pushyNext);
-
-          if (trayService != null) {
-            trayService.applySettings();
-          }
-          runtimeConfig.rememberImageEmbedsEnabled(next.imageEmbedsEnabled());
-          runtimeConfig.rememberImageEmbedsCollapsedByDefault(next.imageEmbedsCollapsedByDefault());
-          runtimeConfig.rememberImageEmbedsMaxWidthPx(next.imageEmbedsMaxWidthPx());
-          runtimeConfig.rememberImageEmbedsMaxHeightPx(next.imageEmbedsMaxHeightPx());
-          runtimeConfig.rememberImageEmbedsAnimateGifs(next.imageEmbedsAnimateGifs());
-          runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
-          runtimeConfig.rememberLinkPreviewsCollapsedByDefault(
-              next.linkPreviewsCollapsedByDefault());
-          runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
-          runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(
-              next.ctcpRequestsInActiveTargetEnabled());
-          runtimeConfig.rememberCtcpAutoRepliesEnabled(ctcpAutoRepliesEnabledV);
-          runtimeConfig.rememberCtcpAutoReplyVersionEnabled(ctcpAutoReplyVersionEnabledV);
-          runtimeConfig.rememberCtcpAutoReplyPingEnabled(ctcpAutoReplyPingEnabledV);
-          runtimeConfig.rememberCtcpAutoReplyTimeEnabled(ctcpAutoReplyTimeEnabledV);
-          runtimeConfig.rememberTypingIndicatorsEnabled(next.typingIndicatorsEnabled());
-          runtimeConfig.rememberTypingIndicatorsReceiveEnabled(
-              next.typingIndicatorsReceiveEnabled());
-          runtimeConfig.rememberTypingTreeIndicatorStyle(next.typingIndicatorsTreeStyle());
-          runtimeConfig.rememberSpellcheckEnabled(nextSpellcheck.enabled());
-          runtimeConfig.rememberSpellcheckUnderlineEnabled(nextSpellcheck.underlineEnabled());
-          runtimeConfig.rememberSpellcheckSuggestOnTabEnabled(nextSpellcheck.suggestOnTabEnabled());
-          runtimeConfig.rememberSpellcheckLanguageTag(nextSpellcheck.languageTag());
-          runtimeConfig.rememberSpellcheckCustomDictionary(nextSpellcheck.customDictionary());
-          runtimeConfig.rememberSpellcheckCompletionPreset(nextSpellcheck.completionPreset());
-          runtimeConfig.rememberSpellcheckCustomMinPrefixCompletionTokenLength(
-              nextSpellcheck.customMinPrefixCompletionTokenLength());
-          runtimeConfig.rememberSpellcheckCustomMaxPrefixCompletionExtraChars(
-              nextSpellcheck.customMaxPrefixCompletionExtraChars());
-          runtimeConfig.rememberSpellcheckCustomMaxPrefixLexiconCandidates(
-              nextSpellcheck.customMaxPrefixLexiconCandidates());
-          runtimeConfig.rememberSpellcheckCustomPrefixCompletionBonusScore(
-              nextSpellcheck.customPrefixCompletionBonusScore());
-          runtimeConfig.rememberSpellcheckCustomSourceOrderWeight(
-              nextSpellcheck.customSourceOrderWeight());
-          persistIrcv3Capabilities(ircv3CapabilitiesV);
-
-          if (nickColorSettingsBus != null) {
-            nickColorSettingsBus.set(
-                new NickColorSettings(nickColoringEnabledV, nickColorMinContrastV));
-          }
-          runtimeConfig.rememberNickColoringEnabled(nickColoringEnabledV);
-          runtimeConfig.rememberNickColorMinContrast(nickColorMinContrastV);
-          runtimeConfig.rememberTimestampsEnabled(next.timestampsEnabled());
-          runtimeConfig.rememberTimestampFormat(next.timestampFormat());
-          runtimeConfig.rememberTimestampsIncludeChatMessages(next.timestampsIncludeChatMessages());
-          runtimeConfig.rememberTimestampsIncludePresenceMessages(
-              next.timestampsIncludePresenceMessages());
-
-          runtimeConfig.rememberChatHistoryInitialLoadLines(next.chatHistoryInitialLoadLines());
-          runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
-          runtimeConfig.rememberCommandHistoryMaxSize(next.commandHistoryMaxSize());
-
-          applyFilterSettingsFromUi(filters);
-          runtimeConfig.rememberChatLoggingEnabled(logging.enabled.isSelected());
-          runtimeConfig.rememberChatLoggingLogSoftIgnoredLines(logging.logSoftIgnored.isSelected());
-          runtimeConfig.rememberChatLoggingLogPrivateMessages(
-              logging.logPrivateMessages.isSelected());
-          runtimeConfig.rememberChatLoggingSavePrivateMessageList(
-              logging.savePrivateMessageList.isSelected());
-          runtimeConfig.rememberChatLoggingDbFileBaseName(logging.dbBaseName.getText());
-          runtimeConfig.rememberChatLoggingDbNextToRuntimeConfig(
-              logging.dbNextToConfig.isSelected());
-
-          runtimeConfig.rememberChatLoggingKeepForever(logging.keepForever.isSelected());
-          runtimeConfig.rememberChatLoggingRetentionDays(
-              ((Number) logging.retentionDays.getValue()).intValue());
-          runtimeConfig.rememberChatLoggingWriterQueueMax(
-              ((Number) logging.writerQueueMax.getValue()).intValue());
-          runtimeConfig.rememberChatLoggingWriterBatchSize(
-              ((Number) logging.writerBatchSize.getValue()).intValue());
-
-          runtimeConfig.rememberClientLineColorEnabled(next.clientLineColorEnabled());
-          runtimeConfig.rememberClientLineColor(next.clientLineColor());
-
-          runtimeConfig.rememberNotificationRuleCooldownSeconds(
-              next.notificationRuleCooldownSeconds());
-          runtimeConfig.rememberNotificationRules(notificationRulesV);
-          runtimeConfig.rememberIrcEventNotificationRules(ircEventNotificationRulesV);
-          if (ircEventNotificationRulesBus != null) {
-            ircEventNotificationRulesBus.set(ircEventNotificationRulesV);
-          }
-          runtimeConfig.rememberUserCommandAliases(userCommandAliasesV);
-          runtimeConfig.rememberUnknownCommandAsRawEnabled(unknownCommandAsRawEnabledV);
-          if (userCommandAliasesBus != null) {
-            userCommandAliasesBus.set(userCommandAliasesV);
-            userCommandAliasesBus.setUnknownCommandAsRawEnabled(unknownCommandAsRawEnabledV);
-          }
-          runtimeConfig.rememberAppDiagnosticsAssertjSwingEnabled(diagnosticsAssertjSwingEnabledV);
-          runtimeConfig.rememberAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(
-              diagnosticsAssertjSwingFreezeWatchdogEnabledV);
-          runtimeConfig.rememberAppDiagnosticsAssertjSwingFreezeThresholdMs(
-              diagnosticsAssertjSwingFreezeThresholdMsV);
-          runtimeConfig.rememberAppDiagnosticsAssertjSwingWatchdogPollMs(
-              diagnosticsAssertjSwingWatchdogPollMsV);
-          runtimeConfig.rememberAppDiagnosticsAssertjSwingFallbackViolationReportMs(
-              diagnosticsAssertjSwingFallbackViolationReportMsV);
-          runtimeConfig.rememberAppDiagnosticsAssertjSwingIssuePlaySound(
-              diagnosticsAssertjSwingOnIssuePlaySoundV);
-          runtimeConfig.rememberAppDiagnosticsAssertjSwingIssueShowNotification(
-              diagnosticsAssertjSwingOnIssueShowNotificationV);
-          runtimeConfig.rememberAppDiagnosticsJhiccupEnabled(diagnosticsJhiccupEnabledV);
-          runtimeConfig.rememberAppDiagnosticsJhiccupJarPath(diagnosticsJhiccupJarPathV);
-          runtimeConfig.rememberAppDiagnosticsJhiccupJavaCommand(diagnosticsJhiccupJavaCommandRawV);
-          runtimeConfig.rememberAppDiagnosticsJhiccupArgs(diagnosticsJhiccupArgsV);
-          if (diagnosticsChangedV) {
-            JOptionPane.showMessageDialog(
-                dialog,
-                "Diagnostics settings were saved.\nRestart IRCafe to apply AssertJ Swing / jHiccup startup changes.",
-                "Restart required",
-                JOptionPane.INFORMATION_MESSAGE);
-          }
-
-          runtimeConfig.rememberUserhostDiscoveryEnabled(next.userhostDiscoveryEnabled());
-          runtimeConfig.rememberUserhostMinIntervalSeconds(next.userhostMinIntervalSeconds());
-          runtimeConfig.rememberUserhostMaxCommandsPerMinute(next.userhostMaxCommandsPerMinute());
-          runtimeConfig.rememberUserhostNickCooldownMinutes(next.userhostNickCooldownMinutes());
-          runtimeConfig.rememberUserhostMaxNicksPerCommand(next.userhostMaxNicksPerCommand());
-          runtimeConfig.rememberUserInfoEnrichmentEnabled(next.userInfoEnrichmentEnabled());
-          runtimeConfig.rememberUserInfoEnrichmentWhoisFallbackEnabled(
-              next.userInfoEnrichmentWhoisFallbackEnabled());
-
-          runtimeConfig.rememberUserInfoEnrichmentUserhostMinIntervalSeconds(
-              next.userInfoEnrichmentUserhostMinIntervalSeconds());
-          runtimeConfig.rememberUserInfoEnrichmentUserhostMaxCommandsPerMinute(
-              next.userInfoEnrichmentUserhostMaxCommandsPerMinute());
-          runtimeConfig.rememberUserInfoEnrichmentUserhostNickCooldownMinutes(
-              next.userInfoEnrichmentUserhostNickCooldownMinutes());
-          runtimeConfig.rememberUserInfoEnrichmentUserhostMaxNicksPerCommand(
-              next.userInfoEnrichmentUserhostMaxNicksPerCommand());
-
-          runtimeConfig.rememberUserInfoEnrichmentWhoisMinIntervalSeconds(
-              next.userInfoEnrichmentWhoisMinIntervalSeconds());
-          runtimeConfig.rememberUserInfoEnrichmentWhoisNickCooldownMinutes(
-              next.userInfoEnrichmentWhoisNickCooldownMinutes());
-
-          runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshEnabled(
-              next.userInfoEnrichmentPeriodicRefreshEnabled());
-          runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshIntervalSeconds(
-              next.userInfoEnrichmentPeriodicRefreshIntervalSeconds());
-          runtimeConfig.rememberUserInfoEnrichmentPeriodicRefreshNicksPerTick(
-              next.userInfoEnrichmentPeriodicRefreshNicksPerTick());
-          runtimeConfig.rememberMonitorIsonPollIntervalSeconds(
-              next.monitorIsonFallbackPollIntervalSeconds());
-          runtimeConfig.rememberClientProxy(proxyCfg);
-          NetProxyContext.configure(proxyCfg);
-          runtimeConfig.rememberClientHeartbeat(heartbeatCfg);
-          NetHeartbeatContext.configure(heartbeatCfg);
-          if (ircClientService != null) {
-            ircClientService.rescheduleActiveHeartbeats();
-          }
-          boolean trustAllTlsV = trustAllTlsCertificates.isSelected();
-          runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);
-          NetTlsContext.configure(trustAllTlsV);
 
           if (themeManager != null) {
             if (themeChanged || accentChanged || tweaksChanged) {
@@ -3087,10 +3165,7 @@ public class PreferencesDialog {
   }
 
   private TrayControls buildTrayControls(
-      UiSettings current,
-      NotificationSoundSettings soundSettings,
-      PushyProperties pushySettings,
-      List<AutoCloseable> closeables) {
+      UiSettings current, NotificationSoundSettings soundSettings, PushyProperties pushySettings) {
     if (soundSettings == null) {
       soundSettings = new NotificationSoundSettings(true, BuiltInSound.NOTIF_1.name(), false, null);
     }
@@ -3345,8 +3420,6 @@ public class PreferencesDialog {
           }
         };
 
-    ExecutorService pushyTestExec = VirtualThreads.newSingleThreadExecutor("ircafe-pushy-test");
-    closeables.add(() -> pushyTestExec.shutdownNow());
     pushyTest.addActionListener(
         e -> {
           PushyTargetMode mode =
@@ -3385,7 +3458,7 @@ public class PreferencesDialog {
           pushyTestStatus.setText("Sending test push…");
           pushyTestStatus.setForeground(UIManager.getColor("Label.foreground"));
 
-          pushyTestExec.submit(
+          pushyTestExecutor.submit(
               () -> {
                 PushyNotificationService.PushResult result =
                     pushyNotificationService != null
@@ -3798,6 +3871,15 @@ public class PreferencesDialog {
       }
     }
     return combo;
+  }
+
+  private JSpinner buildServerTreeUnreadBadgeScalePercentSpinner() {
+    int current = runtimeConfig.readServerTreeUnreadBadgeScalePercent(100);
+    SpinnerNumberModel model = new SpinnerNumberModel(current, 50, 150, 5);
+    JSpinner spinner = new JSpinner(model);
+    spinner.setToolTipText(
+        "Scale for unread/highlight count badges in the server tree. Lower values make badges and numbers smaller.");
+    return spinner;
   }
 
   private SpellcheckControls buildSpellcheckControls(SpellcheckSettings settings) {
@@ -4393,9 +4475,55 @@ public class PreferencesDialog {
             + "Set to 0 to disable history prefill.");
 
     JSpinner historyPageSize =
-        numberSpinner(current.chatHistoryPageSize(), 50, 10_000, 50, closeables);
+        numberSpinner(current.chatHistoryPageSize(), 1, 10_000, 10, closeables);
     historyPageSize.setToolTipText(
         "How many lines to fetch per click when you use 'Load older messages…' inside the transcript.");
+
+    JSpinner historyAutoLoadWheelDebounceMs =
+        numberSpinner(current.chatHistoryAutoLoadWheelDebounceMs(), 100, 30_000, 100, closeables);
+    historyAutoLoadWheelDebounceMs.setToolTipText(
+        "Debounce for wheel-up auto 'Load older' trigger at top of transcript.\n"
+            + "Higher = fewer accidental/rapid requests.");
+
+    JSpinner historyLoadOlderChunkSize =
+        numberSpinner(current.chatHistoryLoadOlderChunkSize(), 1, 500, 1, closeables);
+    historyLoadOlderChunkSize.setToolTipText(
+        "How many history lines are inserted per EDT chunk during 'Load older'.\n"
+            + "Lower = smoother UI, higher = faster completion.");
+
+    JSpinner historyLoadOlderChunkDelayMs =
+        numberSpinner(current.chatHistoryLoadOlderChunkDelayMs(), 0, 1_000, 5, closeables);
+    historyLoadOlderChunkDelayMs.setToolTipText(
+        "Delay between insert chunks in milliseconds.\n"
+            + "Increase if transcript still feels stuttery while loading.");
+
+    JSpinner historyLoadOlderChunkEdtBudgetMs =
+        numberSpinner(current.chatHistoryLoadOlderChunkEdtBudgetMs(), 1, 33, 1, closeables);
+    historyLoadOlderChunkEdtBudgetMs.setToolTipText(
+        "Per-chunk EDT work budget in milliseconds during 'Load older'.\n"
+            + "Lower = smoother UI, higher = faster completion.");
+
+    JCheckBox historyDeferRichTextDuringBatch =
+        new JCheckBox("Defer rich-text parsing during history batch");
+    historyDeferRichTextDuringBatch.setSelected(current.chatHistoryDeferRichTextDuringBatch());
+    historyDeferRichTextDuringBatch.setToolTipText(
+        "When enabled, history loads skip expensive URL/mention rich parsing while inserting.\n"
+            + "This improves smoothness, but history text appears with simpler styling.");
+
+    JSpinner historyRemoteRequestTimeoutSeconds =
+        numberSpinner(current.chatHistoryRemoteRequestTimeoutSeconds(), 1, 120, 1, closeables);
+    historyRemoteRequestTimeoutSeconds.setToolTipText(
+        "Timeout for remote CHATHISTORY request/response waits (seconds).");
+
+    JSpinner historyRemoteZncPlaybackTimeoutSeconds =
+        numberSpinner(current.chatHistoryRemoteZncPlaybackTimeoutSeconds(), 1, 300, 1, closeables);
+    historyRemoteZncPlaybackTimeoutSeconds.setToolTipText(
+        "Timeout for remote ZNC playback capture waits (seconds).");
+
+    JSpinner historyRemoteZncPlaybackWindowMinutes =
+        numberSpinner(current.chatHistoryRemoteZncPlaybackWindowMinutes(), 1, 1440, 5, closeables);
+    historyRemoteZncPlaybackWindowMinutes.setToolTipText(
+        "Requested ZNC playback lookback window per fetch (minutes).");
 
     JSpinner commandHistoryMaxSize =
         numberSpinner(current.commandHistoryMaxSize(), 1, 500, 25, closeables);
@@ -4403,10 +4531,19 @@ public class PreferencesDialog {
         "Max entries kept for Up/Down command history in the input bar.\n"
             + "This history is in-memory only; it does not persist across restarts.");
 
+    JSpinner chatTranscriptMaxLinesPerTarget =
+        numberSpinner(current.chatTranscriptMaxLinesPerTarget(), 0, 200_000, 250, closeables);
+    chatTranscriptMaxLinesPerTarget.setToolTipText(
+        "Max live lines kept per target (channel/query/status) in memory.\n"
+            + "When exceeded, oldest lines are trimmed automatically.\n"
+            + "Set to 0 to disable trimming.");
+
     JTextArea historyInfo =
         new JTextArea(
             "Chat history settings (requires chat logging to be enabled).\n"
-                + "These affect how many messages are pulled from the database when opening a transcript or paging older history.");
+                + "These affect how many messages are pulled from the database when opening a transcript or paging older history.\n"
+                + "Advanced controls tune smoothness and remote-history responsiveness.\n"
+                + "Live transcript retention controls in-memory growth while targets stay open.");
     historyInfo.setEditable(false);
     historyInfo.setLineWrap(true);
     historyInfo.setWrapStyleWord(true);
@@ -4425,11 +4562,41 @@ public class PreferencesDialog {
     historyPanel.add(historyInitialLoadLines, "w 110!");
     historyPanel.add(new JLabel("Page size (Load older):"));
     historyPanel.add(historyPageSize, "w 110!");
+    historyPanel.add(new JLabel("Auto-load wheel debounce (ms):"));
+    historyPanel.add(historyAutoLoadWheelDebounceMs, "w 110!");
+    historyPanel.add(new JLabel("Load older chunk size (lines):"));
+    historyPanel.add(historyLoadOlderChunkSize, "w 110!");
+    historyPanel.add(new JLabel("Load older chunk delay (ms):"));
+    historyPanel.add(historyLoadOlderChunkDelayMs, "w 110!");
+    historyPanel.add(new JLabel("Load older EDT budget (ms):"));
+    historyPanel.add(historyLoadOlderChunkEdtBudgetMs, "w 110!");
+    historyPanel.add(new JLabel("History batch rendering:"));
+    historyPanel.add(historyDeferRichTextDuringBatch, "growx");
+    historyPanel.add(new JLabel("Remote request timeout (sec):"));
+    historyPanel.add(historyRemoteRequestTimeoutSeconds, "w 110!");
+    historyPanel.add(new JLabel("ZNC playback timeout (sec):"));
+    historyPanel.add(historyRemoteZncPlaybackTimeoutSeconds, "w 110!");
+    historyPanel.add(new JLabel("ZNC playback window (min):"));
+    historyPanel.add(historyRemoteZncPlaybackWindowMinutes, "w 110!");
     historyPanel.add(new JLabel("Input command history (max):"));
     historyPanel.add(commandHistoryMaxSize, "w 110!");
+    historyPanel.add(new JLabel("Live transcript max lines/target:"));
+    historyPanel.add(chatTranscriptMaxLinesPerTarget, "w 110!");
 
     return new HistoryControls(
-        historyInitialLoadLines, historyPageSize, commandHistoryMaxSize, historyPanel);
+        historyInitialLoadLines,
+        historyPageSize,
+        historyAutoLoadWheelDebounceMs,
+        historyLoadOlderChunkSize,
+        historyLoadOlderChunkDelayMs,
+        historyLoadOlderChunkEdtBudgetMs,
+        historyDeferRichTextDuringBatch,
+        historyRemoteRequestTimeoutSeconds,
+        historyRemoteZncPlaybackTimeoutSeconds,
+        historyRemoteZncPlaybackWindowMinutes,
+        commandHistoryMaxSize,
+        chatTranscriptMaxLinesPerTarget,
+        historyPanel);
   }
 
   private LoggingControls buildLoggingControls(
@@ -5924,6 +6091,7 @@ public class PreferencesDialog {
       JCheckBox typingIndicatorsSendEnabled,
       JCheckBox typingIndicatorsReceiveEnabled,
       JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle,
+      JSpinner serverTreeUnreadBadgeScalePercent,
       Ircv3CapabilitiesControls ircv3Capabilities) {
     JPanel form =
         new JPanel(
@@ -5964,10 +6132,17 @@ public class PreferencesDialog {
     treeStyleRow.add(new JLabel("Server tree marker style"));
     treeStyleRow.add(typingTreeIndicatorStyle, "growx, wmin 180");
     typingRow.add(treeStyleRow, "growx, wmin 0");
+    JPanel badgeScaleRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[]6[]", "[]"));
+    badgeScaleRow.setOpaque(false);
+    badgeScaleRow.add(new JLabel("Unread badge size"));
+    badgeScaleRow.add(serverTreeUnreadBadgeScalePercent, "w 90!");
+    badgeScaleRow.add(new JLabel("%"));
+    typingRow.add(badgeScaleRow, "growx, wmin 0");
     JTextArea typingImpact = subtleInfoText();
     typingImpact.setText(
         "Send controls your outbound typing state; Display controls incoming typing state from others.\n"
-            + "Server tree marker style controls the channel typing activity indicator.");
+            + "Server tree marker style controls the channel typing activity indicator.\n"
+            + "Unread badge size scales channel unread/highlight count badges in the server tree.");
     typingImpact.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
     JPanel typingTab =
         new JPanel(new MigLayout("insets 6, fillx, wrap 1, hidemode 3", "[grow,fill]", "[]6[]"));
@@ -6085,8 +6260,10 @@ public class PreferencesDialog {
       case "draft/typing" -> "Typing transport (draft)";
       case "typing" -> "Typing transport";
       case "read-marker" -> "Read markers";
+      case "draft/channel-context" -> "Channel context metadata";
       case "draft/reply" -> "Reply metadata";
       case "draft/react" -> "Reaction metadata";
+      case "draft/unreact" -> "Reaction removal metadata";
       case "draft/message-edit" -> "Message edits (draft)";
       case "message-edit" -> "Message edits (final)";
       case "draft/message-redaction" -> "Message redaction (draft)";
@@ -6131,7 +6308,9 @@ public class PreferencesDialog {
           "userhost-in-names" ->
           "core";
       case "draft/reply",
+          "draft/channel-context",
           "draft/react",
+          "draft/unreact",
           "draft/message-edit",
           "message-edit",
           "draft/message-redaction",
@@ -6181,8 +6360,10 @@ public class PreferencesDialog {
       case "draft/typing" -> 225;
       case "typing" -> 230;
       case "read-marker" -> 240;
+      case "draft/channel-context" -> 245;
       case "draft/reply" -> 250;
       case "draft/react" -> 260;
+      case "draft/unreact" -> 265;
       case "message-edit" -> 270;
       case "draft/message-edit" -> 280;
       case "message-redaction" -> 290;
@@ -6216,8 +6397,11 @@ public class PreferencesDialog {
       case "typing", "draft/typing" ->
           "Transport for typing indicators; required to send/receive typing events.";
       case "read-marker" -> "Enables read-position markers on servers that support them.";
+      case "draft/channel-context" ->
+          "Carries channel context for client-tagged metadata sent outside the channel buffer.";
       case "draft/reply" -> "Carries reply context so quoted/reply relationships can be preserved.";
       case "draft/react" -> "Carries reaction metadata where servers/clients support it.";
+      case "draft/unreact" -> "Carries metadata for removing previously applied reactions.";
       case "draft/message-edit", "message-edit" ->
           "Allows edit updates for previously sent messages.";
       case "draft/message-redaction", "message-redaction" ->
@@ -6369,7 +6553,7 @@ public class PreferencesDialog {
     testOutput.setWrapStyleWord(true);
 
     JLabel testStatus = new JLabel(" ");
-    RuleTestRunner testRunner = new RuleTestRunner();
+    RuleTestRunner testRunner = new RuleTestRunner(notificationRuleTestExecutor);
     closeables.add(testRunner);
 
     return new NotificationRulesControls(
@@ -7334,7 +7518,7 @@ public class PreferencesDialog {
     panel.add(
         helpText(
             "Add custom word/regex rules to create notifications when messages match.\n"
-                + "Rules only trigger for channels (not PMs) and only when the channel isn't the active target."),
+                + "Rules only trigger for channels (not PMs), including the active channel."),
         "growx, wmin 0, wrap");
 
     JButton add = new JButton("Add");
@@ -8260,8 +8444,8 @@ public class PreferencesDialog {
     private final ExecutorService exec;
     private final AtomicLong seq = new AtomicLong();
 
-    RuleTestRunner() {
-      this.exec = VirtualThreads.newSingleThreadExecutor("ircafe-notification-rule-test");
+    RuleTestRunner(ExecutorService exec) {
+      this.exec = Objects.requireNonNull(exec, "exec");
     }
 
     void runTest(NotificationRulesControls controls) {
@@ -8295,7 +8479,7 @@ public class PreferencesDialog {
 
     @Override
     public void close() {
-      exec.shutdownNow();
+      seq.incrementAndGet();
     }
   }
 
@@ -10190,7 +10374,19 @@ public class PreferencesDialog {
       JPanel panel) {}
 
   private record HistoryControls(
-      JSpinner initialLoadLines, JSpinner pageSize, JSpinner commandHistoryMaxSize, JPanel panel) {}
+      JSpinner initialLoadLines,
+      JSpinner pageSize,
+      JSpinner autoLoadWheelDebounceMs,
+      JSpinner loadOlderChunkSize,
+      JSpinner loadOlderChunkDelayMs,
+      JSpinner loadOlderChunkEdtBudgetMs,
+      JCheckBox deferRichTextDuringBatch,
+      JSpinner remoteRequestTimeoutSeconds,
+      JSpinner remoteZncPlaybackTimeoutSeconds,
+      JSpinner remoteZncPlaybackWindowMinutes,
+      JSpinner commandHistoryMaxSize,
+      JSpinner chatTranscriptMaxLinesPerTarget,
+      JPanel panel) {}
 
   private record LoggingControls(
       JCheckBox enabled,

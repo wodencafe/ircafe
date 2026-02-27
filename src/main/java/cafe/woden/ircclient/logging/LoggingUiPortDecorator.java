@@ -8,9 +8,10 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.model.LogLine;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.time.Duration;
 import java.time.Instant;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -21,15 +22,19 @@ import org.slf4j.LoggerFactory;
 public final class LoggingUiPortDecorator extends UiPortDecorator {
 
   private static final Logger log = LoggerFactory.getLogger(LoggingUiPortDecorator.class);
-  private static final int DEDUP_MAX_ENTRIES = 50_000;
+  private static final int DEDUP_MAX_ENTRIES = 20_000;
   private static final long DEDUP_TTL_MS = 10L * 60L * 1000L;
+  private static final long TEXT_FINGERPRINT_SEED = 0xcbf29ce484222325L;
+  private static final long TEXT_FINGERPRINT_PRIME = 0x100000001b3L;
 
   private final ChatLogWriter writer;
   private final LogLineFactory factory;
   private final LogProperties props;
-  private final Object dedupLock = new Object();
-  private final LinkedHashMap<LogDedupKey, Long> recentDedup =
-      new LinkedHashMap<>(256, 0.75f, true);
+  private final Cache<LogDedupKey, Boolean> recentDedup =
+      Caffeine.newBuilder()
+          .maximumSize(DEDUP_MAX_ENTRIES)
+          .expireAfterAccess(Duration.ofMillis(DEDUP_TTL_MS))
+          .build();
 
   public LoggingUiPortDecorator(
       UiPort delegate, ChatLogWriter writer, LogLineFactory factory, LogProperties props) {
@@ -294,37 +299,9 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
 
   private boolean shouldSkipDuplicate(LogLine line) {
     if (line == null) return true;
-    long now = System.currentTimeMillis();
     LogDedupKey key = LogDedupKey.from(line);
-    synchronized (dedupLock) {
-      pruneDedupCache(now);
-      Long prev = recentDedup.get(key);
-      if (prev != null) {
-        recentDedup.put(key, now);
-        return true;
-      }
-      recentDedup.put(key, now);
-      while (recentDedup.size() > DEDUP_MAX_ENTRIES) {
-        Iterator<LogDedupKey> it = recentDedup.keySet().iterator();
-        if (!it.hasNext()) break;
-        it.next();
-        it.remove();
-      }
-      return false;
-    }
-  }
-
-  private void pruneDedupCache(long now) {
-    Iterator<Map.Entry<LogDedupKey, Long>> it = recentDedup.entrySet().iterator();
-    while (it.hasNext()) {
-      Map.Entry<LogDedupKey, Long> e = it.next();
-      Long seenAt = e.getValue();
-      if (seenAt != null && (now - seenAt) > DEDUP_TTL_MS) {
-        it.remove();
-        continue;
-      }
-      break;
-    }
+    Boolean prior = recentDedup.asMap().putIfAbsent(key, Boolean.TRUE);
+    return prior != null;
   }
 
   private static String extractMessageId(String metaJson) {
@@ -367,7 +344,8 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       String messageId,
       long tsEpochMs,
       String fromNick,
-      String text,
+      long textFingerprint,
+      int textLength,
       boolean outgoingLocalEcho,
       boolean softIgnored) {
     static LogDedupKey from(LogLine line) {
@@ -377,6 +355,7 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
       LogKind kind = line.kind();
       String msgId = extractMessageId(line.metaJson());
       boolean keyedByMessageId = !msgId.isBlank();
+      String text = Objects.toString(line.text(), "");
       return new LogDedupKey(
           sid,
           target,
@@ -385,10 +364,21 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
           msgId,
           keyedByMessageId ? 0L : line.tsEpochMs(),
           keyedByMessageId ? "" : Objects.toString(line.fromNick(), "").trim(),
-          keyedByMessageId ? "" : Objects.toString(line.text(), ""),
+          keyedByMessageId ? 0L : computeTextFingerprint(text),
+          keyedByMessageId ? 0 : text.length(),
           keyedByMessageId ? false : line.outgoingLocalEcho(),
           keyedByMessageId ? false : line.softIgnored());
     }
+  }
+
+  private static long computeTextFingerprint(String text) {
+    String value = Objects.toString(text, "");
+    long hash = TEXT_FINGERPRINT_SEED;
+    for (int i = 0; i < value.length(); i++) {
+      hash ^= value.charAt(i);
+      hash *= TEXT_FINGERPRINT_PRIME;
+    }
+    return hash;
   }
 
   private boolean shouldLogTarget(TargetRef target) {

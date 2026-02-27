@@ -3,7 +3,8 @@ package cafe.woden.ircclient.irc;
 import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
 import java.time.Instant;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -29,6 +30,7 @@ import org.slf4j.LoggerFactory;
 final class PircbotxAwayNotifyInputParser extends InputParser {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxAwayNotifyInputParser.class);
+  private static final int MAX_ACCOUNT_TAG_KEYS = 8_192;
 
   private final String serverId;
   private final Consumer<ServerIrcEvent> sink;
@@ -37,7 +39,14 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
   private final Ircv3StsPolicyService stsPolicies;
 
   // Deduplicate high-frequency account-tag observations (which can appear on every PRIVMSG).
-  private final Map<String, String> lastAccountTagByNickLower = new HashMap<>();
+  private final Map<String, String> lastAccountTagByNickLower =
+      Collections.synchronizedMap(
+          new LinkedHashMap<>(256, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+              return size() > MAX_ACCOUNT_TAG_KEYS;
+            }
+          });
 
   PircbotxAwayNotifyInputParser(
       PircBotX bot,
@@ -645,7 +654,14 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     String cmd = Objects.toString(command, "").trim().toUpperCase(Locale.ROOT);
     String firstParam = firstParam(parsedLine);
     String msgTarget = !firstParam.isBlank() ? firstParam : stripLeadingColon(rawTarget);
-    String convTarget = resolveConversationTarget(msgTarget, nick);
+    String channelContext =
+        firstTag(
+            tags,
+            "draft/channel-context",
+            "+draft/channel-context",
+            "channel-context",
+            "+channel-context");
+    String convTarget = resolveSignalTarget(msgTarget, nick, channelContext);
 
     if (cmd.equals("PRIVMSG") || cmd.equals("NOTICE") || cmd.equals("TAGMSG")) {
       String replyTo = firstTag(tags, "draft/reply", "+draft/reply");
@@ -664,6 +680,18 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
         sink.accept(
             new ServerIrcEvent(
                 serverId, new IrcEvent.MessageReactObserved(at, nick, convTarget, react, msgId)));
+      }
+
+      String unreact = firstTag(tags, "draft/unreact", "+draft/unreact");
+      if (!unreact.isBlank()) {
+        String msgId = firstTag(tags, "draft/reply", "+draft/reply");
+        if (msgId.isBlank()) {
+          msgId = firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
+        }
+        sink.accept(
+            new ServerIrcEvent(
+                serverId,
+                new IrcEvent.MessageUnreactObserved(at, nick, convTarget, unreact, msgId)));
       }
 
       String redactMsgId =
@@ -846,11 +874,31 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
               enabled ? "enabled" : "disabled");
         }
       }
+      case "draft/channel-context" -> {
+        boolean prev = conn.draftChannelContextCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info(
+              "[{}] CAP {}: draft/channel-context {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
+        }
+      }
       case "draft/react" -> {
         boolean prev = conn.draftReactCapAcked.getAndSet(enabled);
         if (prev != enabled) {
           log.info(
               "[{}] CAP {}: draft/react {}",
+              serverId,
+              sourceAction,
+              enabled ? "enabled" : "disabled");
+        }
+      }
+      case "draft/unreact" -> {
+        boolean prev = conn.draftUnreactCapAcked.getAndSet(enabled);
+        if (prev != enabled) {
+          log.info(
+              "[{}] CAP {}: draft/unreact {}",
               serverId,
               sourceAction,
               enabled ? "enabled" : "disabled");
@@ -1084,6 +1132,13 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     if (t.startsWith("#") || t.startsWith("&")) return t;
     String from = Objects.toString(fromNick, "").trim();
     return from.isBlank() ? t : from;
+  }
+
+  private static String resolveSignalTarget(
+      String rawTarget, String fromNick, String channelContextTag) {
+    String context = Objects.toString(channelContextTag, "").trim();
+    if (isChannelName(context)) return context;
+    return resolveConversationTarget(rawTarget, fromNick);
   }
 
   private static String firstTag(ImmutableMap<String, String> tags, String... keys) {

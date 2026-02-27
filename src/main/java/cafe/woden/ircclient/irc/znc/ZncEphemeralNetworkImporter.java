@@ -2,8 +2,10 @@ package cafe.woden.ircclient.irc.znc;
 
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcClientService;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -28,6 +30,7 @@ public class ZncEphemeralNetworkImporter {
   private final ServerRegistry serverRegistry;
   private final EphemeralServerRegistry ephemeralServers;
   private final ZncAutoConnectStore autoConnect;
+  private final RuntimeConfigStore runtimeConfig;
   private final IrcClientService irc;
 
   /** Guard against repeated connect() calls when ZNC repeats NETWORK lines. */
@@ -37,10 +40,12 @@ public class ZncEphemeralNetworkImporter {
       ServerRegistry serverRegistry,
       EphemeralServerRegistry ephemeralServers,
       ZncAutoConnectStore autoConnect,
+      RuntimeConfigStore runtimeConfig,
       @Lazy IrcClientService irc) {
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
     this.ephemeralServers = Objects.requireNonNull(ephemeralServers, "ephemeralServers");
     this.autoConnect = Objects.requireNonNull(autoConnect, "autoConnect");
+    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
     this.irc = Objects.requireNonNull(irc, "irc");
   }
 
@@ -64,7 +69,8 @@ public class ZncEphemeralNetworkImporter {
 
     IrcProperties.Server bouncer = bouncerOpt.get();
     ZncEphemeralNaming.Derived d = ZncEphemeralNaming.derive(bouncer, network);
-    IrcProperties.Server server = buildEphemeralServer(bouncer, d);
+    IrcProperties.Server server =
+        buildEphemeralServer(bouncer, d, autoJoinChannelsFor(d.serverId()));
 
     // If the user has chosen to persist this network entry, don't keep an ephemeral duplicate.
     if (serverRegistry.containsId(server.id())) {
@@ -132,8 +138,33 @@ public class ZncEphemeralNetworkImporter {
     }
   }
 
+  private List<String> autoJoinChannelsFor(String serverId) {
+    List<String> channels = runtimeConfig.readKnownChannels(serverId);
+    if (channels == null || channels.isEmpty()) return List.of();
+
+    ArrayList<String> out = new ArrayList<>();
+    for (String channel : channels) {
+      String ch = Objects.toString(channel, "").trim();
+      if (ch.isEmpty()) continue;
+      if (!runtimeConfig.readServerTreeChannelAutoReattach(serverId, ch, true)) continue;
+      if (containsIgnoreCase(out, ch)) continue;
+      out.add(ch);
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private static boolean containsIgnoreCase(List<String> values, String needle) {
+    if (values == null || values.isEmpty()) return false;
+    String n = Objects.toString(needle, "").trim();
+    if (n.isEmpty()) return false;
+    for (String value : values) {
+      if (value != null && value.equalsIgnoreCase(n)) return true;
+    }
+    return false;
+  }
+
   private static IrcProperties.Server buildEphemeralServer(
-      IrcProperties.Server bouncer, ZncEphemeralNaming.Derived d) {
+      IrcProperties.Server bouncer, ZncEphemeralNaming.Derived d, List<String> autoJoinChannels) {
     IrcProperties.Server.Sasl sasl = bouncer.sasl();
 
     // Always set the derived username variant (even if SASL is disabled) so later toggles
@@ -156,7 +187,7 @@ public class ZncEphemeralNetworkImporter {
         d.loginUser(),
         bouncer.realName(),
         updatedSasl,
-        List.of(),
+        autoJoinChannels == null ? List.of() : List.copyOf(autoJoinChannels),
         List.of(),
         bouncer.proxy());
   }

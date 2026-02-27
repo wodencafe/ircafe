@@ -32,6 +32,9 @@ class ChatDockTitleCoordinatorTest {
     activeTarget.set(TargetRef.channelList("libera"));
     assertEquals("Channel List", coordinator.tabText());
 
+    activeTarget.set(TargetRef.ignores("libera"));
+    assertEquals("Ignores", coordinator.tabText());
+
     activeTarget.set(new TargetRef("libera", "status"));
     assertEquals("Server", coordinator.tabText());
 

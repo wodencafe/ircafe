@@ -36,6 +36,7 @@ final class ChatLinkPreviewComponent extends JPanel {
 
   private static final int FALLBACK_MAX_W = 420;
   private static final int WIDTH_MARGIN_PX = 32;
+  private static final int SUBS_DISPOSE_DELAY_MS = 1200;
 
   private static final int THUMB_SIZE = 96;
   private static final int IMDB_THUMB_W = 96;
@@ -119,6 +120,7 @@ final class ChatLinkPreviewComponent extends JPanel {
 
   private Disposable sub;
   private Disposable thumbSub;
+  private javax.swing.Timer deferredDisposeTimer;
 
   private volatile int lastMaxW = -1;
   // Layout in a JTextPane can be finicky. We keep a small cache key so we can avoid
@@ -745,6 +747,7 @@ final class ChatLinkPreviewComponent extends JPanel {
   @Override
   public void addNotify() {
     super.addNotify();
+    cancelDeferredSubDispose();
     hookResizeListener();
 
     // IMPORTANT: JTextPane/StyledDocument may temporarily remove and re-add embedded components
@@ -761,6 +764,7 @@ final class ChatLinkPreviewComponent extends JPanel {
   @Override
   public void removeNotify() {
     unhookResizeListener();
+    scheduleDeferredSubDispose();
     // DO NOT dispose the fetch subscriptions here.
     // JTextPane/StyledDocument may call removeNotify() during view rebuilds and scrolling,
     // which would prevent the preview from ever completing and updating the UI.
@@ -1158,13 +1162,34 @@ final class ChatLinkPreviewComponent extends JPanel {
   }
 
   private void disposeSubs() {
+    cancelDeferredSubDispose();
     if (sub != null && !sub.isDisposed()) {
       sub.dispose();
-      sub = null;
     }
+    sub = null;
     if (thumbSub != null && !thumbSub.isDisposed()) {
       thumbSub.dispose();
-      thumbSub = null;
+    }
+    thumbSub = null;
+  }
+
+  private void scheduleDeferredSubDispose() {
+    if (deferredDisposeTimer == null) {
+      deferredDisposeTimer =
+          new javax.swing.Timer(
+              SUBS_DISPOSE_DELAY_MS,
+              e -> {
+                if (isDisplayable()) return;
+                disposeSubs();
+              });
+      deferredDisposeTimer.setRepeats(false);
+    }
+    deferredDisposeTimer.restart();
+  }
+
+  private void cancelDeferredSubDispose() {
+    if (deferredDisposeTimer != null) {
+      deferredDisposeTimer.stop();
     }
   }
 

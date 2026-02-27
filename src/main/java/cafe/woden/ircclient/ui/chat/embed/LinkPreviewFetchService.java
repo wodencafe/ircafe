@@ -7,6 +7,7 @@ import io.reactivex.rxjava3.core.Single;
 import java.net.URI;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -20,6 +21,8 @@ import org.springframework.stereotype.Component;
 public class LinkPreviewFetchService {
 
   private static final Logger log = LoggerFactory.getLogger(LinkPreviewFetchService.class);
+  private static final int MAX_CACHE_KEYS = 2048;
+  private static final int CACHE_PRUNE_MAX_REMOVALS = 256;
 
   private final ServerProxyResolver proxyResolver;
   private final List<LinkPreviewResolver> resolvers;
@@ -60,7 +63,11 @@ public class LinkPreviewFetchService {
         k ->
             Single.fromCallable(() -> load(sid, normalized))
                 .subscribeOn(RxVirtualSchedulers.io())
-                .doOnSuccess(p -> cache.put(k, new java.lang.ref.SoftReference<>(p)))
+                .doOnSuccess(
+                    p -> {
+                      cache.put(k, new java.lang.ref.SoftReference<>(p));
+                      pruneCacheKeysIfNeeded();
+                    })
                 .doFinally(() -> inflight.remove(k))
                 .cache());
   }
@@ -68,6 +75,25 @@ public class LinkPreviewFetchService {
   // Back-compat for any callers not yet server-aware.
   public Single<LinkPreview> fetch(String url) {
     return fetch(null, url);
+  }
+
+  private void pruneCacheKeysIfNeeded() {
+    int size = cache.size();
+    if (size <= MAX_CACHE_KEYS) {
+      return;
+    }
+
+    int removed = 0;
+    for (Map.Entry<String, java.lang.ref.SoftReference<LinkPreview>> e : cache.entrySet()) {
+      if (removed >= CACHE_PRUNE_MAX_REMOVALS) break;
+      java.lang.ref.SoftReference<LinkPreview> ref = e.getValue();
+      LinkPreview value = ref != null ? ref.get() : null;
+      if (value == null || cache.size() > MAX_CACHE_KEYS) {
+        if (cache.remove(e.getKey(), ref)) {
+          removed++;
+        }
+      }
+    }
   }
 
   private LinkPreview load(String serverId, String url) throws Exception {

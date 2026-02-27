@@ -102,10 +102,19 @@ public interface UiPort {
   /**
    * Record a highlight notification (for the per-server Notifications view).
    *
-   * <p>This should be called when the user is mentioned in a channel message/action and that
-   * highlight is considered unread (e.g. the channel is not currently active).
+   * <p>This should be called when the user is mentioned in a channel message/action. Callers may
+   * independently decide whether the highlight should also count as unread.
    */
   void recordHighlight(TargetRef target, String fromNick);
+
+  /**
+   * Record a highlight notification with optional snippet context.
+   *
+   * <p>Default implementation falls back to {@link #recordHighlight(TargetRef, String)}.
+   */
+  default void recordHighlight(TargetRef target, String fromNick, String snippet) {
+    recordHighlight(target, fromNick);
+  }
 
   /**
    * Record a notification rule match (for the per-server Notifications view).
@@ -445,6 +454,10 @@ public interface UiPort {
 
   /** Update inline reaction state for a target message identified by IRCv3 {@code msgid}. */
   default void applyMessageReaction(
+      TargetRef target, Instant at, String fromNick, String targetMessageId, String reaction) {}
+
+  /** Remove inline reaction state for a target message identified by IRCv3 {@code msgid}. */
+  default void removeMessageReaction(
       TargetRef target, Instant at, String fromNick, String targetMessageId, String reaction) {}
 
   /**

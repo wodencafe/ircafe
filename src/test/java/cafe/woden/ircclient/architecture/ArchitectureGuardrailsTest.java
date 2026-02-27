@@ -1,8 +1,13 @@
 package cafe.woden.ircclient.architecture;
 
+import static com.tngtech.archunit.core.domain.JavaCall.Predicates.target;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.assignableTo;
+import static com.tngtech.archunit.core.domain.properties.HasOwner.Predicates.With.owner;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -12,6 +17,16 @@ import com.tngtech.archunit.lang.ArchRule;
     packages = "cafe.woden.ircclient",
     importOptions = {ImportOption.DoNotIncludeTests.class})
 class ArchitectureGuardrailsTest {
+
+  private static final DescribedPredicate<JavaClass> IGNORE_INTERNAL_CLASSES =
+      new DescribedPredicate<>("ignore internal classes (outside ignore::api)") {
+        @Override
+        public boolean test(JavaClass input) {
+          String pkg = input.getPackageName();
+          if (!pkg.startsWith("cafe.woden.ircclient.ignore")) return false;
+          return !pkg.startsWith("cafe.woden.ircclient.ignore.api");
+        }
+      };
 
   @ArchTest
   static final ArchRule app_should_not_depend_on_ui_package_directly =
@@ -55,6 +70,42 @@ class ArchitectureGuardrailsTest {
           .resideInAPackage("cafe.woden.ircclient.notifications..")
           .because(
               "application code should depend on app::api notification ports, not notification module internals");
+
+  @ArchTest
+  static final ArchRule app_should_not_depend_on_ignore_module_internals_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app..")
+          .should()
+          .dependOnClassesThat(IGNORE_INTERNAL_CLASSES)
+          .because("application code should only depend on ignore::api, not ignore internals");
+
+  @ArchTest
+  static final ArchRule non_ui_modules_should_not_depend_on_ignore_module_internals =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages("cafe.woden.ircclient.ignore..", "cafe.woden.ircclient.ui..")
+          .should()
+          .dependOnClassesThat(IGNORE_INTERNAL_CLASSES)
+          .because(
+              "non-UI modules should depend only on ignore::api and remain decoupled from ignore internals");
+
+  @ArchTest
+  static final ArchRule ignore_api_should_remain_dependency_light =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ignore.api..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.ui..",
+              "cafe.woden.ircclient.app.core..",
+              "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.app.commands..",
+              "cafe.woden.ircclient.app.state..",
+              "cafe.woden.ircclient.irc..",
+              "cafe.woden.ircclient.logging..")
+          .because("ignore::api should stay stable and free from app, UI, and transport internals");
 
   @ArchTest
   static final ArchRule app_should_not_depend_on_diagnostics_module_directly =
@@ -214,6 +265,22 @@ class ArchitectureGuardrailsTest {
               "state module should remain a reusable correlation/state holder and integrate through app::api plus config");
 
   @ArchTest
+  static final ArchRule ui_ignore_should_not_depend_on_app_internal_or_irc_packages =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui.ignore..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.app.core..",
+              "cafe.woden.ircclient.app.commands..",
+              "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.app.state..",
+              "cafe.woden.ircclient.irc..")
+          .because(
+              "ignore UI components should stay presentation-focused and avoid coupling to app internals or IRC transport details");
+
+  @ArchTest
   static final ArchRule dcc_should_not_depend_on_ui_or_app_internal_packages =
       noClasses()
           .that()
@@ -254,4 +321,33 @@ class ArchitectureGuardrailsTest {
               "cafe.woden.ircclient.logging..")
           .because(
               "diagnostics support should stay independent from app internals while integrating only via app::api plus config/model/util/notify seams");
+
+  @ArchTest
+  static final ArchRule only_virtual_threads_factory_should_depend_on_executors =
+      noClasses()
+          .that()
+          .doNotHaveFullyQualifiedName("cafe.woden.ircclient.util.VirtualThreads")
+          .should()
+          .dependOnClassesThat()
+          .haveFullyQualifiedName("java.util.concurrent.Executors")
+          .because(
+              "raw Executors factories should stay centralized in VirtualThreads so executor ownership, naming, and shutdown policies remain consistent");
+
+  @ArchTest
+  static final ArchRule only_virtual_threads_factory_should_call_thread_of_virtual =
+      noClasses()
+          .that()
+          .doNotHaveFullyQualifiedName("cafe.woden.ircclient.util.VirtualThreads")
+          .should()
+          .callMethod(Thread.class, "ofVirtual")
+          .because(
+              "virtual-thread creation should stay centralized in VirtualThreads to keep thread naming and policy consistent");
+
+  @ArchTest
+  static final ArchRule app_should_not_construct_threads_directly =
+      noClasses()
+          .should()
+          .callConstructorWhere(target(owner(assignableTo(Thread.class))))
+          .because(
+              "direct new Thread(...) creation should be avoided in favor of VirtualThreads helpers");
 }

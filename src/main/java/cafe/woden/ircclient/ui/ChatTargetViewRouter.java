@@ -5,6 +5,7 @@ import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
+import cafe.woden.ircclient.ui.ignore.IgnoresPanel;
 import cafe.woden.ircclient.ui.interceptors.InterceptorPanel;
 import cafe.woden.ircclient.ui.logviewer.LogViewerPanel;
 import cafe.woden.ircclient.ui.monitor.MonitorPanel;
@@ -20,6 +21,7 @@ final class ChatTargetViewRouter {
   static final String CARD_TRANSCRIPT = "transcript";
   static final String CARD_NOTIFICATIONS = "notifications";
   static final String CARD_CHANNEL_LIST = "channel-list";
+  static final String CARD_IGNORES = "ignores";
   static final String CARD_DCC_TRANSFERS = "dcc-transfers";
   static final String CARD_MONITOR = "monitor";
   static final String CARD_LOG_VIEWER = "log-viewer";
@@ -38,6 +40,7 @@ final class ChatTargetViewRouter {
   private final JPanel centerCards;
   private final NotificationsPanel notificationsPanel;
   private final ChannelListPanel channelListPanel;
+  private final IgnoresPanel ignoresPanel;
   private final DccTransfersPanel dccTransfersPanel;
   private final MonitorPanel monitorPanel;
   private final LogViewerPanel logViewerPanel;
@@ -53,6 +56,7 @@ final class ChatTargetViewRouter {
       JPanel centerCards,
       NotificationsPanel notificationsPanel,
       ChannelListPanel channelListPanel,
+      IgnoresPanel ignoresPanel,
       DccTransfersPanel dccTransfersPanel,
       MonitorPanel monitorPanel,
       LogViewerPanel logViewerPanel,
@@ -66,6 +70,7 @@ final class ChatTargetViewRouter {
     this.centerCards = Objects.requireNonNull(centerCards, "centerCards");
     this.notificationsPanel = Objects.requireNonNull(notificationsPanel, "notificationsPanel");
     this.channelListPanel = Objects.requireNonNull(channelListPanel, "channelListPanel");
+    this.ignoresPanel = Objects.requireNonNull(ignoresPanel, "ignoresPanel");
     this.dccTransfersPanel = Objects.requireNonNull(dccTransfersPanel, "dccTransfersPanel");
     this.monitorPanel = Objects.requireNonNull(monitorPanel, "monitorPanel");
     this.logViewerPanel = Objects.requireNonNull(logViewerPanel, "logViewerPanel");
@@ -92,6 +97,10 @@ final class ChatTargetViewRouter {
     }
     if (target.isChannelList()) {
       showChannelListCard(target.serverId());
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isIgnores()) {
+      showIgnoresCard(target.serverId());
       return TargetViewType.UI_ONLY;
     }
     if (target.isDccTransfers()) {
@@ -167,6 +176,14 @@ final class ChatTargetViewRouter {
     try {
       dccTransfersPanel.setServerId(serverId);
       showCard(CARD_DCC_TRANSFERS);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showIgnoresCard(String serverId) {
+    try {
+      ignoresPanel.setServerId(serverId);
+      showCard(CARD_IGNORES);
     } catch (Exception ignored) {
     }
   }

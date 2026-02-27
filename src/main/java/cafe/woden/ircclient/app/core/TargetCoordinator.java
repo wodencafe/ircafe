@@ -9,7 +9,7 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
@@ -45,7 +45,7 @@ public class TargetCoordinator implements ActiveTargetPort {
   private final ServerRegistry serverRegistry;
   private final RuntimeConfigStore runtimeConfig;
   private final ConnectionCoordinator connectionCoordinator;
-  private final IgnoreListService ignoreList;
+  private final IgnoreListQueryPort ignoreList;
   private final UserhostQueryService userhostQueryService;
   private final UserInfoEnrichmentService userInfoEnrichmentService;
   private final TargetChatHistoryPort targetChatHistoryPort;
@@ -76,7 +76,7 @@ public class TargetCoordinator implements ActiveTargetPort {
       ServerRegistry serverRegistry,
       RuntimeConfigStore runtimeConfig,
       ConnectionCoordinator connectionCoordinator,
-      IgnoreListService ignoreList,
+      IgnoreListQueryPort ignoreList,
       UserhostQueryService userhostQueryService,
       UserInfoEnrichmentService userInfoEnrichmentService,
       TargetChatHistoryPort targetChatHistoryPort,
@@ -616,6 +616,8 @@ public class TargetCoordinator implements ActiveTargetPort {
       statusBarChannel = "Channel List";
     } else if (target.isWeechatFilters()) {
       statusBarChannel = "Filters";
+    } else if (target.isIgnores()) {
+      statusBarChannel = "Ignores";
     } else if (target.isDccTransfers()) {
       statusBarChannel = "DCC Transfers";
     } else if (target.isMonitorGroup()) {

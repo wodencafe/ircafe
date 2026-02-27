@@ -539,6 +539,41 @@ class ChannelHistoryPreservationFunctionalTest {
     public int chatHistoryPageSize() {
       return pageSize;
     }
+
+    @Override
+    public int chatHistoryAutoLoadWheelDebounceMs() {
+      return 2000;
+    }
+
+    @Override
+    public int chatHistoryLoadOlderChunkSize() {
+      return 20;
+    }
+
+    @Override
+    public int chatHistoryLoadOlderChunkDelayMs() {
+      return 10;
+    }
+
+    @Override
+    public int chatHistoryLoadOlderChunkEdtBudgetMs() {
+      return 6;
+    }
+
+    @Override
+    public int chatHistoryRemoteRequestTimeoutSeconds() {
+      return 6;
+    }
+
+    @Override
+    public int chatHistoryRemoteZncPlaybackTimeoutSeconds() {
+      return 18;
+    }
+
+    @Override
+    public int chatHistoryRemoteZncPlaybackWindowMinutes() {
+      return 360;
+    }
   }
 
   @FunctionalInterface

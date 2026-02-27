@@ -521,6 +521,12 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void removeMessageReaction(
+      TargetRef target, Instant at, String fromNick, String targetMessageId, String reaction) {
+    delegate.removeMessageReaction(target, at, fromNick, targetMessageId, reaction);
+  }
+
+  @Override
   public boolean isOwnMessage(TargetRef target, String targetMessageId) {
     return delegate.isOwnMessage(target, targetMessageId);
   }

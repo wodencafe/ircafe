@@ -29,8 +29,12 @@ final class ChatImageComponent extends JPanel {
 
   // Fallback width if we can't determine the transcript viewport width yet.
   private static final int FALLBACK_MAX_W = 360;
+  // Keep large original payloads from piling up across many embeds.
+  // When this threshold is exceeded we keep the rendered preview and reopen via browser on click.
+  private static final int MAX_RETAINED_ORIGINAL_BYTES = 2 * 1024 * 1024;
   // Subtract some breathing room so we don't force horizontal scrolling.
   private static final int WIDTH_MARGIN_PX = 32;
+  private static final int SUBS_DISPOSE_DELAY_MS = 1200;
   private static final int COLLAPSE_ICON_SIZE = 12;
   private static final Icon COLLAPSED_ICON = SvgIcons.action("play", COLLAPSE_ICON_SIZE);
   private static final Icon EXPANDED_ICON = SvgIcons.action("arrow-down", COLLAPSE_ICON_SIZE);
@@ -60,6 +64,7 @@ final class ChatImageComponent extends JPanel {
   private volatile int lastMaxH = -1;
 
   private Disposable sub;
+  private javax.swing.Timer deferredDisposeTimer;
 
   private boolean settingsListenerInstalled;
   private final PropertyChangeListener settingsListener =
@@ -272,6 +277,9 @@ final class ChatImageComponent extends JPanel {
                     if (!collapsed) {
                       renderForCurrentWidth();
                     }
+                    if (b.length > MAX_RETAINED_ORIGINAL_BYTES) {
+                      bytes = null;
+                    }
                   } catch (Exception ex) {
                     decoded = null;
                     if (gifCoordinator != null) {
@@ -294,6 +302,7 @@ final class ChatImageComponent extends JPanel {
   @Override
   public void addNotify() {
     super.addNotify();
+    cancelDeferredSubDispose();
 
     hookVisibilityListener();
     hookResizeListener();
@@ -316,6 +325,7 @@ final class ChatImageComponent extends JPanel {
     // DO NOT dispose the fetch subscription here.
     // JTextPane/StyledDocument may call removeNotify() during view rebuilds and scrolling,
     // which would prevent the image from ever completing and updating the UI.
+    scheduleDeferredSubDispose();
 
     if (gifPlayer != null) {
       gifPlayer.stop();
@@ -326,10 +336,49 @@ final class ChatImageComponent extends JPanel {
     super.removeNotify();
   }
 
+  private void scheduleDeferredSubDispose() {
+    if (deferredDisposeTimer == null) {
+      deferredDisposeTimer =
+          new javax.swing.Timer(
+              SUBS_DISPOSE_DELAY_MS,
+              e -> {
+                if (isDisplayable()) return;
+                disposeLoadSubscription();
+              });
+      deferredDisposeTimer.setRepeats(false);
+    }
+    deferredDisposeTimer.restart();
+  }
+
+  private void cancelDeferredSubDispose() {
+    if (deferredDisposeTimer != null) {
+      deferredDisposeTimer.stop();
+    }
+  }
+
+  private void disposeLoadSubscription() {
+    cancelDeferredSubDispose();
+    if (sub != null && !sub.isDisposed()) {
+      sub.dispose();
+    }
+    sub = null;
+  }
+
   private void renderForCurrentWidth() {
     if (collapsed) return;
 
     DecodedImage d = decoded;
+    if (d == null) {
+      byte[] raw = bytes;
+      if (raw == null || raw.length == 0) return;
+      try {
+        d = ImageDecodeUtil.decode(url, raw);
+        decoded = d;
+      } catch (Exception ignored) {
+        imageLabel.setText("(image decode failed)");
+        return;
+      }
+    }
     if (d == null) return;
 
     int maxW = EmbedHostLayoutUtil.computeMaxInlineWidth(this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 96);
@@ -407,6 +456,7 @@ final class ChatImageComponent extends JPanel {
       imageLabel.setIcon(icon);
       imageLabel.setText("");
       setLabelPreferredSize(icon);
+      decoded = null;
       revalidate();
       repaint();
     }

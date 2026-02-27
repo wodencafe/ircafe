@@ -83,4 +83,18 @@ public interface ChatHistoryTranscriptPort {
   int chatHistoryInitialLoadLines();
 
   int chatHistoryPageSize();
+
+  int chatHistoryAutoLoadWheelDebounceMs();
+
+  int chatHistoryLoadOlderChunkSize();
+
+  int chatHistoryLoadOlderChunkDelayMs();
+
+  int chatHistoryLoadOlderChunkEdtBudgetMs();
+
+  int chatHistoryRemoteRequestTimeoutSeconds();
+
+  int chatHistoryRemoteZncPlaybackTimeoutSeconds();
+
+  int chatHistoryRemoteZncPlaybackWindowMinutes();
 }

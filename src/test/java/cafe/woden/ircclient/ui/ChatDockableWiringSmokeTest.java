@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -22,16 +23,21 @@ import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.awt.Component;
 import java.awt.Container;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
@@ -53,6 +59,11 @@ class ChatDockableWiringSmokeTest {
 
       assertEquals("Channel List", onEdtCall(fixture.chat::getTabText));
       verify(fixture.serverTree).managedChannelsForServer("libera");
+
+      onEdt(() -> fixture.chat.setActiveTarget(TargetRef.ignores("libera")));
+      flushEdt();
+
+      assertEquals("Ignores", onEdtCall(fixture.chat::getTabText));
 
       onEdt(() -> fixture.chat.setActiveTarget(channelTarget));
       flushEdt();
@@ -125,7 +136,60 @@ class ChatDockableWiringSmokeTest {
     }
   }
 
+  @Test
+  void onTargetClosedRemovesDraftCacheEntry() throws Exception {
+    Fixture fixture = createFixture();
+    try {
+      TargetRef first = new TargetRef("libera", "#first");
+      TargetRef second = new TargetRef("libera", "#second");
+      when(fixture.transcripts.document(first)).thenReturn(new DefaultStyledDocument());
+      when(fixture.transcripts.readMarkerJumpOffset(first)).thenReturn(-1);
+      when(fixture.transcripts.document(second)).thenReturn(new DefaultStyledDocument());
+      when(fixture.transcripts.readMarkerJumpOffset(second)).thenReturn(-1);
+
+      onEdt(
+          () -> {
+            fixture.chat.setActiveTarget(first);
+            fixture.chat.setActiveTarget(second);
+          });
+      flushEdt();
+
+      Map<?, ?> before = onEdtCall(() -> draftMapSnapshot(fixture.chat));
+      assertTrue(before.containsKey(first));
+
+      onEdt(() -> fixture.chat.onTargetClosed(first));
+      flushEdt();
+
+      Map<?, ?> after = onEdtCall(() -> draftMapSnapshot(fixture.chat));
+      assertTrue(!after.containsKey(first));
+    } finally {
+      fixture.shutdown();
+    }
+  }
+
   private static Fixture createFixture() throws Exception {
+    return createFixture(
+        VirtualThreads.newSingleThreadExecutor("test-chat-dockable-wiring-log-viewer"),
+        VirtualThreads.newSingleThreadExecutor("test-chat-dockable-wiring-interceptor"));
+  }
+
+  @Test
+  void shutdownDoesNotCloseSharedPanelExecutors() throws Exception {
+    ExecutorService logViewerExecutor = mock(ExecutorService.class);
+    ExecutorService interceptorRefreshExecutor = mock(ExecutorService.class);
+    Fixture fixture = createFixture(logViewerExecutor, interceptorRefreshExecutor);
+    try {
+      fixture.shutdown(false);
+      verify(logViewerExecutor, never()).shutdownNow();
+      verify(interceptorRefreshExecutor, never()).shutdownNow();
+    } finally {
+      fixture.shutdown(false);
+    }
+  }
+
+  private static Fixture createFixture(
+      ExecutorService logViewerExecutor, ExecutorService interceptorRefreshExecutor)
+      throws Exception {
     ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
     ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
     when(serverTree.managedChannelsChangedByServer()).thenReturn(Flowable.never());
@@ -141,6 +205,7 @@ class ChatDockableWiringSmokeTest {
     ActiveInputRouter activeInputRouter = new ActiveInputRouter();
     IgnoreListService ignoreListService = mock(IgnoreListService.class);
     IgnoreStatusService ignoreStatusService = mock(IgnoreStatusService.class);
+    IgnoreListDialog ignoreListDialog = mock(IgnoreListDialog.class);
     MonitorListService monitorListService = mock(MonitorListService.class);
     when(monitorListService.changes()).thenReturn(Flowable.never());
     when(monitorListService.listNicks(anyString())).thenReturn(List.of());
@@ -174,6 +239,7 @@ class ChatDockableWiringSmokeTest {
                     activeInputRouter,
                     ignoreListService,
                     ignoreStatusService,
+                    ignoreListDialog,
                     monitorListService,
                     userListStore,
                     usersDock,
@@ -189,10 +255,19 @@ class ChatDockableWiringSmokeTest {
                     null,
                     settingsBus,
                     spellcheckSettingsBus,
-                    commandHistoryStore)));
+                    commandHistoryStore,
+                    logViewerExecutor,
+                    interceptorRefreshExecutor)));
 
     return new Fixture(
-        holder.get(), transcripts, serverTree, activationBus, outboundBus, monitorListService);
+        holder.get(),
+        transcripts,
+        serverTree,
+        activationBus,
+        outboundBus,
+        monitorListService,
+        logViewerExecutor,
+        interceptorRefreshExecutor);
   }
 
   private static void onEdt(ThrowingRunnable runnable)
@@ -267,6 +342,14 @@ class ChatDockableWiringSmokeTest {
     return "";
   }
 
+  private static Map<?, ?> draftMapSnapshot(ChatDockable chat) throws Exception {
+    Field field = ChatDockable.class.getDeclaredField("draftByTarget");
+    field.setAccessible(true);
+    Object value = field.get(chat);
+    if (!(value instanceof Map<?, ?> map)) return Map.of();
+    return Map.copyOf(map);
+  }
+
   @FunctionalInterface
   private interface ThrowingRunnable {
     void run() throws Exception;
@@ -283,10 +366,25 @@ class ChatDockableWiringSmokeTest {
       ServerTreeDockable serverTree,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
-      MonitorListService monitorListService) {
+      MonitorListService monitorListService,
+      ExecutorService logViewerExecutor,
+      ExecutorService interceptorRefreshExecutor) {
     void shutdown() throws Exception {
+      shutdown(true);
+    }
+
+    void shutdown(boolean shutdownSharedExecutors) throws Exception {
       onEdt(chat::shutdown);
       flushEdt();
+      if (!shutdownSharedExecutors) return;
+      try {
+        logViewerExecutor.shutdownNow();
+      } catch (Exception ignored) {
+      }
+      try {
+        interceptorRefreshExecutor.shutdownNow();
+      } catch (Exception ignored) {
+      }
     }
   }
 }

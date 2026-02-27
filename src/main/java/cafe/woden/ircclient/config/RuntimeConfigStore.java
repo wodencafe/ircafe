@@ -35,6 +35,30 @@ import org.yaml.snakeyaml.Yaml;
 public class RuntimeConfigStore {
 
   private static final Logger log = LoggerFactory.getLogger(RuntimeConfigStore.class);
+  private static final java.util.Set<String> KNOWN_IGNORE_LEVELS =
+      java.util.Set.of(
+          "ALL",
+          "MSGS",
+          "PUBLIC",
+          "NOTICES",
+          "CTCPS",
+          "ACTIONS",
+          "JOINS",
+          "PARTS",
+          "QUITS",
+          "NICKS",
+          "TOPICS",
+          "WALLOPS",
+          "INVITES",
+          "MODES",
+          "DCC",
+          "DCCMSGS",
+          "CLIENTCRAP",
+          "CLIENTNOTICE",
+          "CLIENTERRORS",
+          "HILIGHT",
+          "NOHILIGHT",
+          "CRAP");
 
   public record ServerTreeBuiltInNodesVisibility(
       boolean server,
@@ -88,6 +112,9 @@ public class RuntimeConfigStore {
   private final Path file;
   private final IrcProperties defaults;
   private final Yaml yaml;
+  private int mutationBatchDepth = 0;
+  private Map<String, Object> mutationBatchDoc = null;
+  private boolean mutationBatchDirty = false;
 
   /**
    * True if the runtime config file existed before this process started creating/initializing it.
@@ -230,6 +257,60 @@ public class RuntimeConfigStore {
 
   public Path runtimeConfigPath() {
     return file;
+  }
+
+  /**
+   * Run a series of mutations with a single final disk write.
+   *
+   * <p>Callers should keep the action focused on {@code remember*} methods so EDT stalls are
+   * minimized.
+   */
+  public synchronized void runMutationBatch(Runnable action) {
+    if (action == null) return;
+    beginMutationBatchLocked();
+    try {
+      action.run();
+    } finally {
+      endMutationBatchLocked();
+    }
+  }
+
+  public synchronized void beginMutationBatch() {
+    beginMutationBatchLocked();
+  }
+
+  public synchronized void endMutationBatch() {
+    endMutationBatchLocked();
+  }
+
+  private void beginMutationBatchLocked() {
+    if (mutationBatchDepth == 0) {
+      try {
+        mutationBatchDoc =
+            (file.toString().isBlank() || !Files.exists(file)) ? new LinkedHashMap<>() : loadFile();
+      } catch (Exception e) {
+        mutationBatchDoc = new LinkedHashMap<>();
+        log.warn("[ircafe] Could not start mutation batch for '{}'", file, e);
+      }
+      mutationBatchDirty = false;
+    }
+    mutationBatchDepth++;
+  }
+
+  private void endMutationBatchLocked() {
+    if (mutationBatchDepth <= 0) return;
+    mutationBatchDepth--;
+    if (mutationBatchDepth > 0) return;
+    try {
+      if (mutationBatchDirty && mutationBatchDoc != null) {
+        writeFileNow(mutationBatchDoc);
+      }
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not flush mutation batch to '{}'", file, e);
+    } finally {
+      mutationBatchDoc = null;
+      mutationBatchDirty = false;
+    }
   }
 
   public synchronized void ensureFileExistsWithServers() {
@@ -554,35 +635,34 @@ public class RuntimeConfigStore {
           break;
         }
       }
-      if (serverMap == null) return;
+      if (serverMap != null) {
+        List<String> previousAutoJoin = sanitizeStringList(serverMap.get("autoJoin"));
+        List<String> previousPmTargets = AutoJoinEntryCodec.privateMessageNicks(previousAutoJoin);
 
-      List<String> previousAutoJoin = sanitizeStringList(serverMap.get("autoJoin"));
-      List<String> previousPmTargets = AutoJoinEntryCodec.privateMessageNicks(previousAutoJoin);
-
-      ArrayList<String> nextAutoJoin = new ArrayList<>();
-      for (ServerTreeChannelPreference pref : byKey.values()) {
-        if (pref == null || !pref.autoReattach()) continue;
-        String channel = normalizeChannelName(pref.channel());
-        if (channel.isEmpty()) continue;
-        if (containsIgnoreCase(nextAutoJoin, channel)) continue;
-        nextAutoJoin.add(channel);
+        ArrayList<String> nextAutoJoin = new ArrayList<>();
+        for (ServerTreeChannelPreference pref : byKey.values()) {
+          if (pref == null || !pref.autoReattach()) continue;
+          String channel = normalizeChannelName(pref.channel());
+          if (channel.isEmpty()) continue;
+          if (containsIgnoreCase(nextAutoJoin, channel)) continue;
+          nextAutoJoin.add(channel);
+        }
+        for (String nick : previousPmTargets) {
+          String n = Objects.toString(nick, "").trim();
+          if (n.isEmpty()) continue;
+          String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(n);
+          if (encoded.isEmpty()) continue;
+          if (nextAutoJoin.stream().anyMatch(existing -> existing.equalsIgnoreCase(encoded)))
+            continue;
+          nextAutoJoin.add(encoded);
+        }
+        if (nextAutoJoin.isEmpty()) {
+          serverMap.remove("autoJoin");
+        } else {
+          serverMap.put("autoJoin", nextAutoJoin);
+        }
+        irc.put("servers", servers);
       }
-      for (String nick : previousPmTargets) {
-        String n = Objects.toString(nick, "").trim();
-        if (n.isEmpty()) continue;
-        String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(n);
-        if (encoded.isEmpty()) continue;
-        if (nextAutoJoin.stream().anyMatch(existing -> existing.equalsIgnoreCase(encoded)))
-          continue;
-        nextAutoJoin.add(encoded);
-      }
-      if (nextAutoJoin.isEmpty()) {
-        serverMap.remove("autoJoin");
-      } else {
-        serverMap.put("autoJoin", nextAutoJoin);
-      }
-
-      irc.put("servers", servers);
 
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
@@ -3426,6 +3506,51 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized int readServerTreeUnreadBadgeScalePercent(int defaultValue) {
+    int fallback = clampServerTreeUnreadBadgeScalePercent(defaultValue);
+    try {
+      if (file.toString().isBlank()) return fallback;
+      if (!Files.exists(file)) return fallback;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return fallback;
+
+      Object raw = ui.get("serverTreeUnreadBadgeScalePercent");
+      if (raw == null) return fallback;
+      return asInt(raw).map(this::clampServerTreeUnreadBadgeScalePercent).orElse(fallback);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.serverTreeUnreadBadgeScalePercent from '{}'", file, e);
+      return fallback;
+    }
+  }
+
+  public synchronized void rememberServerTreeUnreadBadgeScalePercent(int percent) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int normalized = clampServerTreeUnreadBadgeScalePercent(percent);
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      ui.put("serverTreeUnreadBadgeScalePercent", normalized);
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.serverTreeUnreadBadgeScalePercent to '{}'", file, e);
+    }
+  }
+
+  private int clampServerTreeUnreadBadgeScalePercent(int percent) {
+    int v = percent;
+    if (v <= 0) v = 100;
+    if (v < 50) v = 50;
+    if (v > 150) v = 150;
+    return v;
+  }
+
   public synchronized void rememberSpellcheckEnabled(boolean enabled) {
     rememberSpellcheckBoolean("spellcheckEnabled", enabled);
   }
@@ -4204,6 +4329,156 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberChatHistoryAutoLoadWheelDebounceMs(int debounceMs) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(100, Math.min(30_000, debounceMs));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryAutoLoadWheelDebounceMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat history wheel debounce setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryLoadOlderChunkSize(int chunkSize) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(1, Math.min(500, chunkSize));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryLoadOlderChunkSize", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history load-older chunk-size setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryLoadOlderChunkDelayMs(int chunkDelayMs) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(0, Math.min(1_000, chunkDelayMs));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryLoadOlderChunkDelayMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history load-older chunk-delay setting to '{}'",
+          file,
+          e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryLoadOlderChunkEdtBudgetMs(int chunkEdtBudgetMs) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(1, Math.min(33, chunkEdtBudgetMs));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryLoadOlderChunkEdtBudgetMs", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history load-older EDT budget setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryDeferRichTextDuringBatch(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryDeferRichTextDuringBatch", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history deferred-rich-text setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryRemoteRequestTimeoutSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(1, Math.min(120, seconds));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryRemoteRequestTimeoutSeconds", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat history remote-timeout setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryRemoteZncPlaybackTimeoutSeconds(int seconds) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(1, Math.min(300, seconds));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryRemoteZncPlaybackTimeoutSeconds", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history remote ZNC-timeout setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatHistoryRemoteZncPlaybackWindowMinutes(int minutes) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(1, Math.min(1440, minutes));
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatHistoryRemoteZncPlaybackWindowMinutes", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat history remote ZNC window setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberCommandHistoryMaxSize(int maxSize) {
     try {
       if (file.toString().isBlank()) return;
@@ -4221,6 +4496,28 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist command history max size setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberChatTranscriptMaxLinesPerTarget(int maxLines) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int v = Math.max(0, maxLines);
+      if (v > 200_000) v = 200_000;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatTranscriptMaxLinesPerTarget", v);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist chat transcript max-lines-per-target setting to '{}'",
+          file,
+          e);
     }
   }
 
@@ -4683,6 +4980,306 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberIgnoreMaskLevels(
+      String serverId, String mask, List<String> levels) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      List<String> normalized = normalizeIgnoreLevels(levels);
+      boolean isDefaultAll =
+          normalized.size() == 1 && "ALL".equalsIgnoreCase(normalized.getFirst());
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> byMask =
+          (server.get("maskLevels") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+
+      if (isDefaultAll) {
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+      } else {
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        byMask.put(m, new java.util.ArrayList<>(normalized));
+      }
+
+      if (byMask.isEmpty()) {
+        server.remove("maskLevels");
+      } else {
+        server.put("maskLevels", byMask);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask levels to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberIgnoreMaskChannels(
+      String serverId, String mask, List<String> channels) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      List<String> normalized = normalizeIgnoreChannels(channels);
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> byMask =
+          (server.get("maskChannels") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+
+      byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+      if (normalized.isEmpty()) {
+        // Empty means no channel restriction; omit per-mask override from persisted YAML.
+      } else {
+        byMask.put(m, new java.util.ArrayList<>(normalized));
+      }
+
+      if (byMask.isEmpty()) {
+        server.remove("maskChannels");
+      } else {
+        server.put("maskChannels", byMask);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask channels to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberIgnoreMaskExpiresAt(
+      String serverId, String mask, Long expiresAtEpochMs) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      long expiresAt = (expiresAtEpochMs == null) ? 0L : expiresAtEpochMs;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> byMask =
+          (server.get("maskExpiresAt") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+
+      byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+      if (expiresAt > 0L) {
+        byMask.put(m, expiresAt);
+      }
+
+      if (byMask.isEmpty()) {
+        server.remove("maskExpiresAt");
+      } else {
+        server.put("maskExpiresAt", byMask);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask expiry to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberIgnoreMaskPattern(
+      String serverId, String mask, String pattern, String modeToken) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      String normalizedPattern = Objects.toString(pattern, "").trim();
+      String normalizedMode = normalizeIgnorePatternMode(modeToken);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> patternsByMask =
+          (server.get("maskPatterns") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      @SuppressWarnings("unchecked")
+      Map<String, Object> modesByMask =
+          (server.get("maskPatternModes") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+
+      patternsByMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+      modesByMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+
+      if (!normalizedPattern.isEmpty()) {
+        patternsByMask.put(m, normalizedPattern);
+        if (!"glob".equals(normalizedMode)) {
+          modesByMask.put(m, normalizedMode);
+        }
+      }
+
+      if (patternsByMask.isEmpty()) {
+        server.remove("maskPatterns");
+      } else {
+        server.put("maskPatterns", patternsByMask);
+      }
+      if (modesByMask.isEmpty()) {
+        server.remove("maskPatternModes");
+      } else {
+        server.put("maskPatternModes", modesByMask);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask pattern to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberIgnoreMaskReplies(
+      String serverId, String mask, boolean repliesEnabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String sid = Objects.toString(serverId, "").trim();
+      String m = Objects.toString(mask, "").trim();
+      if (sid.isEmpty() || m.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ignore = getOrCreateMap(ircafe, "ignore");
+      Map<String, Object> servers = getOrCreateMap(ignore, "servers");
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> server =
+          (servers.get(sid) instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+      servers.put(sid, server);
+
+      @SuppressWarnings("unchecked")
+      Map<String, Object> byMask =
+          (server.get("maskReplies") instanceof Map<?, ?> mm)
+              ? (Map<String, Object>) mm
+              : new LinkedHashMap<>();
+
+      byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+      if (repliesEnabled) {
+        byMask.put(m, Boolean.TRUE);
+      }
+
+      if (byMask.isEmpty()) {
+        server.remove("maskReplies");
+      } else {
+        server.put("maskReplies", byMask);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ignore mask replies flag to '{}'", file, e);
+    }
+  }
+
+  private static List<String> normalizeIgnoreLevels(List<String> levels) {
+    java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+    if (levels != null) {
+      for (String raw : levels) {
+        String v = normalizeIgnoreLevel(raw);
+        if (!v.isEmpty()) out.add(v);
+      }
+    }
+    if (out.isEmpty()) out.add("ALL");
+    return List.copyOf(out);
+  }
+
+  private static String normalizeIgnoreLevel(String raw) {
+    String v = Objects.toString(raw, "").trim().toUpperCase(Locale.ROOT);
+    if (v.isEmpty()) return "";
+    while (v.startsWith("+") || v.startsWith("-")) {
+      v = v.substring(1).trim();
+    }
+    if (v.isEmpty()) return "";
+    if ("*".equals(v)) v = "ALL";
+    return KNOWN_IGNORE_LEVELS.contains(v) ? v : "";
+  }
+
+  private static List<String> normalizeIgnoreChannels(List<String> channels) {
+    java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+    if (channels != null) {
+      for (String raw : channels) {
+        String v = normalizeIgnoreChannel(raw);
+        if (!v.isEmpty()) out.add(v);
+      }
+    }
+    if (out.isEmpty()) return List.of();
+    return List.copyOf(out);
+  }
+
+  private static String normalizeIgnoreChannel(String raw) {
+    String v = Objects.toString(raw, "").trim();
+    if (v.isEmpty()) return "";
+    return (v.startsWith("#") || v.startsWith("&")) ? v : "";
+  }
+
+  private static String normalizeIgnorePatternMode(String raw) {
+    String v = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
+    return switch (v) {
+      case "regexp", "regex" -> "regexp";
+      case "full" -> "full";
+      default -> "glob";
+    };
+  }
+
   public synchronized void forgetIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -4712,6 +5309,67 @@ public class RuntimeConfigStore {
       if (masks.isEmpty()) {
         server.remove("masks");
       }
+
+      Object levelsObj = server.get("maskLevels");
+      if (levelsObj instanceof Map<?, ?> levelsMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) levelsMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskLevels");
+        }
+      }
+
+      Object channelsObj = server.get("maskChannels");
+      if (channelsObj instanceof Map<?, ?> channelsMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) channelsMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskChannels");
+        }
+      }
+
+      Object expiresObj = server.get("maskExpiresAt");
+      if (expiresObj instanceof Map<?, ?> expiresMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) expiresMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskExpiresAt");
+        }
+      }
+
+      Object patternsObj = server.get("maskPatterns");
+      if (patternsObj instanceof Map<?, ?> patternsMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) patternsMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskPatterns");
+        }
+      }
+
+      Object patternModesObj = server.get("maskPatternModes");
+      if (patternModesObj instanceof Map<?, ?> modesMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) modesMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskPatternModes");
+        }
+      }
+
+      Object repliesObj = server.get("maskReplies");
+      if (repliesObj instanceof Map<?, ?> repliesMap) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> byMask = (Map<String, Object>) repliesMap;
+        byMask.entrySet().removeIf(e -> Objects.toString(e.getKey(), "").equalsIgnoreCase(m));
+        if (byMask.isEmpty()) {
+          server.remove("maskReplies");
+        }
+      }
+
       if (server.isEmpty()) {
         servers.remove(sid);
       }
@@ -5039,6 +5697,9 @@ public class RuntimeConfigStore {
 
   @SuppressWarnings("unchecked")
   private Map<String, Object> loadFile() throws IOException {
+    if (mutationBatchDepth > 0 && mutationBatchDoc != null) {
+      return mutationBatchDoc;
+    }
     try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
       Object o = yaml.load(r);
       if (o instanceof Map<?, ?> m) {
@@ -5049,6 +5710,15 @@ public class RuntimeConfigStore {
   }
 
   private void writeFile(Map<String, Object> doc) throws IOException {
+    if (mutationBatchDepth > 0) {
+      mutationBatchDoc = (doc == null) ? new LinkedHashMap<>() : doc;
+      mutationBatchDirty = true;
+      return;
+    }
+    writeFileNow(doc);
+  }
+
+  private void writeFileNow(Map<String, Object> doc) throws IOException {
     Path parent = file.getParent();
     if (parent != null && !Files.exists(parent)) {
       Files.createDirectories(parent);

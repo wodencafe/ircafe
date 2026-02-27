@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
@@ -41,6 +44,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -232,6 +236,61 @@ class PreferencesDialogFunctionalTest {
     closeAll(closeables);
   }
 
+  @Test
+  void constructorRejectsShutdownExecutors() {
+    ExecutorService shutdownPushy = mock(ExecutorService.class);
+    when(shutdownPushy.isShutdown()).thenReturn(true);
+    ExecutorService activeRules = mock(ExecutorService.class);
+    when(activeRules.isShutdown()).thenReturn(false);
+
+    IllegalArgumentException ex =
+        assertThrows(
+            IllegalArgumentException.class, () -> newPreferencesDialog(shutdownPushy, activeRules));
+    assertEquals("pushyTestExecutor must be active", ex.getMessage());
+  }
+
+  @Test
+  void ircv3PanelIncludesUnreadBadgeSizeControl() throws Exception {
+    PreferencesDialog dialog = newPreferencesDialog();
+    UiSettings current = testUiSettings();
+
+    JCheckBox send = (JCheckBox) invoke(dialog, "buildTypingIndicatorsSendCheckbox", current);
+    JCheckBox receive = (JCheckBox) invoke(dialog, "buildTypingIndicatorsReceiveCheckbox", current);
+    @SuppressWarnings("unchecked")
+    JComboBox<Object> style =
+        (JComboBox<Object>) invoke(dialog, "buildTypingTreeIndicatorStyleCombo", current);
+    JSpinner badgeScale = new JSpinner(new javax.swing.SpinnerNumberModel(100, 50, 150, 5));
+    Object capabilities = invoke(dialog, "buildIrcv3CapabilitiesControls");
+
+    JPanel panel =
+        (JPanel)
+            invoke(
+                dialog,
+                "buildIrcv3CapabilitiesPanel",
+                send,
+                receive,
+                style,
+                badgeScale,
+                capabilities);
+    assertNotNull(findLabel(panel, "Unread badge size"));
+  }
+
+  @Test
+  void notificationRuleCloseablesDoNotShutdownSharedExecutors() throws Exception {
+    ExecutorService pushyExec = mock(ExecutorService.class);
+    ExecutorService rulesExec = mock(ExecutorService.class);
+    when(pushyExec.isShutdown()).thenReturn(false);
+    when(rulesExec.isShutdown()).thenReturn(false);
+    PreferencesDialog dialog = newPreferencesDialog(pushyExec, rulesExec);
+    List<AutoCloseable> closeables = new ArrayList<>();
+
+    invoke(dialog, "buildNotificationRulesControls", testUiSettings(), closeables);
+    closeAll(closeables);
+
+    verify(rulesExec, never()).shutdownNow();
+    verify(pushyExec, never()).shutdownNow();
+  }
+
   private static AppearanceFixture buildAppearanceFixture(ChatThemeSettings chatTheme)
       throws Exception {
     PreferencesDialog dialog = newPreferencesDialog();
@@ -271,6 +330,15 @@ class PreferencesDialogFunctionalTest {
   }
 
   private static PreferencesDialog newPreferencesDialog() {
+    ExecutorService pushyTestExecutor = mock(ExecutorService.class);
+    ExecutorService notificationRuleTestExecutor = mock(ExecutorService.class);
+    when(pushyTestExecutor.isShutdown()).thenReturn(false);
+    when(notificationRuleTestExecutor.isShutdown()).thenReturn(false);
+    return newPreferencesDialog(pushyTestExecutor, notificationRuleTestExecutor);
+  }
+
+  private static PreferencesDialog newPreferencesDialog(
+      ExecutorService pushyTestExecutor, ExecutorService notificationRuleTestExecutor) {
     return new PreferencesDialog(
         mock(UiSettingsBus.class),
         mock(ThemeManager.class),
@@ -296,7 +364,9 @@ class PreferencesDialogFunctionalTest {
         mock(IrcEventNotificationRulesBus.class),
         mock(UserCommandAliasesBus.class),
         mock(NotificationSoundService.class),
-        mock(ServerDialogs.class));
+        mock(ServerDialogs.class),
+        pushyTestExecutor,
+        notificationRuleTestExecutor);
   }
 
   private static UiSettings testUiSettings() {

@@ -11,8 +11,9 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
 import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
-import cafe.woden.ircclient.ignore.IgnoreListService;
-import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
+import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
+import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
+import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
@@ -61,11 +62,13 @@ public abstract class AbstractApplicationModuleIntegrationTest {
 
   @MockitoBean UserInfoEnrichmentService userInfoEnrichmentService;
 
-  @MockitoBean IgnoreListService ignoreListService;
+  @MockitoBean IgnoreListQueryPort ignoreListQueryPort;
+
+  @MockitoBean IgnoreListCommandPort ignoreListCommandPort;
 
   @MockitoBean LocalFilterCommandHandler localFilterCommandHandler;
 
-  @MockitoBean InboundIgnorePolicy inboundIgnorePolicy;
+  @MockitoBean InboundIgnorePolicyPort inboundIgnorePolicy;
 
   @MockitoBean JfrSnapshotSummarizer jfrSnapshotSummarizer;
 

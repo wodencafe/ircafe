@@ -53,12 +53,10 @@ class ThemeLookAndFeelInstaller {
     if (raw.isEmpty()) raw = "darcula";
 
     String lower = raw.toLowerCase(Locale.ROOT);
-    if (!nimbusOverrides.isDarkVariant(lower)) {
-      nimbusOverrides.clearDarkOverrides();
-    }
-    if (!nimbusOverrides.isTintVariant(lower)) {
-      nimbusOverrides.clearTintOverrides();
-    }
+    // Start each installation from a clean Nimbus override slate so keys that are not set by a
+    // target variant cannot leak from a previously applied Nimbus variant.
+    nimbusOverrides.clearDarkOverrides();
+    nimbusOverrides.clearTintOverrides();
 
     if (lower.startsWith(IntelliJThemePack.ID_PREFIX)) {
       String className = raw.substring(raw.indexOf(':') + 1).trim();

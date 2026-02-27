@@ -10,6 +10,7 @@ import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
+import cafe.woden.ircclient.ui.ignore.IgnoresPanel;
 import cafe.woden.ircclient.ui.interceptors.InterceptorPanel;
 import cafe.woden.ircclient.ui.logviewer.LogViewerPanel;
 import cafe.woden.ircclient.ui.monitor.MonitorPanel;
@@ -25,6 +26,7 @@ class ChatTargetViewRouterTest {
   void routeChannelListRoutesToUiOnlyAndRefreshesManagedChannels() {
     NotificationsPanel notificationsPanel = mock(NotificationsPanel.class);
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    IgnoresPanel ignoresPanel = mock(IgnoresPanel.class);
     DccTransfersPanel dccTransfersPanel = mock(DccTransfersPanel.class);
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
@@ -41,6 +43,7 @@ class ChatTargetViewRouterTest {
             createCardDeck(),
             notificationsPanel,
             channelListPanel,
+            ignoresPanel,
             dccTransfersPanel,
             monitorPanel,
             logViewerPanel,
@@ -64,6 +67,7 @@ class ChatTargetViewRouterTest {
   void routeMonitorGroupTrimsServerIdAndRefreshesMonitorRows() {
     NotificationsPanel notificationsPanel = mock(NotificationsPanel.class);
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    IgnoresPanel ignoresPanel = mock(IgnoresPanel.class);
     DccTransfersPanel dccTransfersPanel = mock(DccTransfersPanel.class);
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
@@ -80,6 +84,7 @@ class ChatTargetViewRouterTest {
             createCardDeck(),
             notificationsPanel,
             channelListPanel,
+            ignoresPanel,
             dccTransfersPanel,
             monitorPanel,
             logViewerPanel,
@@ -104,6 +109,7 @@ class ChatTargetViewRouterTest {
   void routeInterceptorTargetDelegatesToInterceptorPanel() {
     NotificationsPanel notificationsPanel = mock(NotificationsPanel.class);
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    IgnoresPanel ignoresPanel = mock(IgnoresPanel.class);
     DccTransfersPanel dccTransfersPanel = mock(DccTransfersPanel.class);
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
@@ -118,6 +124,7 @@ class ChatTargetViewRouterTest {
             createCardDeck(),
             notificationsPanel,
             channelListPanel,
+            ignoresPanel,
             dccTransfersPanel,
             monitorPanel,
             logViewerPanel,
@@ -140,6 +147,7 @@ class ChatTargetViewRouterTest {
   void routeChannelTargetKeepsTranscriptView() {
     NotificationsPanel notificationsPanel = mock(NotificationsPanel.class);
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    IgnoresPanel ignoresPanel = mock(IgnoresPanel.class);
     DccTransfersPanel dccTransfersPanel = mock(DccTransfersPanel.class);
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
@@ -154,6 +162,7 @@ class ChatTargetViewRouterTest {
             createCardDeck(),
             notificationsPanel,
             channelListPanel,
+            ignoresPanel,
             dccTransfersPanel,
             monitorPanel,
             logViewerPanel,
@@ -171,6 +180,7 @@ class ChatTargetViewRouterTest {
     verifyNoInteractions(
         notificationsPanel,
         channelListPanel,
+        ignoresPanel,
         dccTransfersPanel,
         monitorPanel,
         logViewerPanel,
@@ -185,6 +195,7 @@ class ChatTargetViewRouterTest {
   void routeApplicationJfrRefreshesPanelAndUsesUiOnlyView() {
     NotificationsPanel notificationsPanel = mock(NotificationsPanel.class);
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    IgnoresPanel ignoresPanel = mock(IgnoresPanel.class);
     DccTransfersPanel dccTransfersPanel = mock(DccTransfersPanel.class);
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
@@ -199,6 +210,7 @@ class ChatTargetViewRouterTest {
             createCardDeck(),
             notificationsPanel,
             channelListPanel,
+            ignoresPanel,
             dccTransfersPanel,
             monitorPanel,
             logViewerPanel,
@@ -220,6 +232,7 @@ class ChatTargetViewRouterTest {
   void routeNotificationsSetsServerIdOnNotificationsPanel() {
     NotificationsPanel notificationsPanel = mock(NotificationsPanel.class);
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    IgnoresPanel ignoresPanel = mock(IgnoresPanel.class);
     DccTransfersPanel dccTransfersPanel = mock(DccTransfersPanel.class);
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
@@ -234,6 +247,7 @@ class ChatTargetViewRouterTest {
             createCardDeck(),
             notificationsPanel,
             channelListPanel,
+            ignoresPanel,
             dccTransfersPanel,
             monitorPanel,
             logViewerPanel,
@@ -251,11 +265,49 @@ class ChatTargetViewRouterTest {
     verify(notificationsPanel).setServerId("libera");
   }
 
+  @Test
+  void routeIgnoresSetsServerIdOnIgnoresPanel() {
+    NotificationsPanel notificationsPanel = mock(NotificationsPanel.class);
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    IgnoresPanel ignoresPanel = mock(IgnoresPanel.class);
+    DccTransfersPanel dccTransfersPanel = mock(DccTransfersPanel.class);
+    MonitorPanel monitorPanel = mock(MonitorPanel.class);
+    LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
+    InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
+    RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
+    JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
+    RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
+
+    ChatTargetViewRouter router =
+        new ChatTargetViewRouter(
+            createCardDeck(),
+            notificationsPanel,
+            channelListPanel,
+            ignoresPanel,
+            dccTransfersPanel,
+            monitorPanel,
+            logViewerPanel,
+            interceptorPanel,
+            appAssertjPanel,
+            appJhiccupPanel,
+            appJfrPanel,
+            appSpringPanel,
+            sid -> {},
+            sid -> {});
+
+    ChatTargetViewRouter.TargetViewType viewType = router.route(TargetRef.ignores("libera"));
+
+    assertEquals(ChatTargetViewRouter.TargetViewType.UI_ONLY, viewType);
+    verify(ignoresPanel).setServerId("libera");
+  }
+
   private static JPanel createCardDeck() {
     JPanel deck = new JPanel(new CardLayout());
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_TRANSCRIPT);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_NOTIFICATIONS);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_CHANNEL_LIST);
+    deck.add(new JPanel(), ChatTargetViewRouter.CARD_IGNORES);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_DCC_TRANSFERS);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_MONITOR);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_LOG_VIEWER);

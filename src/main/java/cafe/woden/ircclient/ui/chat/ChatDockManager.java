@@ -151,7 +151,8 @@ public class ChatDockManager {
       clearTypingIndicatorsForServer(sid);
       return;
     }
-    if (!"draft/reply".equals(cap) && !"draft/react".equals(cap)) return;
+    if (!"draft/reply".equals(cap) && !"draft/react".equals(cap) && !"draft/unreact".equals(cap))
+      return;
 
     boolean replySupported = isDraftReplySupportedForServer(sid);
     boolean reactSupported = isDraftReactSupportedForServer(sid);

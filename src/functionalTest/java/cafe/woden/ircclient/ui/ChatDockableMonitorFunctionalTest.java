@@ -24,11 +24,13 @@ import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.monitor.MonitorPanel;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Flowable;
 import java.awt.Component;
 import java.awt.Container;
@@ -110,6 +112,7 @@ class ChatDockableMonitorFunctionalTest {
     ActiveInputRouter activeInputRouter = new ActiveInputRouter();
     IgnoreListService ignoreListService = mock(IgnoreListService.class);
     IgnoreStatusService ignoreStatusService = mock(IgnoreStatusService.class);
+    IgnoreListDialog ignoreListDialog = mock(IgnoreListDialog.class);
     UserListStore userListStore = mock(UserListStore.class);
     UserListDockable usersDock = mock(UserListDockable.class);
     NickContextMenuFactory nickContextMenuFactory = new NickContextMenuFactory();
@@ -143,6 +146,7 @@ class ChatDockableMonitorFunctionalTest {
                     activeInputRouter,
                     ignoreListService,
                     ignoreStatusService,
+                    ignoreListDialog,
                     monitorListService,
                     userListStore,
                     usersDock,
@@ -158,7 +162,9 @@ class ChatDockableMonitorFunctionalTest {
                     springRuntimeEventsService,
                     settingsBus,
                     spellcheckSettingsBus,
-                    commandHistoryStore));
+                    commandHistoryStore,
+                    VirtualThreads.newSingleThreadExecutor("test-chat-monitor-log-viewer"),
+                    VirtualThreads.newSingleThreadExecutor("test-chat-monitor-interceptor")));
 
     ChatDockable chat = holder.chat;
     MonitorPanel monitorPanel = findFirst(chat, MonitorPanel.class);

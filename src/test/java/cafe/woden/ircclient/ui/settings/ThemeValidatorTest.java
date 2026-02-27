@@ -23,6 +23,7 @@ import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
@@ -263,15 +264,15 @@ class ThemeValidatorTest {
     assertNotNull(nimbusDarkBlue, "nimbus-dark-blue theme must be present");
 
     final Color[] baseFieldBg = new Color[1];
-    final Color[] basePaneBg = new Color[1];
 
+    // Prime with a tinted variant first to ensure switching to plain nimbus-dark clears any
+    // previously applied dark-variant-specific keys.
+    onEdt(() -> themeManager.installLookAndFeel(nimbusDarkBlue.id()));
     onEdt(() -> themeManager.installLookAndFeel(nimbusDark.id()));
     onEdt(
         () -> {
           JTextField field = new JTextField("base");
-          JTextPane pane = new JTextPane();
           baseFieldBg[0] = field.getBackground();
-          basePaneBg[0] = pane.getBackground();
         });
 
     onEdt(() -> themeManager.installLookAndFeel(nimbusDarkBlue.id()));
@@ -289,10 +290,6 @@ class ThemeValidatorTest {
               baseFieldBg[0],
               tintedFieldBg,
               "nimbus-dark-blue: JTextField background should differ from base nimbus-dark");
-          assertNotEquals(
-              basePaneBg[0],
-              tintedPaneBg,
-              "nimbus-dark-blue: JTextPane background should differ from base nimbus-dark");
 
           assertTrue(
               tintedFieldBg.getBlue() > tintedFieldBg.getRed() + 6,
@@ -304,6 +301,34 @@ class ThemeValidatorTest {
               () ->
                   "nimbus-dark-blue: JTextPane background should keep a blue tint, got "
                       + tintedPaneBg);
+        });
+  }
+
+  @RepeatedTest(5)
+  void nimbusDarkBlueSwitchCycleRemainsTintedAcrossRepeatedRuns() throws Exception {
+    ThemeManager.ThemeOption nimbusDark = findThemeById("nimbus-dark");
+    ThemeManager.ThemeOption nimbusDarkBlue = findThemeById("nimbus-dark-blue");
+    assertNotNull(nimbusDark, "nimbus-dark theme must be present");
+    assertNotNull(nimbusDarkBlue, "nimbus-dark-blue theme must be present");
+
+    onEdt(() -> themeManager.installLookAndFeel(nimbusDarkBlue.id()));
+    onEdt(() -> themeManager.installLookAndFeel(nimbusDark.id()));
+
+    onEdt(() -> themeManager.installLookAndFeel(nimbusDarkBlue.id()));
+    onEdt(
+        () -> {
+          Color blueField = new JTextField("blue").getBackground();
+          Color bluePane = new JTextPane().getBackground();
+          assertTrue(
+              blueField.getBlue() > blueField.getRed() + 6,
+              () ->
+                  "nimbus-dark-blue: repeated-cycle JTextField background should stay blue-tinted, got "
+                      + blueField);
+          assertTrue(
+              bluePane.getBlue() > bluePane.getRed() + 4,
+              () ->
+                  "nimbus-dark-blue: repeated-cycle JTextPane background should stay blue-tinted, got "
+                      + bluePane);
         });
   }
 

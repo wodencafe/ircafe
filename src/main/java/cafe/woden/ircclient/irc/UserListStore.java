@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class UserListStore {
 
+  private static final int MAX_LEARNED_NICKS_PER_SERVER = 20_000;
+
   private final Map<String, Map<String, List<NickInfo>>> usersByServerAndChannel =
       new ConcurrentHashMap<>();
   private final Map<String, Map<String, Set<String>>> lowerNickSetByServerAndChannel =
@@ -84,6 +86,49 @@ public class UserListStore {
   private static String normalizeRealName(String realName) {
     String rn = norm(realName);
     return rn.isEmpty() ? null : rn;
+  }
+
+  private void pruneLearnedNickCaches(String serverId) {
+    String sid = norm(serverId);
+    if (sid.isEmpty()) return;
+    Set<String> activeLowerNicks = activeLowerNicksOnServer(sid);
+    pruneServerNickMap(hostmaskByServerAndNickLower.get(sid), activeLowerNicks);
+    pruneServerNickMap(awayStateByServerAndNickLower.get(sid), activeLowerNicks);
+    pruneServerNickMap(awayMessageByServerAndNickLower.get(sid), activeLowerNicks);
+    pruneServerNickMap(accountStateByServerAndNickLower.get(sid), activeLowerNicks);
+    pruneServerNickMap(accountNameByServerAndNickLower.get(sid), activeLowerNicks);
+    pruneServerNickMap(realNameByServerAndNickLower.get(sid), activeLowerNicks);
+  }
+
+  private Set<String> activeLowerNicksOnServer(String serverId) {
+    Map<String, Set<String>> byChannel = lowerNickSetByServerAndChannel.get(serverId);
+    if (byChannel == null || byChannel.isEmpty()) return Set.of();
+    java.util.HashSet<String> out = new java.util.HashSet<>();
+    for (Set<String> nicks : byChannel.values()) {
+      if (nicks == null || nicks.isEmpty()) continue;
+      out.addAll(nicks);
+    }
+    return out;
+  }
+
+  private static void pruneServerNickMap(Map<String, ?> byNick, Set<String> activeLowerNicks) {
+    if (byNick == null || byNick.size() <= MAX_LEARNED_NICKS_PER_SERVER) return;
+
+    Set<String> active = (activeLowerNicks == null) ? Set.of() : activeLowerNicks;
+    if (!active.isEmpty()) {
+      for (String nickLower : byNick.keySet()) {
+        if (byNick.size() <= MAX_LEARNED_NICKS_PER_SERVER) break;
+        if (!active.contains(nickLower)) {
+          byNick.remove(nickLower);
+        }
+      }
+    }
+
+    // Backstop: if the active set itself is huge, keep a hard cap to avoid runaway growth.
+    for (String nickLower : byNick.keySet()) {
+      if (byNick.size() <= MAX_LEARNED_NICKS_PER_SERVER) break;
+      byNick.remove(nickLower);
+    }
   }
 
   public String getLearnedHostmask(String serverId, String nick) {
@@ -332,6 +377,7 @@ public class UserListStore {
     lowerNickSetByServerAndChannel
         .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
         .put(ch, lower);
+    pruneLearnedNickCaches(sid);
   }
 
   public void clear(String serverId, String channel) {
@@ -344,6 +390,7 @@ public class UserListStore {
 
     Map<String, Set<String>> byChannelSet = lowerNickSetByServerAndChannel.get(sid);
     if (byChannelSet != null) byChannelSet.remove(ch);
+    pruneLearnedNickCaches(sid);
   }
 
   public void clearServer(String serverId) {
@@ -369,9 +416,10 @@ public class UserListStore {
 
     // Remember learned hostmask server-wide.
     if (isUsefulHostmask(hm)) {
-      hostmaskByServerAndNickLower
-          .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
-          .put(nickKey(n), hm);
+      Map<String, String> byNick =
+          hostmaskByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+      byNick.put(nickKey(n), hm);
+      pruneLearnedNickCaches(sid);
     }
 
     Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
@@ -426,9 +474,10 @@ public class UserListStore {
     if (sid.isEmpty() || n.isEmpty() || hm.isEmpty() || !isUsefulHostmask(hm)) return Set.of();
 
     // Remember learned hostmask server-wide.
-    hostmaskByServerAndNickLower
-        .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
-        .put(nickKey(n), hm);
+    Map<String, String> byNick =
+        hostmaskByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+    byNick.put(nickKey(n), hm);
+    pruneLearnedNickCaches(sid);
 
     Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
     if (byChannel == null || byChannel.isEmpty()) return Set.of();
@@ -494,21 +543,22 @@ public class UserListStore {
     if (sid.isEmpty() || ch.isEmpty() || n.isEmpty() || !isKnownAway(as)) return false;
 
     // Remember learned away state server-wide.
-    awayStateByServerAndNickLower
-        .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
-        .put(nickKey(n), as);
+    Map<String, AwayState> learnedAway =
+        awayStateByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+    learnedAway.put(nickKey(n), as);
 
     // Remember learned away message server-wide (only meaningful for AWAY).
     if (as == AwayState.AWAY) {
       if (msg != null) {
-        awayMessageByServerAndNickLower
-            .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
-            .put(nickKey(n), msg);
+        Map<String, String> byNickMsg =
+            awayMessageByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+        byNickMsg.put(nickKey(n), msg);
       }
     } else {
       Map<String, String> m = awayMessageByServerAndNickLower.get(sid);
       if (m != null) m.remove(nickKey(n));
     }
+    pruneLearnedNickCaches(sid);
 
     Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
     if (byChannel == null) return false;
@@ -569,21 +619,22 @@ public class UserListStore {
     if (sid.isEmpty() || n.isEmpty() || !isKnownAway(as)) return Set.of();
 
     // Remember learned away state server-wide.
-    awayStateByServerAndNickLower
-        .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
-        .put(nickKey(n), as);
+    Map<String, AwayState> learnedAway =
+        awayStateByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+    learnedAway.put(nickKey(n), as);
 
     // Remember learned away message server-wide (only meaningful for AWAY).
     if (as == AwayState.AWAY) {
       if (msg != null) {
-        awayMessageByServerAndNickLower
-            .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
-            .put(nickKey(n), msg);
+        Map<String, String> byNickMsg =
+            awayMessageByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+        byNickMsg.put(nickKey(n), msg);
       }
     } else {
       Map<String, String> m = awayMessageByServerAndNickLower.get(sid);
       if (m != null) m.remove(nickKey(n));
     }
+    pruneLearnedNickCaches(sid);
 
     Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
     if (byChannel == null || byChannel.isEmpty()) return Set.of();
@@ -647,21 +698,22 @@ public class UserListStore {
     if (sid.isEmpty() || n.isEmpty() || !isKnownAccount(st)) return Set.of();
 
     // Remember learned account state server-wide.
-    accountStateByServerAndNickLower
-        .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
-        .put(nickKey(n), st);
+    Map<String, AccountState> accountStateByNick =
+        accountStateByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+    accountStateByNick.put(nickKey(n), st);
 
     // Remember account name server-wide (only meaningful for LOGGED_IN).
     if (st == AccountState.LOGGED_IN) {
       if (name != null) {
-        accountNameByServerAndNickLower
-            .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
-            .put(nickKey(n), name);
+        Map<String, String> accountNamesByNick =
+            accountNameByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+        accountNamesByNick.put(nickKey(n), name);
       }
     } else {
       Map<String, String> m = accountNameByServerAndNickLower.get(sid);
       if (m != null) m.remove(nickKey(n));
     }
+    pruneLearnedNickCaches(sid);
 
     Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
     if (byChannel == null || byChannel.isEmpty()) return Set.of();
@@ -727,13 +779,14 @@ public class UserListStore {
     if (sid.isEmpty() || n.isEmpty()) return Set.of();
 
     if (rn != null) {
-      realNameByServerAndNickLower
-          .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
-          .put(nickKey(n), rn);
+      Map<String, String> realNamesByNick =
+          realNameByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+      realNamesByNick.put(nickKey(n), rn);
     } else {
       Map<String, String> m = realNameByServerAndNickLower.get(sid);
       if (m != null) m.remove(nickKey(n));
     }
+    pruneLearnedNickCaches(sid);
 
     Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(sid);
     if (byChannel == null || byChannel.isEmpty()) return Set.of();

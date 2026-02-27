@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.ui.settings.SpellcheckSettings;
+import cafe.woden.ircclient.util.VirtualThreads;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.reactivex.rxjava3.core.Single;
@@ -28,7 +29,6 @@ import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.JTextField;
@@ -67,15 +67,9 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   private static final String EN_PREFIX_COMPLETIONS_RESOURCE =
       "/cafe/woden/ircclient/ui/spellcheck/en-prefix-completions.txt";
 
-  private static final ExecutorService SPELLCHECK_EXECUTOR =
-      Executors.newSingleThreadExecutor(
-          r -> {
-            Thread t = new Thread(r, "ircafe-spellcheck");
-            t.setDaemon(true);
-            return t;
-          });
-  private static final io.reactivex.rxjava3.core.Scheduler SPELLCHECK_SCHEDULER =
-      Schedulers.from(SPELLCHECK_EXECUTOR);
+  private static final Object SPELLCHECK_EXECUTOR_LOCK = new Object();
+  private static ExecutorService spellcheckExecutor;
+  private static io.reactivex.rxjava3.core.Scheduler spellcheckScheduler;
 
   private static final ThreadLocal<Map<String, JLanguageTool>> CHECKERS_BY_THREAD =
       ThreadLocal.withInitial(HashMap::new);
@@ -110,13 +104,14 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
         Caffeine.newBuilder()
             .maximumSize(512)
             .expireAfterWrite(Duration.ofMillis(SUGGESTION_CACHE_TTL_MS))
-            .executor(SPELLCHECK_EXECUTOR)
+            .executor(ensureSpellcheckExecutor())
             .buildAsync(
                 (key, executor) ->
                     CompletableFuture.supplyAsync(() -> computeSuggestions(key), executor));
 
     // Warm up dictionaries once to avoid first-use jank on the EDT.
-    SPELLCHECK_EXECUTOR.execute(() -> checkerForCurrentThreadOrNull(this.settings.languageTag()));
+    ensureSpellcheckExecutor()
+        .execute(() -> checkerForCurrentThreadOrNull(this.settings.languageTag()));
     this.spellcheckRequests = PublishSubject.<SpellcheckRequest>create().toSerialized();
     this.spellcheckSubscription =
         spellcheckRequests
@@ -180,6 +175,25 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   void onRemoveNotify() {
     spellcheckRequestSeq.incrementAndGet();
     clearMisspellingHighlights();
+  }
+
+  void shutdown() {
+    spellcheckRequestSeq.incrementAndGet();
+    clearMisspellingHighlights();
+    suggestionCache.synchronous().invalidateAll();
+    localWordFrequency.clear();
+    knownNicksByLower = Map.of();
+    customDictionaryByLower = Set.of();
+    try {
+      spellcheckRequests.onComplete();
+    } catch (Exception ignored) {
+    }
+    try {
+      if (!spellcheckSubscription.isDisposed()) {
+        spellcheckSubscription.dispose();
+      }
+    } catch (Exception ignored) {
+    }
   }
 
   Optional<MisspelledWord> misspelledWordAtCaret() {
@@ -434,7 +448,46 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
 
   private Single<SpellcheckOutcome> evaluateSpellcheckRequest(SpellcheckRequest request) {
     return Single.fromCallable(() -> evaluateSpellcheckRequestBlocking(request))
-        .subscribeOn(SPELLCHECK_SCHEDULER);
+        .subscribeOn(ensureSpellcheckScheduler());
+  }
+
+  static void shutdownSharedResources() {
+    synchronized (SPELLCHECK_EXECUTOR_LOCK) {
+      if (spellcheckExecutor != null) {
+        try {
+          spellcheckExecutor.shutdownNow();
+        } catch (Exception ignored) {
+        }
+      }
+      spellcheckExecutor = null;
+      spellcheckScheduler = null;
+    }
+    CHECKERS_BY_THREAD.remove();
+    PREFIX_PRIORITY_BY_LANG.clear();
+    PREFIX_LEXICON_BY_LANG.clear();
+  }
+
+  private static ExecutorService ensureSpellcheckExecutor() {
+    synchronized (SPELLCHECK_EXECUTOR_LOCK) {
+      if (spellcheckExecutor == null
+          || spellcheckExecutor.isShutdown()
+          || spellcheckExecutor.isTerminated()) {
+        spellcheckExecutor = newSpellcheckExecutor();
+        spellcheckScheduler = Schedulers.from(spellcheckExecutor);
+      }
+      return spellcheckExecutor;
+    }
+  }
+
+  private static io.reactivex.rxjava3.core.Scheduler ensureSpellcheckScheduler() {
+    synchronized (SPELLCHECK_EXECUTOR_LOCK) {
+      ensureSpellcheckExecutor();
+      return spellcheckScheduler;
+    }
+  }
+
+  private static ExecutorService newSpellcheckExecutor() {
+    return VirtualThreads.newSingleThreadExecutor("ircafe-spellcheck");
   }
 
   private SpellcheckOutcome evaluateSpellcheckRequestBlocking(SpellcheckRequest request) {

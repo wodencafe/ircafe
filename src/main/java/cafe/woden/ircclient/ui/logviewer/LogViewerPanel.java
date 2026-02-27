@@ -118,7 +118,8 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
 
   private final ChatLogViewerService service;
   private final java.util.function.Function<String, List<String>> openChannelsProvider;
-  private final ExecutorService exec = VirtualThreads.newSingleThreadExecutor("ircafe-log-viewer");
+  private final ExecutorService exec;
+  private final boolean ownsExecutor;
   private final AtomicLong requestSeq = new AtomicLong(0);
 
   private Future<?> runningTask;
@@ -183,10 +184,34 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
   public LogViewerPanel(
       ChatLogViewerService service,
       java.util.function.Function<String, List<String>> openChannelsProvider) {
+    this(
+        service,
+        openChannelsProvider,
+        VirtualThreads.newSingleThreadExecutor("ircafe-log-viewer"),
+        true);
+  }
+
+  public LogViewerPanel(
+      ChatLogViewerService service,
+      java.util.function.Function<String, List<String>> openChannelsProvider,
+      ExecutorService exec) {
+    this(service, openChannelsProvider, exec, false);
+  }
+
+  private LogViewerPanel(
+      ChatLogViewerService service,
+      java.util.function.Function<String, List<String>> openChannelsProvider,
+      ExecutorService exec,
+      boolean ownsExecutor) {
     super(new BorderLayout());
     this.service = Objects.requireNonNull(service, "service");
     this.openChannelsProvider =
         (openChannelsProvider == null) ? sid -> List.of() : openChannelsProvider;
+    this.exec = Objects.requireNonNull(exec, "exec");
+    if (this.exec.isShutdown()) {
+      throw new IllegalArgumentException("exec must be active");
+    }
+    this.ownsExecutor = ownsExecutor;
 
     Date now = new Date();
     Date dayAgo = new Date(Math.max(0L, now.getTime() - Duration.ofDays(1).toMillis()));
@@ -229,7 +254,9 @@ public final class LogViewerPanel extends JPanel implements AutoCloseable {
       } catch (Exception ignored) {
       }
     }
-    exec.shutdownNow();
+    if (ownsExecutor) {
+      exec.shutdownNow();
+    }
     SwingUtilities.invokeLater(
         () -> {
           if (channelPickerPopup != null) {

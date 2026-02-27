@@ -464,6 +464,26 @@ class PircbotxAwayNotifyInputParserTest {
   }
 
   @Test
+  void capAckUpdatesDraftUnreactAndChannelContextState() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :draft/unreact draft/channel-context",
+        List.of("me", "ACK", ":draft/unreact draft/channel-context"),
+        ImmutableMap.of());
+
+    assertTrue(conn.draftUnreactCapAcked.get());
+    assertTrue(conn.draftChannelContextCapAcked.get());
+  }
+
+  @Test
   void capLsLearnsStsPolicyWhenConnectionIsSecure() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     conn.connectedHost.set("irc.example.net");
@@ -633,6 +653,37 @@ class PircbotxAwayNotifyInputParserTest {
                     e instanceof IrcEvent.MessageRedactionObserved r
                         && "bob".equals(r.from())
                         && "#ircafe".equals(r.target())
+                        && "abc123".equals(r.messageId())));
+  }
+
+  @Test
+  void unreactTagUsesChannelContextTargetWhenPresent() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "me",
+        source("bob"),
+        "TAGMSG",
+        "@+draft/channel-context=#ircafe;+draft/reply=abc123;+draft/unreact=:+1: :bob!u@h TAGMSG me",
+        List.of("me"),
+        ImmutableMap.of(
+            "draft/channel-context", "#ircafe",
+            "draft/reply", "abc123",
+            "draft/unreact", ":+1:"));
+
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                e ->
+                    e instanceof IrcEvent.MessageUnreactObserved r
+                        && "bob".equals(r.from())
+                        && "#ircafe".equals(r.target())
+                        && ":+1:".equals(r.reaction())
                         && "abc123".equals(r.messageId())));
   }
 

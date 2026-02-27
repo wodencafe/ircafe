@@ -61,6 +61,11 @@ public final class Ircv3DraftNormalizer {
         kept.add(part);
         continue;
       }
+      if ("draft/unreact".equals(key)) {
+        sawReactTag = true;
+        kept.add(part);
+        continue;
+      }
       kept.add(part);
     }
 

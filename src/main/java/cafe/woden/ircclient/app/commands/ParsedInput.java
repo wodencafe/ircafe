@@ -53,6 +53,7 @@ public sealed interface ParsedInput
         ParsedInput.Help,
         ParsedInput.ReplyMessage,
         ParsedInput.ReactMessage,
+        ParsedInput.UnreactMessage,
         ParsedInput.EditMessage,
         ParsedInput.RedactMessage,
         ParsedInput.Filter,
@@ -247,6 +248,13 @@ public sealed interface ParsedInput
    * <p>Internal/advanced IRCv3 compose helper used by the quick reaction picker UI.
    */
   record ReactMessage(String messageId, String reaction) implements ParsedInput {}
+
+  /**
+   * /unreact <msgid> <reaction-token>
+   *
+   * <p>Internal/advanced IRCv3 compose helper used to remove a prior reaction token.
+   */
+  record UnreactMessage(String messageId, String reaction) implements ParsedInput {}
 
   /**
    * /edit <msgid> <message>

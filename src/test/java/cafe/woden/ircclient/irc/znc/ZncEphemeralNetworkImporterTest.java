@@ -12,6 +12,8 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -47,7 +49,7 @@ class ZncEphemeralNetworkImporterTest {
     when(irc.connect(anyString())).thenReturn(Completable.complete());
 
     ZncEphemeralNetworkImporter importer =
-        new ZncEphemeralNetworkImporter(configured, ephemeral, autoConnect, irc);
+        new ZncEphemeralNetworkImporter(configured, ephemeral, autoConnect, runtime, irc);
 
     importer.onNetworkDiscovered(new ZncNetwork("znc", "Libera.Chat", true));
 
@@ -87,7 +89,7 @@ class ZncEphemeralNetworkImporterTest {
     when(irc.connect(anyString())).thenReturn(Completable.complete());
 
     ZncEphemeralNetworkImporter importer =
-        new ZncEphemeralNetworkImporter(configured, ephemeral, autoConnect, irc);
+        new ZncEphemeralNetworkImporter(configured, ephemeral, autoConnect, runtime, irc);
     ZncNetwork net = new ZncNetwork("znc", "oftc", false);
 
     importer.onNetworkDiscovered(net);
@@ -126,7 +128,7 @@ class ZncEphemeralNetworkImporterTest {
     when(irc.connect(anyString())).thenReturn(Completable.complete());
 
     ZncEphemeralNetworkImporter importer =
-        new ZncEphemeralNetworkImporter(configured, ephemeral, autoConnect, irc);
+        new ZncEphemeralNetworkImporter(configured, ephemeral, autoConnect, runtime, irc);
 
     importer.onNetworkDiscovered(new ZncNetwork("znc", "libera", true));
     importer.onNetworkDiscovered(new ZncNetwork("znc", "oftc", true));
@@ -136,5 +138,47 @@ class ZncEphemeralNetworkImporterTest {
     importer.onOriginDisconnected("znc");
 
     assertEquals(0, ephemeral.serverIds().size());
+  }
+
+  @Test
+  void importsKnownChannelsIntoEphemeralAutoJoinWhenAutoReattachEnabled() throws Exception {
+    IrcProperties.Server.Sasl sasl = new IrcProperties.Server.Sasl(false, "", "", "PLAIN", null);
+    IrcProperties.Server bouncer =
+        new IrcProperties.Server(
+            "znc",
+            "bouncer.example",
+            6697,
+            true,
+            "pass",
+            "nick",
+            "user",
+            "Real",
+            sasl,
+            List.of(),
+            List.of(),
+            null);
+
+    IrcProperties props = new IrcProperties(null, List.of(bouncer));
+    Path cfg = Files.createTempFile("ircafe-znc-autojoin-", ".yml");
+    RuntimeConfigStore runtime = new RuntimeConfigStore(cfg.toString(), props);
+    runtime.rememberJoinedChannel("znc:znc:libera.chat", "#ircafe");
+    runtime.rememberJoinedChannel("znc:znc:libera.chat", "#off");
+    runtime.rememberServerTreeChannelAutoReattach("znc:znc:libera.chat", "#off", false);
+
+    ServerRegistry configured = new ServerRegistry(props, runtime);
+    EphemeralServerRegistry ephemeral = new EphemeralServerRegistry();
+    ZncAutoConnectStore autoConnect =
+        new ZncAutoConnectStore(
+            new ZncProperties(Map.of(), new ZncProperties.Discovery(true)), runtime);
+    IrcClientService irc = mock(IrcClientService.class);
+    when(irc.connect(anyString())).thenReturn(Completable.complete());
+
+    ZncEphemeralNetworkImporter importer =
+        new ZncEphemeralNetworkImporter(configured, ephemeral, autoConnect, runtime, irc);
+    importer.onNetworkDiscovered(new ZncNetwork("znc", "Libera.Chat", true));
+
+    IrcProperties.Server imported = ephemeral.require("znc:znc:libera.chat");
+    assertTrue(imported.autoJoin().contains("#ircafe"));
+    assertFalse(imported.autoJoin().contains("#off"));
   }
 }

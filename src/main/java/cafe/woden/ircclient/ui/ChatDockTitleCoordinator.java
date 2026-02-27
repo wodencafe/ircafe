@@ -43,6 +43,7 @@ final class ChatDockTitleCoordinator {
     if (target.isNotifications()) return "Notifications";
     if (target.isChannelList()) return "Channel List";
     if (target.isWeechatFilters()) return "Filters";
+    if (target.isIgnores()) return "Ignores";
     if (target.isDccTransfers()) return "DCC Transfers";
     if (target.isMonitorGroup()) return "Monitor";
     if (target.isInterceptorsGroup()) return "Interceptors";

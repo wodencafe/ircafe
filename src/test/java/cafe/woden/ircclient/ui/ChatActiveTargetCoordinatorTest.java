@@ -186,6 +186,55 @@ class ChatActiveTargetCoordinatorTest {
     assertEquals(42, readMarkerOffset.get());
   }
 
+  @Test
+  void setActiveTargetChannelToIgnoresAndBackRestoresDraftAndInputState() {
+    MessageInputPanel inputPanel = mock(MessageInputPanel.class);
+    when(inputPanel.getDraftText()).thenReturn("channel draft", "");
+    when(inputPanel.isVisible()).thenReturn(true, false);
+    ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
+    StyledDocument doc = new DefaultStyledDocument();
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    TargetRef ignores = TargetRef.ignores("libera");
+    AtomicReference<TargetRef> activeTarget = new AtomicReference<>(channel);
+    Map<TargetRef, String> drafts = new HashMap<>();
+    AtomicReference<TargetRef> readMarkerTarget = new AtomicReference<>();
+    AtomicInteger readMarkerOffset = new AtomicInteger(Integer.MIN_VALUE);
+
+    when(transcripts.document(channel)).thenReturn(doc);
+    when(transcripts.readMarkerJumpOffset(channel)).thenReturn(7);
+
+    ChatActiveTargetCoordinator coordinator =
+        coordinator(
+            activeTarget,
+            inputPanel,
+            drafts,
+            target ->
+                target.isIgnores()
+                    ? ChatTargetViewRouter.TargetViewType.UI_ONLY
+                    : ChatTargetViewRouter.TargetViewType.TRANSCRIPT,
+            transcripts,
+            (target, offset) -> {
+              readMarkerTarget.set(target);
+              readMarkerOffset.set(offset);
+            });
+
+    coordinator.setActiveTarget(ignores);
+    coordinator.setActiveTarget(channel);
+
+    assertEquals(channel, activeTarget.get());
+    assertEquals("channel draft", drafts.get(channel));
+    verify(inputPanel).setVisible(false);
+    verify(inputPanel).setVisible(true);
+    verify(inputPanel).setDraftText("");
+    verify(inputPanel).setDraftText("channel draft");
+    verify(inputPanel).focusInput();
+    verify(transcripts).ensureTargetExists(channel);
+    verify(transcripts).document(channel);
+    verify(transcripts).readMarkerJumpOffset(channel);
+    assertEquals(channel, readMarkerTarget.get());
+    assertEquals(7, readMarkerOffset.get());
+  }
+
   private static ChatActiveTargetCoordinator coordinator(
       AtomicReference<TargetRef> activeTarget,
       MessageInputPanel inputPanel,

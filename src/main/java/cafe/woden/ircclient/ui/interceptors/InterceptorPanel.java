@@ -87,8 +87,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
   private final InterceptorStore store;
   private final CompositeDisposable disposables = new CompositeDisposable();
-  private final ExecutorService refreshExecutor =
-      VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-panel-refresh");
+  private final ExecutorService refreshExecutor;
+  private final boolean ownsRefreshExecutor;
   private final AtomicLong refreshSeq = new AtomicLong(0L);
 
   private final JLabel title = new JLabel("Interceptor");
@@ -156,8 +156,22 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private Consumer<TargetRef> onSelectTarget;
 
   public InterceptorPanel(InterceptorStore store) {
+    this(store, VirtualThreads.newSingleThreadExecutor("ircafe-interceptor-panel-refresh"), true);
+  }
+
+  public InterceptorPanel(InterceptorStore store, ExecutorService refreshExecutor) {
+    this(store, refreshExecutor, false);
+  }
+
+  private InterceptorPanel(
+      InterceptorStore store, ExecutorService refreshExecutor, boolean ownsRefreshExecutor) {
     super(new BorderLayout());
     this.store = Objects.requireNonNull(store, "store");
+    this.refreshExecutor = Objects.requireNonNull(refreshExecutor, "refreshExecutor");
+    if (this.refreshExecutor.isShutdown()) {
+      throw new IllegalArgumentException("refreshExecutor must be active");
+    }
+    this.ownsRefreshExecutor = ownsRefreshExecutor;
 
     buildHeader();
     buildBody();
@@ -204,7 +218,9 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   public void close() {
     refreshSeq.incrementAndGet();
     disposables.dispose();
-    refreshExecutor.shutdownNow();
+    if (ownsRefreshExecutor) {
+      refreshExecutor.shutdownNow();
+    }
   }
 
   private void buildHeader() {
