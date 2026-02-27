@@ -302,7 +302,8 @@ class IrcMediatorMockVerifyTest {
     invokeOnServerIrcEvent(new ServerIrcEvent("libera", event));
 
     verify(targetCoordinator).onUserSetNameObserved("libera", event);
-    verify(ui).appendStatusAt(any(), any(), eq("(setname)"), eq("alice set name to: Alice Liddell"));
+    verify(ui)
+        .appendStatusAt(any(), any(), eq("(setname)"), eq("alice set name to: Alice Liddell"));
   }
 
   private void invokeHandleOutgoingLine(String raw) throws Exception {
