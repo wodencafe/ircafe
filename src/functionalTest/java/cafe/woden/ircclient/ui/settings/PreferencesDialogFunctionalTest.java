@@ -210,8 +210,7 @@ class PreferencesDialogFunctionalTest {
             "buildTrayControls",
             testUiSettings(),
             new NotificationSoundSettings(true, "NOTIF_1", true, "sounds/custom.wav"),
-            new PushyProperties(false, null, null, null, null, null, null, null),
-            closeables);
+            new PushyProperties(false, null, null, null, null, null, null, null));
     JPanel trayPanel = (JPanel) invoke(dialog, "buildTrayNotificationsPanel", trayControls);
     assertNotNull(findTabbedPaneWithTab(trayPanel, "Sounds"));
 
