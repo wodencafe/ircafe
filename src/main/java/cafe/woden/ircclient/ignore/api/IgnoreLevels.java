@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.ignore;
+package cafe.woden.ircclient.ignore.api;
 
 import java.util.ArrayList;
 import java.util.Collection;

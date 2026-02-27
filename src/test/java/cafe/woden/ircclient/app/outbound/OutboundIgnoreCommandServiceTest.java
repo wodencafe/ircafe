@@ -12,8 +12,10 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.ignore.IgnoreListService;
-import cafe.woden.ircclient.ignore.IgnoreTextPatternMode;
+import cafe.woden.ircclient.ignore.api.IgnoreAddMaskResult;
+import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
+import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
+import cafe.woden.ircclient.ignore.api.IgnoreTextPatternMode;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -21,15 +23,17 @@ class OutboundIgnoreCommandServiceTest {
 
   private final UiPort ui = mock(UiPort.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
-  private final IgnoreListService ignoreListService = mock(IgnoreListService.class);
+  private final IgnoreListQueryPort ignoreListQueryPort = mock(IgnoreListQueryPort.class);
+  private final IgnoreListCommandPort ignoreListCommandPort = mock(IgnoreListCommandPort.class);
 
   private final OutboundIgnoreCommandService service =
-      new OutboundIgnoreCommandService(ui, targetCoordinator, ignoreListService);
+      new OutboundIgnoreCommandService(
+          ui, targetCoordinator, ignoreListQueryPort, ignoreListCommandPort);
 
   @Test
   void ignoreWithoutArgsListsMasksForActiveServer() {
     when(targetCoordinator.getActiveTarget()).thenReturn(new TargetRef("libera", "#ircafe"));
-    when(ignoreListService.listMasks("libera")).thenReturn(List.of("alice!*@*", "*!*@bad.host"));
+    when(ignoreListQueryPort.listMasks("libera")).thenReturn(List.of("alice!*@*", "*!*@bad.host"));
 
     service.handleIgnore("   ");
 
@@ -42,8 +46,8 @@ class OutboundIgnoreCommandServiceTest {
   @Test
   void ignoreListShowsRepliesMetadataWhenConfigured() {
     when(targetCoordinator.getActiveTarget()).thenReturn(new TargetRef("libera", "#ircafe"));
-    when(ignoreListService.listMasks("libera")).thenReturn(List.of("alice!*@*"));
-    when(ignoreListService.repliesForHardMask("libera", "alice!*@*")).thenReturn(true);
+    when(ignoreListQueryPort.listMasks("libera")).thenReturn(List.of("alice!*@*"));
+    when(ignoreListQueryPort.repliesForHardMask("libera", "alice!*@*")).thenReturn(true);
 
     service.handleIgnore(" ");
 
@@ -55,7 +59,7 @@ class OutboundIgnoreCommandServiceTest {
   @Test
   void ignoreParsesIrssiLevelsAndAddsMask() {
     when(targetCoordinator.getActiveTarget()).thenReturn(new TargetRef("libera", "#ircafe"));
-    when(ignoreListService.addMaskWithLevels(
+    when(ignoreListCommandPort.addMaskWithLevels(
             "libera",
             "*!*@bad.host",
             List.of("MSGS", "NOTICES"),
@@ -64,11 +68,11 @@ class OutboundIgnoreCommandServiceTest {
             "",
             IgnoreTextPatternMode.GLOB,
             false))
-        .thenReturn(IgnoreListService.AddMaskResult.ADDED);
+        .thenReturn(IgnoreAddMaskResult.ADDED);
 
     service.handleIgnore("MSGS NOTICES *!*@bad.host");
 
-    verify(ignoreListService)
+    verify(ignoreListCommandPort)
         .addMaskWithLevels(
             "libera",
             "*!*@bad.host",
@@ -90,13 +94,13 @@ class OutboundIgnoreCommandServiceTest {
   @Test
   void ignoreWithNetworkOptionCanWorkWithoutActiveTarget() {
     when(targetCoordinator.getActiveTarget()).thenReturn(null);
-    when(ignoreListService.addMaskWithLevels(
+    when(ignoreListCommandPort.addMaskWithLevels(
             "libera", "badnick", List.of(), List.of(), null, "", IgnoreTextPatternMode.GLOB, false))
-        .thenReturn(IgnoreListService.AddMaskResult.ADDED);
+        .thenReturn(IgnoreAddMaskResult.ADDED);
 
     service.handleIgnore("-network libera badnick");
 
-    verify(ignoreListService)
+    verify(ignoreListCommandPort)
         .addMaskWithLevels(
             "libera", "badnick", List.of(), List.of(), null, "", IgnoreTextPatternMode.GLOB, false);
     verify(ui).appendStatus(new TargetRef("libera", "status"), "(ignore)", "Ignoring: badnick!*@*");
@@ -105,7 +109,7 @@ class OutboundIgnoreCommandServiceTest {
   @Test
   void ignoreParsesChannelsOptionAndStoresChannelScopedRule() {
     when(targetCoordinator.getActiveTarget()).thenReturn(new TargetRef("libera", "#ircafe"));
-    when(ignoreListService.addMaskWithLevels(
+    when(ignoreListCommandPort.addMaskWithLevels(
             "libera",
             "*!*@bad.host",
             List.of("MSGS"),
@@ -114,11 +118,11 @@ class OutboundIgnoreCommandServiceTest {
             "",
             IgnoreTextPatternMode.GLOB,
             false))
-        .thenReturn(IgnoreListService.AddMaskResult.ADDED);
+        .thenReturn(IgnoreAddMaskResult.ADDED);
 
     service.handleIgnore("-channels #ircafe,#ops MSGS *!*@bad.host");
 
-    verify(ignoreListService)
+    verify(ignoreListCommandPort)
         .addMaskWithLevels(
             "libera",
             "*!*@bad.host",
@@ -135,7 +139,7 @@ class OutboundIgnoreCommandServiceTest {
   @Test
   void ignoreParsesPatternRegexpAndStoresPatternMetadata() {
     when(targetCoordinator.getActiveTarget()).thenReturn(new TargetRef("libera", "#ircafe"));
-    when(ignoreListService.addMaskWithLevels(
+    when(ignoreListCommandPort.addMaskWithLevels(
             "libera",
             "*!*@bad.host",
             List.of("MSGS"),
@@ -144,11 +148,11 @@ class OutboundIgnoreCommandServiceTest {
             "afk|brb",
             IgnoreTextPatternMode.REGEXP,
             false))
-        .thenReturn(IgnoreListService.AddMaskResult.ADDED);
+        .thenReturn(IgnoreAddMaskResult.ADDED);
 
     service.handleIgnore("-pattern afk|brb -regexp MSGS *!*@bad.host");
 
-    verify(ignoreListService)
+    verify(ignoreListCommandPort)
         .addMaskWithLevels(
             "libera",
             "*!*@bad.host",
@@ -163,7 +167,7 @@ class OutboundIgnoreCommandServiceTest {
   @Test
   void ignoreParsesTimeOptionAndStoresAbsoluteExpiry() {
     when(targetCoordinator.getActiveTarget()).thenReturn(new TargetRef("libera", "#ircafe"));
-    when(ignoreListService.addMaskWithLevels(
+    when(ignoreListCommandPort.addMaskWithLevels(
             eq("libera"),
             eq("*!*@bad.host"),
             eq(List.of("MSGS")),
@@ -172,13 +176,13 @@ class OutboundIgnoreCommandServiceTest {
             eq(""),
             eq(IgnoreTextPatternMode.GLOB),
             eq(false)))
-        .thenReturn(IgnoreListService.AddMaskResult.ADDED);
+        .thenReturn(IgnoreAddMaskResult.ADDED);
 
     long before = System.currentTimeMillis();
     service.handleIgnore("-time 10min MSGS *!*@bad.host");
     long after = System.currentTimeMillis();
 
-    verify(ignoreListService)
+    verify(ignoreListCommandPort)
         .addMaskWithLevels(
             eq("libera"),
             eq("*!*@bad.host"),
@@ -198,7 +202,7 @@ class OutboundIgnoreCommandServiceTest {
 
     service.handleIgnore("-time nope MSGS *!*@bad.host");
 
-    verify(ignoreListService, never())
+    verify(ignoreListCommandPort, never())
         .addMaskWithLevels(
             eq("libera"),
             eq("*!*@bad.host"),
@@ -219,7 +223,7 @@ class OutboundIgnoreCommandServiceTest {
 
     service.handleIgnore("-pattern ( -regexp MSGS *!*@bad.host");
 
-    verify(ignoreListService, never())
+    verify(ignoreListCommandPort, never())
         .addMaskWithLevels(
             eq("libera"),
             eq("*!*@bad.host"),
@@ -239,7 +243,7 @@ class OutboundIgnoreCommandServiceTest {
   @Test
   void ignoreParsesRepliesOptionAndStoresRepliesMetadata() {
     when(targetCoordinator.getActiveTarget()).thenReturn(new TargetRef("libera", "#ircafe"));
-    when(ignoreListService.addMaskWithLevels(
+    when(ignoreListCommandPort.addMaskWithLevels(
             "libera",
             "*!*@bad.host",
             List.of("MSGS"),
@@ -248,11 +252,11 @@ class OutboundIgnoreCommandServiceTest {
             "",
             IgnoreTextPatternMode.GLOB,
             true))
-        .thenReturn(IgnoreListService.AddMaskResult.ADDED);
+        .thenReturn(IgnoreAddMaskResult.ADDED);
 
     service.handleIgnore("-replies MSGS *!*@bad.host");
 
-    verify(ignoreListService)
+    verify(ignoreListCommandPort)
         .addMaskWithLevels(
             "libera",
             "*!*@bad.host",
@@ -267,12 +271,12 @@ class OutboundIgnoreCommandServiceTest {
   @Test
   void unignoreSupportsNumericIndex() {
     when(targetCoordinator.getActiveTarget()).thenReturn(new TargetRef("libera", "#ircafe"));
-    when(ignoreListService.listMasks("libera")).thenReturn(List.of("a!*@*", "b!*@*"));
-    when(ignoreListService.removeMask("libera", "b!*@*")).thenReturn(true);
+    when(ignoreListQueryPort.listMasks("libera")).thenReturn(List.of("a!*@*", "b!*@*"));
+    when(ignoreListCommandPort.removeMask("libera", "b!*@*")).thenReturn(true);
 
     service.handleUnignore("2");
 
-    verify(ignoreListService).removeMask("libera", "b!*@*");
+    verify(ignoreListCommandPort).removeMask("libera", "b!*@*");
     verify(ui)
         .appendStatus(new TargetRef("libera", "status"), "(unignore)", "Removed ignore: b!*@*");
   }
@@ -280,11 +284,11 @@ class OutboundIgnoreCommandServiceTest {
   @Test
   void ignoreExceptOptionUsesUnignoreCompatibilityPath() {
     when(targetCoordinator.getActiveTarget()).thenReturn(new TargetRef("libera", "#ircafe"));
-    when(ignoreListService.removeMask("libera", "badnick")).thenReturn(true);
+    when(ignoreListCommandPort.removeMask("libera", "badnick")).thenReturn(true);
 
     service.handleIgnore("-except badnick");
 
-    verify(ignoreListService).removeMask("libera", "badnick");
+    verify(ignoreListCommandPort).removeMask("libera", "badnick");
     verify(ui)
         .appendStatus(
             new TargetRef("libera", "status"), "(unignore)", "Removed ignore: badnick!*@*");

@@ -52,6 +52,12 @@ import cafe.woden.ircclient.diagnostics.JhiccupDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.diagnostics.RuntimeJfrService;
 import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
+import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ignore.IgnoreStatusService;
+import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
+import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
+import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
+import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.interceptors.InterceptorHit;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
@@ -117,6 +123,9 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(ActiveTargetPort.class, ApplicationLayer.class);
     assertAnnotated(TrayNotificationsPort.class, ApplicationLayer.class);
     assertAnnotated(UiSettingsPort.class, ApplicationLayer.class);
+    assertAnnotated(InboundIgnorePolicyPort.class, ApplicationLayer.class);
+    assertAnnotated(IgnoreListQueryPort.class, ApplicationLayer.class);
+    assertAnnotated(IgnoreListCommandPort.class, ApplicationLayer.class);
     assertAnnotated(ChatHistoryIngestionPort.class, ApplicationLayer.class);
     assertAnnotated(ChatHistoryIngestEventsPort.class, ApplicationLayer.class);
     assertAnnotated(ChatHistoryBatchEventsPort.class, ApplicationLayer.class);
@@ -140,6 +149,9 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(NotificationRuleMatcher.class, ApplicationLayer.class);
     assertAnnotated(IrcEventNotificationRulesBus.class, ApplicationLayer.class);
     assertAnnotated(DccTransferStore.class, ApplicationLayer.class);
+    assertAnnotated(IgnoreListService.class, ApplicationLayer.class);
+    assertAnnotated(IgnoreStatusService.class, ApplicationLayer.class);
+    assertAnnotated(InboundIgnorePolicy.class, ApplicationLayer.class);
 
     assertAnnotated(SwingUiPort.class, InterfaceLayer.class);
     assertAnnotated(PircbotxIrcClientService.class, InfrastructureLayer.class);
@@ -172,6 +184,14 @@ class JmoleculesIncrementalAdoptionTest {
     assertTrue(
         NotificationRuleMatcherPort.class.isInterface(),
         "NotificationRuleMatcherPort should remain an interface");
+    assertTrue(
+        InboundIgnorePolicyPort.class.isInterface(),
+        "InboundIgnorePolicyPort should remain an interface");
+    assertTrue(
+        IgnoreListQueryPort.class.isInterface(), "IgnoreListQueryPort should remain an interface");
+    assertTrue(
+        IgnoreListCommandPort.class.isInterface(),
+        "IgnoreListCommandPort should remain an interface");
   }
 
   @Test
@@ -200,6 +220,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertComponentPackageAnnotated("cafe.woden.ircclient.interceptors", ApplicationLayer.class);
     assertComponentPackageAnnotated("cafe.woden.ircclient.notifications", ApplicationLayer.class);
     assertComponentPackageAnnotated("cafe.woden.ircclient.dcc", ApplicationLayer.class);
+    assertComponentPackageAnnotated("cafe.woden.ircclient.ignore", ApplicationLayer.class);
     assertComponentPackageAnnotated("cafe.woden.ircclient.app.state", ApplicationLayer.class);
   }
 

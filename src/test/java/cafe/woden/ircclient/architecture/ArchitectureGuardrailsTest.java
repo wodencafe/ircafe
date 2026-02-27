@@ -3,6 +3,8 @@ package cafe.woden.ircclient.architecture;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
@@ -12,6 +14,16 @@ import com.tngtech.archunit.lang.ArchRule;
     packages = "cafe.woden.ircclient",
     importOptions = {ImportOption.DoNotIncludeTests.class})
 class ArchitectureGuardrailsTest {
+
+  private static final DescribedPredicate<JavaClass> IGNORE_INTERNAL_CLASSES =
+      new DescribedPredicate<>("ignore internal classes (outside ignore::api)") {
+        @Override
+        public boolean test(JavaClass input) {
+          String pkg = input.getPackageName();
+          if (!pkg.startsWith("cafe.woden.ircclient.ignore")) return false;
+          return !pkg.startsWith("cafe.woden.ircclient.ignore.api");
+        }
+      };
 
   @ArchTest
   static final ArchRule app_should_not_depend_on_ui_package_directly =
@@ -55,6 +67,15 @@ class ArchitectureGuardrailsTest {
           .resideInAPackage("cafe.woden.ircclient.notifications..")
           .because(
               "application code should depend on app::api notification ports, not notification module internals");
+
+  @ArchTest
+  static final ArchRule app_should_not_depend_on_ignore_module_internals_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app..")
+          .should()
+          .dependOnClassesThat(IGNORE_INTERNAL_CLASSES)
+          .because("application code should only depend on ignore::api, not ignore internals");
 
   @ArchTest
   static final ArchRule app_should_not_depend_on_diagnostics_module_directly =

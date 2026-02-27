@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.ignore;
 
+import cafe.woden.ircclient.ignore.api.IgnoreLevels;
+import cafe.woden.ircclient.ignore.api.IgnoreTextPatternMode;
 import cafe.woden.ircclient.irc.UserListStore;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
@@ -8,10 +10,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Centralized ignore matching service. */
 @Component
+@ApplicationLayer
 public class IgnoreStatusService {
 
   /**

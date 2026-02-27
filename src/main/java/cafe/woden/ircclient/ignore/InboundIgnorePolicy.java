@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.ignore;
 
+import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import java.util.List;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -9,15 +11,8 @@ import org.springframework.stereotype.Component;
  * lists.
  */
 @Component
-public class InboundIgnorePolicy {
-
-  public enum Decision {
-    ALLOW,
-
-    SOFT_SPOILER,
-
-    HARD_DROP
-  }
+@ApplicationLayer
+public class InboundIgnorePolicy implements InboundIgnorePolicyPort {
 
   private final IgnoreListService ignoreListService;
   private final IgnoreStatusService ignoreStatusService;
@@ -28,50 +23,7 @@ public class InboundIgnorePolicy {
     this.ignoreStatusService = ignoreStatusService;
   }
 
-  /**
-   * Decide how a message from a sender should be handled.
-   *
-   * @param serverId server id
-   * @param fromNick sender nick
-   * @param hostmask optional full hostmask (nick!ident@host) if already known; may be null
-   * @param isCtcp whether this is a CTCP request/reply (hard ignore can optionally exclude CTCP)
-   */
-  public Decision decide(String serverId, String fromNick, String hostmask, boolean isCtcp) {
-    return decide(serverId, fromNick, hostmask, isCtcp, List.of());
-  }
-
-  /**
-   * Decide how a message from a sender should be handled in a specific inbound level context.
-   *
-   * <p>Level values follow irssi naming (for example: MSGS, PUBLIC, NOTICES, CTCPS, ACTIONS).
-   */
-  public Decision decide(
-      String serverId,
-      String fromNick,
-      String hostmask,
-      boolean isCtcp,
-      List<String> inboundLevels) {
-    return decide(serverId, fromNick, hostmask, isCtcp, inboundLevels, "", "");
-  }
-
-  /**
-   * Decide how a message from a sender should be handled in a specific inbound level and channel
-   * context.
-   */
-  public Decision decide(
-      String serverId,
-      String fromNick,
-      String hostmask,
-      boolean isCtcp,
-      List<String> inboundLevels,
-      String inboundChannel) {
-    return decide(serverId, fromNick, hostmask, isCtcp, inboundLevels, inboundChannel, "");
-  }
-
-  /**
-   * Decide how a message from a sender should be handled in a specific inbound level/channel/text
-   * context.
-   */
+  @Override
   public Decision decide(
       String serverId,
       String fromNick,

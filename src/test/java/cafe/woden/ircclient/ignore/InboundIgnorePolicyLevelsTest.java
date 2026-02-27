@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 
 import cafe.woden.ircclient.config.IgnoreProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.UserListStore;
 import java.util.List;
 import java.util.Map;
@@ -68,13 +69,13 @@ class InboundIgnorePolicyLevelsTest {
     IgnoreStatusService status = new IgnoreStatusService(lists, mock(UserListStore.class));
     InboundIgnorePolicy policy = new InboundIgnorePolicy(lists, status);
 
-    InboundIgnorePolicy.Decision publicMessage =
+    InboundIgnorePolicyPort.Decision publicMessage =
         policy.decide("libera", "alice", "alice!id@bad.host", false, List.of("MSGS", "PUBLIC"));
-    InboundIgnorePolicy.Decision notice =
+    InboundIgnorePolicyPort.Decision notice =
         policy.decide("libera", "alice", "alice!id@bad.host", false, List.of("NOTICES"));
 
-    assertEquals(InboundIgnorePolicy.Decision.HARD_DROP, publicMessage);
-    assertEquals(InboundIgnorePolicy.Decision.ALLOW, notice);
+    assertEquals(InboundIgnorePolicyPort.Decision.HARD_DROP, publicMessage);
+    assertEquals(InboundIgnorePolicyPort.Decision.ALLOW, notice);
   }
 
   @Test
@@ -100,18 +101,18 @@ class InboundIgnorePolicyLevelsTest {
     IgnoreStatusService status = new IgnoreStatusService(lists, mock(UserListStore.class));
     InboundIgnorePolicy policy = new InboundIgnorePolicy(lists, status);
 
-    InboundIgnorePolicy.Decision inScopedChannel =
+    InboundIgnorePolicyPort.Decision inScopedChannel =
         policy.decide(
             "libera", "alice", "alice!id@bad.host", false, List.of("MSGS", "PUBLIC"), "#ircafe");
-    InboundIgnorePolicy.Decision inOtherChannel =
+    InboundIgnorePolicyPort.Decision inOtherChannel =
         policy.decide(
             "libera", "alice", "alice!id@bad.host", false, List.of("MSGS", "PUBLIC"), "#other");
-    InboundIgnorePolicy.Decision inPrivateMessage =
+    InboundIgnorePolicyPort.Decision inPrivateMessage =
         policy.decide("libera", "alice", "alice!id@bad.host", false, List.of("MSGS"), "");
 
-    assertEquals(InboundIgnorePolicy.Decision.HARD_DROP, inScopedChannel);
-    assertEquals(InboundIgnorePolicy.Decision.ALLOW, inOtherChannel);
-    assertEquals(InboundIgnorePolicy.Decision.ALLOW, inPrivateMessage);
+    assertEquals(InboundIgnorePolicyPort.Decision.HARD_DROP, inScopedChannel);
+    assertEquals(InboundIgnorePolicyPort.Decision.ALLOW, inOtherChannel);
+    assertEquals(InboundIgnorePolicyPort.Decision.ALLOW, inPrivateMessage);
   }
 
   @Test
@@ -138,10 +139,10 @@ class InboundIgnorePolicyLevelsTest {
     IgnoreStatusService status = new IgnoreStatusService(lists, mock(UserListStore.class));
     InboundIgnorePolicy policy = new InboundIgnorePolicy(lists, status);
 
-    InboundIgnorePolicy.Decision decision =
+    InboundIgnorePolicyPort.Decision decision =
         policy.decide("libera", "alice", "alice!id@bad.host", false, List.of("MSGS", "PUBLIC"));
 
-    assertEquals(InboundIgnorePolicy.Decision.ALLOW, decision);
+    assertEquals(InboundIgnorePolicyPort.Decision.ALLOW, decision);
     assertTrue(lists.listMasks("libera").isEmpty());
   }
 
@@ -168,7 +169,7 @@ class InboundIgnorePolicyLevelsTest {
     IgnoreStatusService status = new IgnoreStatusService(lists, mock(UserListStore.class));
     InboundIgnorePolicy policy = new InboundIgnorePolicy(lists, status);
 
-    InboundIgnorePolicy.Decision matching =
+    InboundIgnorePolicyPort.Decision matching =
         policy.decide(
             "libera",
             "alice",
@@ -177,7 +178,7 @@ class InboundIgnorePolicyLevelsTest {
             List.of("MSGS", "PUBLIC"),
             "#ircafe",
             "brb, back later");
-    InboundIgnorePolicy.Decision nonMatching =
+    InboundIgnorePolicyPort.Decision nonMatching =
         policy.decide(
             "libera",
             "alice",
@@ -187,8 +188,8 @@ class InboundIgnorePolicyLevelsTest {
             "#ircafe",
             "hello everyone");
 
-    assertEquals(InboundIgnorePolicy.Decision.HARD_DROP, matching);
-    assertEquals(InboundIgnorePolicy.Decision.ALLOW, nonMatching);
+    assertEquals(InboundIgnorePolicyPort.Decision.HARD_DROP, matching);
+    assertEquals(InboundIgnorePolicyPort.Decision.ALLOW, nonMatching);
   }
 
   @Test
@@ -214,7 +215,7 @@ class InboundIgnorePolicyLevelsTest {
     IgnoreStatusService status = new IgnoreStatusService(lists, mock(UserListStore.class));
     InboundIgnorePolicy policy = new InboundIgnorePolicy(lists, status);
 
-    InboundIgnorePolicy.Decision replyInChannel =
+    InboundIgnorePolicyPort.Decision replyInChannel =
         policy.decide(
             "libera",
             "bob",
@@ -223,7 +224,7 @@ class InboundIgnorePolicyLevelsTest {
             List.of("MSGS", "PUBLIC"),
             "#ircafe",
             "alice: ping");
-    InboundIgnorePolicy.Decision nonReplyInChannel =
+    InboundIgnorePolicyPort.Decision nonReplyInChannel =
         policy.decide(
             "libera",
             "bob",
@@ -232,12 +233,12 @@ class InboundIgnorePolicyLevelsTest {
             List.of("MSGS", "PUBLIC"),
             "#ircafe",
             "hello all");
-    InboundIgnorePolicy.Decision replyInPrivateMessage =
+    InboundIgnorePolicyPort.Decision replyInPrivateMessage =
         policy.decide(
             "libera", "bob", "bob!id@good.host", false, List.of("MSGS"), "", "alice: ping");
 
-    assertEquals(InboundIgnorePolicy.Decision.HARD_DROP, replyInChannel);
-    assertEquals(InboundIgnorePolicy.Decision.ALLOW, nonReplyInChannel);
-    assertEquals(InboundIgnorePolicy.Decision.ALLOW, replyInPrivateMessage);
+    assertEquals(InboundIgnorePolicyPort.Decision.HARD_DROP, replyInChannel);
+    assertEquals(InboundIgnorePolicyPort.Decision.ALLOW, nonReplyInChannel);
+    assertEquals(InboundIgnorePolicyPort.Decision.ALLOW, replyInPrivateMessage);
   }
 }

@@ -3,9 +3,12 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.ignore.IgnoreLevels;
-import cafe.woden.ircclient.ignore.IgnoreListService;
-import cafe.woden.ircclient.ignore.IgnoreTextPatternMode;
+import cafe.woden.ircclient.ignore.api.IgnoreAddMaskResult;
+import cafe.woden.ircclient.ignore.api.IgnoreLevels;
+import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
+import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
+import cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer;
+import cafe.woden.ircclient.ignore.api.IgnoreTextPatternMode;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -31,13 +34,18 @@ public class OutboundIgnoreCommandService {
 
   private final UiPort ui;
   private final TargetCoordinator targetCoordinator;
-  private final IgnoreListService ignoreListService;
+  private final IgnoreListQueryPort ignoreListQueryPort;
+  private final IgnoreListCommandPort ignoreListCommandPort;
 
   public OutboundIgnoreCommandService(
-      UiPort ui, TargetCoordinator targetCoordinator, IgnoreListService ignoreListService) {
+      UiPort ui,
+      TargetCoordinator targetCoordinator,
+      IgnoreListQueryPort ignoreListQueryPort,
+      IgnoreListCommandPort ignoreListCommandPort) {
     this.ui = ui;
     this.targetCoordinator = targetCoordinator;
-    this.ignoreListService = ignoreListService;
+    this.ignoreListQueryPort = ignoreListQueryPort;
+    this.ignoreListCommandPort = ignoreListCommandPort;
   }
 
   public void handleIgnore(String maskOrNick) {
@@ -90,8 +98,8 @@ public class OutboundIgnoreCommandService {
       }
     }
 
-    IgnoreListService.AddMaskResult addResult =
-        ignoreListService.addMaskWithLevels(
+    IgnoreAddMaskResult addResult =
+        ignoreListCommandPort.addMaskWithLevels(
             sid,
             spec.mask(),
             spec.levels(),
@@ -100,10 +108,10 @@ public class OutboundIgnoreCommandService {
             spec.patternText(),
             patternMode,
             spec.replies());
-    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(spec.mask());
-    if (addResult == IgnoreListService.AddMaskResult.ADDED) {
+    String stored = IgnoreMaskNormalizer.normalizeMaskOrNickToHostmask(spec.mask());
+    if (addResult == IgnoreAddMaskResult.ADDED) {
       ui.appendStatus(new TargetRef(sid, "status"), "(ignore)", "Ignoring: " + stored);
-    } else if (addResult == IgnoreListService.AddMaskResult.UPDATED) {
+    } else if (addResult == IgnoreAddMaskResult.UPDATED) {
       ui.appendStatus(new TargetRef(sid, "status"), "(ignore)", "Updated ignore: " + stored);
     } else {
       ui.appendStatus(new TargetRef(sid, "status"), "(ignore)", "Already ignored: " + stored);
@@ -129,7 +137,7 @@ public class OutboundIgnoreCommandService {
     String arg = spec.mask();
     if (isPositiveInteger(arg)) {
       int idx = Integer.parseInt(arg);
-      List<String> masks = ignoreListService.listMasks(sid);
+      List<String> masks = ignoreListQueryPort.listMasks(sid);
       if (idx < 1 || idx > masks.size()) {
         ui.appendStatus(
             new TargetRef(sid, "status"),
@@ -154,8 +162,8 @@ public class OutboundIgnoreCommandService {
     String arg = Objects.toString(maskOrNick, "").trim();
     if (arg.isEmpty()) return;
 
-    boolean removed = ignoreListService.removeMask(sid, arg);
-    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
+    boolean removed = ignoreListCommandPort.removeMask(sid, arg);
+    String stored = IgnoreMaskNormalizer.normalizeMaskOrNickToHostmask(arg);
     if (removed) {
       ui.appendStatus(new TargetRef(sid, "status"), "(unignore)", "Removed ignore: " + stored);
     } else {
@@ -182,9 +190,9 @@ public class OutboundIgnoreCommandService {
 
   private void handleIgnoreListForServer(String serverId, String tag) {
     String sid = Objects.toString(serverId, "").trim();
-    ignoreListService.pruneExpiredHardMasks(sid, System.currentTimeMillis());
+    ignoreListCommandPort.pruneExpiredHardMasks(sid, System.currentTimeMillis());
     TargetRef status = new TargetRef(sid, "status");
-    List<String> masks = ignoreListService.listMasks(sid);
+    List<String> masks = ignoreListQueryPort.listMasks(sid);
     if (masks.isEmpty()) {
       ui.appendStatus(status, tag, "Ignore list is empty.");
       return;
@@ -194,12 +202,12 @@ public class OutboundIgnoreCommandService {
     for (int i = 0; i < masks.size(); i++) {
       String m = masks.get(i);
       List<String> levels =
-          IgnoreLevels.normalizeConfigured(ignoreListService.levelsForHardMask(sid, m));
-      List<String> channels = ignoreListService.channelsForHardMask(sid, m);
-      long expiresAtEpochMs = ignoreListService.expiresAtEpochMsForHardMask(sid, m);
-      String pattern = Objects.toString(ignoreListService.patternForHardMask(sid, m), "").trim();
-      IgnoreTextPatternMode patternMode = ignoreListService.patternModeForHardMask(sid, m);
-      boolean replies = ignoreListService.repliesForHardMask(sid, m);
+          IgnoreLevels.normalizeConfigured(ignoreListQueryPort.levelsForHardMask(sid, m));
+      List<String> channels = ignoreListQueryPort.channelsForHardMask(sid, m);
+      long expiresAtEpochMs = ignoreListQueryPort.expiresAtEpochMsForHardMask(sid, m);
+      String pattern = Objects.toString(ignoreListQueryPort.patternForHardMask(sid, m), "").trim();
+      IgnoreTextPatternMode patternMode = ignoreListQueryPort.patternModeForHardMask(sid, m);
+      boolean replies = ignoreListQueryPort.repliesForHardMask(sid, m);
       List<String> metadata = new ArrayList<>();
       if (!(levels.size() == 1 && "ALL".equalsIgnoreCase(levels.getFirst()))) {
         metadata.add("levels=" + String.join(",", levels));
@@ -235,8 +243,8 @@ public class OutboundIgnoreCommandService {
       return;
     }
 
-    boolean added = ignoreListService.addSoftMask(at.serverId(), arg);
-    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
+    boolean added = ignoreListCommandPort.addSoftMask(at.serverId(), arg);
+    String stored = IgnoreMaskNormalizer.normalizeMaskOrNickToHostmask(arg);
     if (added) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"), "(soft-ignore)", "Soft-ignoring: " + stored);
@@ -262,8 +270,8 @@ public class OutboundIgnoreCommandService {
       return;
     }
 
-    boolean removed = ignoreListService.removeSoftMask(at.serverId(), arg);
-    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(arg);
+    boolean removed = ignoreListCommandPort.removeSoftMask(at.serverId(), arg);
+    String stored = IgnoreMaskNormalizer.normalizeMaskOrNickToHostmask(arg);
     if (removed) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
@@ -285,7 +293,7 @@ public class OutboundIgnoreCommandService {
       return;
     }
 
-    List<String> masks = ignoreListService.listSoftMasks(at.serverId());
+    List<String> masks = ignoreListQueryPort.listSoftMasks(at.serverId());
     TargetRef status = new TargetRef(at.serverId(), "status");
     if (masks.isEmpty()) {
       ui.appendStatus(status, "(soft-ignore)", "Soft-ignore list is empty.");

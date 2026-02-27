@@ -12,7 +12,8 @@ import cafe.woden.ircclient.app.state.PendingEchoMessageState;
 import cafe.woden.ircclient.app.state.PendingInviteState;
 import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
+import cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.nio.charset.StandardCharsets;
@@ -57,7 +58,7 @@ public class OutboundChatCommandService {
   private final PendingEchoMessageState pendingEchoMessageState;
   private final PendingInviteState pendingInviteState;
   private final WhoisRoutingState whoisRoutingState;
-  private final IgnoreListService ignoreListService;
+  private final IgnoreListCommandPort ignoreListService;
 
   public OutboundChatCommandService(
       IrcClientService irc,
@@ -72,7 +73,7 @@ public class OutboundChatCommandService {
       PendingEchoMessageState pendingEchoMessageState,
       PendingInviteState pendingInviteState,
       WhoisRoutingState whoisRoutingState,
-      IgnoreListService ignoreListService) {
+      IgnoreListCommandPort ignoreListService) {
     this.irc = irc;
     this.ui = ui;
     this.connectionCoordinator = connectionCoordinator;
@@ -714,7 +715,7 @@ public class OutboundChatCommandService {
     }
 
     boolean added = ignoreListService.addMask(invite.serverId(), nick);
-    String stored = IgnoreListService.normalizeMaskOrNickToHostmask(nick);
+    String stored = IgnoreMaskNormalizer.normalizeMaskOrNickToHostmask(nick);
     if (added) {
       ui.appendStatus(status, "(invite)", "Blocked invites from " + nick + " (" + stored + ").");
     } else {

@@ -265,6 +265,9 @@ class ThemeValidatorTest {
     final Color[] baseFieldBg = new Color[1];
     final Color[] basePaneBg = new Color[1];
 
+    // Prime with a tinted variant first to ensure switching to plain nimbus-dark clears any
+    // previously applied dark-variant-specific keys.
+    onEdt(() -> themeManager.installLookAndFeel(nimbusDarkBlue.id()));
     onEdt(() -> themeManager.installLookAndFeel(nimbusDark.id()));
     onEdt(
         () -> {

@@ -35,6 +35,10 @@ import cafe.woden.ircclient.diagnostics.JhiccupDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.diagnostics.RuntimeJfrService;
 import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
+import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
+import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
+import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
+import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.logging.LoggingTargetLogMaintenancePortAdapter;
 import cafe.woden.ircclient.logging.history.LoggingAppHistoryPortsAdapter;
@@ -113,6 +117,16 @@ class SpringModulithIncrementalAdoptionTest {
     assertThat(dccModule).isNotEqualTo(appModule);
     assertThat(dccModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.dcc");
 
+    ApplicationModule ignoreModule = moduleFor(modules, InboundIgnorePolicy.class);
+    assertThat(ignoreModule).isNotEqualTo(appModule);
+    assertThat(ignoreModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.ignore");
+    assertNamedInterfaceContains(
+        ignoreModule,
+        "api",
+        InboundIgnorePolicyPort.class,
+        IgnoreListQueryPort.class,
+        IgnoreListCommandPort.class);
+
     ApplicationModule loggingModule =
         moduleFor(modules, LoggingTargetLogMaintenancePortAdapter.class);
     assertThat(loggingModule).isNotEqualTo(appModule);
@@ -163,16 +177,26 @@ class SpringModulithIncrementalAdoptionTest {
   }
 
   private static void assertNamedInterfaceContains(
-      ApplicationModule appModule, String namedInterface, Class<?>... requiredTypes) {
+      ApplicationModule module, String namedInterface, Class<?>... requiredTypes) {
     NamedInterface diagnosticsInterface =
-        appModule
+        module
             .getNamedInterfaces()
             .getByName(namedInterface)
             .orElseThrow(
-                () -> new AssertionError("Missing app::" + namedInterface + " named interface."));
+                () ->
+                    new AssertionError(
+                        "Missing named interface "
+                            + namedInterface
+                            + " in module "
+                            + module.getBasePackage().getName()));
     for (Class<?> type : requiredTypes) {
       assertThat(diagnosticsInterface.contains(type))
-          .as("app::" + namedInterface + " should contain " + type.getSimpleName())
+          .as(
+              module.getBasePackage().getName()
+                  + "::"
+                  + namedInterface
+                  + " should contain "
+                  + type.getSimpleName())
           .isTrue();
     }
   }

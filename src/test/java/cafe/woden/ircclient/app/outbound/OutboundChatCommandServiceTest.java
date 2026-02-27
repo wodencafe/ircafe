@@ -25,7 +25,7 @@ import cafe.woden.ircclient.app.state.PendingEchoMessageState;
 import cafe.woden.ircclient.app.state.PendingInviteState;
 import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -51,7 +51,7 @@ class OutboundChatCommandServiceTest {
       mock(PendingEchoMessageState.class);
   private final PendingInviteState pendingInviteState = mock(PendingInviteState.class);
   private final WhoisRoutingState whoisRoutingState = mock(WhoisRoutingState.class);
-  private final IgnoreListService ignoreListService = mock(IgnoreListService.class);
+  private final IgnoreListCommandPort ignoreListService = mock(IgnoreListCommandPort.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundChatCommandService service =

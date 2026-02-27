@@ -2,6 +2,12 @@ package cafe.woden.ircclient.ignore;
 
 import cafe.woden.ircclient.config.IgnoreProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ignore.api.IgnoreAddMaskResult;
+import cafe.woden.ircclient.ignore.api.IgnoreLevels;
+import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
+import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
+import cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer;
+import cafe.woden.ircclient.ignore.api.IgnoreTextPatternMode;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -12,10 +18,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 @Component
-public class IgnoreListService {
+@ApplicationLayer
+public class IgnoreListService implements IgnoreListQueryPort, IgnoreListCommandPort {
 
   private final RuntimeConfigStore runtimeConfig;
 
@@ -76,12 +84,6 @@ public class IgnoreListService {
 
   private final ConcurrentHashMap<String, List<String>> softMasksByServer =
       new ConcurrentHashMap<>();
-
-  public enum AddMaskResult {
-    ADDED,
-    UPDATED,
-    UNCHANGED
-  }
 
   public enum ListKind {
     IGNORE,
@@ -270,21 +272,21 @@ public class IgnoreListService {
   }
 
   public boolean addMask(String serverId, String rawMaskOrNick) {
-    return addMaskWithLevels(serverId, rawMaskOrNick, List.of()) == AddMaskResult.ADDED;
+    return addMaskWithLevels(serverId, rawMaskOrNick, List.of()) == IgnoreAddMaskResult.ADDED;
   }
 
-  public AddMaskResult addMaskWithLevels(
+  public IgnoreAddMaskResult addMaskWithLevels(
       String serverId, String rawMaskOrNick, List<String> levels) {
     return addMaskWithLevels(serverId, rawMaskOrNick, levels, List.of(), null);
   }
 
-  public AddMaskResult addMaskWithLevels(
+  public IgnoreAddMaskResult addMaskWithLevels(
       String serverId, String rawMaskOrNick, List<String> levels, List<String> channels) {
     return addMaskWithLevels(
         serverId, rawMaskOrNick, levels, channels, null, "", IgnoreTextPatternMode.GLOB, false);
   }
 
-  public AddMaskResult addMaskWithLevels(
+  public IgnoreAddMaskResult addMaskWithLevels(
       String serverId,
       String rawMaskOrNick,
       List<String> levels,
@@ -301,7 +303,7 @@ public class IgnoreListService {
         false);
   }
 
-  public AddMaskResult addMaskWithLevels(
+  public IgnoreAddMaskResult addMaskWithLevels(
       String serverId,
       String rawMaskOrNick,
       List<String> levels,
@@ -320,7 +322,7 @@ public class IgnoreListService {
         false);
   }
 
-  public AddMaskResult addMaskWithLevels(
+  public IgnoreAddMaskResult addMaskWithLevels(
       String serverId,
       String rawMaskOrNick,
       List<String> levels,
@@ -330,10 +332,10 @@ public class IgnoreListService {
       IgnoreTextPatternMode textPatternMode,
       boolean repliesEnabled) {
     String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return AddMaskResult.UNCHANGED;
+    if (sid.isEmpty()) return IgnoreAddMaskResult.UNCHANGED;
 
     String mask = normalizeMaskOrNickToHostmask(rawMaskOrNick);
-    if (mask.isEmpty()) return AddMaskResult.UNCHANGED;
+    if (mask.isEmpty()) return IgnoreAddMaskResult.UNCHANGED;
 
     List<String> normalizedLevels = IgnoreLevels.normalizeConfigured(levels);
     List<String> normalizedChannels = normalizeChannels(channels);
@@ -414,7 +416,7 @@ public class IgnoreListService {
         && !patternChanged
         && !patternModeChanged
         && !repliesChanged) {
-      return AddMaskResult.UNCHANGED;
+      return IgnoreAddMaskResult.UNCHANGED;
     }
 
     if (added) {
@@ -427,7 +429,7 @@ public class IgnoreListService {
         sid, storedMask, normalizedPattern, normalizedPatternMode.token());
     runtimeConfig.rememberIgnoreMaskReplies(sid, storedMask, normalizedReplies);
     changes.onNext(new Change(sid, ListKind.IGNORE));
-    return added ? AddMaskResult.ADDED : AddMaskResult.UPDATED;
+    return added ? IgnoreAddMaskResult.ADDED : IgnoreAddMaskResult.UPDATED;
   }
 
   public boolean addSoftMask(String serverId, String rawMaskOrNick) {
@@ -550,36 +552,7 @@ public class IgnoreListService {
    * Convert user input to a hostmask pattern (full mask, user@host, host-only, or nick pattern).
    */
   public static String normalizeMaskOrNickToHostmask(String rawMaskOrNick) {
-    String s = normalizeMask(rawMaskOrNick);
-    if (s.isEmpty()) return "";
-
-    // Full hostmask/pattern already.
-    if (s.indexOf('!') >= 0 && s.indexOf('@') >= 0) {
-      return s;
-    }
-
-    // Something@host (maybe ident@host or *@host).
-    if (s.indexOf('@') >= 0) {
-      // If it already has a leading "*!" prefix, keep it.
-      if (s.startsWith("*!")) return s;
-      // If it starts with "!" (rare), prefix nick wildcard.
-      if (s.startsWith("!")) return "*" + s;
-      return "*!" + s;
-    }
-
-    // Host-only
-    if (looksLikeHost(s)) {
-      return "*!*@" + s;
-    }
-
-    // Otherwise treat as nick.
-    return s + "!*@*";
-  }
-
-  private static boolean looksLikeHost(String s) {
-    // Heuristic: contains a dot or colon (v6), or ends with known-ish TLD length.
-    String lower = s.toLowerCase(Locale.ROOT);
-    return lower.contains(".") || lower.contains(":") || lower.endsWith("/");
+    return IgnoreMaskNormalizer.normalizeMaskOrNickToHostmask(rawMaskOrNick);
   }
 
   public boolean isHardIgnored(String serverId, String fromHostmask) {

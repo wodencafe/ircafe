@@ -38,7 +38,7 @@ import cafe.woden.ircclient.app.state.PendingInviteState;
 import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
+import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
@@ -93,7 +93,7 @@ class IrcMediatorMockVerifyTest {
   private final IrcEventNotifierPort ircEventNotifierPort = mock(IrcEventNotifierPort.class);
   private final cafe.woden.ircclient.app.api.InterceptorIngestPort interceptorIngestPort =
       mock(cafe.woden.ircclient.app.api.InterceptorIngestPort.class);
-  private final InboundIgnorePolicy inboundIgnorePolicy = mock(InboundIgnorePolicy.class);
+  private final InboundIgnorePolicyPort inboundIgnorePolicy = mock(InboundIgnorePolicyPort.class);
   private final MonitorFallbackPort monitorFallbackPort = mock(MonitorFallbackPort.class);
 
   private final IrcMediator mediator =

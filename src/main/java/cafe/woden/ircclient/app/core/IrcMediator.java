@@ -33,7 +33,7 @@ import cafe.woden.ircclient.app.state.PendingInviteState;
 import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.ignore.InboundIgnorePolicy;
+import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
@@ -90,7 +90,7 @@ public class IrcMediator implements MediatorControlPort {
   private final TrayNotificationsPort trayNotificationService;
   private final UserInfoEnrichmentService userInfoEnrichmentService;
   private final UserListStore userListStore;
-  private final InboundIgnorePolicy inboundIgnorePolicy;
+  private final InboundIgnorePolicyPort inboundIgnorePolicy;
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final WhoisRoutingState whoisRoutingState;
   private final CtcpRoutingState ctcpRoutingState;
@@ -160,7 +160,7 @@ public class IrcMediator implements MediatorControlPort {
       InboundModeEventHandler inboundModeEventHandler,
       IrcEventNotifierPort ircEventNotifierPort,
       InterceptorIngestPort interceptorIngestPort,
-      InboundIgnorePolicy inboundIgnorePolicy,
+      InboundIgnorePolicyPort inboundIgnorePolicy,
       MonitorFallbackPort monitorFallbackPort) {
 
     this.irc = irc;
@@ -417,17 +417,17 @@ public class IrcMediator implements MediatorControlPort {
     return new ParsedCtcp(cmd, arg);
   }
 
-  private InboundIgnorePolicy.Decision decideInbound(
+  private InboundIgnorePolicyPort.Decision decideInbound(
       String sid,
       String from,
       boolean isCtcp,
       String inboundChannel,
       String inboundText,
       String... levels) {
-    if (inboundIgnorePolicy == null) return InboundIgnorePolicy.Decision.ALLOW;
+    if (inboundIgnorePolicy == null) return InboundIgnorePolicyPort.Decision.ALLOW;
     String f = Objects.toString(from, "").trim();
-    if (f.isEmpty()) return InboundIgnorePolicy.Decision.ALLOW;
-    if ("server".equalsIgnoreCase(f)) return InboundIgnorePolicy.Decision.ALLOW;
+    if (f.isEmpty()) return InboundIgnorePolicyPort.Decision.ALLOW;
+    if ("server".equalsIgnoreCase(f)) return InboundIgnorePolicyPort.Decision.ALLOW;
     String ch = Objects.toString(inboundChannel, "").trim();
     String text = Objects.toString(inboundText, "");
     List<String> levelList = (levels == null || levels.length == 0) ? List.of() : List.of(levels);
@@ -616,9 +616,9 @@ public class IrcMediator implements MediatorControlPort {
 
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
-        InboundIgnorePolicy.Decision decision =
+        InboundIgnorePolicyPort.Decision decision =
             decideInbound(sid, ev.from(), false, ev.channel(), ev.text(), "MSGS", "PUBLIC");
-        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+        if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
 
         if (tryResolvePendingEchoChannelMessage(sid, chan, active, ev)) {
           return;
@@ -629,7 +629,7 @@ public class IrcMediator implements MediatorControlPort {
           return;
         }
 
-        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+        if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           postTo(
               chan,
               active,
@@ -691,11 +691,11 @@ public class IrcMediator implements MediatorControlPort {
 
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
-        InboundIgnorePolicy.Decision decision =
+        InboundIgnorePolicyPort.Decision decision =
             decideInbound(sid, ev.from(), true, ev.channel(), ev.action(), "ACTIONS", "CTCPS");
-        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+        if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
 
-        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+        if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           postTo(
               chan,
               active,
@@ -822,9 +822,9 @@ public class IrcMediator implements MediatorControlPort {
 
         ParsedCtcp ctcp = parseCtcp(ev.text());
         if (!fromSelf && ctcp != null && "DCC".equals(ctcp.commandUpper())) {
-          InboundIgnorePolicy.Decision dccDecision =
+          InboundIgnorePolicyPort.Decision dccDecision =
               decideInbound(sid, ev.from(), true, "", ctcp.arg(), "DCC", "CTCPS");
-          if (dccDecision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+          if (dccDecision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
 
           boolean dccHandled =
               outboundDccCommandService.handleInboundDccOffer(
@@ -832,15 +832,15 @@ public class IrcMediator implements MediatorControlPort {
                   sid,
                   ev.from(),
                   ctcp.arg(),
-                  dccDecision == InboundIgnorePolicy.Decision.SOFT_SPOILER);
+                  dccDecision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER);
           if (dccHandled) return;
         }
 
-        InboundIgnorePolicy.Decision decision =
+        InboundIgnorePolicyPort.Decision decision =
             fromSelf
-                ? InboundIgnorePolicy.Decision.ALLOW
+                ? InboundIgnorePolicyPort.Decision.ALLOW
                 : decideInbound(sid, ev.from(), false, "", ev.text(), "MSGS");
-        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+        if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
 
         if (tryResolvePendingEchoPrivateMessage(sid, pm, ev, allowAutoOpen)) {
           return;
@@ -851,7 +851,7 @@ public class IrcMediator implements MediatorControlPort {
           return;
         }
 
-        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+        if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           if (allowAutoOpen) {
             postTo(
                 pm,
@@ -934,13 +934,13 @@ public class IrcMediator implements MediatorControlPort {
           markPrivateMessagePeerOnline(sid, ev.from());
         }
 
-        InboundIgnorePolicy.Decision decision =
+        InboundIgnorePolicyPort.Decision decision =
             fromSelf
-                ? InboundIgnorePolicy.Decision.ALLOW
+                ? InboundIgnorePolicyPort.Decision.ALLOW
                 : decideInbound(sid, ev.from(), true, "", ev.action(), "ACTIONS", "CTCPS");
-        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+        if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
 
-        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+        if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           if (allowAutoOpen) {
             postTo(
                 pm,
@@ -1017,12 +1017,12 @@ public class IrcMediator implements MediatorControlPort {
             noticeChannel = targetRef.target();
           }
         }
-        InboundIgnorePolicy.Decision d =
+        InboundIgnorePolicyPort.Decision d =
             isCtcp
                 ? decideInbound(sid, ev.from(), true, noticeChannel, ev.text(), "NOTICES", "CTCPS")
                 : decideInbound(sid, ev.from(), false, noticeChannel, ev.text(), "NOTICES");
-        boolean spoiler = d == InboundIgnorePolicy.Decision.SOFT_SPOILER;
-        boolean suppress = d == InboundIgnorePolicy.Decision.HARD_DROP;
+        boolean spoiler = d == InboundIgnorePolicyPort.Decision.SOFT_SPOILER;
+        boolean suppress = d == InboundIgnorePolicyPort.Decision.HARD_DROP;
 
         TargetRef dest = null;
         String t = ev.target();
@@ -1169,9 +1169,9 @@ public class IrcMediator implements MediatorControlPort {
                 + (Objects.toString(ev.argument(), "").isBlank()
                     ? ""
                     : (" " + Objects.toString(ev.argument(), "").trim()));
-        InboundIgnorePolicy.Decision decision =
+        InboundIgnorePolicyPort.Decision decision =
             decideInbound(sid, ev.from(), true, ev.channel(), ctcpText, "CTCPS");
-        if (decision == InboundIgnorePolicy.Decision.HARD_DROP) return;
+        if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
 
         TargetRef dest;
         if (uiSettingsPort.get().ctcpRequestsInActiveTargetEnabled()) {
@@ -1196,7 +1196,7 @@ public class IrcMediator implements MediatorControlPort {
         if (ev.channel() != null && !ev.channel().isBlank()) sb.append(" in ").append(ev.channel());
         final String rendered = sb.toString();
 
-        if (decision == InboundIgnorePolicy.Decision.SOFT_SPOILER) {
+        if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           postTo(dest, true, d -> ui.appendSpoilerChatAt(d, ev.at(), "(ctcp)", rendered));
         } else {
           postTo(dest, true, d -> ui.appendStatusAt(d, ev.at(), "(ctcp)", rendered));
