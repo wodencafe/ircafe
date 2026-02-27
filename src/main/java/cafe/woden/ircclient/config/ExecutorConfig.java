@@ -40,8 +40,7 @@ public class ExecutorConfig {
   public static final String JFR_RUNTIME_EVENTS_SAMPLER_SCHEDULER =
       "jfrRuntimeEventsSamplerScheduler";
   public static final String INTERCEPTOR_STORE_INGEST_EXECUTOR = "interceptorStoreIngestExecutor";
-  public static final String INTERCEPTOR_STORE_PERSIST_EXECUTOR =
-      "interceptorStorePersistExecutor";
+  public static final String INTERCEPTOR_STORE_PERSIST_EXECUTOR = "interceptorStorePersistExecutor";
   public static final String UI_LOG_VIEWER_EXECUTOR = "uiLogViewerExecutor";
   public static final String UI_INTERCEPTOR_REFRESH_EXECUTOR = "uiInterceptorRefreshExecutor";
   public static final String PREFERENCES_PUSHY_TEST_EXECUTOR = "preferencesPushyTestExecutor";

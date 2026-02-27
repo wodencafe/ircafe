@@ -66,8 +66,7 @@ public final class VirtualThreads {
   }
 
   private static void pruneTrackedExecutors() {
-    TRACKED_EXECUTORS.removeIf(
-        exec -> exec == null || exec.isShutdown() || exec.isTerminated());
+    TRACKED_EXECUTORS.removeIf(exec -> exec == null || exec.isShutdown() || exec.isTerminated());
   }
 
   private static String normalize(String name) {

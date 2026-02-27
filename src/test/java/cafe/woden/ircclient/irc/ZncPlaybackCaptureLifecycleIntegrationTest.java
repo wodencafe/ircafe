@@ -41,4 +41,3 @@ class ZncPlaybackCaptureLifecycleIntegrationTest {
     return (ScheduledExecutorService) f.get(null);
   }
 }
-

@@ -19,8 +19,7 @@ class ExecutorConfigIntegrationTest {
     try {
       ctx.register(ExecutorConfig.class);
       ctx.refresh();
-      uiLogViewerExec =
-          ctx.getBean(ExecutorConfig.UI_LOG_VIEWER_EXECUTOR, ExecutorService.class);
+      uiLogViewerExec = ctx.getBean(ExecutorConfig.UI_LOG_VIEWER_EXECUTOR, ExecutorService.class);
       jfrSamplerExec =
           ctx.getBean(
               ExecutorConfig.JFR_RUNTIME_EVENTS_SAMPLER_SCHEDULER, ScheduledExecutorService.class);
@@ -36,4 +35,3 @@ class ExecutorConfigIntegrationTest {
     assertTrue(jfrSamplerExec.isShutdown());
   }
 }
-

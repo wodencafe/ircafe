@@ -44,4 +44,3 @@ class MessageInputSpellcheckLifecycleIntegrationTest {
     return (ExecutorService) f.get(null);
   }
 }
-

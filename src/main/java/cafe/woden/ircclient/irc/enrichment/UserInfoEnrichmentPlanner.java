@@ -531,7 +531,8 @@ public final class UserInfoEnrichmentPlanner {
       }
     }
     if (ps.cmdTimes.size() >= maxPerMinute && ps.cmdTimes.peekFirst() != null) {
-      long afterRateWindowEpochMs = safeAddEpochMillis(ps.cmdTimes.peekFirst().toEpochMilli(), 60_000L);
+      long afterRateWindowEpochMs =
+          safeAddEpochMillis(ps.cmdTimes.peekFirst().toEpochMilli(), 60_000L);
       if (afterRateWindowEpochMs > nextRateAllowedAtEpochMs) {
         nextRateAllowedAtEpochMs = afterRateWindowEpochMs;
       }

@@ -52,8 +52,7 @@ class InterceptorPanelExecutorLifecycleTest {
 
     IllegalArgumentException ex =
         assertThrows(
-            IllegalArgumentException.class,
-            () -> new InterceptorPanel(store, refreshExecutor));
+            IllegalArgumentException.class, () -> new InterceptorPanel(store, refreshExecutor));
     assertEquals("refreshExecutor must be active", ex.getMessage());
   }
 
@@ -126,4 +125,3 @@ class InterceptorPanelExecutorLifecycleTest {
     T get() throws Exception;
   }
 }
-

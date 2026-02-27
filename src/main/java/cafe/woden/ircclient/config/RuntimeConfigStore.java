@@ -3539,8 +3539,7 @@ public class RuntimeConfigStore {
       ui.put("serverTreeUnreadBadgeScalePercent", normalized);
       writeFile(doc);
     } catch (Exception e) {
-      log.warn(
-          "[ircafe] Could not persist ui.serverTreeUnreadBadgeScalePercent to '{}'", file, e);
+      log.warn("[ircafe] Could not persist ui.serverTreeUnreadBadgeScalePercent to '{}'", file, e);
     }
   }
 
@@ -4344,8 +4343,7 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn(
-          "[ircafe] Could not persist chat history wheel debounce setting to '{}'", file, e);
+      log.warn("[ircafe] Could not persist chat history wheel debounce setting to '{}'", file, e);
     }
   }
 
@@ -4364,9 +4362,7 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn(
-          "[ircafe] Could not persist chat history load-older chunk-size setting to '{}'",
-          file,
-          e);
+          "[ircafe] Could not persist chat history load-older chunk-size setting to '{}'", file, e);
     }
   }
 
@@ -4406,9 +4402,7 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn(
-          "[ircafe] Could not persist chat history load-older EDT budget setting to '{}'",
-          file,
-          e);
+          "[ircafe] Could not persist chat history load-older EDT budget setting to '{}'", file, e);
     }
   }
 
@@ -4443,8 +4437,7 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn(
-          "[ircafe] Could not persist chat history remote-timeout setting to '{}'", file, e);
+      log.warn("[ircafe] Could not persist chat history remote-timeout setting to '{}'", file, e);
     }
   }
 
@@ -4463,9 +4456,7 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn(
-          "[ircafe] Could not persist chat history remote ZNC-timeout setting to '{}'",
-          file,
-          e);
+          "[ircafe] Could not persist chat history remote ZNC-timeout setting to '{}'", file, e);
     }
   }
 
@@ -4484,9 +4475,7 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn(
-          "[ircafe] Could not persist chat history remote ZNC window setting to '{}'",
-          file,
-          e);
+          "[ircafe] Could not persist chat history remote ZNC window setting to '{}'", file, e);
     }
   }
 

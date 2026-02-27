@@ -362,7 +362,11 @@ public class MediatorHistoryIngestOrchestrator {
   private record HistoryRenderKey(TargetRef target, HistoryFingerprint fingerprint) {}
 
   private record HistoryFingerprint(
-      long tsEpochMs, ChatHistoryEntry.Kind kind, String from, long textFingerprint, int textLength) {
+      long tsEpochMs,
+      ChatHistoryEntry.Kind kind,
+      String from,
+      long textFingerprint,
+      int textLength) {
     static HistoryFingerprint from(ChatHistoryEntry entry) {
       if (entry == null) {
         return new HistoryFingerprint(0L, ChatHistoryEntry.Kind.PRIVMSG, "", 0L, 0);

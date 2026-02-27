@@ -132,8 +132,7 @@ class ChatDockableIgnoresMockVerifyTest {
                     settingsBus,
                     spellcheckSettingsBus,
                     commandHistoryStore,
-                    VirtualThreads.newSingleThreadExecutor(
-                        "test-chat-dockable-ignores-log-viewer"),
+                    VirtualThreads.newSingleThreadExecutor("test-chat-dockable-ignores-log-viewer"),
                     VirtualThreads.newSingleThreadExecutor(
                         "test-chat-dockable-ignores-interceptor"))));
 

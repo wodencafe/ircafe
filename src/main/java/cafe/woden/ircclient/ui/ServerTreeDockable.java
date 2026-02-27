@@ -5012,7 +5012,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     int next = TREE_BADGE_SCALE_PERCENT_DEFAULT;
     try {
       if (runtimeConfig != null) {
-        next = runtimeConfig.readServerTreeUnreadBadgeScalePercent(TREE_BADGE_SCALE_PERCENT_DEFAULT);
+        next =
+            runtimeConfig.readServerTreeUnreadBadgeScalePercent(TREE_BADGE_SCALE_PERCENT_DEFAULT);
       }
     } catch (Exception ignored) {
       next = TREE_BADGE_SCALE_PERCENT_DEFAULT;
@@ -5575,7 +5576,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       if (base == null) base = UIManager.getFont("defaultFont");
       if (base == null) return new Font("SansSerif", Font.PLAIN, 12);
       float scaledSize =
-          Math.max(8f, base.getSize2D() * (Math.max(50, Math.min(150, unreadBadgeScalePercent)) / 100f));
+          Math.max(
+              8f, base.getSize2D() * (Math.max(50, Math.min(150, unreadBadgeScalePercent)) / 100f));
       return base.deriveFont(scaledSize);
     }
 

@@ -138,10 +138,8 @@ class ChatDockableIgnoresFunctionalTest {
                     settingsBus,
                     spellcheckSettingsBus,
                     commandHistoryStore,
-                    VirtualThreads.newSingleThreadExecutor(
-                        "test-chat-ignores-log-viewer"),
-                    VirtualThreads.newSingleThreadExecutor(
-                        "test-chat-ignores-interceptor"))));
+                    VirtualThreads.newSingleThreadExecutor("test-chat-ignores-log-viewer"),
+                    VirtualThreads.newSingleThreadExecutor("test-chat-ignores-interceptor"))));
 
     ChatDockable chat = holder.get();
     MessageInputPanel inputPanel = onEdtCall(() -> findFirst(chat, MessageInputPanel.class));

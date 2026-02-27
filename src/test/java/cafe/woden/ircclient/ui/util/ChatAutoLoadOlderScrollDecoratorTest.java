@@ -120,8 +120,7 @@ class ChatAutoLoadOlderScrollDecoratorTest {
     }
   }
 
-  private static void onEdt(Runnable task)
-      throws InvocationTargetException, InterruptedException {
+  private static void onEdt(Runnable task) throws InvocationTargetException, InterruptedException {
     if (SwingUtilities.isEventDispatchThread()) {
       task.run();
       return;

@@ -183,7 +183,8 @@ class SojuEphemeralNetworkImporterTest {
 
     SojuEphemeralNetworkImporter importer =
         new SojuEphemeralNetworkImporter(configured, ephemeral, autoConnect, runtime, irc);
-    importer.onNetworkDiscovered(new SojuNetwork("soju", "123", "libera", Map.of("name", "libera")));
+    importer.onNetworkDiscovered(
+        new SojuNetwork("soju", "123", "libera", Map.of("name", "libera")));
 
     IrcProperties.Server imported = ephemeral.require("soju:soju:123");
     assertTrue(imported.autoJoin().contains("#ircafe"));

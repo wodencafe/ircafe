@@ -33,7 +33,8 @@ public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
       JScrollPane scroll, Component transcriptRoot, IntSupplier cooldownMsSupplier) {
     this.scroll = scroll;
     this.transcriptRoot = transcriptRoot;
-    this.cooldownMsSupplier = cooldownMsSupplier != null ? cooldownMsSupplier : () -> (int) DEFAULT_COOLDOWN_MS;
+    this.cooldownMsSupplier =
+        cooldownMsSupplier != null ? cooldownMsSupplier : () -> (int) DEFAULT_COOLDOWN_MS;
     this.listener = this::onWheel;
     this.scroll.addMouseWheelListener(listener);
   }
@@ -59,7 +60,8 @@ public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
       if (bar.getValue() > 0) return;
 
       long now = System.currentTimeMillis();
-      int cooldownMs = (cooldownMsSupplier != null) ? cooldownMsSupplier.getAsInt() : (int) DEFAULT_COOLDOWN_MS;
+      int cooldownMs =
+          (cooldownMsSupplier != null) ? cooldownMsSupplier.getAsInt() : (int) DEFAULT_COOLDOWN_MS;
       if (cooldownMs < 100) cooldownMs = 100;
       if (cooldownMs > 30_000) cooldownMs = 30_000;
       if (now - lastTriggeredAtMs < cooldownMs) return;

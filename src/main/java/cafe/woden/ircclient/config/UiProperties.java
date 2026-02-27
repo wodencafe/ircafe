@@ -678,7 +678,8 @@ public record UiProperties(
     if (chatHistoryDeferRichTextDuringBatch == null) {
       chatHistoryDeferRichTextDuringBatch = false;
     }
-    if (chatHistoryRemoteRequestTimeoutSeconds == null || chatHistoryRemoteRequestTimeoutSeconds <= 0) {
+    if (chatHistoryRemoteRequestTimeoutSeconds == null
+        || chatHistoryRemoteRequestTimeoutSeconds <= 0) {
       chatHistoryRemoteRequestTimeoutSeconds = 6;
     }
     if (chatHistoryRemoteRequestTimeoutSeconds < 1) {

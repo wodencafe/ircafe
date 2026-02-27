@@ -584,8 +584,7 @@ public final class JfrDiagnosticsPanel extends JPanel {
     boolean includeHeapDump = choice == 1;
 
     setExportInProgress(true);
-    CompletableFuture
-        .supplyAsync(() -> service.captureMemoryDiagnosticsBundle(includeHeapDump))
+    CompletableFuture.supplyAsync(() -> service.captureMemoryDiagnosticsBundle(includeHeapDump))
         .whenComplete(
             (report, error) ->
                 SwingUtilities.invokeLater(

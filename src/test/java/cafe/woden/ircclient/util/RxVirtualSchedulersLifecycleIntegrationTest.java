@@ -57,4 +57,3 @@ class RxVirtualSchedulersLifecycleIntegrationTest {
     return (ScheduledExecutorService) f.get(null);
   }
 }
-

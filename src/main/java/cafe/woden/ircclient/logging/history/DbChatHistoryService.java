@@ -753,8 +753,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
     boolean finished = false;
     try {
       int maxLines = Math.max(1, chunkSize);
-      long budgetNs =
-          TimeUnit.MILLISECONDS.toNanos(Math.max(1, Math.min(33, chunkEdtBudgetMs)));
+      long budgetNs = TimeUnit.MILLISECONDS.toNanos(Math.max(1, Math.min(33, chunkEdtBudgetMs)));
       int minLinesBeforeBudget = Math.min(maxLines, Math.max(1, MIN_LOAD_OLDER_LINES_PER_CHUNK));
       long chunkStartNs = System.nanoTime();
       long deadlineNs = System.nanoTime() + budgetNs;
@@ -894,7 +893,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
         Point p = vp.getViewPosition();
         if (p == null) p = new Point(0, 0);
-        int viewHeight = view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
+        int viewHeight =
+            view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
         if (viewHeight < 0) viewHeight = 0;
 
         // Find the first visible model position for the top-left of the viewport.
@@ -941,14 +941,16 @@ public final class DbChatHistoryService implements ChatHistoryService {
         if (view == null) return;
         if (!(view instanceof javax.swing.text.JTextComponent text)) return;
 
-        int viewH = view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
+        int viewH =
+            view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
         if (viewH < 0) viewH = 0;
         int extentH = viewport.getExtentSize() != null ? viewport.getExtentSize().height : 0;
         int maxY = Math.max(0, viewH - extentH);
 
         if (beforePos == null) return;
 
-        int currentViewHeight = view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
+        int currentViewHeight =
+            view.getPreferredSize() != null ? view.getPreferredSize().height : view.getHeight();
         if (currentViewHeight < 0) currentViewHeight = 0;
         int prependedHeightDelta = Math.max(0, currentViewHeight - beforeViewHeight);
 
@@ -962,7 +964,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
             Rectangle r = text.modelToView2D(off).getBounds();
             if (r != null) {
               int anchorY = r.y + intraLineDeltaY;
-              // When pinned at top before prepend, model-position anchoring can track the control row.
+              // When pinned at top before prepend, model-position anchoring can track the control
+              // row.
               // Keep at least the height-delta offset so the prior top message remains visible.
               newY = Math.max(anchorY, beforePos.y + prependedHeightDelta);
             }

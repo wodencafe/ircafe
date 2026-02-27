@@ -6,6 +6,8 @@ import cafe.woden.ircclient.util.VirtualThreads;
 import com.sun.management.HotSpotDiagnosticMXBean;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeSupport;
 import java.io.IOException;
 import java.lang.management.ClassLoadingMXBean;
 import java.lang.management.GarbageCollectorMXBean;
@@ -15,8 +17,6 @@ import java.lang.management.MemoryPoolMXBean;
 import java.lang.management.MemoryUsage;
 import java.lang.management.RuntimeMXBean;
 import java.lang.management.ThreadMXBean;
-import java.beans.PropertyChangeListener;
-import java.beans.PropertyChangeSupport;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,9 +33,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.function.Predicate;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -328,9 +328,7 @@ public class JfrRuntimeEventsService {
           .append('\n');
 
       appendMemoryExportEvent(
-          "INFO",
-          "Exported memory diagnostics bundle.",
-          summary.toString().trim() + '\n');
+          "INFO", "Exported memory diagnostics bundle.", summary.toString().trim() + '\n');
       return new MemoryDiagnosticsExportReport(bundleZipPath, summary.toString().trim(), true);
     } catch (Throwable t) {
       String err =
@@ -342,7 +340,8 @@ public class JfrRuntimeEventsService {
               .append(stagingDir.toAbsolutePath())
               .toString()
               .trim();
-      appendMemoryExportEvent("ERROR", "Memory diagnostics export failed.", err + '\n' + stackTrace(t));
+      appendMemoryExportEvent(
+          "ERROR", "Memory diagnostics export failed.", err + '\n' + stackTrace(t));
       return new MemoryDiagnosticsExportReport(null, err, false);
     }
   }
@@ -623,7 +622,8 @@ public class JfrRuntimeEventsService {
       if (!server.isRegistered(name)) {
         return "DiagnosticCommand MBean is unavailable on this runtime.";
       }
-      Object out = invokeDiagnosticCommand(server, name, "gcClassHistogram", new String[] {"-all=true"});
+      Object out =
+          invokeDiagnosticCommand(server, name, "gcClassHistogram", new String[] {"-all=true"});
       if (out == null) {
         out = invokeDiagnosticCommand(server, name, "gcClassHistogram", new String[0]);
       }
@@ -738,8 +738,7 @@ public class JfrRuntimeEventsService {
 
   private static void appendCategoryLine(
       StringBuilder out, String label, long bytes, long parsedTotalBytes) {
-    double pct =
-        parsedTotalBytes > 0L ? Math.max(0.0d, (bytes * 100.0d) / parsedTotalBytes) : 0.0d;
+    double pct = parsedTotalBytes > 0L ? Math.max(0.0d, (bytes * 100.0d) / parsedTotalBytes) : 0.0d;
     out.append("- ")
         .append(label)
         .append(": ")

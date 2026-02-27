@@ -245,8 +245,7 @@ class PreferencesDialogFunctionalTest {
 
     IllegalArgumentException ex =
         assertThrows(
-            IllegalArgumentException.class,
-            () -> newPreferencesDialog(shutdownPushy, activeRules));
+            IllegalArgumentException.class, () -> newPreferencesDialog(shutdownPushy, activeRules));
     assertEquals("pushyTestExecutor must be active", ex.getMessage());
   }
 

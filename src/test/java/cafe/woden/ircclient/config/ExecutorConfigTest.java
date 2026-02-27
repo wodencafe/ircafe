@@ -25,8 +25,10 @@ class ExecutorConfigTest {
           assertInstanceOf(
               ExecutorService.class, ctx.getBean(ExecutorConfig.INTERCEPTOR_STORE_INGEST_EXECUTOR));
           assertInstanceOf(
-              ExecutorService.class, ctx.getBean(ExecutorConfig.INTERCEPTOR_STORE_PERSIST_EXECUTOR));
-          assertInstanceOf(ExecutorService.class, ctx.getBean(ExecutorConfig.UI_LOG_VIEWER_EXECUTOR));
+              ExecutorService.class,
+              ctx.getBean(ExecutorConfig.INTERCEPTOR_STORE_PERSIST_EXECUTOR));
+          assertInstanceOf(
+              ExecutorService.class, ctx.getBean(ExecutorConfig.UI_LOG_VIEWER_EXECUTOR));
           assertInstanceOf(
               ExecutorService.class, ctx.getBean(ExecutorConfig.UI_INTERCEPTOR_REFRESH_EXECUTOR));
           assertInstanceOf(
@@ -41,7 +43,8 @@ class ExecutorConfigTest {
   void createsDistinctExecutorsForIndependentWorkloads() {
     runner.run(
         ctx -> {
-          ExecutorService logViewer = ctx.getBean(ExecutorConfig.UI_LOG_VIEWER_EXECUTOR, ExecutorService.class);
+          ExecutorService logViewer =
+              ctx.getBean(ExecutorConfig.UI_LOG_VIEWER_EXECUTOR, ExecutorService.class);
           ExecutorService interceptorRefresh =
               ctx.getBean(ExecutorConfig.UI_INTERCEPTOR_REFRESH_EXECUTOR, ExecutorService.class);
           ExecutorService pushyTest =
@@ -59,7 +62,8 @@ class ExecutorConfigTest {
 
     runner.run(
         ctx -> {
-          logViewerRef.set(ctx.getBean(ExecutorConfig.UI_LOG_VIEWER_EXECUTOR, ExecutorService.class));
+          logViewerRef.set(
+              ctx.getBean(ExecutorConfig.UI_LOG_VIEWER_EXECUTOR, ExecutorService.class));
           jfrSamplerRef.set(
               ctx.getBean(
                   ExecutorConfig.JFR_RUNTIME_EVENTS_SAMPLER_SCHEDULER,
@@ -70,4 +74,3 @@ class ExecutorConfigTest {
     assertTrue(jfrSamplerRef.get().isShutdown());
   }
 }
-

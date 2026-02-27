@@ -69,7 +69,8 @@ public class ZncEphemeralNetworkImporter {
 
     IrcProperties.Server bouncer = bouncerOpt.get();
     ZncEphemeralNaming.Derived d = ZncEphemeralNaming.derive(bouncer, network);
-    IrcProperties.Server server = buildEphemeralServer(bouncer, d, autoJoinChannelsFor(d.serverId()));
+    IrcProperties.Server server =
+        buildEphemeralServer(bouncer, d, autoJoinChannelsFor(d.serverId()));
 
     // If the user has chosen to persist this network entry, don't keep an ephemeral duplicate.
     if (serverRegistry.containsId(server.id())) {

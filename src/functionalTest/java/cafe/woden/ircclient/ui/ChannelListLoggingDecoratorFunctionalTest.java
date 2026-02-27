@@ -183,10 +183,8 @@ class ChannelListLoggingDecoratorFunctionalTest {
                     settingsBus,
                     spellcheckSettingsBus,
                     commandHistoryStore,
-                    VirtualThreads.newSingleThreadExecutor(
-                        "test-channel-list-log-viewer"),
-                    VirtualThreads.newSingleThreadExecutor(
-                        "test-channel-list-interceptor")));
+                    VirtualThreads.newSingleThreadExecutor("test-channel-list-log-viewer"),
+                    VirtualThreads.newSingleThreadExecutor("test-channel-list-interceptor")));
     ChatDockable chat = holder.chat;
 
     SwingUiPort swingUiPort =

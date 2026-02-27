@@ -65,6 +65,7 @@ public class NotificationStore {
 
   /** Default cooldown to avoid spamming rule-match notifications. */
   public static final int DEFAULT_RULE_MATCH_COOLDOWN_SECONDS = 15;
+
   private static final Duration RULE_MATCH_KEY_TTL = Duration.ofHours(24);
   private static final int MAX_RULE_MATCH_KEYS = 50_000;
 
