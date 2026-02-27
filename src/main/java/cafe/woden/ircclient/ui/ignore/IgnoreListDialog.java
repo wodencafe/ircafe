@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.ui.ignore;
 
 import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ignore.api.IgnoreLevels;
+import cafe.woden.ircclient.ignore.api.IgnoreTextPatternMode;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
@@ -10,6 +12,9 @@ import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.KeyEvent;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import javax.swing.BorderFactory;
@@ -45,8 +50,8 @@ public class IgnoreListDialog {
   private String currentServerId;
   private JTabbedPane tabs;
 
-  private DefaultListModel<String> ignoreModel;
-  private DefaultListModel<String> softModel;
+  private DefaultListModel<MaskRow> ignoreModel;
+  private DefaultListModel<MaskRow> softModel;
 
   public IgnoreListDialog(IgnoreListService ignores) {
     this.ignores = ignores;
@@ -159,8 +164,8 @@ public class IgnoreListDialog {
     SOFT_IGNORE
   }
 
-  private JPanel buildMaskPanel(String serverId, Kind kind, DefaultListModel<String> model) {
-    JList<String> list = new JList<>(model);
+  private JPanel buildMaskPanel(String serverId, Kind kind, DefaultListModel<MaskRow> model) {
+    JList<MaskRow> list = new JList<>(model);
     list.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 
     JScrollPane scroll = new JScrollPane(list);
@@ -222,7 +227,7 @@ public class IgnoreListDialog {
 
     remove.addActionListener(
         e -> {
-          List<String> sel = list.getSelectedValuesList();
+          List<MaskRow> sel = list.getSelectedValuesList();
           if (sel == null || sel.isEmpty()) return;
 
           String title = kind == Kind.SOFT_IGNORE ? "Remove Soft Ignores" : "Remove Ignores";
@@ -235,12 +240,12 @@ public class IgnoreListDialog {
                   JOptionPane.WARNING_MESSAGE);
           if (ok != JOptionPane.OK_OPTION) return;
 
-          for (String m : sel) {
-            if (m == null || m.isBlank()) continue;
+          for (MaskRow row : sel) {
+            if (row == null || row.mask().isBlank()) continue;
             if (kind == Kind.SOFT_IGNORE) {
-              ignores.removeSoftMask(serverId, m);
+              ignores.removeSoftMask(serverId, row.mask());
             } else {
-              ignores.removeMask(serverId, m);
+              ignores.removeMask(serverId, row.mask());
             }
           }
           refresh(model, serverId, kind);
@@ -248,12 +253,12 @@ public class IgnoreListDialog {
 
     copy.addActionListener(
         e -> {
-          String m = list.getSelectedValue();
-          if (m == null || m.isBlank()) return;
+          MaskRow row = list.getSelectedValue();
+          if (row == null || row.mask().isBlank()) return;
           try {
             Toolkit.getDefaultToolkit()
                 .getSystemClipboard()
-                .setContents(new StringSelection(m), null);
+                .setContents(new StringSelection(row.mask()), null);
           } catch (Exception ignored) {
           }
         });
@@ -273,22 +278,103 @@ public class IgnoreListDialog {
     return root;
   }
 
-  private void refresh(DefaultListModel<String> model, String serverId, Kind kind) {
+  private void refresh(DefaultListModel<MaskRow> model, String serverId, Kind kind) {
     model.clear();
     if (ignores == null) return;
     List<String> masks =
         (kind == Kind.SOFT_IGNORE) ? ignores.listSoftMasks(serverId) : ignores.listMasks(serverId);
     for (String m : masks) {
       if (m == null || m.isBlank()) continue;
-      model.addElement(m);
+      if (kind == Kind.SOFT_IGNORE) {
+        model.addElement(MaskRow.forSoftMask(m));
+      } else {
+        model.addElement(
+            MaskRow.forHardMask(
+                m,
+                formatHardMaskDisplay(
+                    m,
+                    ignores.levelsForHardMask(serverId, m),
+                    ignores.channelsForHardMask(serverId, m),
+                    ignores.expiresAtEpochMsForHardMask(serverId, m),
+                    ignores.patternForHardMask(serverId, m),
+                    ignores.patternModeForHardMask(serverId, m),
+                    ignores.repliesForHardMask(serverId, m))));
+      }
     }
   }
 
-  private void refreshIgnore(DefaultListModel<String> model, String serverId) {
+  private void refreshIgnore(DefaultListModel<MaskRow> model, String serverId) {
     refresh(model, serverId, Kind.IGNORE);
   }
 
-  private void refreshSoft(DefaultListModel<String> model, String serverId) {
+  private void refreshSoft(DefaultListModel<MaskRow> model, String serverId) {
     refresh(model, serverId, Kind.SOFT_IGNORE);
+  }
+
+  static String formatHardMaskDisplay(
+      String mask,
+      List<String> levels,
+      List<String> channels,
+      long expiresAtEpochMs,
+      String pattern,
+      IgnoreTextPatternMode patternMode,
+      boolean replies) {
+    String m = Objects.toString(mask, "").trim();
+    if (m.isEmpty()) return "";
+
+    List<String> metadata = new ArrayList<>();
+    List<String> normalizedLevels = IgnoreLevels.normalizeConfigured(levels);
+    if (!(normalizedLevels.size() == 1 && "ALL".equalsIgnoreCase(normalizedLevels.getFirst()))) {
+      metadata.add("levels=" + String.join(",", normalizedLevels));
+    }
+    if (channels != null && !channels.isEmpty()) {
+      metadata.add("channels=" + String.join(",", channels));
+    }
+    if (expiresAtEpochMs > 0L) {
+      metadata.add(
+          "expires="
+              + DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(expiresAtEpochMs)));
+    }
+
+    String normalizedPattern = Objects.toString(pattern, "").trim();
+    if (!normalizedPattern.isEmpty()) {
+      metadata.add("pattern=" + renderPattern(normalizedPattern, patternMode));
+    }
+    if (replies) {
+      metadata.add("replies");
+    }
+
+    if (metadata.isEmpty()) return m;
+    return m + " [" + String.join("; ", metadata) + "]";
+  }
+
+  private static String renderPattern(String pattern, IgnoreTextPatternMode mode) {
+    String p = Objects.toString(pattern, "").trim();
+    if (p.isEmpty()) return "";
+    IgnoreTextPatternMode m = (mode == null) ? IgnoreTextPatternMode.GLOB : mode;
+    return switch (m) {
+      case REGEXP -> "/" + p + "/ (regexp)";
+      case FULL -> p + " (full)";
+      case GLOB -> p;
+    };
+  }
+
+  private record MaskRow(String mask, String display) {
+    static MaskRow forHardMask(String mask, String display) {
+      String m = Objects.toString(mask, "").trim();
+      String d = Objects.toString(display, "").trim();
+      if (d.isEmpty()) d = m;
+      return new MaskRow(m, d);
+    }
+
+    static MaskRow forSoftMask(String mask) {
+      String m = Objects.toString(mask, "").trim();
+      return new MaskRow(m, m);
+    }
+
+    @Override
+    public String toString() {
+      return display;
+    }
   }
 }
