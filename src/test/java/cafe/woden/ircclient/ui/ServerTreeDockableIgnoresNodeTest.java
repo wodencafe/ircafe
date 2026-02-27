@@ -4,10 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.ServerEntry;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import org.junit.jupiter.api.Test;
@@ -42,6 +46,40 @@ class ServerTreeDockableIgnoresNodeTest {
         });
   }
 
+  @Test
+  void removingServerWhileIgnoresIsSelectedFallsBackToRemainingServerStatus() throws Exception {
+    AtomicReference<ServerTreeDockable> dockableRef = new AtomicReference<>();
+
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            dockableRef.set(dockable);
+            invokeAddServerRoot(dockable, "libera");
+            invokeAddServerRoot(dockable, "oftc");
+
+            TargetRef selectedIgnores = TargetRef.ignores("libera");
+            dockable.selectTarget(selectedIgnores);
+            assertEquals(selectedIgnores, selectedTargetRef(dockable));
+
+            invokeSyncServers(dockable, List.of(serverEntry("oftc")));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+
+    // Let syncServers()'s invokeLater fallback run.
+    onEdt(
+        () -> {
+          try {
+            TargetRef selected = selectedTargetRef(dockableRef.get());
+            assertEquals(new TargetRef("oftc", "status"), selected);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
   private static ServerTreeDockable newDockable() {
     return new ServerTreeDockable(
         null,
@@ -62,6 +100,36 @@ class ServerTreeDockableIgnoresNodeTest {
     Method m = ServerTreeDockable.class.getDeclaredMethod("addServerRoot", String.class);
     m.setAccessible(true);
     m.invoke(dockable, serverId);
+  }
+
+  private static void invokeSyncServers(ServerTreeDockable dockable, List<ServerEntry> entries)
+      throws Exception {
+    Method m = ServerTreeDockable.class.getDeclaredMethod("syncServers", List.class);
+    m.setAccessible(true);
+    m.invoke(dockable, entries);
+  }
+
+  private static TargetRef selectedTargetRef(ServerTreeDockable dockable) throws Exception {
+    Method m = ServerTreeDockable.class.getDeclaredMethod("selectedTargetRef");
+    m.setAccessible(true);
+    return (TargetRef) m.invoke(dockable);
+  }
+
+  private static ServerEntry serverEntry(String id) {
+    return ServerEntry.persistent(
+        new IrcProperties.Server(
+            id,
+            "irc.example.net",
+            6697,
+            true,
+            "",
+            "ircafe",
+            "ircafe",
+            "IRCafe User",
+            null,
+            List.of(),
+            List.of(),
+            null));
   }
 
   @SuppressWarnings("unchecked")

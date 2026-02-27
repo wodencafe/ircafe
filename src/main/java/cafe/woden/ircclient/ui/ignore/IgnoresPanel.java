@@ -15,6 +15,7 @@ import javax.swing.JPanel;
 public final class IgnoresPanel extends JPanel {
 
   private final JLabel serverLabel = new JLabel("Server: (none)");
+  private final JButton openButton = new JButton("Open Ignore Lists...");
   private String serverId = "";
   private Consumer<String> openIgnoreDialogHandler = sid -> {};
 
@@ -28,13 +29,13 @@ public final class IgnoresPanel extends JPanel {
             "<html>Manage hard and soft ignore rules for the selected server.<br>"
                 + "Hard ignores drop matching events. Soft ignores collapse matching lines.</html>");
 
-    JButton open = new JButton("Open Ignore Lists...");
-    open.setIcon(SvgIcons.action("ban", 16));
-    open.setDisabledIcon(SvgIcons.actionDisabled("ban", 16));
-    open.addActionListener(
+    openButton.setIcon(SvgIcons.action("ban", 16));
+    openButton.setDisabledIcon(SvgIcons.actionDisabled("ban", 16));
+    openButton.setEnabled(false);
+    openButton.addActionListener(
         e -> {
           String sid = Objects.toString(serverId, "").trim();
-          if (sid.isEmpty()) return;
+          if (!isValidServerId(sid)) return;
           openIgnoreDialogHandler.accept(sid);
         });
 
@@ -46,7 +47,7 @@ public final class IgnoresPanel extends JPanel {
     stack.add(Box.createVerticalStrut(12));
     stack.add(serverLabel);
     stack.add(Box.createVerticalStrut(12));
-    stack.add(open);
+    stack.add(openButton);
 
     add(stack, BorderLayout.NORTH);
   }
@@ -55,12 +56,23 @@ public final class IgnoresPanel extends JPanel {
     this.serverId = Objects.toString(serverId, "").trim();
     if (this.serverId.isEmpty()) {
       serverLabel.setText("Server: (none)");
+      openButton.setEnabled(false);
       return;
     }
     serverLabel.setText("Server: " + this.serverId);
+    openButton.setEnabled(isValidServerId(this.serverId));
   }
 
   public void setOnOpenIgnoreDialog(Consumer<String> handler) {
     this.openIgnoreDialogHandler = handler == null ? sid -> {} : handler;
+  }
+
+  private static boolean isValidServerId(String rawServerId) {
+    String sid = Objects.toString(rawServerId, "").trim();
+    if (sid.isEmpty()) return false;
+    for (int i = 0; i < sid.length(); i++) {
+      if (Character.isWhitespace(sid.charAt(i))) return false;
+    }
+    return true;
   }
 }
