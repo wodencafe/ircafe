@@ -6,10 +6,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
@@ -22,8 +25,7 @@ class ChatTopicCoordinatorTest {
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
     AtomicInteger uiRefreshCalls = new AtomicInteger();
     ChatTopicCoordinator coordinator =
-        new ChatTopicCoordinator(
-            new JScrollPane(), channelListPanel, uiRefreshCalls::incrementAndGet);
+        newCoordinator(channelListPanel, uiRefreshCalls::incrementAndGet);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     TestSubscriber<ChatDockable.TopicUpdate> subscriber = coordinator.topicUpdates().test();
 
@@ -44,8 +46,7 @@ class ChatTopicCoordinatorTest {
   @Test
   void setTopicIgnoresNonChannelTargets() {
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
-    ChatTopicCoordinator coordinator =
-        new ChatTopicCoordinator(new JScrollPane(), channelListPanel, () -> {});
+    ChatTopicCoordinator coordinator = newCoordinator(channelListPanel, () -> {});
     TargetRef queryTarget = new TargetRef("libera", "alice");
     TestSubscriber<ChatDockable.TopicUpdate> subscriber = coordinator.topicUpdates().test();
 
@@ -59,8 +60,7 @@ class ChatTopicCoordinatorTest {
   @Test
   void updateTopicPanelForActiveChannelShowsTopicPanel() {
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
-    ChatTopicCoordinator coordinator =
-        new ChatTopicCoordinator(new JScrollPane(), channelListPanel, () -> {});
+    ChatTopicCoordinator coordinator = newCoordinator(channelListPanel, () -> {});
     TargetRef channel = new TargetRef("libera", "#ircafe");
 
     coordinator.setTopic(channel, "visible topic", channel);
@@ -73,8 +73,7 @@ class ChatTopicCoordinatorTest {
   @Test
   void updateTopicPanelForNonChannelHidesPanel() {
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
-    ChatTopicCoordinator coordinator =
-        new ChatTopicCoordinator(new JScrollPane(), channelListPanel, () -> {});
+    ChatTopicCoordinator coordinator = newCoordinator(channelListPanel, () -> {});
     TargetRef channel = new TargetRef("libera", "#ircafe");
     TargetRef status = new TargetRef("libera", "status");
 
@@ -89,8 +88,7 @@ class ChatTopicCoordinatorTest {
   @Test
   void clearTopicWithoutExistingValueDoesNotEmitUpdate() {
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
-    ChatTopicCoordinator coordinator =
-        new ChatTopicCoordinator(new JScrollPane(), channelListPanel, () -> {});
+    ChatTopicCoordinator coordinator = newCoordinator(channelListPanel, () -> {});
     TargetRef channel = new TargetRef("libera", "#ircafe");
     TestSubscriber<ChatDockable.TopicUpdate> subscriber = coordinator.topicUpdates().test();
 
@@ -98,5 +96,15 @@ class ChatTopicCoordinatorTest {
 
     subscriber.assertNoValues();
     verifyNoInteractions(channelListPanel);
+  }
+
+  private static ChatTopicCoordinator newCoordinator(
+      ChannelListPanel channelListPanel, Runnable refresh) {
+    NotificationStore notificationStore = mock(NotificationStore.class);
+    when(notificationStore.listAll("libera")).thenReturn(List.of());
+    when(notificationStore.listAllRuleMatches("libera")).thenReturn(List.of());
+    when(notificationStore.listAllIrcEventRules("libera")).thenReturn(List.of());
+    return new ChatTopicCoordinator(
+        new JScrollPane(), channelListPanel, notificationStore, target -> {}, refresh);
   }
 }

@@ -246,10 +246,10 @@ public record UiProperties(
       if (notifyPrivateMessages == null) notifyPrivateMessages = true;
       if (notifyConnectionState == null) notifyConnectionState = false;
 
-      // HexChat-ish defaults: notify when you're not actively looking at IRCafe.
-      if (notifyOnlyWhenUnfocused == null) notifyOnlyWhenUnfocused = true;
+      // Default to notifying in both focused and unfocused states; users can narrow this.
+      if (notifyOnlyWhenUnfocused == null) notifyOnlyWhenUnfocused = false;
       if (notifyOnlyWhenMinimizedOrHidden == null) notifyOnlyWhenMinimizedOrHidden = false;
-      if (notifySuppressWhenTargetActive == null) notifySuppressWhenTargetActive = true;
+      if (notifySuppressWhenTargetActive == null) notifySuppressWhenTargetActive = false;
 
       // Default to "on" - we only actually use D-Bus if the session supports actions.
       if (linuxDbusActionsEnabled == null) linuxDbusActionsEnabled = true;

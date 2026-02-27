@@ -1,9 +1,11 @@
 package cafe.woden.ircclient.app;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -11,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.MonitorFallbackPort;
+import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
@@ -40,11 +43,14 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.lang.reflect.Method;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -207,9 +213,79 @@ class IrcMediatorMockVerifyTest {
     verify(ui).appendStatus(status, "(alias)", "warn");
   }
 
+  @Test
+  void mentionInActiveChannelStillRecordsHighlightNotification() throws Exception {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("bob"));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera", new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "hi bob")));
+
+    verify(ui).recordHighlight(chan, "alice", "hi bob");
+    verify(ui, never()).markHighlight(chan);
+    verify(trayNotificationsPort).notifyHighlight("libera", "#ircafe", "alice", "hi bob");
+  }
+
+  @Test
+  void mentionInBackgroundChannelMarksUnreadHighlightAndRecordsNotification() throws Exception {
+    TargetRef active = new TargetRef("libera", "#other");
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("bob"));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera", new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "hi bob")));
+
+    verify(ui).markHighlight(chan);
+    verify(ui).recordHighlight(chan, "alice", "hi bob");
+    verify(trayNotificationsPort).notifyHighlight("libera", "#ircafe", "alice", "hi bob");
+  }
+
+  @Test
+  void ruleMatchInActiveChannelStillRecordsNotificationWithoutUnreadHighlight() throws Exception {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(notificationRuleMatcherPort.matchAll("deploy now"))
+        .thenReturn(List.of(new NotificationRuleMatch("Rule A", "deploy", 0, 6, "#FF9900")));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "deploy now")));
+
+    verify(ui).recordRuleMatch(eq(chan), eq("alice"), eq("Rule A"), anyString());
+    verify(ui, never()).markHighlight(chan);
+  }
+
+  @Test
+  void ruleMatchInBackgroundChannelRecordsNotificationAndUnreadHighlight() throws Exception {
+    TargetRef active = new TargetRef("libera", "#other");
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    when(notificationRuleMatcherPort.matchAll("deploy now"))
+        .thenReturn(List.of(new NotificationRuleMatch("Rule A", "deploy", 0, 6, "#FF9900")));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "deploy now")));
+
+    verify(ui).recordRuleMatch(eq(chan), eq("alice"), eq("Rule A"), anyString());
+    verify(ui).markHighlight(chan);
+  }
+
   private void invokeHandleOutgoingLine(String raw) throws Exception {
     Method method = IrcMediator.class.getDeclaredMethod("handleOutgoingLine", String.class);
     method.setAccessible(true);
     method.invoke(mediator, raw);
+  }
+
+  private void invokeOnServerIrcEvent(ServerIrcEvent event) throws Exception {
+    Method method = IrcMediator.class.getDeclaredMethod("onServerIrcEvent", ServerIrcEvent.class);
+    method.setAccessible(true);
+    method.invoke(mediator, event);
   }
 }

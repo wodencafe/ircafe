@@ -102,10 +102,19 @@ public interface UiPort {
   /**
    * Record a highlight notification (for the per-server Notifications view).
    *
-   * <p>This should be called when the user is mentioned in a channel message/action and that
-   * highlight is considered unread (e.g. the channel is not currently active).
+   * <p>This should be called when the user is mentioned in a channel message/action. Callers may
+   * independently decide whether the highlight should also count as unread.
    */
   void recordHighlight(TargetRef target, String fromNick);
+
+  /**
+   * Record a highlight notification with optional snippet context.
+   *
+   * <p>Default implementation falls back to {@link #recordHighlight(TargetRef, String)}.
+   */
+  default void recordHighlight(TargetRef target, String fromNick, String snippet) {
+    recordHighlight(target, fromNick);
+  }
 
   /**
    * Record a notification rule match (for the per-server Notifications view).

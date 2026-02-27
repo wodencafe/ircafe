@@ -195,9 +195,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     // Show something harmless on startup; first selection will swap it.
     setDocument(new DefaultStyledDocument());
 
-    TopicCoordinatorBundle topicBundle = createTopicCoordinatorBundle();
+    TopicCoordinatorBundle topicBundle = createTopicCoordinatorBundle(notificationStore);
     this.topicCoordinator = topicBundle.topicCoordinator();
     this.banListCoordinator = topicBundle.banListCoordinator();
+    bindTopicNotificationIndicatorUpdates(notificationStore);
 
     CenterViewCoordinatorBundle centerViewBundle =
         createCenterViewCoordinatorBundle(
@@ -305,19 +306,45 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         springRuntimeEventsService != null ? springRuntimeEventsService.changeStream() : null);
   }
 
-  private TopicCoordinatorBundle createTopicCoordinatorBundle() {
+  private TopicCoordinatorBundle createTopicCoordinatorBundle(NotificationStore notificationStore) {
     // Insert an optional topic panel above the transcript.
     remove(scroll);
     ChatTopicCoordinator topicCoordinator =
         new ChatTopicCoordinator(
             scroll,
             channelListPanel,
+            java.util.Objects.requireNonNull(notificationStore, "notificationStore"),
+            ref -> {
+              if (ref == null) return;
+              if (serverTree != null) {
+                serverTree.selectTarget(ref);
+              }
+            },
             () -> {
               revalidate();
               repaint();
             });
     ChatBanListCoordinator banListCoordinator = new ChatBanListCoordinator(channelListPanel);
     return new TopicCoordinatorBundle(topicCoordinator, banListCoordinator);
+  }
+
+  private void bindTopicNotificationIndicatorUpdates(NotificationStore notificationStore) {
+    if (notificationStore == null) return;
+    disposables.add(
+        notificationStore
+            .changes()
+            .subscribe(
+                change -> {
+                  TargetRef target = activeTarget;
+                  if (target == null || !target.isChannel()) return;
+                  if (change == null || !Objects.equals(target.serverId(), change.serverId()))
+                    return;
+                  SwingUtilities.invokeLater(
+                      () -> topicCoordinator.updateTopicPanelForActiveTarget(activeTarget));
+                },
+                err -> {
+                  // Never break chat view updates due to best-effort indicator refreshes.
+                }));
   }
 
   private CenterViewCoordinatorBundle createCenterViewCoordinatorBundle(

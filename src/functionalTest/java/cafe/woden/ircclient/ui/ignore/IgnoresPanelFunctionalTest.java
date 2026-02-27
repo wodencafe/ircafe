@@ -54,7 +54,8 @@ class IgnoresPanelFunctionalTest {
     return null;
   }
 
-  private static void onEdt(ThrowingRunnable r) throws InvocationTargetException, InterruptedException {
+  private static void onEdt(ThrowingRunnable r)
+      throws InvocationTargetException, InterruptedException {
     if (SwingUtilities.isEventDispatchThread()) {
       try {
         r.run();
@@ -82,7 +83,8 @@ class IgnoresPanelFunctionalTest {
         throw new RuntimeException(e);
       }
     }
-    java.util.concurrent.atomic.AtomicReference<T> out = new java.util.concurrent.atomic.AtomicReference<>();
+    java.util.concurrent.atomic.AtomicReference<T> out =
+        new java.util.concurrent.atomic.AtomicReference<>();
     SwingUtilities.invokeAndWait(
         () -> {
           try {
@@ -104,4 +106,3 @@ class IgnoresPanelFunctionalTest {
     T get() throws Exception;
   }
 }
-

@@ -32,7 +32,8 @@ class OutboundIgnoreOptionParsingPropertyTest {
         if (p > 0 && random.nextBoolean()) {
           token.append(random.nextBoolean() ? "_" : " ");
         }
-        String unit = random.nextBoolean() ? units[unitIdx].toUpperCase(Locale.ROOT) : units[unitIdx];
+        String unit =
+            random.nextBoolean() ? units[unitIdx].toUpperCase(Locale.ROOT) : units[unitIdx];
         token.append(amount).append(unit);
       }
 
@@ -46,7 +47,8 @@ class OutboundIgnoreOptionParsingPropertyTest {
   void parseIrssiDurationMsRejectsInvalidTokens() {
     for (String invalid : List.of("", " ", "nope", "10x", "1h-30m", "m10", "10minutesx")) {
       OptionalLong parsed = parseIrssiDurationMs(invalid);
-      assertTrue(parsed.isEmpty(), () -> "expected invalid duration token to be rejected: " + invalid);
+      assertTrue(
+          parsed.isEmpty(), () -> "expected invalid duration token to be rejected: " + invalid);
     }
   }
 
@@ -87,7 +89,8 @@ class OutboundIgnoreOptionParsingPropertyTest {
 
   private static Object invokePrivate(String methodName, String arg) {
     try {
-      Method method = OutboundIgnoreCommandService.class.getDeclaredMethod(methodName, String.class);
+      Method method =
+          OutboundIgnoreCommandService.class.getDeclaredMethod(methodName, String.class);
       method.setAccessible(true);
       return method.invoke(null, arg);
     } catch (Exception ex) {

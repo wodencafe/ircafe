@@ -99,7 +99,8 @@ class ThemeSwitchingFunctionalTest {
         throw new RuntimeException(e);
       }
     }
-    java.util.concurrent.atomic.AtomicReference<T> out = new java.util.concurrent.atomic.AtomicReference<>();
+    java.util.concurrent.atomic.AtomicReference<T> out =
+        new java.util.concurrent.atomic.AtomicReference<>();
     SwingUtilities.invokeAndWait(
         () -> {
           try {
@@ -116,4 +117,3 @@ class ThemeSwitchingFunctionalTest {
     T get() throws Exception;
   }
 }
-

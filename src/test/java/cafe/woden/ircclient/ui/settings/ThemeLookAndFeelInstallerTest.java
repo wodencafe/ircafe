@@ -31,7 +31,8 @@ class ThemeLookAndFeelInstallerTest {
     when(nimbusOverrides.variantIds()).thenReturn(Set.of("nimbus-dark-blue"));
     when(nimbusOverrides.applyVariant(anyString())).thenReturn(true);
 
-    ThemeLookAndFeelInstaller installer = new ThemeLookAndFeelInstaller(presetRegistry, nimbusOverrides);
+    ThemeLookAndFeelInstaller installer =
+        new ThemeLookAndFeelInstaller(presetRegistry, nimbusOverrides);
     assertNotNull(installer);
 
     onEdt(() -> installer.install("nimbus-dark-blue"));
@@ -48,7 +49,8 @@ class ThemeLookAndFeelInstallerTest {
     NimbusThemeOverrideService nimbusOverrides = mock(NimbusThemeOverrideService.class);
     when(nimbusOverrides.variantIds()).thenReturn(Set.of("nimbus-dark-blue"));
 
-    ThemeLookAndFeelInstaller installer = new ThemeLookAndFeelInstaller(presetRegistry, nimbusOverrides);
+    ThemeLookAndFeelInstaller installer =
+        new ThemeLookAndFeelInstaller(presetRegistry, nimbusOverrides);
     onEdt(() -> installer.install("darcula"));
 
     verify(nimbusOverrides).clearDarkOverrides();
@@ -76,4 +78,3 @@ class ThemeLookAndFeelInstallerTest {
     SwingUtilities.invokeAndWait(r);
   }
 }
-

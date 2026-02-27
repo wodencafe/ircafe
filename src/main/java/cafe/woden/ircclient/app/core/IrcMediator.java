@@ -611,8 +611,7 @@ public class IrcMediator implements MediatorControlPort {
       case IrcEvent.ChannelMessage ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
-        NotificationRuleMatch ruleMatch =
-            firstRuleMatchForUnreadChannel(sid, chan, active, ev.from(), ev.text());
+        NotificationRuleMatch ruleMatch = firstRuleMatchForChannel(sid, chan, ev.from(), ev.text());
 
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
@@ -654,7 +653,7 @@ public class IrcMediator implements MediatorControlPort {
                       ruleMatch != null ? ruleMatch.highlightColor() : null));
         }
 
-        recordRuleMatchIfPresent(chan, ev.from(), ev.text(), ruleMatch);
+        recordRuleMatchIfPresent(chan, active, ev.from(), ev.text(), ruleMatch);
         recordInterceptorEvent(
             sid,
             ev.channel(),
@@ -672,10 +671,7 @@ public class IrcMediator implements MediatorControlPort {
               learnedHostmaskForNick(sid, ev.from()),
               ev.text(),
               InterceptorEventType.HIGHLIGHT);
-          if (!chan.equals(active)) {
-            ui.markHighlight(chan);
-            ui.recordHighlight(chan, ev.from());
-          }
+          recordMentionHighlight(chan, active, ev.from(), ev.text());
 
           try {
             trayNotificationService.notifyHighlight(sid, ev.channel(), ev.from(), ev.text());
@@ -687,7 +683,7 @@ public class IrcMediator implements MediatorControlPort {
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
         NotificationRuleMatch ruleMatch =
-            firstRuleMatchForUnreadChannel(sid, chan, active, ev.from(), ev.action());
+            firstRuleMatchForChannel(sid, chan, ev.from(), ev.action());
 
         userInfoEnrichmentService.noteUserActivity(sid, ev.from(), ev.at());
 
@@ -720,7 +716,7 @@ public class IrcMediator implements MediatorControlPort {
                       ruleMatch != null ? ruleMatch.highlightColor() : null));
         }
 
-        recordRuleMatchIfPresent(chan, ev.from(), ev.action(), ruleMatch);
+        recordRuleMatchIfPresent(chan, active, ev.from(), ev.action(), ruleMatch);
         recordInterceptorEvent(
             sid,
             ev.channel(),
@@ -738,10 +734,7 @@ public class IrcMediator implements MediatorControlPort {
               learnedHostmaskForNick(sid, ev.from()),
               ev.action(),
               InterceptorEventType.HIGHLIGHT);
-          if (!chan.equals(active)) {
-            ui.markHighlight(chan);
-            ui.recordHighlight(chan, ev.from());
-          }
+          recordMentionHighlight(chan, active, ev.from(), "* " + ev.action());
 
           try {
             trayNotificationService.notifyHighlight(
@@ -1841,10 +1834,9 @@ public class IrcMediator implements MediatorControlPort {
     }
   }
 
-  private NotificationRuleMatch firstRuleMatchForUnreadChannel(
-      String serverId, TargetRef chan, TargetRef active, String from, String text) {
+  private NotificationRuleMatch firstRuleMatchForChannel(
+      String serverId, TargetRef chan, String from, String text) {
     if (chan == null || text == null || text.isBlank()) return null;
-    if (active != null && chan.equals(active)) return null;
     if (isFromSelf(serverId, from)) return null;
 
     List<NotificationRuleMatch> matches;
@@ -2205,11 +2197,22 @@ public class IrcMediator implements MediatorControlPort {
   private record ModeChangeToken(boolean add, char mode, String arg) {}
 
   private void recordRuleMatchIfPresent(
-      TargetRef chan, String from, String text, NotificationRuleMatch match) {
+      TargetRef chan, TargetRef active, String from, String text, NotificationRuleMatch match) {
     if (chan == null || match == null) return;
-    ui.markHighlight(chan);
+    if (active == null || !chan.equals(active)) {
+      ui.markHighlight(chan);
+    }
     ui.recordRuleMatch(
         chan, from, match.ruleLabel(), snippetAround(text, match.start(), match.end()));
+  }
+
+  private void recordMentionHighlight(
+      TargetRef chan, TargetRef active, String fromNick, String snippet) {
+    if (chan == null) return;
+    if (active == null || !chan.equals(active)) {
+      ui.markHighlight(chan);
+    }
+    ui.recordHighlight(chan, fromNick, snippet);
   }
 
   private void recordInterceptorEvent(

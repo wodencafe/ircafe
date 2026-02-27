@@ -23,8 +23,12 @@ class IgnoreMaskNormalizerPropertyTest {
       assertFalse(
           normalized.chars().anyMatch(Character::isWhitespace),
           () -> "normalized mask must not contain whitespace: '" + normalized + "'");
-      assertTrue(normalized.contains("@"), () -> "normalized mask should include host part: " + normalized);
-      assertTrue(normalized.contains("!"), () -> "normalized mask should include ident separator: " + normalized);
+      assertTrue(
+          normalized.contains("@"),
+          () -> "normalized mask should include host part: " + normalized);
+      assertTrue(
+          normalized.contains("!"),
+          () -> "normalized mask should include ident separator: " + normalized);
     }
   }
 

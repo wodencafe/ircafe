@@ -71,15 +71,11 @@ public class UiSettingsBus {
         tray != null && Boolean.TRUE.equals(tray.notifyConnectionState());
 
     boolean trayNotifyOnlyWhenUnfocused =
-        tray == null
-            || tray.notifyOnlyWhenUnfocused() == null
-            || Boolean.TRUE.equals(tray.notifyOnlyWhenUnfocused());
+        tray != null && Boolean.TRUE.equals(tray.notifyOnlyWhenUnfocused());
     boolean trayNotifyOnlyWhenMinimizedOrHidden =
         tray != null && Boolean.TRUE.equals(tray.notifyOnlyWhenMinimizedOrHidden());
     boolean trayNotifySuppressWhenTargetActive =
-        tray == null
-            || tray.notifySuppressWhenTargetActive() == null
-            || Boolean.TRUE.equals(tray.notifySuppressWhenTargetActive());
+        tray != null && Boolean.TRUE.equals(tray.notifySuppressWhenTargetActive());
 
     boolean trayLinuxDbusActionsEnabled =
         tray == null

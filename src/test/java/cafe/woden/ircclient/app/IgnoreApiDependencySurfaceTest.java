@@ -38,7 +38,8 @@ class IgnoreApiDependencySurfaceTest {
         Arrays.stream(type.getDeclaredConstructors())
             .map(Constructor::getParameterTypes)
             .anyMatch(params -> Arrays.asList(params).contains(dependency));
-    assertTrue(found, () -> type.getSimpleName() + " should depend on " + dependency.getSimpleName());
+    assertTrue(
+        found, () -> type.getSimpleName() + " should depend on " + dependency.getSimpleName());
   }
 
   private static void assertNoIgnoreInternalsInTypeSurface(Class<?> type) {
@@ -52,4 +53,3 @@ class IgnoreApiDependencySurfaceTest {
     }
   }
 }
-

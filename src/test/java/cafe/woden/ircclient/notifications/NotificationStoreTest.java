@@ -18,11 +18,12 @@ class NotificationStoreTest {
     NotificationStore store = new NotificationStore();
     TargetRef chan = new TargetRef("libera", "#ircafe");
 
-    store.recordHighlight(chan, "alice");
+    store.recordHighlight(chan, "alice", "alice: ping");
     store.recordRuleMatch(chan, "bob", "Rule A", "match snippet");
     store.recordIrcEvent("libera", "#ircafe", "carol", "Topic changed", "new topic body");
 
     assertEquals(1, store.listAll("libera").size());
+    assertEquals("alice: ping", store.listAll("libera").getFirst().snippet());
     assertEquals(1, store.listAllRuleMatches("libera").size());
     assertEquals(1, store.listAllIrcEventRules("libera").size());
     assertEquals(3, store.count("libera"));

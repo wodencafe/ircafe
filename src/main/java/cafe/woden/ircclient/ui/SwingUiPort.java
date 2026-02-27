@@ -336,8 +336,13 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void recordHighlight(TargetRef target, String fromNick) {
+    recordHighlight(target, fromNick, "");
+  }
+
+  @Override
+  public void recordHighlight(TargetRef target, String fromNick, String snippet) {
     // Not a UI action; no need to marshal to the EDT.
-    notificationStore.recordHighlight(target, fromNick);
+    notificationStore.recordHighlight(target, fromNick, snippet);
   }
 
   @Override
@@ -348,11 +353,6 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void clearUnread(TargetRef target) {
-    // Visiting a channel clears any stored highlight notifications for that channel.
-    if (target != null && target.isChannel()) {
-      // Not a UI action; no need to marshal to the EDT.
-      notificationStore.clearChannel(target);
-    }
     onEdt(() -> serverTree.clearUnread(target));
   }
 

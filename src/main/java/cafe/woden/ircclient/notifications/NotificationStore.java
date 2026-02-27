@@ -27,9 +27,11 @@ public class NotificationStore {
    * @param serverId server identifier
    * @param channel channel name (e.g. #libera)
    * @param fromNick nick that triggered the highlight
+   * @param snippet short excerpt of the message/action that triggered the highlight
    * @param at timestamp (Instant)
    */
-  public record HighlightEvent(String serverId, String channel, String fromNick, Instant at) {}
+  public record HighlightEvent(
+      String serverId, String channel, String fromNick, String snippet, Instant at) {}
 
   /**
    * A rule match event (WORD/REGEX) from a channel message/action.
@@ -107,6 +109,11 @@ public class NotificationStore {
 
   /** Record a new highlight event. */
   public void recordHighlight(TargetRef channelTarget, String fromNick) {
+    recordHighlight(channelTarget, fromNick, "");
+  }
+
+  /** Record a new highlight event with optional message snippet context. */
+  public void recordHighlight(TargetRef channelTarget, String fromNick, String snippet) {
     if (channelTarget == null) return;
     if (channelTarget.isUiOnly()) return;
     if (!channelTarget.isChannel()) return;
@@ -118,13 +125,14 @@ public class NotificationStore {
     if (channel.isEmpty()) return;
 
     String nick = normalizeNick(fromNick);
+    String snip = normalizeSnippet(snippet);
     Instant now = Instant.now();
 
     List<HighlightEvent> list =
         eventsByServer.computeIfAbsent(sid, k -> Collections.synchronizedList(new ArrayList<>()));
 
     synchronized (list) {
-      list.add(new HighlightEvent(sid, channel, nick, now));
+      list.add(new HighlightEvent(sid, channel, nick, snip, now));
       // Enforce cap (drop oldest first).
       int overflow = list.size() - maxEventsPerServer;
       if (overflow > 0) {

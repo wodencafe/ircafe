@@ -96,4 +96,3 @@ class IgnoreListServiceConcurrencyTest {
     return new IgnoreListService(new IgnoreProperties(true, false, Map.of()), runtimeConfig);
   }
 }
-

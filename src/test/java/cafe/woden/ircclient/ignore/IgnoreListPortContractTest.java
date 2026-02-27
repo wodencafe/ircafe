@@ -40,8 +40,10 @@ class IgnoreListPortContractTest {
     assertEquals(IgnoreAddMaskResult.ADDED, added);
     assertEquals(List.of("BadNick!*@*"), queryPort.listMasks("libera"));
     assertEquals(List.of("MSGS", "NOTICES"), queryPort.levelsForHardMask("libera", "badnick!*@*"));
-    assertEquals(List.of("#ircafe", "#ops"), queryPort.channelsForHardMask("libera", "BadNick!*@*"));
-    assertEquals(1_772_368_496_000L, queryPort.expiresAtEpochMsForHardMask("libera", "BadNick!*@*"));
+    assertEquals(
+        List.of("#ircafe", "#ops"), queryPort.channelsForHardMask("libera", "BadNick!*@*"));
+    assertEquals(
+        1_772_368_496_000L, queryPort.expiresAtEpochMsForHardMask("libera", "BadNick!*@*"));
     assertEquals("afk|brb", queryPort.patternForHardMask("libera", "BadNick!*@*"));
     assertEquals(
         IgnoreTextPatternMode.REGEXP, queryPort.patternModeForHardMask("libera", "BadNick!*@*"));
@@ -62,7 +64,8 @@ class IgnoreListPortContractTest {
     assertEquals(List.of("#ircafe"), queryPort.channelsForHardMask("libera", "BadNick!*@*"));
     assertEquals(0L, queryPort.expiresAtEpochMsForHardMask("libera", "BadNick!*@*"));
     assertEquals("", queryPort.patternForHardMask("libera", "BadNick!*@*"));
-    assertEquals(IgnoreTextPatternMode.GLOB, queryPort.patternModeForHardMask("libera", "BadNick!*@*"));
+    assertEquals(
+        IgnoreTextPatternMode.GLOB, queryPort.patternModeForHardMask("libera", "BadNick!*@*"));
     assertFalse(queryPort.repliesForHardMask("libera", "BadNick!*@*"));
 
     assertTrue(commandPort.removeMask("libera", "badnick"));
@@ -123,4 +126,3 @@ class IgnoreListPortContractTest {
     return new IgnoreListService(new IgnoreProperties(true, false, Map.of()), runtimeConfig);
   }
 }
-

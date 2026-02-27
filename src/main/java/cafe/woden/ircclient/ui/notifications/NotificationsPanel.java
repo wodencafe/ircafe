@@ -153,7 +153,7 @@ public class NotificationsPanel extends JPanel implements AutoCloseable {
     List<HighlightEvent> highlights = store.listAll(sid);
     for (HighlightEvent ev : highlights) {
       if (ev == null) continue;
-      rows.add(new Row(ev.at(), ev.channel(), ev.fromNick(), "(mention)", ""));
+      rows.add(new Row(ev.at(), ev.channel(), ev.fromNick(), "(mention)", ev.snippet()));
     }
 
     List<RuleMatchEvent> rules = store.listAllRuleMatches(sid);

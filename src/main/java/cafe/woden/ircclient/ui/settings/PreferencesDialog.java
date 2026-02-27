@@ -7343,7 +7343,7 @@ public class PreferencesDialog {
     panel.add(
         helpText(
             "Add custom word/regex rules to create notifications when messages match.\n"
-                + "Rules only trigger for channels (not PMs) and only when the channel isn't the active target."),
+                + "Rules only trigger for channels (not PMs), including the active channel."),
         "growx, wmin 0, wrap");
 
     JButton add = new JButton("Add");

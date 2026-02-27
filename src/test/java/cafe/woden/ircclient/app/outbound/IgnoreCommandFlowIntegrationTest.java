@@ -37,12 +37,14 @@ class IgnoreCommandFlowIntegrationTest {
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
 
     OutboundIgnoreCommandService service =
-        new OutboundIgnoreCommandService(ui, targetCoordinator, ignoreListService, ignoreListService);
+        new OutboundIgnoreCommandService(
+            ui, targetCoordinator, ignoreListService, ignoreListService);
 
     service.handleIgnore("-channels #ircafe MSGS badnick");
     assertEquals(List.of("badnick!*@*"), ignoreListService.listMasks("libera"));
     assertEquals(List.of("MSGS"), ignoreListService.levelsForHardMask("libera", "badnick!*@*"));
-    assertEquals(List.of("#ircafe"), ignoreListService.channelsForHardMask("libera", "badnick!*@*"));
+    assertEquals(
+        List.of("#ircafe"), ignoreListService.channelsForHardMask("libera", "badnick!*@*"));
 
     service.handleIgnore(" ");
     ArgumentCaptor<String> lines = ArgumentCaptor.forClass(String.class);
@@ -56,7 +58,8 @@ class IgnoreCommandFlowIntegrationTest {
 
   @Test
   void softIgnoreFlowAddsListsAndRemovesRules() {
-    IgnoreListService ignoreListService = newIgnoreListService(tempDir.resolve("soft-command-flow.yml"));
+    IgnoreListService ignoreListService =
+        newIgnoreListService(tempDir.resolve("soft-command-flow.yml"));
     UiPort ui = mock(UiPort.class);
     TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
     TargetRef active = new TargetRef("libera", "#ircafe");
@@ -65,7 +68,8 @@ class IgnoreCommandFlowIntegrationTest {
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
 
     OutboundIgnoreCommandService service =
-        new OutboundIgnoreCommandService(ui, targetCoordinator, ignoreListService, ignoreListService);
+        new OutboundIgnoreCommandService(
+            ui, targetCoordinator, ignoreListService, ignoreListService);
 
     service.handleSoftIgnore("quietnick");
     assertEquals(List.of("quietnick!*@*"), ignoreListService.listSoftMasks("libera"));
@@ -102,4 +106,3 @@ class IgnoreCommandFlowIntegrationTest {
     return new IgnoreListService(new IgnoreProperties(true, false, Map.of()), runtimeConfig);
   }
 }
-
