@@ -440,9 +440,10 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
                   prependOlderLinesInChunks(
                       target,
                       lines,
-                      0,
+                      lines.size() - 1,
                       insertAt,
                       0,
+                      insertAt,
                       hasMore,
                       anchor,
                       chunkSize,
@@ -470,9 +471,10 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private void prependOlderLinesInChunks(
       TargetRef target,
       List<LogLine> lines,
-      int startIndex,
+      int nextIndexInclusive,
       int insertAt,
       int insertedSoFar,
+      int dividerInsertAt,
       boolean hasMore,
       ScrollAnchor anchor,
       int chunkSize,
@@ -486,9 +488,10 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
               prependOlderLinesInChunks(
                   target,
                   lines,
-                  startIndex,
+                  nextIndexInclusive,
                   insertAt,
                   insertedSoFar,
+                  dividerInsertAt,
                   hasMore,
                   anchor,
                   chunkSize,
@@ -506,13 +509,22 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       int minLinesBeforeBudget = Math.min(maxLines, Math.max(1, MIN_LOAD_OLDER_LINES_PER_CHUNK));
       long chunkStartNs = System.nanoTime();
       long deadlineNs = System.nanoTime() + budgetNs;
-      int pos = insertAt;
+      int safeInsertAt = Math.max(0, insertAt);
       int inserted = insertedSoFar;
-      int nextIndex = startIndex;
+      int dividerPos = Math.max(0, dividerInsertAt);
+      int nextIndex = nextIndexInclusive;
       int insertedThisChunk = 0;
-      while (nextIndex < lines.size() && insertedThisChunk < maxLines) {
-        pos = insertLineFromHistoryAt(target, pos, lines.get(nextIndex));
-        nextIndex++;
+      // Insert newest-to-oldest at a fixed prepend offset so users see lines nearest the current
+      // transcript first, while final transcript order stays chronological.
+      while (nextIndex >= 0 && insertedThisChunk < maxLines) {
+        int beforeInsertAt = safeInsertAt;
+        int nextInsertAt = insertLineFromHistoryAt(target, safeInsertAt, lines.get(nextIndex));
+        dividerPos = Math.max(0, dividerPos + (nextInsertAt - beforeInsertAt));
+        if (nextInsertAt < safeInsertAt) {
+          // Transcript line-cap trimming can shift the fixed prepend point downward.
+          safeInsertAt = nextInsertAt;
+        }
+        nextIndex--;
         inserted++;
         insertedThisChunk++;
         if (insertedThisChunk >= minLinesBeforeBudget && System.nanoTime() >= deadlineNs) break;
@@ -534,10 +546,11 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
         anchor.restoreDuringInsertIfNeeded();
       }
 
-      if (nextIndex < lines.size()) {
+      if (nextIndex >= 0) {
         final int nextIndexFinal = nextIndex;
-        final int nextPos = pos;
+        final int nextInsertAt = safeInsertAt;
         final int nextInserted = inserted;
+        final int nextDividerPos = dividerPos;
         scheduleNextChunk(
             nextDelayMs,
             () ->
@@ -545,8 +558,9 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
                     target,
                     lines,
                     nextIndexFinal,
-                    nextPos,
+                    nextInsertAt,
                     nextInserted,
+                    nextDividerPos,
                     hasMore,
                     anchor,
                     chunkSize,
@@ -560,7 +574,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       finished = true;
       if (inserted > 0) {
         try {
-          transcripts.ensureHistoryDivider(target, pos, "Earlier messages");
+          transcripts.ensureHistoryDivider(target, dividerPos, "Earlier messages");
         } catch (Exception ignored) {
         }
       }

@@ -694,7 +694,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
                   prependOlderLinesInChunks(
                       target,
                       lines,
-                      0,
+                      lines.size() - 1,
                       insertAt,
                       hasMore,
                       anchor,
@@ -723,7 +723,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
   private void prependOlderLinesInChunks(
       TargetRef target,
       List<LogLine> lines,
-      int startIndex,
+      int nextIndexInclusive,
       int insertAt,
       boolean hasMore,
       ScrollAnchor anchor,
@@ -738,7 +738,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
               prependOlderLinesInChunks(
                   target,
                   lines,
-                  startIndex,
+                  nextIndexInclusive,
                   insertAt,
                   hasMore,
                   anchor,
@@ -757,15 +757,22 @@ public final class DbChatHistoryService implements ChatHistoryService {
       int minLinesBeforeBudget = Math.min(maxLines, Math.max(1, MIN_LOAD_OLDER_LINES_PER_CHUNK));
       long chunkStartNs = System.nanoTime();
       long deadlineNs = System.nanoTime() + budgetNs;
-      int pos = insertAt;
-      int nextIndex = startIndex;
+      int safeInsertAt = Math.max(0, insertAt);
+      int nextIndex = nextIndexInclusive;
       int insertedThisChunk = 0;
-      while (nextIndex < lines.size() && insertedThisChunk < maxLines) {
-        pos = insertLineFromHistoryAt(target, pos, lines.get(nextIndex));
-        nextIndex++;
+      // Insert newest-to-oldest at a fixed prepend offset so users see lines nearest the current
+      // transcript first, while final transcript order stays chronological.
+      while (nextIndex >= 0 && insertedThisChunk < maxLines) {
+        int nextInsertAt = insertLineFromHistoryAt(target, safeInsertAt, lines.get(nextIndex));
+        if (nextInsertAt < safeInsertAt) {
+          // Transcript line-cap trimming can shift the fixed prepend point downward.
+          safeInsertAt = nextInsertAt;
+        }
+        nextIndex--;
         insertedThisChunk++;
         if (insertedThisChunk >= minLinesBeforeBudget && System.nanoTime() >= deadlineNs) break;
       }
+      int insertedTotal = lines.size() - (nextIndex + 1);
       long elapsedNs = Math.max(0L, System.nanoTime() - chunkStartNs);
       int nextDelayMs = effectiveInterChunkDelayMs(chunkDelayMs, elapsedNs);
       log.info(
@@ -774,7 +781,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
           target,
           chunkNumber,
           insertedThisChunk,
-          nextIndex,
+          insertedTotal,
           lines.size(),
           TimeUnit.NANOSECONDS.toMillis(elapsedNs),
           nextDelayMs);
@@ -783,9 +790,9 @@ public final class DbChatHistoryService implements ChatHistoryService {
         anchor.restoreDuringInsertIfNeeded();
       }
 
-      if (nextIndex < lines.size()) {
+      if (nextIndex >= 0) {
         final int nextIndexFinal = nextIndex;
-        final int nextPos = pos;
+        final int nextInsertAt = safeInsertAt;
         scheduleNextChunk(
             nextDelayMs,
             () ->
@@ -793,7 +800,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
                     target,
                     lines,
                     nextIndexFinal,
-                    nextPos,
+                    nextInsertAt,
                     hasMore,
                     anchor,
                     chunkSize,
@@ -811,7 +818,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
           "[TEMP-LOAD-OLDER][DB] insert-finish id={} target={} insertedTotal={} totalLines={} hasMore={}",
           insertId,
           target,
-          nextIndex,
+          insertedTotal,
           lines.size(),
           hasMore);
     } catch (Exception e) {
