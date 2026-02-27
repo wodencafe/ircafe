@@ -277,6 +277,34 @@ class IrcMediatorMockVerifyTest {
     verify(ui).markHighlight(chan);
   }
 
+  @Test
+  void extendedJoinSetnameUpdatesRosterWithoutTranscriptStatusLine() throws Exception {
+    IrcEvent.UserSetNameObserved event =
+        new IrcEvent.UserSetNameObserved(
+            Instant.now(),
+            "alice",
+            "Alice Liddell",
+            IrcEvent.UserSetNameObserved.Source.EXTENDED_JOIN);
+
+    invokeOnServerIrcEvent(new ServerIrcEvent("libera", event));
+
+    verify(targetCoordinator).onUserSetNameObserved("libera", event);
+    verify(ui, never()).appendStatusAt(any(), any(), eq("(setname)"), anyString());
+  }
+
+  @Test
+  void explicitSetnameStillAppendsStatusLine() throws Exception {
+    when(targetCoordinator.sharedChannelTargetsForNick("libera", "alice")).thenReturn(List.of());
+    IrcEvent.UserSetNameObserved event =
+        new IrcEvent.UserSetNameObserved(
+            Instant.now(), "alice", "Alice Liddell", IrcEvent.UserSetNameObserved.Source.SETNAME);
+
+    invokeOnServerIrcEvent(new ServerIrcEvent("libera", event));
+
+    verify(targetCoordinator).onUserSetNameObserved("libera", event);
+    verify(ui).appendStatusAt(any(), any(), eq("(setname)"), eq("alice set name to: Alice Liddell"));
+  }
+
   private void invokeHandleOutgoingLine(String raw) throws Exception {
     Method method = IrcMediator.class.getDeclaredMethod("handleOutgoingLine", String.class);
     method.setAccessible(true);

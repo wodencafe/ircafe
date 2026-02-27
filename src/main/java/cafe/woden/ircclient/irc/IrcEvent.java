@@ -469,8 +469,22 @@ public sealed interface IrcEvent
     }
   }
 
-  /** Observed IRCv3 SETNAME for a nick. */
-  record UserSetNameObserved(Instant at, String nick, String realName) implements IrcEvent {}
+  /** Observed a user's real-name signal (via SETNAME or extended-join metadata). */
+  record UserSetNameObserved(Instant at, String nick, String realName, Source source)
+      implements IrcEvent {
+    public UserSetNameObserved {
+      if (source == null) source = Source.SETNAME;
+    }
+
+    public UserSetNameObserved(Instant at, String nick, String realName) {
+      this(at, nick, realName, Source.SETNAME);
+    }
+
+    public enum Source {
+      SETNAME,
+      EXTENDED_JOIN
+    }
+  }
 
   /** Observed IRC MONITOR online numerics (RPL_MONONLINE 730). */
   record MonitorOnlineObserved(Instant at, List<String> nicks) implements IrcEvent {
