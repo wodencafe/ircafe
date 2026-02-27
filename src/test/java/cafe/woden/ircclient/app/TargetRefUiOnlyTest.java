@@ -51,6 +51,16 @@ class TargetRefUiOnlyTest {
   }
 
   @Test
+  void ignoresTargetIsUiOnly() {
+    TargetRef ref = TargetRef.ignores("srv");
+    assertTrue(ref.isIgnores());
+    assertTrue(ref.isUiOnly());
+    assertFalse(ref.isStatus());
+    assertFalse(ref.isChannel());
+    assertEquals(ref, new TargetRef("srv", TargetRef.IGNORES_TARGET));
+  }
+
+  @Test
   void applicationTerminalTargetIsUiOnly() {
     TargetRef ref = TargetRef.applicationTerminal();
     assertTrue(ref.isApplicationTerminal());

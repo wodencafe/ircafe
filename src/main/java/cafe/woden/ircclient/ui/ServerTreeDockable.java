@@ -112,6 +112,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final String STATUS_LABEL = "Server";
   private static final String CHANNEL_LIST_LABEL = "Channel List";
   private static final String WEECHAT_FILTERS_LABEL = "Filters";
+  private static final String IGNORES_LABEL = "Ignores";
   private static final String DCC_TRANSFERS_LABEL = "DCC Transfers";
   private static final String LOG_VIEWER_LABEL = "Log Viewer";
   private static final String MONITOR_GROUP_LABEL = "Monitor";
@@ -3316,6 +3317,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ensureUiLeafVisible(sn, sn.logViewerRef, LOG_VIEWER_LABEL, vis.logViewer());
       ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, true);
       ensureUiLeafVisible(sn, sn.weechatFiltersRef, WEECHAT_FILTERS_LABEL, true);
+      ensureUiLeafVisible(sn, sn.ignoresRef, IGNORES_LABEL, true);
       ensureUiLeafVisible(sn, sn.dccTransfersRef, DCC_TRANSFERS_LABEL, showDccTransfersNodes);
       ensureMonitorGroupVisible(sn, vis.monitor());
       ensureInterceptorsGroupVisible(sn, vis.interceptors());
@@ -3375,6 +3377,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
     if (leaves.containsKey(sn.weechatFiltersRef)) {
       selectTarget(sn.weechatFiltersRef);
+      return;
+    }
+    if (leaves.containsKey(sn.ignoresRef)) {
+      selectTarget(sn.ignoresRef);
       return;
     }
     if (vis.monitor() && sn.monitorNode != null && sn.monitorNode.getParent() == sn.serverNode) {
@@ -3501,6 +3507,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     boolean hasLogViewer = leaves.containsKey(sn.logViewerRef);
     boolean hasChannelList = leaves.containsKey(sn.channelListRef);
     boolean hasWeechatFilters = leaves.containsKey(sn.weechatFiltersRef);
+    boolean hasIgnores = leaves.containsKey(sn.ignoresRef);
     boolean hasDccTransfers = leaves.containsKey(sn.dccTransfersRef);
 
     if (ref.equals(sn.logViewerRef)) {
@@ -3518,6 +3525,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
 
     if (hasWeechatFilters) idx++;
+    if (ref.equals(sn.ignoresRef)) {
+      return idx;
+    }
+
+    if (hasIgnores) idx++;
     if (ref.equals(sn.dccTransfersRef)) {
       return idx;
     }
@@ -3589,6 +3601,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       parent = sn.serverNode;
     } else if (ref.isWeechatFilters()) {
       parent = sn.serverNode;
+    } else if (ref.isIgnores()) {
+      parent = sn.serverNode;
     } else if (ref.isDccTransfers()) {
       parent = sn.serverNode;
     } else if (ref.isLogViewer()) {
@@ -3624,6 +3638,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       leafLabel = CHANNEL_LIST_LABEL;
     } else if (ref.isWeechatFilters()) {
       leafLabel = WEECHAT_FILTERS_LABEL;
+    } else if (ref.isIgnores()) {
+      leafLabel = IGNORES_LABEL;
     } else if (ref.isDccTransfers()) {
       leafLabel = DCC_TRANSFERS_LABEL;
     }
@@ -4476,6 +4492,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (leaves.containsKey(originNodes.logViewerRef)) count++;
     if (leaves.containsKey(originNodes.channelListRef)) count++;
     if (leaves.containsKey(originNodes.weechatFiltersRef)) count++;
+    if (leaves.containsKey(originNodes.ignoresRef)) count++;
     if (leaves.containsKey(originNodes.dccTransfersRef)) count++;
     if (originNodes.interceptorsNode != null
         && originNodes.interceptorsNode.getParent() == originNodes.serverNode) count++;
@@ -4554,6 +4571,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       }
       if (nd.ref.isWeechatFilters()) {
         return "WeeChat-style local filters for this server (rules, placeholders, and scope overrides).";
+      }
+      if (nd.ref.isIgnores()) {
+        return "Manage hard and soft ignore rules for this server.";
       }
     }
 
@@ -4783,6 +4803,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     serverNode.insert(weechatFiltersLeaf, nextUiLeafIndex++);
     leaves.put(weechatFiltersRef, weechatFiltersLeaf);
 
+    TargetRef ignoresRef = TargetRef.ignores(id);
+    DefaultMutableTreeNode ignoresLeaf =
+        new DefaultMutableTreeNode(new NodeData(ignoresRef, IGNORES_LABEL));
+    serverNode.insert(ignoresLeaf, nextUiLeafIndex++);
+    leaves.put(ignoresRef, ignoresLeaf);
+
     TargetRef dccTransfersRef = TargetRef.dccTransfers(id);
     if (showDccTransfersNodes) {
       DefaultMutableTreeNode dccTransfersLeaf =
@@ -4842,6 +4868,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             logViewerRef,
             channelListRef,
             weechatFiltersRef,
+            ignoresRef,
             dccTransfersRef);
     servers.put(id, sn);
 
@@ -5042,6 +5069,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     final TargetRef logViewerRef;
     final TargetRef channelListRef;
     final TargetRef weechatFiltersRef;
+    final TargetRef ignoresRef;
     final TargetRef dccTransfersRef;
 
     ServerNodes(
@@ -5054,6 +5082,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         TargetRef logViewerRef,
         TargetRef channelListRef,
         TargetRef weechatFiltersRef,
+        TargetRef ignoresRef,
         TargetRef dccTransfersRef) {
       this.serverNode = serverNode;
       this.pmNode = pmNode;
@@ -5064,6 +5093,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       this.logViewerRef = logViewerRef;
       this.channelListRef = channelListRef;
       this.weechatFiltersRef = weechatFiltersRef;
+      this.ignoresRef = ignoresRef;
       this.dccTransfersRef = dccTransfersRef;
     }
   }
@@ -5191,6 +5221,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             setTreeIcon("add");
           } else if (nd.ref != null && nd.ref.isWeechatFilters()) {
             setTreeIcon("settings");
+          } else if (nd.ref != null && nd.ref.isIgnores()) {
+            setTreeIcon("ban");
           } else if (nd.ref != null && nd.ref.isDccTransfers()) {
             setTreeIcon("dock-right");
           } else if (nd.ref == null && isMonitorGroupNode(node)) {

@@ -616,6 +616,8 @@ public class TargetCoordinator implements ActiveTargetPort {
       statusBarChannel = "Channel List";
     } else if (target.isWeechatFilters()) {
       statusBarChannel = "Filters";
+    } else if (target.isIgnores()) {
+      statusBarChannel = "Ignores";
     } else if (target.isDccTransfers()) {
       statusBarChannel = "DCC Transfers";
     } else if (target.isMonitorGroup()) {

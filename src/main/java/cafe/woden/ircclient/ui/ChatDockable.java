@@ -24,6 +24,8 @@ import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
+import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
+import cafe.woden.ircclient.ui.ignore.IgnoresPanel;
 import cafe.woden.ircclient.ui.interceptors.InterceptorPanel;
 import cafe.woden.ircclient.ui.logviewer.LogViewerPanel;
 import cafe.woden.ircclient.ui.monitor.MonitorPanel;
@@ -85,6 +87,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final JPanel centerCards = new JPanel(new CardLayout());
   private final NotificationsPanel notificationsPanel;
   private final ChannelListPanel channelListPanel = new ChannelListPanel();
+  private final IgnoresPanel ignoresPanel;
   private final DccTransfersPanel dccTransfersPanel;
   private final MonitorPanel monitorPanel = new MonitorPanel();
   private final LogViewerPanel logViewerPanel;
@@ -120,6 +123,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private record CenterViewCoordinatorBundle(
       NotificationsPanel notificationsPanel,
+      IgnoresPanel ignoresPanel,
       ChatMonitorCoordinator monitorCoordinator,
       DccTransfersPanel dccTransfersPanel,
       LogViewerPanel logViewerPanel,
@@ -145,6 +149,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       ActiveInputRouter activeInputRouter,
       IgnoreListService ignoreListService,
       IgnoreStatusService ignoreStatusService,
+      IgnoreListDialog ignoreListDialog,
       MonitorListService monitorListService,
       UserListStore userListStore,
       UserListDockable usersDock,
@@ -201,11 +206,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             outboundBus,
             userListStore,
             usersDock,
+            ignoreListDialog,
             monitorListService,
             dccTransferStore,
             chatLogViewerService,
             activationBus);
     this.notificationsPanel = centerViewBundle.notificationsPanel();
+    this.ignoresPanel = centerViewBundle.ignoresPanel();
 
     this.monitorCoordinator = centerViewBundle.monitorCoordinator();
     this.dccTransfersPanel = centerViewBundle.dccTransfersPanel();
@@ -319,6 +326,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       OutboundLineBus outboundBus,
       UserListStore userListStore,
       UserListDockable usersDock,
+      IgnoreListDialog ignoreListDialog,
       MonitorListService monitorListService,
       DccTransferStore dccTransferStore,
       ChatLogViewerService chatLogViewerService,
@@ -333,6 +341,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         createDccTransfersPanel(dccTransferStore, activationBus, outboundBus);
     configureMonitorPanelCommandEmission(activationBus, outboundBus);
     LogViewerPanel logViewerPanel = createLogViewerPanel(chatLogViewerService);
+    IgnoresPanel ignoresPanel = createIgnoresPanel(ignoreListDialog);
     InterceptorPanel interceptorPanel = new InterceptorPanel(this.interceptorStore);
     ChatInterceptorCoordinator interceptorCoordinator =
         createInterceptorCoordinator(interceptorPanel);
@@ -340,6 +349,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     ChatTargetViewRouter targetViewRouter =
         createTargetViewRouter(
             notificationsPanel,
+            ignoresPanel,
             channelListCoordinator,
             monitorCoordinator,
             dccTransfersPanel,
@@ -347,6 +357,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             interceptorPanel);
     return new CenterViewCoordinatorBundle(
         notificationsPanel,
+        ignoresPanel,
         monitorCoordinator,
         dccTransfersPanel,
         logViewerPanel,
@@ -389,6 +400,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private ChatTargetViewRouter createTargetViewRouter(
       NotificationsPanel notificationsPanel,
+      IgnoresPanel ignoresPanel,
       ChatChannelListCoordinator channelListCoordinator,
       ChatMonitorCoordinator monitorCoordinator,
       DccTransfersPanel dccTransfersPanel,
@@ -398,6 +410,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         centerCards,
         notificationsPanel,
         channelListPanel,
+        ignoresPanel,
         dccTransfersPanel,
         monitorPanel,
         logViewerPanel,
@@ -644,10 +657,24 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
                 : this.serverTree.openChannelsForServer(sid));
   }
 
+  private IgnoresPanel createIgnoresPanel(IgnoreListDialog ignoreListDialog) {
+    IgnoresPanel panel = new IgnoresPanel();
+    panel.setOnOpenIgnoreDialog(
+        serverId -> {
+          if (ignoreListDialog == null) return;
+          String sid = Objects.toString(serverId, "").trim();
+          if (sid.isEmpty()) return;
+          Window owner = SwingUtilities.getWindowAncestor(this);
+          ignoreListDialog.open(owner, sid);
+        });
+    return panel;
+  }
+
   private void registerCenterCards() {
     centerCards.add(topicCoordinator.topicSplit(), ChatTargetViewRouter.CARD_TRANSCRIPT);
     centerCards.add(notificationsPanel, ChatTargetViewRouter.CARD_NOTIFICATIONS);
     centerCards.add(channelListPanel, ChatTargetViewRouter.CARD_CHANNEL_LIST);
+    centerCards.add(ignoresPanel, ChatTargetViewRouter.CARD_IGNORES);
     centerCards.add(dccTransfersPanel, ChatTargetViewRouter.CARD_DCC_TRANSFERS);
     centerCards.add(monitorPanel, ChatTargetViewRouter.CARD_MONITOR);
     centerCards.add(logViewerPanel, ChatTargetViewRouter.CARD_LOG_VIEWER);

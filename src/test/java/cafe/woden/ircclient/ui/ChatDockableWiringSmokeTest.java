@@ -22,6 +22,7 @@ import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeService;
@@ -53,6 +54,11 @@ class ChatDockableWiringSmokeTest {
 
       assertEquals("Channel List", onEdtCall(fixture.chat::getTabText));
       verify(fixture.serverTree).managedChannelsForServer("libera");
+
+      onEdt(() -> fixture.chat.setActiveTarget(TargetRef.ignores("libera")));
+      flushEdt();
+
+      assertEquals("Ignores", onEdtCall(fixture.chat::getTabText));
 
       onEdt(() -> fixture.chat.setActiveTarget(channelTarget));
       flushEdt();
@@ -141,6 +147,7 @@ class ChatDockableWiringSmokeTest {
     ActiveInputRouter activeInputRouter = new ActiveInputRouter();
     IgnoreListService ignoreListService = mock(IgnoreListService.class);
     IgnoreStatusService ignoreStatusService = mock(IgnoreStatusService.class);
+    IgnoreListDialog ignoreListDialog = mock(IgnoreListDialog.class);
     MonitorListService monitorListService = mock(MonitorListService.class);
     when(monitorListService.changes()).thenReturn(Flowable.never());
     when(monitorListService.listNicks(anyString())).thenReturn(List.of());
@@ -174,6 +181,7 @@ class ChatDockableWiringSmokeTest {
                     activeInputRouter,
                     ignoreListService,
                     ignoreStatusService,
+                    ignoreListDialog,
                     monitorListService,
                     userListStore,
                     usersDock,
