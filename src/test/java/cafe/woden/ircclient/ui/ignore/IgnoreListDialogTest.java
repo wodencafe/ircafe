@@ -93,4 +93,29 @@ class IgnoreListDialogTest {
     assertEquals(null, parsed.value());
     assertEquals("Invalid expiry format. Use ISO-8601 instant or epoch millis.", parsed.error());
   }
+
+  @Test
+  void parseMaskInputNormalizesNickToHostmask() {
+    IgnoreListDialog.ParseResult<String> parsed = IgnoreListDialog.parseMaskInput("badnick");
+
+    assertEquals("badnick!*@*", parsed.value());
+    assertEquals(null, parsed.error());
+  }
+
+  @Test
+  void parseMaskInputRejectsBlankMask() {
+    IgnoreListDialog.ParseResult<String> parsed = IgnoreListDialog.parseMaskInput(" ");
+
+    assertEquals(null, parsed.value());
+    assertEquals("Mask is required.", parsed.error());
+  }
+
+  @Test
+  void hardIgnoreModeHintTextReflectsMode() {
+    assertEquals(
+        "Simple mode: Add is mask-only (legacy).", IgnoreListDialog.hardIgnoreModeHintText(false));
+    assertEquals(
+        "Advanced mode: Add/Edit uses irssi-style rule fields.",
+        IgnoreListDialog.hardIgnoreModeHintText(true));
+  }
 }

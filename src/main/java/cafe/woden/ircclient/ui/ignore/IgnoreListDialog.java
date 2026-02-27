@@ -56,6 +56,7 @@ public class IgnoreListDialog {
   private JDialog dialog;
   private String currentServerId;
   private JTabbedPane tabs;
+  private boolean hardIgnoreAdvancedMode;
 
   private DefaultListModel<MaskRow> ignoreModel;
   private DefaultListModel<MaskRow> softModel;
@@ -96,6 +97,7 @@ public class IgnoreListDialog {
       dialog = null;
     }
     currentServerId = sid;
+    hardIgnoreAdvancedMode = false;
 
     ignoreModel = new DefaultListModel<>();
     softModel = new DefaultListModel<>();
@@ -171,6 +173,11 @@ public class IgnoreListDialog {
     SOFT_IGNORE
   }
 
+  private enum HardIgnoreEditorMode {
+    ADD,
+    EDIT
+  }
+
   private JPanel buildMaskPanel(String serverId, Kind kind, DefaultListModel<MaskRow> model) {
     JList<MaskRow> list = new JList<>(model);
     list.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
@@ -193,6 +200,17 @@ public class IgnoreListDialog {
     copy.setDisabledIcon(SvgIcons.actionDisabled("copy", 16));
 
     boolean allowEdit = kind == Kind.IGNORE;
+    JCheckBox advancedModeToggle = null;
+    JLabel modeHint = null;
+    if (allowEdit) {
+      advancedModeToggle = new JCheckBox("Advanced (irssi) mode");
+      advancedModeToggle.setSelected(hardIgnoreAdvancedMode);
+      advancedModeToggle.setToolTipText(
+          "Simple mode: mask-only add.\nAdvanced mode: add/edit levels, channels, expiry, pattern, and replies.");
+      modeHint = new JLabel();
+      modeHint.putClientProperty(FlatClientProperties.STYLE, "font: -1");
+      updateHardIgnoreModeHint(modeHint, hardIgnoreAdvancedMode);
+    }
     edit.setEnabled(false);
     remove.setEnabled(false);
     copy.setEnabled(false);
@@ -210,6 +228,13 @@ public class IgnoreListDialog {
 
     add.addActionListener(
         e -> {
+          if (allowEdit && hardIgnoreAdvancedMode) {
+            boolean changed = openHardIgnoreRuleEditor(serverId, "", HardIgnoreEditorMode.ADD);
+            if (changed) {
+              refresh(model, serverId, kind);
+            }
+            return;
+          }
           String title = kind == Kind.SOFT_IGNORE ? "Add Soft Ignore" : "Add Ignore";
           String prompt =
               kind == Kind.SOFT_IGNORE
@@ -245,11 +270,22 @@ public class IgnoreListDialog {
           if (!allowEdit) return;
           MaskRow row = list.getSelectedValue();
           if (row == null || row.mask().isBlank()) return;
-          boolean changed = editHardIgnoreRule(serverId, row.mask());
+          boolean changed =
+              openHardIgnoreRuleEditor(serverId, row.mask(), HardIgnoreEditorMode.EDIT);
           if (changed) {
             refresh(model, serverId, kind);
           }
         });
+
+    if (advancedModeToggle != null) {
+      final JCheckBox advancedToggle = advancedModeToggle;
+      final JLabel hint = modeHint;
+      advancedModeToggle.addActionListener(
+          e -> {
+            hardIgnoreAdvancedMode = advancedToggle.isSelected();
+            updateHardIgnoreModeHint(hint, hardIgnoreAdvancedMode);
+          });
+    }
 
     remove.addActionListener(
         e -> {
@@ -299,6 +335,13 @@ public class IgnoreListDialog {
 
     JPanel footer = new JPanel(new BorderLayout());
     footer.add(left, BorderLayout.WEST);
+    if (advancedModeToggle != null && modeHint != null) {
+      JPanel right = new JPanel();
+      right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
+      right.add(advancedModeToggle);
+      right.add(modeHint);
+      footer.add(right, BorderLayout.EAST);
+    }
 
     JPanel root = new JPanel(new BorderLayout(10, 10));
     root.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -340,11 +383,14 @@ public class IgnoreListDialog {
     refresh(model, serverId, Kind.SOFT_IGNORE);
   }
 
-  private boolean editHardIgnoreRule(String serverId, String mask) {
+  private boolean openHardIgnoreRuleEditor(
+      String serverId, String mask, HardIgnoreEditorMode editorMode) {
     String sid = Objects.toString(serverId, "").trim();
     String m = Objects.toString(mask, "").trim();
-    if (sid.isEmpty() || m.isEmpty() || ignores == null) return false;
+    if (sid.isEmpty() || ignores == null) return false;
+    if (editorMode == HardIgnoreEditorMode.EDIT && m.isEmpty()) return false;
 
+    JTextField maskField = new JTextField(m);
     JTextField levelsField =
         new JTextField(renderLevelsForEditor(ignores.levelsForHardMask(sid, m)));
     JTextField channelsField =
@@ -361,7 +407,7 @@ public class IgnoreListDialog {
 
     JPanel form = new JPanel();
     form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
-    form.add(fieldRow("Mask", new JLabel(m)));
+    form.add(fieldRow("Mask", maskField));
     form.add(fieldRow("Levels", levelsField));
     form.add(fieldRow("Channels", channelsField));
     form.add(fieldRow("Expires at", expiresField));
@@ -370,7 +416,10 @@ public class IgnoreListDialog {
     form.add(fieldRow("", repliesBox));
 
     String message =
-        "<html>Edit hard-ignore metadata.<br>"
+        "<html>"
+            + (editorMode == HardIgnoreEditorMode.ADD
+                ? "Add a hard-ignore rule.<br>"
+                : "Edit hard-ignore metadata.<br>")
             + "Levels: comma/space separated (blank means ALL).<br>"
             + "Channels: comma/space separated #channel patterns.<br>"
             + "Expires at: ISO-8601 instant (e.g. 2026-03-01T12:34:56Z) or epoch millis.</html>";
@@ -380,10 +429,16 @@ public class IgnoreListDialog {
           JOptionPane.showConfirmDialog(
               dialog,
               new Object[] {message, form},
-              "Edit Ignore Rule",
+              editorMode == HardIgnoreEditorMode.ADD ? "Add Ignore Rule" : "Edit Ignore Rule",
               JOptionPane.OK_CANCEL_OPTION,
               JOptionPane.PLAIN_MESSAGE);
       if (result != JOptionPane.OK_OPTION) return false;
+
+      ParseResult<String> normalizedMask = parseMaskInput(maskField.getText());
+      if (normalizedMask.error() != null) {
+        showValidationError(normalizedMask.error());
+        continue;
+      }
 
       ParseResult<List<String>> levels = parseLevelsInput(levelsField.getText());
       if (levels.error() != null) {
@@ -418,7 +473,7 @@ public class IgnoreListDialog {
       IgnoreAddMaskResult addResult =
           ignores.addMaskWithLevels(
               sid,
-              m,
+              normalizedMask.value(),
               levels.value(),
               channels.value(),
               expiry.value(),
@@ -429,12 +484,24 @@ public class IgnoreListDialog {
         JOptionPane.showMessageDialog(
             dialog,
             "No changes detected for this ignore rule.",
-            "Edit Ignore Rule",
+            editorMode == HardIgnoreEditorMode.ADD ? "Add Ignore Rule" : "Edit Ignore Rule",
             JOptionPane.INFORMATION_MESSAGE);
         return false;
       }
       return true;
     }
+  }
+
+  private static void updateHardIgnoreModeHint(JLabel hint, boolean advancedMode) {
+    if (hint == null) return;
+    hint.setText(hardIgnoreModeHintText(advancedMode));
+  }
+
+  static String hardIgnoreModeHintText(boolean advancedMode) {
+    if (advancedMode) {
+      return "Advanced mode: Add/Edit uses irssi-style rule fields.";
+    }
+    return "Simple mode: Add is mask-only (legacy).";
   }
 
   private static JPanel fieldRow(String label, java.awt.Component input) {
@@ -516,6 +583,14 @@ public class IgnoreListDialog {
     } catch (Exception ex) {
       return ParseResult.error("Invalid expiry format. Use ISO-8601 instant or epoch millis.");
     }
+  }
+
+  static ParseResult<String> parseMaskInput(String raw) {
+    String normalized = IgnoreListService.normalizeMaskOrNickToHostmask(raw);
+    if (normalized.isBlank()) {
+      return ParseResult.error("Mask is required.");
+    }
+    return ParseResult.ok(normalized);
   }
 
   private static String normalizeLevelToken(String raw) {
