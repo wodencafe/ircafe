@@ -78,6 +78,33 @@ class ArchitectureGuardrailsTest {
           .because("application code should only depend on ignore::api, not ignore internals");
 
   @ArchTest
+  static final ArchRule non_ui_modules_should_not_depend_on_ignore_module_internals =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages("cafe.woden.ircclient.ignore..", "cafe.woden.ircclient.ui..")
+          .should()
+          .dependOnClassesThat(IGNORE_INTERNAL_CLASSES)
+          .because(
+              "non-UI modules should depend only on ignore::api and remain decoupled from ignore internals");
+
+  @ArchTest
+  static final ArchRule ignore_api_should_remain_dependency_light =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ignore.api..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "cafe.woden.ircclient.ui..",
+              "cafe.woden.ircclient.app.core..",
+              "cafe.woden.ircclient.app.outbound..",
+              "cafe.woden.ircclient.app.commands..",
+              "cafe.woden.ircclient.app.state..",
+              "cafe.woden.ircclient.irc..",
+              "cafe.woden.ircclient.logging..")
+          .because("ignore::api should stay stable and free from app, UI, and transport internals");
+
+  @ArchTest
   static final ArchRule app_should_not_depend_on_diagnostics_module_directly =
       noClasses()
           .that()

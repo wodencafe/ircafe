@@ -749,6 +749,83 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void inviteBlockAddsMaskAndRemovesInviteWhenNickIsPresent() {
+    TargetRef status = new TargetRef("libera", "status");
+    PendingInviteState.PendingInvite invite =
+        new PendingInviteState.PendingInvite(
+            12L,
+            Instant.parse("2026-02-16T00:00:00Z"),
+            Instant.parse("2026-02-16T00:00:00Z"),
+            "libera",
+            "#ircafe",
+            "alice",
+            "me",
+            "",
+            true,
+            1);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(pendingInviteState.latestForServer("libera")).thenReturn(invite);
+    when(ignoreListService.addMask("libera", "alice")).thenReturn(true);
+
+    service.handleInviteBlock("last");
+
+    verify(ignoreListService).addMask("libera", "alice");
+    verify(pendingInviteState).remove(12L);
+    verify(ui).appendStatus(status, "(invite)", "Blocked invites from alice (alice!*@*).");
+  }
+
+  @Test
+  void inviteBlockReportsAlreadyBlockingWhenMaskAlreadyExists() {
+    TargetRef status = new TargetRef("libera", "status");
+    PendingInviteState.PendingInvite invite =
+        new PendingInviteState.PendingInvite(
+            27L,
+            Instant.parse("2026-02-16T00:00:00Z"),
+            Instant.parse("2026-02-16T00:00:00Z"),
+            "libera",
+            "#ircafe",
+            "alice",
+            "me",
+            "",
+            true,
+            1);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(pendingInviteState.latestForServer("libera")).thenReturn(invite);
+    when(ignoreListService.addMask("libera", "alice")).thenReturn(false);
+
+    service.handleInviteBlock("last");
+
+    verify(ignoreListService).addMask("libera", "alice");
+    verify(pendingInviteState).remove(27L);
+    verify(ui).appendStatus(status, "(invite)", "Already blocking alice (alice!*@*).");
+  }
+
+  @Test
+  void inviteBlockRejectsServerInviteWithoutNick() {
+    TargetRef status = new TargetRef("libera", "status");
+    PendingInviteState.PendingInvite invite =
+        new PendingInviteState.PendingInvite(
+            31L,
+            Instant.parse("2026-02-16T00:00:00Z"),
+            Instant.parse("2026-02-16T00:00:00Z"),
+            "libera",
+            "#ircafe",
+            "server",
+            "me",
+            "",
+            true,
+            1);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(pendingInviteState.latestForServer("libera")).thenReturn(invite);
+
+    service.handleInviteBlock("last");
+
+    verify(ignoreListService, never()).addMask(anyString(), anyString());
+    verify(pendingInviteState, never()).remove(anyLong());
+    verify(ui).appendStatus(status, "(invite)", "No inviter nick available for invite #31.");
+  }
+
+  @Test
   void inviteAutoJoinToggleFlipsCurrentState() {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);

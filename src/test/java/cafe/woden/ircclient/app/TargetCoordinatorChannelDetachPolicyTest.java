@@ -20,7 +20,7 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
@@ -241,7 +241,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
         mock(ServerRegistry.class),
         runtimeConfig,
         connectionCoordinator,
-        mock(IgnoreListService.class),
+        mock(IgnoreListQueryPort.class),
         mock(UserhostQueryService.class),
         mock(UserInfoEnrichmentService.class),
         mock(TargetChatHistoryPort.class),
