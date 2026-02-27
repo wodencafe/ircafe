@@ -24,7 +24,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
@@ -71,8 +70,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
   private final Set<TargetRef> loading = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
   private final ExecutorService exec;
-  private final AtomicLong loadOlderRequestSeq = new AtomicLong(0);
-  private final AtomicLong loadOlderInsertSeq = new AtomicLong(0);
 
   public DbChatHistoryService(
       ChatLogRepository repo,
@@ -165,30 +162,16 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
     // Guard: one in-flight load per target.
     if (!loading.add(target)) {
-      log.info(
-          "[TEMP-LOAD-OLDER][DB] request-rejected reason=in-flight target={} limit={} cursorTs={} cursorId={}",
-          target,
-          limit,
-          cursor.tsEpochMs(),
-          cursor.id());
       SwingUtilities.invokeLater(
           () -> callback.accept(new LoadOlderResult(List.of(), cursor, true)));
       return;
     }
 
-    final long requestId = loadOlderRequestSeq.incrementAndGet();
     final String serverId = target.serverId();
     final String tgt = target.target();
     final long beforeTs = cursor.tsEpochMs();
     final long beforeId = cursor.id();
     final int limitFinal = limit;
-    log.info(
-        "[TEMP-LOAD-OLDER][DB] request-start id={} target={} limit={} cursorTs={} cursorId={}",
-        requestId,
-        target,
-        limitFinal,
-        beforeTs,
-        beforeId);
 
     exec.execute(
         () -> {
@@ -210,10 +193,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
             if (rows.isEmpty()) {
               noMoreOlder.put(target, Boolean.TRUE);
-              log.info(
-                  "[TEMP-LOAD-OLDER][DB] request-empty id={} target={} hasMore=false",
-                  requestId,
-                  target);
               SwingUtilities.invokeLater(
                   () -> callback.accept(new LoadOlderResult(List.of(), cursor, false)));
               return;
@@ -266,15 +245,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
             final boolean hasMoreFinal = hasMore;
             final LogCursor newCursorFinal = newCursor;
             final List<LogLine> linesFinal = List.copyOf(lines);
-            log.info(
-                "[TEMP-LOAD-OLDER][DB] request-result id={} target={} rawRows={} filteredLines={} hasMore={} nextCursorTs={} nextCursorId={}",
-                requestId,
-                target,
-                rows.size(),
-                linesFinal.size(),
-                hasMoreFinal,
-                newCursorFinal.tsEpochMs(),
-                newCursorFinal.id());
             SwingUtilities.invokeLater(
                 () ->
                     callback.accept(new LoadOlderResult(linesFinal, newCursorFinal, hasMoreFinal)));
@@ -661,12 +631,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
             pageSize = DEFAULT_PAGE_SIZE;
           }
           final int limit = Math.max(1, pageSize);
-          final long insertId = loadOlderInsertSeq.incrementAndGet();
-          log.info(
-              "[TEMP-LOAD-OLDER][DB] insert-start id={} target={} limit={}",
-              insertId,
-              target,
-              limit);
 
           loadOlder(
               target,
@@ -686,16 +650,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
                   int chunkSize = configuredLoadOlderChunkSize();
                   int chunkDelayMs = configuredLoadOlderChunkDelayMs();
                   int chunkEdtBudgetMs = configuredLoadOlderChunkEdtBudgetMs();
-                  log.info(
-                      "[TEMP-LOAD-OLDER][DB] insert-received id={} target={} lines={} hasMore={} chunkSize={} chunkDelayMs={} chunkBudgetMs={} lockViewport={}",
-                      insertId,
-                      target,
-                      lines.size(),
-                      hasMore,
-                      chunkSize,
-                      chunkDelayMs,
-                      chunkEdtBudgetMs,
-                      lockViewportDuringLoad ? "fixed" : "adaptive");
                   prependOlderLinesInChunks(
                       target,
                       lines,
@@ -708,7 +662,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
                       chunkSize,
                       chunkDelayMs,
                       chunkEdtBudgetMs,
-                      insertId,
                       1);
                 } catch (Exception e) {
                   // Fail open: allow retry.
@@ -739,7 +692,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
       int chunkSize,
       int chunkDelayMs,
       int chunkEdtBudgetMs,
-      long insertId,
       int chunkNumber) {
     if (!SwingUtilities.isEventDispatchThread()) {
       SwingUtilities.invokeLater(
@@ -756,7 +708,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
                   chunkSize,
                   chunkDelayMs,
                   chunkEdtBudgetMs,
-                  insertId,
                   chunkNumber));
       return;
     }
@@ -783,19 +734,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
         insertedThisChunk++;
         if (insertedThisChunk >= minLinesBeforeBudget && System.nanoTime() >= deadlineNs) break;
       }
-      int insertedTotal = lines.size() - (nextIndex + 1);
       long elapsedNs = Math.max(0L, System.nanoTime() - chunkStartNs);
       int nextDelayMs = effectiveInterChunkDelayMs(chunkDelayMs, elapsedNs);
-      log.info(
-          "[TEMP-LOAD-OLDER][DB] insert-chunk id={} target={} chunk={} insertedChunk={} insertedTotal={} totalLines={} elapsedMs={} nextDelayMs={}",
-          insertId,
-          target,
-          chunkNumber,
-          insertedThisChunk,
-          insertedTotal,
-          lines.size(),
-          TimeUnit.NANOSECONDS.toMillis(elapsedNs),
-          nextDelayMs);
 
       ScrollAnchor effectiveAnchor =
           lockViewportDuringLoad ? fixedAnchor : ScrollAnchor.capture(anchorControl);
@@ -821,7 +761,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
                     chunkSize,
                     chunkDelayMs,
                     chunkEdtBudgetMs,
-                    insertId,
                     chunkNumber + 1));
         return;
       }
@@ -829,21 +768,9 @@ public final class DbChatHistoryService implements ChatHistoryService {
       finished = true;
       transcripts.setLoadOlderMessagesControlState(
           target, hasMore ? LoadOlderControlState.READY : LoadOlderControlState.EXHAUSTED);
-      log.info(
-          "[TEMP-LOAD-OLDER][DB] insert-finish id={} target={} insertedTotal={} totalLines={} hasMore={}",
-          insertId,
-          target,
-          insertedTotal,
-          lines.size(),
-          hasMore);
     } catch (Exception e) {
       finished = true;
       transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.READY);
-      log.info(
-          "[TEMP-LOAD-OLDER][DB] insert-error id={} target={} message={}",
-          insertId,
-          target,
-          e.toString());
     } finally {
       if (!finished) return;
       try {

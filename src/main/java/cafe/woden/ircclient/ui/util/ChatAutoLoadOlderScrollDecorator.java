@@ -7,20 +7,15 @@ import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntSupplier;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /** "Infinite scroll" helper for chat transcripts. */
 public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
 
-  private static final Logger log = LoggerFactory.getLogger(ChatAutoLoadOlderScrollDecorator.class);
   private static final long DEFAULT_COOLDOWN_MS = 2_000;
-  private static final AtomicLong TRIGGER_SEQ = new AtomicLong(0);
 
   private final JScrollPane scroll;
   private final Component transcriptRoot;
@@ -71,19 +66,6 @@ public final class ChatAutoLoadOlderScrollDecorator implements AutoCloseable {
       if (comp.state() != LoadOlderMessagesComponent.State.READY) return;
 
       lastTriggeredAtMs = now;
-      long triggerId = TRIGGER_SEQ.incrementAndGet();
-      try {
-        int max = bar.getMaximum();
-        int extent = bar.getModel() != null ? bar.getModel().getExtent() : 0;
-        log.info(
-            "[TEMP-LOAD-OLDER] auto-trigger id={} cooldownMs={} scrollValue={} extent={} max={}",
-            triggerId,
-            cooldownMs,
-            bar.getValue(),
-            extent,
-            max);
-      } catch (Exception ignored) {
-      }
 
       if (SwingUtilities.isEventDispatchThread()) {
         comp.requestLoad();
