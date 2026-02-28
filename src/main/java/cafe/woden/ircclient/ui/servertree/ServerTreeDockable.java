@@ -802,7 +802,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             if (targetNode == null) {
               int idx =
                   Math.max(
-                      minInsertIndex(dragParent), Math.min(maxInsertIndex(dragParent), dragFromIndex));
+                      minInsertIndex(dragParent),
+                      Math.min(maxInsertIndex(dragParent), dragFromIndex));
               return new TreeDropTarget(dragParent, idx);
             }
 
@@ -930,7 +931,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             if (anchor == sn.otherNode
                 && draggedKind == RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS
                 && after) {
-              int otherIdx = clampBuiltInInsertIndex(sn, sn.otherNode, sn.otherNode.getChildCount());
+              int otherIdx =
+                  clampBuiltInInsertIndex(sn, sn.otherNode, sn.otherNode.getChildCount());
               return otherIdx < 0 ? null : new TreeDropTarget(sn.otherNode, otherIdx);
             }
             int desired = idx + (after ? 1 : 0);
@@ -1613,6 +1615,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ConnectionState state = connectionStateForServer(serverId);
       JPopupMenu menu = new JPopupMenu();
       boolean canReorder = isRootServerNode(node);
+      java.util.Optional<ServerEntry> serverEntry =
+          serverCatalog != null ? serverCatalog.findEntry(serverId) : java.util.Optional.empty();
+      boolean persistedServerEntry = serverEntry.map(se -> !se.ephemeral()).orElse(false);
       if (canReorder) {
         menu.add(new JMenuItem(moveNodeUpAction()));
         menu.add(new JMenuItem(moveNodeDownAction()));
@@ -1649,9 +1654,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
       // Ephemeral servers can be promoted to persisted servers. This is especially useful for
       // bouncer-discovered networks that would otherwise disappear when the bouncer disconnects.
-      boolean ephemeral =
-          serverCatalog != null
-              && serverCatalog.findEntry(serverId).map(ServerEntry::ephemeral).orElse(false);
+      boolean ephemeral = serverEntry.map(ServerEntry::ephemeral).orElse(false);
       if (ephemeral) {
         menu.addSeparator();
         JMenuItem save = new JMenuItem("Save \"" + pretty + "\"…");
@@ -1670,10 +1673,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       // Only show server editing for the primary, configured server entries directly under the IRC
       // branch.
       if (canReorder) {
-        boolean editable =
-            serverDialogs != null
-                && serverCatalog != null
-                && serverCatalog.findEntry(serverId).map(se -> !se.ephemeral()).orElse(false);
+        boolean editable = serverDialogs != null && persistedServerEntry;
 
         menu.addSeparator();
         JMenuItem edit = new JMenuItem("Edit \"" + pretty + "\"…");
@@ -1686,6 +1686,18 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
               serverDialogs.openEditServer(w, serverId);
             });
         menu.add(edit);
+      }
+
+      if (canReorder && persistedServerEntry && runtimeConfig != null) {
+        menu.addSeparator();
+        JCheckBoxMenuItem startupAutoConnect =
+            new JCheckBoxMenuItem("Auto-connect \"" + pretty + "\" on startup");
+        startupAutoConnect.setSelected(runtimeConfig.readServerAutoConnectOnStart(serverId, true));
+        startupAutoConnect.addActionListener(
+            ev ->
+                runtimeConfig.rememberServerAutoConnectOnStart(
+                    serverId, startupAutoConnect.isSelected()));
+        menu.add(startupAutoConnect);
       }
 
       if (isSojuEphemeralServer(serverId)) {
@@ -2244,7 +2256,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return false;
   }
 
-  private RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(TargetRef ref) {
+  private RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(
+      TargetRef ref) {
     return ServerTreeBuiltInLayoutCoordinator.nodeKindForRef(ref);
   }
 
@@ -3615,8 +3628,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       String sid = normalizeServerId(sn.statusRef.serverId());
       ServerBuiltInNodesVisibility vis = builtInNodesVisibility(sid);
 
-      ensureMovableBuiltInLeafVisible(sn, sn.statusRef, statusLeafLabelForServer(sid), vis.server());
-      ensureMovableBuiltInLeafVisible(sn, sn.notificationsRef, "Notifications", vis.notifications());
+      ensureMovableBuiltInLeafVisible(
+          sn, sn.statusRef, statusLeafLabelForServer(sid), vis.server());
+      ensureMovableBuiltInLeafVisible(
+          sn, sn.notificationsRef, "Notifications", vis.notifications());
       ensureMovableBuiltInLeafVisible(sn, sn.logViewerRef, LOG_VIEWER_LABEL, vis.logViewer());
       ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, true);
       ensureMovableBuiltInLeafVisible(sn, sn.weechatFiltersRef, WEECHAT_FILTERS_LABEL, true);
@@ -3690,7 +3705,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
     if (vis.monitor()
         && sn.monitorNode != null
-        && (sn.monitorNode.getParent() == sn.serverNode || sn.monitorNode.getParent() == sn.otherNode)) {
+        && (sn.monitorNode.getParent() == sn.serverNode
+            || sn.monitorNode.getParent() == sn.otherNode)) {
       selectTarget(TargetRef.monitorGroup(sid));
       return;
     }
@@ -3873,7 +3889,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (sn.otherNode.getParent() != sn.serverNode) {
       int pmIdx = sn.serverNode.getIndex(sn.pmNode);
       int insertIdx = pmIdx >= 0 ? pmIdx : sn.serverNode.getChildCount();
-      sn.serverNode.insert(sn.otherNode, Math.max(0, Math.min(insertIdx, sn.serverNode.getChildCount())));
+      sn.serverNode.insert(
+          sn.otherNode, Math.max(0, Math.min(insertIdx, sn.serverNode.getChildCount())));
       changed = true;
     }
 
@@ -5092,7 +5109,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ConnectionState state = connectionStateForServer(serverId);
       boolean desired = desiredOnlineForServer(serverId);
       String stateTip = "State: " + ServerTreeConnectionStateViewModel.stateLabel(state) + ".";
-      String intentTip = " Intent: " + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired) + ".";
+      String intentTip =
+          " Intent: " + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired) + ".";
       String queueTip = ServerTreeConnectionStateViewModel.intentQueueTip(state, desired);
       String diagnostics = connectionDiagnosticsTipForServer(serverId);
       String origin = Objects.toString(sojuOriginByServerId.get(serverId), "").trim();
@@ -5115,7 +5133,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ConnectionState state = connectionStateForServer(serverId);
       boolean desired = desiredOnlineForServer(serverId);
       String stateTip = "State: " + ServerTreeConnectionStateViewModel.stateLabel(state) + ".";
-      String intentTip = " Intent: " + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired) + ".";
+      String intentTip =
+          " Intent: " + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired) + ".";
       String queueTip = ServerTreeConnectionStateViewModel.intentQueueTip(state, desired);
       String diagnostics = connectionDiagnosticsTipForServer(serverId);
       String origin = Objects.toString(zncOriginByServerId.get(serverId), "").trim();
@@ -5346,7 +5365,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       }
     }
 
-    DefaultMutableTreeNode otherNode = new DefaultMutableTreeNode(new NodeData(null, OTHER_GROUP_LABEL));
+    DefaultMutableTreeNode otherNode =
+        new DefaultMutableTreeNode(new NodeData(null, OTHER_GROUP_LABEL));
     serverNode.add(otherNode);
     serverNode.add(pmNode);
 

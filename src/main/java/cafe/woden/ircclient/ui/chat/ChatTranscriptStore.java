@@ -58,6 +58,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private static final int RESTYLE_ELEMENTS_PER_SLICE = 180;
   private static final int DEFAULT_TRANSCRIPT_MAX_LINES_PER_TARGET = 4000;
   private static final int MAX_TRANSCRIPT_LINES_PER_TARGET = 200_000;
+  private static final String MANUAL_PREVIEW_MARKER = " \uD83D\uDC41";
 
   /**
    * Step 5.2: Safety cap for history/backfill. After this many filtered placeholder/hint runs are
@@ -125,7 +126,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       Long epochMs,
       Set<String> tags,
       String messageId,
-      String ircv3Tags) {
+      String ircv3Tags,
+      Map<String, String> ircv3TagsMap) {
     String tagsDisplay() {
       if (tags == null || tags.isEmpty()) return "";
       return String.join(" ", tags);
@@ -163,7 +165,15 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     Map<String, String> tagsMap = normalizeIrcv3Tags(ircv3Tags);
     Set<String> tags = computeTags(kind, dir, fromNick, presenceEvent, msgId, tagsMap);
     return new LineMeta(
-        bufferKey(ref), kind, dir, fromNick, epochMs, tags, msgId, formatIrcv3Tags(tagsMap));
+        bufferKey(ref),
+        kind,
+        dir,
+        fromNick,
+        epochMs,
+        tags,
+        msgId,
+        formatIrcv3Tags(tagsMap),
+        tagsMap);
   }
 
   private Set<String> computeTags(
@@ -1048,7 +1058,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private LineMeta buildFilteredOverflowMeta(LineMeta base, long tsEpochMs, Set<String> unionTags) {
     if (base == null) {
       base =
-          new LineMeta("", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of(), "", "");
+          new LineMeta(
+              "", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of(), "", "", Map.of());
     }
 
     java.util.LinkedHashSet<String> tags = new java.util.LinkedHashSet<>();
@@ -1069,7 +1080,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         tsEpochMs,
         Set.copyOf(tags),
         base.messageId(),
-        base.ircv3Tags());
+        base.ircv3Tags(),
+        base.ircv3TagsMap());
   }
 
   private void updateFilteredOverflowRunAttributes(StyledDocument doc, FilteredOverflowRun run) {
@@ -1144,7 +1156,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     if (base == null) {
       // Fallback meta: should be rare (only if a caller fails to provide meta).
       base =
-          new LineMeta("", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of(), "", "");
+          new LineMeta(
+              "", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of(), "", "", Map.of());
     }
 
     java.util.LinkedHashSet<String> tags = new java.util.LinkedHashSet<>();
@@ -1165,7 +1178,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         tsEpochMs,
         Set.copyOf(tags),
         base.messageId(),
-        base.ircv3Tags());
+        base.ircv3Tags(),
+        base.ircv3TagsMap());
   }
 
   private void attachFilterMatch(
@@ -1926,21 +1940,102 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         doc.insertString(doc.getLength(), " ", a);
       }
 
+      int lineEndOffset = doc.getLength();
       doc.insertString(doc.getLength(), "\n", tsStyle);
 
       if (!allowEmbeds) {
         enforceTranscriptLineCap(ref, doc);
         return;
       }
+      String embedFrom = meta != null ? meta.fromNick() : from;
+      Map<String, String> embedTags = meta != null ? meta.ircv3TagsMap() : Map.of();
+      LinkedHashSet<String> blockedManualPreviewUrls = new LinkedHashSet<>();
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
-        imageEmbeds.appendEmbeds(ref, doc, text);
+        ChatImageEmbedder.AppendResult imageResult =
+            imageEmbeds.appendEmbeds(ref, doc, text, embedFrom, embedTags);
+        if (imageResult != null && imageResult.blockedUrls() != null) {
+          blockedManualPreviewUrls.addAll(imageResult.blockedUrls());
+        }
       }
       if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
-        linkPreviews.appendPreviews(ref, doc, text);
+        ChatLinkPreviewEmbedder.AppendResult linkResult =
+            linkPreviews.appendPreviews(ref, doc, text, embedFrom, embedTags);
+        if (linkResult != null && linkResult.blockedUrls() != null) {
+          blockedManualPreviewUrls.addAll(linkResult.blockedUrls());
+        }
+      }
+      if (!blockedManualPreviewUrls.isEmpty()) {
+        insertManualPreviewMarkers(
+            doc, lineEndOffset, meta, match, List.copyOf(blockedManualPreviewUrls));
       }
       enforceTranscriptLineCap(ref, doc);
     } catch (Exception ignored) {
     }
+  }
+
+  private void insertManualPreviewMarkers(
+      StyledDocument doc,
+      int lineEndOffset,
+      LineMeta meta,
+      FilterEngine.Match match,
+      Collection<String> blockedUrls) {
+    if (doc == null || blockedUrls == null || blockedUrls.isEmpty()) return;
+
+    LinkedHashSet<String> deduped = new LinkedHashSet<>();
+    for (String blockedUrl : blockedUrls) {
+      String normalized = normalizeManualPreviewUrl(blockedUrl);
+      if (!normalized.isEmpty()) {
+        deduped.add(normalized);
+      }
+    }
+    if (deduped.isEmpty()) return;
+
+    int pos = Math.max(0, Math.min(lineEndOffset, doc.getLength()));
+    for (String blockedUrl : deduped) {
+      try {
+        SimpleAttributeSet attrs = withLineMeta(styles.link(), meta);
+        attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_LINK);
+        attrs.addAttribute(ChatStyles.ATTR_MANUAL_PREVIEW_URL, blockedUrl);
+        if (match != null) {
+          attrs = withFilterMatch(attrs, match);
+        }
+        doc.insertString(pos, MANUAL_PREVIEW_MARKER, attrs);
+        pos += MANUAL_PREVIEW_MARKER.length();
+      } catch (Exception ignored) {
+      }
+    }
+  }
+
+  public synchronized boolean insertManualPreviewAt(TargetRef ref, int insertAt, String rawUrl) {
+    if (ref == null || ref.isUiOnly()) return false;
+    String url = normalizeManualPreviewUrl(rawUrl);
+    if (url.isEmpty()) return false;
+
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return false;
+
+    int pos = Math.max(0, Math.min(insertAt, doc.getLength()));
+    int beforeLen = doc.getLength();
+    boolean inserted = false;
+    if (imageEmbeds != null) {
+      inserted = imageEmbeds.insertEmbedForUrlAt(ref, doc, url, pos);
+    }
+    if (!inserted && linkPreviews != null) {
+      inserted = linkPreviews.insertPreviewForUrlAt(ref, doc, url, pos);
+    }
+    if (!inserted) return false;
+
+    int delta = doc.getLength() - beforeLen;
+    if (delta != 0) {
+      shiftCurrentPresenceBlock(ref, pos, delta);
+    }
+    enforceTranscriptLineCap(ref, doc);
+    return true;
+  }
+
+  private static String normalizeManualPreviewUrl(String rawUrl) {
+    return Objects.toString(rawUrl, "").trim();
   }
 
   public void appendChat(TargetRef ref, String from, String text) {
@@ -4139,6 +4234,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         doc.insertString(doc.getLength(), a, ms);
       }
 
+      int lineEndOffset = doc.getLength();
       doc.insertString(doc.getLength(), "\n", tsStyle);
 
       if (!allowEmbeds) {
@@ -4146,12 +4242,25 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         return;
       }
 
+      LinkedHashSet<String> blockedManualPreviewUrls = new LinkedHashSet<>();
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
-        imageEmbeds.appendEmbeds(ref, doc, a);
+        ChatImageEmbedder.AppendResult imageResult =
+            imageEmbeds.appendEmbeds(ref, doc, a, from, ircv3Tags);
+        if (imageResult != null && imageResult.blockedUrls() != null) {
+          blockedManualPreviewUrls.addAll(imageResult.blockedUrls());
+        }
       }
 
       if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
-        linkPreviews.appendPreviews(ref, doc, a);
+        ChatLinkPreviewEmbedder.AppendResult linkResult =
+            linkPreviews.appendPreviews(ref, doc, a, from, ircv3Tags);
+        if (linkResult != null && linkResult.blockedUrls() != null) {
+          blockedManualPreviewUrls.addAll(linkResult.blockedUrls());
+        }
+      }
+      if (!blockedManualPreviewUrls.isEmpty()) {
+        insertManualPreviewMarkers(
+            doc, lineEndOffset, meta, m, List.copyOf(blockedManualPreviewUrls));
       }
       enforceTranscriptLineCap(ref, doc);
     } catch (Exception ignored) {
@@ -4951,6 +5060,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       Object url = old.getAttribute(ChatStyles.ATTR_URL);
       if (url != null) {
         fresh.addAttribute(ChatStyles.ATTR_URL, url);
+      }
+      Object manualPreviewUrl = old.getAttribute(ChatStyles.ATTR_MANUAL_PREVIEW_URL);
+      if (manualPreviewUrl != null) {
+        fresh.addAttribute(ChatStyles.ATTR_MANUAL_PREVIEW_URL, manualPreviewUrl);
       }
       Object chan = old.getAttribute(ChatStyles.ATTR_CHANNEL);
       if (chan != null) {

@@ -7,4 +7,6 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 public interface MediatorControlPort {
 
   void connectAll();
+
+  void connectAutoConnectOnStartServers();
 }

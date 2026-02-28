@@ -23,6 +23,7 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import io.reactivex.rxjava3.core.Completable;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -104,6 +105,37 @@ class ConnectionCoordinatorTest {
     verify(ui, atLeastOnce()).setConnectionControlsEnabled(false, true);
     verify(ui, atLeastOnce()).setConnectionControlsEnabled(true, true);
     verify(ui, atLeastOnce()).setConnectionControlsEnabled(true, false);
+  }
+
+  @Test
+  void startupConnectSkipsServersWithAutoConnectDisabled() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("libera", "oftc", "snoonet"));
+    when(runtimeConfig.readServerAutoConnectOnStartByServer())
+        .thenReturn(Map.of("libera", false, "snoonet", true));
+    when(irc.connect(anyString())).thenReturn(Completable.complete());
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    coordinator.connectAutoConnectOnStartServers();
+
+    verify(irc, never()).connect("libera");
+    verify(irc).connect("oftc");
+    verify(irc).connect("snoonet");
   }
 
   @Test

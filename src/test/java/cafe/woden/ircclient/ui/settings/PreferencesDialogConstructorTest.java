@@ -16,6 +16,7 @@ import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
 import cafe.woden.ircclient.notify.pushy.PushySettingsBus;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
+import cafe.woden.ircclient.ui.chat.embed.EmbedLoadPolicyBus;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
 import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
@@ -79,6 +80,8 @@ class PreferencesDialogConstructorTest {
         mock(NickColorSettingsBus.class),
         mock(NickColorService.class),
         mock(NickColorOverridesDialog.class),
+        mock(EmbedLoadPolicyDialog.class),
+        mock(EmbedLoadPolicyBus.class),
         mock(PircbotxIrcClientService.class),
         mock(FilterSettingsBus.class),
         mock(TranscriptRebuildService.class),

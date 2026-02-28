@@ -17,6 +17,7 @@ public class ChatStyles {
   private final ChatThemeSettingsBus chatThemeSettings;
 
   public static final String ATTR_URL = "chat.url";
+  public static final String ATTR_MANUAL_PREVIEW_URL = "chat.manualPreviewUrl";
   public static final String ATTR_CHANNEL = "chat.channel";
   public static final String ATTR_MSG_REF = "chat.msgRef";
   public static final String ATTR_STYLE = "chat.style";

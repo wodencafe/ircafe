@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import javax.swing.tree.DefaultMutableTreeNode;
 
@@ -32,7 +32,8 @@ final class ServerTreeBuiltInLayoutCoordinator {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
     RuntimeConfigStore.ServerTreeBuiltInLayout normalized =
-        normalizeLayout(layout == null ? RuntimeConfigStore.ServerTreeBuiltInLayout.defaults() : layout);
+        normalizeLayout(
+            layout == null ? RuntimeConfigStore.ServerTreeBuiltInLayout.defaults() : layout);
     RuntimeConfigStore.ServerTreeBuiltInLayout defaults =
         RuntimeConfigStore.ServerTreeBuiltInLayout.defaults();
     if (normalized.equals(defaults)) {

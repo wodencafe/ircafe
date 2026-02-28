@@ -15,7 +15,9 @@ final class ServerTreeConnectionStateViewModel {
 
   static boolean canDisconnect(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return st == ConnectionState.CONNECTED || st == ConnectionState.RECONNECTING;
+    return st == ConnectionState.CONNECTING
+        || st == ConnectionState.CONNECTED
+        || st == ConnectionState.RECONNECTING;
   }
 
   static String stateLabel(ConnectionState state) {
@@ -65,7 +67,9 @@ final class ServerTreeConnectionStateViewModel {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     return canConnect(st)
         ? "Click the row action to connect."
-        : canDisconnect(st) ? "Click the row action to disconnect." : "Connection state is changing.";
+        : canDisconnect(st)
+            ? "Click the row action to disconnect."
+            : "Connection state is changing.";
   }
 
   static String serverNodeIconName(ConnectionState state) {

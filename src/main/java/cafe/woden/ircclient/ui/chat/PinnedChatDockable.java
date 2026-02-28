@@ -456,6 +456,12 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   }
 
   @Override
+  protected boolean onManualPreviewRequested(String url, int insertOffset) {
+    if (target == null || target.isUiOnly()) return false;
+    return transcripts.insertManualPreviewAt(target, insertOffset, url);
+  }
+
+  @Override
   public String getPersistentID() {
     return persistentId;
   }

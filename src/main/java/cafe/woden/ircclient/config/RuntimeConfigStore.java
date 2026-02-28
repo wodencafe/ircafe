@@ -207,6 +207,91 @@ public class RuntimeConfigStore {
     }
   }
 
+  public record EmbedLoadPolicyScope(
+      List<String> userWhitelist,
+      List<String> userBlacklist,
+      List<String> channelWhitelist,
+      List<String> channelBlacklist,
+      boolean requireVoiceOrOp,
+      boolean requireLoggedIn,
+      int minAccountAgeDays,
+      List<String> linkWhitelist,
+      List<String> linkBlacklist,
+      List<String> domainWhitelist,
+      List<String> domainBlacklist) {
+    public EmbedLoadPolicyScope {
+      userWhitelist = sanitizePolicyPatternList(userWhitelist);
+      userBlacklist = sanitizePolicyPatternList(userBlacklist);
+      channelWhitelist = sanitizePolicyPatternList(channelWhitelist);
+      channelBlacklist = sanitizePolicyPatternList(channelBlacklist);
+      linkWhitelist = sanitizePolicyPatternList(linkWhitelist);
+      linkBlacklist = sanitizePolicyPatternList(linkBlacklist);
+      domainWhitelist = sanitizePolicyPatternList(domainWhitelist);
+      domainBlacklist = sanitizePolicyPatternList(domainBlacklist);
+      if (minAccountAgeDays < 0) minAccountAgeDays = 0;
+    }
+
+    public static EmbedLoadPolicyScope defaults() {
+      return new EmbedLoadPolicyScope(
+          List.of(),
+          List.of(),
+          List.of(),
+          List.of(),
+          false,
+          false,
+          0,
+          List.of(),
+          List.of(),
+          List.of(),
+          List.of());
+    }
+
+    public boolean isDefaultScope() {
+      return this.equals(defaults());
+    }
+  }
+
+  public record EmbedLoadPolicySnapshot(
+      EmbedLoadPolicyScope global, Map<String, EmbedLoadPolicyScope> byServer) {
+    public EmbedLoadPolicySnapshot {
+      if (global == null) global = EmbedLoadPolicyScope.defaults();
+
+      LinkedHashMap<String, EmbedLoadPolicyScope> normalized = new LinkedHashMap<>();
+      if (byServer != null) {
+        for (Map.Entry<String, EmbedLoadPolicyScope> entry : byServer.entrySet()) {
+          String serverId = Objects.toString(entry.getKey(), "").trim();
+          if (serverId.isEmpty()) continue;
+          EmbedLoadPolicyScope scope =
+              entry.getValue() == null ? EmbedLoadPolicyScope.defaults() : entry.getValue();
+          if (scope.isDefaultScope()) continue;
+          normalized.put(serverId, scope);
+        }
+      }
+      byServer = normalized.isEmpty() ? Map.of() : Map.copyOf(normalized);
+    }
+
+    public static EmbedLoadPolicySnapshot defaults() {
+      return new EmbedLoadPolicySnapshot(EmbedLoadPolicyScope.defaults(), Map.of());
+    }
+
+    public boolean isDefaultPolicy() {
+      return this.equals(defaults());
+    }
+
+    public EmbedLoadPolicyScope scopeForServer(String serverId) {
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty() || byServer == null || byServer.isEmpty()) return global;
+      EmbedLoadPolicyScope exact = byServer.get(sid);
+      if (exact != null) return exact;
+      for (Map.Entry<String, EmbedLoadPolicyScope> entry : byServer.entrySet()) {
+        if (sid.equalsIgnoreCase(Objects.toString(entry.getKey(), "").trim())) {
+          return entry.getValue();
+        }
+      }
+      return global;
+    }
+  }
+
   private final Path file;
   private final IrcProperties defaults;
   private final Yaml yaml;
@@ -461,6 +546,33 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist servers list to '{}'", file, e);
+    }
+  }
+
+  /** Returns configured server ids from runtime config, falling back to boot defaults. */
+  public synchronized List<String> readServerIds() {
+    try {
+      if (file.toString().isBlank()) return defaultServerIds();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Object ircObj = doc.get("irc");
+      if (!(ircObj instanceof Map<?, ?> irc)) return defaultServerIds();
+      Object serversObj = irc.get("servers");
+      if (!(serversObj instanceof List<?> servers) || servers.isEmpty()) return defaultServerIds();
+
+      ArrayList<String> out = new ArrayList<>();
+      for (Object item : servers) {
+        if (!(item instanceof Map<?, ?> server)) continue;
+        String id = Objects.toString(server.get("id"), "").trim();
+        if (id.isEmpty()) continue;
+        if (containsIgnoreCase(out, id)) continue;
+        out.add(id);
+      }
+      if (out.isEmpty()) return defaultServerIds();
+      return List.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read server ids from '{}'", file, e);
+      return defaultServerIds();
     }
   }
 
@@ -901,6 +1013,67 @@ public class RuntimeConfigStore {
       if (!v.isEmpty()) out.add(v);
     }
     return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private List<String> defaultServerIds() {
+    if (defaults == null || defaults.servers() == null || defaults.servers().isEmpty()) {
+      return List.of();
+    }
+    ArrayList<String> out = new ArrayList<>();
+    for (IrcProperties.Server server : defaults.servers()) {
+      if (server == null) continue;
+      String id = Objects.toString(server.id(), "").trim();
+      if (id.isEmpty()) continue;
+      if (containsIgnoreCase(out, id)) continue;
+      out.add(id);
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private static List<String> sanitizePolicyPatternList(List<String> raw) {
+    if (raw == null || raw.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(raw.size());
+    for (String entry : raw) {
+      String v = Objects.toString(entry, "").trim();
+      if (v.isEmpty()) continue;
+      if (out.contains(v)) continue;
+      out.add(v);
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private static EmbedLoadPolicyScope parseEmbedLoadPolicyScope(Object raw) {
+    if (!(raw instanceof Map<?, ?> scope)) return EmbedLoadPolicyScope.defaults();
+    return new EmbedLoadPolicyScope(
+        sanitizeStringList(scope.get("userWhitelist")),
+        sanitizeStringList(scope.get("userBlacklist")),
+        sanitizeStringList(scope.get("channelWhitelist")),
+        sanitizeStringList(scope.get("channelBlacklist")),
+        asBoolean(scope.get("requireVoiceOrOp")).orElse(Boolean.FALSE),
+        asBoolean(scope.get("requireLoggedIn")).orElse(Boolean.FALSE),
+        Math.max(0, asInt(scope.get("minAccountAgeDays")).orElse(0)),
+        sanitizeStringList(scope.get("linkWhitelist")),
+        sanitizeStringList(scope.get("linkBlacklist")),
+        sanitizeStringList(scope.get("domainWhitelist")),
+        sanitizeStringList(scope.get("domainBlacklist")));
+  }
+
+  private static void writeEmbedLoadPolicyScopeMap(
+      Map<String, Object> out, EmbedLoadPolicyScope scope) {
+    if (out == null) return;
+    out.clear();
+    EmbedLoadPolicyScope s = (scope == null) ? EmbedLoadPolicyScope.defaults() : scope;
+    if (!s.userWhitelist().isEmpty()) out.put("userWhitelist", s.userWhitelist());
+    if (!s.userBlacklist().isEmpty()) out.put("userBlacklist", s.userBlacklist());
+    if (!s.channelWhitelist().isEmpty()) out.put("channelWhitelist", s.channelWhitelist());
+    if (!s.channelBlacklist().isEmpty()) out.put("channelBlacklist", s.channelBlacklist());
+    if (s.requireVoiceOrOp()) out.put("requireVoiceOrOp", true);
+    if (s.requireLoggedIn()) out.put("requireLoggedIn", true);
+    if (s.minAccountAgeDays() > 0) out.put("minAccountAgeDays", s.minAccountAgeDays());
+    if (!s.linkWhitelist().isEmpty()) out.put("linkWhitelist", s.linkWhitelist());
+    if (!s.linkBlacklist().isEmpty()) out.put("linkBlacklist", s.linkBlacklist());
+    if (!s.domainWhitelist().isEmpty()) out.put("domainWhitelist", s.domainWhitelist());
+    if (!s.domainBlacklist().isEmpty()) out.put("domainBlacklist", s.domainBlacklist());
   }
 
   private static String normalizeChannelName(Object channel) {
@@ -1437,7 +1610,8 @@ public class RuntimeConfigStore {
    *
    * <p>Stored under {@code ircafe.ui.serverTree.rootSiblingOrderByServer.<serverId>}.
    */
-  public synchronized Map<String, ServerTreeRootSiblingOrder> readServerTreeRootSiblingOrderByServer() {
+  public synchronized Map<String, ServerTreeRootSiblingOrder>
+      readServerTreeRootSiblingOrderByServer() {
     try {
       if (file.toString().isBlank()) return Map.of();
       if (!Files.exists(file)) return Map.of();
@@ -1489,8 +1663,7 @@ public class RuntimeConfigStore {
       if (sid.isEmpty()) return;
 
       ServerTreeRootSiblingOrder next =
-          normalizeRootSiblingOrder(
-              order == null ? ServerTreeRootSiblingOrder.defaults() : order);
+          normalizeRootSiblingOrder(order == null ? ServerTreeRootSiblingOrder.defaults() : order);
 
       Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
@@ -1908,6 +2081,96 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist autoConnectOnStart setting to '{}'", file, e);
+    }
+  }
+
+  /**
+   * Reads persisted per-server startup auto-connect overrides.
+   *
+   * <p>Stored under {@code ircafe.ui.serverAutoConnectOnStartByServer.<serverId>}. Default behavior
+   * is enabled, so this map usually contains only {@code false} entries.
+   */
+  public synchronized Map<String, Boolean> readServerAutoConnectOnStartByServer() {
+    try {
+      if (file.toString().isBlank()) return Map.of();
+      if (!Files.exists(file)) return Map.of();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Map.of();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Map.of();
+
+      Object byServerObj = ui.get("serverAutoConnectOnStartByServer");
+      if (!(byServerObj instanceof Map<?, ?> byServer)) return Map.of();
+
+      LinkedHashMap<String, Boolean> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : byServer.entrySet()) {
+        String sid = Objects.toString(entry.getKey(), "").trim();
+        if (sid.isEmpty()) continue;
+        Optional<Boolean> enabled = asBoolean(entry.getValue());
+        enabled.ifPresent(value -> out.put(sid, value));
+      }
+      if (out.isEmpty()) return Map.of();
+      return Map.copyOf(out);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not read per-server startup auto-connect settings from '{}'", file, e);
+      return Map.of();
+    }
+  }
+
+  /**
+   * Reads whether a server should auto-connect on startup.
+   *
+   * <p>Returns {@code defaultValue} when no override is present.
+   */
+  public synchronized boolean readServerAutoConnectOnStart(String serverId, boolean defaultValue) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return defaultValue;
+
+    Map<String, Boolean> byServer = readServerAutoConnectOnStartByServer();
+    Boolean exact = byServer.get(sid);
+    if (exact != null) return exact;
+
+    for (Map.Entry<String, Boolean> entry : byServer.entrySet()) {
+      if (sid.equalsIgnoreCase(Objects.toString(entry.getKey(), "").trim())) {
+        return Boolean.TRUE.equals(entry.getValue());
+      }
+    }
+    return defaultValue;
+  }
+
+  /**
+   * Persists whether a server should auto-connect on startup.
+   *
+   * <p>Enabled is the default, so enabled values are removed to keep the YAML concise.
+   */
+  public synchronized void rememberServerAutoConnectOnStart(String serverId, boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> byServer = getOrCreateMap(ui, "serverAutoConnectOnStartByServer");
+
+      if (enabled) {
+        byServer.remove(sid);
+      } else {
+        byServer.put(sid, false);
+      }
+      if (byServer.isEmpty()) {
+        ui.remove("serverAutoConnectOnStartByServer");
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist per-server startup auto-connect settings to '{}'", file, e);
     }
   }
 
@@ -3776,6 +4039,95 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist link preview collapse setting to '{}'", file, e);
+    }
+  }
+
+  /** Reads advanced embed/link loading policy settings under {@code ircafe.ui.embedLoadPolicy}. */
+  public synchronized EmbedLoadPolicySnapshot readEmbedLoadPolicy() {
+    try {
+      if (file.toString().isBlank()) return EmbedLoadPolicySnapshot.defaults();
+      if (!Files.exists(file)) return EmbedLoadPolicySnapshot.defaults();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return EmbedLoadPolicySnapshot.defaults();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return EmbedLoadPolicySnapshot.defaults();
+
+      Object rawPolicy = ui.get("embedLoadPolicy");
+      if (!(rawPolicy instanceof Map<?, ?> policy)) return EmbedLoadPolicySnapshot.defaults();
+
+      EmbedLoadPolicyScope global = parseEmbedLoadPolicyScope(policy.get("global"));
+
+      LinkedHashMap<String, EmbedLoadPolicyScope> byServer = new LinkedHashMap<>();
+      Object rawByServer = policy.get("byServer");
+      if (rawByServer instanceof Map<?, ?> map) {
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+          String serverId = Objects.toString(entry.getKey(), "").trim();
+          if (serverId.isEmpty()) continue;
+          EmbedLoadPolicyScope scope = parseEmbedLoadPolicyScope(entry.getValue());
+          if (scope.isDefaultScope()) continue;
+          byServer.put(serverId, scope);
+        }
+      }
+
+      return new EmbedLoadPolicySnapshot(global, byServer);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read embed/link load policy from '{}'", file, e);
+      return EmbedLoadPolicySnapshot.defaults();
+    }
+  }
+
+  /** Persists advanced embed/link loading policy settings under {@code ircafe.ui.embedLoadPolicy}. */
+  public synchronized void rememberEmbedLoadPolicy(EmbedLoadPolicySnapshot snapshot) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      EmbedLoadPolicySnapshot normalized =
+          snapshot == null ? EmbedLoadPolicySnapshot.defaults() : snapshot;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      if (normalized.isDefaultPolicy()) {
+        ui.remove("embedLoadPolicy");
+        writeFile(doc);
+        return;
+      }
+
+      Map<String, Object> policy = getOrCreateMap(ui, "embedLoadPolicy");
+      Map<String, Object> global = getOrCreateMap(policy, "global");
+      writeEmbedLoadPolicyScopeMap(global, normalized.global());
+
+      if (normalized.byServer() == null || normalized.byServer().isEmpty()) {
+        policy.remove("byServer");
+      } else {
+        Map<String, Object> byServer = getOrCreateMap(policy, "byServer");
+        byServer.clear();
+        for (Map.Entry<String, EmbedLoadPolicyScope> entry : normalized.byServer().entrySet()) {
+          String serverId = Objects.toString(entry.getKey(), "").trim();
+          if (serverId.isEmpty()) continue;
+          EmbedLoadPolicyScope scope =
+              entry.getValue() == null ? EmbedLoadPolicyScope.defaults() : entry.getValue();
+          if (scope.isDefaultScope()) continue;
+          Map<String, Object> scopeMap = new LinkedHashMap<>();
+          writeEmbedLoadPolicyScopeMap(scopeMap, scope);
+          byServer.put(serverId, scopeMap);
+        }
+        if (byServer.isEmpty()) {
+          policy.remove("byServer");
+        }
+      }
+
+      if (policy.isEmpty()) {
+        ui.remove("embedLoadPolicy");
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist embed/link load policy to '{}'", file, e);
     }
   }
 

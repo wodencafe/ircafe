@@ -569,6 +569,11 @@ public class IrcMediator implements MediatorControlPort {
     connectionCoordinator.connectAll();
   }
 
+  @Override
+  public void connectAutoConnectOnStartServers() {
+    connectionCoordinator.connectAutoConnectOnStartServers();
+  }
+
   public void disconnectAll() {
     connectionCoordinator.disconnectAll();
   }

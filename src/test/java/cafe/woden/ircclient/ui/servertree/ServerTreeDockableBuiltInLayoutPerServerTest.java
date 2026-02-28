@@ -17,8 +17,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.swing.SwingUtilities;
 import javax.swing.JTree;
+import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -48,10 +48,13 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
             assertNotNull(monitorNode);
             assertNotNull(interceptorsNode);
 
-            assertEquals(otherNode, leafNode(dockable, new TargetRef("libera", "status")).getParent());
-            assertEquals(otherNode, leafNode(dockable, TargetRef.notifications("libera")).getParent());
+            assertEquals(
+                otherNode, leafNode(dockable, new TargetRef("libera", "status")).getParent());
+            assertEquals(
+                otherNode, leafNode(dockable, TargetRef.notifications("libera")).getParent());
             assertEquals(otherNode, leafNode(dockable, TargetRef.logViewer("libera")).getParent());
-            assertEquals(otherNode, leafNode(dockable, TargetRef.weechatFilters("libera")).getParent());
+            assertEquals(
+                otherNode, leafNode(dockable, TargetRef.weechatFilters("libera")).getParent());
             assertEquals(otherNode, leafNode(dockable, TargetRef.ignores("libera")).getParent());
             assertEquals(otherNode, monitorNode.getParent());
             assertEquals(otherNode, interceptorsNode.getParent());
@@ -93,7 +96,8 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
             DefaultMutableTreeNode monitorNode = nodeField(serverNodes, "monitorNode");
             DefaultMutableTreeNode interceptorsNode = nodeField(serverNodes, "interceptorsNode");
 
-            assertEquals(serverNode, leafNode(dockable, new TargetRef("libera", "status")).getParent());
+            assertEquals(
+                serverNode, leafNode(dockable, new TargetRef("libera", "status")).getParent());
             assertEquals(serverNode, monitorNode.getParent());
             assertEquals(otherNode, interceptorsNode.getParent());
           } catch (Exception e) {
@@ -117,7 +121,8 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
             Object serverNodes = serverNodes(dockable, "libera");
             DefaultMutableTreeNode serverNode = nodeField(serverNodes, "serverNode");
             DefaultMutableTreeNode otherNode = nodeField(serverNodes, "otherNode");
-            DefaultMutableTreeNode statusNode = leafNode(dockable, new TargetRef("libera", "status"));
+            DefaultMutableTreeNode statusNode =
+                leafNode(dockable, new TargetRef("libera", "status"));
             DefaultTreeModel model = model(dockable);
 
             model.removeNodeFromParent(statusNode);
@@ -130,7 +135,8 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
                 runtime.readServerTreeBuiltInLayoutByServer().get("libera");
             assertNotNull(persisted);
             assertEquals(
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER, persisted.rootOrder().get(0));
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
+                persisted.rootOrder().get(0));
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -312,9 +318,10 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
     m.invoke(dockable, serverId);
   }
 
-  private static void invokePersistBuiltInLayoutFromTree(ServerTreeDockable dockable, String serverId)
-      throws Exception {
-    Method m = ServerTreeDockable.class.getDeclaredMethod("persistBuiltInLayoutFromTree", String.class);
+  private static void invokePersistBuiltInLayoutFromTree(
+      ServerTreeDockable dockable, String serverId) throws Exception {
+    Method m =
+        ServerTreeDockable.class.getDeclaredMethod("persistBuiltInLayoutFromTree", String.class);
     m.setAccessible(true);
     m.invoke(dockable, serverId);
   }
@@ -364,7 +371,10 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
   }
 
   private static void moveToServerIndex(
-      DefaultTreeModel model, DefaultMutableTreeNode serverNode, DefaultMutableTreeNode node, int index) {
+      DefaultTreeModel model,
+      DefaultMutableTreeNode serverNode,
+      DefaultMutableTreeNode node,
+      int index) {
     model.removeNodeFromParent(node);
     int clamped = Math.max(0, Math.min(index, serverNode.getChildCount()));
     model.insertNodeInto(node, serverNode, clamped);

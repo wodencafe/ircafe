@@ -28,6 +28,7 @@ import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
 import cafe.woden.ircclient.ui.SwingEdt;
+import cafe.woden.ircclient.ui.chat.embed.EmbedLoadPolicyBus;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettings;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
@@ -158,6 +159,8 @@ public class PreferencesDialog {
   private final NickColorSettingsBus nickColorSettingsBus;
   private final NickColorService nickColorService;
   private final NickColorOverridesDialog nickColorOverridesDialog;
+  private final EmbedLoadPolicyDialog embedLoadPolicyDialog;
+  private final EmbedLoadPolicyBus embedLoadPolicyBus;
   private final PircbotxIrcClientService ircClientService;
   private final FilterSettingsBus filterSettingsBus;
   private final TranscriptRebuildService transcriptRebuildService;
@@ -189,6 +192,8 @@ public class PreferencesDialog {
       NickColorSettingsBus nickColorSettingsBus,
       NickColorService nickColorService,
       NickColorOverridesDialog nickColorOverridesDialog,
+      EmbedLoadPolicyDialog embedLoadPolicyDialog,
+      EmbedLoadPolicyBus embedLoadPolicyBus,
       PircbotxIrcClientService ircClientService,
       FilterSettingsBus filterSettingsBus,
       TranscriptRebuildService transcriptRebuildService,
@@ -217,6 +222,8 @@ public class PreferencesDialog {
     this.nickColorSettingsBus = nickColorSettingsBus;
     this.nickColorService = nickColorService;
     this.nickColorOverridesDialog = nickColorOverridesDialog;
+    this.embedLoadPolicyDialog = embedLoadPolicyDialog;
+    this.embedLoadPolicyBus = embedLoadPolicyBus;
     this.ircClientService = ircClientService;
     this.filterSettingsBus = filterSettingsBus;
     this.transcriptRebuildService = transcriptRebuildService;
@@ -312,6 +319,12 @@ public class PreferencesDialog {
         new java.util.concurrent.atomic.AtomicReference<>(committedThemeId.get());
     final java.util.concurrent.atomic.AtomicReference<UiSettings> committedUiSettings =
         new java.util.concurrent.atomic.AtomicReference<>(current);
+    final java.util.concurrent.atomic.AtomicReference<RuntimeConfigStore.EmbedLoadPolicySnapshot>
+        pendingEmbedLoadPolicy =
+            new java.util.concurrent.atomic.AtomicReference<>(
+                embedLoadPolicyBus != null
+                    ? embedLoadPolicyBus.get()
+                    : runtimeConfig.readEmbedLoadPolicy());
     final java.util.concurrent.atomic.AtomicReference<ThemeAccentSettings> committedAccentSettings =
         new java.util.concurrent.atomic.AtomicReference<>(
             initialAccent != null
@@ -847,6 +860,8 @@ public class PreferencesDialog {
 
     ImageEmbedControls imageEmbeds = buildImageEmbedControls(current, closeables);
     LinkPreviewControls linkPreviews = buildLinkPreviewControls(current);
+    JButton advancedEmbedPolicyButton =
+        buildAdvancedEmbedPolicyButton(owner, pendingEmbedLoadPolicy);
     TimestampControls timestamps = buildTimestampControls(current);
     JComboBox<MemoryUsageDisplayMode> memoryUsageDisplayMode =
         buildMemoryUsageDisplayModeCombo(current);
@@ -922,7 +937,8 @@ public class PreferencesDialog {
             typingTreeIndicatorStyle,
             serverTreeUnreadBadgeScalePercent,
             ircv3Capabilities);
-    JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
+    JPanel embedsPanel =
+        buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews, advancedEmbedPolicyButton);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
     JPanel notificationsPanel = buildNotificationsPanel(notifications, ircEventNotifications);
     JPanel commandsPanel = buildUserCommandsPanel(userCommands);
@@ -1674,6 +1690,14 @@ public class PreferencesDialog {
             runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
             runtimeConfig.rememberLinkPreviewsCollapsedByDefault(
                 next.linkPreviewsCollapsedByDefault());
+            RuntimeConfigStore.EmbedLoadPolicySnapshot embedPolicyV =
+                pendingEmbedLoadPolicy.get() != null
+                    ? pendingEmbedLoadPolicy.get()
+                    : RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults();
+            runtimeConfig.rememberEmbedLoadPolicy(embedPolicyV);
+            if (embedLoadPolicyBus != null) {
+              embedLoadPolicyBus.set(embedPolicyV);
+            }
             runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
             runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(
                 next.ctcpRequestsInActiveTargetEnabled());
@@ -6460,10 +6484,33 @@ public class PreferencesDialog {
     return k;
   }
 
-  private JPanel buildEmbedsAndPreviewsPanel(ImageEmbedControls image, LinkPreviewControls links) {
+  private JButton buildAdvancedEmbedPolicyButton(
+      Window owner,
+      java.util.concurrent.atomic.AtomicReference<RuntimeConfigStore.EmbedLoadPolicySnapshot>
+          pendingEmbedLoadPolicy) {
+    JButton advanced = new JButton("Advanced Policy...");
+    advanced.setToolTipText(
+        "Open advanced allow/deny controls for embed/link loading by user, channel, URL/domain, and network.");
+    advanced.addActionListener(
+        e -> {
+          if (embedLoadPolicyDialog == null || pendingEmbedLoadPolicy == null) return;
+          RuntimeConfigStore.EmbedLoadPolicySnapshot current =
+              pendingEmbedLoadPolicy.get() != null
+                  ? pendingEmbedLoadPolicy.get()
+                  : RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults();
+          embedLoadPolicyDialog
+              .open(owner, current)
+              .ifPresent(pendingEmbedLoadPolicy::set);
+        });
+    return advanced;
+  }
+
+  private JPanel buildEmbedsAndPreviewsPanel(
+      ImageEmbedControls image, LinkPreviewControls links, JButton advancedPolicyButton) {
     JPanel form =
         new JPanel(
-            new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]"));
+            new MigLayout(
+                "insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]10[]"));
 
     form.add(tabTitle("Embeds & Previews"), "span 2, growx, wmin 0, wrap");
     form.add(sectionTitle("Inline images"), "span 2, growx, wmin 0, wrap");
@@ -6473,6 +6520,15 @@ public class PreferencesDialog {
     form.add(sectionTitle("Link previews"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("OpenGraph cards"), "aligny top");
     form.add(links.panel, "growx");
+
+    form.add(sectionTitle("Access policy"), "span 2, growx, wmin 0, wrap");
+    form.add(new JLabel("Advanced matching rules"), "aligny top");
+    JPanel buttonRow = new JPanel(new MigLayout("insets 0", "[]", "[]"));
+    buttonRow.setOpaque(false);
+    if (advancedPolicyButton != null) {
+      buttonRow.add(advancedPolicyButton);
+    }
+    form.add(buttonRow, "growx");
 
     return form;
   }

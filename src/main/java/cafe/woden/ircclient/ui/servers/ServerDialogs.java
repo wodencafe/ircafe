@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.servers;
 
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import java.awt.Window;
 import java.util.Objects;
@@ -16,25 +17,35 @@ import org.springframework.stereotype.Component;
 public class ServerDialogs {
   private final ServerRegistry serverRegistry;
   private final EphemeralServerRegistry ephemeralServers;
+  private final RuntimeConfigStore runtimeConfig;
 
-  public ServerDialogs(ServerRegistry serverRegistry, EphemeralServerRegistry ephemeralServers) {
+  public ServerDialogs(
+      ServerRegistry serverRegistry,
+      EphemeralServerRegistry ephemeralServers,
+      RuntimeConfigStore runtimeConfig) {
     this.serverRegistry = serverRegistry;
     this.ephemeralServers = ephemeralServers;
+    this.runtimeConfig = runtimeConfig;
   }
 
   public void openAddServer(Window parent) {
     runOnEdt(
         () -> {
-          ServerEditorDialog dlg = new ServerEditorDialog(parent, "Add Server", null);
+          ServerEditorDialog dlg = new ServerEditorDialog(parent, "Add Server", null, true);
           Optional<IrcProperties.Server> result = dlg.open();
-          result.ifPresent(serverRegistry::upsert);
+          result.ifPresent(
+              next -> {
+                serverRegistry.upsert(next);
+                runtimeConfig.rememberServerAutoConnectOnStart(
+                    next.id(), dlg.autoConnectOnStartSelected());
+              });
         });
   }
 
   public void openManageServers(Window parent) {
     runOnEdt(
         () -> {
-          ServersDialog dlg = new ServersDialog(parent, serverRegistry);
+          ServersDialog dlg = new ServersDialog(parent, serverRegistry, runtimeConfig);
           dlg.open();
         });
   }
@@ -60,8 +71,10 @@ public class ServerDialogs {
 
           IrcProperties.Server cur = curOpt.get();
           String originalId = Objects.toString(cur.id(), "").trim();
+          boolean autoConnectOnStart = runtimeConfig.readServerAutoConnectOnStart(originalId, true);
 
-          ServerEditorDialog dlg = new ServerEditorDialog(parent, "Edit Server", cur);
+          ServerEditorDialog dlg =
+              new ServerEditorDialog(parent, "Edit Server", cur, autoConnectOnStart);
           Optional<IrcProperties.Server> out = dlg.open();
           if (out.isEmpty()) return;
 
@@ -78,8 +91,10 @@ public class ServerDialogs {
 
           if (!Objects.equals(originalId, nextId)) {
             serverRegistry.remove(originalId);
+            runtimeConfig.rememberServerAutoConnectOnStart(originalId, true);
           }
           serverRegistry.upsert(next);
+          runtimeConfig.rememberServerAutoConnectOnStart(nextId, dlg.autoConnectOnStartSelected());
         });
   }
 
@@ -111,8 +126,10 @@ public class ServerDialogs {
           }
 
           IrcProperties.Server seed = ephOpt.get();
+          boolean autoConnectOnStart = runtimeConfig.readServerAutoConnectOnStart(id, true);
 
-          ServerEditorDialog dlg = new ServerEditorDialog(parent, "Save Server", seed);
+          ServerEditorDialog dlg =
+              new ServerEditorDialog(parent, "Save Server", seed, autoConnectOnStart);
           Optional<IrcProperties.Server> out = dlg.open();
           if (out.isEmpty()) return;
 
@@ -143,6 +160,7 @@ public class ServerDialogs {
           }
 
           serverRegistry.upsert(next);
+          runtimeConfig.rememberServerAutoConnectOnStart(nextId, dlg.autoConnectOnStartSelected());
           if (ephemeralServers != null) {
             // Remove the ephemeral copy (importers will also avoid re-adding if a persisted entry
             // exists).

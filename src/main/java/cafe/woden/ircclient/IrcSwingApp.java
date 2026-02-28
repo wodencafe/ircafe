@@ -103,7 +103,7 @@ public class IrcSwingApp {
 
               MediatorControlPort mediator = mediatorProvider.getObject();
               if (settingsBus.get().autoConnectOnStart()) {
-                mediator.connectAll();
+                mediator.connectAutoConnectOnStartServers();
               }
               startupCompleted = true;
             } finally {

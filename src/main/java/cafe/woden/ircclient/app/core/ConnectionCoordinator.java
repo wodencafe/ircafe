@@ -126,6 +126,23 @@ public class ConnectionCoordinator {
     updateConnectionUi();
   }
 
+  public void connectAutoConnectOnStartServers() {
+    Set<String> serverIds = serverRegistry.serverIds();
+    if (serverIds.isEmpty()) {
+      ui.setConnectionStatusText("No servers configured");
+      ui.setConnectionControlsEnabled(false, false);
+      return;
+    }
+
+    Map<String, Boolean> autoConnectByServer =
+        runtimeConfig != null ? runtimeConfig.readServerAutoConnectOnStartByServer() : Map.of();
+    for (String sid : serverIds) {
+      if (!isStartupAutoConnectEnabled(autoConnectByServer, sid)) continue;
+      requestConnect(sid, false, false);
+    }
+    updateConnectionUi();
+  }
+
   public void connectOne(String serverId) {
     String sid = normalizedKnownServerId(serverId, "(conn)");
     if (sid == null) return;
@@ -201,6 +218,23 @@ public class ConnectionCoordinator {
                   setState(sid, ConnectionState.DISCONNECTED);
                   updateConnectionUi();
                 }));
+  }
+
+  private static boolean isStartupAutoConnectEnabled(
+      Map<String, Boolean> autoConnectByServer, String serverId) {
+    if (autoConnectByServer == null || autoConnectByServer.isEmpty()) return true;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return true;
+
+    Boolean exact = autoConnectByServer.get(sid);
+    if (exact != null) return exact;
+
+    for (Map.Entry<String, Boolean> entry : autoConnectByServer.entrySet()) {
+      if (sid.equalsIgnoreCase(Objects.toString(entry.getKey(), "").trim())) {
+        return Boolean.TRUE.equals(entry.getValue());
+      }
+    }
+    return true;
   }
 
   private String normalizedKnownServerId(String serverId, String tag) {

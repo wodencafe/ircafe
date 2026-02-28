@@ -90,6 +90,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   public static final String ID = "chat";
   private static final int MAX_DRAFT_TARGETS = 512;
 
+  private final ChatTranscriptStore transcripts;
   private final ServerTreeDockable serverTree;
 
   private final ActiveInputRouter activeInputRouter;
@@ -205,6 +206,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
           ExecutorService interceptorRefreshExecutor) {
     super(settingsBus);
 
+    this.transcripts = transcripts;
     this.serverTree = serverTree;
 
     this.activeInputRouter = activeInputRouter;
@@ -1069,6 +1071,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   @Override
   protected boolean onMessageReferenceClicked(String messageId) {
     return transcriptInteractionCoordinator.onMessageReferenceClicked(messageId);
+  }
+
+  @Override
+  protected boolean onManualPreviewRequested(String url, int insertOffset) {
+    TargetRef target = activeTarget;
+    if (target == null || target.isUiOnly()) return false;
+    return transcripts != null && transcripts.insertManualPreviewAt(target, insertOffset, url);
   }
 
   @Override
