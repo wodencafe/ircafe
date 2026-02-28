@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
+import cafe.woden.ircclient.app.api.InterceptorEventType;
 import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
@@ -52,6 +53,7 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
@@ -245,6 +247,65 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void duplicateChannelMessageByMsgIdIsSuppressedBeforeUiAndSideEffects() throws Exception {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("bob"));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ChannelMessage(
+                Instant.now(), "#ircafe", "alice", "hello", "dup-1", Map.of("msgid", "dup-1"))));
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ChannelMessage(
+                Instant.now(),
+                "#ircafe",
+                "alice",
+                "hello again",
+                "dup-1",
+                Map.of("msgid", "dup-1"))));
+
+    verify(ui, times(1))
+        .appendChatAt(
+            eq(chan), any(), eq("alice"), anyString(), eq(false), eq("dup-1"), any(), any());
+    verify(interceptorIngestPort, times(1))
+        .ingestEvent(
+            eq("libera"), eq("#ircafe"), eq("alice"), anyString(), anyString(), eq(InterceptorEventType.MESSAGE));
+  }
+
+  @Test
+  void duplicatePrivateMessageFallsBackToTagMsgIdWhenMessageIdFieldIsBlank() throws Exception {
+    TargetRef pm = new TargetRef("libera", "alice");
+    when(targetCoordinator.allowPrivateAutoOpenFromInbound(eq(pm), eq(false))).thenReturn(false);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.PrivateMessage(
+                Instant.now(), "alice", "hello", "", Map.of("msgid", "pm-dup-1"))));
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.PrivateMessage(
+                Instant.now(), "alice", "hello again", "", Map.of("msgid", "pm-dup-1"))));
+
+    verify(ui, times(1))
+        .appendChatAt(eq(pm), any(), eq("alice"), anyString(), eq(false), anyString(), any());
+    verify(interceptorIngestPort, times(1))
+        .ingestEvent(
+            eq("libera"),
+            eq("pm:alice"),
+            eq("alice"),
+            anyString(),
+            anyString(),
+            eq(InterceptorEventType.PRIVATE_MESSAGE));
+    verify(trayNotificationsPort, times(1)).notifyPrivateMessage("libera", "alice", "hello");
+  }
+
+  @Test
   void ruleMatchInActiveChannelStillRecordsNotificationWithoutUnreadHighlight() throws Exception {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
@@ -302,7 +363,8 @@ class IrcMediatorMockVerifyTest {
     invokeOnServerIrcEvent(new ServerIrcEvent("libera", event));
 
     verify(targetCoordinator).onUserSetNameObserved("libera", event);
-    verify(ui).appendStatusAt(any(), any(), eq("(setname)"), eq("alice set name to: Alice Liddell"));
+    verify(ui)
+        .appendStatusAt(any(), any(), eq("(setname)"), eq("alice set name to: Alice Liddell"));
   }
 
   private void invokeHandleOutgoingLine(String raw) throws Exception {

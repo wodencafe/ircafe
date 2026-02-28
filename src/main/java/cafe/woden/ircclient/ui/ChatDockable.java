@@ -103,6 +103,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final LogViewerPanel logViewerPanel;
   private final InterceptorStore interceptorStore;
   private final InterceptorPanel interceptorPanel;
+  private final RuntimeEventsPanel appUnhandledErrorsPanel;
   private final RuntimeEventsPanel appAssertjPanel;
   private final RuntimeEventsPanel appJhiccupPanel;
   private final JfrDiagnosticsPanel appJfrPanel;
@@ -196,6 +197,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             this::setName,
             SwingUtilities::invokeLater);
     this.terminalPanel = java.util.Objects.requireNonNull(terminalDockable, "terminalDockable");
+    this.appUnhandledErrorsPanel = createUnhandledErrorsPanel(applicationDiagnosticsService);
     this.appAssertjPanel = createAssertjEventsPanel(applicationDiagnosticsService);
     this.appJhiccupPanel = createJhiccupEventsPanel(applicationDiagnosticsService);
     this.appJfrPanel = new JfrDiagnosticsPanel(jfrRuntimeEventsService);
@@ -280,6 +282,26 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         "assertj-swing",
         applicationDiagnosticsService != null
             ? applicationDiagnosticsService.assertjSwingChangeStream()
+            : null);
+  }
+
+  private RuntimeEventsPanel createUnhandledErrorsPanel(
+      ApplicationDiagnosticsService applicationDiagnosticsService) {
+    return new RuntimeEventsPanel(
+        "Unhandled Errors",
+        "Uncaught exceptions observed by the global thread exception handler.",
+        () ->
+            applicationDiagnosticsService != null
+                ? applicationDiagnosticsService.recentUnhandledErrorEvents(1200)
+                : List.of(),
+        () -> {
+          if (applicationDiagnosticsService != null) {
+            applicationDiagnosticsService.clearUnhandledErrorEvents();
+          }
+        },
+        "uncaught",
+        applicationDiagnosticsService != null
+            ? applicationDiagnosticsService.unhandledErrorChangeStream()
             : null);
   }
 
@@ -460,6 +482,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         monitorPanel,
         logViewerPanel,
         interceptorPanel,
+        appUnhandledErrorsPanel,
         appAssertjPanel,
         appJhiccupPanel,
         appJfrPanel,
@@ -726,6 +749,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     centerCards.add(monitorPanel, ChatTargetViewRouter.CARD_MONITOR);
     centerCards.add(logViewerPanel, ChatTargetViewRouter.CARD_LOG_VIEWER);
     centerCards.add(interceptorPanel, ChatTargetViewRouter.CARD_INTERCEPTOR);
+    centerCards.add(appUnhandledErrorsPanel, ChatTargetViewRouter.CARD_APP_UNHANDLED_ERRORS);
     centerCards.add(appAssertjPanel, ChatTargetViewRouter.CARD_APP_ASSERTJ);
     centerCards.add(appJhiccupPanel, ChatTargetViewRouter.CARD_APP_JHICCUP);
     centerCards.add(appJfrPanel, ChatTargetViewRouter.CARD_APP_JFR);

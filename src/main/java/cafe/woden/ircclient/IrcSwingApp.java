@@ -52,8 +52,17 @@ public class IrcSwingApp {
 
   public static void main(String[] args) {
     ConsoleTeeHub.install();
+    installSwingSafetyDefaults();
 
     new SpringApplicationBuilder(IrcSwingApp.class).headless(false).run(args);
+  }
+
+  private static void installSwingSafetyDefaults() {
+    // Prevent a known Swing repaint edge-case where volatile offscreen buffers can be requested
+    // with zero dimensions, which throws IllegalArgumentException on the EDT.
+    if (System.getProperty("swing.volatileImageBufferEnabled") == null) {
+      System.setProperty("swing.volatileImageBufferEnabled", "false");
+    }
   }
 
   @Bean

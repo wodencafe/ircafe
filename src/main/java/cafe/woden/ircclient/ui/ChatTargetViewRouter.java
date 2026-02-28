@@ -26,6 +26,7 @@ final class ChatTargetViewRouter {
   static final String CARD_MONITOR = "monitor";
   static final String CARD_LOG_VIEWER = "log-viewer";
   static final String CARD_INTERCEPTOR = "interceptor";
+  static final String CARD_APP_UNHANDLED_ERRORS = "app-unhandled-errors";
   static final String CARD_APP_ASSERTJ = "app-assertj";
   static final String CARD_APP_JHICCUP = "app-jhiccup";
   static final String CARD_APP_JFR = "app-jfr";
@@ -45,6 +46,7 @@ final class ChatTargetViewRouter {
   private final MonitorPanel monitorPanel;
   private final LogViewerPanel logViewerPanel;
   private final InterceptorPanel interceptorPanel;
+  private final RuntimeEventsPanel appUnhandledErrorsPanel;
   private final RuntimeEventsPanel appAssertjPanel;
   private final RuntimeEventsPanel appJhiccupPanel;
   private final JfrDiagnosticsPanel appJfrPanel;
@@ -61,6 +63,7 @@ final class ChatTargetViewRouter {
       MonitorPanel monitorPanel,
       LogViewerPanel logViewerPanel,
       InterceptorPanel interceptorPanel,
+      RuntimeEventsPanel appUnhandledErrorsPanel,
       RuntimeEventsPanel appAssertjPanel,
       RuntimeEventsPanel appJhiccupPanel,
       JfrDiagnosticsPanel appJfrPanel,
@@ -75,6 +78,8 @@ final class ChatTargetViewRouter {
     this.monitorPanel = Objects.requireNonNull(monitorPanel, "monitorPanel");
     this.logViewerPanel = Objects.requireNonNull(logViewerPanel, "logViewerPanel");
     this.interceptorPanel = Objects.requireNonNull(interceptorPanel, "interceptorPanel");
+    this.appUnhandledErrorsPanel =
+        Objects.requireNonNull(appUnhandledErrorsPanel, "appUnhandledErrorsPanel");
     this.appAssertjPanel = Objects.requireNonNull(appAssertjPanel, "appAssertjPanel");
     this.appJhiccupPanel = Objects.requireNonNull(appJhiccupPanel, "appJhiccupPanel");
     this.appJfrPanel = Objects.requireNonNull(appJfrPanel, "appJfrPanel");
@@ -109,6 +114,10 @@ final class ChatTargetViewRouter {
     }
     if (target.isMonitorGroup()) {
       showMonitorCard(target.serverId());
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isApplicationUnhandledErrors()) {
+      showApplicationUnhandledErrorsCard();
       return TargetViewType.UI_ONLY;
     }
     if (target.isApplicationAssertjSwing()) {
@@ -217,6 +226,14 @@ final class ChatTargetViewRouter {
     try {
       appJfrPanel.refreshNow();
       showCard(CARD_APP_JFR);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationUnhandledErrorsCard() {
+    try {
+      appUnhandledErrorsPanel.refreshNow();
+      showCard(CARD_APP_UNHANDLED_ERRORS);
     } catch (Exception ignored) {
     }
   }

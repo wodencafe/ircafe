@@ -40,6 +40,8 @@ import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -72,6 +74,8 @@ public class IrcMediator implements MediatorControlPort {
   private static final int PENDING_ECHO_TIMEOUT_BATCH_MAX = 64;
   private static final long NETSPLIT_NOTIFY_DEBOUNCE_MS = 20_000L;
   private static final int NETSPLIT_NOTIFY_MAX_KEYS = 512;
+  private static final int INBOUND_MSGID_DEDUP_MAX_KEYS = 50_000;
+  private static final Duration INBOUND_MSGID_DEDUP_TTL = Duration.ofMinutes(30);
 
   private final IrcClientService irc;
   private final UiPort ui;
@@ -114,10 +118,17 @@ public class IrcMediator implements MediatorControlPort {
   // Dedup cache
   private final Map<String, TypingLogState> lastTypingByKey = new ConcurrentHashMap<>();
   private final Map<String, Long> lastNetsplitNotifyAtMs = new ConcurrentHashMap<>();
+  private final Cache<InboundMessageDedupKey, Boolean> inboundMessageIdDedup =
+      Caffeine.newBuilder()
+          .maximumSize(INBOUND_MSGID_DEDUP_MAX_KEYS)
+          .expireAfterAccess(INBOUND_MSGID_DEDUP_TTL)
+          .build();
   private static final long TYPING_LOG_DEDUP_MS = 5_000;
   private static final int TYPING_LOG_MAX_KEYS = 512;
 
   private record TypingLogState(String state, long atMs) {}
+
+  private record InboundMessageDedupKey(String serverId, String target, String eventType, String msgId) {}
 
   @PostConstruct
   void init() {
@@ -627,6 +638,10 @@ public class IrcMediator implements MediatorControlPort {
             sid, chan, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags())) {
           return;
         }
+        if (shouldSuppressInboundDuplicateByMsgId(
+            sid, chan, "channel-message", ev.messageId(), ev.ircv3Tags())) {
+          return;
+        }
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           postTo(
@@ -690,6 +705,10 @@ public class IrcMediator implements MediatorControlPort {
         InboundIgnorePolicyPort.Decision decision =
             decideInbound(sid, ev.from(), true, ev.channel(), ev.action(), "ACTIONS", "CTCPS");
         if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
+        if (shouldSuppressInboundDuplicateByMsgId(
+            sid, chan, "channel-action", ev.messageId(), ev.ircv3Tags())) {
+          return;
+        }
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           postTo(
@@ -843,6 +862,10 @@ public class IrcMediator implements MediatorControlPort {
             sid, pm, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags())) {
           return;
         }
+        if (shouldSuppressInboundDuplicateByMsgId(
+            sid, pm, "private-message", ev.messageId(), ev.ircv3Tags())) {
+          return;
+        }
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           if (allowAutoOpen) {
@@ -932,6 +955,10 @@ public class IrcMediator implements MediatorControlPort {
                 ? InboundIgnorePolicyPort.Decision.ALLOW
                 : decideInbound(sid, ev.from(), true, "", ev.action(), "ACTIONS", "CTCPS");
         if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
+        if (shouldSuppressInboundDuplicateByMsgId(
+            sid, pm, "private-action", ev.messageId(), ev.ircv3Tags())) {
+          return;
+        }
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           if (allowAutoOpen) {
@@ -1031,6 +1058,10 @@ public class IrcMediator implements MediatorControlPort {
 
         if (maybeApplyMessageEditFromTaggedLine(
             sid, dest, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags())) {
+          return;
+        }
+        if (shouldSuppressInboundDuplicateByMsgId(
+            sid, dest, "notice", ev.messageId(), ev.ircv3Tags())) {
           return;
         }
 
@@ -2807,6 +2838,48 @@ public class IrcMediator implements MediatorControlPort {
     String f = Objects.toString(from, "").trim();
     if (f.isEmpty() || "server".equalsIgnoreCase(f)) return true;
     return isFromSelf(sid, f);
+  }
+
+  private boolean shouldSuppressInboundDuplicateByMsgId(
+      String sid, TargetRef target, String eventType, String messageId, Map<String, String> tags) {
+    if (hasMessageMutationTag(tags)) return false;
+
+    String msgId = effectiveMessageIdForDedup(messageId, tags);
+    if (msgId.isBlank()) return false;
+
+    String sidKey = Objects.toString(sid, "").trim().toLowerCase(Locale.ROOT);
+    String targetKey = normalizeDedupTarget(target);
+    String eventKey = Objects.toString(eventType, "").trim().toLowerCase(Locale.ROOT);
+    InboundMessageDedupKey key = new InboundMessageDedupKey(sidKey, targetKey, eventKey, msgId);
+    return inboundMessageIdDedup.asMap().putIfAbsent(key, Boolean.TRUE) != null;
+  }
+
+  private static String normalizeDedupTarget(TargetRef target) {
+    if (target == null) return "";
+    String sid = Objects.toString(target.serverId(), "").trim().toLowerCase(Locale.ROOT);
+    String raw = Objects.toString(target.target(), "").trim().toLowerCase(Locale.ROOT);
+    return sid + "|" + raw;
+  }
+
+  private static String effectiveMessageIdForDedup(String messageId, Map<String, String> tags) {
+    String direct = Objects.toString(messageId, "").trim();
+    if (!direct.isBlank()) return direct;
+    return firstIrcv3TagValue(
+        tags,
+        "msgid",
+        "+msgid",
+        "draft/msgid",
+        "+draft/msgid",
+        "znc.in/msgid",
+        "+znc.in/msgid");
+  }
+
+  private static boolean hasMessageMutationTag(Map<String, String> tags) {
+    return !firstIrcv3TagValue(tags, "draft/edit", "+draft/edit").isBlank()
+        || !firstIrcv3TagValue(tags, "draft/react", "+draft/react").isBlank()
+        || !firstIrcv3TagValue(tags, "draft/unreact", "+draft/unreact").isBlank()
+        || !firstIrcv3TagValue(tags, "draft/delete", "+draft/delete").isBlank()
+        || !firstIrcv3TagValue(tags, "draft/redact", "+draft/redact").isBlank();
   }
 
   private static String firstIrcv3TagValue(Map<String, String> tags, String... keys) {

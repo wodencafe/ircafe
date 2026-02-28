@@ -4514,8 +4514,7 @@ public class PreferencesDialog {
         "When enabled, history loads skip expensive URL/mention rich parsing while inserting.\n"
             + "This improves smoothness, but history text appears with simpler styling.");
 
-    JCheckBox historyLockViewportDuringLoadOlder =
-        new JCheckBox("Lock viewport during load older");
+    JCheckBox historyLockViewportDuringLoadOlder = new JCheckBox("Lock viewport during load older");
     historyLockViewportDuringLoadOlder.setSelected(
         runtimeConfig == null || runtimeConfig.readChatHistoryLockViewportDuringLoadOlder(true));
     historyLockViewportDuringLoadOlder.setToolTipText(

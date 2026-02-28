@@ -4438,9 +4438,7 @@ public class RuntimeConfigStore {
       return asBoolean(raw).orElse(defaultValue);
     } catch (Exception e) {
       log.warn(
-          "[ircafe] Could not read ui.chatHistoryLockViewportDuringLoadOlder from '{}'",
-          file,
-          e);
+          "[ircafe] Could not read ui.chatHistoryLockViewportDuringLoadOlder from '{}'", file, e);
       return defaultValue;
     }
   }
@@ -4457,8 +4455,7 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn(
-          "[ircafe] Could not persist chat history viewport-lock setting to '{}'", file, e);
+      log.warn("[ircafe] Could not persist chat history viewport-lock setting to '{}'", file, e);
     }
   }
 

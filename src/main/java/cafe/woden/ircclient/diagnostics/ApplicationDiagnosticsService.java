@@ -35,14 +35,18 @@ public class ApplicationDiagnosticsService {
 
   private final UiPort ui;
   private final AtomicBoolean installed = new AtomicBoolean(false);
+  private final Deque<RuntimeDiagnosticEvent> unhandledErrorEvents = new ArrayDeque<>();
   private final Deque<RuntimeDiagnosticEvent> assertjSwingEvents = new ArrayDeque<>();
   private final Deque<RuntimeDiagnosticEvent> jhiccupEvents = new ArrayDeque<>();
+  private final FlowableProcessor<Long> unhandledErrorChangeSignals =
+      PublishProcessor.<Long>create().toSerialized();
   private final FlowableProcessor<Long> assertjSwingChangeSignals =
       PublishProcessor.<Long>create().toSerialized();
   private final FlowableProcessor<Long> jhiccupChangeSignals =
       PublishProcessor.<Long>create().toSerialized();
   private final Thread.UncaughtExceptionHandler uncaughtExceptionHandler =
       this::handleUncaughtException;
+  private long unhandledErrorChangeSeq;
   private long assertjSwingChangeSeq;
   private long jhiccupChangeSeq;
   private volatile Thread.UncaughtExceptionHandler previousDefaultHandler;
@@ -93,8 +97,16 @@ public class ApplicationDiagnosticsService {
     return recentEvents(assertjSwingEvents, limit);
   }
 
+  public synchronized List<RuntimeDiagnosticEvent> recentUnhandledErrorEvents(int limit) {
+    return recentEvents(unhandledErrorEvents, limit);
+  }
+
   public synchronized List<RuntimeDiagnosticEvent> recentJhiccupEvents(int limit) {
     return recentEvents(jhiccupEvents, limit);
+  }
+
+  public Flowable<Long> unhandledErrorChangeStream() {
+    return unhandledErrorChangeSignals.onBackpressureLatest();
   }
 
   public Flowable<Long> assertjSwingChangeStream() {
@@ -109,6 +121,12 @@ public class ApplicationDiagnosticsService {
     if (assertjSwingEvents.isEmpty()) return;
     assertjSwingEvents.clear();
     emitAssertjSwingChangeLocked();
+  }
+
+  public synchronized void clearUnhandledErrorEvents() {
+    if (unhandledErrorEvents.isEmpty()) return;
+    unhandledErrorEvents.clear();
+    emitUnhandledErrorChangeLocked();
   }
 
   public synchronized void clearJhiccupEvents() {
@@ -218,9 +236,13 @@ public class ApplicationDiagnosticsService {
       TargetRef target, String from, String message, boolean error) {
     if (target == null) return;
     Deque<RuntimeDiagnosticEvent> buffer = null;
+    boolean unhandledErrorTarget = false;
     boolean assertjTarget = false;
     boolean jhiccupTarget = false;
-    if (target.isApplicationAssertjSwing()) {
+    if (target.isApplicationUnhandledErrors()) {
+      buffer = unhandledErrorEvents;
+      unhandledErrorTarget = true;
+    } else if (target.isApplicationAssertjSwing()) {
       buffer = assertjSwingEvents;
       assertjTarget = true;
     } else if (target.isApplicationJhiccup()) {
@@ -237,11 +259,17 @@ public class ApplicationDiagnosticsService {
     while (buffer.size() > MAX_EVENTS_PER_BUFFER) {
       buffer.removeFirst();
     }
-    if (assertjTarget) {
+    if (unhandledErrorTarget) {
+      emitUnhandledErrorChangeLocked();
+    } else if (assertjTarget) {
       emitAssertjSwingChangeLocked();
     } else if (jhiccupTarget) {
       emitJhiccupChangeLocked();
     }
+  }
+
+  private void emitUnhandledErrorChangeLocked() {
+    unhandledErrorChangeSignals.onNext(++unhandledErrorChangeSeq);
   }
 
   private void emitAssertjSwingChangeLocked() {

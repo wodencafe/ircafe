@@ -7,11 +7,11 @@ import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
+import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.atomic.AtomicReference;
-import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
@@ -60,7 +60,8 @@ class TreeWheelSelectionDecoratorTest {
           JScrollPane scroll = new JScrollPane(tree);
           AtomicInteger scrollEvents = new AtomicInteger();
           scroll.addMouseWheelListener(e -> scrollEvents.incrementAndGet());
-          TreeWheelSelectionDecorator decorator = TreeWheelSelectionDecorator.decorate(tree, scroll);
+          TreeWheelSelectionDecorator decorator =
+              TreeWheelSelectionDecorator.decorate(tree, scroll);
           ref.set(new Fixture(tree, decorator, scrollEvents));
         });
     return ref.get();

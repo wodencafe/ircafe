@@ -31,6 +31,7 @@ class ChatTargetViewRouterTest {
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
     InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    RuntimeEventsPanel appUnhandledErrorsPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
@@ -48,6 +49,7 @@ class ChatTargetViewRouterTest {
             monitorPanel,
             logViewerPanel,
             interceptorPanel,
+            appUnhandledErrorsPanel,
             appAssertjPanel,
             appJhiccupPanel,
             appJfrPanel,
@@ -72,6 +74,7 @@ class ChatTargetViewRouterTest {
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
     InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    RuntimeEventsPanel appUnhandledErrorsPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
@@ -89,6 +92,7 @@ class ChatTargetViewRouterTest {
             monitorPanel,
             logViewerPanel,
             interceptorPanel,
+            appUnhandledErrorsPanel,
             appAssertjPanel,
             appJhiccupPanel,
             appJfrPanel,
@@ -114,6 +118,7 @@ class ChatTargetViewRouterTest {
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
     InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    RuntimeEventsPanel appUnhandledErrorsPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
@@ -129,6 +134,7 @@ class ChatTargetViewRouterTest {
             monitorPanel,
             logViewerPanel,
             interceptorPanel,
+            appUnhandledErrorsPanel,
             appAssertjPanel,
             appJhiccupPanel,
             appJfrPanel,
@@ -152,6 +158,7 @@ class ChatTargetViewRouterTest {
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
     InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    RuntimeEventsPanel appUnhandledErrorsPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
@@ -167,6 +174,7 @@ class ChatTargetViewRouterTest {
             monitorPanel,
             logViewerPanel,
             interceptorPanel,
+            appUnhandledErrorsPanel,
             appAssertjPanel,
             appJhiccupPanel,
             appJfrPanel,
@@ -185,6 +193,7 @@ class ChatTargetViewRouterTest {
         monitorPanel,
         logViewerPanel,
         interceptorPanel,
+        appUnhandledErrorsPanel,
         appAssertjPanel,
         appJhiccupPanel,
         appJfrPanel,
@@ -200,6 +209,7 @@ class ChatTargetViewRouterTest {
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
     InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    RuntimeEventsPanel appUnhandledErrorsPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
@@ -215,6 +225,7 @@ class ChatTargetViewRouterTest {
             monitorPanel,
             logViewerPanel,
             interceptorPanel,
+            appUnhandledErrorsPanel,
             appAssertjPanel,
             appJhiccupPanel,
             appJfrPanel,
@@ -229,7 +240,7 @@ class ChatTargetViewRouterTest {
   }
 
   @Test
-  void routeNotificationsSetsServerIdOnNotificationsPanel() {
+  void routeApplicationUnhandledErrorsRefreshesPanelAndUsesUiOnlyView() {
     NotificationsPanel notificationsPanel = mock(NotificationsPanel.class);
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
     IgnoresPanel ignoresPanel = mock(IgnoresPanel.class);
@@ -237,6 +248,7 @@ class ChatTargetViewRouterTest {
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
     InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    RuntimeEventsPanel appUnhandledErrorsPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
@@ -252,6 +264,47 @@ class ChatTargetViewRouterTest {
             monitorPanel,
             logViewerPanel,
             interceptorPanel,
+            appUnhandledErrorsPanel,
+            appAssertjPanel,
+            appJhiccupPanel,
+            appJfrPanel,
+            appSpringPanel,
+            sid -> {},
+            sid -> {});
+
+    ChatTargetViewRouter.TargetViewType viewType =
+        router.route(TargetRef.applicationUnhandledErrors());
+
+    assertEquals(ChatTargetViewRouter.TargetViewType.UI_ONLY, viewType);
+    verify(appUnhandledErrorsPanel).refreshNow();
+  }
+
+  @Test
+  void routeNotificationsSetsServerIdOnNotificationsPanel() {
+    NotificationsPanel notificationsPanel = mock(NotificationsPanel.class);
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    IgnoresPanel ignoresPanel = mock(IgnoresPanel.class);
+    DccTransfersPanel dccTransfersPanel = mock(DccTransfersPanel.class);
+    MonitorPanel monitorPanel = mock(MonitorPanel.class);
+    LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
+    InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    RuntimeEventsPanel appUnhandledErrorsPanel = mock(RuntimeEventsPanel.class);
+    RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
+    RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
+    JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
+    RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
+
+    ChatTargetViewRouter router =
+        new ChatTargetViewRouter(
+            createCardDeck(),
+            notificationsPanel,
+            channelListPanel,
+            ignoresPanel,
+            dccTransfersPanel,
+            monitorPanel,
+            logViewerPanel,
+            interceptorPanel,
+            appUnhandledErrorsPanel,
             appAssertjPanel,
             appJhiccupPanel,
             appJfrPanel,
@@ -274,6 +327,7 @@ class ChatTargetViewRouterTest {
     MonitorPanel monitorPanel = mock(MonitorPanel.class);
     LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
     InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    RuntimeEventsPanel appUnhandledErrorsPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
@@ -289,6 +343,7 @@ class ChatTargetViewRouterTest {
             monitorPanel,
             logViewerPanel,
             interceptorPanel,
+            appUnhandledErrorsPanel,
             appAssertjPanel,
             appJhiccupPanel,
             appJfrPanel,
@@ -312,6 +367,7 @@ class ChatTargetViewRouterTest {
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_MONITOR);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_LOG_VIEWER);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_INTERCEPTOR);
+    deck.add(new JPanel(), ChatTargetViewRouter.CARD_APP_UNHANDLED_ERRORS);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_APP_ASSERTJ);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_APP_JHICCUP);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_APP_JFR);
