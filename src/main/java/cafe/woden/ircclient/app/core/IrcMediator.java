@@ -129,23 +129,26 @@ public class IrcMediator implements MediatorControlPort {
           .maximumSize(INBOUND_MSGID_DEDUP_MAX_KEYS)
           .expireAfterAccess(INBOUND_MSGID_DEDUP_TTL)
           .build();
-  private final Cache<InboundMessageDedupCounterKey, Long> inboundMessageIdDedupSuppressedCountByKey =
-      Caffeine.newBuilder()
-          .maximumSize(INBOUND_MSGID_DEDUP_COUNTER_MAX_KEYS)
-          .expireAfterAccess(INBOUND_MSGID_DEDUP_COUNTER_TTL)
-          .build();
-  private final Cache<InboundMessageDedupCounterKey, Long> inboundMessageIdDedupDiagLastEmitMsByKey =
-      Caffeine.newBuilder()
-          .maximumSize(INBOUND_MSGID_DEDUP_COUNTER_MAX_KEYS)
-          .expireAfterAccess(INBOUND_MSGID_DEDUP_COUNTER_TTL)
-          .build();
+  private final Cache<InboundMessageDedupCounterKey, Long>
+      inboundMessageIdDedupSuppressedCountByKey =
+          Caffeine.newBuilder()
+              .maximumSize(INBOUND_MSGID_DEDUP_COUNTER_MAX_KEYS)
+              .expireAfterAccess(INBOUND_MSGID_DEDUP_COUNTER_TTL)
+              .build();
+  private final Cache<InboundMessageDedupCounterKey, Long>
+      inboundMessageIdDedupDiagLastEmitMsByKey =
+          Caffeine.newBuilder()
+              .maximumSize(INBOUND_MSGID_DEDUP_COUNTER_MAX_KEYS)
+              .expireAfterAccess(INBOUND_MSGID_DEDUP_COUNTER_TTL)
+              .build();
   private final AtomicLong inboundMessageIdDedupSuppressedTotal = new AtomicLong();
   private static final long TYPING_LOG_DEDUP_MS = 5_000;
   private static final int TYPING_LOG_MAX_KEYS = 512;
 
   private record TypingLogState(String state, long atMs) {}
 
-  private record InboundMessageDedupKey(String serverId, String target, String eventType, String msgId) {}
+  private record InboundMessageDedupKey(
+      String serverId, String target, String eventType, String msgId) {}
 
   private record InboundMessageDedupCounterKey(String serverId, String target, String eventType) {}
 
@@ -2931,13 +2934,7 @@ public class IrcMediator implements MediatorControlPort {
     String direct = Objects.toString(messageId, "").trim();
     if (!direct.isBlank()) return direct;
     return firstIrcv3TagValue(
-        tags,
-        "msgid",
-        "+msgid",
-        "draft/msgid",
-        "+draft/msgid",
-        "znc.in/msgid",
-        "+znc.in/msgid");
+        tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid", "znc.in/msgid", "+znc.in/msgid");
   }
 
   private static boolean hasMessageMutationTag(Map<String, String> tags) {

@@ -914,7 +914,13 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
               ircv3Tags);
       case NOTICE ->
           transcripts.insertNoticeFromHistoryAt(
-              target, insertAt, line.fromNick(), line.text(), line.tsEpochMs(), messageId, ircv3Tags);
+              target,
+              insertAt,
+              line.fromNick(),
+              line.text(),
+              line.tsEpochMs(),
+              messageId,
+              ircv3Tags);
       case STATUS ->
           transcripts.insertStatusFromHistoryAt(
               target, insertAt, line.fromNick(), line.text(), line.tsEpochMs());

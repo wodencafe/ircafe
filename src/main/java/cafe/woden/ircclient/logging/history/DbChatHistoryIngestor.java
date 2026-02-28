@@ -242,14 +242,7 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
     if (mid == null || mid.isBlank()) {
       return "{\"source\":\"" + src + "\",\"batch\":\"" + bid + "\"}";
     }
-    return
-        "{\"source\":\""
-            + src
-            + "\",\"batch\":\""
-            + bid
-            + "\",\"messageId\":\""
-            + mid
-            + "\"}";
+    return "{\"source\":\"" + src + "\",\"batch\":\"" + bid + "\",\"messageId\":\"" + mid + "\"}";
   }
 
   private static String inferSource(String batchId) {

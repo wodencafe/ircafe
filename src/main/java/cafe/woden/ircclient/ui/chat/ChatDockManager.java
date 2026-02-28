@@ -3,13 +3,13 @@ package cafe.woden.ircclient.ui.chat;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
-import cafe.woden.ircclient.ui.ActiveInputRouter;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
-import cafe.woden.ircclient.ui.OutboundLineBus;
-import cafe.woden.ircclient.ui.ServerTreeDockable;
 import cafe.woden.ircclient.ui.SwingEdt;
-import cafe.woden.ircclient.ui.TargetActivationBus;
+import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
+import cafe.woden.ircclient.ui.bus.OutboundLineBus;
+import cafe.woden.ircclient.ui.bus.TargetActivationBus;
+import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.DockingRegion;
@@ -185,7 +185,7 @@ public class ChatDockManager {
       if (target == null || !java.util.Objects.equals(target.serverId(), serverId)) continue;
       String before = pinnedDrafts.getOrDefault(target, "");
       String after =
-          cafe.woden.ircclient.ui.MessageInputPanel.normalizeIrcv3DraftForCapabilities(
+          cafe.woden.ircclient.ui.input.MessageInputPanel.normalizeIrcv3DraftForCapabilities(
               before, replySupported, reactSupported);
       if (!java.util.Objects.equals(before, after)) {
         pinnedDrafts.put(target, after);

@@ -64,7 +64,8 @@ public final class InboundDedupDiagnosticsPanel extends JPanel {
       java.util.function.Supplier<List<RuntimeDiagnosticEvent>> sourceEventsSupplier,
       Flowable<?> refreshTrigger) {
     super(new BorderLayout(0, 6));
-    this.sourceEventsSupplier = Objects.requireNonNull(sourceEventsSupplier, "sourceEventsSupplier");
+    this.sourceEventsSupplier =
+        Objects.requireNonNull(sourceEventsSupplier, "sourceEventsSupplier");
     this.eventsPanel =
         new RuntimeEventsPanel(
             "Inbound Dedup",
@@ -76,8 +77,7 @@ public final class InboundDedupDiagnosticsPanel extends JPanel {
     add(eventsPanel, BorderLayout.CENTER);
 
     configureExportSupportButton();
-    JPanel footer =
-        new JPanel(new MigLayout("insets 0 8 8 8, fillx", "[]push[]", "[]"));
+    JPanel footer = new JPanel(new MigLayout("insets 0 8 8 8, fillx", "[]push[]", "[]"));
     footer.setOpaque(false);
     footer.add(exportSupportButton);
     footer.add(new JLabel("Export ZIP (CSV + summary) for support/debugging"), "alignx right");
@@ -186,7 +186,11 @@ public final class InboundDedupDiagnosticsPanel extends JPanel {
       }
       out.add(
           new RuntimeDiagnosticEvent(
-              event.at(), event.level(), "InboundDedup", summary, Objects.toString(event.details(), "")));
+              event.at(),
+              event.level(),
+              "InboundDedup",
+              summary,
+              Objects.toString(event.details(), "")));
     }
     return List.copyOf(out);
   }
@@ -213,7 +217,12 @@ public final class InboundDedupDiagnosticsPanel extends JPanel {
     if (target.isEmpty()) target = "(unknown-target)";
     if (eventType.isEmpty()) eventType = "(unknown-type)";
     return new ParsedDedup(
-        serverId, target, eventType, Math.max(0L, suppressedCount), Math.max(0L, suppressedTotal), messageIdSample);
+        serverId,
+        target,
+        eventType,
+        Math.max(0L, suppressedCount),
+        Math.max(0L, suppressedTotal),
+        messageIdSample);
   }
 
   private static String extractDedupRecord(String summary, String details) {
@@ -272,7 +281,8 @@ public final class InboundDedupDiagnosticsPanel extends JPanel {
       return new SupportBundleReport(bundleZipPath, summary.toString(), true);
     } catch (Exception e) {
       deleteRecursivelyQuietly(stagingDir);
-      String err = "Failed to create support bundle: " + Objects.toString(e.getMessage(), e.toString());
+      String err =
+          "Failed to create support bundle: " + Objects.toString(e.getMessage(), e.toString());
       return new SupportBundleReport(null, summary.append(err).toString(), false);
     }
   }

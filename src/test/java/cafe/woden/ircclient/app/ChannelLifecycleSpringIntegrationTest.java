@@ -177,23 +177,13 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     emitServerEvent(
         sid,
         new IrcEvent.ChannelMessage(
-            Instant.now(),
-            channel,
-            "alice",
-            "hi tester",
-            msgId,
-            Map.of("msgid", msgId)));
+            Instant.now(), channel, "alice", "hi tester", msgId, Map.of("msgid", msgId)));
     emitServerEvent(sid, new IrcEvent.Disconnected(Instant.now(), "test disconnect"));
     emitServerEvent(sid, new IrcEvent.Connected(Instant.now(), "irc.example.net", 6697, "tester"));
     emitServerEvent(
         sid,
         new IrcEvent.ChannelMessage(
-            Instant.now(),
-            channel,
-            "alice",
-            "hi tester (replay)",
-            msgId,
-            Map.of("msgid", msgId)));
+            Instant.now(), channel, "alice", "hi tester (replay)", msgId, Map.of("msgid", msgId)));
 
     verify(swingUiPort, times(1))
         .appendChatAt(

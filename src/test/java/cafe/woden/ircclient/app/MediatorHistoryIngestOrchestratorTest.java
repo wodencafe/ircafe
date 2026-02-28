@@ -89,13 +89,11 @@ class MediatorHistoryIngestOrchestratorTest {
 
     Instant t1 = Instant.parse("2026-02-16T00:00:01Z");
     Instant t2 = Instant.parse("2026-02-16T00:00:02Z");
-    when(
-            transcripts.insertChatFromHistoryAt(
-                chan, 0, "alice", "hello", false, t1.toEpochMilli(), "", java.util.Map.of()))
+    when(transcripts.insertChatFromHistoryAt(
+            chan, 0, "alice", "hello", false, t1.toEpochMilli(), "", java.util.Map.of()))
         .thenReturn(1);
-    when(
-            transcripts.insertActionFromHistoryAt(
-                chan, 1, "me", "waves", true, t2.toEpochMilli(), "", java.util.Map.of()))
+    when(transcripts.insertActionFromHistoryAt(
+            chan, 1, "me", "waves", true, t2.toEpochMilli(), "", java.util.Map.of()))
         .thenReturn(2);
 
     ChatHistoryEntry chat =

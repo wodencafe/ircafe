@@ -5,11 +5,11 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
-import cafe.woden.ircclient.ui.MainFrame;
-import cafe.woden.ircclient.ui.StatusBar;
 import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.shell.MainFrame;
+import cafe.woden.ircclient.ui.shell.StatusBar;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import com.sshtools.twoslices.Toast;
@@ -75,7 +75,8 @@ public class TrayNotificationService implements TrayNotificationsPort {
   private final ObjectProvider<MainFrame> mainFrameProvider;
   private final ObjectProvider<StatusBar> statusBarProvider;
   private final ObjectProvider<ActiveTargetPort> targetCoordinatorProvider;
-  private final ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider;
+  private final ObjectProvider<cafe.woden.ircclient.ui.servertree.ServerTreeDockable>
+      serverTreeProvider;
   private final ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider;
   private final NotificationSoundService soundService;
   private final FlowableProcessor<NotificationRequest> requests;
@@ -92,7 +93,7 @@ public class TrayNotificationService implements TrayNotificationsPort {
       ObjectProvider<MainFrame> mainFrameProvider,
       ObjectProvider<StatusBar> statusBarProvider,
       ObjectProvider<ActiveTargetPort> targetCoordinatorProvider,
-      ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider,
+      ObjectProvider<cafe.woden.ircclient.ui.servertree.ServerTreeDockable> serverTreeProvider,
       ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider,
       NotificationSoundService soundService) {
     this.settingsBus = settingsBus;
@@ -588,7 +589,7 @@ public class TrayNotificationService implements TrayNotificationsPort {
           }
 
           try {
-            cafe.woden.ircclient.ui.ServerTreeDockable serverTree =
+            cafe.woden.ircclient.ui.servertree.ServerTreeDockable serverTree =
                 serverTreeProvider.getIfAvailable();
             if (serverTree == null) {
               serverTree = serverTreeProvider.getObject();

@@ -1202,8 +1202,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
           return;
       } else {
         if (maybeCaptureZncPlayback(
-            convTarget, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg, messageId, ircv3Tags))
-          return;
+            convTarget, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg, messageId, ircv3Tags)) return;
       }
     }
 

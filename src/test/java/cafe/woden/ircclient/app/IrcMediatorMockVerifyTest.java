@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.app;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -10,11 +12,9 @@ import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
-import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.InterceptorEventType;
+import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
@@ -280,7 +280,12 @@ class IrcMediatorMockVerifyTest {
             eq(chan), any(), eq("alice"), anyString(), eq(false), eq("dup-1"), any(), any());
     verify(interceptorIngestPort, times(1))
         .ingestEvent(
-            eq("libera"), eq("#ircafe"), eq("alice"), anyString(), anyString(), eq(InterceptorEventType.MESSAGE));
+            eq("libera"),
+            eq("#ircafe"),
+            eq("alice"),
+            anyString(),
+            anyString(),
+            eq(InterceptorEventType.MESSAGE));
     ArgumentCaptor<Object> published = ArgumentCaptor.forClass(Object.class);
     verify(applicationEventPublisher, times(1)).publishEvent(published.capture());
     IrcMediator.InboundMessageDedupDiagnostics event =

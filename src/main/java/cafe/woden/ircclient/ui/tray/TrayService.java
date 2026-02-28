@@ -2,8 +2,8 @@ package cafe.woden.ircclient.ui.tray;
 
 import cafe.woden.ircclient.app.ApplicationShutdownCoordinator;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.shell.MainFrame;
 import dorkbox.systemTray.MenuItem;
 import dorkbox.systemTray.SystemTray;
 import jakarta.annotation.PreDestroy;
