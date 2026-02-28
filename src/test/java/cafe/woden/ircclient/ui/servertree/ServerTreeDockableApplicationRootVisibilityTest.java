@@ -171,11 +171,16 @@ class ServerTreeDockableApplicationRootVisibilityTest {
     serverNodeField.setAccessible(true);
     DefaultMutableTreeNode serverNode = (DefaultMutableTreeNode) serverNodeField.get(serverNodes);
 
+    Field otherNodeField = serverNodes.getClass().getDeclaredField("otherNode");
+    otherNodeField.setAccessible(true);
+    DefaultMutableTreeNode otherNode = (DefaultMutableTreeNode) otherNodeField.get(serverNodes);
+
     Field monitorNodeField = serverNodes.getClass().getDeclaredField("monitorNode");
     monitorNodeField.setAccessible(true);
     DefaultMutableTreeNode monitorNode = (DefaultMutableTreeNode) monitorNodeField.get(serverNodes);
 
-    return monitorNode != null && monitorNode.getParent() == serverNode;
+    return monitorNode != null
+        && (monitorNode.getParent() == serverNode || monitorNode.getParent() == otherNode);
   }
 
   private static boolean isMonitorGroupSelected(ServerTreeDockable dockable) throws Exception {

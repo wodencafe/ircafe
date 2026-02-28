@@ -35,6 +35,7 @@ class ServerTreeDockableIgnoresTooltipRegressionTest {
             JTree tree = getTree(dockable);
             TreePath path = new TreePath(ignoresNode.getPath());
             tree.expandPath(path);
+            tree.scrollPathToVisible(path);
             Rectangle bounds = tree.getPathBounds(path);
             assertNotNull(bounds);
 
@@ -44,7 +45,7 @@ class ServerTreeDockableIgnoresTooltipRegressionTest {
                     MouseEvent.MOUSE_MOVED,
                     System.currentTimeMillis(),
                     0,
-                    bounds.x + 4,
+                    bounds.x + Math.max(2, Math.min(bounds.width - 2, bounds.width / 3)),
                     bounds.y + Math.max(1, bounds.height / 2),
                     1,
                     false);

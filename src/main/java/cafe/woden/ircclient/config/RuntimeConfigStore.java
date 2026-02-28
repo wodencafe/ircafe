@@ -75,6 +75,61 @@ public class RuntimeConfigStore {
     }
   }
 
+  public enum ServerTreeBuiltInLayoutNode {
+    SERVER("server"),
+    NOTIFICATIONS("notifications"),
+    LOG_VIEWER("logViewer"),
+    FILTERS("filters"),
+    IGNORES("ignores"),
+    MONITOR("monitor"),
+    INTERCEPTORS("interceptors");
+
+    private final String token;
+
+    ServerTreeBuiltInLayoutNode(String token) {
+      this.token = token;
+    }
+
+    public String token() {
+      return token;
+    }
+
+    public static ServerTreeBuiltInLayoutNode fromToken(String token) {
+      String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
+      return switch (raw) {
+        case "server", "status" -> SERVER;
+        case "notifications", "notification" -> NOTIFICATIONS;
+        case "logviewer", "log-viewer", "log_viewer", "logviewernode", "log_viewer_node" ->
+            LOG_VIEWER;
+        case "filters", "weechatfilters", "weechat-filters", "weechat_filters" -> FILTERS;
+        case "ignores", "ignore" -> IGNORES;
+        case "monitor" -> MONITOR;
+        case "interceptors", "interceptor" -> INTERCEPTORS;
+        default -> null;
+      };
+    }
+  }
+
+  public record ServerTreeBuiltInLayout(
+      List<ServerTreeBuiltInLayoutNode> rootOrder, List<ServerTreeBuiltInLayoutNode> otherOrder) {
+    public static ServerTreeBuiltInLayout defaults() {
+      return new ServerTreeBuiltInLayout(
+          List.of(),
+          List.of(
+              ServerTreeBuiltInLayoutNode.SERVER,
+              ServerTreeBuiltInLayoutNode.NOTIFICATIONS,
+              ServerTreeBuiltInLayoutNode.LOG_VIEWER,
+              ServerTreeBuiltInLayoutNode.FILTERS,
+              ServerTreeBuiltInLayoutNode.IGNORES,
+              ServerTreeBuiltInLayoutNode.MONITOR,
+              ServerTreeBuiltInLayoutNode.INTERCEPTORS));
+    }
+
+    public boolean isDefaultLayout() {
+      return this.equals(defaults());
+    }
+  }
+
   public enum ServerTreeChannelSortMode {
     ALPHABETICAL("alphabetical"),
     CUSTOM("custom");
@@ -1244,6 +1299,160 @@ public class RuntimeConfigStore {
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist server-tree built-in node visibility to '{}'", file, e);
     }
+  }
+
+  /**
+   * Reads persisted per-server layout for movable built-in server tree nodes.
+   *
+   * <p>Stored under {@code ircafe.ui.serverTree.builtInLayoutByServer.<serverId>}.
+   */
+  public synchronized Map<String, ServerTreeBuiltInLayout> readServerTreeBuiltInLayoutByServer() {
+    try {
+      if (file.toString().isBlank()) return Map.of();
+      if (!Files.exists(file)) return Map.of();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Map.of();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Map.of();
+
+      Object serverTreeObj = ui.get("serverTree");
+      if (!(serverTreeObj instanceof Map<?, ?> serverTree)) return Map.of();
+
+      Object byServerObj = serverTree.get("builtInLayoutByServer");
+      if (!(byServerObj instanceof Map<?, ?> byServer)) return Map.of();
+
+      LinkedHashMap<String, ServerTreeBuiltInLayout> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : byServer.entrySet()) {
+        String sid = Objects.toString(entry.getKey(), "").trim();
+        if (sid.isEmpty()) continue;
+        if (!(entry.getValue() instanceof Map<?, ?> raw)) continue;
+
+        List<ServerTreeBuiltInLayoutNode> root =
+            parseBuiltInLayoutNodeOrder(raw.get("root"), List.of());
+        List<ServerTreeBuiltInLayoutNode> other =
+            parseBuiltInLayoutNodeOrder(raw.get("other"), List.of());
+        ServerTreeBuiltInLayout layout =
+            normalizeBuiltInLayout(new ServerTreeBuiltInLayout(root, other));
+        if (layout.isDefaultLayout()) continue;
+        out.put(sid, layout);
+      }
+
+      if (out.isEmpty()) return Map.of();
+      return Map.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read server-tree built-in layout from '{}'", file, e);
+      return Map.of();
+    }
+  }
+
+  /**
+   * Persists per-server layout for movable built-in server tree nodes.
+   *
+   * <p>When layout matches defaults, the server entry is removed to keep config compact.
+   */
+  public synchronized void rememberServerTreeBuiltInLayout(
+      String serverId, ServerTreeBuiltInLayout layout) {
+    try {
+      if (file.toString().isBlank()) return;
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+
+      ServerTreeBuiltInLayout next =
+          normalizeBuiltInLayout(layout == null ? ServerTreeBuiltInLayout.defaults() : layout);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> serverTree = getOrCreateMap(ui, "serverTree");
+      Map<String, Object> byServer = getOrCreateMap(serverTree, "builtInLayoutByServer");
+
+      if (next.isDefaultLayout()) {
+        byServer.remove(sid);
+      } else {
+        Map<String, Object> out = new LinkedHashMap<>();
+        List<String> root = builtInLayoutNodeTokens(next.rootOrder());
+        List<String> other = builtInLayoutNodeTokens(next.otherOrder());
+        if (!root.isEmpty()) out.put("root", root);
+        if (!other.isEmpty()) out.put("other", other);
+        byServer.put(sid, out);
+      }
+
+      if (byServer.isEmpty()) serverTree.remove("builtInLayoutByServer");
+      if (serverTree.isEmpty()) ui.remove("serverTree");
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist server-tree built-in layout to '{}'", file, e);
+    }
+  }
+
+  private static ServerTreeBuiltInLayout normalizeBuiltInLayout(ServerTreeBuiltInLayout layout) {
+    ServerTreeBuiltInLayout defaults = ServerTreeBuiltInLayout.defaults();
+    List<ServerTreeBuiltInLayoutNode> defaultOther = defaults.otherOrder();
+
+    List<ServerTreeBuiltInLayoutNode> rawRoot =
+        layout == null ? List.of() : parseBuiltInLayoutNodeOrder(layout.rootOrder(), List.of());
+    List<ServerTreeBuiltInLayoutNode> rawOther =
+        layout == null ? List.of() : parseBuiltInLayoutNodeOrder(layout.otherOrder(), List.of());
+
+    ArrayList<ServerTreeBuiltInLayoutNode> root = new ArrayList<>();
+    java.util.EnumSet<ServerTreeBuiltInLayoutNode> seen =
+        java.util.EnumSet.noneOf(ServerTreeBuiltInLayoutNode.class);
+    for (ServerTreeBuiltInLayoutNode node : rawRoot) {
+      if (node == null || seen.contains(node)) continue;
+      root.add(node);
+      seen.add(node);
+    }
+
+    ArrayList<ServerTreeBuiltInLayoutNode> other = new ArrayList<>();
+    for (ServerTreeBuiltInLayoutNode node : rawOther) {
+      if (node == null || seen.contains(node)) continue;
+      other.add(node);
+      seen.add(node);
+    }
+
+    for (ServerTreeBuiltInLayoutNode node : defaultOther) {
+      if (node == null || seen.contains(node)) continue;
+      other.add(node);
+      seen.add(node);
+    }
+
+    return new ServerTreeBuiltInLayout(List.copyOf(root), List.copyOf(other));
+  }
+
+  private static List<ServerTreeBuiltInLayoutNode> parseBuiltInLayoutNodeOrder(
+      Object rawOrder, List<ServerTreeBuiltInLayoutNode> fallback) {
+    ArrayList<ServerTreeBuiltInLayoutNode> out = new ArrayList<>();
+
+    if (rawOrder instanceof List<?> list) {
+      for (Object entry : list) {
+        ServerTreeBuiltInLayoutNode node =
+            ServerTreeBuiltInLayoutNode.fromToken(Objects.toString(entry, ""));
+        if (node == null || out.contains(node)) continue;
+        out.add(node);
+      }
+    } else if (rawOrder instanceof ServerTreeBuiltInLayoutNode node) {
+      out.add(node);
+    } else if (rawOrder instanceof String token) {
+      ServerTreeBuiltInLayoutNode node = ServerTreeBuiltInLayoutNode.fromToken(token);
+      if (node != null) out.add(node);
+    }
+
+    if (out.isEmpty()) return fallback == null ? List.of() : List.copyOf(fallback);
+    return List.copyOf(out);
+  }
+
+  private static List<String> builtInLayoutNodeTokens(List<ServerTreeBuiltInLayoutNode> order) {
+    if (order == null || order.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(order.size());
+    for (ServerTreeBuiltInLayoutNode node : order) {
+      if (node == null) continue;
+      out.add(node.token());
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
   }
 
   public synchronized void rememberAccentColor(String accentColor) {

@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.servertree;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
@@ -17,7 +18,7 @@ import org.junit.jupiter.api.Test;
 class ServerTreeDockableWeechatFiltersNodeTest {
 
   @Test
-  void serverRootIncludesWeechatFiltersLeafBetweenChannelListAndDccTransfers() throws Exception {
+  void weechatFiltersLeafIsPlacedUnderOtherGroup() throws Exception {
     onEdt(
         () -> {
           try {
@@ -32,16 +33,28 @@ class ServerTreeDockableWeechatFiltersNodeTest {
 
             assertNotNull(channelListNode);
             assertNotNull(filtersNode);
-            assertEquals(channelListNode.getParent(), filtersNode.getParent());
 
             DefaultMutableTreeNode parent = (DefaultMutableTreeNode) filtersNode.getParent();
-            int channelListIdx = parent.getIndex(channelListNode);
+            assertTrue(isOtherGroup(parent));
+            assertEquals(channelListNode.getParent(), parent.getParent());
+
+            TargetRef ignoresRef = TargetRef.ignores("libera");
+            DefaultMutableTreeNode ignoresNode = findLeafNode(dockable, ignoresRef);
+            assertNotNull(ignoresNode);
             int filtersIdx = parent.getIndex(filtersNode);
-            assertEquals(channelListIdx + 1, filtersIdx);
+            int ignoresIdx = parent.getIndex(ignoresNode);
+            assertEquals(filtersIdx + 1, ignoresIdx);
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
         });
+  }
+
+  private static boolean isOtherGroup(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof ServerTreeDockable.NodeData nd)) return false;
+    return nd.ref == null && "Other".equals(nd.label);
   }
 
   private static ServerTreeDockable newDockable() {

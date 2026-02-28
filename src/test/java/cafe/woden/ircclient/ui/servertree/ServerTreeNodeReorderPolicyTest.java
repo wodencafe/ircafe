@@ -98,6 +98,58 @@ class ServerTreeNodeReorderPolicyTest {
     assertNull(plan, "channel should not move above the Monitor group node");
   }
 
+  @Test
+  void allowsMovingBuiltInNodeWithinOtherGroup() {
+    DefaultMutableTreeNode server = serverNode("test");
+    DefaultMutableTreeNode other = otherGroupNode();
+    DefaultMutableTreeNode status = statusNode("test");
+    DefaultMutableTreeNode notifications = notificationsNode("test");
+    other.add(status);
+    other.add(notifications);
+    server.add(channelListNode("test"));
+    server.add(other);
+    server.add(new DefaultMutableTreeNode("Private messages"));
+
+    ServerTreeNodeReorderPolicy policy = policyForServerLabel("test");
+    TreeNodeReorderPolicy.MovePlan plan = policy.planMove(status, +1);
+
+    assertNotNull(plan);
+    assertEquals(0, plan.fromIndex());
+    assertEquals(1, plan.toIndex());
+  }
+
+  @Test
+  void doesNotMoveServerLevelBuiltInBelowOtherGroup() {
+    DefaultMutableTreeNode server = serverNode("test");
+    DefaultMutableTreeNode status = statusNode("test");
+    DefaultMutableTreeNode notifications = notificationsNode("test");
+    server.add(channelListNode("test"));
+    server.add(status);
+    server.add(notifications);
+    server.add(otherGroupNode());
+    server.add(new DefaultMutableTreeNode("Private messages"));
+
+    ServerTreeNodeReorderPolicy policy = policyForServerLabel("test");
+    TreeNodeReorderPolicy.MovePlan plan = policy.planMove(notifications, +1);
+
+    assertNull(plan);
+  }
+
+  @Test
+  void doesNotMoveServerLevelBuiltInAboveChannelList() {
+    DefaultMutableTreeNode server = serverNode("test");
+    DefaultMutableTreeNode status = statusNode("test");
+    server.add(channelListNode("test"));
+    server.add(status);
+    server.add(otherGroupNode());
+    server.add(new DefaultMutableTreeNode("Private messages"));
+
+    ServerTreeNodeReorderPolicy policy = policyForServerLabel("test");
+    TreeNodeReorderPolicy.MovePlan plan = policy.planMove(status, -1);
+
+    assertNull(plan);
+  }
+
   private static ServerTreeNodeReorderPolicy policyForServerLabel(String label) {
     return new ServerTreeNodeReorderPolicy(
         node -> node != null && label.equals(node.getUserObject()),
@@ -125,12 +177,20 @@ class ServerTreeNodeReorderPolicyTest {
     return leafNode(new TargetRef(serverId, channel), channel);
   }
 
+  private static DefaultMutableTreeNode channelListNode(String serverId) {
+    return leafNode(TargetRef.channelList(serverId), "Channel List");
+  }
+
   private static DefaultMutableTreeNode interceptorsGroupNode() {
     return new DefaultMutableTreeNode(new ServerTreeDockable.NodeData(null, "Interceptors"));
   }
 
   private static DefaultMutableTreeNode monitorGroupNode() {
     return new DefaultMutableTreeNode(new ServerTreeDockable.NodeData(null, "Monitor"));
+  }
+
+  private static DefaultMutableTreeNode otherGroupNode() {
+    return new DefaultMutableTreeNode(new ServerTreeDockable.NodeData(null, "Other"));
   }
 
   private static DefaultMutableTreeNode leafNode(TargetRef ref, String label) {
