@@ -922,8 +922,7 @@ public class OutboundChatCommandService {
     disposables.add(
         irc.sendReadMarker(at.serverId(), at.target(), now)
             .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(markread-error)", String.valueOf(err))));
+                () -> {}, err -> ui.appendError(status, "(markread-error)", String.valueOf(err))));
   }
 
   public void handleHelp(String topic) {

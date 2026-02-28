@@ -32,7 +32,8 @@ class ChatLinkPreviewComponentStyleTest {
   }
 
   private static Border invokeBuildCardBorder(boolean collapsed) throws Exception {
-    Method method = ChatLinkPreviewComponent.class.getDeclaredMethod("buildCardBorder", boolean.class);
+    Method method =
+        ChatLinkPreviewComponent.class.getDeclaredMethod("buildCardBorder", boolean.class);
     method.setAccessible(true);
     return (Border) method.invoke(null, collapsed);
   }

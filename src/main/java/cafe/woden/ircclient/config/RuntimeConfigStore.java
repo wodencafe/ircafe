@@ -233,17 +233,8 @@ public class RuntimeConfigStore {
 
     public static EmbedLoadPolicyScope defaults() {
       return new EmbedLoadPolicyScope(
-          List.of(),
-          List.of(),
-          List.of(),
-          List.of(),
-          false,
-          false,
-          0,
-          List.of(),
-          List.of(),
-          List.of(),
-          List.of());
+          List.of(), List.of(), List.of(), List.of(), false, false, 0, List.of(), List.of(),
+          List.of(), List.of());
     }
 
     public boolean isDefaultScope() {
@@ -4079,7 +4070,9 @@ public class RuntimeConfigStore {
     }
   }
 
-  /** Persists advanced embed/link loading policy settings under {@code ircafe.ui.embedLoadPolicy}. */
+  /**
+   * Persists advanced embed/link loading policy settings under {@code ircafe.ui.embedLoadPolicy}.
+   */
   public synchronized void rememberEmbedLoadPolicy(EmbedLoadPolicySnapshot snapshot) {
     try {
       if (file.toString().isBlank()) return;

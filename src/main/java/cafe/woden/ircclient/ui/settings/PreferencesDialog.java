@@ -28,11 +28,11 @@ import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettings;
 import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
 import cafe.woden.ircclient.ui.SwingEdt;
-import cafe.woden.ircclient.ui.chat.embed.EmbedLoadPolicyBus;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettings;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
 import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
+import cafe.woden.ircclient.ui.chat.embed.EmbedLoadPolicyBus;
 import cafe.woden.ircclient.ui.filter.FilterRuleEntryDialog;
 import cafe.woden.ircclient.ui.filter.FilterSettings;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
@@ -6501,9 +6501,7 @@ public class PreferencesDialog {
               pendingEmbedLoadPolicy.get() != null
                   ? pendingEmbedLoadPolicy.get()
                   : RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults();
-          embedLoadPolicyDialog
-              .open(owner, current)
-              .ifPresent(pendingEmbedLoadPolicy::set);
+          embedLoadPolicyDialog.open(owner, current).ifPresent(pendingEmbedLoadPolicy::set);
         });
     return advanced;
   }

@@ -67,14 +67,7 @@ public class ChatLinkPreviewEmbedder {
       try {
         InsertResult result =
             insertPreview(
-                ctx,
-                doc,
-                fromNick,
-                ircv3Tags,
-                serverId,
-                url,
-                false,
-                Math.max(0, insertAt));
+                ctx, doc, fromNick, ircv3Tags, serverId, url, false, Math.max(0, insertAt));
         if (result.appended()) {
           count++;
           insertAt = result.nextInsertAt();
@@ -90,7 +83,8 @@ public class ChatLinkPreviewEmbedder {
     return new AppendResult(count, List.copyOf(blocked));
   }
 
-  public boolean insertPreviewForUrlAt(TargetRef ctx, StyledDocument doc, String rawUrl, int insertAt) {
+  public boolean insertPreviewForUrlAt(
+      TargetRef ctx, StyledDocument doc, String rawUrl, int insertAt) {
     if (doc == null) return false;
     String serverId = (ctx != null) ? ctx.serverId() : null;
     try {
@@ -115,17 +109,15 @@ public class ChatLinkPreviewEmbedder {
     if (doc == null || url.isEmpty()) {
       return new InsertResult(false, Math.max(0, insertAt), null);
     }
-    if (!bypassPolicy && policyMatcher != null && !policyMatcher.allow(ctx, fromNick, ircv3Tags, url)) {
+    if (!bypassPolicy
+        && policyMatcher != null
+        && !policyMatcher.allow(ctx, fromNick, ircv3Tags, url)) {
       return new InsertResult(false, Math.max(0, insertAt), url);
     }
 
     ChatLinkPreviewComponent comp =
         new ChatLinkPreviewComponent(
-            serverId,
-            url,
-            fetch,
-            imageFetch,
-            uiSettings.get().linkPreviewsCollapsedByDefault());
+            serverId, url, fetch, imageFetch, uiSettings.get().linkPreviewsCollapsedByDefault());
 
     SimpleAttributeSet a = new SimpleAttributeSet(styles.message());
     a.addAttribute(ChatStyles.ATTR_URL, url);

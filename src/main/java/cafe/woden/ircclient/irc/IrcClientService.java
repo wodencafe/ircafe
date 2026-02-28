@@ -239,7 +239,9 @@ public interface IrcClientService {
     return "";
   }
 
-  /** @return true if IRCv3 {@code read-marker} (or {@code draft/read-marker}) is negotiated. */
+  /**
+   * @return true if IRCv3 {@code read-marker} (or {@code draft/read-marker}) is negotiated.
+   */
   default boolean isReadMarkerAvailable(String serverId) {
     return false;
   }

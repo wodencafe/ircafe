@@ -35,7 +35,8 @@ public class EmbedLoadPolicyMatcher {
     this.userListStore = userListStore;
   }
 
-  public boolean allow(TargetRef target, String fromNick, Map<String, String> ircv3Tags, String url) {
+  public boolean allow(
+      TargetRef target, String fromNick, Map<String, String> ircv3Tags, String url) {
     String normalizedUrl = Objects.toString(url, "").trim();
     if (target == null || normalizedUrl.isEmpty()) return true;
 
@@ -47,7 +48,8 @@ public class EmbedLoadPolicyMatcher {
     String channel = target.isChannel() ? target.target() : "";
 
     if (!allowByUserRules(scope.userWhitelist(), scope.userBlacklist(), sender)) return false;
-    if (!allowBySimpleRules(scope.channelWhitelist(), scope.channelBlacklist(), channel)) return false;
+    if (!allowBySimpleRules(scope.channelWhitelist(), scope.channelBlacklist(), channel))
+      return false;
 
     if (scope.requireVoiceOrOp() && !sender.voiceOrOp()) return false;
     if (scope.requireLoggedIn() && !sender.loggedIn()) return false;
@@ -56,7 +58,8 @@ public class EmbedLoadPolicyMatcher {
       if (ageDays < 0 || ageDays < scope.minAccountAgeDays()) return false;
     }
 
-    if (!allowBySimpleRules(scope.linkWhitelist(), scope.linkBlacklist(), normalizedUrl)) return false;
+    if (!allowBySimpleRules(scope.linkWhitelist(), scope.linkBlacklist(), normalizedUrl))
+      return false;
 
     String domain = extractDomain(normalizedUrl);
     if (!allowBySimpleRules(scope.domainWhitelist(), scope.domainBlacklist(), domain)) return false;
@@ -149,7 +152,8 @@ public class EmbedLoadPolicyMatcher {
     return matchesAnyUserPattern(whitelist, nick, hostmask);
   }
 
-  private static boolean matchesAnyUserPattern(List<String> patterns, String nick, String hostmask) {
+  private static boolean matchesAnyUserPattern(
+      List<String> patterns, String nick, String hostmask) {
     if (patterns == null || patterns.isEmpty()) return false;
     for (String pattern : patterns) {
       if (matchesUserPattern(pattern, nick, hostmask)) {

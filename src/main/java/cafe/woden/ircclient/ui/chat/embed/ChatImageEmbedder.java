@@ -121,7 +121,9 @@ public class ChatImageEmbedder {
       return new InsertResult(false, Math.max(0, insertAt), null);
     }
 
-    if (!bypassPolicy && policyMatcher != null && !policyMatcher.allow(ctx, fromNick, ircv3Tags, url)) {
+    if (!bypassPolicy
+        && policyMatcher != null
+        && !policyMatcher.allow(ctx, fromNick, ircv3Tags, url)) {
       return new InsertResult(false, Math.max(0, insertAt), url);
     }
 

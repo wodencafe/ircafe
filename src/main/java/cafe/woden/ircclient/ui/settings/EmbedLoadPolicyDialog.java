@@ -2,9 +2,9 @@ package cafe.woden.ircclient.ui.settings;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ui.chat.embed.EmbedLoadPolicyMatcher;
+import java.awt.Color;
 import java.awt.Dialog;
 import java.awt.Dimension;
-import java.awt.Color;
 import java.awt.Window;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -24,9 +24,9 @@ import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
-import javax.swing.UIManager;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import net.miginfocom.swing.MigLayout;
@@ -47,8 +47,9 @@ public class EmbedLoadPolicyDialog {
   public Optional<RuntimeConfigStore.EmbedLoadPolicySnapshot> open(
       Window owner, RuntimeConfigStore.EmbedLoadPolicySnapshot seed) {
     if (!SwingUtilities.isEventDispatchThread()) {
-      final RuntimeConfigStore.EmbedLoadPolicySnapshot[] out =
-          {RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults()};
+      final RuntimeConfigStore.EmbedLoadPolicySnapshot[] out = {
+        RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults()
+      };
       final boolean[] changed = {false};
       try {
         SwingUtilities.invokeAndWait(
@@ -96,7 +97,8 @@ public class EmbedLoadPolicyDialog {
             "Whitelist", "Blacklist", controls.domainWhitelist(), controls.domainBlacklist()));
     tabs.addTab("Gates", buildGatePanel(controls));
 
-    JPanel scopePanel = new JPanel(new MigLayout("insets 10, fillx, wrap 2", "[][grow,fill]", "[]4[]4[]"));
+    JPanel scopePanel =
+        new JPanel(new MigLayout("insets 10, fillx, wrap 2", "[][grow,fill]", "[]4[]4[]"));
     scopePanel.add(new JLabel("Scope:"));
     scopePanel.add(scope, "growx, wrap");
     scopePanel.add(inheritGlobal, "span 2, wrap");
@@ -131,8 +133,7 @@ public class EmbedLoadPolicyDialog {
           ScopeOption selected = (ScopeOption) scope.getSelectedItem();
           if (selected == null) return;
           stopTableEditing(controls);
-          RuntimeConfigStore.EmbedLoadPolicyScope currentScope =
-              readScopeFromControls(controls);
+          RuntimeConfigStore.EmbedLoadPolicyScope currentScope = readScopeFromControls(controls);
           if (selected.global()) {
             globalRef[0] = currentScope;
           } else {
@@ -180,12 +181,15 @@ public class EmbedLoadPolicyDialog {
           if (inheritGlobal.isSelected()) {
             byServerRef.remove(selected.serverId());
           } else if (!byServerRef.containsKey(selected.serverId())) {
-            byServerRef.put(selected.serverId(), RuntimeConfigStore.EmbedLoadPolicyScope.defaults());
+            byServerRef.put(
+                selected.serverId(), RuntimeConfigStore.EmbedLoadPolicyScope.defaults());
           }
           loadSelection.run();
         });
 
-    JDialog dialog = new JDialog(owner, "Advanced Embed/Link Loading Policy", Dialog.ModalityType.APPLICATION_MODAL);
+    JDialog dialog =
+        new JDialog(
+            owner, "Advanced Embed/Link Loading Policy", Dialog.ModalityType.APPLICATION_MODAL);
     dialog.setContentPane(root);
     dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
     dialog.setMinimumSize(new Dimension(920, 680));
@@ -247,14 +251,12 @@ public class EmbedLoadPolicyDialog {
     PatternTableControls userBlacklist =
         buildPatternTable("User blacklist", "Deny users matching these nick/host patterns.");
     PatternTableControls channelWhitelist =
-        buildPatternTable(
-            "Channel whitelist", "Allow only these channels when list is non-empty.");
+        buildPatternTable("Channel whitelist", "Allow only these channels when list is non-empty.");
     PatternTableControls channelBlacklist =
         buildPatternTable("Channel blacklist", "Deny these channels.");
     PatternTableControls linkWhitelist =
         buildPatternTable("Link whitelist", "Allow only these URLs when list is non-empty.");
-    PatternTableControls linkBlacklist =
-        buildPatternTable("Link blacklist", "Deny these URLs.");
+    PatternTableControls linkBlacklist = buildPatternTable("Link blacklist", "Deny these URLs.");
     PatternTableControls domainWhitelist =
         buildPatternTable("Domain whitelist", "Allow only these domains when list is non-empty.");
     PatternTableControls domainBlacklist =
@@ -279,12 +281,10 @@ public class EmbedLoadPolicyDialog {
   }
 
   private static JPanel buildDualTablePanel(
-      String leftTitle,
-      String rightTitle,
-      PatternTableControls left,
-      PatternTableControls right) {
+      String leftTitle, String rightTitle, PatternTableControls left, PatternTableControls right) {
     JPanel panel =
-        new JPanel(new MigLayout("insets 10, fill, wrap 2", "[grow,fill][grow,fill]", "[grow,fill]"));
+        new JPanel(
+            new MigLayout("insets 10, fill, wrap 2", "[grow,fill][grow,fill]", "[grow,fill]"));
     panel.add(buildLabeledPanel(leftTitle, left.panel()), "grow");
     panel.add(buildLabeledPanel(rightTitle, right.panel()), "grow");
     return panel;
@@ -299,7 +299,8 @@ public class EmbedLoadPolicyDialog {
   }
 
   private static JPanel buildGatePanel(PolicyControls controls) {
-    JPanel panel = new JPanel(new MigLayout("insets 10, fillx, wrap 2", "[][grow,fill]", "[]6[]6[]6[]"));
+    JPanel panel =
+        new JPanel(new MigLayout("insets 10, fillx, wrap 2", "[][grow,fill]", "[]6[]6[]6[]"));
     panel.add(controls.requireVoiceOrOp(), "span 2, wrap");
     panel.add(controls.requireLoggedIn(), "span 2, wrap");
     panel.add(new JLabel("Minimum account age (days, 0 = disabled):"));
@@ -327,9 +328,15 @@ public class EmbedLoadPolicyDialog {
         new DefaultTableCellRenderer() {
           @Override
           public java.awt.Component getTableCellRendererComponent(
-              JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+              JTable table,
+              Object value,
+              boolean isSelected,
+              boolean hasFocus,
+              int row,
+              int column) {
             java.awt.Component c =
-                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                super.getTableCellRendererComponent(
+                    table, value, isSelected, hasFocus, row, column);
             if (!isSelected) {
               if (invalidRows.contains(row)) {
                 c.setBackground(errorBg);
@@ -398,8 +405,7 @@ public class EmbedLoadPolicyDialog {
           table.getSelectionModel().setSelectionInterval(row + 1, row + 1);
         });
 
-    JPanel actions =
-        new JPanel(new MigLayout("insets 0, wrap 1", "[grow,fill]", "[]4[]4[]4[]"));
+    JPanel actions = new JPanel(new MigLayout("insets 0, wrap 1", "[grow,fill]", "[]4[]4[]4[]"));
     actions.add(add, "growx");
     actions.add(remove, "growx");
     actions.add(up, "growx");
@@ -417,7 +423,8 @@ public class EmbedLoadPolicyDialog {
     panel.add(actions, "top");
     panel.add(validation, "span 2, growx, wrap");
 
-    return new PatternTableControls(model, table, add, remove, up, down, panel, validation, invalidRows);
+    return new PatternTableControls(
+        model, table, add, remove, up, down, panel, validation, invalidRows);
   }
 
   private static RuntimeConfigStore.EmbedLoadPolicyScope readScopeFromControls(

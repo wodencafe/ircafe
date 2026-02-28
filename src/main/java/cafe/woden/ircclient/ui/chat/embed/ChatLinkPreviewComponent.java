@@ -266,7 +266,8 @@ final class ChatLinkPreviewComponent extends JPanel {
     title.setForeground(titleTextColor());
     try {
       Font titleFont = title.getFont();
-      title.setFont(titleFont.deriveFont(titleFont.getStyle() | Font.BOLD, titleFont.getSize2D() + 1f));
+      title.setFont(
+          titleFont.deriveFont(titleFont.getStyle() | Font.BOLD, titleFont.getSize2D() + 1f));
     } catch (Exception ignored) {
     }
 
@@ -914,7 +915,8 @@ final class ChatLinkPreviewComponent extends JPanel {
           protected void paintComponent(java.awt.Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             try {
-              g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+              g2.setRenderingHint(
+                  RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
               g2.setColor(cardBackgroundColor());
               g2.fillRoundRect(
                   0,

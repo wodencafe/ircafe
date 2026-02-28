@@ -107,17 +107,8 @@ class EmbedLoadPolicyMatcherTest {
 
     RuntimeConfigStore.EmbedLoadPolicyScope scope =
         new RuntimeConfigStore.EmbedLoadPolicyScope(
-            List.of(),
-            List.of(),
-            List.of(),
-            List.of(),
-            true,
-            true,
-            0,
-            List.of(),
-            List.of(),
-            List.of(),
-            List.of());
+            List.of(), List.of(), List.of(), List.of(), true, true, 0, List.of(), List.of(),
+            List.of(), List.of());
     when(bus.get()).thenReturn(new RuntimeConfigStore.EmbedLoadPolicySnapshot(scope, Map.of()));
 
     EmbedLoadPolicyMatcher matcher = new EmbedLoadPolicyMatcher(bus, users);
@@ -126,8 +117,7 @@ class EmbedLoadPolicyMatcherTest {
     assertTrue(matcher.allow(ref, "alice", Map.of(), "https://example.com/page"));
     assertFalse(matcher.allow(ref, "bob", Map.of(), "https://example.com/page"));
     assertFalse(matcher.allow(ref, "carol", Map.of(), "https://example.com/page"));
-    assertTrue(
-        matcher.allow(ref, "carol", Map.of("account", "carol"), "https://example.com/page"));
+    assertTrue(matcher.allow(ref, "carol", Map.of("account", "carol"), "https://example.com/page"));
   }
 
   @Test

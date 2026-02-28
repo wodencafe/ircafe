@@ -206,7 +206,8 @@ class ChatTranscriptStoreTest {
     ChatImageEmbedder imageEmbeds = mock(ChatImageEmbedder.class);
     ChatLinkPreviewEmbedder linkPreviews = mock(ChatLinkPreviewEmbedder.class);
     when(imageEmbeds.appendEmbeds(any(), any(), anyString(), anyString(), any()))
-        .thenReturn(new ChatImageEmbedder.AppendResult(0, List.of("https://blocked.example/a.png")));
+        .thenReturn(
+            new ChatImageEmbedder.AppendResult(0, List.of("https://blocked.example/a.png")));
     when(linkPreviews.appendPreviews(any(), any(), anyString(), anyString(), any()))
         .thenReturn(new ChatLinkPreviewEmbedder.AppendResult(0, List.of()));
 
@@ -222,7 +223,9 @@ class ChatTranscriptStoreTest {
     int marker = text.indexOf("👁");
     assertTrue(marker >= 0);
     Object markerUrl =
-        doc.getCharacterElement(marker).getAttributes().getAttribute(ChatStyles.ATTR_MANUAL_PREVIEW_URL);
+        doc.getCharacterElement(marker)
+            .getAttributes()
+            .getAttribute(ChatStyles.ATTR_MANUAL_PREVIEW_URL);
     assertEquals("https://blocked.example/a.png", markerUrl);
   }
 
