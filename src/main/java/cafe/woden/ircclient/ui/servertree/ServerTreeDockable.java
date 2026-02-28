@@ -342,8 +342,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ServerBuiltInNodesVisibility.defaults();
   private final Map<String, ServerBuiltInNodesVisibility> builtInNodesVisibilityByServer =
       new HashMap<>();
-  private final Map<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayoutByServer =
-      new HashMap<>();
+  private final ServerTreeBuiltInLayoutCoordinator builtInLayoutCoordinator;
   private volatile boolean showApplicationRoot = true;
 
   public ServerTreeDockable(
@@ -399,8 +398,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.jfrRuntimeEventsService = jfrRuntimeEventsService;
     this.settingsBus = settingsBus;
     this.serverDialogs = serverDialogs;
+    this.builtInLayoutCoordinator = new ServerTreeBuiltInLayoutCoordinator(runtimeConfig);
     loadPersistedBuiltInNodesVisibility();
-    loadPersistedBuiltInLayoutByServer();
     syncTypingIndicatorStyleFromSettings();
     syncUnreadBadgeScaleFromRuntimeConfig();
 
@@ -1039,28 +1038,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
   }
 
-  private void loadPersistedBuiltInLayoutByServer() {
-    if (runtimeConfig == null) return;
-    try {
-      Map<String, RuntimeConfigStore.ServerTreeBuiltInLayout> persisted =
-          runtimeConfig.readServerTreeBuiltInLayoutByServer();
-      if (persisted == null || persisted.isEmpty()) return;
-      for (Map.Entry<String, RuntimeConfigStore.ServerTreeBuiltInLayout> entry :
-          persisted.entrySet()) {
-        String sid = normalizeServerId(entry.getKey());
-        if (sid.isEmpty()) continue;
-        RuntimeConfigStore.ServerTreeBuiltInLayout normalized =
-            normalizeBuiltInLayout(entry.getValue());
-        if (normalized.equals(RuntimeConfigStore.ServerTreeBuiltInLayout.defaults())) {
-          builtInLayoutByServer.remove(sid);
-        } else {
-          builtInLayoutByServer.put(sid, normalized);
-        }
-      }
-    } catch (Exception ignored) {
-    }
-  }
-
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
   }
@@ -1072,62 +1049,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return RuntimeConfigStore.ServerTreeBuiltInLayout.defaults();
-    return builtInLayoutByServer.getOrDefault(
-        sid, RuntimeConfigStore.ServerTreeBuiltInLayout.defaults());
-  }
-
-  private static RuntimeConfigStore.ServerTreeBuiltInLayout normalizeBuiltInLayout(
-      RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
-    List<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> defaultOther =
-        RuntimeConfigStore.ServerTreeBuiltInLayout.defaults().otherOrder();
-
-    List<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> rawRoot =
-        layout == null || layout.rootOrder() == null ? List.of() : layout.rootOrder();
-    List<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> rawOther =
-        layout == null || layout.otherOrder() == null ? List.of() : layout.otherOrder();
-
-    java.util.EnumSet<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> seen =
-        java.util.EnumSet.noneOf(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.class);
-    ArrayList<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> root = new ArrayList<>();
-    for (RuntimeConfigStore.ServerTreeBuiltInLayoutNode node : rawRoot) {
-      if (node == null || seen.contains(node)) continue;
-      root.add(node);
-      seen.add(node);
-    }
-
-    ArrayList<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> other = new ArrayList<>();
-    for (RuntimeConfigStore.ServerTreeBuiltInLayoutNode node : rawOther) {
-      if (node == null || seen.contains(node)) continue;
-      other.add(node);
-      seen.add(node);
-    }
-
-    for (RuntimeConfigStore.ServerTreeBuiltInLayoutNode node : defaultOther) {
-      if (node == null || seen.contains(node)) continue;
-      other.add(node);
-      seen.add(node);
-    }
-
-    return new RuntimeConfigStore.ServerTreeBuiltInLayout(List.copyOf(root), List.copyOf(other));
+    return builtInLayoutCoordinator.layoutForServer(serverId);
   }
 
   private void persistBuiltInLayoutForServer(
       String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    RuntimeConfigStore.ServerTreeBuiltInLayout normalized = normalizeBuiltInLayout(layout);
-    RuntimeConfigStore.ServerTreeBuiltInLayout defaults =
-        RuntimeConfigStore.ServerTreeBuiltInLayout.defaults();
-    if (normalized.equals(defaults)) {
-      builtInLayoutByServer.remove(sid);
-    } else {
-      builtInLayoutByServer.put(sid, normalized);
-    }
-    if (runtimeConfig != null) {
-      runtimeConfig.rememberServerTreeBuiltInLayout(sid, normalized);
-    }
+    builtInLayoutCoordinator.rememberLayout(serverId, layout);
   }
 
   private void applyBuiltInNodesVisibilityGlobally(
@@ -1180,82 +1107,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return Boolean.TRUE.equals(serverDesiredOnline.get(sid));
   }
 
-  private static boolean canConnectServer(ConnectionState state) {
-    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return st == ConnectionState.DISCONNECTED;
-  }
-
-  private static boolean canDisconnectServer(ConnectionState state) {
-    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return st == ConnectionState.CONNECTED || st == ConnectionState.RECONNECTING;
-  }
-
-  private static String serverStateLabel(ConnectionState state) {
-    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return switch (st) {
-      case CONNECTED -> "Connected";
-      case CONNECTING -> "Connecting";
-      case RECONNECTING -> "Reconnecting";
-      case DISCONNECTING -> "Disconnecting";
-      case DISCONNECTED -> "Disconnected";
-    };
-  }
-
-  private static String serverDesiredIntentLabel(boolean desiredOnline) {
-    return desiredOnline ? "Online" : "Offline";
-  }
-
-  private static boolean isOnlineState(ConnectionState state) {
-    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return st == ConnectionState.CONNECTED
-        || st == ConnectionState.CONNECTING
-        || st == ConnectionState.RECONNECTING;
-  }
-
-  private static String serverDesiredBadge(ConnectionState state, boolean desiredOnline) {
-    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    boolean online = isOnlineState(st);
-    if (desiredOnline && !online) {
-      if (st == ConnectionState.DISCONNECTING) return " [connect queued]";
-      return " [wanted online]";
-    }
-    if (!desiredOnline && online) {
-      return " [disconnect queued]";
-    }
-    return "";
-  }
-
-  private static String serverIntentQueueTip(ConnectionState state, boolean desiredOnline) {
-    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    boolean online = isOnlineState(st);
-    if (desiredOnline && st == ConnectionState.DISCONNECTING) {
-      return "Connect is queued until the current disconnect finishes.";
-    }
-    if (desiredOnline && st == ConnectionState.DISCONNECTED) {
-      return "Wanted online; waiting for a successful connect attempt.";
-    }
-    if (!desiredOnline && online) {
-      return "Disconnect is queued.";
-    }
-    return "";
-  }
-
-  private static String serverActionHint(ConnectionState state) {
-    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return canConnectServer(st)
-        ? "Click the row action to connect."
-        : canDisconnectServer(st)
-            ? "Click the row action to disconnect."
-            : "Connection state is changing.";
-  }
-
   private String serverNodeDisplayLabel(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return sid;
     String base = prettyServerLabel(sid);
     ConnectionState state = connectionStateForServer(sid);
     boolean desired = desiredOnlineForServer(sid);
-    String badge = serverDesiredBadge(state, desired);
+    String badge = ServerTreeConnectionStateViewModel.desiredBadge(state, desired);
     return badge.isEmpty() ? base : (base + badge);
   }
 
@@ -1280,32 +1138,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       }
     }
     return out.toString();
-  }
-
-  private static String serverNodeIconName(ConnectionState state) {
-    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return switch (st) {
-      case CONNECTED -> "check";
-      case CONNECTING, RECONNECTING, DISCONNECTING -> "refresh";
-      case DISCONNECTED -> "terminal";
-    };
-  }
-
-  private static Palette serverNodeIconPalette(ConnectionState state) {
-    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return switch (st) {
-      case CONNECTED, CONNECTING, RECONNECTING -> Palette.TREE;
-      case DISCONNECTED, DISCONNECTING -> Palette.TREE_DISABLED;
-    };
-  }
-
-  private static String serverActionIconName(ConnectionState state) {
-    ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return switch (st) {
-      case DISCONNECTED -> "plus";
-      case CONNECTED, RECONNECTING -> "exit";
-      case CONNECTING, DISCONNECTING -> "refresh";
-    };
   }
 
   private String selectedServerActionServerId() {
@@ -1419,9 +1251,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (btn == null || !btn.contains(event.getPoint())) return false;
 
     ConnectionState state = connectionStateForServer(sid);
-    if (canConnectServer(state)) {
+    if (ServerTreeConnectionStateViewModel.canConnect(state)) {
       connectServerRequests.onNext(sid);
-    } else if (canDisconnectServer(state)) {
+    } else if (ServerTreeConnectionStateViewModel.canDisconnect(state)) {
       disconnectServerRequests.onNext(sid);
     }
 
@@ -1530,7 +1362,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (btn == null) return;
 
     ConnectionState state = connectionStateForServer(sid);
-    boolean enabled = canConnectServer(state) || canDisconnectServer(state);
+    boolean enabled =
+        ServerTreeConnectionStateViewModel.canConnect(state)
+            || ServerTreeConnectionStateViewModel.canDisconnect(state);
 
     Graphics2D g2 = (Graphics2D) g.create();
     try {
@@ -1570,7 +1404,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
       Icon actionIcon =
           SvgIcons.icon(
-              serverActionIconName(state),
+              ServerTreeConnectionStateViewModel.serverActionIconName(state),
               SERVER_ACTION_BUTTON_ICON_SIZE,
               enabled ? Palette.ACTION : Palette.ACTION_DISABLED);
       if (actionIcon != null) {
@@ -1612,14 +1446,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       JMenuItem connectOne = new JMenuItem("Connect \"" + pretty + "\"");
       connectOne.setIcon(SvgIcons.action("plus", 16));
       connectOne.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
-      connectOne.setEnabled(canConnectServer(state));
+      connectOne.setEnabled(ServerTreeConnectionStateViewModel.canConnect(state));
       connectOne.addActionListener(ev -> connectServerRequests.onNext(serverId));
       menu.add(connectOne);
 
       JMenuItem disconnectOne = new JMenuItem("Disconnect \"" + pretty + "\"");
       disconnectOne.setIcon(SvgIcons.action("exit", 16));
       disconnectOne.setDisabledIcon(SvgIcons.actionDisabled("exit", 16));
-      disconnectOne.setEnabled(canDisconnectServer(state));
+      disconnectOne.setEnabled(ServerTreeConnectionStateViewModel.canDisconnect(state));
       disconnectOne.addActionListener(ev -> disconnectServerRequests.onNext(serverId));
       menu.add(disconnectOne);
 
@@ -2235,24 +2069,20 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(TargetRef ref) {
-    if (ref == null) return null;
-    if (ref.isStatus()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER;
-    if (ref.isNotifications()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS;
-    if (ref.isLogViewer()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.LOG_VIEWER;
-    if (ref.isWeechatFilters()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.FILTERS;
-    if (ref.isIgnores()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.IGNORES;
-    return null;
+    return ServerTreeBuiltInLayoutCoordinator.nodeKindForRef(ref);
   }
 
   private RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
       DefaultMutableTreeNode node) {
+    return builtInLayoutCoordinator.nodeKindForNode(
+        node, this::isMonitorGroupNode, this::isInterceptorsGroupNode, this::targetRefForNode);
+  }
+
+  private TargetRef targetRefForNode(DefaultMutableTreeNode node) {
     if (node == null) return null;
-    if (isMonitorGroupNode(node)) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR;
-    if (isInterceptorsGroupNode(node))
-      return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.INTERCEPTORS;
     Object uo = node.getUserObject();
-    if (!(uo instanceof NodeData nd)) return null;
-    return builtInLayoutNodeKindForRef(nd.ref);
+    if (uo instanceof NodeData nd) return nd.ref;
+    return null;
   }
 
   private DefaultMutableTreeNode treeNodeForBuiltInLayoutKind(
@@ -2801,7 +2631,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       title.setFont(base.deriveFont(Font.BOLD, base.getSize2D() + 1.5f));
     }
     panel.add(title, "growx");
-    panel.add(new JLabel("State: " + serverStateLabel(state)));
+    panel.add(new JLabel("State: " + ServerTreeConnectionStateViewModel.stateLabel(state)));
 
     String endpoint = formatConnectedEndpoint(meta.connectedHost, meta.connectedPort);
     String nick = fallbackInfoValue(meta.nick);
@@ -2813,7 +2643,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 + "    Nick: "
                 + nick
                 + "    Intent: "
-                + serverDesiredIntentLabel(desired)),
+                + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired)),
         "span 2, growx");
     return panel;
   }
@@ -2835,8 +2665,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     addInfoRow(panel, "Network ID", serverId);
     addInfoRow(panel, "Display", prettyServerLabel(serverId));
-    addInfoRow(panel, "State", serverStateLabel(state));
-    addInfoRow(panel, "Intent", serverDesiredIntentLabel(desired));
+    addInfoRow(panel, "State", ServerTreeConnectionStateViewModel.stateLabel(state));
+    addInfoRow(panel, "Intent", ServerTreeConnectionStateViewModel.desiredIntentLabel(desired));
     addInfoRow(
         panel,
         "Connected endpoint",
@@ -3810,7 +3640,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ServerNodes sn, RuntimeConfigStore.ServerTreeBuiltInLayout requestedLayout) {
     if (sn == null || sn.serverNode == null || sn.otherNode == null) return;
 
-    RuntimeConfigStore.ServerTreeBuiltInLayout layout = normalizeBuiltInLayout(requestedLayout);
+    RuntimeConfigStore.ServerTreeBuiltInLayout layout =
+        ServerTreeBuiltInLayoutCoordinator.normalizeLayout(requestedLayout);
     boolean changed = false;
     if (sn.otherNode.getParent() != sn.serverNode) {
       int pmIdx = sn.serverNode.getIndex(sn.pmNode);
@@ -3899,7 +3730,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
 
     RuntimeConfigStore.ServerTreeBuiltInLayout next =
-        normalizeBuiltInLayout(
+        ServerTreeBuiltInLayoutCoordinator.normalizeLayout(
             new RuntimeConfigStore.ServerTreeBuiltInLayout(
                 List.copyOf(rootOrder), List.copyOf(otherOrder)));
     persistBuiltInLayoutForServer(sid, next);
@@ -4957,9 +4788,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (uo instanceof String serverId && isServerNode(node) && isSojuEphemeralServer(serverId)) {
       ConnectionState state = connectionStateForServer(serverId);
       boolean desired = desiredOnlineForServer(serverId);
-      String stateTip = "State: " + serverStateLabel(state) + ".";
-      String intentTip = " Intent: " + serverDesiredIntentLabel(desired) + ".";
-      String queueTip = serverIntentQueueTip(state, desired);
+      String stateTip = "State: " + ServerTreeConnectionStateViewModel.stateLabel(state) + ".";
+      String intentTip = " Intent: " + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired) + ".";
+      String queueTip = ServerTreeConnectionStateViewModel.intentQueueTip(state, desired);
       String diagnostics = connectionDiagnosticsTipForServer(serverId);
       String origin = Objects.toString(sojuOriginByServerId.get(serverId), "").trim();
       String display = serverDisplayNames.getOrDefault(serverId, serverId);
@@ -4980,9 +4811,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (uo instanceof String serverId && isServerNode(node) && isZncEphemeralServer(serverId)) {
       ConnectionState state = connectionStateForServer(serverId);
       boolean desired = desiredOnlineForServer(serverId);
-      String stateTip = "State: " + serverStateLabel(state) + ".";
-      String intentTip = " Intent: " + serverDesiredIntentLabel(desired) + ".";
-      String queueTip = serverIntentQueueTip(state, desired);
+      String stateTip = "State: " + ServerTreeConnectionStateViewModel.stateLabel(state) + ".";
+      String intentTip = " Intent: " + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired) + ".";
+      String queueTip = ServerTreeConnectionStateViewModel.intentQueueTip(state, desired);
       String diagnostics = connectionDiagnosticsTipForServer(serverId);
       String origin = Objects.toString(zncOriginByServerId.get(serverId), "").trim();
       String display = serverDisplayNames.getOrDefault(serverId, serverId);
@@ -5001,14 +4832,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (uo instanceof String serverId && isServerNode(node)) {
       ConnectionState state = connectionStateForServer(serverId);
       boolean desired = desiredOnlineForServer(serverId);
-      String queueTip = serverIntentQueueTip(state, desired);
+      String queueTip = ServerTreeConnectionStateViewModel.intentQueueTip(state, desired);
       String diagnostics = connectionDiagnosticsTipForServer(serverId);
-      String action = serverActionHint(state);
+      String action = ServerTreeConnectionStateViewModel.actionHint(state);
       String base =
           "State: "
-              + serverStateLabel(state)
+              + ServerTreeConnectionStateViewModel.stateLabel(state)
               + ". Intent: "
-              + serverDesiredIntentLabel(desired)
+              + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired)
               + ".";
       if (!queueTip.isBlank() && !diagnostics.isBlank())
         return base + " " + queueTip + diagnostics + " " + action;
@@ -5632,8 +5463,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             setFont(base.deriveFont(Font.PLAIN));
           }
           ConnectionState state = connectionStateForServer(id);
-          String iconName = serverNodeIconName(state);
-          Palette palette = serverNodeIconPalette(state);
+          String iconName = ServerTreeConnectionStateViewModel.serverNodeIconName(state);
+          Palette palette = ServerTreeConnectionStateViewModel.serverNodeIconPalette(state);
           Icon icon = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, palette);
           Icon disabled = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
           setIcon(icon);
