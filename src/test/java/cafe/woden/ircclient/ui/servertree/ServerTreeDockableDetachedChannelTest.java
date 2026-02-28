@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
@@ -38,7 +39,7 @@ import org.junit.jupiter.api.Test;
 class ServerTreeDockableDetachedChannelTest {
 
   @Test
-  void channelContextMenuSwitchesBetweenDetachAndJoin() throws Exception {
+  void channelContextMenuSwitchesBetweenDisconnectAndReconnect() throws Exception {
     onEdt(
         () -> {
           try {
@@ -50,19 +51,21 @@ class ServerTreeDockableDetachedChannelTest {
 
             JPopupMenu attachedMenu = buildPopupMenuForTarget(dockable, chan);
             assertNotNull(attachedMenu);
-            assertNotNull(findMenuItem(attachedMenu, "Detach \"#ircafe\""));
-            assertNotNull(findMenuItem(attachedMenu, "Close Channel \"#ircafe\""));
-            assertFalse(dockable.isChannelDetached(chan));
-            assertNull(findMenuItem(attachedMenu, "Join \"#ircafe\""));
+            assertNotNull(findMenuItem(attachedMenu, "Disconnect \"#ircafe\""));
+            assertNotNull(findMenuItem(attachedMenu, "Close and PART \"#ircafe\""));
+            assertFalse(dockable.isChannelDisconnected(chan));
+            assertNull(findMenuItem(attachedMenu, "Reconnect \"#ircafe\""));
+            assertNull(findMenuItem(attachedMenu, "Detach (Bouncer) \"#ircafe\""));
 
-            dockable.setChannelDetached(chan, true);
-            assertTrue(dockable.isChannelDetached(chan));
+            dockable.setChannelDisconnected(chan, true);
+            assertTrue(dockable.isChannelDisconnected(chan));
 
             JPopupMenu detachedMenu = buildPopupMenuForTarget(dockable, chan);
             assertNotNull(detachedMenu);
-            assertNotNull(findMenuItem(detachedMenu, "Join \"#ircafe\""));
+            assertNotNull(findMenuItem(detachedMenu, "Reconnect \"#ircafe\""));
             assertNotNull(findMenuItem(detachedMenu, "Close Channel \"#ircafe\""));
-            assertNull(findMenuItem(detachedMenu, "Detach \"#ircafe\""));
+            assertNull(findMenuItem(detachedMenu, "Disconnect \"#ircafe\""));
+            assertNull(findMenuItem(detachedMenu, "Close and PART \"#ircafe\""));
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -106,7 +109,8 @@ class ServerTreeDockableDetachedChannelTest {
 
             JPopupMenu menu = buildPopupMenuForTarget(dockable, chan);
             assertNotNull(menu);
-            JCheckBoxMenuItem autoReattach = findCheckBoxMenuItem(menu, "Auto-reattach on startup");
+            JCheckBoxMenuItem autoReattach =
+                findCheckBoxMenuItem(menu, "Auto-reconnect on startup");
             assertNotNull(autoReattach);
             assertTrue(autoReattach.isSelected());
 
@@ -119,10 +123,11 @@ class ServerTreeDockableDetachedChannelTest {
   }
 
   @Test
-  void channelContextMenuEmitsDetachAndJoinRequests() throws Exception {
+  void channelContextMenuEmitsDisconnectAndReconnectRequests() throws Exception {
     onEdt(
         () -> {
           Disposable detachSub = null;
+          Disposable bouncerDetachSub = null;
           Disposable joinSub = null;
           Disposable closeSub = null;
           try {
@@ -133,33 +138,36 @@ class ServerTreeDockableDetachedChannelTest {
             dockable.ensureNode(chan);
 
             AtomicReference<TargetRef> detached = new AtomicReference<>();
+            AtomicReference<TargetRef> bouncerDetached = new AtomicReference<>();
             AtomicReference<TargetRef> joined = new AtomicReference<>();
             AtomicReference<TargetRef> closed = new AtomicReference<>();
-            detachSub = dockable.detachChannelRequests().subscribe(detached::set);
+            detachSub = dockable.disconnectChannelRequests().subscribe(detached::set);
+            bouncerDetachSub = dockable.bouncerDetachChannelRequests().subscribe(bouncerDetached::set);
             joinSub = dockable.joinChannelRequests().subscribe(joined::set);
             closeSub = dockable.closeChannelRequests().subscribe(closed::set);
 
             JMenuItem detachItem =
                 findMenuItem(
                     Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
-                    "Detach \"#ircafe\"");
+                    "Disconnect \"#ircafe\"");
             assertNotNull(detachItem);
             detachItem.doClick();
             assertEquals(chan, detached.get());
+            assertNull(bouncerDetached.get());
 
             JMenuItem closeItem =
                 findMenuItem(
                     Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
-                    "Close Channel \"#ircafe\"");
+                    "Close and PART \"#ircafe\"");
             assertNotNull(closeItem);
             closeItem.doClick();
             assertEquals(chan, closed.get());
 
-            dockable.setChannelDetached(chan, true);
+            dockable.setChannelDisconnected(chan, true);
             JMenuItem joinItem =
                 findMenuItem(
                     Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
-                    "Join \"#ircafe\"");
+                    "Reconnect \"#ircafe\"");
             assertNotNull(joinItem);
             joinItem.doClick();
             assertEquals(chan, joined.get());
@@ -167,8 +175,41 @@ class ServerTreeDockableDetachedChannelTest {
             throw new RuntimeException(e);
           } finally {
             if (detachSub != null) detachSub.dispose();
+            if (bouncerDetachSub != null) bouncerDetachSub.dispose();
             if (joinSub != null) joinSub.dispose();
             if (closeSub != null) closeSub.dispose();
+          }
+        });
+  }
+
+  @Test
+  void channelContextMenuShowsAndEmitsBouncerDetachWhenSupported() throws Exception {
+    onEdt(
+        () -> {
+          Disposable bouncerDetachSub = null;
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+            dockable.setServerConnectionState("libera", ConnectionState.CONNECTED);
+            dockable.setServerIrcv3Capability("libera", "znc.in/playback", "ACK", true);
+
+            TargetRef chan = new TargetRef("libera", "#ircafe");
+            dockable.ensureNode(chan);
+
+            AtomicReference<TargetRef> bouncerDetached = new AtomicReference<>();
+            bouncerDetachSub = dockable.bouncerDetachChannelRequests().subscribe(bouncerDetached::set);
+
+            JMenuItem bouncerDetach =
+                findMenuItem(
+                    Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
+                    "Detach (Bouncer) \"#ircafe\"");
+            assertNotNull(bouncerDetach);
+            bouncerDetach.doClick();
+            assertEquals(chan, bouncerDetached.get());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          } finally {
+            if (bouncerDetachSub != null) bouncerDetachSub.dispose();
           }
         });
   }
@@ -185,7 +226,7 @@ class ServerTreeDockableDetachedChannelTest {
 
             TargetRef chan = new TargetRef("libera", "#ircafe");
             dockable.ensureNode(chan);
-            dockable.setChannelDetached(chan, true);
+            dockable.setChannelDisconnected(chan, true);
 
             UIManager.put("Label.disabledForeground", new Color(12, 34, 56));
             UIManager.put("Component.disabledForeground", new Color(65, 76, 87));
@@ -219,7 +260,7 @@ class ServerTreeDockableDetachedChannelTest {
 
             TargetRef chan = new TargetRef("libera", "#ircafe");
             dockable.ensureNode(chan);
-            dockable.setChannelDetached(chan, false);
+            dockable.setChannelDisconnected(chan, false);
 
             JTree tree = getTree(dockable);
             DefaultMutableTreeNode node = findLeafNode(dockable, chan);
@@ -260,6 +301,46 @@ class ServerTreeDockableDetachedChannelTest {
             JLabel label = (JLabel) rendered;
             assertEquals("#ircafe", label.getText());
             assertFalse(label.getText().contains("("));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void disablingServerTreeNotificationBadgesRemovesBadgeWidthReservation() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+
+            TargetRef chan = new TargetRef("libera", "#ircafe");
+            dockable.ensureNode(chan);
+            dockable.markUnread(chan);
+            dockable.markHighlight(chan);
+
+            JTree tree = getTree(dockable);
+            DefaultMutableTreeNode node = findLeafNode(dockable, chan);
+            assertNotNull(node);
+
+            Component withBadges =
+                tree.getCellRenderer()
+                    .getTreeCellRendererComponent(tree, node, false, false, true, 0, false);
+            assertTrue(withBadges instanceof JComponent);
+            int widthWithBadges = ((JComponent) withBadges).getPreferredSize().width;
+
+            setServerTreeNotificationBadgesEnabled(dockable, false);
+
+            Component withoutBadges =
+                tree.getCellRenderer()
+                    .getTreeCellRendererComponent(tree, node, false, false, true, 0, false);
+            assertTrue(withoutBadges instanceof JComponent);
+            int widthWithoutBadges = ((JComponent) withoutBadges).getPreferredSize().width;
+
+            assertTrue(
+                widthWithoutBadges < widthWithBadges,
+                "Renderer width should shrink when server-tree notification badges are hidden.");
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -324,8 +405,8 @@ class ServerTreeDockableDetachedChannelTest {
             assertTrue(nd.hasTypingActivity());
             assertTrue(typingActivityNodes(dockable).contains(node));
 
-            dockable.setChannelDetached(chan, true);
-            assertTrue(dockable.isChannelDetached(chan));
+            dockable.setChannelDisconnected(chan, true);
+            assertTrue(dockable.isChannelDisconnected(chan));
             assertFalse(nd.hasTypingActivity());
             assertFalse(typingActivityNodes(dockable).contains(node));
 
@@ -348,13 +429,13 @@ class ServerTreeDockableDetachedChannelTest {
 
             TargetRef chan = new TargetRef("libera", "#ircafe");
             dockable.ensureNode(chan);
-            dockable.setChannelDetached(chan, true, "Kicked by ChanServ (flood)");
+            dockable.setChannelDisconnected(chan, true, "Kicked by ChanServ (flood)");
 
             JTree tree = getTree(dockable);
             DefaultMutableTreeNode node = findLeafNode(dockable, chan);
             assertNotNull(node);
             TreePath path = new TreePath(node.getPath());
-            Rectangle warningBounds = detachedWarningBounds(dockable, path, node);
+            Rectangle warningBounds = disconnectedWarningBounds(dockable, path, node);
             assertNotNull(warningBounds);
 
             MouseEvent hover =
@@ -383,9 +464,9 @@ class ServerTreeDockableDetachedChannelTest {
                     1,
                     false,
                     MouseEvent.BUTTON1);
-            boolean handled = invokeMaybeHandleDetachedWarningClick(dockable, click);
+            boolean handled = invokeMaybeHandleDisconnectedWarningClick(dockable, click);
             assertTrue(handled);
-            assertTrue(dockable.isChannelDetached(chan));
+            assertTrue(dockable.isChannelDisconnected(chan));
 
             ServerTreeDockable.NodeData nd = (ServerTreeDockable.NodeData) node.getUserObject();
             assertFalse(nd.hasDetachedWarning());
@@ -407,12 +488,12 @@ class ServerTreeDockableDetachedChannelTest {
 
             TargetRef chan = new TargetRef("libera", "#ircafe");
             dockable.ensureNode(chan);
-            dockable.setChannelDetached(chan, true);
+            dockable.setChannelDisconnected(chan, true);
             dockable.selectTarget(chan);
 
             AtomicReference<TargetRef> detached = new AtomicReference<>();
             AtomicReference<TargetRef> closed = new AtomicReference<>();
-            detachSub = dockable.detachChannelRequests().subscribe(detached::set);
+            detachSub = dockable.disconnectChannelRequests().subscribe(detached::set);
             closeSub = dockable.closeTargetRequests().subscribe(closed::set);
 
             triggerKeyboardClose(dockable);
@@ -444,7 +525,7 @@ class ServerTreeDockableDetachedChannelTest {
 
             AtomicReference<TargetRef> detached = new AtomicReference<>();
             AtomicReference<TargetRef> closed = new AtomicReference<>();
-            detachSub = dockable.detachChannelRequests().subscribe(detached::set);
+            detachSub = dockable.disconnectChannelRequests().subscribe(detached::set);
             closeSub = dockable.closeTargetRequests().subscribe(closed::set);
 
             triggerKeyboardClose(dockable);
@@ -478,7 +559,7 @@ class ServerTreeDockableDetachedChannelTest {
                 "libera", ServerTreeDockable.ChannelSortMode.CUSTOM);
             dockable.setChannelCustomOrderForServer("libera", List.of("#beta", "#alpha"));
             dockable.setChannelSortModeForServer(
-                "oftc", ServerTreeDockable.ChannelSortMode.ALPHABETICAL);
+                "oftc", ServerTreeDockable.ChannelSortMode.MOST_RECENT_ACTIVITY);
 
             List<String> liberaOrder =
                 dockable.managedChannelsForServer("libera").stream()
@@ -493,10 +574,42 @@ class ServerTreeDockableDetachedChannelTest {
                 ServerTreeDockable.ChannelSortMode.CUSTOM,
                 dockable.channelSortModeForServer("libera"));
             assertEquals(
-                ServerTreeDockable.ChannelSortMode.ALPHABETICAL,
+                ServerTreeDockable.ChannelSortMode.MOST_RECENT_ACTIVITY,
                 dockable.channelSortModeForServer("oftc"));
             assertEquals(List.of("#beta", "#alpha"), liberaOrder);
             assertEquals(List.of("#alpha", "#beta"), oftcOrder);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void mostRecentActivitySortPromotesRecentlyActiveChannels() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+            TargetRef alpha = new TargetRef("libera", "#alpha");
+            TargetRef beta = new TargetRef("libera", "#beta");
+            TargetRef gamma = new TargetRef("libera", "#gamma");
+
+            dockable.ensureNode(alpha);
+            dockable.ensureNode(beta);
+            dockable.ensureNode(gamma);
+
+            dockable.setChannelSortModeForServer(
+                "libera", ServerTreeDockable.ChannelSortMode.MOST_RECENT_ACTIVITY);
+            dockable.markUnread(beta);
+            dockable.markHighlight(gamma);
+
+            List<String> order =
+                dockable.managedChannelsForServer("libera").stream()
+                    .map(ServerTreeDockable.ManagedChannelEntry::channel)
+                    .toList();
+
+            assertEquals(List.of("#gamma", "#beta", "#alpha"), order);
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -586,11 +699,11 @@ class ServerTreeDockableDetachedChannelTest {
     return (java.util.Set<DefaultMutableTreeNode>) field.get(dockable);
   }
 
-  private static Rectangle detachedWarningBounds(
+  private static Rectangle disconnectedWarningBounds(
       ServerTreeDockable dockable, TreePath path, DefaultMutableTreeNode node) throws Exception {
     Method m =
         ServerTreeDockable.class.getDeclaredMethod(
-            "detachedWarningIndicatorBounds", TreePath.class, DefaultMutableTreeNode.class);
+            "disconnectedWarningIndicatorBounds", TreePath.class, DefaultMutableTreeNode.class);
     m.setAccessible(true);
     return (Rectangle) m.invoke(dockable, path, node);
   }
@@ -602,13 +715,20 @@ class ServerTreeDockableDetachedChannelTest {
     return (String) m.invoke(dockable, event);
   }
 
-  private static boolean invokeMaybeHandleDetachedWarningClick(
+  private static boolean invokeMaybeHandleDisconnectedWarningClick(
       ServerTreeDockable dockable, MouseEvent event) throws Exception {
     Method m =
         ServerTreeDockable.class.getDeclaredMethod(
-            "maybeHandleDetachedWarningClick", MouseEvent.class);
+            "maybeHandleDisconnectedWarningClick", MouseEvent.class);
     m.setAccessible(true);
     return (Boolean) m.invoke(dockable, event);
+  }
+
+  private static void setServerTreeNotificationBadgesEnabled(
+      ServerTreeDockable dockable, boolean enabled) throws Exception {
+    Field f = ServerTreeDockable.class.getDeclaredField("serverTreeNotificationBadgesEnabled");
+    f.setAccessible(true);
+    f.setBoolean(dockable, enabled);
   }
 
   private static void onEdt(Runnable r) throws InvocationTargetException, InterruptedException {

@@ -882,6 +882,8 @@ public class PreferencesDialog {
     JCheckBox typingIndicatorsReceiveEnabled = buildTypingIndicatorsReceiveCheckbox(current);
     JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle =
         buildTypingTreeIndicatorStyleCombo(current);
+    JCheckBox serverTreeNotificationBadgesEnabled =
+        buildServerTreeNotificationBadgesCheckbox(current);
     JSpinner serverTreeUnreadBadgeScalePercent = buildServerTreeUnreadBadgeScalePercentSpinner();
     Ircv3CapabilitiesControls ircv3Capabilities = buildIrcv3CapabilitiesControls();
     NickColorControls nickColors = buildNickColorControls(owner, closeables);
@@ -895,6 +897,7 @@ public class PreferencesDialog {
     LoggingControls logging = buildLoggingControls(logProps, closeables);
 
     OutgoingColorControls outgoing = buildOutgoingColorControls(current);
+    JCheckBox outgoingDeliveryIndicators = buildOutgoingDeliveryIndicatorsCheckbox(current);
     NetworkAdvancedControls network = buildNetworkAdvancedControls(current, closeables);
     ProxyControls proxy = network.proxy;
     UserhostControls userhost = network.userhost;
@@ -933,13 +936,15 @@ public class PreferencesDialog {
             spellcheck,
             nickColors,
             timestamps,
-            outgoing);
+            outgoing,
+            outgoingDeliveryIndicators);
     JPanel ctcpRepliesPanel = buildCtcpRepliesPanel(ctcpAutoReplies);
     JPanel ircv3Panel =
         buildIrcv3CapabilitiesPanel(
             typingIndicatorsSendEnabled,
             typingIndicatorsReceiveEnabled,
             typingTreeIndicatorStyle,
+            serverTreeNotificationBadgesEnabled,
             serverTreeUnreadBadgeScalePercent,
             ircv3Capabilities);
     JPanel embedsPanel =
@@ -1224,6 +1229,8 @@ public class PreferencesDialog {
           boolean typingIndicatorsReceiveEnabledV = typingIndicatorsReceiveEnabled.isSelected();
           String typingIndicatorsTreeStyleV =
               typingTreeIndicatorStyleValue(typingTreeIndicatorStyle);
+          boolean serverTreeNotificationBadgesEnabledV =
+              serverTreeNotificationBadgesEnabled.isSelected();
           int serverTreeUnreadBadgeScalePercentV =
               ((Number) serverTreeUnreadBadgeScalePercent.getValue()).intValue();
           if (serverTreeUnreadBadgeScalePercentV < 50) serverTreeUnreadBadgeScalePercentV = 50;
@@ -1395,6 +1402,7 @@ public class PreferencesDialog {
           String outgoingHexV =
               UiSettings.normalizeHexOrDefault(outgoing.hex.getText(), prev.clientLineColor());
           outgoing.hex.setText(outgoingHexV);
+          boolean outgoingDeliveryIndicatorsEnabledV = outgoingDeliveryIndicators.isSelected();
 
           if (notifications.table.isEditing()) {
             try {
@@ -1559,6 +1567,8 @@ public class PreferencesDialog {
                   chatTranscriptMaxLinesPerTargetV,
                   outgoingColorEnabledV,
                   outgoingHexV,
+                  outgoingDeliveryIndicatorsEnabledV,
+                  serverTreeNotificationBadgesEnabledV,
                   userhostEnabledV,
                   userhostMinIntervalV,
                   userhostMaxPerMinuteV,
@@ -1602,6 +1612,8 @@ public class PreferencesDialog {
 
           runtimeConfig.rememberServerTreeUnreadBadgeScalePercent(
               serverTreeUnreadBadgeScalePercentV);
+          runtimeConfig.rememberServerTreeNotificationBadgesEnabled(
+              serverTreeNotificationBadgesEnabledV);
           settingsBus.set(next);
           if (spellcheckSettingsBus != null) {
             spellcheckSettingsBus.set(nextSpellcheck);
@@ -1804,6 +1816,8 @@ public class PreferencesDialog {
 
             runtimeConfig.rememberClientLineColorEnabled(next.clientLineColorEnabled());
             runtimeConfig.rememberClientLineColor(next.clientLineColor());
+            runtimeConfig.rememberOutgoingDeliveryIndicatorsEnabled(
+                next.outgoingDeliveryIndicatorsEnabled());
 
             runtimeConfig.rememberNotificationRuleCooldownSeconds(
                 next.notificationRuleCooldownSeconds());
@@ -3873,6 +3887,17 @@ public class PreferencesDialog {
     return ctcp;
   }
 
+  private JCheckBox buildOutgoingDeliveryIndicatorsCheckbox(UiSettings current) {
+    JCheckBox cb =
+        new JCheckBox(
+            "Show send-status indicators for my outgoing messages (spinner + green dot)");
+    cb.setSelected(current.outgoingDeliveryIndicatorsEnabled());
+    cb.setToolTipText(
+        "When enabled, outgoing messages show a pending spinner and a brief green confirmation dot when server echo reconciliation completes.\n"
+            + "When disabled, these visual indicators are hidden; message send/reconcile behavior is unchanged.");
+    return cb;
+  }
+
   private JCheckBox buildTypingIndicatorsSendCheckbox(UiSettings current) {
     JCheckBox cb = new JCheckBox("Send typing indicators (IRCv3)");
     cb.setSelected(current.typingIndicatorsEnabled());
@@ -3924,6 +3949,15 @@ public class PreferencesDialog {
       }
     }
     return combo;
+  }
+
+  private JCheckBox buildServerTreeNotificationBadgesCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Show unread/highlight badges in the server tree");
+    cb.setSelected(current.serverTreeNotificationBadgesEnabled());
+    cb.setToolTipText(
+        "When enabled, the server tree shows numeric unread/highlight badges next to targets.\n"
+            + "When disabled, badge counts are hidden but unread/highlight tracking still runs.");
+    return cb;
   }
 
   private JSpinner buildServerTreeUnreadBadgeScalePercentSpinner() {
@@ -6018,7 +6052,8 @@ public class PreferencesDialog {
       SpellcheckControls spellcheck,
       NickColorControls nickColors,
       TimestampControls timestamps,
-      OutgoingColorControls outgoing) {
+      OutgoingColorControls outgoing,
+      JCheckBox outgoingDeliveryIndicators) {
     JPanel form =
         new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]10[grow,fill]"));
     form.add(tabTitle("Chat"), "growx, wmin 0, wrap");
@@ -6028,7 +6063,12 @@ public class PreferencesDialog {
         "General",
         padSubTab(
             buildChatGeneralSubTab(
-                presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing)));
+                presenceFolds,
+                ctcpRequestsInActiveTarget,
+                nickColors,
+                timestamps,
+                outgoing,
+                outgoingDeliveryIndicators)));
     chatTabs.addTab("Spellcheck", padSubTab(buildChatSpellcheckSubTab(spellcheck)));
     form.add(chatTabs, "grow, push, wmin 0");
     return form;
@@ -6039,7 +6079,8 @@ public class PreferencesDialog {
       JCheckBox ctcpRequestsInActiveTarget,
       NickColorControls nickColors,
       TimestampControls timestamps,
-      OutgoingColorControls outgoing) {
+      OutgoingColorControls outgoing,
+      JCheckBox outgoingDeliveryIndicators) {
     JPanel panel =
         new JPanel(
             new MigLayout(
@@ -6062,6 +6103,8 @@ public class PreferencesDialog {
     panel.add(sectionTitle("Your messages"), "span 2, growx, wmin 0, wrap");
     panel.add(new JLabel("Outgoing messages"), "aligny top");
     panel.add(outgoing.panel, "growx, wmin 0");
+    panel.add(new JLabel("Delivery indicators"), "aligny top");
+    panel.add(outgoingDeliveryIndicators, "alignx left");
 
     return panel;
   }
@@ -6167,6 +6210,7 @@ public class PreferencesDialog {
       JCheckBox typingIndicatorsSendEnabled,
       JCheckBox typingIndicatorsReceiveEnabled,
       JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle,
+      JCheckBox serverTreeNotificationBadgesEnabled,
       JSpinner serverTreeUnreadBadgeScalePercent,
       Ircv3CapabilitiesControls ircv3Capabilities) {
     JPanel form =
@@ -6208,6 +6252,7 @@ public class PreferencesDialog {
     treeStyleRow.add(new JLabel("Server tree marker style"));
     treeStyleRow.add(typingTreeIndicatorStyle, "growx, wmin 180");
     typingRow.add(treeStyleRow, "growx, wmin 0");
+    typingRow.add(serverTreeNotificationBadgesEnabled, "growx, wmin 0");
     JPanel badgeScaleRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[]6[]", "[]"));
     badgeScaleRow.setOpaque(false);
     badgeScaleRow.add(new JLabel("Unread badge size"));
@@ -6218,6 +6263,7 @@ public class PreferencesDialog {
     typingImpact.setText(
         "Send controls your outbound typing state; Display controls incoming typing state from others.\n"
             + "Server tree marker style controls the channel typing activity indicator.\n"
+            + "Show unread/highlight badges toggles server tree notification count badges.\n"
             + "Unread badge size scales channel unread/highlight count badges in the server tree.");
     typingImpact.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
     JPanel typingTab =

@@ -197,6 +197,10 @@ public class UiSettingsBus {
                 : 4000,
             props.clientLineColorEnabled(),
             props.clientLineColor(),
+            props.outgoingDeliveryIndicatorsEnabled() == null
+                || Boolean.TRUE.equals(props.outgoingDeliveryIndicatorsEnabled()),
+            props.serverTreeNotificationBadgesEnabled() == null
+                || Boolean.TRUE.equals(props.serverTreeNotificationBadgesEnabled()),
 
             // Hostmask discovery / USERHOST
             hm == null || Boolean.TRUE.equals(hm.userhostEnabled()),

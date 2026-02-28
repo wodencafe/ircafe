@@ -108,7 +108,7 @@ class ServerTreeDockableFunctionalTest {
     ServerTreeDockable dockable = newDockable();
     CopyOnWriteArrayList<TargetRef> detached = new CopyOnWriteArrayList<>();
     CopyOnWriteArrayList<TargetRef> closed = new CopyOnWriteArrayList<>();
-    Disposable detachSub = dockable.detachChannelRequests().subscribe(detached::add);
+    Disposable detachSub = dockable.disconnectChannelRequests().subscribe(detached::add);
     Disposable closeSub = dockable.closeTargetRequests().subscribe(closed::add);
 
     try {
@@ -134,11 +134,11 @@ class ServerTreeDockableFunctionalTest {
   }
 
   @Test
-  void channelContextMenuSwitchesDetachAndJoinAndPublishesRequests() throws Exception {
+  void channelContextMenuSwitchesDisconnectAndReconnectAndPublishesRequests() throws Exception {
     ServerTreeDockable dockable = newDockable();
     CopyOnWriteArrayList<TargetRef> detached = new CopyOnWriteArrayList<>();
     CopyOnWriteArrayList<TargetRef> joined = new CopyOnWriteArrayList<>();
-    Disposable detachSub = dockable.detachChannelRequests().subscribe(detached::add);
+    Disposable detachSub = dockable.disconnectChannelRequests().subscribe(detached::add);
     Disposable joinSub = dockable.joinChannelRequests().subscribe(joined::add);
 
     try {
@@ -148,20 +148,20 @@ class ServerTreeDockableFunctionalTest {
       flushEdt();
 
       JPopupMenu attachedMenu = onEdtCall(() -> popupForTarget(dockable, channel));
-      JMenuItem detachItem = findMenuItem(attachedMenu, "Detach \"#functional-menu\"");
-      assertNotNull(detachItem, "attached channel should show Detach action");
+      JMenuItem detachItem = findMenuItem(attachedMenu, "Disconnect \"#functional-menu\"");
+      assertNotNull(detachItem, "connected channel should show Disconnect action");
 
       onEdt(detachItem::doClick);
       flushEdt();
       waitFor(() -> !detached.isEmpty(), Duration.ofSeconds(2));
       assertEquals(channel, detached.getLast());
 
-      onEdt(() -> dockable.setChannelDetached(channel, true));
+      onEdt(() -> dockable.setChannelDisconnected(channel, true));
       flushEdt();
 
       JPopupMenu detachedMenu = onEdtCall(() -> popupForTarget(dockable, channel));
-      JMenuItem joinItem = findMenuItem(detachedMenu, "Join \"#functional-menu\"");
-      assertNotNull(joinItem, "detached channel should show Join action");
+      JMenuItem joinItem = findMenuItem(detachedMenu, "Reconnect \"#functional-menu\"");
+      assertNotNull(joinItem, "disconnected channel should show Reconnect action");
 
       onEdt(joinItem::doClick);
       flushEdt();

@@ -1620,7 +1620,9 @@ public class IrcMediator implements MediatorControlPort {
               st,
               ev.at(),
               "(join)",
-              "Stayed detached from " + ev.channel() + " (right-click channel and choose Join).");
+              "Stayed disconnected from "
+                  + ev.channel()
+                  + " (right-click channel and choose Reconnect).");
           break;
         }
 

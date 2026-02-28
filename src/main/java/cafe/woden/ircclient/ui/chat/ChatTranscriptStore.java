@@ -2211,6 +2211,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     ms.addAttribute(ChatStyles.ATTR_META_PENDING_ID, pid);
     ms.addAttribute(ChatStyles.ATTR_META_PENDING_STATE, "pending");
 
+    if (!outgoingDeliveryIndicatorsEnabled()) {
+      appendLineInternal(ref, from, Objects.toString(text, ""), fs, ms, true, meta);
+      return;
+    }
+
     // Replace the old textual "[pending]" suffix with an inline spinner indicator.
     java.awt.Color spinnerColor = null;
     try {
@@ -3536,33 +3541,35 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     int after = insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, meta);
 
     // Inline delivery confirmation dot that fades away.
-    try {
-      StyledDocument docForDot = docs.get(ref);
-      if (docForDot != null) {
-        int insertPos = Math.max(0, Math.min(after - 1, docForDot.getLength()));
-        if (insertPos >= 0 && insertPos <= docForDot.getLength()) {
-          java.awt.Color green = new java.awt.Color(0x2ecc71);
-          final OutgoingSendIndicator.ConfirmedDot[] holder =
-              new OutgoingSendIndicator.ConfirmedDot[1];
-          holder[0] =
-              new OutgoingSendIndicator.ConfirmedDot(
-                  green,
-                  200,
-                  900,
-                  () -> {
-                    try {
-                      removeInlineComponentNear(docForDot, holder[0]);
-                    } catch (Exception ignored) {
-                    }
-                  });
+    if (outgoingDeliveryIndicatorsEnabled()) {
+      try {
+        StyledDocument docForDot = docs.get(ref);
+        if (docForDot != null) {
+          int insertPos = Math.max(0, Math.min(after - 1, docForDot.getLength()));
+          if (insertPos >= 0 && insertPos <= docForDot.getLength()) {
+            java.awt.Color green = new java.awt.Color(0x2ecc71);
+            final OutgoingSendIndicator.ConfirmedDot[] holder =
+                new OutgoingSendIndicator.ConfirmedDot[1];
+            holder[0] =
+                new OutgoingSendIndicator.ConfirmedDot(
+                    green,
+                    200,
+                    900,
+                    () -> {
+                      try {
+                        removeInlineComponentNear(docForDot, holder[0]);
+                      } catch (Exception ignored) {
+                      }
+                    });
 
-          SimpleAttributeSet attrs = new SimpleAttributeSet(ms);
-          attrs = withLineMeta(attrs, meta);
-          StyleConstants.setComponent(attrs, holder[0]);
-          docForDot.insertString(insertPos, " ", attrs);
+            SimpleAttributeSet attrs = new SimpleAttributeSet(ms);
+            attrs = withLineMeta(attrs, meta);
+            StyleConstants.setComponent(attrs, holder[0]);
+            docForDot.insertString(insertPos, " ", attrs);
+          }
         }
+      } catch (Exception ignored) {
       }
-    } catch (Exception ignored) {
     }
 
     StyledDocument doc = docs.get(ref);
@@ -3712,6 +3719,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     } catch (Exception ignored) {
       return null;
     }
+  }
+
+  private boolean outgoingDeliveryIndicatorsEnabled() {
+    UiSettings s = safeSettings();
+    return s == null || s.outgoingDeliveryIndicatorsEnabled();
   }
 
   private Color configuredOutgoingLineColor(UiSettings s) {

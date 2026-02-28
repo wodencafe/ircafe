@@ -15,6 +15,7 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
+import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.util.Comparator;
@@ -65,6 +66,7 @@ public class TargetCoordinator implements ActiveTargetPort {
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final Set<TargetRef> closedPrivateTargetsByUser = ConcurrentHashMap.newKeySet();
   private final Set<TargetRef> detachedChannelsByUserOrKick = ConcurrentHashMap.newKeySet();
+  private final Set<TargetRef> bouncerDetachedChannels = ConcurrentHashMap.newKeySet();
   private final Set<TargetRef> channelsClosedByUser = ConcurrentHashMap.newKeySet();
 
   private TargetRef activeTarget;
@@ -362,7 +364,7 @@ public class TargetCoordinator implements ActiveTargetPort {
       ui.setInputEnabled(false);
       return;
     }
-    if (activeTarget.isChannel() && ui.isChannelDetached(activeTarget)) {
+    if (activeTarget.isChannel() && ui.isChannelDisconnected(activeTarget)) {
       ui.setInputEnabled(false);
       return;
     }
@@ -382,7 +384,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     if (target == null || target.isStatus() || target.isUiOnly()) return;
 
     if (target.isChannel()) {
-      detachChannel(target);
+      disconnectChannel(target);
       return;
     }
 
@@ -420,7 +422,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     TargetRef status = new TargetRef(sid, "status");
     ensureTargetExists(status);
     ensureTargetExists(target);
-    boolean detached = ui.isChannelDetached(target);
+    boolean detached = ui.isChannelDisconnected(target);
 
     if (Objects.equals(activeTarget, target)) {
       applyTargetContext(status);
@@ -429,6 +431,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     }
 
     detachedChannelsByUserOrKick.remove(target);
+    bouncerDetachedChannels.remove(target);
     channelsClosedByUser.remove(target);
     runtimeConfig.forgetJoinedChannel(sid, target.target());
     userListStore.clear(sid, target.target());
@@ -445,11 +448,44 @@ public class TargetCoordinator implements ActiveTargetPort {
                 () -> {}, err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
   }
 
-  public void detachChannel(TargetRef target) {
-    detachChannel(target, null);
+  public void disconnectChannel(TargetRef target) {
+    disconnectChannel(target, null);
   }
 
-  public void detachChannel(TargetRef target, String reason) {
+  public void disconnectChannel(TargetRef target, String reason) {
+    if (target == null || !target.isChannel()) return;
+
+    String sid = Objects.toString(target.serverId(), "").trim();
+    if (sid.isEmpty()) return;
+
+    TargetRef status = new TargetRef(sid, "status");
+    ensureTargetExists(status);
+    ensureTargetExists(target);
+    String msg = Objects.toString(reason, "").trim();
+
+    channelsClosedByUser.remove(target);
+    detachedChannelsByUserOrKick.add(target);
+    bouncerDetachedChannels.remove(target);
+    ui.setChannelDisconnected(target, true);
+    userListStore.clear(sid, target.target());
+
+    if (Objects.equals(activeTarget, target)) {
+      applyTargetContext(target);
+      ui.setChatActiveTarget(target);
+    }
+
+    if (!connectionCoordinator.isConnected(sid)) {
+      ui.appendStatus(status, "(disconnect)", "Disconnected from " + target.target());
+      return;
+    }
+
+    disposables.add(
+        irc.partChannel(sid, target.target(), msg.isEmpty() ? null : msg)
+            .subscribe(
+                () -> {}, err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
+  }
+
+  public void bouncerDetachChannel(TargetRef target) {
     if (target == null || !target.isChannel()) return;
 
     String sid = Objects.toString(target.serverId(), "").trim();
@@ -459,9 +495,15 @@ public class TargetCoordinator implements ActiveTargetPort {
     ensureTargetExists(status);
     ensureTargetExists(target);
 
+    if (!supportsBouncerDetach(sid)) {
+      disconnectChannel(target);
+      return;
+    }
+
     channelsClosedByUser.remove(target);
-    detachedChannelsByUserOrKick.add(target);
-    ui.setChannelDetached(target, true);
+    detachedChannelsByUserOrKick.remove(target);
+    bouncerDetachedChannels.add(target);
+    ui.setChannelDisconnected(target, true);
     userListStore.clear(sid, target.target());
 
     if (Objects.equals(activeTarget, target)) {
@@ -470,15 +512,13 @@ public class TargetCoordinator implements ActiveTargetPort {
     }
 
     if (!connectionCoordinator.isConnected(sid)) {
-      ui.appendStatus(status, "(detach)", "Detached from " + target.target());
+      ui.appendStatus(status, "(disconnect)", "Disconnected from " + target.target());
       return;
     }
 
-    String msg = Objects.toString(reason, "").trim();
     disposables.add(
-        irc.partChannel(sid, target.target(), msg.isEmpty() ? null : msg)
-            .subscribe(
-                () -> {}, err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
+        bouncerDetach(sid, target.target())
+            .subscribe(() -> {}, err -> ui.appendError(status, "(detach-error)", String.valueOf(err))));
   }
 
   public void joinChannel(TargetRef target) {
@@ -494,8 +534,9 @@ public class TargetCoordinator implements ActiveTargetPort {
     channelsClosedByUser.remove(target);
     runtimeConfig.rememberJoinedChannel(sid, target.target());
     detachedChannelsByUserOrKick.remove(target);
+    bouncerDetachedChannels.remove(target);
     // Keep detached until JOIN is confirmed by the server.
-    ui.setChannelDetached(target, true);
+    ui.setChannelDisconnected(target, true);
 
     if (!connectionCoordinator.isConnected(sid)) {
       ui.appendStatus(status, "(conn)", "Not connected (join queued in config only)");
@@ -508,6 +549,7 @@ public class TargetCoordinator implements ActiveTargetPort {
                 () -> {},
                 err -> {
                   detachedChannelsByUserOrKick.add(target);
+                  bouncerDetachedChannels.remove(target);
                   ui.appendError(status, "(join-error)", String.valueOf(err));
                 }));
   }
@@ -536,6 +578,7 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     if (channelsClosedByUser.remove(target)) {
       detachedChannelsByUserOrKick.remove(target);
+      bouncerDetachedChannels.remove(target);
       userListStore.clear(sid, ch);
       return;
     }
@@ -546,13 +589,13 @@ public class TargetCoordinator implements ActiveTargetPort {
     ensureTargetExists(target);
     String warning = "";
     if (!alreadyDetached) {
-      warning = normalizeDetachedWarning(warningReason);
-      if (warning.isEmpty()) warning = "Detached by server.";
+      warning = normalizeDisconnectedWarning(warningReason);
+      if (warning.isEmpty()) warning = "Disconnected by server.";
     }
     if (warning.isEmpty()) {
-      ui.setChannelDetached(target, true);
+      ui.setChannelDisconnected(target, true);
     } else {
-      ui.setChannelDetached(target, true, warning);
+      ui.setChannelDisconnected(target, true, warning);
     }
     userListStore.clear(sid, ch);
 
@@ -579,8 +622,18 @@ public class TargetCoordinator implements ActiveTargetPort {
     TargetRef status = new TargetRef(sid, "status");
     ensureTargetExists(status);
 
+    if (bouncerDetachedChannels.remove(target)) {
+      detachedChannelsByUserOrKick.remove(target);
+      ui.setChannelDisconnected(target, false);
+      if (Objects.equals(activeTarget, target)) {
+        applyTargetContext(target);
+        ui.setChatActiveTarget(target);
+      }
+      return true;
+    }
+
     if (detachedChannelsByUserOrKick.contains(target)) {
-      ui.setChannelDetached(target, true);
+      ui.setChannelDisconnected(target, true);
       userListStore.clear(sid, ch);
 
       if (connectionCoordinator.isConnected(sid)) {
@@ -597,12 +650,33 @@ public class TargetCoordinator implements ActiveTargetPort {
     }
 
     detachedChannelsByUserOrKick.remove(target);
-    ui.setChannelDetached(target, false);
+    ui.setChannelDisconnected(target, false);
     if (Objects.equals(activeTarget, target)) {
       applyTargetContext(target);
       ui.setChatActiveTarget(target);
     }
     return true;
+  }
+
+  private boolean supportsBouncerDetach(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return false;
+    return irc.isSojuBouncerAvailable(sid) || irc.isZncBouncerDetected(sid);
+  }
+
+  private Completable bouncerDetach(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) {
+      return Completable.error(new IllegalArgumentException("serverId/channel is blank"));
+    }
+    if (irc.isSojuBouncerAvailable(sid)) {
+      return irc.partChannel(sid, ch, "detach");
+    }
+    if (irc.isZncBouncerDetected(sid)) {
+      return irc.sendRaw(sid, "DETACH " + ch);
+    }
+    return irc.partChannel(sid, ch, null);
   }
 
   private void applyTargetContext(TargetRef target) {
@@ -645,7 +719,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     ui.setStatusBarServer(serverDisplay(target.serverId()));
     ui.setUsersChannel(target);
     if (target.isChannel()) {
-      if (ui.isChannelDetached(target)) {
+      if (ui.isChannelDisconnected(target)) {
         ui.setStatusBarCounts(0, 0);
         ui.setUsersNicks(List.of());
       } else {
@@ -920,7 +994,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     return isPrivateTarget(target) && closedPrivateTargetsByUser.contains(target);
   }
 
-  private static String normalizeDetachedWarning(String warningReason) {
+  private static String normalizeDisconnectedWarning(String warningReason) {
     return Objects.toString(warningReason, "").trim();
   }
 

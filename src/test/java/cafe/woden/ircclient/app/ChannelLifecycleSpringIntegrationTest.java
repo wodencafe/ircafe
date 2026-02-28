@@ -106,7 +106,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     stubJoinAndPart(sid, channel);
     markConnected(sid);
 
-    targetCoordinator.detachChannel(ref);
+    targetCoordinator.disconnectChannel(ref);
     connectionCoordinator.handleConnectivityEvent(
         sid, new IrcEvent.Disconnected(Instant.now(), "test disconnect"), null);
     markConnected(sid);
@@ -114,7 +114,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     boolean accepted = targetCoordinator.onJoinedChannel(sid, channel);
 
     assertFalse(accepted);
-    verify(swingUiPort, atLeastOnce()).setChannelDetached(ref, true);
+    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, true);
     verify(ircClientService, atLeastOnce()).partChannel(sid, channel);
   }
 
@@ -127,7 +127,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     runtimeConfig.forgetJoinedChannel(sid, channel);
     emitServerEvent(sid, new IrcEvent.KickedFromChannel(Instant.now(), channel, "chanop", "bye"));
 
-    verify(swingUiPort, atLeastOnce()).setChannelDetached(eq(ref), eq(true), anyString());
+    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(eq(ref), eq(true), anyString());
     assertFalse(targetCoordinator.onJoinedChannel(sid, channel));
   }
 
@@ -148,7 +148,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
 
     assertTrue(accepted);
     verify(ircClientService, atLeastOnce()).joinChannel(sid, channel);
-    verify(swingUiPort, atLeastOnce()).setChannelDetached(ref, false);
+    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, false);
   }
 
   @Test
@@ -163,7 +163,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     markConnected(sid);
 
     verify(swingUiPort, atLeastOnce()).ensureTargetExists(ref);
-    verify(swingUiPort, atLeastOnce()).setChannelDetached(ref, true);
+    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, true);
   }
 
   @Test

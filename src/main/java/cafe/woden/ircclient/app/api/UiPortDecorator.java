@@ -78,8 +78,13 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
-  public Flowable<TargetRef> detachChannelRequests() {
-    return delegate.detachChannelRequests();
+  public Flowable<TargetRef> disconnectChannelRequests() {
+    return delegate.disconnectChannelRequests();
+  }
+
+  @Override
+  public Flowable<TargetRef> bouncerDetachChannelRequests() {
+    return delegate.bouncerDetachChannelRequests();
   }
 
   @Override
@@ -113,18 +118,18 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
-  public void setChannelDetached(TargetRef target, boolean detached) {
-    delegate.setChannelDetached(target, detached);
+  public void setChannelDisconnected(TargetRef target, boolean detached) {
+    delegate.setChannelDisconnected(target, detached);
   }
 
   @Override
-  public void setChannelDetached(TargetRef target, boolean detached, String warningReason) {
-    delegate.setChannelDetached(target, detached, warningReason);
+  public void setChannelDisconnected(TargetRef target, boolean detached, String warningReason) {
+    delegate.setChannelDisconnected(target, detached, warningReason);
   }
 
   @Override
-  public boolean isChannelDetached(TargetRef target) {
-    return delegate.isChannelDetached(target);
+  public boolean isChannelDisconnected(TargetRef target) {
+    return delegate.isChannelDisconnected(target);
   }
 
   @Override

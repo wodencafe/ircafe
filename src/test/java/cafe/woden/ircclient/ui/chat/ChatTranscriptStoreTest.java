@@ -20,6 +20,7 @@ import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.util.List;
 import java.util.Map;
+import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import org.junit.jupiter.api.Test;
 
@@ -250,6 +251,34 @@ class ChatTranscriptStoreTest {
     verify(linkPreviews).insertPreviewForUrlAt(any(), any(), anyString(), anyInt());
   }
 
+  @Test
+  void appendPendingOutgoingChatSkipsSpinnerWhenDeliveryIndicatorsAreDisabled() {
+    ChatTranscriptStore store = newStoreWithTranscriptCapAndDeliveryIndicators(0, false);
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendPendingOutgoingChat(ref, "pending-1", "me", "hello", 10_000L);
+
+    StyledDocument doc = store.document(ref);
+    assertTrue(transcriptTextUnchecked(doc).contains("hello"));
+    assertEquals(0, inlineComponentCount(doc, OutgoingSendIndicator.PendingSpinner.class));
+  }
+
+  @Test
+  void resolvePendingOutgoingChatSkipsConfirmedDotWhenDeliveryIndicatorsAreDisabled() {
+    ChatTranscriptStore store = newStoreWithTranscriptCapAndDeliveryIndicators(0, false);
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendPendingOutgoingChat(ref, "pending-2", "me", "hello", 10_000L);
+    boolean resolved =
+        store.resolvePendingOutgoingChat(
+            ref, "pending-2", "me", "hello", 10_100L, "msg-1", Map.of("msgid", "msg-1"));
+
+    assertTrue(resolved);
+    StyledDocument doc = store.document(ref);
+    assertTrue(transcriptTextUnchecked(doc).contains("hello"));
+    assertEquals(0, inlineComponentCount(doc, OutgoingSendIndicator.ConfirmedDot.class));
+  }
+
   private static ChatTranscriptStore newStore() {
     ChatStyles styles = new ChatStyles(null);
     ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);
@@ -265,7 +294,22 @@ class ChatTranscriptStoreTest {
         styles, renderer, null, null, null, null, null, settingsBus, null);
   }
 
+  private static ChatTranscriptStore newStoreWithTranscriptCapAndDeliveryIndicators(
+      int maxLines, boolean enabled) {
+    ChatStyles styles = new ChatStyles(null);
+    ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);
+    UiSettingsBus settingsBus = mock(UiSettingsBus.class);
+    when(settingsBus.get()).thenReturn(settingsWithTranscriptCap(maxLines, enabled));
+    return new ChatTranscriptStore(
+        styles, renderer, null, null, null, null, null, settingsBus, null);
+  }
+
   private static UiSettings settingsWithTranscriptCap(int maxLines) {
+    return settingsWithTranscriptCap(maxLines, true);
+  }
+
+  private static UiSettings settingsWithTranscriptCap(
+      int maxLines, boolean outgoingDeliveryIndicatorsEnabled) {
     return new UiSettings(
         "darcula",
         "Monospaced",
@@ -313,6 +357,8 @@ class ChatTranscriptStoreTest {
         maxLines,
         true,
         "#6AA2FF",
+        outgoingDeliveryIndicatorsEnabled,
+        true,
         true,
         7,
         6,
@@ -351,5 +397,26 @@ class ChatTranscriptStoreTest {
     } catch (Exception ignored) {
       return 0;
     }
+  }
+
+  private static String transcriptTextUnchecked(StyledDocument doc) {
+    try {
+      return transcriptText(doc);
+    } catch (Exception ignored) {
+      return "";
+    }
+  }
+
+  private static int inlineComponentCount(StyledDocument doc, Class<?> componentType) {
+    if (doc == null || componentType == null) return 0;
+    int count = 0;
+    int len = doc.getLength();
+    for (int i = 0; i < len; i++) {
+      Object component = StyleConstants.getComponent(doc.getCharacterElement(i).getAttributes());
+      if (component != null && componentType.isInstance(component)) {
+        count++;
+      }
+    }
+    return count;
   }
 }

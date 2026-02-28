@@ -580,7 +580,7 @@ public class ConnectionCoordinator {
         TargetRef target = new TargetRef(serverId, ch);
         if (!target.isChannel()) continue;
         ui.ensureTargetExists(target);
-        ui.setChannelDetached(target, true);
+        ui.setChannelDisconnected(target, true);
       } catch (Exception ignored) {
       }
     }

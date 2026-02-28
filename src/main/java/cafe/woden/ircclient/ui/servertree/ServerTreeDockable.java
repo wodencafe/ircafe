@@ -172,6 +172,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   public enum ChannelSortMode {
     ALPHABETICAL,
+    MOST_RECENT_ACTIVITY,
     CUSTOM
   }
 
@@ -202,7 +203,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final FlowableProcessor<TargetRef> joinChannelRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
-  private final FlowableProcessor<TargetRef> detachChannelRequests =
+  private final FlowableProcessor<TargetRef> disconnectChannelRequests =
+      PublishProcessor.<TargetRef>create().toSerialized();
+
+  private final FlowableProcessor<TargetRef> bouncerDetachChannelRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
   private final FlowableProcessor<TargetRef> closeChannelRequests =
@@ -295,6 +299,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final Map<String, ChannelSortMode> channelSortModeByServer = new HashMap<>();
   private final Map<String, ArrayList<String>> channelCustomOrderByServer = new HashMap<>();
   private final Map<String, Map<String, Boolean>> channelAutoReattachByServer = new HashMap<>();
+  private final Map<String, Map<String, Long>> channelActivityRankByServer = new HashMap<>();
+  private long channelActivityRankCounter = 0L;
 
   private final Map<String, ConnectionState> serverStates = new HashMap<>();
   private final Map<String, Boolean> serverDesiredOnline = new HashMap<>();
@@ -336,6 +342,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private PropertyChangeListener jfrStateListener;
   private volatile TreeTypingIndicatorStyle typingIndicatorStyle = TreeTypingIndicatorStyle.DOTS;
   private volatile int unreadBadgeScalePercent = TREE_BADGE_SCALE_PERCENT_DEFAULT;
+  private volatile boolean serverTreeNotificationBadgesEnabled = true;
   private volatile boolean showChannelListNodes = true;
   private volatile boolean showDccTransfersNodes = false;
   private volatile ServerBuiltInNodesVisibility defaultBuiltInNodesVisibility =
@@ -405,6 +412,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     loadPersistedBuiltInNodesVisibility();
     syncTypingIndicatorStyleFromSettings();
     syncUnreadBadgeScaleFromRuntimeConfig();
+    syncServerTreeNotificationBadgesFromSettings();
 
     this.connectBtn = connectBtn;
     this.disconnectBtn = disconnectBtn;
@@ -487,8 +495,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             ref -> {
               if (ref == null) return;
               if (ref.isChannel()) {
-                if (!isChannelDetached(ref)) {
-                  detachChannelRequests.onNext(ref);
+                if (!isChannelDisconnected(ref)) {
+                  disconnectChannelRequests.onNext(ref);
                 }
                 return;
               }
@@ -584,6 +592,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
             syncTypingIndicatorStyleFromSettings();
             syncUnreadBadgeScaleFromRuntimeConfig();
+            syncServerTreeNotificationBadgesFromSettings();
             SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange);
           };
       this.settingsBus.addListener(settingsListener);
@@ -645,7 +654,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           @Override
           public void mousePressed(MouseEvent e) {
             if (maybeHandleHoveredServerActionClick(e)) return;
-            if (maybeHandleDetachedWarningClick(e)) return;
+            if (maybeHandleDisconnectedWarningClick(e)) return;
             maybeSelectRowFromLeftClick(e);
             updateHoveredServerAction(e);
           }
@@ -1440,7 +1449,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return true;
   }
 
-  private boolean maybeHandleDetachedWarningClick(MouseEvent event) {
+  private boolean maybeHandleDisconnectedWarningClick(MouseEvent event) {
     if (event == null || event.isConsumed()) return false;
     if (!SwingUtilities.isLeftMouseButton(event) || event.isPopupTrigger()) return false;
 
@@ -1451,16 +1460,16 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     Object uo = node.getUserObject();
     if (!(uo instanceof NodeData nd) || nd.ref == null || !nd.hasDetachedWarning()) return false;
 
-    Rectangle warningBounds = detachedWarningIndicatorBounds(path, node);
+    Rectangle warningBounds = disconnectedWarningIndicatorBounds(path, node);
     if (warningBounds == null || !warningBounds.contains(event.getPoint())) return false;
 
-    clearChannelDetachedWarning(nd.ref);
+    clearChannelDisconnectedWarning(nd.ref);
     event.consume();
     tree.repaint(warningBounds);
     return true;
   }
 
-  private Rectangle detachedWarningIndicatorBounds(TreePath path, DefaultMutableTreeNode node) {
+  private Rectangle disconnectedWarningIndicatorBounds(TreePath path, DefaultMutableTreeNode node) {
     if (path == null || node == null) return null;
     Rectangle rowBounds = tree.getPathBounds(path);
     if (rowBounds == null) return null;
@@ -1786,24 +1795,37 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         if (!nd.ref.isStatus() && !nd.ref.isUiOnly()) {
           menu.addSeparator();
           if (nd.ref.isChannel()) {
-            boolean detached = isChannelDetached(nd.ref);
+            boolean detached = isChannelDisconnected(nd.ref);
             if (detached) {
-              JMenuItem join = new JMenuItem("Join \"" + nd.label + "\"");
+              JMenuItem join = new JMenuItem("Reconnect \"" + nd.label + "\"");
               join.addActionListener(ev -> joinChannelRequests.onNext(nd.ref));
               menu.add(join);
             } else {
-              JMenuItem detach = new JMenuItem("Detach \"" + nd.label + "\"");
-              detach.addActionListener(ev -> detachChannelRequests.onNext(nd.ref));
-              menu.add(detach);
+              JMenuItem disconnect = new JMenuItem("Disconnect \"" + nd.label + "\"");
+              disconnect.addActionListener(ev -> disconnectChannelRequests.onNext(nd.ref));
+              menu.add(disconnect);
+
+              JMenuItem closeAndPart = new JMenuItem("Close and PART \"" + nd.label + "\"");
+              closeAndPart.addActionListener(ev -> closeChannelRequests.onNext(nd.ref));
+              menu.add(closeAndPart);
+
+              if (supportsBouncerDetach(nd.ref.serverId())) {
+                JMenuItem bouncerDetach =
+                    new JMenuItem("Detach (Bouncer) \"" + nd.label + "\"");
+                bouncerDetach.addActionListener(ev -> bouncerDetachChannelRequests.onNext(nd.ref));
+                menu.add(bouncerDetach);
+              }
             }
-            JCheckBoxMenuItem autoReattach = new JCheckBoxMenuItem("Auto-reattach on startup");
+            JCheckBoxMenuItem autoReattach = new JCheckBoxMenuItem("Auto-reconnect on startup");
             autoReattach.setSelected(isChannelAutoReattach(nd.ref));
             autoReattach.addActionListener(
                 ev -> setChannelAutoReattach(nd.ref, autoReattach.isSelected()));
             menu.add(autoReattach);
-            JMenuItem closeChannel = new JMenuItem("Close Channel \"" + nd.label + "\"");
-            closeChannel.addActionListener(ev -> closeChannelRequests.onNext(nd.ref));
-            menu.add(closeChannel);
+            if (detached) {
+              JMenuItem closeChannel = new JMenuItem("Close Channel \"" + nd.label + "\"");
+              closeChannel.addActionListener(ev -> closeChannelRequests.onNext(nd.ref));
+              menu.add(closeChannel);
+            }
           } else {
             JMenuItem close = new JMenuItem("Close \"" + nd.label + "\"");
             close.addActionListener(ev -> closeTargetRequests.onNext(nd.ref));
@@ -2377,8 +2399,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return joinChannelRequests.onBackpressureLatest();
   }
 
-  public Flowable<TargetRef> detachChannelRequests() {
-    return detachChannelRequests.onBackpressureLatest();
+  public Flowable<TargetRef> disconnectChannelRequests() {
+    return disconnectChannelRequests.onBackpressureLatest();
+  }
+
+  public Flowable<TargetRef> bouncerDetachChannelRequests() {
+    return bouncerDetachChannelRequests.onBackpressureLatest();
   }
 
   public Flowable<TargetRef> closeChannelRequests() {
@@ -2487,10 +2513,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           channelSortModeByServer.put(sid, next);
           if (runtimeConfig != null) {
             runtimeConfig.rememberServerTreeChannelSortMode(
-                sid,
-                next == ChannelSortMode.ALPHABETICAL
-                    ? RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL
-                    : RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM);
+                sid, runtimeChannelSortMode(next));
           }
           sortChannelsUnderChannelList(sid);
           emitManagedChannelsChanged(sid);
@@ -2501,6 +2524,26 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     } else {
       SwingUtilities.invokeLater(apply);
     }
+  }
+
+  private static RuntimeConfigStore.ServerTreeChannelSortMode runtimeChannelSortMode(
+      ChannelSortMode mode) {
+    return switch (mode) {
+      case ALPHABETICAL -> RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL;
+      case MOST_RECENT_ACTIVITY ->
+          RuntimeConfigStore.ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY;
+      case CUSTOM -> RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM;
+    };
+  }
+
+  private static ChannelSortMode uiChannelSortMode(
+      RuntimeConfigStore.ServerTreeChannelSortMode mode) {
+    if (mode == null) return ChannelSortMode.CUSTOM;
+    return switch (mode) {
+      case ALPHABETICAL -> ChannelSortMode.ALPHABETICAL;
+      case MOST_RECENT_ACTIVITY -> ChannelSortMode.MOST_RECENT_ACTIVITY;
+      case CUSTOM -> ChannelSortMode.CUSTOM;
+    };
   }
 
   public void setChannelCustomOrderForServer(String serverId, List<String> channels) {
@@ -2534,9 +2577,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     joinChannelRequests.onNext(target);
   }
 
-  public void requestDetachChannel(TargetRef target) {
+  public void requestDisconnectChannel(TargetRef target) {
     if (target == null || !target.isChannel()) return;
-    detachChannelRequests.onNext(target);
+    disconnectChannelRequests.onNext(target);
   }
 
   public void requestCloseChannel(TargetRef target) {
@@ -4246,6 +4289,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         if (autoByChannel != null) {
           autoByChannel.remove(key);
         }
+        Map<String, Long> activityByChannel = channelActivityRankByServer.get(sid);
+        if (activityByChannel != null) {
+          activityByChannel.remove(key);
+        }
         ArrayList<String> customOrder = channelCustomOrderByServer.get(sid);
         if (customOrder != null) {
           customOrder.removeIf(c -> foldChannelKey(c).equals(key));
@@ -4273,11 +4320,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
   }
 
-  public void setChannelDetached(TargetRef ref, boolean detached) {
-    setChannelDetached(ref, detached, null);
+  public void setChannelDisconnected(TargetRef ref, boolean detached) {
+    setChannelDisconnected(ref, detached, null);
   }
 
-  public void setChannelDetached(TargetRef ref, boolean detached, String warningReason) {
+  public void setChannelDisconnected(TargetRef ref, boolean detached, String warningReason) {
     if (ref == null || !ref.isChannel()) return;
     ensureNode(ref);
     DefaultMutableTreeNode node = leaves.get(ref);
@@ -4312,16 +4359,16 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     emitManagedChannelsChanged(ref.serverId());
   }
 
-  public void clearChannelDetachedWarning(TargetRef ref) {
+  public void clearChannelDisconnectedWarning(TargetRef ref) {
     if (ref == null || !ref.isChannel()) return;
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return;
     Object uo = node.getUserObject();
     if (!(uo instanceof NodeData nd) || !nd.hasDetachedWarning()) return;
-    setChannelDetached(ref, true, "");
+    setChannelDisconnected(ref, true, "");
   }
 
-  public boolean isChannelDetached(TargetRef ref) {
+  public boolean isChannelDisconnected(TargetRef ref) {
     if (ref == null || !ref.isChannel()) return false;
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return false;
@@ -4415,6 +4462,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         runtimeConfig.rememberServerTreeChannelCustomOrder(sid, customOrder);
       }
     }
+    channelActivityRankByServer
+        .computeIfAbsent(sid, __ -> new HashMap<>())
+        .putIfAbsent(key, 0L);
   }
 
   private List<ManagedChannelEntry> snapshotManagedChannelsForServer(String serverId) {
@@ -4482,12 +4532,17 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     ArrayList<DefaultMutableTreeNode> sorted = new ArrayList<>(channelNodes);
     if (sortMode == ChannelSortMode.ALPHABETICAL) {
       sorted.sort(
+          (a, b) -> compareChannelLabels(channelLabelForNode(a), channelLabelForNode(b)));
+    } else if (sortMode == ChannelSortMode.MOST_RECENT_ACTIVITY) {
+      Map<String, Long> byKey = channelActivityRankByServer.getOrDefault(sid, Map.of());
+      sorted.sort(
           (a, b) -> {
             String ac = channelLabelForNode(a);
             String bc = channelLabelForNode(b);
-            int cmp = ac.compareToIgnoreCase(bc);
-            if (cmp != 0) return cmp;
-            return ac.compareTo(bc);
+            long ai = byKey.getOrDefault(foldChannelKey(ac), 0L);
+            long bi = byKey.getOrDefault(foldChannelKey(bc), 0L);
+            if (ai != bi) return Long.compare(bi, ai);
+            return compareChannelLabels(ac, bc);
           });
     } else {
       ArrayList<String> customOrder =
@@ -4505,9 +4560,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             int ai = byKey.getOrDefault(foldChannelKey(ac), Integer.MAX_VALUE);
             int bi = byKey.getOrDefault(foldChannelKey(bc), Integer.MAX_VALUE);
             if (ai != bi) return Integer.compare(ai, bi);
-            int cmp = ac.compareToIgnoreCase(bc);
-            if (cmp != 0) return cmp;
-            return ac.compareTo(bc);
+            return compareChannelLabels(ac, bc);
           });
     }
 
@@ -4540,6 +4593,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     Object uo = node.getUserObject();
     if (!(uo instanceof NodeData nd) || nd.ref == null) return "";
     return Objects.toString(nd.ref.target(), "").trim();
+  }
+
+  private static int compareChannelLabels(String a, String b) {
+    int cmp = a.compareToIgnoreCase(b);
+    if (cmp != 0) return cmp;
+    return a.compareTo(b);
   }
 
   private void persistCustomOrderFromTree(String serverId) {
@@ -4579,10 +4638,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       RuntimeConfigStore.ServerTreeChannelState state =
           runtimeConfig.readServerTreeChannelState(sid);
       if (state != null && state.sortMode() != null) {
-        sortMode =
-            state.sortMode() == RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL
-                ? ChannelSortMode.ALPHABETICAL
-                : ChannelSortMode.CUSTOM;
+        sortMode = uiChannelSortMode(state.sortMode());
       }
       if (state != null && state.customOrder() != null) {
         customOrder.addAll(normalizeCustomOrderList(state.customOrder()));
@@ -4600,6 +4656,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     channelSortModeByServer.put(sid, sortMode);
     channelCustomOrderByServer.put(sid, customOrder);
     channelAutoReattachByServer.put(sid, autoByChannel);
+    channelActivityRankByServer.put(sid, new HashMap<>());
   }
 
   private static String foldChannelKey(String channel) {
@@ -4634,11 +4691,29 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return out;
   }
 
+  private void noteChannelActivity(TargetRef ref) {
+    if (ref == null || !ref.isChannel()) return;
+    String sid = normalizeServerId(ref.serverId());
+    String channel = Objects.toString(ref.target(), "").trim();
+    String key = foldChannelKey(channel);
+    if (sid.isEmpty() || key.isEmpty()) return;
+
+    Map<String, Long> byChannel =
+        channelActivityRankByServer.computeIfAbsent(sid, __ -> new HashMap<>());
+    byChannel.put(key, ++channelActivityRankCounter);
+
+    if (channelSortModeByServer.getOrDefault(sid, ChannelSortMode.CUSTOM)
+        == ChannelSortMode.MOST_RECENT_ACTIVITY) {
+      sortChannelsUnderChannelList(sid);
+    }
+  }
+
   public void markUnread(TargetRef ref) {
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return;
     if (!(node.getUserObject() instanceof NodeData nd)) return;
     nd.unread++;
+    noteChannelActivity(ref);
     model.nodeChanged(node);
     if (ref != null && ref.isChannel()) {
       emitManagedChannelsChanged(ref.serverId());
@@ -4650,6 +4725,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (node == null) return;
     if (!(node.getUserObject() instanceof NodeData nd)) return;
     nd.highlightUnread++;
+    noteChannelActivity(ref);
     model.nodeChanged(node);
     if (ref != null && ref.isChannel()) {
       emitManagedChannelsChanged(ref.serverId());
@@ -4963,6 +5039,33 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return !id.isEmpty() && id.startsWith("znc:") && ephemeralServerIds.contains(id);
   }
 
+  private boolean supportsBouncerDetach(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return false;
+    if (serverStates.getOrDefault(sid, ConnectionState.DISCONNECTED) != ConnectionState.CONNECTED) {
+      return false;
+    }
+    if (isSojuEphemeralServer(sid)
+        || isZncEphemeralServer(sid)
+        || sojuBouncerControlServerIds.contains(sid)
+        || zncBouncerControlServerIds.contains(sid)) {
+      return true;
+    }
+    ServerRuntimeMetadata meta = serverRuntimeMetadata.get(sid);
+    return hasBouncerCapability(meta, "soju.im/bouncer-networks")
+        || hasBouncerCapability(meta, "znc.in/playback");
+  }
+
+  private static boolean hasBouncerCapability(ServerRuntimeMetadata meta, String capability) {
+    if (meta == null) return false;
+    String cap = Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
+    if (cap.isEmpty()) return false;
+    CapabilityState state = meta.ircv3Caps.get(cap);
+    return state == CapabilityState.ENABLED
+        || state == CapabilityState.AVAILABLE
+        || state == CapabilityState.DISABLED;
+  }
+
   private DefaultMutableTreeNode getOrCreateSojuNetworksGroupNode(String originServerId) {
     String origin = Objects.toString(originServerId, "").trim();
     if (origin.isEmpty()) return null;
@@ -5063,7 +5166,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     Object uo = node.getUserObject();
     if (uo instanceof NodeData nd && nd.ref != null) {
       if (nd.ref.isChannel() && nd.hasDetachedWarning()) {
-        return "Detached: " + nd.detachedWarning + " (click warning icon to clear).";
+        return "Disconnected: " + nd.detachedWarning + " (click warning icon to clear).";
       }
       if (nd.ref.isApplicationUnhandledErrors()) {
         return "Uncaught JVM exceptions captured by IRCafe.";
@@ -5220,6 +5323,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     channelSortModeByServer.remove(serverId);
     channelCustomOrderByServer.remove(serverId);
     channelAutoReattachByServer.remove(serverId);
+    channelActivityRankByServer.remove(serverId);
     clearPrivateMessageOnlineStates(serverId);
     leaves.entrySet().removeIf(e -> Objects.equals(e.getKey().serverId(), serverId));
     typingActivityNodes.removeIf(
@@ -5521,6 +5625,19 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.typingIndicatorStyle = TreeTypingIndicatorStyle.from(configured);
   }
 
+  private void syncServerTreeNotificationBadgesFromSettings() {
+    boolean enabled = true;
+    try {
+      enabled =
+          settingsBus == null
+              || settingsBus.get() == null
+              || settingsBus.get().serverTreeNotificationBadgesEnabled();
+    } catch (Exception ignored) {
+      enabled = true;
+    }
+    this.serverTreeNotificationBadgesEnabled = enabled;
+  }
+
   private void syncUnreadBadgeScaleFromRuntimeConfig() {
     int next = TREE_BADGE_SCALE_PERCENT_DEFAULT;
     try {
@@ -5707,8 +5824,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           setText(nd.label);
           boolean detachedChannel = nd.ref != null && nd.ref.isChannel() && nd.detached;
           int style = nd.highlightUnread > 0 ? Font.BOLD : Font.PLAIN;
-          unreadBadgeCount = Math.max(0, nd.unread);
-          highlightBadgeCount = Math.max(0, nd.highlightUnread);
+          if (serverTreeNotificationBadgesEnabled) {
+            unreadBadgeCount = Math.max(0, nd.unread);
+            highlightBadgeCount = Math.max(0, nd.highlightUnread);
+          }
           if (detachedChannel) {
             style |= Font.ITALIC;
           }
@@ -5885,7 +6004,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           float alpha = Math.max(0f, Math.min(1f, typingIndicatorAlpha));
 
           if (detachedWarningIndicatorVisible) {
-            drawDetachedWarningIndicator(g2, slotLeft, 0, slotWidth, getHeight());
+            drawDisconnectedWarningIndicator(g2, slotLeft, 0, slotWidth, getHeight());
           } else {
             switch (style) {
               case KEYBOARD -> drawKeyboardIndicator(g2, x, y, width, height, alpha);
@@ -5980,7 +6099,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       g2.fillOval(cx, cy, dot, dot);
     }
 
-    private void drawDetachedWarningIndicator(
+    private void drawDisconnectedWarningIndicator(
         Graphics2D g2, int slotLeft, int y, int slotWidth, int slotHeight) {
       int icon = Math.max(8, Math.min(10, Math.min(slotWidth - 2, slotHeight - 4)));
       int x = slotLeft + Math.max(0, (slotWidth - icon) / 2);
@@ -6010,6 +6129,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
 
     private int badgesPreferredWidth() {
+      if (!serverTreeNotificationBadgesEnabled) return 0;
       if (unreadBadgeCount <= 0 && highlightBadgeCount <= 0) return 0;
       FontMetrics fm = getFontMetrics(badgeFont());
       if (fm == null) return 0;
@@ -6018,6 +6138,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
 
     private void paintUnreadBadges(Graphics2D g2) {
+      if (!serverTreeNotificationBadgesEnabled) return;
       if (unreadBadgeCount <= 0 && highlightBadgeCount <= 0) return;
       Font badgeFont = badgeFont();
       FontMetrics fm = g2.getFontMetrics(badgeFont);

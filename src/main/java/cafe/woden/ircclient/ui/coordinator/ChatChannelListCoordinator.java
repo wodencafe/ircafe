@@ -93,7 +93,7 @@ public final class ChatChannelListCoordinator {
           serverTree.requestJoinChannel(ref);
           refreshManagedChannelsCard(sid);
         });
-    channelListPanel.setOnAttachChannelRequest(
+    channelListPanel.setOnReconnectChannelRequest(
         channel -> {
           String sid = channelListServerIdForActions();
           String ch = normalizeChannelName(channel);
@@ -101,12 +101,12 @@ public final class ChatChannelListCoordinator {
           serverTree.requestJoinChannel(new TargetRef(sid, ch));
           refreshManagedChannelsCard(sid);
         });
-    channelListPanel.setOnDetachChannelRequest(
+    channelListPanel.setOnDisconnectChannelRequest(
         channel -> {
           String sid = channelListServerIdForActions();
           String ch = normalizeChannelName(channel);
           if (sid.isBlank() || ch.isEmpty()) return;
-          serverTree.requestDetachChannel(new TargetRef(sid, ch));
+          serverTree.requestDisconnectChannel(new TargetRef(sid, ch));
           refreshManagedChannelsCard(sid);
         });
     channelListPanel.setOnCloseChannelRequest(
@@ -129,10 +129,7 @@ public final class ChatChannelListCoordinator {
         mode -> {
           String sid = channelListServerIdForActions();
           if (sid.isBlank()) return;
-          ServerTreeDockable.ChannelSortMode mapped =
-              mode == ChannelListPanel.ManagedSortMode.ALPHABETICAL
-                  ? ServerTreeDockable.ChannelSortMode.ALPHABETICAL
-                  : ServerTreeDockable.ChannelSortMode.CUSTOM;
+          ServerTreeDockable.ChannelSortMode mapped = toServerTreeSortMode(mode);
           serverTree.setChannelSortModeForServer(sid, mapped);
           refreshManagedChannelsCard(sid);
         });
@@ -212,10 +209,28 @@ public final class ChatChannelListCoordinator {
                 })
             .toList();
     ChannelListPanel.ManagedSortMode sortMode =
-        serverTree.channelSortModeForServer(sid) == ServerTreeDockable.ChannelSortMode.ALPHABETICAL
-            ? ChannelListPanel.ManagedSortMode.ALPHABETICAL
-            : ChannelListPanel.ManagedSortMode.CUSTOM;
+        toManagedSortMode(serverTree.channelSortModeForServer(sid));
     channelListPanel.setManagedChannels(sid, rows, sortMode);
+  }
+
+  private static ServerTreeDockable.ChannelSortMode toServerTreeSortMode(
+      ChannelListPanel.ManagedSortMode mode) {
+    if (mode == null) return ServerTreeDockable.ChannelSortMode.CUSTOM;
+    return switch (mode) {
+      case ALPHABETICAL -> ServerTreeDockable.ChannelSortMode.ALPHABETICAL;
+      case MOST_RECENT_ACTIVITY -> ServerTreeDockable.ChannelSortMode.MOST_RECENT_ACTIVITY;
+      case CUSTOM -> ServerTreeDockable.ChannelSortMode.CUSTOM;
+    };
+  }
+
+  private static ChannelListPanel.ManagedSortMode toManagedSortMode(
+      ServerTreeDockable.ChannelSortMode mode) {
+    if (mode == null) return ChannelListPanel.ManagedSortMode.CUSTOM;
+    return switch (mode) {
+      case ALPHABETICAL -> ChannelListPanel.ManagedSortMode.ALPHABETICAL;
+      case MOST_RECENT_ACTIVITY -> ChannelListPanel.ManagedSortMode.MOST_RECENT_ACTIVITY;
+      case CUSTOM -> ChannelListPanel.ManagedSortMode.CUSTOM;
+    };
   }
 
   private void updateUsersDockForChannel(String serverId, String channel) {

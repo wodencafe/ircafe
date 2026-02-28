@@ -888,6 +888,26 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
+  public boolean isZncBouncerDetected(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      return c != null && (c.zncDetected.get() || c.zncPlaybackCapAcked.get());
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
+  public boolean isSojuBouncerAvailable(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      return c != null && c.sojuBouncerNetworksCapAcked.get();
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
   public Completable requestZncPlaybackRange(
       String serverId, String target, Instant fromInclusive, Instant toInclusive) {
     return Completable.fromAction(

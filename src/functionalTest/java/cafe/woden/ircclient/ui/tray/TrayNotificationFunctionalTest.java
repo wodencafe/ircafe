@@ -170,6 +170,8 @@ class TrayNotificationFunctionalTest {
         true,
         "#6AA2FF",
         true,
+        true,
+        true,
         7,
         6,
         30,

@@ -58,6 +58,10 @@ public record UiProperties(
     Boolean memoryUsageWarningSoundEnabled,
     Boolean clientLineColorEnabled,
     String clientLineColor,
+    /** Visual send-status indicators for outbound messages (pending spinner + confirmed dot). */
+    Boolean outgoingDeliveryIndicatorsEnabled,
+    /** Show unread/highlight notification badges in the server tree. */
+    Boolean serverTreeNotificationBadgesEnabled,
     Boolean imageEmbedsEnabled,
     Boolean imageEmbedsCollapsedByDefault,
     Integer imageEmbedsMaxWidthPx,
@@ -726,6 +730,13 @@ public record UiProperties(
     }
     // Default outgoing message color if enabled but not set explicitly.
     clientLineColor = normalizeHexOrDefault(clientLineColor, "#6AA2FF");
+    // Delivery indicators default: enabled.
+    if (outgoingDeliveryIndicatorsEnabled == null) {
+      outgoingDeliveryIndicatorsEnabled = true;
+    }
+    if (serverTreeNotificationBadgesEnabled == null) {
+      serverTreeNotificationBadgesEnabled = true;
+    }
 
     if (layout == null) {
       layout = new Layout(null, null);

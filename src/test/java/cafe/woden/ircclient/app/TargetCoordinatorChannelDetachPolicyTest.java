@@ -44,7 +44,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
 
     coordinator.closeTarget(chan);
 
-    verify(ui, atLeastOnce()).setChannelDetached(chan, true);
+    verify(ui, atLeastOnce()).setChannelDisconnected(chan, true);
     verify(irc).partChannel(eq("libera"), eq("#ircafe"), isNull());
     verify(ui, never()).closeTarget(chan);
     verify(runtimeConfig, never()).forgetJoinedChannel(anyString(), anyString());
@@ -59,7 +59,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
 
     TargetRef chan = new TargetRef("libera", "#ircafe");
-    when(ui.isChannelDetached(chan)).thenReturn(false);
+    when(ui.isChannelDisconnected(chan)).thenReturn(false);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.partChannel("libera", "#ircafe", null)).thenReturn(Completable.complete());
 
@@ -79,7 +79,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
 
     TargetRef chan = new TargetRef("libera", "#ircafe");
-    when(ui.isChannelDetached(chan)).thenReturn(true);
+    when(ui.isChannelDisconnected(chan)).thenReturn(true);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
 
     coordinator.closeChannel(chan);
@@ -99,7 +99,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
 
     TargetRef chan = new TargetRef("libera", "#ircafe");
-    when(ui.isChannelDetached(chan)).thenReturn(false);
+    when(ui.isChannelDisconnected(chan)).thenReturn(false);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.partChannel("libera", "#ircafe", null)).thenReturn(Completable.complete());
 
@@ -108,7 +108,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
 
     coordinator.onChannelMembershipLost("libera", "#ircafe", true);
 
-    verify(ui, never()).setChannelDetached(chan, true);
+    verify(ui, never()).setChannelDisconnected(chan, true);
     verify(ui, never()).ensureTargetExists(chan);
   }
 
@@ -128,7 +128,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
     boolean accepted = coordinator.onJoinedChannel("libera", "#ircafe");
 
     assertFalse(accepted);
-    verify(ui, atLeastOnce()).setChannelDetached(chan, true);
+    verify(ui, atLeastOnce()).setChannelDisconnected(chan, true);
     verify(irc).partChannel("libera", "#ircafe");
   }
 
@@ -151,7 +151,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
     assertTrue(accepted);
     verify(runtimeConfig).rememberJoinedChannel("libera", "#ircafe");
     verify(irc).joinChannel("libera", "#ircafe");
-    verify(ui, atLeastOnce()).setChannelDetached(chan, false);
+    verify(ui, atLeastOnce()).setChannelDisconnected(chan, false);
   }
 
   @Test
@@ -165,9 +165,9 @@ class TargetCoordinatorChannelDetachPolicyTest {
     TargetRef chan = new TargetRef("libera", "#offline-detach");
     when(connectionCoordinator.isConnected("libera")).thenReturn(false);
 
-    coordinator.detachChannel(chan);
+    coordinator.disconnectChannel(chan);
 
-    verify(ui, atLeastOnce()).setChannelDetached(chan, true);
+    verify(ui, atLeastOnce()).setChannelDisconnected(chan, true);
     verify(irc, never()).partChannel(eq("libera"), eq("#offline-detach"), isNull());
     verify(irc, never()).partChannel("libera", "#offline-detach");
   }
@@ -186,7 +186,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
     coordinator.joinChannel(chan);
 
     verify(runtimeConfig).rememberJoinedChannel("libera", "#queued-join");
-    verify(ui, atLeastOnce()).setChannelDetached(chan, true);
+    verify(ui, atLeastOnce()).setChannelDisconnected(chan, true);
     verify(irc, never()).joinChannel("libera", "#queued-join");
   }
 
@@ -206,7 +206,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
     coordinator.joinChannel(chan);
 
     verify(runtimeConfig).rememberJoinedChannel("libera", "#join-error");
-    verify(ui, atLeastOnce()).setChannelDetached(chan, true);
+    verify(ui, atLeastOnce()).setChannelDisconnected(chan, true);
     verify(ui, atLeastOnce())
         .appendError(eq(new TargetRef("libera", "status")), eq("(join-error)"), anyString());
   }
@@ -224,9 +224,89 @@ class TargetCoordinatorChannelDetachPolicyTest {
     boolean accepted = coordinator.onJoinedChannel("libera", "#attached");
 
     assertTrue(accepted);
-    verify(ui, atLeastOnce()).setChannelDetached(chan, false);
+    verify(ui, atLeastOnce()).setChannelDisconnected(chan, false);
     verify(irc, never()).partChannel("libera", "#attached");
     verify(irc, never()).partChannel(eq("libera"), eq("#attached"), isNull());
+  }
+
+  @Test
+  void bouncerDetachUsesSojuDetachReasonAndReattachesOnJoin() {
+    UiPort ui = mock(UiPort.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isSojuBouncerAvailable("libera")).thenReturn(true);
+    when(irc.partChannel("libera", "#ircafe", "detach")).thenReturn(Completable.complete());
+
+    coordinator.bouncerDetachChannel(chan);
+    boolean accepted = coordinator.onJoinedChannel("libera", "#ircafe");
+
+    assertTrue(accepted);
+    verify(irc).partChannel("libera", "#ircafe", "detach");
+    verify(irc, never()).partChannel("libera", "#ircafe");
+    verify(ui, atLeastOnce()).setChannelDisconnected(chan, false);
+  }
+
+  @Test
+  void bouncerDetachUsesZncDetachCommandWhenDetected() {
+    UiPort ui = mock(UiPort.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+
+    TargetRef chan = new TargetRef("libera", "#znc");
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isZncBouncerDetected("libera")).thenReturn(true);
+    when(irc.sendRaw("libera", "DETACH #znc")).thenReturn(Completable.complete());
+
+    coordinator.bouncerDetachChannel(chan);
+
+    verify(irc).sendRaw("libera", "DETACH #znc");
+    verify(irc, never()).partChannel("libera", "#znc", null);
+  }
+
+  @Test
+  void disconnectWithoutReasonKeepsRegularPartEvenWhenBouncerIsAvailable() {
+    UiPort ui = mock(UiPort.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+
+    TargetRef chan = new TargetRef("libera", "#reasonless");
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isSojuBouncerAvailable("libera")).thenReturn(true);
+    when(irc.partChannel("libera", "#reasonless", null)).thenReturn(Completable.complete());
+
+    coordinator.disconnectChannel(chan);
+
+    verify(irc).partChannel("libera", "#reasonless", null);
+    verify(irc, never()).partChannel("libera", "#reasonless", "detach");
+    verify(irc, never()).sendRaw("libera", "DETACH #reasonless");
+  }
+
+  @Test
+  void explicitPartReasonKeepsRegularPartEvenWhenBouncerIsAvailable() {
+    UiPort ui = mock(UiPort.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+
+    TargetRef chan = new TargetRef("libera", "#reason");
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isSojuBouncerAvailable("libera")).thenReturn(true);
+    when(irc.partChannel("libera", "#reason", "brb")).thenReturn(Completable.complete());
+
+    coordinator.disconnectChannel(chan, "brb");
+
+    verify(irc).partChannel("libera", "#reason", "brb");
+    verify(irc, never()).partChannel("libera", "#reason", "detach");
   }
 
   private static TargetCoordinator newCoordinator(

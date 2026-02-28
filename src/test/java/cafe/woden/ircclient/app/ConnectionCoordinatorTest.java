@@ -230,7 +230,7 @@ class ConnectionCoordinatorTest {
     verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Alice"));
     verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Bob"));
     verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#ircafe"));
-    verify(ui, atLeastOnce()).setChannelDetached(new TargetRef("libera", "#ircafe"), true);
+    verify(ui, atLeastOnce()).setChannelDisconnected(new TargetRef("libera", "#ircafe"), true);
     verify(runtimeConfig, never()).rememberNick(anyString(), anyString());
   }
 
@@ -281,8 +281,8 @@ class ConnectionCoordinatorTest {
         irc, ui, serverRegistry, serverCatalog, runtimeConfig, LOG_PROPS, trayNotificationService);
 
     verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#ircafe"));
-    verify(ui, atLeastOnce()).setChannelDetached(new TargetRef("libera", "#ircafe"), true);
+    verify(ui, atLeastOnce()).setChannelDisconnected(new TargetRef("libera", "#ircafe"), true);
     verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#java"));
-    verify(ui, atLeastOnce()).setChannelDetached(new TargetRef("libera", "#java"), true);
+    verify(ui, atLeastOnce()).setChannelDisconnected(new TargetRef("libera", "#java"), true);
   }
 }

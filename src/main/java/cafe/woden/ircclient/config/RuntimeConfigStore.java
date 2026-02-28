@@ -175,6 +175,7 @@ public class RuntimeConfigStore {
 
   public enum ServerTreeChannelSortMode {
     ALPHABETICAL("alphabetical"),
+    MOST_RECENT_ACTIVITY("most-recent-activity"),
     CUSTOM("custom");
 
     private final String token;
@@ -191,6 +192,12 @@ public class RuntimeConfigStore {
       String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
       if ("alphabetical".equals(raw) || "alpha".equals(raw) || "a-z".equals(raw)) {
         return ALPHABETICAL;
+      }
+      if ("most-recent-activity".equals(raw)
+          || "recent-activity".equals(raw)
+          || "recent".equals(raw)
+          || "activity".equals(raw)) {
+        return MOST_RECENT_ACTIVITY;
       }
       return CUSTOM;
     }
@@ -5339,6 +5346,40 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist outgoing message color setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberOutgoingDeliveryIndicatorsEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("outgoingDeliveryIndicatorsEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist outgoing delivery indicators setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberServerTreeNotificationBadgesEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("serverTreeNotificationBadgesEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist server tree notification badges setting to '{}'", file, e);
     }
   }
 

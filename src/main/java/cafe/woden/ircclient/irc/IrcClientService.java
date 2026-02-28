@@ -321,6 +321,20 @@ public interface IrcClientService {
   }
 
   /**
+   * @return true when this connection appears to be backed by a ZNC bouncer session.
+   */
+  default boolean isZncBouncerDetected(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return true if the connection negotiated {@code soju.im/bouncer-networks}.
+   */
+  default boolean isSojuBouncerAvailable(String serverId) {
+    return false;
+  }
+
+  /**
    * Request backlog playback from ZNC.
    *
    * <p>Requires {@code znc.in/playback}. ZNC playback replays messages as normal

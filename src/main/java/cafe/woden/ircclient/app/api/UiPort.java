@@ -54,7 +54,12 @@ public interface UiPort {
   }
 
   /** User-initiated request to detach from an attached channel target. */
-  default Flowable<TargetRef> detachChannelRequests() {
+  default Flowable<TargetRef> disconnectChannelRequests() {
+    return Flowable.empty();
+  }
+
+  /** User-initiated request to bouncer-detach from an attached channel target. */
+  default Flowable<TargetRef> bouncerDetachChannelRequests() {
     return Flowable.empty();
   }
 
@@ -78,20 +83,20 @@ public interface UiPort {
   void closeTarget(TargetRef target);
 
   /** Mark a channel target as detached/attached in the tree without removing it. */
-  default void setChannelDetached(TargetRef target, boolean detached) {}
+  default void setChannelDisconnected(TargetRef target, boolean detached) {}
 
   /**
    * Mark a channel target as detached/attached and optionally attach a warning reason shown in the
    * tree UI.
    */
-  default void setChannelDetached(TargetRef target, boolean detached, String warningReason) {
-    setChannelDetached(target, detached);
+  default void setChannelDisconnected(TargetRef target, boolean detached, String warningReason) {
+    setChannelDisconnected(target, detached);
   }
 
   /**
    * @return true if the channel target is currently marked detached in the tree.
    */
-  default boolean isChannelDetached(TargetRef target) {
+  default boolean isChannelDisconnected(TargetRef target) {
     return false;
   }
 

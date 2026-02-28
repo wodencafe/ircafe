@@ -59,6 +59,11 @@ ircafe:
     clientLineColorEnabled: false
     # Color when enabled (hex like "#RRGGBB").
     clientLineColor: "#6AA2FF"
+    # Show visual delivery indicators for outgoing messages (pending spinner + confirmed dot).
+    # If false, only the indicators are hidden; message send/reconcile behavior is unchanged.
+    outgoingDeliveryIndicatorsEnabled: true
+    # Show unread/highlight notification badges in the server tree.
+    serverTreeNotificationBadgesEnabled: true
 
     # Optional chat transcript color overrides (hex like "#RRGGBB").
     # Leave unset to follow the active theme/preset defaults.

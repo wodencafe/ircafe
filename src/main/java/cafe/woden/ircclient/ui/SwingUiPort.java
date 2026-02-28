@@ -273,8 +273,13 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public Flowable<TargetRef> detachChannelRequests() {
-    return serverTree.detachChannelRequests();
+  public Flowable<TargetRef> disconnectChannelRequests() {
+    return serverTree.disconnectChannelRequests();
+  }
+
+  @Override
+  public Flowable<TargetRef> bouncerDetachChannelRequests() {
+    return serverTree.bouncerDetachChannelRequests();
   }
 
   @Override
@@ -318,18 +323,18 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public void setChannelDetached(TargetRef target, boolean detached) {
-    onEdt(() -> serverTree.setChannelDetached(target, detached));
+  public void setChannelDisconnected(TargetRef target, boolean detached) {
+    onEdt(() -> serverTree.setChannelDisconnected(target, detached));
   }
 
   @Override
-  public void setChannelDetached(TargetRef target, boolean detached, String warningReason) {
-    onEdt(() -> serverTree.setChannelDetached(target, detached, warningReason));
+  public void setChannelDisconnected(TargetRef target, boolean detached, String warningReason) {
+    onEdt(() -> serverTree.setChannelDisconnected(target, detached, warningReason));
   }
 
   @Override
-  public boolean isChannelDetached(TargetRef target) {
-    return onEdtCall(() -> serverTree.isChannelDetached(target), false);
+  public boolean isChannelDisconnected(TargetRef target) {
+    return onEdtCall(() -> serverTree.isChannelDisconnected(target), false);
   }
 
   @Override

@@ -33,6 +33,7 @@ class MediatorUiSubscriptionBinderTest {
 
     PublishProcessor<TargetRef> joinRequests = PublishProcessor.create();
     PublishProcessor<TargetRef> detachRequests = PublishProcessor.create();
+    PublishProcessor<TargetRef> bouncerDetachRequests = PublishProcessor.create();
     PublishProcessor<TargetRef> closeChannelRequests = PublishProcessor.create();
 
     when(ui.targetSelections()).thenReturn(Flowable.never());
@@ -42,7 +43,8 @@ class MediatorUiSubscriptionBinderTest {
     when(ui.outboundLines()).thenReturn(Flowable.never());
     when(ui.closeTargetRequests()).thenReturn(Flowable.never());
     when(ui.joinChannelRequests()).thenReturn(joinRequests);
-    when(ui.detachChannelRequests()).thenReturn(detachRequests);
+    when(ui.disconnectChannelRequests()).thenReturn(detachRequests);
+    when(ui.bouncerDetachChannelRequests()).thenReturn(bouncerDetachRequests);
     when(ui.closeChannelRequests()).thenReturn(closeChannelRequests);
     when(ui.clearLogRequests()).thenReturn(Flowable.never());
 
@@ -52,10 +54,12 @@ class MediatorUiSubscriptionBinderTest {
     TargetRef channel = new TargetRef("libera", "#ircafe");
     joinRequests.onNext(channel);
     detachRequests.onNext(channel);
+    bouncerDetachRequests.onNext(channel);
     closeChannelRequests.onNext(channel);
 
     verify(targetCoordinator, timeout(1_000)).joinChannel(channel);
-    verify(targetCoordinator, timeout(1_000)).detachChannel(channel);
+    verify(targetCoordinator, timeout(1_000)).disconnectChannel(channel);
+    verify(targetCoordinator, timeout(1_000)).bouncerDetachChannel(channel);
     verify(targetCoordinator, timeout(1_000)).closeChannel(channel);
   }
 }

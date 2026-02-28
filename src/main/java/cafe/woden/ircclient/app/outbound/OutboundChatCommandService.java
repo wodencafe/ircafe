@@ -179,7 +179,7 @@ public class OutboundChatCommandService {
       }
     }
 
-    targetCoordinator.detachChannel(target, msg);
+    targetCoordinator.disconnectChannel(target, msg);
   }
 
   public void handleConnect(String target) {
