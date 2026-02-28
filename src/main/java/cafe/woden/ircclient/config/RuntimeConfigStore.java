@@ -130,6 +130,49 @@ public class RuntimeConfigStore {
     }
   }
 
+  public enum ServerTreeRootSiblingNode {
+    CHANNEL_LIST("channelList"),
+    NOTIFICATIONS("notifications"),
+    OTHER("other"),
+    PRIVATE_MESSAGES("privateMessages");
+
+    private final String token;
+
+    ServerTreeRootSiblingNode(String token) {
+      this.token = token;
+    }
+
+    public String token() {
+      return token;
+    }
+
+    public static ServerTreeRootSiblingNode fromToken(String token) {
+      String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
+      return switch (raw) {
+        case "channellist", "channel-list", "channel_list" -> CHANNEL_LIST;
+        case "notifications", "notification" -> NOTIFICATIONS;
+        case "other" -> OTHER;
+        case "privatemessages", "private-messages", "private_messages", "pm" -> PRIVATE_MESSAGES;
+        default -> null;
+      };
+    }
+  }
+
+  public record ServerTreeRootSiblingOrder(List<ServerTreeRootSiblingNode> order) {
+    public static ServerTreeRootSiblingOrder defaults() {
+      return new ServerTreeRootSiblingOrder(
+          List.of(
+              ServerTreeRootSiblingNode.CHANNEL_LIST,
+              ServerTreeRootSiblingNode.NOTIFICATIONS,
+              ServerTreeRootSiblingNode.OTHER,
+              ServerTreeRootSiblingNode.PRIVATE_MESSAGES));
+    }
+
+    public boolean isDefaultOrder() {
+      return this.equals(defaults());
+    }
+  }
+
   public enum ServerTreeChannelSortMode {
     ALPHABETICAL("alphabetical"),
     CUSTOM("custom");
@@ -1389,6 +1432,87 @@ public class RuntimeConfigStore {
     }
   }
 
+  /**
+   * Reads persisted per-server order for top-level server sibling nodes.
+   *
+   * <p>Stored under {@code ircafe.ui.serverTree.rootSiblingOrderByServer.<serverId>}.
+   */
+  public synchronized Map<String, ServerTreeRootSiblingOrder> readServerTreeRootSiblingOrderByServer() {
+    try {
+      if (file.toString().isBlank()) return Map.of();
+      if (!Files.exists(file)) return Map.of();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Map.of();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Map.of();
+
+      Object serverTreeObj = ui.get("serverTree");
+      if (!(serverTreeObj instanceof Map<?, ?> serverTree)) return Map.of();
+
+      Object byServerObj = serverTree.get("rootSiblingOrderByServer");
+      if (!(byServerObj instanceof Map<?, ?> byServer)) return Map.of();
+
+      LinkedHashMap<String, ServerTreeRootSiblingOrder> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : byServer.entrySet()) {
+        String sid = Objects.toString(entry.getKey(), "").trim();
+        if (sid.isEmpty()) continue;
+
+        List<ServerTreeRootSiblingNode> parsed =
+            parseRootSiblingNodeOrder(entry.getValue(), List.of());
+        ServerTreeRootSiblingOrder order =
+            normalizeRootSiblingOrder(new ServerTreeRootSiblingOrder(parsed));
+        if (order.isDefaultOrder()) continue;
+        out.put(sid, order);
+      }
+
+      if (out.isEmpty()) return Map.of();
+      return Map.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read server-tree root sibling order from '{}'", file, e);
+      return Map.of();
+    }
+  }
+
+  /**
+   * Persists per-server order for top-level server sibling nodes.
+   *
+   * <p>When order matches defaults, the server entry is removed to keep config compact.
+   */
+  public synchronized void rememberServerTreeRootSiblingOrder(
+      String serverId, ServerTreeRootSiblingOrder order) {
+    try {
+      if (file.toString().isBlank()) return;
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+
+      ServerTreeRootSiblingOrder next =
+          normalizeRootSiblingOrder(
+              order == null ? ServerTreeRootSiblingOrder.defaults() : order);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> serverTree = getOrCreateMap(ui, "serverTree");
+      Map<String, Object> byServer = getOrCreateMap(serverTree, "rootSiblingOrderByServer");
+
+      if (next.isDefaultOrder()) {
+        byServer.remove(sid);
+      } else {
+        byServer.put(sid, rootSiblingNodeTokens(next.order()));
+      }
+
+      if (byServer.isEmpty()) serverTree.remove("rootSiblingOrderByServer");
+      if (serverTree.isEmpty()) ui.remove("serverTree");
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist server-tree root sibling order to '{}'", file, e);
+    }
+  }
+
   private static ServerTreeBuiltInLayout normalizeBuiltInLayout(ServerTreeBuiltInLayout layout) {
     ServerTreeBuiltInLayout defaults = ServerTreeBuiltInLayout.defaults();
     List<ServerTreeBuiltInLayoutNode> defaultOther = defaults.otherOrder();
@@ -1449,6 +1573,61 @@ public class RuntimeConfigStore {
     if (order == null || order.isEmpty()) return List.of();
     ArrayList<String> out = new ArrayList<>(order.size());
     for (ServerTreeBuiltInLayoutNode node : order) {
+      if (node == null) continue;
+      out.add(node.token());
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private static ServerTreeRootSiblingOrder normalizeRootSiblingOrder(
+      ServerTreeRootSiblingOrder order) {
+    ServerTreeRootSiblingOrder defaults = ServerTreeRootSiblingOrder.defaults();
+    List<ServerTreeRootSiblingNode> raw =
+        order == null ? List.of() : parseRootSiblingNodeOrder(order.order(), List.of());
+
+    ArrayList<ServerTreeRootSiblingNode> out = new ArrayList<>();
+    for (ServerTreeRootSiblingNode node : raw) {
+      if (node == null || out.contains(node)) continue;
+      out.add(node);
+    }
+    for (ServerTreeRootSiblingNode node : defaults.order()) {
+      if (node == null || out.contains(node)) continue;
+      out.add(node);
+    }
+
+    return new ServerTreeRootSiblingOrder(List.copyOf(out));
+  }
+
+  private static List<ServerTreeRootSiblingNode> parseRootSiblingNodeOrder(
+      Object rawOrder, List<ServerTreeRootSiblingNode> fallback) {
+    Object raw = rawOrder;
+    if (raw instanceof Map<?, ?> map) {
+      raw = map.get("order");
+    }
+
+    ArrayList<ServerTreeRootSiblingNode> out = new ArrayList<>();
+    if (raw instanceof List<?> list) {
+      for (Object entry : list) {
+        ServerTreeRootSiblingNode node =
+            ServerTreeRootSiblingNode.fromToken(Objects.toString(entry, ""));
+        if (node == null || out.contains(node)) continue;
+        out.add(node);
+      }
+    } else if (raw instanceof ServerTreeRootSiblingNode node) {
+      out.add(node);
+    } else if (raw instanceof String token) {
+      ServerTreeRootSiblingNode node = ServerTreeRootSiblingNode.fromToken(token);
+      if (node != null) out.add(node);
+    }
+
+    if (out.isEmpty()) return fallback == null ? List.of() : List.copyOf(fallback);
+    return List.copyOf(out);
+  }
+
+  private static List<String> rootSiblingNodeTokens(List<ServerTreeRootSiblingNode> order) {
+    if (order == null || order.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(order.size());
+    for (ServerTreeRootSiblingNode node : order) {
       if (node == null) continue;
       out.add(node.token());
     }

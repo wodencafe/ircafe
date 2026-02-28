@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.ui.servertree;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.IrcProperties;
@@ -14,9 +16,12 @@ import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.SwingUtilities;
+import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreePath;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -132,6 +137,143 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
         });
   }
 
+  @Test
+  void persistedRootSiblingOrderReordersTopLevelServerSiblings() throws Exception {
+    Path cfg = tempDir.resolve("ircafe.yml");
+    RuntimeConfigStore runtime =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of(server("libera"))));
+    runtime.rememberServerTreeBuiltInLayout(
+        "libera",
+        new RuntimeConfigStore.ServerTreeBuiltInLayout(
+            List.of(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS),
+            List.of(
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.LOG_VIEWER,
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.FILTERS,
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.IGNORES,
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR,
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.INTERCEPTORS)));
+    runtime.rememberServerTreeRootSiblingOrder(
+        "libera",
+        new RuntimeConfigStore.ServerTreeRootSiblingOrder(
+            List.of(
+                RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER,
+                RuntimeConfigStore.ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
+                RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST,
+                RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS)));
+
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable(runtime);
+            invokeAddServerRoot(dockable, "libera");
+
+            Object serverNodes = serverNodes(dockable, "libera");
+            DefaultMutableTreeNode serverNode = nodeField(serverNodes, "serverNode");
+            DefaultMutableTreeNode pmNode = nodeField(serverNodes, "pmNode");
+            DefaultMutableTreeNode otherNode = nodeField(serverNodes, "otherNode");
+            DefaultMutableTreeNode notificationsNode =
+                leafNode(dockable, TargetRef.notifications("libera"));
+            DefaultMutableTreeNode channelListNode =
+                leafNode(dockable, TargetRef.channelList("libera"));
+
+            assertEquals(0, serverNode.getIndex(otherNode));
+            assertEquals(1, serverNode.getIndex(pmNode));
+            assertEquals(2, serverNode.getIndex(channelListNode));
+            assertEquals(3, serverNode.getIndex(notificationsNode));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void persistingRootSiblingOrderTracksCurrentServerTreeOrder() throws Exception {
+    Path cfg = tempDir.resolve("ircafe.yml");
+    RuntimeConfigStore runtime =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of(server("libera"))));
+    runtime.rememberServerTreeBuiltInLayout(
+        "libera",
+        new RuntimeConfigStore.ServerTreeBuiltInLayout(
+            List.of(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS),
+            List.of(
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.LOG_VIEWER,
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.FILTERS,
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.IGNORES,
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR,
+                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.INTERCEPTORS)));
+
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable(runtime);
+            invokeAddServerRoot(dockable, "libera");
+
+            Object serverNodes = serverNodes(dockable, "libera");
+            DefaultMutableTreeNode serverNode = nodeField(serverNodes, "serverNode");
+            DefaultMutableTreeNode pmNode = nodeField(serverNodes, "pmNode");
+            DefaultMutableTreeNode otherNode = nodeField(serverNodes, "otherNode");
+            DefaultMutableTreeNode notificationsNode =
+                leafNode(dockable, TargetRef.notifications("libera"));
+            DefaultMutableTreeNode channelListNode =
+                leafNode(dockable, TargetRef.channelList("libera"));
+            DefaultTreeModel model = model(dockable);
+
+            moveToServerIndex(model, serverNode, pmNode, 0);
+            moveToServerIndex(model, serverNode, channelListNode, 1);
+            moveToServerIndex(model, serverNode, otherNode, 2);
+            moveToServerIndex(model, serverNode, notificationsNode, 3);
+
+            invokePersistRootSiblingOrderFromTree(dockable, "libera");
+
+            RuntimeConfigStore.ServerTreeRootSiblingOrder persisted =
+                runtime.readServerTreeRootSiblingOrderByServer().get("libera");
+            assertNotNull(persisted);
+            assertEquals(
+                List.of(
+                    RuntimeConfigStore.ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
+                    RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST,
+                    RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER,
+                    RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS),
+                persisted.order());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void otherNodeIsCollapsedByDefaultWhenServerIsAdded() throws Exception {
+    AtomicReference<ServerTreeDockable> ref = new AtomicReference<>();
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable(null);
+            invokeAddServerRoot(dockable, "libera");
+            ref.set(dockable);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+    onEdt(() -> {});
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = ref.get();
+            Object serverNodes = serverNodes(dockable, "libera");
+            DefaultMutableTreeNode serverNode = nodeField(serverNodes, "serverNode");
+            DefaultMutableTreeNode otherNode = nodeField(serverNodes, "otherNode");
+            JTree tree = tree(dockable);
+
+            assertFalse(tree.isExpanded(new TreePath(otherNode.getPath())));
+            assertTrue(tree.isExpanded(new TreePath(serverNode.getPath())));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
   private static ServerTreeDockable newDockable(RuntimeConfigStore runtimeConfig) {
     return new ServerTreeDockable(
         null,
@@ -177,6 +319,14 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
     m.invoke(dockable, serverId);
   }
 
+  private static void invokePersistRootSiblingOrderFromTree(
+      ServerTreeDockable dockable, String serverId) throws Exception {
+    Method m =
+        ServerTreeDockable.class.getDeclaredMethod("persistRootSiblingOrderFromTree", String.class);
+    m.setAccessible(true);
+    m.invoke(dockable, serverId);
+  }
+
   @SuppressWarnings("unchecked")
   private static Object serverNodes(ServerTreeDockable dockable, String serverId) throws Exception {
     Field f = ServerTreeDockable.class.getDeclaredField("servers");
@@ -205,6 +355,19 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
     Field f = ServerTreeDockable.class.getDeclaredField("model");
     f.setAccessible(true);
     return (DefaultTreeModel) f.get(dockable);
+  }
+
+  private static JTree tree(ServerTreeDockable dockable) throws Exception {
+    Field f = ServerTreeDockable.class.getDeclaredField("tree");
+    f.setAccessible(true);
+    return (JTree) f.get(dockable);
+  }
+
+  private static void moveToServerIndex(
+      DefaultTreeModel model, DefaultMutableTreeNode serverNode, DefaultMutableTreeNode node, int index) {
+    model.removeNodeFromParent(node);
+    int clamped = Math.max(0, Math.min(index, serverNode.getChildCount()));
+    model.insertNodeInto(node, serverNode, clamped);
   }
 
   private static void onEdt(Runnable r) throws InvocationTargetException, InterruptedException {

@@ -343,6 +343,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final Map<String, ServerBuiltInNodesVisibility> builtInNodesVisibilityByServer =
       new HashMap<>();
   private final ServerTreeBuiltInLayoutCoordinator builtInLayoutCoordinator;
+  private final ServerTreeRootSiblingOrderCoordinator rootSiblingOrderCoordinator;
+  private boolean startupSelectionCompleted = false;
   private volatile boolean showApplicationRoot = true;
 
   public ServerTreeDockable(
@@ -399,6 +401,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.settingsBus = settingsBus;
     this.serverDialogs = serverDialogs;
     this.builtInLayoutCoordinator = new ServerTreeBuiltInLayoutCoordinator(runtimeConfig);
+    this.rootSiblingOrderCoordinator = new ServerTreeRootSiblingOrderCoordinator(runtimeConfig);
     loadPersistedBuiltInNodesVisibility();
     syncTypingIndicatorStyleFromSettings();
     syncUnreadBadgeScaleFromRuntimeConfig();
@@ -502,6 +505,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                     == ChannelSortMode.CUSTOM) {
                   persistCustomOrderFromTree(sid);
                 }
+                return;
+              }
+              if (isRootSiblingReorderableNode(movedNode)) {
+                String sid = owningServerIdForNode(movedNode);
+                if (sid.isBlank()) return;
+                persistRootSiblingOrderFromTree(sid);
                 return;
               }
               if (!isMovableBuiltInNode(movedNode)) return;
@@ -690,6 +699,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           private int dragFromIndex = -1;
           private boolean dragBuiltInNode = false;
           private String dragBuiltInServerId = "";
+          private boolean dragRootSiblingNode = false;
+          private String dragRootSiblingServerId = "";
           private boolean dragging = false;
           private boolean draggedWasSelected = false;
           private Cursor oldCursor;
@@ -703,18 +714,21 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
             boolean channelDrag = isDraggableChannelNode(node);
-            boolean builtInDrag = !channelDrag && isMovableBuiltInNode(node);
-            if (!channelDrag && !builtInDrag) return;
+            boolean rootSiblingDrag = !channelDrag && isRootSiblingReorderableNode(node);
+            boolean builtInDrag = !channelDrag && !rootSiblingDrag && isMovableBuiltInNode(node);
+            if (!channelDrag && !rootSiblingDrag && !builtInDrag) return;
 
             DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
             if (parent == null) return;
 
             String sid = "";
-            if (builtInDrag) {
+            if (builtInDrag || rootSiblingDrag) {
               sid = owningServerIdForNode(node);
               if (sid.isBlank()) return;
               ServerNodes sn = servers.get(sid);
-              if (sn == null || (parent != sn.serverNode && parent != sn.otherNode)) return;
+              if (sn == null) return;
+              if (builtInDrag && (parent != sn.serverNode && parent != sn.otherNode)) return;
+              if (rootSiblingDrag && parent != sn.serverNode) return;
             }
 
             dragNode = node;
@@ -722,6 +736,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             dragFromIndex = parent.getIndex(node);
             dragBuiltInNode = builtInDrag;
             dragBuiltInServerId = sid;
+            dragRootSiblingNode = rootSiblingDrag;
+            dragRootSiblingServerId = sid;
             dragging = true;
 
             TreePath sel = tree.getSelectionPath();
@@ -763,7 +779,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             if (dragNode == null || dragParent == null) return null;
 
             TreeDropTarget target =
-                dragBuiltInNode ? computeBuiltInDropTarget(e) : computeChannelDropTarget(e);
+                dragBuiltInNode
+                    ? computeBuiltInDropTarget(e)
+                    : dragRootSiblingNode
+                        ? computeRootSiblingDropTarget(e)
+                        : computeChannelDropTarget(e);
             if (target == null || target.parent() == null) return null;
             return ServerTreeDockable.this.insertionLineForIndex(
                 target.parent(), target.insertBeforeIndex());
@@ -857,6 +877,81 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             return null;
           }
 
+          private TreeDropTarget computeRootSiblingDropTarget(MouseEvent e) {
+            if (dragNode == null || dragParent == null) return null;
+            String sid = Objects.toString(dragRootSiblingServerId, "").trim();
+            if (sid.isEmpty()) return null;
+            ServerNodes sn = servers.get(sid);
+            if (sn == null || sn.serverNode == null) return null;
+            if (dragParent != sn.serverNode) return null;
+            RuntimeConfigStore.ServerTreeRootSiblingNode draggedKind =
+                rootSiblingNodeKindForNode(dragNode);
+            if (draggedKind == null) return null;
+
+            TreePath targetPath = tree.getClosestPathForLocation(e.getX(), e.getY());
+            DefaultMutableTreeNode targetNode = null;
+            if (targetPath != null) {
+              Object o = targetPath.getLastPathComponent();
+              if (o instanceof DefaultMutableTreeNode n) targetNode = n;
+            }
+
+            if (targetNode == null) {
+              int idx = sn.serverNode.getIndex(dragNode);
+              if (idx < 0) idx = 0;
+              return new TreeDropTarget(sn.serverNode, idx);
+            }
+
+            DefaultMutableTreeNode targetParent = (DefaultMutableTreeNode) targetNode.getParent();
+            if (draggedKind == RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS
+                && targetParent == sn.otherNode) {
+              int idx = sn.otherNode.getIndex(targetNode);
+              if (idx < 0) idx = sn.otherNode.getChildCount();
+              Rectangle r = tree.getPathBounds(targetPath);
+              boolean after = r != null && e.getY() > (r.y + (r.height / 2));
+              int desired = idx + (after ? 1 : 0);
+              desired = clampBuiltInInsertIndex(sn, sn.otherNode, desired);
+              return desired < 0 ? null : new TreeDropTarget(sn.otherNode, desired);
+            }
+
+            DefaultMutableTreeNode anchor = resolveRootSiblingDropAnchor(targetNode, sn);
+            if (anchor == null || anchor == dragNode) return null;
+            if (anchor == sn.serverNode) {
+              int idx = sn.serverNode.getIndex(dragNode);
+              if (idx < 0) idx = 0;
+              return new TreeDropTarget(sn.serverNode, idx);
+            }
+            if (anchor.getParent() != sn.serverNode) return null;
+
+            int idx = sn.serverNode.getIndex(anchor);
+            if (idx < 0) return null;
+
+            Rectangle r = tree.getPathBounds(new TreePath(anchor.getPath()));
+            boolean after = r != null && e.getY() > (r.y + (r.height / 2));
+            if (anchor == sn.otherNode
+                && draggedKind == RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS
+                && after) {
+              int otherIdx = clampBuiltInInsertIndex(sn, sn.otherNode, sn.otherNode.getChildCount());
+              return otherIdx < 0 ? null : new TreeDropTarget(sn.otherNode, otherIdx);
+            }
+            int desired = idx + (after ? 1 : 0);
+            desired = Math.max(0, Math.min(sn.serverNode.getChildCount(), desired));
+            return new TreeDropTarget(sn.serverNode, desired);
+          }
+
+          private DefaultMutableTreeNode resolveRootSiblingDropAnchor(
+              DefaultMutableTreeNode node, ServerNodes sn) {
+            DefaultMutableTreeNode cur = node;
+            while (cur != null) {
+              if (cur == sn.serverNode) return cur;
+              if (cur.getParent() == sn.serverNode && rootSiblingNodeKindForNode(cur) != null) {
+                return cur;
+              }
+              javax.swing.tree.TreeNode p = cur.getParent();
+              cur = (p instanceof DefaultMutableTreeNode dmtn) ? dmtn : null;
+            }
+            return null;
+          }
+
           private DefaultMutableTreeNode resolveBuiltInDropAnchor(
               DefaultMutableTreeNode node, ServerNodes sn) {
             DefaultMutableTreeNode cur = node;
@@ -889,6 +984,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             dragFromIndex = -1;
             dragBuiltInNode = false;
             dragBuiltInServerId = "";
+            dragRootSiblingNode = false;
+            dragRootSiblingServerId = "";
             draggedWasSelected = false;
             tree.setLeadSelectionPath(null);
             ServerTreeDockable.this.setInsertionLine(null);
@@ -900,6 +997,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             if (dragNode == null || dragParent == null) return;
             if (dragBuiltInNode) {
               performBuiltInDrop(e);
+            } else if (dragRootSiblingNode) {
+              performRootSiblingDrop(e);
             } else {
               performChannelDrop(e);
             }
@@ -945,6 +1044,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             if (sid.isEmpty()) return;
             ServerNodes sn = servers.get(sid);
             if (sn == null) return;
+            RuntimeConfigStore.ServerTreeBuiltInLayoutNode draggedKind =
+                builtInLayoutNodeKindForNode(dragNode);
 
             TreeDropTarget target = computeBuiltInDropTarget(e);
             if (target == null || target.parent() == null) return;
@@ -963,6 +1064,65 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             model.insertNodeInto(dragNode, targetParent, desiredAfterRemoval);
             dragParent = targetParent;
             persistBuiltInLayoutFromTree(sid);
+            if (draggedKind == RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS
+                && targetParent == sn.serverNode) {
+              persistRootSiblingOrderFromTree(sid);
+            }
+
+            if (draggedWasSelected) {
+              suppressSelectionBroadcast = true;
+              try {
+                TreePath np = new TreePath(dragNode.getPath());
+                tree.setSelectionPath(np);
+              } finally {
+                suppressSelectionBroadcast = false;
+              }
+            }
+
+            TreePath moved = new TreePath(dragNode.getPath());
+            tree.scrollPathToVisible(moved);
+            nodeActions.refreshEnabledState();
+          }
+
+          private void performRootSiblingDrop(MouseEvent e) {
+            String sid = Objects.toString(dragRootSiblingServerId, "").trim();
+            if (sid.isEmpty()) return;
+            ServerNodes sn = servers.get(sid);
+            if (sn == null || sn.serverNode == null) return;
+            RuntimeConfigStore.ServerTreeRootSiblingNode draggedKind =
+                rootSiblingNodeKindForNode(dragNode);
+            if (draggedKind == null) return;
+
+            TreeDropTarget target = computeRootSiblingDropTarget(e);
+            if (target == null || target.parent() == null) return;
+            DefaultMutableTreeNode targetParent = target.parent();
+            if (targetParent != sn.serverNode && targetParent != sn.otherNode) return;
+            if (targetParent == sn.otherNode
+                && draggedKind != RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS) {
+              return;
+            }
+            int desiredAfterRemoval = target.insertBeforeIndex();
+
+            int sourceIndex = dragParent.getIndex(dragNode);
+            boolean sameParent = targetParent == dragParent;
+            if (sameParent && desiredAfterRemoval > sourceIndex) desiredAfterRemoval--;
+            if (sameParent && desiredAfterRemoval == sourceIndex) return;
+
+            model.removeNodeFromParent(dragNode);
+            if (targetParent == sn.serverNode) {
+              desiredAfterRemoval =
+                  Math.max(0, Math.min(targetParent.getChildCount(), desiredAfterRemoval));
+            } else {
+              desiredAfterRemoval = clampBuiltInInsertIndex(sn, targetParent, desiredAfterRemoval);
+              if (desiredAfterRemoval < 0) return;
+            }
+            model.insertNodeInto(dragNode, targetParent, desiredAfterRemoval);
+            dragParent = targetParent;
+
+            if (targetParent == sn.otherNode) {
+              persistBuiltInLayoutFromTree(sid);
+            }
+            persistRootSiblingOrderFromTree(sid);
 
             if (draggedWasSelected) {
               suppressSelectionBroadcast = true;
@@ -984,10 +1144,17 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     tree.addMouseMotionListener(middleDragReorder);
     SwingUtilities.invokeLater(
         () -> {
+          if (startupSelectionCompleted) return;
+          TreePath existingSelection = tree.getSelectionPath();
+          if (existingSelection != null && isPathInCurrentTreeModel(existingSelection)) {
+            startupSelectionCompleted = true;
+            return;
+          }
           String firstServerId =
               servers.values().stream().findFirst().map(sn -> sn.statusRef.serverId()).orElse("");
           if (!firstServerId.isBlank()) {
-            selectBestFallbackForServer(firstServerId);
+            selectStartupDefaultForServer(firstServerId);
+            startupSelectionCompleted = true;
           } else {
             tree.setSelectionPath(defaultSelectionPath());
           }
@@ -1055,6 +1222,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private void persistBuiltInLayoutForServer(
       String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
     builtInLayoutCoordinator.rememberLayout(serverId, layout);
+  }
+
+  private RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
+    return rootSiblingOrderCoordinator.orderForServer(serverId);
+  }
+
+  private void persistRootSiblingOrderForServer(
+      String serverId, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
+    rootSiblingOrderCoordinator.rememberOrder(serverId, order);
   }
 
   private void applyBuiltInNodesVisibilityGlobally(
@@ -2078,11 +2254,38 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         node, this::isMonitorGroupNode, this::isInterceptorsGroupNode, this::targetRefForNode);
   }
 
+  private RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
+      DefaultMutableTreeNode node) {
+    return rootSiblingOrderCoordinator.nodeKindForNode(
+        node, this::isOtherGroupNode, this::isPrivateMessagesGroupNode, this::targetRefForNode);
+  }
+
   private TargetRef targetRefForNode(DefaultMutableTreeNode node) {
     if (node == null) return null;
     Object uo = node.getUserObject();
     if (uo instanceof NodeData nd) return nd.ref;
     return null;
+  }
+
+  private DefaultMutableTreeNode treeNodeForRootSiblingKind(
+      ServerNodes sn, RuntimeConfigStore.ServerTreeRootSiblingNode nodeKind) {
+    if (sn == null || sn.serverNode == null || nodeKind == null) return null;
+    return switch (nodeKind) {
+      case CHANNEL_LIST -> leaves.get(sn.channelListRef);
+      case NOTIFICATIONS -> leaves.get(sn.notificationsRef);
+      case OTHER -> sn.otherNode;
+      case PRIVATE_MESSAGES -> sn.pmNode;
+    };
+  }
+
+  private boolean isRootSiblingReorderableNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    String sid = owningServerIdForNode(node);
+    if (sid.isBlank()) return false;
+    ServerNodes sn = servers.get(sid);
+    if (sn == null || sn.serverNode == null) return false;
+    if (node.getParent() != sn.serverNode) return false;
+    return rootSiblingNodeKindForNode(node) != null;
   }
 
   private DefaultMutableTreeNode treeNodeForBuiltInLayoutKind(
@@ -3422,6 +3625,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       ensureMonitorGroupVisible(sn, vis.monitor());
       ensureInterceptorsGroupVisible(sn, vis.interceptors());
       applyBuiltInLayoutToTree(sn, builtInLayout(sid));
+      applyRootSiblingOrderToTree(sn, rootSiblingOrder(sid));
     }
 
     if (selected != null) {
@@ -3496,6 +3700,29 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             || sn.interceptorsNode.getParent() == sn.otherNode)) {
       selectTarget(TargetRef.interceptorsGroup(sid));
     }
+  }
+
+  private void selectStartupDefaultForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerNodes sn = servers.get(sid);
+    if (sn == null || sn.serverNode == null) return;
+
+    DefaultMutableTreeNode channelListNode = leaves.get(sn.channelListRef);
+    if (channelListNode != null && channelListNode.getParent() == sn.serverNode) {
+      selectTarget(sn.channelListRef);
+      return;
+    }
+
+    DefaultMutableTreeNode notificationsNode = leaves.get(sn.notificationsRef);
+    if (notificationsNode != null && notificationsNode.getParent() == sn.serverNode) {
+      selectTarget(sn.notificationsRef);
+      return;
+    }
+
+    TreePath serverPath = new TreePath(sn.serverNode.getPath());
+    tree.setSelectionPath(serverPath);
+    tree.scrollPathToVisible(serverPath);
   }
 
   private boolean ensureUiLeafVisible(
@@ -3675,19 +3902,79 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       changed = true;
     }
 
-    int pmIdx = sn.serverNode.getIndex(sn.pmNode);
-    int otherIdx = sn.serverNode.getIndex(sn.otherNode);
-    if (pmIdx >= 0 && otherIdx > pmIdx) {
-      sn.serverNode.remove(sn.otherNode);
-      int nextPmIdx = sn.serverNode.getIndex(sn.pmNode);
-      int insertIdx = nextPmIdx >= 0 ? nextPmIdx : sn.serverNode.getChildCount();
-      sn.serverNode.insert(sn.otherNode, insertIdx);
-      changed = true;
-    }
-
     if (changed) {
       model.nodeStructureChanged(sn.serverNode);
     }
+  }
+
+  private void applyRootSiblingOrderToTree(
+      ServerNodes sn, RuntimeConfigStore.ServerTreeRootSiblingOrder requestedOrder) {
+    if (sn == null || sn.serverNode == null) return;
+
+    RuntimeConfigStore.ServerTreeRootSiblingOrder order =
+        ServerTreeRootSiblingOrderCoordinator.normalizeOrder(requestedOrder);
+
+    ArrayList<DefaultMutableTreeNode> current = new ArrayList<>();
+    ArrayList<Integer> slots = new ArrayList<>();
+    for (int i = 0; i < sn.serverNode.getChildCount(); i++) {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) sn.serverNode.getChildAt(i);
+      if (rootSiblingNodeKindForNode(child) == null) continue;
+      current.add(child);
+      slots.add(i);
+    }
+    if (current.size() <= 1) return;
+
+    ArrayList<DefaultMutableTreeNode> desired = new ArrayList<>();
+    for (RuntimeConfigStore.ServerTreeRootSiblingNode nodeKind : order.order()) {
+      DefaultMutableTreeNode node = treeNodeForRootSiblingKind(sn, nodeKind);
+      if (node == null || node.getParent() != sn.serverNode || desired.contains(node)) continue;
+      desired.add(node);
+    }
+    for (DefaultMutableTreeNode node : current) {
+      if (node == null || desired.contains(node)) continue;
+      desired.add(node);
+    }
+
+    if (desired.equals(current)) return;
+
+    for (DefaultMutableTreeNode node : current) {
+      sn.serverNode.remove(node);
+    }
+    for (int i = 0; i < desired.size() && i < slots.size(); i++) {
+      sn.serverNode.insert(desired.get(i), slots.get(i));
+    }
+    model.nodeStructureChanged(sn.serverNode);
+  }
+
+  private void persistRootSiblingOrderFromTree(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerNodes sn = servers.get(sid);
+    if (sn == null || sn.serverNode == null) return;
+
+    ArrayList<RuntimeConfigStore.ServerTreeRootSiblingNode> order = new ArrayList<>();
+    java.util.EnumSet<RuntimeConfigStore.ServerTreeRootSiblingNode> seen =
+        java.util.EnumSet.noneOf(RuntimeConfigStore.ServerTreeRootSiblingNode.class);
+
+    for (int i = 0; i < sn.serverNode.getChildCount(); i++) {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) sn.serverNode.getChildAt(i);
+      RuntimeConfigStore.ServerTreeRootSiblingNode nodeKind = rootSiblingNodeKindForNode(child);
+      if (nodeKind == null || seen.contains(nodeKind)) continue;
+      order.add(nodeKind);
+      seen.add(nodeKind);
+    }
+
+    RuntimeConfigStore.ServerTreeRootSiblingOrder current = rootSiblingOrder(sid);
+    for (RuntimeConfigStore.ServerTreeRootSiblingNode nodeKind : current.order()) {
+      if (nodeKind == null || seen.contains(nodeKind)) continue;
+      order.add(nodeKind);
+      seen.add(nodeKind);
+    }
+
+    RuntimeConfigStore.ServerTreeRootSiblingOrder next =
+        ServerTreeRootSiblingOrderCoordinator.normalizeOrder(
+            new RuntimeConfigStore.ServerTreeRootSiblingOrder(List.copyOf(order)));
+    persistRootSiblingOrderForServer(sid, next);
   }
 
   private void persistBuiltInLayoutFromTree(String serverId) {
@@ -3873,6 +4160,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     model.nodesWereInserted(parent, new int[] {idx});
     if (builtInKind != null) {
       applyBuiltInLayoutToTree(sn, builtInLayout(ref.serverId()));
+      applyRootSiblingOrderToTree(sn, rootSiblingOrder(ref.serverId()));
       persistBuiltInLayoutFromTree(ref.serverId());
     }
     if (ref.isChannel()) {
@@ -4473,6 +4761,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void syncServers(List<ServerEntry> latest) {
+    if (tree.getSelectionPath() != null) {
+      startupSelectionCompleted = true;
+    }
+    TargetRef selectedRefBeforeReload = selectedTargetRef();
+
     Set<String> newIds = new HashSet<>();
     Map<String, String> nextDisplay = new HashMap<>();
     Set<String> nextEphemeral = new HashSet<>();
@@ -4581,10 +4874,20 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             }
           }
 
-          TargetRef first =
-              servers.values().stream().findFirst().map(sn -> sn.statusRef).orElse(null);
-          if (first != null) {
-            selectTarget(first);
+          if (selectedRefBeforeReload != null && leaves.containsKey(selectedRefBeforeReload)) {
+            selectTarget(selectedRefBeforeReload);
+            return;
+          }
+
+          String firstServerId =
+              servers.values().stream().findFirst().map(sn -> sn.statusRef.serverId()).orElse("");
+          if (!firstServerId.isBlank()) {
+            if (!startupSelectionCompleted || selectedRefBeforeReload == null) {
+              selectStartupDefaultForServer(firstServerId);
+              startupSelectionCompleted = true;
+            } else {
+              selectTarget(new TargetRef(firstServerId, "status"));
+            }
           } else {
             tree.setSelectionPath(defaultSelectionPath());
           }
@@ -5063,9 +5366,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             dccTransfersRef);
     servers.put(id, sn);
     applyBuiltInLayoutToTree(sn, builtInLayout(id));
+    applyRootSiblingOrderToTree(sn, rootSiblingOrder(id));
 
     model.reload(root);
     tree.expandPath(new TreePath(serverNode.getPath()));
+    tree.collapsePath(new TreePath(otherNode.getPath()));
     refreshNotificationsCount(id);
     refreshInterceptorGroupCount(id);
     return sn;
