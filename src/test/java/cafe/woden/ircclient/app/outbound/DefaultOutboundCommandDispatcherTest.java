@@ -183,6 +183,12 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
+  void dispatchMarkReadRoutesToChatService() {
+    dispatcher.dispatch(disposables, new ParsedInput.MarkRead());
+    verify(chat).handleMarkRead(disposables);
+  }
+
+  @Test
   void dispatchEditAndRedactRouteToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.EditMessage("abc123", "new body"));
     verify(chat).handleEditMessage(disposables, "abc123", "new body");

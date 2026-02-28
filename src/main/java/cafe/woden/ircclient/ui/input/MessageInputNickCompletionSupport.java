@@ -105,6 +105,7 @@ final class MessageInputNickCompletionSupport {
           new SlashCommand("/dccmsg", "DCC message"),
           new SlashCommand("/chathistory", "IRCv3 CHATHISTORY"),
           new SlashCommand("/history", "Alias: /chathistory"),
+          new SlashCommand("/markread", "Set read marker for current target"),
           new SlashCommand("/help", "Show command help"),
           new SlashCommand("/commands", "Alias: /help"),
           new SlashCommand("/reply", "Reply to message-id"),

@@ -1460,42 +1460,35 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     TranscriptState st = stateByTarget.get(ref);
     if (doc == null || st == null) return;
 
-    removeReadMarkerControl(ref, doc, st);
-
     long markerMs = markerEpochMs > 0 ? markerEpochMs : System.currentTimeMillis();
-    int firstUnreadStart = findFirstUnreadLineStart(doc, markerMs);
-    if (firstUnreadStart < 0) return;
+    st.readMarkerEpochMs = markerMs;
 
-    LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, null, markerMs, null);
+    removeReadMarkerControl(ref, doc, st);
+    tryInsertReadMarkerControl(ref, doc, st, markerMs);
+  }
 
-    int beforeLen = doc.getLength();
-    int pos = normalizeInsertAtLineStart(doc, firstUnreadStart);
-    pos = ensureAtLineStartForInsert(doc, pos);
-    final int insertionStart = pos;
+  public synchronized void clearReadMarker(TargetRef ref) {
+    if (ref == null) return;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null || st == null) return;
+    removeReadMarkerControl(ref, doc, st);
+    st.readMarkerEpochMs = null;
+  }
 
-    HistoryDividerComponent comp = new HistoryDividerComponent("Unread");
-    Font f = safeTranscriptFont();
-    if (f != null) {
-      try {
-        comp.setTranscriptFont(f);
-      } catch (Exception ignored) {
-      }
+  public synchronized void clearReadMarkersForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    java.util.ArrayList<TargetRef> targets = new java.util.ArrayList<>(stateByTarget.keySet());
+    for (TargetRef ref : targets) {
+      if (ref == null || !sid.equals(Objects.toString(ref.serverId(), "").trim())) continue;
+      StyledDocument doc = docs.get(ref);
+      TranscriptState st = stateByTarget.get(ref);
+      if (doc == null || st == null) continue;
+      removeReadMarkerControl(ref, doc, st);
+      st.readMarkerEpochMs = null;
     }
-
-    try {
-      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
-      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
-      StyleConstants.setComponent(attrs, comp);
-      doc.insertString(pos, " ", attrs);
-      Position p = doc.createPosition(pos);
-      doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
-      st.readMarker = new ReadMarkerControl(p);
-    } catch (Exception ignored) {
-      st.readMarker = null;
-    }
-
-    int delta = doc.getLength() - beforeLen;
-    shiftCurrentPresenceBlock(ref, insertionStart, delta);
   }
 
   public synchronized int readMarkerJumpOffset(TargetRef ref) {
@@ -1945,6 +1938,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       if (!allowEmbeds) {
         enforceTranscriptLineCap(ref, doc);
+        maybeRenderPendingReadMarker(ref, epochMs);
         return;
       }
       String embedFrom = meta != null ? meta.fromNick() : from;
@@ -1969,6 +1963,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
             doc, lineEndOffset, meta, match, List.copyOf(blockedManualPreviewUrls));
       }
       enforceTranscriptLineCap(ref, doc);
+      maybeRenderPendingReadMarker(ref, epochMs);
     } catch (Exception ignored) {
     }
   }
@@ -2464,6 +2459,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     if (trimmed > 0) {
       pos = Math.max(0, pos - trimmed);
     }
+    maybeRenderPendingReadMarker(ref, tsEpochMs);
     return pos;
   }
 
@@ -2919,6 +2915,62 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     } finally {
       st.readMarker = null;
     }
+  }
+
+  private boolean tryInsertReadMarkerControl(
+      TargetRef ref, StyledDocument doc, TranscriptState st, long markerEpochMs) {
+    if (ref == null || doc == null || st == null) return false;
+    if (markerEpochMs <= 0L) return false;
+
+    int firstUnreadStart = findFirstUnreadLineStart(doc, markerEpochMs);
+    if (firstUnreadStart < 0) return false;
+
+    LineMeta meta =
+        buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, null, markerEpochMs, null);
+
+    int beforeLen = doc.getLength();
+    int pos = normalizeInsertAtLineStart(doc, firstUnreadStart);
+    pos = ensureAtLineStartForInsert(doc, pos);
+    final int insertionStart = pos;
+
+    HistoryDividerComponent comp = new HistoryDividerComponent("Unread");
+    Font f = safeTranscriptFont();
+    if (f != null) {
+      try {
+        comp.setTranscriptFont(f);
+      } catch (Exception ignored) {
+      }
+    }
+
+    try {
+      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+      StyleConstants.setComponent(attrs, comp);
+      doc.insertString(pos, " ", attrs);
+      Position p = doc.createPosition(pos);
+      doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
+      st.readMarker = new ReadMarkerControl(p);
+    } catch (Exception ignored) {
+      st.readMarker = null;
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, insertionStart, delta);
+    return st.readMarker != null;
+  }
+
+  private void maybeRenderPendingReadMarker(TargetRef ref, Long lineEpochMs) {
+    if (ref == null) return;
+    TranscriptState st = stateByTarget.get(ref);
+    StyledDocument doc = docs.get(ref);
+    if (st == null || doc == null) return;
+    if (st.readMarker != null) return;
+
+    Long markerEpochMs = st.readMarkerEpochMs;
+    if (markerEpochMs == null || markerEpochMs <= 0L) return;
+    if (lineEpochMs != null && lineEpochMs <= markerEpochMs) return;
+
+    tryInsertReadMarkerControl(ref, doc, st, markerEpochMs);
   }
 
   private int findFirstUnreadLineStart(StyledDocument doc, long markerEpochMs) {
@@ -4239,6 +4291,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       if (!allowEmbeds) {
         enforceTranscriptLineCap(ref, doc);
+        maybeRenderPendingReadMarker(ref, tsEpochMs);
         return;
       }
 
@@ -4263,6 +4316,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
             doc, lineEndOffset, meta, m, List.copyOf(blockedManualPreviewUrls));
       }
       enforceTranscriptLineCap(ref, doc);
+      maybeRenderPendingReadMarker(ref, tsEpochMs);
     } catch (Exception ignored) {
     }
 
@@ -4579,6 +4633,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       doc.remove(0, removeLen);
       resetStateAfterHeadTrim(ref);
+      maybeRenderPendingReadMarker(ref, null);
       return removeLen;
     } catch (Exception ignored) {
       return 0;
@@ -4588,6 +4643,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private void resetStateAfterHeadTrim(TargetRef ref) {
     TranscriptState st = stateByTarget.get(ref);
     if (st == null) return;
+
+    Long readMarkerEpochMs = st.readMarkerEpochMs;
 
     st.earliestEpochMsSeen = null;
     st.currentPresenceBlock = null;
@@ -4603,6 +4660,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     st.historyDivider = null;
     st.pendingHistoryDividerLabel = null;
     st.readMarker = null;
+    st.readMarkerEpochMs = readMarkerEpochMs;
     st.reactionsByTargetMsgId.clear();
   }
 
@@ -4684,6 +4742,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     String pendingHistoryDividerLabel;
 
     ReadMarkerControl readMarker;
+    Long readMarkerEpochMs;
     Map<String, ReactionState> reactionsByTargetMsgId = new HashMap<>();
   }
 

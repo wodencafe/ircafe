@@ -290,6 +290,12 @@ class CommandParserTest {
   }
 
   @Test
+  void parsesMarkReadCommand() {
+    ParsedInput in = parser.parse("/markread");
+    assertTrue(in instanceof ParsedInput.MarkRead);
+  }
+
+  @Test
   void parsesReplyComposeCommand() {
     ParsedInput in = parser.parse("/reply abc123 hello there");
     assertTrue(in instanceof ParsedInput.ReplyMessage);

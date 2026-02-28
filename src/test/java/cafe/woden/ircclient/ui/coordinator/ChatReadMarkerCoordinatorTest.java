@@ -129,4 +129,31 @@ class ChatReadMarkerCoordinatorTest {
 
     verifyNoInteractions(transcripts, irc);
   }
+
+  @Test
+  void normalizeReadMarkerCapabilityClearsServerStateAndMarkerUi() {
+    ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    TargetRef target = new TargetRef("libera", "#ircafe");
+    AtomicLong now = new AtomicLong(1_000L);
+
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(irc.sendReadMarker("libera", "#ircafe", Instant.ofEpochMilli(1_000L)))
+        .thenReturn(Completable.complete());
+
+    ChatReadMarkerCoordinator coordinator =
+        new ChatReadMarkerCoordinator(
+            transcripts, irc, () -> target, offset -> {}, () -> {}, () -> false, now::get);
+
+    coordinator.setFollowTail(false);
+    coordinator.setFollowTail(true);
+
+    coordinator.normalizeIrcv3CapabilityUiState("libera", "read-marker");
+
+    coordinator.setFollowTail(false);
+    coordinator.setFollowTail(true);
+
+    verify(transcripts).clearReadMarkersForServer("libera");
+    verify(irc, times(2)).sendReadMarker("libera", "#ircafe", Instant.ofEpochMilli(1_000L));
+  }
 }

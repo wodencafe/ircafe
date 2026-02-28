@@ -6,6 +6,7 @@ import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
@@ -130,6 +131,16 @@ public final class ChatReadMarkerCoordinator {
   public void clearAll() {
     stateByTarget.clear();
     lastReadMarkerSentAtByTarget.clear();
+  }
+
+  public void normalizeIrcv3CapabilityUiState(String serverId, String capability) {
+    String sid = Objects.toString(serverId, "").trim();
+    String cap = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
+    if (sid.isEmpty() || cap.isEmpty()) return;
+    if (!"read-marker".equals(cap) && !"draft/read-marker".equals(cap)) return;
+
+    clearServer(sid);
+    transcripts.clearReadMarkersForServer(sid);
   }
 
   private ViewState state() {

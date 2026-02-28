@@ -147,6 +147,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       case ParsedInput.ChatHistoryAround cmd ->
           outboundChatCommandService.handleChatHistoryAround(
               disposables, cmd.selector(), cmd.limit());
+      case ParsedInput.MarkRead cmd -> outboundChatCommandService.handleMarkRead(disposables);
       case ParsedInput.Help cmd -> outboundChatCommandService.handleHelp(cmd.topic());
       case ParsedInput.ReplyMessage cmd ->
           outboundChatCommandService.handleReplyMessage(disposables, cmd.messageId(), cmd.body());

@@ -405,6 +405,7 @@ class IrcMediatorMockVerifyTest {
         .setReadMarker(
             new TargetRef("libera", "#ircafe"),
             Instant.parse("2026-02-16T12:30:00.000Z").toEpochMilli());
+    verify(ui).clearUnread(new TargetRef("libera", "#ircafe"));
   }
 
   @Test
@@ -419,6 +420,7 @@ class IrcMediatorMockVerifyTest {
                 Instant.parse("2026-02-16T12:31:00.000Z"), "server", "#ircafe", "*")));
 
     verify(ui).setReadMarker(new TargetRef("libera", "#ircafe"), 0L);
+    verify(ui).clearUnread(new TargetRef("libera", "#ircafe"));
   }
 
   private void invokeHandleOutgoingLine(String raw) throws Exception {

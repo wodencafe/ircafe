@@ -1831,6 +1831,7 @@ public class IrcMediator implements MediatorControlPort {
         TargetRef dest = resolveReadMarkerTarget(sid, ev.target(), status);
         long markerEpochMs = parseReadMarkerEpochMs(ev.marker(), ev.at());
         ui.setReadMarker(dest, markerEpochMs);
+        ui.clearUnread(dest);
       }
 
       case IrcEvent.MessageReplyObserved ev -> {

@@ -253,7 +253,13 @@ public class PircbotxIrcClientService implements IrcClientService {
               }
 
               PircBotX bot = c.botRef.getAndSet(null);
-              if (bot == null) return;
+              if (bot == null) {
+                bus.onNext(
+                    new ServerIrcEvent(
+                        serverId,
+                        new IrcEvent.Disconnected(Instant.now(), "Client requested disconnect")));
+                return;
+              }
 
               String quitReason = reason == null ? "" : reason.trim();
               if (quitReason.contains("\r") || quitReason.contains("\n")) {
@@ -574,7 +580,7 @@ public class PircbotxIrcClientService implements IrcClientService {
               PircbotxConnectionState c = conn(serverId);
               if (c == null || !c.readMarkerCapAcked.get()) {
                 throw new IllegalStateException(
-                    "read-marker capability not negotiated (requires draft/read-marker): "
+                    "read-marker capability not negotiated (requires read-marker or draft/read-marker): "
                         + serverId);
               }
               if (c.botRef.get() == null) {

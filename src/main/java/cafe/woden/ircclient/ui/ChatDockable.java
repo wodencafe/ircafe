@@ -991,6 +991,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public void normalizeIrcv3CapabilityUiState(String serverId, String capability) {
     typingCoordinator.normalizeIrcv3CapabilityUiState(serverId, capability);
+    readMarkerCoordinator.normalizeIrcv3CapabilityUiState(serverId, capability);
   }
 
   @Override

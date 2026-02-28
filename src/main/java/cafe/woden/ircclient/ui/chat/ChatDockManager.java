@@ -147,6 +147,11 @@ public class ChatDockManager {
         java.util.Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
     if (sid.isEmpty() || cap.isEmpty()) return;
 
+    if ("read-marker".equals(cap) || "draft/read-marker".equals(cap)) {
+      transcripts.clearReadMarkersForServer(sid);
+      return;
+    }
+
     if ("typing".equals(cap) || "message-tags".equals(cap)) {
       clearTypingIndicatorsForServer(sid);
       return;
