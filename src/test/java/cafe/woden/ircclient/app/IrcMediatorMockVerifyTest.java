@@ -10,6 +10,8 @@ import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.InterceptorEventType;
@@ -55,7 +57,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
+import org.springframework.context.ApplicationEventPublisher;
 
 class IrcMediatorMockVerifyTest {
 
@@ -103,6 +107,8 @@ class IrcMediatorMockVerifyTest {
       mock(cafe.woden.ircclient.app.api.InterceptorIngestPort.class);
   private final InboundIgnorePolicyPort inboundIgnorePolicy = mock(InboundIgnorePolicyPort.class);
   private final MonitorFallbackPort monitorFallbackPort = mock(MonitorFallbackPort.class);
+  private final ApplicationEventPublisher applicationEventPublisher =
+      mock(ApplicationEventPublisher.class);
 
   private final IrcMediator mediator =
       new IrcMediator(
@@ -137,7 +143,8 @@ class IrcMediatorMockVerifyTest {
           ircEventNotifierPort,
           interceptorIngestPort,
           inboundIgnorePolicy,
-          monitorFallbackPort);
+          monitorFallbackPort,
+          applicationEventPublisher);
 
   @Test
   void startBindsUiIrcAndConnectionCollaboratorsInOrderOnce() {
@@ -274,6 +281,14 @@ class IrcMediatorMockVerifyTest {
     verify(interceptorIngestPort, times(1))
         .ingestEvent(
             eq("libera"), eq("#ircafe"), eq("alice"), anyString(), anyString(), eq(InterceptorEventType.MESSAGE));
+    ArgumentCaptor<Object> published = ArgumentCaptor.forClass(Object.class);
+    verify(applicationEventPublisher, times(1)).publishEvent(published.capture());
+    IrcMediator.InboundMessageDedupDiagnostics event =
+        assertInstanceOf(IrcMediator.InboundMessageDedupDiagnostics.class, published.getValue());
+    assertEquals("libera", event.serverId());
+    assertEquals("#ircafe", event.target());
+    assertEquals("channel-message", event.eventType());
+    assertEquals(1L, event.suppressedCount());
   }
 
   @Test

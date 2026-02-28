@@ -7,6 +7,7 @@ import cafe.woden.ircclient.logging.history.LoadOlderControlState;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import java.util.Map;
 import java.util.OptionalLong;
 import java.util.function.BooleanSupplier;
 import javax.swing.text.StyledDocument;
@@ -98,6 +99,20 @@ public class ChatHistoryTranscriptPortAdapter implements ChatHistoryTranscriptPo
   }
 
   @Override
+  public int insertChatFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return transcripts.insertChatFromHistoryAt(
+        ref, insertAt, from, text, outgoingLocalEcho, tsEpochMs, messageId, ircv3Tags);
+  }
+
+  @Override
   public int insertActionFromHistoryAt(
       TargetRef ref,
       int insertAt,
@@ -110,9 +125,36 @@ public class ChatHistoryTranscriptPortAdapter implements ChatHistoryTranscriptPo
   }
 
   @Override
+  public int insertActionFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return transcripts.insertActionFromHistoryAt(
+        ref, insertAt, from, text, outgoingLocalEcho, tsEpochMs, messageId, ircv3Tags);
+  }
+
+  @Override
   public int insertNoticeFromHistoryAt(
       TargetRef ref, int insertAt, String from, String text, long tsEpochMs) {
     return transcripts.insertNoticeFromHistoryAt(ref, insertAt, from, text, tsEpochMs);
+  }
+
+  @Override
+  public int insertNoticeFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return transcripts.insertNoticeFromHistoryAt(
+        ref, insertAt, from, text, tsEpochMs, messageId, ircv3Tags);
   }
 
   @Override
@@ -145,14 +187,51 @@ public class ChatHistoryTranscriptPortAdapter implements ChatHistoryTranscriptPo
   }
 
   @Override
+  public void appendChatFromHistory(
+      TargetRef ref,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    transcripts.appendChatFromHistory(
+        ref, from, text, outgoingLocalEcho, tsEpochMs, messageId, ircv3Tags);
+  }
+
+  @Override
   public void appendActionFromHistory(
       TargetRef ref, String from, String text, boolean outgoingLocalEcho, long tsEpochMs) {
     transcripts.appendActionFromHistory(ref, from, text, outgoingLocalEcho, tsEpochMs);
   }
 
   @Override
+  public void appendActionFromHistory(
+      TargetRef ref,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    transcripts.appendActionFromHistory(
+        ref, from, text, outgoingLocalEcho, tsEpochMs, messageId, ircv3Tags);
+  }
+
+  @Override
   public void appendNoticeFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
     transcripts.appendNoticeFromHistory(ref, from, text, tsEpochMs);
+  }
+
+  @Override
+  public void appendNoticeFromHistory(
+      TargetRef ref,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    transcripts.appendNoticeFromHistory(ref, from, text, tsEpochMs, messageId, ircv3Tags);
   }
 
   @Override

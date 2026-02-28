@@ -55,10 +55,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -76,6 +78,9 @@ public class IrcMediator implements MediatorControlPort {
   private static final int NETSPLIT_NOTIFY_MAX_KEYS = 512;
   private static final int INBOUND_MSGID_DEDUP_MAX_KEYS = 50_000;
   private static final Duration INBOUND_MSGID_DEDUP_TTL = Duration.ofMinutes(30);
+  private static final int INBOUND_MSGID_DEDUP_COUNTER_MAX_KEYS = 4_096;
+  private static final Duration INBOUND_MSGID_DEDUP_COUNTER_TTL = Duration.ofHours(6);
+  private static final long INBOUND_MSGID_DEDUP_DIAG_MIN_EMIT_MS = 10_000L;
 
   private final IrcClientService irc;
   private final UiPort ui;
@@ -95,6 +100,7 @@ public class IrcMediator implements MediatorControlPort {
   private final UserInfoEnrichmentService userInfoEnrichmentService;
   private final UserListStore userListStore;
   private final InboundIgnorePolicyPort inboundIgnorePolicy;
+  private final ApplicationEventPublisher applicationEventPublisher;
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final WhoisRoutingState whoisRoutingState;
   private final CtcpRoutingState ctcpRoutingState;
@@ -123,12 +129,33 @@ public class IrcMediator implements MediatorControlPort {
           .maximumSize(INBOUND_MSGID_DEDUP_MAX_KEYS)
           .expireAfterAccess(INBOUND_MSGID_DEDUP_TTL)
           .build();
+  private final Cache<InboundMessageDedupCounterKey, Long> inboundMessageIdDedupSuppressedCountByKey =
+      Caffeine.newBuilder()
+          .maximumSize(INBOUND_MSGID_DEDUP_COUNTER_MAX_KEYS)
+          .expireAfterAccess(INBOUND_MSGID_DEDUP_COUNTER_TTL)
+          .build();
+  private final Cache<InboundMessageDedupCounterKey, Long> inboundMessageIdDedupDiagLastEmitMsByKey =
+      Caffeine.newBuilder()
+          .maximumSize(INBOUND_MSGID_DEDUP_COUNTER_MAX_KEYS)
+          .expireAfterAccess(INBOUND_MSGID_DEDUP_COUNTER_TTL)
+          .build();
+  private final AtomicLong inboundMessageIdDedupSuppressedTotal = new AtomicLong();
   private static final long TYPING_LOG_DEDUP_MS = 5_000;
   private static final int TYPING_LOG_MAX_KEYS = 512;
 
   private record TypingLogState(String state, long atMs) {}
 
   private record InboundMessageDedupKey(String serverId, String target, String eventType, String msgId) {}
+
+  private record InboundMessageDedupCounterKey(String serverId, String target, String eventType) {}
+
+  public record InboundMessageDedupDiagnostics(
+      String serverId,
+      String target,
+      String eventType,
+      long suppressedCount,
+      long suppressedTotal,
+      String messageIdSample) {}
 
   @PostConstruct
   void init() {
@@ -172,7 +199,8 @@ public class IrcMediator implements MediatorControlPort {
       IrcEventNotifierPort ircEventNotifierPort,
       InterceptorIngestPort interceptorIngestPort,
       InboundIgnorePolicyPort inboundIgnorePolicy,
-      MonitorFallbackPort monitorFallbackPort) {
+      MonitorFallbackPort monitorFallbackPort,
+      ApplicationEventPublisher applicationEventPublisher) {
 
     this.irc = irc;
     this.ui = ui;
@@ -206,6 +234,7 @@ public class IrcMediator implements MediatorControlPort {
     this.interceptorIngestPort = interceptorIngestPort;
     this.inboundIgnorePolicy = inboundIgnorePolicy;
     this.monitorFallbackPort = monitorFallbackPort;
+    this.applicationEventPublisher = applicationEventPublisher;
   }
 
   public void start() {
@@ -2851,14 +2880,51 @@ public class IrcMediator implements MediatorControlPort {
     String targetKey = normalizeDedupTarget(target);
     String eventKey = Objects.toString(eventType, "").trim().toLowerCase(Locale.ROOT);
     InboundMessageDedupKey key = new InboundMessageDedupKey(sidKey, targetKey, eventKey, msgId);
-    return inboundMessageIdDedup.asMap().putIfAbsent(key, Boolean.TRUE) != null;
+    boolean duplicate = inboundMessageIdDedup.asMap().putIfAbsent(key, Boolean.TRUE) != null;
+    if (duplicate) {
+      recordInboundMessageIdSuppression(sidKey, targetKey, eventKey, msgId);
+    }
+    return duplicate;
   }
 
   private static String normalizeDedupTarget(TargetRef target) {
     if (target == null) return "";
-    String sid = Objects.toString(target.serverId(), "").trim().toLowerCase(Locale.ROOT);
-    String raw = Objects.toString(target.target(), "").trim().toLowerCase(Locale.ROOT);
-    return sid + "|" + raw;
+    return Objects.toString(target.target(), "").trim().toLowerCase(Locale.ROOT);
+  }
+
+  private void recordInboundMessageIdSuppression(
+      String serverId, String target, String eventType, String messageId) {
+    InboundMessageDedupCounterKey counterKey =
+        new InboundMessageDedupCounterKey(serverId, target, eventType);
+    long keyCount =
+        inboundMessageIdDedupSuppressedCountByKey
+            .asMap()
+            .compute(counterKey, (k, prev) -> prev == null ? 1L : (prev + 1L));
+    long total = inboundMessageIdDedupSuppressedTotal.incrementAndGet();
+    maybePublishInboundMessageIdSuppression(counterKey, keyCount, total, messageId);
+  }
+
+  private void maybePublishInboundMessageIdSuppression(
+      InboundMessageDedupCounterKey key, long keyCount, long total, String messageId) {
+    if (applicationEventPublisher == null || key == null) return;
+    if (keyCount > 1 && (keyCount % 25L) != 0L) return;
+
+    long now = System.currentTimeMillis();
+    Long last = inboundMessageIdDedupDiagLastEmitMsByKey.asMap().get(key);
+    if (last != null && (now - last.longValue()) < INBOUND_MSGID_DEDUP_DIAG_MIN_EMIT_MS) return;
+    inboundMessageIdDedupDiagLastEmitMsByKey.put(key, now);
+
+    try {
+      applicationEventPublisher.publishEvent(
+          new InboundMessageDedupDiagnostics(
+              key.serverId(),
+              key.target(),
+              key.eventType(),
+              keyCount,
+              total,
+              Objects.toString(messageId, "")));
+    } catch (Exception ignored) {
+    }
   }
 
   private static String effectiveMessageIdForDedup(String messageId, Map<String, String> tags) {

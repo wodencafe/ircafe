@@ -123,6 +123,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final String APP_UNHANDLED_ERRORS_LABEL = "Unhandled Errors";
   private static final String APP_ASSERTJ_SWING_LABEL = "AssertJ Swing";
   private static final String APP_JHICCUP_LABEL = "jHiccup";
+  private static final String APP_INBOUND_DEDUP_LABEL = "Inbound Dedup";
   private static final String APP_JFR_LABEL = "JFR";
   private static final String APP_SPRING_LABEL = "Spring";
   private static final String APP_TERMINAL_LABEL = "Terminal";
@@ -223,6 +224,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final TargetRef applicationUnhandledErrorsRef = TargetRef.applicationUnhandledErrors();
   private final TargetRef applicationAssertjSwingRef = TargetRef.applicationAssertjSwing();
   private final TargetRef applicationJhiccupRef = TargetRef.applicationJhiccup();
+  private final TargetRef applicationInboundDedupRef = TargetRef.applicationInboundDedup();
   private final TargetRef applicationJfrRef = TargetRef.applicationJfr();
   private final TargetRef applicationSpringRef = TargetRef.applicationSpring();
   private final TargetRef applicationTerminalRef = TargetRef.applicationTerminal();
@@ -3176,6 +3178,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     addApplicationLeaf(applicationUnhandledErrorsRef, APP_UNHANDLED_ERRORS_LABEL);
     addApplicationLeaf(applicationAssertjSwingRef, APP_ASSERTJ_SWING_LABEL);
     addApplicationLeaf(applicationJhiccupRef, APP_JHICCUP_LABEL);
+    addApplicationLeaf(applicationInboundDedupRef, APP_INBOUND_DEDUP_LABEL);
     addApplicationLeaf(applicationJfrRef, APP_JFR_LABEL);
     addApplicationLeaf(applicationSpringRef, APP_SPRING_LABEL);
     addApplicationLeaf(applicationTerminalRef, APP_TERMINAL_LABEL);
@@ -3279,6 +3282,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (ref.isApplicationUnhandledErrors()) return APP_UNHANDLED_ERRORS_LABEL;
     if (ref.isApplicationAssertjSwing()) return APP_ASSERTJ_SWING_LABEL;
     if (ref.isApplicationJhiccup()) return APP_JHICCUP_LABEL;
+    if (ref.isApplicationInboundDedup()) return APP_INBOUND_DEDUP_LABEL;
     if (ref.isApplicationJfr()) return APP_JFR_LABEL;
     if (ref.isApplicationSpring()) return APP_SPRING_LABEL;
     if (ref.isApplicationTerminal()) return APP_TERMINAL_LABEL;
@@ -4553,6 +4557,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       if (nd.ref.isApplicationJhiccup()) {
         return "Diagnostic buffer for jHiccup latency output.";
       }
+      if (nd.ref.isApplicationInboundDedup()) {
+        return "Inbound duplicate message suppression diagnostics (msgid replay / resend telemetry).";
+      }
       if (nd.ref.isApplicationJfr()) {
         return isApplicationJfrActive()
             ? "Runtime JFR diagnostics are active (status gauges + JFR event stream)."
@@ -5217,6 +5224,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             setTreeIcon("settings");
           } else if (nd.ref != null && nd.ref.isApplicationJhiccup()) {
             setTreeIcon("refresh");
+          } else if (nd.ref != null && nd.ref.isApplicationInboundDedup()) {
+            setTreeIcon("copy");
           } else if (nd.ref != null && nd.ref.isApplicationJfr()) {
             boolean active = isApplicationJfrActive();
             String iconName = active ? "play" : "pause";

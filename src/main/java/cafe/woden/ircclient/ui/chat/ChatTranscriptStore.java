@@ -1973,11 +1973,30 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
   public void appendChatFromHistory(
       TargetRef ref, String from, String text, boolean outgoingLocalEcho, long tsEpochMs) {
+    appendChatFromHistory(ref, from, text, outgoingLocalEcho, tsEpochMs, "", Map.of());
+  }
+
+  public void appendChatFromHistory(
+      TargetRef ref,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     ensureTargetExists(ref);
     noteEpochMs(ref, tsEpochMs);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank()) {
+      StyledDocument existingDoc = docs.get(ref);
+      if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+        return;
+      }
+    }
 
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
-    LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null);
+    LineMeta meta =
+        buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null, messageId, ircv3Tags);
     FilterEngine.Match m = hideMatch(ref, LogKind.CHAT, dir, from, text, meta.tags());
     if (m != null) {
       onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
@@ -2179,13 +2198,31 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       String text,
       boolean outgoingLocalEcho,
       long tsEpochMs) {
+    return insertChatFromHistoryAt(
+        ref, insertAt, from, text, outgoingLocalEcho, tsEpochMs, "", Map.of());
+  }
+
+  public synchronized int insertChatFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
     noteEpochMs(ref, tsEpochMs);
     if (doc == null) return Math.max(0, insertAt);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank() && findLineStartByMessageId(doc, normalizedMsgId) >= 0) {
+      return Math.max(0, insertAt);
+    }
 
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
-    LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null);
+    LineMeta meta =
+        buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null, messageId, ircv3Tags);
     FilterEngine.Match m = hideMatch(ref, LogKind.CHAT, dir, from, text, meta.tags());
     if (m != null) {
       FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
@@ -2221,13 +2258,31 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       String action,
       boolean outgoingLocalEcho,
       long tsEpochMs) {
+    return insertActionFromHistoryAt(
+        ref, insertAt, from, action, outgoingLocalEcho, tsEpochMs, "", Map.of());
+  }
+
+  public synchronized int insertActionFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     ensureTargetExists(ref);
     noteEpochMs(ref, tsEpochMs);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return Math.max(0, insertAt);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank() && findLineStartByMessageId(doc, normalizedMsgId) >= 0) {
+      return Math.max(0, insertAt);
+    }
 
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
-    LineMeta meta = buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null);
+    LineMeta meta =
+        buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null, messageId, ircv3Tags);
     FilterEngine.Match m = firstFilterMatch(ref, LogKind.ACTION, dir, from, action, meta.tags());
     if (m != null && m.isHide()) {
       FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
@@ -2324,12 +2379,29 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
   public synchronized int insertNoticeFromHistoryAt(
       TargetRef ref, int insertAt, String from, String text, long tsEpochMs) {
+    return insertNoticeFromHistoryAt(ref, insertAt, from, text, tsEpochMs, "", Map.of());
+  }
+
+  public synchronized int insertNoticeFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
     noteEpochMs(ref, tsEpochMs);
     if (doc == null) return Math.max(0, insertAt);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank() && findLineStartByMessageId(doc, normalizedMsgId) >= 0) {
+      return Math.max(0, insertAt);
+    }
 
-    LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null);
+    LineMeta meta =
+        buildLineMeta(
+            ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null, messageId, ircv3Tags);
     FilterEngine.Match m = hideMatch(ref, LogKind.NOTICE, LogDirection.IN, from, text, meta.tags());
     if (m != null) {
       FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
@@ -3920,8 +3992,19 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
   public void appendActionFromHistory(
       TargetRef ref, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
+    appendActionFromHistory(ref, from, action, outgoingLocalEcho, tsEpochMs, "", Map.of());
+  }
+
+  public void appendActionFromHistory(
+      TargetRef ref,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     appendActionInternal(
-        ref, from, action, outgoingLocalEcho, false, tsEpochMs, "", Map.of(), null);
+        ref, from, action, outgoingLocalEcho, false, tsEpochMs, messageId, ircv3Tags, null);
   }
 
   /** Append an action (/me) with a timestamp, allowing embeds. */
@@ -4124,9 +4207,28 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   }
 
   public void appendNoticeFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
+    appendNoticeFromHistory(ref, from, text, tsEpochMs, "", Map.of());
+  }
+
+  public void appendNoticeFromHistory(
+      TargetRef ref,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     ensureTargetExists(ref);
     noteEpochMs(ref, tsEpochMs);
-    LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank()) {
+      StyledDocument existingDoc = docs.get(ref);
+      if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+        return;
+      }
+    }
+    LineMeta meta =
+        buildLineMeta(
+            ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null, messageId, ircv3Tags);
     FilterEngine.Match m = hideMatch(ref, LogKind.NOTICE, LogDirection.IN, from, text, meta.tags());
     if (m != null) {
       onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);

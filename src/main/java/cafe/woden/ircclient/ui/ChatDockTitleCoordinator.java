@@ -50,6 +50,7 @@ final class ChatDockTitleCoordinator {
     if (target.isApplicationUnhandledErrors()) return "Unhandled Errors";
     if (target.isApplicationAssertjSwing()) return "AssertJ Swing";
     if (target.isApplicationJhiccup()) return "jHiccup";
+    if (target.isApplicationInboundDedup()) return "Inbound Dedup";
     if (target.isApplicationJfr()) return "JFR";
     if (target.isApplicationSpring()) return "Spring";
     if (target.isApplicationTerminal()) return "Terminal";

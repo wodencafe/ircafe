@@ -124,7 +124,7 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
               text,
               false,
               false,
-              metaJson(source, batchId)));
+              metaJson(source, batchId, e.messageId())));
     }
 
     if (candidates.isEmpty()) {
@@ -229,13 +229,27 @@ public class DbChatHistoryIngestor implements ChatHistoryIngestor {
     return sb.toString();
   }
 
-  private static String metaJson(String source, String batchId) {
+  private static String metaJson(String source, String batchId, String messageId) {
     String src = escapeJson(source);
     String bid = escapeJson(batchId);
-    if (bid == null || bid.isBlank()) {
+    String mid = escapeJson(messageId);
+    if ((bid == null || bid.isBlank()) && (mid == null || mid.isBlank())) {
       return "{\"source\":\"" + src + "\"}";
     }
-    return "{\"source\":\"" + src + "\",\"batch\":\"" + bid + "\"}";
+    if (bid == null || bid.isBlank()) {
+      return "{\"source\":\"" + src + "\",\"messageId\":\"" + mid + "\"}";
+    }
+    if (mid == null || mid.isBlank()) {
+      return "{\"source\":\"" + src + "\",\"batch\":\"" + bid + "\"}";
+    }
+    return
+        "{\"source\":\""
+            + src
+            + "\",\"batch\":\""
+            + bid
+            + "\",\"messageId\":\""
+            + mid
+            + "\"}";
   }
 
   private static String inferSource(String batchId) {

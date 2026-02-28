@@ -95,4 +95,17 @@ class TargetRefUiOnlyTest {
     assertEquals(
         ref, new TargetRef(TargetRef.APPLICATION_SERVER_ID, TargetRef.APPLICATION_SPRING_TARGET));
   }
+
+  @Test
+  void applicationInboundDedupTargetIsUiOnly() {
+    TargetRef ref = TargetRef.applicationInboundDedup();
+    assertTrue(ref.isApplicationInboundDedup());
+    assertTrue(ref.isApplicationUi());
+    assertTrue(ref.isUiOnly());
+    assertFalse(ref.isStatus());
+    assertFalse(ref.isChannel());
+    assertEquals(
+        ref,
+        new TargetRef(TargetRef.APPLICATION_SERVER_ID, TargetRef.APPLICATION_INBOUND_DEDUP_TARGET));
+  }
 }

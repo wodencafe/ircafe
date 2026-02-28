@@ -7,6 +7,7 @@ import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
+import cafe.woden.ircclient.diagnostics.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
@@ -19,6 +20,7 @@ import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.ui.application.InboundDedupDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
@@ -41,6 +43,7 @@ import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,6 +109,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final RuntimeEventsPanel appUnhandledErrorsPanel;
   private final RuntimeEventsPanel appAssertjPanel;
   private final RuntimeEventsPanel appJhiccupPanel;
+  private final InboundDedupDiagnosticsPanel appInboundDedupPanel;
   private final JfrDiagnosticsPanel appJfrPanel;
   private final RuntimeEventsPanel appSpringPanel;
   private final TerminalDockable terminalPanel;
@@ -200,6 +204,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.appUnhandledErrorsPanel = createUnhandledErrorsPanel(applicationDiagnosticsService);
     this.appAssertjPanel = createAssertjEventsPanel(applicationDiagnosticsService);
     this.appJhiccupPanel = createJhiccupEventsPanel(applicationDiagnosticsService);
+    this.appInboundDedupPanel = createInboundDedupPanel(springRuntimeEventsService);
     this.appJfrPanel = new JfrDiagnosticsPanel(jfrRuntimeEventsService);
     this.appSpringPanel = createSpringEventsPanel(springRuntimeEventsService);
 
@@ -341,6 +346,33 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         },
         "spring-events",
         springRuntimeEventsService != null ? springRuntimeEventsService.changeStream() : null);
+  }
+
+  private InboundDedupDiagnosticsPanel createInboundDedupPanel(
+      SpringRuntimeEventsService springRuntimeEventsService) {
+    return new InboundDedupDiagnosticsPanel(
+        () ->
+            springRuntimeEventsService != null
+                ? filterInboundDedupEvents(springRuntimeEventsService.recentEvents(1200))
+                : List.of(),
+        springRuntimeEventsService != null ? springRuntimeEventsService.changeStream() : null);
+  }
+
+  private static List<RuntimeDiagnosticEvent> filterInboundDedupEvents(
+      List<RuntimeDiagnosticEvent> events) {
+    if (events == null || events.isEmpty()) return List.of();
+    ArrayList<RuntimeDiagnosticEvent> out = new ArrayList<>(events.size());
+    for (RuntimeDiagnosticEvent event : events) {
+      if (event == null) continue;
+      String details = Objects.toString(event.details(), "");
+      String summary = Objects.toString(event.summary(), "");
+      if (details.contains(
+              "payloadType=cafe.woden.ircclient.app.core.IrcMediator$InboundMessageDedupDiagnostics")
+          || summary.contains("InboundMessageDedupDiagnostics[")) {
+        out.add(event);
+      }
+    }
+    return List.copyOf(out);
   }
 
   private TopicCoordinatorBundle createTopicCoordinatorBundle(NotificationStore notificationStore) {
@@ -485,6 +517,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         appUnhandledErrorsPanel,
         appAssertjPanel,
         appJhiccupPanel,
+        appInboundDedupPanel,
         appJfrPanel,
         appSpringPanel,
         channelListCoordinator::refreshManagedChannelsCard,
@@ -752,6 +785,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     centerCards.add(appUnhandledErrorsPanel, ChatTargetViewRouter.CARD_APP_UNHANDLED_ERRORS);
     centerCards.add(appAssertjPanel, ChatTargetViewRouter.CARD_APP_ASSERTJ);
     centerCards.add(appJhiccupPanel, ChatTargetViewRouter.CARD_APP_JHICCUP);
+    centerCards.add(appInboundDedupPanel, ChatTargetViewRouter.CARD_APP_INBOUND_DEDUP);
     centerCards.add(appJfrPanel, ChatTargetViewRouter.CARD_APP_JFR);
     centerCards.add(appSpringPanel, ChatTargetViewRouter.CARD_APP_SPRING);
     centerCards.add(terminalPanel, ChatTargetViewRouter.CARD_TERMINAL);

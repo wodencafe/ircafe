@@ -89,9 +89,13 @@ class MediatorHistoryIngestOrchestratorTest {
 
     Instant t1 = Instant.parse("2026-02-16T00:00:01Z");
     Instant t2 = Instant.parse("2026-02-16T00:00:02Z");
-    when(transcripts.insertChatFromHistoryAt(chan, 0, "alice", "hello", false, t1.toEpochMilli()))
+    when(
+            transcripts.insertChatFromHistoryAt(
+                chan, 0, "alice", "hello", false, t1.toEpochMilli(), "", java.util.Map.of()))
         .thenReturn(1);
-    when(transcripts.insertActionFromHistoryAt(chan, 1, "me", "waves", true, t2.toEpochMilli()))
+    when(
+            transcripts.insertActionFromHistoryAt(
+                chan, 1, "me", "waves", true, t2.toEpochMilli(), "", java.util.Map.of()))
         .thenReturn(2);
 
     ChatHistoryEntry chat =
@@ -106,8 +110,11 @@ class MediatorHistoryIngestOrchestratorTest {
 
     verify(transcripts).beginHistoryInsertBatch(chan);
     verify(transcripts)
-        .insertChatFromHistoryAt(chan, 0, "alice", "hello", false, t1.toEpochMilli());
-    verify(transcripts).insertActionFromHistoryAt(chan, 1, "me", "waves", true, t2.toEpochMilli());
+        .insertChatFromHistoryAt(
+            chan, 0, "alice", "hello", false, t1.toEpochMilli(), "", java.util.Map.of());
+    verify(transcripts)
+        .insertActionFromHistoryAt(
+            chan, 1, "me", "waves", true, t2.toEpochMilli(), "", java.util.Map.of());
     verify(transcripts).endHistoryInsertBatch(chan);
     verify(ui, atLeastOnce())
         .appendStatus(
@@ -138,8 +145,12 @@ class MediatorHistoryIngestOrchestratorTest {
     orchestrator.onChatHistoryBatchReceived("libera", ev);
 
     verify(transcripts, never()).loadOlderInsertOffset(any());
-    verify(transcripts).appendChatFromHistory(chan, "alice", "hello", false, t1.toEpochMilli());
-    verify(transcripts).appendActionFromHistory(chan, "me", "waves", true, t2.toEpochMilli());
+    verify(transcripts)
+        .appendChatFromHistory(
+            chan, "alice", "hello", false, t1.toEpochMilli(), "", java.util.Map.of());
+    verify(transcripts)
+        .appendActionFromHistory(
+            chan, "me", "waves", true, t2.toEpochMilli(), "", java.util.Map.of());
   }
 
   @Test
@@ -235,6 +246,54 @@ class MediatorHistoryIngestOrchestratorTest {
     orchestrator.onChatHistoryBatchReceived("libera", ev2);
 
     verify(transcripts, times(1))
-        .appendChatFromHistory(chan, "alice", "hello", false, t.toEpochMilli());
+        .appendChatFromHistory(
+            chan, "alice", "hello", false, t.toEpochMilli(), "", java.util.Map.of());
+  }
+
+  @Test
+  void skipsDuplicateHistoryLinesByMessageIdWithinSingleBatch() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(routingState.consumeIfFresh(eq("libera"), eq("#ircafe"), any(Duration.class)))
+        .thenReturn(
+            new ChatHistoryRequestRoutingState.PendingRequest(
+                chan, Instant.now(), 20, "*", ChatHistoryRequestRoutingState.QueryMode.LATEST));
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+
+    String msgId = "history-msgid-1";
+    Instant t1 = Instant.parse("2026-02-16T03:00:01Z");
+    Instant t2 = Instant.parse("2026-02-16T03:00:05Z");
+    ChatHistoryEntry first =
+        new ChatHistoryEntry(
+            t1,
+            ChatHistoryEntry.Kind.PRIVMSG,
+            "#ircafe",
+            "alice",
+            "first body",
+            msgId,
+            java.util.Map.of("msgid", msgId));
+    ChatHistoryEntry replay =
+        new ChatHistoryEntry(
+            t2,
+            ChatHistoryEntry.Kind.PRIVMSG,
+            "#ircafe",
+            "alice",
+            "replayed body changed",
+            msgId,
+            java.util.Map.of("msgid", msgId));
+
+    orchestrator.onChatHistoryBatchReceived(
+        "libera",
+        new IrcEvent.ChatHistoryBatchReceived(
+            Instant.now(), "#ircafe", "batch-msgid", List.of(first, replay)));
+
+    verify(transcripts, times(1))
+        .appendChatFromHistory(
+            chan,
+            "alice",
+            "first body",
+            false,
+            t1.toEpochMilli(),
+            msgId,
+            java.util.Map.of("msgid", msgId));
   }
 }
