@@ -182,11 +182,11 @@ public final class MessageInputComposeSupport {
       composeBannerLabel.setText(
           "Replying to message " + abbreviateMessageId(replyComposeMessageId));
       composeBanner.setVisible(true);
-      sendButton.setText("Reply");
+      updateSendButtonHint("Send reply");
     } else {
       composeBannerLabel.setText("");
       composeBanner.setVisible(false);
-      sendButton.setText("Send");
+      updateSendButtonHint("Send message");
     }
 
     try {
@@ -194,6 +194,16 @@ public final class MessageInputComposeSupport {
       layoutTarget.repaint();
     } catch (Exception ex) {
       log.warn("[MessageInputComposeSupport] refresh layout failed", ex);
+    }
+  }
+
+  private void updateSendButtonHint(String tooltip) {
+    String text = Objects.toString(tooltip, "").trim();
+    if (text.isEmpty()) text = "Send message";
+    sendButton.setToolTipText(text);
+    if (sendButton.getAccessibleContext() != null) {
+      sendButton.getAccessibleContext().setAccessibleName(text);
+      sendButton.getAccessibleContext().setAccessibleDescription(text);
     }
   }
 

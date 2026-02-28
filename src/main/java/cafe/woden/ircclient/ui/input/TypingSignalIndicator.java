@@ -3,43 +3,42 @@ package cafe.woden.ircclient.ui.input;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.MouseEvent;
-import java.awt.geom.RoundRectangle2D;
+import java.awt.geom.Path2D;
 import java.util.Locale;
 import javax.swing.*;
 
 /**
- * Small right-side telemetry icon showing typing-signal availability and sends.
+ * Overlay icon that animates local typing-send state above the send button.
  *
- * <p>Renders a subtle keyboard icon and themed chevron telemetry: active -> one double-chevron
- * group scanning left-to-right, paused -> ghost gray hold, done -> fade out.
+ * <p>Behavior:
+ *
+ * <ul>
+ *   <li>Unavailable/default: steady white arrow.
+ *   <li>Idle (typing available): steady green arrow.
+ *   <li>Active: glowing blue arrow pulse.
+ *   <li>Paused: light gray arrow (fades from active).
+ *   <li>Done: fade back to idle green.
+ * </ul>
  */
 final class TypingSignalIndicator extends JComponent {
 
   private static final int FRAME_MS = 33;
-  private static final int DONE_FADE_MS = 650;
-  private static final long ACTIVE_SCAN_MS = 900L;
-  private static final int CHEVRON_GROUPS = 5;
-  private static final int CHEVRON_GROUP_STEP = 9;
-  private static final int CHEVRON_WIDTH = 4;
-  private static final int CHEVRON_PAIR_OFFSET = 4;
-  private static final float PAUSED_ALPHA = 0.72f;
-
-  private static final float KEYBOARD_ALPHA = 0.78f;
-  private static final String KEYBOARD_TOOLTIP = "Typing indicators are enabled";
+  private static final long ACTIVE_PULSE_MS = 1050L;
+  private static final int PAUSE_FADE_MS = 240;
+  private static final int RETURN_TO_IDLE_MS = 420;
+  private static final float IDLE_GLOW_ALPHA = 0.12f;
 
   private final Timer fadeTimer;
 
   private boolean available;
-  private float arrowAlpha;
   private long modeStartMs;
-  private float fadeStartAlpha;
+  private Color transitionFromColor = idleGreenColor();
+  private float transitionFromGlow = 0f;
   private Mode mode = Mode.IDLE;
-  private SignalStyle style = SignalStyle.ACTIVE;
 
   TypingSignalIndicator() {
     setOpaque(false);
-    setVisible(false);
+    setVisible(true);
     fadeTimer =
         new Timer(
             FRAME_MS,
@@ -50,20 +49,27 @@ final class TypingSignalIndicator extends JComponent {
               }
             });
     fadeTimer.setRepeats(true);
-    // Enable per-region tooltips via getToolTipText(MouseEvent).
-    setToolTipText("");
   }
 
   void setAvailable(boolean available) {
+    if (this.available == available) {
+      if (!available) {
+        fadeTimer.stop();
+        mode = Mode.IDLE;
+      }
+      setVisible(true);
+      repaint();
+      return;
+    }
     this.available = available;
     if (!available) {
       fadeTimer.stop();
-      arrowAlpha = 0f;
       mode = Mode.IDLE;
-      setVisible(false);
     } else {
-      setVisible(true);
+      mode = Mode.IDLE;
+      modeStartMs = System.currentTimeMillis();
     }
+    setVisible(true);
     repaint();
   }
 
@@ -74,40 +80,33 @@ final class TypingSignalIndicator extends JComponent {
     SignalEvent event = SignalEvent.fromState(state);
     switch (event) {
       case ACTIVE -> {
-        style = SignalStyle.ACTIVE;
         mode = Mode.ACTIVE;
         modeStartMs = now;
-        arrowAlpha = 1f;
         startTimerIfDisplayable();
       }
       case PAUSED -> {
-        style = SignalStyle.GHOST;
-        mode = Mode.PAUSED;
-        arrowAlpha = PAUSED_ALPHA;
-        fadeTimer.stop();
+        beginPauseTransition(now);
       }
       case DONE -> {
-        if (arrowAlpha <= 0.01f) {
-          mode = Mode.IDLE;
-          fadeTimer.stop();
-          break;
-        }
-        mode = Mode.FADING;
-        modeStartMs = now;
-        fadeStartAlpha = Math.max(0.01f, arrowAlpha);
-        startTimerIfDisplayable();
+        beginReturnToIdle(now);
       }
     }
     repaint();
   }
 
   boolean isArrowVisible() {
-    return arrowAlpha > 0.01f;
+    return isVisible();
+  }
+
+  @Override
+  public boolean contains(int x, int y) {
+    // Keep clicks/hover targeted to the underlying send button.
+    return false;
   }
 
   @Override
   public Dimension getPreferredSize() {
-    return new Dimension(66, 16);
+    return new Dimension(18, 18);
   }
 
   @Override
@@ -117,33 +116,22 @@ final class TypingSignalIndicator extends JComponent {
 
   @Override
   protected void paintComponent(Graphics g) {
-    if (!available) return;
-
     Graphics2D g2 = (Graphics2D) g.create();
     try {
       g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-      int h = getHeight();
-      int y = Math.max(0, (h - 10) / 2);
-
-      drawKeyboard(g2, 1, y, 14, 10);
-      drawChevronWave(g2, 19, y + 1, 8);
+      ArrowVisual visual = visualAt(System.currentTimeMillis());
+      drawRightArrow(g2, visual);
     } finally {
       g2.dispose();
     }
   }
 
   @Override
-  public String getToolTipText(MouseEvent event) {
-    if (!available || event == null) return null;
-    Rectangle kb = keyboardBounds();
-    return kb.contains(event.getPoint()) ? KEYBOARD_TOOLTIP : null;
-  }
-
-  @Override
   public void addNotify() {
     super.addNotify();
-    if (available && (mode == Mode.ACTIVE || mode == Mode.FADING) && !fadeTimer.isRunning()) {
+    if (available
+        && (mode == Mode.ACTIVE || mode == Mode.PAUSING || mode == Mode.RETURNING)
+        && !fadeTimer.isRunning()) {
       fadeTimer.start();
     }
   }
@@ -155,26 +143,25 @@ final class TypingSignalIndicator extends JComponent {
   }
 
   private void onFadeTick() {
-    long now = System.currentTimeMillis();
-    switch (mode) {
-      case ACTIVE -> {
-        // Active scan index is computed at paint time.
-        arrowAlpha = 1f;
-      }
-      case FADING -> {
-        long elapsed = now - modeStartMs;
-        float t = Math.max(0f, Math.min(1f, (float) elapsed / (float) DONE_FADE_MS));
-        float eased = 1f - (t * t);
-        arrowAlpha = fadeStartAlpha * eased;
-        if (t >= 1f) {
-          arrowAlpha = 0f;
-          mode = Mode.IDLE;
-          fadeTimer.stop();
-        }
-      }
-      default -> {
+    if (!available) {
+      fadeTimer.stop();
+      mode = Mode.IDLE;
+      return;
+    }
+    if (mode == Mode.PAUSING) {
+      long elapsed = Math.max(0L, System.currentTimeMillis() - modeStartMs);
+      if (elapsed >= PAUSE_FADE_MS) {
+        mode = Mode.PAUSED;
         fadeTimer.stop();
       }
+    } else if (mode == Mode.RETURNING) {
+      long elapsed = Math.max(0L, System.currentTimeMillis() - modeStartMs);
+      if (elapsed >= RETURN_TO_IDLE_MS) {
+        mode = Mode.IDLE;
+        fadeTimer.stop();
+      }
+    } else if (mode != Mode.ACTIVE) {
+      fadeTimer.stop();
     }
     repaint();
   }
@@ -185,130 +172,118 @@ final class TypingSignalIndicator extends JComponent {
     }
   }
 
-  private void drawKeyboard(Graphics2D g2, int x, int y, int w, int h) {
-    Color base = keyboardColor();
-    Color stroke = withAlpha(base, KEYBOARD_ALPHA);
-    Color fill = withAlpha(base, 0.14f);
+  private void drawRightArrow(Graphics2D g2, ArrowVisual visual) {
+    int w = Math.max(8, getWidth());
+    int h = Math.max(8, getHeight());
+    int left = Math.max(2, w / 6);
+    int right = Math.max(left + 4, w - Math.max(3, w / 6));
+    int midY = h / 2;
+    int head = Math.max(3, Math.min(5, h / 4));
+    int shaftEnd = Math.max(left + 1, right - head);
 
-    RoundRectangle2D.Float body = new RoundRectangle2D.Float(x, y, w, h, 3, 3);
-    g2.setColor(fill);
-    g2.fill(body);
-    g2.setColor(stroke);
-    g2.setStroke(new BasicStroke(1f));
-    g2.draw(body);
+    Path2D.Float path = new Path2D.Float();
+    path.moveTo(left, midY);
+    path.lineTo(shaftEnd, midY);
+    path.moveTo(shaftEnd - 1, midY - head);
+    path.lineTo(right, midY);
+    path.lineTo(shaftEnd - 1, midY + head);
 
-    int keyY1 = y + 3;
-    int keyY2 = y + 6;
-    int keyW = 2;
-    int keyH = 1;
-    int[] xs = {x + 3, x + 6, x + 9, x + 12};
-    g2.setColor(withAlpha(base, 0.56f));
-    for (int keyX : xs) {
-      g2.fillRect(keyX - 1, keyY1, keyW, keyH);
+    if (visual.glowAlpha() > 0.01f) {
+      g2.setStroke(new BasicStroke(5.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+      g2.setColor(withAlpha(visual.color(), visual.glowAlpha()));
+      g2.draw(path);
     }
-    g2.fillRect(x + 5, keyY2, 5, keyH);
+
+    g2.setStroke(new BasicStroke(2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+    g2.setColor(withAlpha(visual.color(), 0.98f));
+    g2.draw(path);
   }
 
-  private Rectangle keyboardBounds() {
-    int h = getHeight();
-    int y = Math.max(0, (h - 10) / 2);
-    return new Rectangle(1, y, 14, 10);
-  }
-
-  private void drawChevronWave(Graphics2D g2, int x, int y, int h) {
-    if (arrowAlpha <= 0.01f) return;
-
-    Color core = (style == SignalStyle.ACTIVE) ? activeArrowColor() : ghostArrowColor();
-    float glowFactor = (style == SignalStyle.ACTIVE) ? 0.40f : 0.14f;
-    int hh = Math.max(6, h);
-    int activeIndex = activeChevronIndex();
-
-    for (int i = 0; i < CHEVRON_GROUPS; i++) {
-      float scanAlpha = chevronScanAlpha(i, activeIndex);
-      float groupAlpha = Math.max(0f, Math.min(1f, arrowAlpha * scanAlpha));
-      if (groupAlpha <= 0.01f) continue;
-      int gx = x + (i * CHEVRON_GROUP_STEP);
-      Color glow = withAlpha(core, groupAlpha * glowFactor);
-      Color stroke = withAlpha(core, groupAlpha);
-      drawDoubleChevron(g2, gx, y, hh, glow, stroke);
+  private void beginReturnToIdle(long now) {
+    if (mode == Mode.IDLE) {
+      fadeTimer.stop();
+      return;
     }
+    ArrowVisual current = visualAt(now);
+    transitionFromColor = current.color();
+    transitionFromGlow = current.glowAlpha();
+    mode = Mode.RETURNING;
+    modeStartMs = now;
+    startTimerIfDisplayable();
   }
 
-  private int activeChevronIndex() {
-    if (style != SignalStyle.ACTIVE || mode != Mode.ACTIVE) return -1;
-    if (CHEVRON_GROUPS <= 0) return -1;
-    long elapsed = Math.max(0L, System.currentTimeMillis() - modeStartMs);
-    double phase = (elapsed % ACTIVE_SCAN_MS) / (double) ACTIVE_SCAN_MS;
-    int idx = (int) Math.floor(phase * CHEVRON_GROUPS);
-    if (idx < 0) idx = 0;
-    if (idx >= CHEVRON_GROUPS) idx = CHEVRON_GROUPS - 1;
-    return idx;
+  private void beginPauseTransition(long now) {
+    if (mode == Mode.PAUSED) {
+      fadeTimer.stop();
+      return;
+    }
+    ArrowVisual current = visualAt(now);
+    transitionFromColor = current.color();
+    transitionFromGlow = current.glowAlpha();
+    mode = Mode.PAUSING;
+    modeStartMs = now;
+    startTimerIfDisplayable();
   }
 
-  private float chevronScanAlpha(int index, int activeIndex) {
-    if (style != SignalStyle.ACTIVE || mode != Mode.ACTIVE) return 1f;
-    if (activeIndex < 0) return 0f;
-    return index == activeIndex ? 1f : 0f;
+  private ArrowVisual visualAt(long now) {
+    if (!available) {
+      return new ArrowVisual(defaultWhiteColor(), 0f);
+    }
+    if (mode == Mode.PAUSING) {
+      float t = clamp01((float) (Math.max(0L, now - modeStartMs) / (double) PAUSE_FADE_MS));
+      float eased = easeOutCubic(t);
+      Color c = mix(transitionFromColor, pausedGrayColor(), eased);
+      float glow = transitionFromGlow * (1f - eased);
+      return new ArrowVisual(c, glow);
+    }
+    if (mode == Mode.PAUSED) {
+      return new ArrowVisual(pausedGrayColor(), 0f);
+    }
+    if (mode == Mode.ACTIVE) {
+      float pulse = activePulse(now);
+      Color c = mix(activeBlueBaseColor(), activeBluePeakColor(), 0.45f + (0.55f * pulse));
+      float glow = 0.20f + (0.46f * pulse);
+      return new ArrowVisual(c, glow);
+    }
+    if (mode == Mode.RETURNING) {
+      float t = clamp01((float) (Math.max(0L, now - modeStartMs) / (double) RETURN_TO_IDLE_MS));
+      float eased = easeOutCubic(t);
+      Color c = mix(transitionFromColor, idleGreenColor(), eased);
+      float glow = transitionFromGlow * (1f - eased);
+      return new ArrowVisual(c, glow);
+    }
+    return new ArrowVisual(idleGreenColor(), IDLE_GLOW_ALPHA);
   }
 
-  private static void drawDoubleChevron(
-      Graphics2D g2, int x, int y, int h, Color glow, Color stroke) {
-    drawChevron(g2, x, y, h, glow, stroke);
-    drawChevron(g2, x + CHEVRON_PAIR_OFFSET, y, h, glow, stroke);
+  private float activePulse(long now) {
+    long elapsed = Math.max(0L, now - modeStartMs);
+    double phase = (elapsed % ACTIVE_PULSE_MS) / (double) ACTIVE_PULSE_MS;
+    return (float) (0.5d + 0.5d * Math.sin(phase * Math.PI * 2d));
   }
 
-  private static void drawChevron(Graphics2D g2, int x, int y, int h, Color glow, Color stroke) {
-    int mid = y + (h / 2);
-    int right = x + CHEVRON_WIDTH;
-
-    g2.setStroke(new BasicStroke(3.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-    g2.setColor(glow);
-    g2.drawLine(x, y, right, mid);
-    g2.drawLine(x, y + h, right, mid);
-
-    g2.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-    g2.setColor(stroke);
-    g2.drawLine(x, y, right, mid);
-    g2.drawLine(x, y + h, right, mid);
+  private static Color idleGreenColor() {
+    return new Color(0x35C86E);
   }
 
-  private Color keyboardColor() {
-    Color c = UIManager.getColor("Label.foreground");
-    if (c == null) c = getForeground();
-    if (c == null) c = Color.GRAY;
-    return c;
+  private static Color defaultWhiteColor() {
+    return new Color(0xFFFFFF);
   }
 
-  private Color activeArrowColor() {
-    Color accent = UIManager.getColor("@accentColor");
-    if (accent == null) accent = UIManager.getColor("Component.accentColor");
-    if (accent == null) accent = UIManager.getColor("Component.focusColor");
-    if (accent == null) accent = new Color(0x4B8DE8);
-    return themedChevronTint(accent);
+  private static Color activeBlueBaseColor() {
+    return new Color(0x52A6FF);
   }
 
-  private Color ghostArrowColor() {
-    Color ghost = UIManager.getColor("Label.disabledForeground");
-    if (ghost != null) return ghost;
-    return new Color(0x9AA0A6);
+  private static Color activeBluePeakColor() {
+    return new Color(0x7CC4FF);
+  }
+
+  private static Color pausedGrayColor() {
+    return new Color(0xC6CDD5);
   }
 
   private static Color withAlpha(Color c, float alpha) {
-    int a = Math.max(0, Math.min(255, Math.round(alpha * 255f)));
+    int a = (int) Math.round(clamp01(alpha) * 255f);
     return new Color(c.getRed(), c.getGreen(), c.getBlue(), a);
-  }
-
-  private static Color themedChevronTint(Color accent) {
-    float[] hsb = Color.RGBtoHSB(accent.getRed(), accent.getGreen(), accent.getBlue(), null);
-    float hue = hsb[0];
-    // Warm red accents shift slightly toward magenta/pink for better neon readability.
-    if (hue <= 0.08f || hue >= 0.92f) {
-      hue = 0.92f;
-    }
-    float sat = clamp(0.26f, 0.60f, hsb[1] * 0.70f + 0.10f);
-    float bri = clamp(0.90f, 1.00f, hsb[2] * 0.85f + 0.20f);
-    Color base = Color.getHSBColor(hue, sat, bri);
-    return mix(base, Color.WHITE, 0.14f);
   }
 
   private static Color mix(Color a, Color b, double t) {
@@ -319,13 +294,13 @@ final class TypingSignalIndicator extends JComponent {
     return new Color(r, g, bb);
   }
 
-  private static float clamp(float min, float max, float v) {
-    return Math.max(min, Math.min(max, v));
+  private static float clamp01(float v) {
+    return Math.max(0f, Math.min(1f, v));
   }
 
-  private enum SignalStyle {
-    ACTIVE,
-    GHOST
+  private static float easeOutCubic(float t) {
+    float x = 1f - clamp01(t);
+    return 1f - (x * x * x);
   }
 
   private enum SignalEvent {
@@ -346,7 +321,18 @@ final class TypingSignalIndicator extends JComponent {
   private enum Mode {
     IDLE,
     ACTIVE,
+    PAUSING,
     PAUSED,
-    FADING
+    RETURNING
+  }
+
+  private record ArrowVisual(Color color, float glowAlpha) {}
+
+  Color debugArrowColorForTest() {
+    return visualAt(System.currentTimeMillis()).color();
+  }
+
+  float debugArrowGlowForTest() {
+    return visualAt(System.currentTimeMillis()).glowAlpha();
   }
 }

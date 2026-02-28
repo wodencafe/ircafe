@@ -146,7 +146,7 @@ final class MessageInputTypingSupport {
     lastActiveSentAtMs = 0L;
 
     String text = input.getText();
-    if (text != null && !text.isBlank() && !text.startsWith("/")) {
+    if (text != null && !text.isBlank() && !isTypingSuppressedSlashCommand(text)) {
       emitTypingState("paused");
       return;
     }
@@ -259,9 +259,8 @@ final class MessageInputTypingSupport {
       return;
     }
 
-    // Slash commands should not broadcast typing indicators.
-    // (User request: do not send typing indicators when the first character is '/'.)
-    if (text.startsWith("/")) {
+    // Slash commands should not broadcast typing indicators, except /me action text.
+    if (isTypingSuppressedSlashCommand(text)) {
       typingPauseTimer.stop();
 
       lastActiveSentAtMs = 0L;
@@ -293,7 +292,7 @@ final class MessageInputTypingSupport {
       return;
     }
 
-    if (text.startsWith("/")) {
+    if (isTypingSuppressedSlashCommand(text)) {
 
       lastActiveSentAtMs = 0L;
       emitTypingState("done");
@@ -383,6 +382,20 @@ final class MessageInputTypingSupport {
       case "done", "inactive" -> "done";
       default -> "";
     };
+  }
+
+  private static boolean isTypingSuppressedSlashCommand(String text) {
+    String t = Objects.toString(text, "");
+    if (!t.startsWith("/")) return false;
+    return !isMeCommand(t);
+  }
+
+  private static boolean isMeCommand(String text) {
+    if (text == null || !text.regionMatches(true, 0, "/me", 0, 3)) {
+      return false;
+    }
+    if (text.length() == 3) return true;
+    return Character.isWhitespace(text.charAt(3));
   }
 
   private void onRemoteTypingHintElapsed() {

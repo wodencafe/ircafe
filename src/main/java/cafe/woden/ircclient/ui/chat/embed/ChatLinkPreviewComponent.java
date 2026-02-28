@@ -71,6 +71,7 @@ final class ChatLinkPreviewComponent extends JPanel {
   private static final Insets CARD_PAD_EXPANDED_DEFAULT = new Insets(10, 12, 10, 12);
   private static final Insets CARD_PAD_COLLAPSED_DEFAULT = new Insets(6, 12, 6, 12);
   private static final int CARD_CORNER_ARC_DEFAULT = 18;
+  private static final int EXT_MEDIA_CARD_CHROME_PX = 28;
   private static final int COLLAPSE_ICON_SIZE = 12;
   private static final Icon COLLAPSED_ICON = SvgIcons.action("play", COLLAPSE_ICON_SIZE);
   private static final Icon EXPANDED_ICON = SvgIcons.action("arrow-down", COLLAPSE_ICON_SIZE);
@@ -81,6 +82,8 @@ final class ChatLinkPreviewComponent extends JPanel {
   private final ImageFetchService imageFetch;
   private final boolean collapsedByDefault;
   private final EmbedCardStyle cardStyle;
+  private final int mediaMaxWidthPx;
+  private final int mediaMaxHeightPx;
 
   private final JLabel status = new JLabel("Loading preview…");
 
@@ -145,7 +148,9 @@ final class ChatLinkPreviewComponent extends JPanel {
       LinkPreviewFetchService fetch,
       ImageFetchService imageFetch,
       boolean collapsedByDefault,
-      EmbedCardStyle cardStyle) {
+      EmbedCardStyle cardStyle,
+      int mediaMaxWidthPx,
+      int mediaMaxHeightPx) {
     super(new FlowLayout(FlowLayout.LEFT, 0, 0));
     this.serverId = serverId;
     this.url = url;
@@ -153,6 +158,8 @@ final class ChatLinkPreviewComponent extends JPanel {
     this.imageFetch = imageFetch;
     this.collapsedByDefault = collapsedByDefault;
     this.cardStyle = cardStyle != null ? cardStyle : EmbedCardStyle.DEFAULT;
+    this.mediaMaxWidthPx = Math.max(0, mediaMaxWidthPx);
+    this.mediaMaxHeightPx = Math.max(0, mediaMaxHeightPx);
     this.collapsed = collapsedByDefault;
 
     setOpaque(false);
@@ -737,11 +744,13 @@ final class ChatLinkPreviewComponent extends JPanel {
                                 this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 220);
                         if (inlineW > 0) {
                           // Keep vertical media previews inside the card's usable content width.
-                          maxW = Math.max(120, inlineW - 28);
+                          maxW = Math.max(120, inlineW - EXT_MEDIA_CARD_CHROME_PX);
                         }
                       }
+                      maxW = effectiveThumbnailMaxWidth(maxW, mediaMaxWidthPx);
                       java.awt.image.BufferedImage scaled =
-                          ImageScaleUtil.scaleDownToWidth(img, maxW);
+                          ImageScaleUtil.scaleDownToFit(
+                              img, maxW, effectiveThumbnailMaxHeight(mediaMaxHeightPx));
                       if (instagramExtended || imgurExtended) {
                         // Portrait photos can exceed the initial placeholder height.
                         // Grow the host to the scaled image so it doesn't look cramped/cropped.
@@ -824,6 +833,9 @@ final class ChatLinkPreviewComponent extends JPanel {
     int maxW =
         EmbedHostLayoutUtil.computeMaxInlineWidth(this, FALLBACK_MAX_W, WIDTH_MARGIN_PX, 220);
     if (maxW <= 0) maxW = FALLBACK_MAX_W;
+    if (instagramExtended || imgurExtended) {
+      maxW = effectiveExtendedCardMaxWidth(maxW, mediaMaxWidthPx);
+    }
 
     if (Math.abs(maxW - lastMaxW) < 4 && lastMaxW > 0 && collapsed == lastCollapsedLayout) return;
     lastMaxW = maxW;
@@ -910,6 +922,26 @@ final class ChatLinkPreviewComponent extends JPanel {
     revalidate();
     repaint();
     EmbedHostLayoutUtil.requestHostReflow(this);
+  }
+
+  static int effectiveThumbnailMaxWidth(int requestedWidthPx, int configuredMaxWidthPx) {
+    int width = requestedWidthPx > 0 ? requestedWidthPx : THUMB_SIZE;
+    if (configuredMaxWidthPx > 0) {
+      width = Math.min(width, configuredMaxWidthPx);
+    }
+    return Math.max(1, width);
+  }
+
+  static int effectiveThumbnailMaxHeight(int configuredMaxHeightPx) {
+    return Math.max(0, configuredMaxHeightPx);
+  }
+
+  static int effectiveExtendedCardMaxWidth(int requestedCardWidthPx, int configuredMaxWidthPx) {
+    int width = Math.max(1, requestedCardWidthPx);
+    if (configuredMaxWidthPx > 0) {
+      width = Math.min(width, Math.max(1, configuredMaxWidthPx + EXT_MEDIA_CARD_CHROME_PX));
+    }
+    return width;
   }
 
   private JPanel createCardPanel() {

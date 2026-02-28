@@ -33,7 +33,7 @@ public class MessageInputPanel extends JPanel {
   private static final Logger log = LoggerFactory.getLogger(MessageInputPanel.class);
   public static final String ID = "input";
   private final JTextField input = new JTextField();
-  private final JButton send = new JButton("Send");
+  private final JButton send = new JButton();
 
   private final JPanel typingBanner = new JPanel(new BorderLayout());
   private final JLabel typingBannerLabel = new JLabel();
@@ -66,7 +66,7 @@ public class MessageInputPanel extends JPanel {
       UiSettingsBus settingsBus,
       CommandHistoryStore historyStore,
       SpellcheckSettingsBus spellcheckSettingsBus) {
-    super(new BorderLayout(8, 0));
+    super(new BorderLayout(0, 0));
     this.settingsBus = settingsBus;
     this.spellcheckSettingsBus = spellcheckSettingsBus;
 
@@ -149,14 +149,20 @@ public class MessageInputPanel extends JPanel {
   }
 
   private void buildLayout() {
-    JPanel right = new JPanel();
-    right.setOpaque(false);
-    right.setLayout(new OverlayLayout(right));
-
     configureTypingBanner();
+    configureInputShell();
     configureTypingSignalIndicator();
-    right.add(send);
-    right.add(typingSignalIndicator);
+
+    JPanel sendOverlay = new JPanel();
+    sendOverlay.setOpaque(false);
+    sendOverlay.setLayout(new OverlayLayout(sendOverlay));
+    sendOverlay.add(send);
+    sendOverlay.add(typingSignalIndicator);
+
+    JPanel inputRow = new JPanel(new BorderLayout(0, 0));
+    inputRow.setOpaque(false);
+    inputRow.add(input, BorderLayout.CENTER);
+    inputRow.add(sendOverlay, BorderLayout.EAST);
 
     JPanel center = new JPanel(new BorderLayout(0, 2));
     center.setOpaque(false);
@@ -168,10 +174,20 @@ public class MessageInputPanel extends JPanel {
     bannerStack.add(typingBanner);
 
     center.add(bannerStack, BorderLayout.NORTH);
-    center.add(input, BorderLayout.CENTER);
+    center.add(inputRow, BorderLayout.CENTER);
 
-    add(center, BorderLayout.CENTER);
-    add(right, BorderLayout.EAST);
+    JPanel shell = new JPanel(new BorderLayout(0, 0));
+    shell.setOpaque(true);
+    Color textBg = UIManager.getColor("TextField.background");
+    if (textBg == null) textBg = input.getBackground();
+    if (textBg != null) shell.setBackground(textBg);
+    shell.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(resolveInputShellBorderColor(), 1, true),
+            BorderFactory.createEmptyBorder(2, 6, 2, 2)));
+    shell.add(center, BorderLayout.CENTER);
+
+    add(shell, BorderLayout.CENTER);
   }
 
   private void configureTypingBanner() {
@@ -187,13 +203,53 @@ public class MessageInputPanel extends JPanel {
     typingBanner.setVisible(false);
   }
 
+  private void configureInputShell() {
+    input.setOpaque(false);
+    input.setBorder(BorderFactory.createEmptyBorder(5, 6, 5, 6));
+
+    send.setName("messageSendButton");
+    send.setText("");
+    // Arrow visuals are painted by TypingSignalIndicator so all states share one icon design.
+    send.setIcon(null);
+    send.setDisabledIcon(null);
+    send.setToolTipText("Send message");
+    if (send.getAccessibleContext() != null) {
+      send.getAccessibleContext().setAccessibleName("Send message");
+      send.getAccessibleContext().setAccessibleDescription("Send current message");
+    }
+    send.setOpaque(false);
+    send.setContentAreaFilled(false);
+    send.setFocusPainted(false);
+    send.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(0, 1, 0, 0, resolveInputDividerColor()),
+            BorderFactory.createEmptyBorder(5, 10, 5, 10)));
+    send.setPreferredSize(new Dimension(38, 30));
+  }
+
   private void configureTypingSignalIndicator() {
-    typingSignalIndicator.setVisible(false);
-    typingSignalIndicator.setAlignmentX(1f);
-    typingSignalIndicator.setAlignmentY(1f);
-    typingSignalIndicator.setBorder(BorderFactory.createEmptyBorder(0, 0, 3, 4));
+    typingSignalIndicator.setVisible(true);
+    typingSignalIndicator.setAlignmentX(0.5f);
+    typingSignalIndicator.setAlignmentY(0.5f);
+    typingSignalIndicator.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
     send.setAlignmentX(0.5f);
     send.setAlignmentY(0.5f);
+  }
+
+  private static Color resolveInputShellBorderColor() {
+    Color c = UIManager.getColor("Component.borderColor");
+    if (c == null) c = UIManager.getColor("TextField.borderColor");
+    if (c == null) c = UIManager.getColor("Separator.foreground");
+    if (c == null) c = new Color(0x8B8F95);
+    return c;
+  }
+
+  private static Color resolveInputDividerColor() {
+    Color c = UIManager.getColor("Component.borderColor");
+    if (c == null) c = UIManager.getColor("Separator.foreground");
+    if (c == null) c = UIManager.getColor("Label.disabledForeground");
+    if (c == null) c = new Color(0x9AA0A6);
+    return c;
   }
 
   private void installSupports() {

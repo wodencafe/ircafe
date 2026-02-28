@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.settings.EmbedCardStyle;
 import cafe.woden.ircclient.ui.settings.EmbedCardStyleBus;
+import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -120,14 +121,20 @@ public class ChatLinkPreviewEmbedder {
       return new InsertResult(false, Math.max(0, insertAt), url);
     }
 
+    UiSettings settings = uiSettings.get();
+    boolean collapsedByDefault = settings != null && settings.linkPreviewsCollapsedByDefault();
+    int imageEmbedsMaxWidthPx = settings != null ? settings.imageEmbedsMaxWidthPx() : 0;
+    int imageEmbedsMaxHeightPx = settings != null ? settings.imageEmbedsMaxHeightPx() : 0;
     ChatLinkPreviewComponent comp =
         new ChatLinkPreviewComponent(
             serverId,
             url,
             fetch,
             imageFetch,
-            uiSettings.get().linkPreviewsCollapsedByDefault(),
-            embedCardStyleBus != null ? embedCardStyleBus.get() : EmbedCardStyle.DEFAULT);
+            collapsedByDefault,
+            embedCardStyleBus != null ? embedCardStyleBus.get() : EmbedCardStyle.DEFAULT,
+            imageEmbedsMaxWidthPx,
+            imageEmbedsMaxHeightPx);
 
     SimpleAttributeSet a = new SimpleAttributeSet(styles.message());
     a.addAttribute(ChatStyles.ATTR_URL, url);

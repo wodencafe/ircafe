@@ -667,16 +667,15 @@ jpackage {
 
 // Best-effort packaging icon.
 // Windows prefers .ico; Linux prefers .png; macOS generally prefers .icns (not included by default).
-afterEvaluate {
-    def jp = project.extensions.findByName("jpackage")
-    if (jp == null) return
-
+tasks.named("jpackage").configure {
     def os = OperatingSystem.current()
     // Prefer the source-controlled PNG in resources for Linux.
     // (packaging/ is optional and may not exist in this repo.)
-    def iconFile = (os.isWindows()) ? file("packaging/ircafe.ico") : (os.isLinux() ? file("src/main/resources/icons/ircafe_512.png") : null)
-    if (iconFile != null && iconFile.exists() && jp.metaClass.hasProperty(jp, "icon")) {
-        jp.icon = iconFile
+    def iconFile = (os.isWindows())
+        ? file("packaging/ircafe.ico")
+        : (os.isLinux() ? file("src/main/resources/icons/ircafe_512.png") : null)
+    if (iconFile != null && iconFile.exists()) {
+        icon.set(iconFile)
     }
 }
 

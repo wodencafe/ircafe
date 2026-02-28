@@ -34,7 +34,7 @@ class MessageInputPanelFunctionalTest {
 
     try {
       JTextField input = findFirst(panel, JTextField.class);
-      JButton send = findButton(panel, "Send");
+      JButton send = findNamedButton(panel, "messageSendButton");
       assertNotNull(input, "message input field should be present");
       assertNotNull(send, "send button should be present");
 
@@ -53,14 +53,14 @@ class MessageInputPanelFunctionalTest {
     }
   }
 
-  private static JButton findButton(Component root, String text) {
-    if (root == null || text == null) return null;
-    if (root instanceof JButton button && text.equals(button.getText())) {
+  private static JButton findNamedButton(Component root, String name) {
+    if (root == null || name == null) return null;
+    if (root instanceof JButton button && name.equals(button.getName())) {
       return button;
     }
     if (!(root instanceof Container container)) return null;
     for (Component child : container.getComponents()) {
-      JButton found = findButton(child, text);
+      JButton found = findNamedButton(child, name);
       if (found != null) return found;
     }
     return null;

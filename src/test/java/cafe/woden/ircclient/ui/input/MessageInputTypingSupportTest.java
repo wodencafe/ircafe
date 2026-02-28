@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.input;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.ui.settings.UiSettings;
@@ -93,19 +94,23 @@ class MessageInputTypingSupportTest {
   }
 
   @Test
-  void localTypingSignalTelemetryIsHiddenWhenUnavailable() throws Exception {
+  void localTypingSignalTelemetryFallsBackToWhiteArrowWhenUnavailable() throws Exception {
     Fixture f = newFixture();
     onEdt(
         () -> {
           f.support.setTypingSignalAvailable(false);
           f.support.onLocalTypingIndicatorSent("active");
-          assertFalse(f.signal.isVisible());
-          assertFalse(f.signal.isArrowVisible());
+          assertTrue(f.signal.isVisible());
+          assertEquals(0xFFFFFF, rgbHex(f.signal.debugArrowColorForTest()));
+          assertEquals(0f, f.signal.debugArrowGlowForTest());
+          assertTrue(f.signal.isArrowVisible());
 
           f.support.setTypingSignalAvailable(true);
           f.support.onLocalTypingIndicatorSent("active");
           assertTrue(f.signal.isVisible());
           assertTrue(f.signal.isArrowVisible());
+          assertNotEquals(0xFFFFFF, rgbHex(f.signal.debugArrowColorForTest()));
+          assertTrue(f.signal.debugArrowGlowForTest() > 0f);
         });
   }
 
@@ -136,7 +141,7 @@ class MessageInputTypingSupportTest {
   }
 
   @Test
-  void sendSignalDisplayToggleOffSuppressesLocalTypingTelemetry() throws Exception {
+  void sendSignalDisplayToggleOffUsesWhiteArrowFallback() throws Exception {
     AtomicReference<UiSettings> settings =
         new AtomicReference<>(defaultSettings().withTypingIndicatorsSendSignalEnabled(false));
     Fixture f = newFixture(settings::get);
@@ -144,8 +149,10 @@ class MessageInputTypingSupportTest {
         () -> {
           f.support.setTypingSignalAvailable(true);
           f.support.onLocalTypingIndicatorSent("active");
-          assertFalse(f.signal.isVisible());
-          assertFalse(f.signal.isArrowVisible());
+          assertTrue(f.signal.isVisible());
+          assertEquals(0xFFFFFF, rgbHex(f.signal.debugArrowColorForTest()));
+          assertEquals(0f, f.signal.debugArrowGlowForTest());
+          assertTrue(f.signal.isArrowVisible());
         });
   }
 
@@ -165,6 +172,34 @@ class MessageInputTypingSupportTest {
           f.support.onUserEdit(false);
           assertTrue(states.contains("active"));
           assertFalse(f.banner.isVisible());
+        });
+  }
+
+  @Test
+  void meCommandDraftEmitsActiveTypingState() throws Exception {
+    Fixture f = newFixture();
+    List<String> states = new ArrayList<>();
+    onEdt(
+        () -> {
+          f.support.setOnTypingStateChanged(states::add);
+          f.input.setText("/me waves");
+          f.support.onUserEdit(false);
+          assertEquals("active", states.get(states.size() - 1));
+        });
+  }
+
+  @Test
+  void nonMeSlashCommandDraftEmitsDoneTypingState() throws Exception {
+    Fixture f = newFixture();
+    List<String> states = new ArrayList<>();
+    onEdt(
+        () -> {
+          f.support.setOnTypingStateChanged(states::add);
+          f.input.setText("hello");
+          f.support.onUserEdit(false);
+          f.input.setText("/whois alice");
+          f.support.onUserEdit(false);
+          assertEquals("done", states.get(states.size() - 1));
         });
   }
 
@@ -212,6 +247,21 @@ class MessageInputTypingSupportTest {
           f.input.setText("/whois alice");
           f.support.flushTypingForBufferSwitch();
           assertEquals("done", states.get(states.size() - 1));
+        });
+  }
+
+  @Test
+  void bufferSwitchWithMeCommandDraftEmitsPaused() throws Exception {
+    Fixture f = newFixture();
+    List<String> states = new ArrayList<>();
+    onEdt(
+        () -> {
+          f.support.setOnTypingStateChanged(states::add);
+          f.input.setText("/me waves");
+          f.support.onUserEdit(false);
+
+          f.support.flushTypingForBufferSwitch();
+          assertEquals("paused", states.get(states.size() - 1));
         });
   }
 
@@ -279,6 +329,10 @@ class MessageInputTypingSupportTest {
       return;
     }
     SwingUtilities.invokeAndWait(r);
+  }
+
+  private static int rgbHex(java.awt.Color color) {
+    return color == null ? 0 : (color.getRGB() & 0xFFFFFF);
   }
 
   private record Fixture(
