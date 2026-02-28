@@ -438,6 +438,34 @@ class PircbotxAwayNotifyInputParserTest {
   }
 
   @Test
+  void draftReadMarkerCapAckUpdatesReadMarkerState() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    parser.processCommand(
+        "*",
+        source("server"),
+        "CAP",
+        ":server CAP me ACK :draft/read-marker",
+        List.of("me", "ACK", ":draft/read-marker"),
+        ImmutableMap.of());
+
+    assertTrue(conn.readMarkerCapAcked.get());
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                e ->
+                    e instanceof IrcEvent.Ircv3CapabilityChanged cap
+                        && "ACK".equalsIgnoreCase(cap.subcommand())
+                        && "draft/read-marker".equalsIgnoreCase(cap.capability())
+                        && cap.enabled()));
+  }
+
+  @Test
   void capNewEmitsCapabilityAvailabilityEvent() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
@@ -728,8 +756,8 @@ class PircbotxAwayNotifyInputParserTest {
         "#ircafe",
         source("server"),
         "MARKREAD",
-        "MARKREAD #ircafe :2026-02-16T12:30:00.000Z",
-        List.of("#ircafe", ":2026-02-16T12:30:00.000Z"),
+        "MARKREAD #ircafe timestamp=2026-02-16T12:30:00.000Z",
+        List.of("#ircafe", "timestamp=2026-02-16T12:30:00.000Z"),
         ImmutableMap.of());
 
     assertTrue(
@@ -740,7 +768,7 @@ class PircbotxAwayNotifyInputParserTest {
                     e instanceof IrcEvent.ReadMarkerObserved rm
                         && "server".equals(rm.from())
                         && "#ircafe".equals(rm.target())
-                        && "2026-02-16T12:30:00.000Z".equals(rm.marker())));
+                        && "timestamp=2026-02-16T12:30:00.000Z".equals(rm.marker())));
   }
 
   @Test

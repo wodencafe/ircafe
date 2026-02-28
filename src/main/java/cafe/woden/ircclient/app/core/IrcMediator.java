@@ -2988,17 +2988,27 @@ public class IrcMediator implements MediatorControlPort {
   private static long parseReadMarkerEpochMs(String marker, Instant fallbackAt) {
     Instant fallback = (fallbackAt != null) ? fallbackAt : Instant.now();
     String raw = Objects.toString(marker, "").trim();
-    if (raw.isEmpty()) return fallback.toEpochMilli();
+    if (raw.isEmpty() || "*".equals(raw)) return 0L;
+
+    String value = raw;
+    int eq = raw.indexOf('=');
+    if (eq > 0 && eq < (raw.length() - 1)) {
+      String key = raw.substring(0, eq).trim();
+      if ("timestamp".equalsIgnoreCase(key)) {
+        value = raw.substring(eq + 1).trim();
+      }
+    }
+    if (value.isEmpty() || "*".equals(value)) return 0L;
 
     try {
-      return Instant.parse(raw).toEpochMilli();
+      return Instant.parse(value).toEpochMilli();
     } catch (Exception ignored) {
     }
 
     try {
-      long parsed = Long.parseLong(raw);
+      long parsed = Long.parseLong(value);
       if (parsed <= 0) return fallback.toEpochMilli();
-      if (raw.length() <= 10) {
+      if (value.length() <= 10) {
         return Math.multiplyExact(parsed, 1000L);
       }
       return parsed;

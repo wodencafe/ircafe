@@ -574,7 +574,8 @@ public class PircbotxIrcClientService implements IrcClientService {
               PircbotxConnectionState c = conn(serverId);
               if (c == null || !c.readMarkerCapAcked.get()) {
                 throw new IllegalStateException(
-                    "read-marker capability not negotiated: " + serverId);
+                    "read-marker capability not negotiated (requires draft/read-marker): "
+                        + serverId);
               }
               if (c.botRef.get() == null) {
                 throw new IllegalStateException("Not connected: " + serverId);
@@ -583,7 +584,7 @@ public class PircbotxIrcClientService implements IrcClientService {
               String dest = sanitizeTarget(target);
               Instant at = (markerAt == null) ? Instant.now() : markerAt;
               String ts = MARKREAD_TS_FMT.format(at);
-              requireBot(serverId).sendRaw().rawLine("MARKREAD " + dest + " :" + ts);
+              requireBot(serverId).sendRaw().rawLine("MARKREAD " + dest + " timestamp=" + ts);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }

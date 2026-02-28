@@ -6297,7 +6297,7 @@ public class PreferencesDialog {
       case "draft/multiline" -> "Multiline messages (draft)";
       case "draft/typing" -> "Typing transport (draft)";
       case "typing" -> "Typing transport";
-      case "read-marker" -> "Read markers";
+      case "draft/read-marker", "read-marker" -> "Read markers";
       case "draft/channel-context" -> "Channel context metadata";
       case "draft/reply" -> "Reply metadata";
       case "draft/react" -> "Reaction metadata";
@@ -6355,6 +6355,7 @@ public class PreferencesDialog {
           "message-redaction",
           "draft/typing",
           "typing",
+          "draft/read-marker",
           "read-marker",
           "multiline",
           "draft/multiline" ->
@@ -6397,7 +6398,7 @@ public class PreferencesDialog {
       case "draft/multiline" -> 220;
       case "draft/typing" -> 225;
       case "typing" -> 230;
-      case "read-marker" -> 240;
+      case "draft/read-marker", "read-marker" -> 240;
       case "draft/channel-context" -> 245;
       case "draft/reply" -> 250;
       case "draft/react" -> 260;
@@ -6434,7 +6435,8 @@ public class PreferencesDialog {
           "Allows sending and receiving multiline messages as a single logical message.";
       case "typing", "draft/typing" ->
           "Transport for typing indicators; required to send/receive typing events.";
-      case "read-marker" -> "Enables read-position markers on servers that support them.";
+      case "draft/read-marker", "read-marker" ->
+          "Enables read-position markers on servers that support them.";
       case "draft/channel-context" ->
           "Carries channel context for client-tagged metadata sent outside the channel buffer.";
       case "draft/reply" -> "Carries reply context so quoted/reply relationships can be preserved.";
@@ -6481,6 +6483,7 @@ public class PreferencesDialog {
   private static String normalizeIrcv3CapabilityKey(String capability) {
     if (capability == null) return "";
     String k = capability.trim().toLowerCase(Locale.ROOT);
+    if ("draft/read-marker".equals(k)) return "read-marker";
     return k;
   }
 

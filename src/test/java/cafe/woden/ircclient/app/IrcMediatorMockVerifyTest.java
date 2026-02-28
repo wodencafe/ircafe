@@ -387,6 +387,40 @@ class IrcMediatorMockVerifyTest {
         .appendStatusAt(any(), any(), eq("(setname)"), eq("alice set name to: Alice Liddell"));
   }
 
+  @Test
+  void readMarkerTimestampSelectorParsesAndAppliesEpoch() throws Exception {
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ReadMarkerObserved(
+                Instant.parse("2026-02-16T12:31:00.000Z"),
+                "server",
+                "#ircafe",
+                "timestamp=2026-02-16T12:30:00.000Z")));
+
+    verify(ui)
+        .setReadMarker(
+            new TargetRef("libera", "#ircafe"),
+            Instant.parse("2026-02-16T12:30:00.000Z").toEpochMilli());
+  }
+
+  @Test
+  void readMarkerWildcardAppliesZeroEpoch() throws Exception {
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ReadMarkerObserved(
+                Instant.parse("2026-02-16T12:31:00.000Z"), "server", "#ircafe", "*")));
+
+    verify(ui).setReadMarker(new TargetRef("libera", "#ircafe"), 0L);
+  }
+
   private void invokeHandleOutgoingLine(String raw) throws Exception {
     Method method = IrcMediator.class.getDeclaredMethod("handleOutgoingLine", String.class);
     method.setAccessible(true);

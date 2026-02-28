@@ -240,7 +240,8 @@ public interface IrcClientService {
   }
 
   /**
-   * @return true if IRCv3 {@code read-marker} is negotiated on this connection.
+   * @return true if IRCv3 {@code draft/read-marker} (or equivalent) is negotiated on this
+   *     connection.
    */
   default boolean isReadMarkerAvailable(String serverId) {
     return false;

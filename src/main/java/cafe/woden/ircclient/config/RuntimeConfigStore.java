@@ -6733,7 +6733,9 @@ public class RuntimeConfigStore {
 
   private static String normalizeCapabilityKey(String capability) {
     String c = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
-    return c.isEmpty() ? null : c;
+    if (c.isEmpty()) return null;
+    if ("draft/read-marker".equals(c)) return "read-marker";
+    return c;
   }
 
   private static String normalizeHostKey(String host) {
