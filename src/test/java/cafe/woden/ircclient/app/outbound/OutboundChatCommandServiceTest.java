@@ -112,7 +112,7 @@ class OutboundChatCommandServiceTest {
     service.handlePart(disposables, "", "");
 
     verify(ui).appendStatus(status, "(part)", "Select a server first.");
-    verify(targetCoordinator, never()).detachChannel(any(TargetRef.class), anyString());
+    verify(targetCoordinator, never()).disconnectChannel(any(TargetRef.class), anyString());
   }
 
   @Test
@@ -122,7 +122,7 @@ class OutboundChatCommandServiceTest {
 
     service.handlePart(disposables, "", "  be right back  ");
 
-    verify(targetCoordinator).detachChannel(chan, "be right back");
+    verify(targetCoordinator).disconnectChannel(chan, "be right back");
   }
 
   @Test
@@ -135,7 +135,7 @@ class OutboundChatCommandServiceTest {
     verify(ui)
         .appendStatus(
             status, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
-    verify(targetCoordinator, never()).detachChannel(any(TargetRef.class), anyString());
+    verify(targetCoordinator, never()).disconnectChannel(any(TargetRef.class), anyString());
   }
 
   @Test
@@ -146,7 +146,7 @@ class OutboundChatCommandServiceTest {
 
     service.handlePart(disposables, "  #ircafe ", "  later ");
 
-    verify(targetCoordinator).detachChannel(expected, "later");
+    verify(targetCoordinator).disconnectChannel(expected, "later");
   }
 
   @Test
@@ -157,7 +157,7 @@ class OutboundChatCommandServiceTest {
     service.handlePart(disposables, "alice", "bye");
 
     verify(ui).appendStatus(status, "(part)", "Usage: /part [#channel] [reason]");
-    verify(targetCoordinator, never()).detachChannel(any(TargetRef.class), anyString());
+    verify(targetCoordinator, never()).disconnectChannel(any(TargetRef.class), anyString());
   }
 
   @Test
@@ -700,11 +700,42 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void markReadSendsReadMarkerAndClearsUnreadForActiveConversation() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(irc.sendReadMarker(eq("libera"), eq("#ircafe"), any(Instant.class)))
+        .thenReturn(Completable.complete());
+
+    service.handleMarkRead(disposables);
+
+    verify(ui).setReadMarker(eq(chan), anyLong());
+    verify(ui).clearUnread(chan);
+    verify(irc).sendReadMarker(eq("libera"), eq("#ircafe"), any(Instant.class));
+  }
+
+  @Test
+  void markReadShowsCapabilityHintWhenReadMarkerUnavailable() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(false);
+
+    service.handleMarkRead(disposables);
+
+    verify(ui).appendStatus(status, "(markread)", "read-marker is not negotiated on this server.");
+    verify(irc, never()).sendReadMarker(eq("libera"), eq("#ircafe"), any(Instant.class));
+  }
+
+  @Test
   void helpAnnotatesEditAndRedactAsUnavailableWhenCapsNotNegotiated() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(irc.isMessageEditAvailable("libera")).thenReturn(false);
     when(irc.isMessageRedactionAvailable("libera")).thenReturn(false);
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(false);
 
     service.handleHelp("");
 
@@ -715,6 +746,7 @@ class OutboundChatCommandServiceTest {
             eq(chan),
             eq("(help)"),
             contains("/redact <msgid> [reason] (alias: /delete) (unavailable:"));
+    verify(ui).appendStatus(eq(chan), eq("(help)"), contains("/markread (unavailable:"));
   }
 
   @Test
@@ -723,12 +755,15 @@ class OutboundChatCommandServiceTest {
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(irc.isMessageEditAvailable("libera")).thenReturn(true);
     when(irc.isMessageRedactionAvailable("libera")).thenReturn(true);
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
 
     service.handleHelp("edit");
     service.handleHelp("redact");
+    service.handleHelp("markread");
 
     verify(ui).appendStatus(chan, "(help)", "/edit <msgid> <message>");
     verify(ui).appendStatus(chan, "(help)", "/redact <msgid> [reason] (alias: /delete)");
+    verify(ui).appendStatus(chan, "(help)", "/markread");
   }
 
   @Test

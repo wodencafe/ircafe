@@ -350,4 +350,43 @@ class ArchitectureGuardrailsTest {
           .callConstructorWhere(target(owner(assignableTo(Thread.class))))
           .because(
               "direct new Thread(...) creation should be avoided in favor of VirtualThreads helpers");
+
+  @ArchTest
+  static final ArchRule
+      non_ui_packages_should_not_depend_on_ui_input_servertree_or_coordinator_subpackages =
+          noClasses()
+              .that()
+              .resideOutsideOfPackage("cafe.woden.ircclient.ui..")
+              .should()
+              .dependOnClassesThat()
+              .resideInAnyPackage(
+                  "cafe.woden.ircclient.ui.input..",
+                  "cafe.woden.ircclient.ui.servertree..",
+                  "cafe.woden.ircclient.ui.coordinator..",
+                  "cafe.woden.ircclient.ui.bus..",
+                  "cafe.woden.ircclient.ui.controls..")
+              .because(
+                  "ui internals (input, server-tree, coordinator, bus, controls) should remain behind the top-level ui adapter boundary");
+
+  @ArchTest
+  static final ArchRule ui_input_should_not_depend_on_servertree_subpackage =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui.input..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.ui.servertree..")
+          .because(
+              "message-input internals and server-tree internals should stay decoupled and coordinate via higher-level UI services");
+
+  @ArchTest
+  static final ArchRule ui_servertree_should_not_depend_on_input_subpackage =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui.servertree..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.ui.input..")
+          .because(
+              "server-tree internals should not depend on message-input internals; interactions belong in UI coordinators");
 }

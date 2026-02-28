@@ -32,6 +32,7 @@ import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettings;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
 import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
+import cafe.woden.ircclient.ui.chat.embed.EmbedLoadPolicyBus;
 import cafe.woden.ircclient.ui.filter.FilterRuleEntryDialog;
 import cafe.woden.ircclient.ui.filter.FilterSettings;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
@@ -148,6 +149,7 @@ public class PreferencesDialog {
       "Overrides the global Swing UI font family and size for controls, menus, tabs, and dialogs.";
 
   private final UiSettingsBus settingsBus;
+  private final EmbedCardStyleBus embedCardStyleBus;
   private final ThemeManager themeManager;
   private final ThemeAccentSettingsBus accentSettingsBus;
   private final ThemeTweakSettingsBus tweakSettingsBus;
@@ -158,6 +160,8 @@ public class PreferencesDialog {
   private final NickColorSettingsBus nickColorSettingsBus;
   private final NickColorService nickColorService;
   private final NickColorOverridesDialog nickColorOverridesDialog;
+  private final EmbedLoadPolicyDialog embedLoadPolicyDialog;
+  private final EmbedLoadPolicyBus embedLoadPolicyBus;
   private final PircbotxIrcClientService ircClientService;
   private final FilterSettingsBus filterSettingsBus;
   private final TranscriptRebuildService transcriptRebuildService;
@@ -179,6 +183,7 @@ public class PreferencesDialog {
 
   public PreferencesDialog(
       UiSettingsBus settingsBus,
+      EmbedCardStyleBus embedCardStyleBus,
       ThemeManager themeManager,
       ThemeAccentSettingsBus accentSettingsBus,
       ThemeTweakSettingsBus tweakSettingsBus,
@@ -189,6 +194,8 @@ public class PreferencesDialog {
       NickColorSettingsBus nickColorSettingsBus,
       NickColorService nickColorService,
       NickColorOverridesDialog nickColorOverridesDialog,
+      EmbedLoadPolicyDialog embedLoadPolicyDialog,
+      EmbedLoadPolicyBus embedLoadPolicyBus,
       PircbotxIrcClientService ircClientService,
       FilterSettingsBus filterSettingsBus,
       TranscriptRebuildService transcriptRebuildService,
@@ -207,6 +214,7 @@ public class PreferencesDialog {
       @Qualifier(ExecutorConfig.PREFERENCES_NOTIFICATION_RULE_TEST_EXECUTOR)
           ExecutorService notificationRuleTestExecutor) {
     this.settingsBus = settingsBus;
+    this.embedCardStyleBus = embedCardStyleBus;
     this.themeManager = themeManager;
     this.accentSettingsBus = accentSettingsBus;
     this.tweakSettingsBus = tweakSettingsBus;
@@ -217,6 +225,8 @@ public class PreferencesDialog {
     this.nickColorSettingsBus = nickColorSettingsBus;
     this.nickColorService = nickColorService;
     this.nickColorOverridesDialog = nickColorOverridesDialog;
+    this.embedLoadPolicyDialog = embedLoadPolicyDialog;
+    this.embedLoadPolicyBus = embedLoadPolicyBus;
     this.ircClientService = ircClientService;
     this.filterSettingsBus = filterSettingsBus;
     this.transcriptRebuildService = transcriptRebuildService;
@@ -312,6 +322,12 @@ public class PreferencesDialog {
         new java.util.concurrent.atomic.AtomicReference<>(committedThemeId.get());
     final java.util.concurrent.atomic.AtomicReference<UiSettings> committedUiSettings =
         new java.util.concurrent.atomic.AtomicReference<>(current);
+    final java.util.concurrent.atomic.AtomicReference<RuntimeConfigStore.EmbedLoadPolicySnapshot>
+        pendingEmbedLoadPolicy =
+            new java.util.concurrent.atomic.AtomicReference<>(
+                embedLoadPolicyBus != null
+                    ? embedLoadPolicyBus.get()
+                    : runtimeConfig.readEmbedLoadPolicy());
     final java.util.concurrent.atomic.AtomicReference<ThemeAccentSettings> committedAccentSettings =
         new java.util.concurrent.atomic.AtomicReference<>(
             initialAccent != null
@@ -845,8 +861,12 @@ public class PreferencesDialog {
             : new PushyProperties(false, null, null, null, null, null, null, null);
     TrayControls trayControls = buildTrayControls(current, soundSettings, pushySettings);
 
+    EmbedCardStyle currentEmbedCardStyle =
+        embedCardStyleBus != null ? embedCardStyleBus.get() : EmbedCardStyle.DEFAULT;
     ImageEmbedControls imageEmbeds = buildImageEmbedControls(current, closeables);
-    LinkPreviewControls linkPreviews = buildLinkPreviewControls(current);
+    LinkPreviewControls linkPreviews = buildLinkPreviewControls(current, currentEmbedCardStyle);
+    JButton advancedEmbedPolicyButton =
+        buildAdvancedEmbedPolicyButton(owner, pendingEmbedLoadPolicy);
     TimestampControls timestamps = buildTimestampControls(current);
     JComboBox<MemoryUsageDisplayMode> memoryUsageDisplayMode =
         buildMemoryUsageDisplayModeCombo(current);
@@ -860,8 +880,18 @@ public class PreferencesDialog {
     CtcpAutoReplyControls ctcpAutoReplies = buildCtcpAutoReplyControls();
     JCheckBox typingIndicatorsSendEnabled = buildTypingIndicatorsSendCheckbox(current);
     JCheckBox typingIndicatorsReceiveEnabled = buildTypingIndicatorsReceiveCheckbox(current);
+    JCheckBox typingIndicatorsTreeDisplayEnabled =
+        buildTypingIndicatorsTreeDisplayCheckbox(current);
+    JCheckBox typingIndicatorsUsersListDisplayEnabled =
+        buildTypingIndicatorsUsersListDisplayCheckbox(current);
+    JCheckBox typingIndicatorsTranscriptDisplayEnabled =
+        buildTypingIndicatorsTranscriptDisplayCheckbox(current);
+    JCheckBox typingIndicatorsSendSignalDisplayEnabled =
+        buildTypingIndicatorsSendSignalDisplayCheckbox(current);
     JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle =
         buildTypingTreeIndicatorStyleCombo(current);
+    JCheckBox serverTreeNotificationBadgesEnabled =
+        buildServerTreeNotificationBadgesCheckbox(current);
     JSpinner serverTreeUnreadBadgeScalePercent = buildServerTreeUnreadBadgeScalePercentSpinner();
     Ircv3CapabilitiesControls ircv3Capabilities = buildIrcv3CapabilitiesControls();
     NickColorControls nickColors = buildNickColorControls(owner, closeables);
@@ -875,6 +905,7 @@ public class PreferencesDialog {
     LoggingControls logging = buildLoggingControls(logProps, closeables);
 
     OutgoingColorControls outgoing = buildOutgoingColorControls(current);
+    JCheckBox outgoingDeliveryIndicators = buildOutgoingDeliveryIndicatorsCheckbox(current);
     NetworkAdvancedControls network = buildNetworkAdvancedControls(current, closeables);
     ProxyControls proxy = network.proxy;
     UserhostControls userhost = network.userhost;
@@ -913,16 +944,23 @@ public class PreferencesDialog {
             spellcheck,
             nickColors,
             timestamps,
-            outgoing);
+            outgoing,
+            outgoingDeliveryIndicators);
     JPanel ctcpRepliesPanel = buildCtcpRepliesPanel(ctcpAutoReplies);
     JPanel ircv3Panel =
         buildIrcv3CapabilitiesPanel(
             typingIndicatorsSendEnabled,
             typingIndicatorsReceiveEnabled,
+            typingIndicatorsTreeDisplayEnabled,
+            typingIndicatorsUsersListDisplayEnabled,
+            typingIndicatorsTranscriptDisplayEnabled,
+            typingIndicatorsSendSignalDisplayEnabled,
             typingTreeIndicatorStyle,
+            serverTreeNotificationBadgesEnabled,
             serverTreeUnreadBadgeScalePercent,
             ircv3Capabilities);
-    JPanel embedsPanel = buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews);
+    JPanel embedsPanel =
+        buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews, advancedEmbedPolicyButton);
     JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
     JPanel notificationsPanel = buildNotificationsPanel(notifications, ircEventNotifications);
     JPanel commandsPanel = buildUserCommandsPanel(userCommands);
@@ -1201,8 +1239,18 @@ public class PreferencesDialog {
           boolean ctcpAutoReplyTimeEnabledV = ctcpAutoReplies.time.isSelected();
           boolean typingIndicatorsSendEnabledV = typingIndicatorsSendEnabled.isSelected();
           boolean typingIndicatorsReceiveEnabledV = typingIndicatorsReceiveEnabled.isSelected();
+          boolean typingIndicatorsTreeDisplayEnabledV =
+              typingIndicatorsTreeDisplayEnabled.isSelected();
+          boolean typingIndicatorsUsersListDisplayEnabledV =
+              typingIndicatorsUsersListDisplayEnabled.isSelected();
+          boolean typingIndicatorsTranscriptDisplayEnabledV =
+              typingIndicatorsTranscriptDisplayEnabled.isSelected();
+          boolean typingIndicatorsSendSignalDisplayEnabledV =
+              typingIndicatorsSendSignalDisplayEnabled.isSelected();
           String typingIndicatorsTreeStyleV =
               typingTreeIndicatorStyleValue(typingTreeIndicatorStyle);
+          boolean serverTreeNotificationBadgesEnabledV =
+              serverTreeNotificationBadgesEnabled.isSelected();
           int serverTreeUnreadBadgeScalePercentV =
               ((Number) serverTreeUnreadBadgeScalePercent.getValue()).intValue();
           if (serverTreeUnreadBadgeScalePercentV < 50) serverTreeUnreadBadgeScalePercentV = 50;
@@ -1215,6 +1263,14 @@ public class PreferencesDialog {
 
           int maxImageW = ((Number) imageEmbeds.maxWidth.getValue()).intValue();
           int maxImageH = ((Number) imageEmbeds.maxHeight.getValue()).intValue();
+          EmbedCardStyle embedCardStyleV =
+              linkPreviews.cardStyle.getSelectedItem() instanceof EmbedCardStyle style
+                  ? style
+                  : EmbedCardStyle.DEFAULT;
+          EmbedCardStyle prevEmbedCardStyle =
+              embedCardStyleBus != null ? embedCardStyleBus.get() : EmbedCardStyle.DEFAULT;
+          boolean embedCardStyleChanged =
+              !java.util.Objects.equals(prevEmbedCardStyle, embedCardStyleV);
 
           int historyInitialLoadV = ((Number) history.initialLoadLines.getValue()).intValue();
           int historyPageSizeV = ((Number) history.pageSize.getValue()).intValue();
@@ -1366,6 +1422,7 @@ public class PreferencesDialog {
           String outgoingHexV =
               UiSettings.normalizeHexOrDefault(outgoing.hex.getText(), prev.clientLineColor());
           outgoing.hex.setText(outgoingHexV);
+          boolean outgoingDeliveryIndicatorsEnabledV = outgoingDeliveryIndicators.isSelected();
 
           if (notifications.table.isEditing()) {
             try {
@@ -1512,6 +1569,10 @@ public class PreferencesDialog {
                   typingIndicatorsSendEnabledV,
                   typingIndicatorsReceiveEnabledV,
                   typingIndicatorsTreeStyleV,
+                  typingIndicatorsTreeDisplayEnabledV,
+                  typingIndicatorsUsersListDisplayEnabledV,
+                  typingIndicatorsTranscriptDisplayEnabledV,
+                  typingIndicatorsSendSignalDisplayEnabledV,
                   timestampsEnabledV,
                   timestampFormatV,
                   timestampsIncludeChatMessagesV,
@@ -1530,6 +1591,8 @@ public class PreferencesDialog {
                   chatTranscriptMaxLinesPerTargetV,
                   outgoingColorEnabledV,
                   outgoingHexV,
+                  outgoingDeliveryIndicatorsEnabledV,
+                  serverTreeNotificationBadgesEnabledV,
                   userhostEnabledV,
                   userhostMinIntervalV,
                   userhostMaxPerMinuteV,
@@ -1573,6 +1636,8 @@ public class PreferencesDialog {
 
           runtimeConfig.rememberServerTreeUnreadBadgeScalePercent(
               serverTreeUnreadBadgeScalePercentV);
+          runtimeConfig.rememberServerTreeNotificationBadgesEnabled(
+              serverTreeNotificationBadgesEnabledV);
           settingsBus.set(next);
           if (spellcheckSettingsBus != null) {
             spellcheckSettingsBus.set(nextSpellcheck);
@@ -1671,9 +1736,21 @@ public class PreferencesDialog {
             runtimeConfig.rememberImageEmbedsMaxWidthPx(next.imageEmbedsMaxWidthPx());
             runtimeConfig.rememberImageEmbedsMaxHeightPx(next.imageEmbedsMaxHeightPx());
             runtimeConfig.rememberImageEmbedsAnimateGifs(next.imageEmbedsAnimateGifs());
+            runtimeConfig.rememberEmbedCardStyle(embedCardStyleV.token());
+            if (embedCardStyleBus != null) {
+              embedCardStyleBus.set(embedCardStyleV);
+            }
             runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
             runtimeConfig.rememberLinkPreviewsCollapsedByDefault(
                 next.linkPreviewsCollapsedByDefault());
+            RuntimeConfigStore.EmbedLoadPolicySnapshot embedPolicyV =
+                pendingEmbedLoadPolicy.get() != null
+                    ? pendingEmbedLoadPolicy.get()
+                    : RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults();
+            runtimeConfig.rememberEmbedLoadPolicy(embedPolicyV);
+            if (embedLoadPolicyBus != null) {
+              embedLoadPolicyBus.set(embedPolicyV);
+            }
             runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
             runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(
                 next.ctcpRequestsInActiveTargetEnabled());
@@ -1685,6 +1762,13 @@ public class PreferencesDialog {
             runtimeConfig.rememberTypingIndicatorsReceiveEnabled(
                 next.typingIndicatorsReceiveEnabled());
             runtimeConfig.rememberTypingTreeIndicatorStyle(next.typingIndicatorsTreeStyle());
+            runtimeConfig.rememberTypingIndicatorsTreeEnabled(next.typingIndicatorsTreeEnabled());
+            runtimeConfig.rememberTypingIndicatorsUsersListEnabled(
+                next.typingIndicatorsUsersListEnabled());
+            runtimeConfig.rememberTypingIndicatorsTranscriptEnabled(
+                next.typingIndicatorsTranscriptEnabled());
+            runtimeConfig.rememberTypingIndicatorsSendSignalEnabled(
+                next.typingIndicatorsSendSignalEnabled());
             runtimeConfig.rememberSpellcheckEnabled(nextSpellcheck.enabled());
             runtimeConfig.rememberSpellcheckUnderlineEnabled(nextSpellcheck.underlineEnabled());
             runtimeConfig.rememberSpellcheckSuggestOnTabEnabled(
@@ -1763,6 +1847,8 @@ public class PreferencesDialog {
 
             runtimeConfig.rememberClientLineColorEnabled(next.clientLineColorEnabled());
             runtimeConfig.rememberClientLineColor(next.clientLineColor());
+            runtimeConfig.rememberOutgoingDeliveryIndicatorsEnabled(
+                next.outgoingDeliveryIndicatorsEnabled());
 
             runtimeConfig.rememberNotificationRuleCooldownSeconds(
                 next.notificationRuleCooldownSeconds());
@@ -1856,6 +1942,14 @@ public class PreferencesDialog {
             } else if (chatThemeChanged) {
               // Only the transcript palette changed
               themeManager.refreshChatStyles();
+            }
+          }
+          if (embedCardStyleChanged) {
+            try {
+              TargetRef active = targetCoordinator.getActiveTarget();
+              if (active != null) transcriptRebuildService.rebuild(active);
+            } catch (Exception ignored) {
+              // best-effort
             }
           }
 
@@ -3824,6 +3918,16 @@ public class PreferencesDialog {
     return ctcp;
   }
 
+  private JCheckBox buildOutgoingDeliveryIndicatorsCheckbox(UiSettings current) {
+    JCheckBox cb =
+        new JCheckBox("Show send-status indicators for my outgoing messages (spinner + green dot)");
+    cb.setSelected(current.outgoingDeliveryIndicatorsEnabled());
+    cb.setToolTipText(
+        "When enabled, outgoing messages show a pending spinner and a brief green confirmation dot when server echo reconciliation completes.\n"
+            + "When disabled, these visual indicators are hidden; message send/reconcile behavior is unchanged.");
+    return cb;
+  }
+
   private JCheckBox buildTypingIndicatorsSendCheckbox(UiSettings current) {
     JCheckBox cb = new JCheckBox("Send typing indicators (IRCv3)");
     cb.setSelected(current.typingIndicatorsEnabled());
@@ -3837,6 +3941,42 @@ public class PreferencesDialog {
     cb.setSelected(current.typingIndicatorsReceiveEnabled());
     cb.setToolTipText(
         "When enabled, IRCafe will display incoming IRCv3 typing indicators from other users.");
+    return cb;
+  }
+
+  private JCheckBox buildTypingIndicatorsTreeDisplayCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Show typing marker next to channels");
+    cb.setSelected(current.typingIndicatorsTreeEnabled());
+    cb.setToolTipText(
+        "Controls typing markers in the server tree channel list.\n"
+            + "Typing transport behavior is unchanged.");
+    return cb;
+  }
+
+  private JCheckBox buildTypingIndicatorsUsersListDisplayCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Show typing marker next to users");
+    cb.setSelected(current.typingIndicatorsUsersListEnabled());
+    cb.setToolTipText(
+        "Controls typing markers beside nicknames in the channel user list.\n"
+            + "Typing transport behavior is unchanged.");
+    return cb;
+  }
+
+  private JCheckBox buildTypingIndicatorsTranscriptDisplayCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Show typing status in the transcript input area");
+    cb.setSelected(current.typingIndicatorsTranscriptEnabled());
+    cb.setToolTipText(
+        "Controls the incoming typing banner above the input field (\"X is typing\").\n"
+            + "Typing transport behavior is unchanged.");
+    return cb;
+  }
+
+  private JCheckBox buildTypingIndicatorsSendSignalDisplayCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Show local typing-send arrows near Send");
+    cb.setSelected(current.typingIndicatorsSendSignalEnabled());
+    cb.setToolTipText(
+        "Controls the local send telemetry arrows near the Send button.\n"
+            + "Typing transport behavior is unchanged.");
     return cb;
   }
 
@@ -3875,6 +4015,15 @@ public class PreferencesDialog {
       }
     }
     return combo;
+  }
+
+  private JCheckBox buildServerTreeNotificationBadgesCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Show unread/highlight badges in the server tree");
+    cb.setSelected(current.serverTreeNotificationBadgesEnabled());
+    cb.setToolTipText(
+        "When enabled, the server tree shows numeric unread/highlight badges next to targets.\n"
+            + "When disabled, badge counts are hidden but unread/highlight tracking still runs.");
+    return cb;
   }
 
   private JSpinner buildServerTreeUnreadBadgeScalePercentSpinner() {
@@ -4359,7 +4508,8 @@ public class PreferencesDialog {
         imageEmbeds, imageEmbedsCollapsed, imageMaxWidth, imageMaxHeight, animateGifs, imagePanel);
   }
 
-  private LinkPreviewControls buildLinkPreviewControls(UiSettings current) {
+  private LinkPreviewControls buildLinkPreviewControls(
+      UiSettings current, EmbedCardStyle currentEmbedCardStyle) {
     JCheckBox linkPreviews = new JCheckBox("Enable link previews (OpenGraph cards)");
     linkPreviews.setSelected(current.linkPreviewsEnabled());
     linkPreviews.setToolTipText(
@@ -4374,12 +4524,24 @@ public class PreferencesDialog {
     linkPreviews.addActionListener(
         e -> linkPreviewsCollapsed.setEnabled(linkPreviews.isSelected()));
 
-    JPanel linkPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]4[]"));
+    JComboBox<EmbedCardStyle> cardStyle = new JComboBox<>(EmbedCardStyle.values());
+    cardStyle.setSelectedItem(
+        currentEmbedCardStyle != null ? currentEmbedCardStyle : EmbedCardStyle.DEFAULT);
+    cardStyle.setToolTipText(
+        "Visual preset for inline cards used by link previews and image embeds.");
+
+    JPanel linkPanel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]4[]8[]"));
     linkPanel.setOpaque(false);
     linkPanel.add(linkPreviews);
     linkPanel.add(linkPreviewsCollapsed);
+    JPanel styleRow = new JPanel(new MigLayout("insets 0", "[][grow,fill]", "[]"));
+    styleRow.setOpaque(false);
+    styleRow.add(new JLabel("Card style"));
+    styleRow.add(cardStyle, "w 180!");
+    linkPanel.add(styleRow, "growx");
 
-    return new LinkPreviewControls(linkPreviews, linkPreviewsCollapsed, linkPanel);
+    return new LinkPreviewControls(linkPreviews, linkPreviewsCollapsed, cardStyle, linkPanel);
   }
 
   private TimestampControls buildTimestampControls(UiSettings current) {
@@ -4514,8 +4676,7 @@ public class PreferencesDialog {
         "When enabled, history loads skip expensive URL/mention rich parsing while inserting.\n"
             + "This improves smoothness, but history text appears with simpler styling.");
 
-    JCheckBox historyLockViewportDuringLoadOlder =
-        new JCheckBox("Lock viewport during load older");
+    JCheckBox historyLockViewportDuringLoadOlder = new JCheckBox("Lock viewport during load older");
     historyLockViewportDuringLoadOlder.setSelected(
         runtimeConfig == null || runtimeConfig.readChatHistoryLockViewportDuringLoadOlder(true));
     historyLockViewportDuringLoadOlder.setToolTipText(
@@ -5957,7 +6118,8 @@ public class PreferencesDialog {
       SpellcheckControls spellcheck,
       NickColorControls nickColors,
       TimestampControls timestamps,
-      OutgoingColorControls outgoing) {
+      OutgoingColorControls outgoing,
+      JCheckBox outgoingDeliveryIndicators) {
     JPanel form =
         new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]10[grow,fill]"));
     form.add(tabTitle("Chat"), "growx, wmin 0, wrap");
@@ -5967,7 +6129,12 @@ public class PreferencesDialog {
         "General",
         padSubTab(
             buildChatGeneralSubTab(
-                presenceFolds, ctcpRequestsInActiveTarget, nickColors, timestamps, outgoing)));
+                presenceFolds,
+                ctcpRequestsInActiveTarget,
+                nickColors,
+                timestamps,
+                outgoing,
+                outgoingDeliveryIndicators)));
     chatTabs.addTab("Spellcheck", padSubTab(buildChatSpellcheckSubTab(spellcheck)));
     form.add(chatTabs, "grow, push, wmin 0");
     return form;
@@ -5978,7 +6145,8 @@ public class PreferencesDialog {
       JCheckBox ctcpRequestsInActiveTarget,
       NickColorControls nickColors,
       TimestampControls timestamps,
-      OutgoingColorControls outgoing) {
+      OutgoingColorControls outgoing,
+      JCheckBox outgoingDeliveryIndicators) {
     JPanel panel =
         new JPanel(
             new MigLayout(
@@ -6001,6 +6169,8 @@ public class PreferencesDialog {
     panel.add(sectionTitle("Your messages"), "span 2, growx, wmin 0, wrap");
     panel.add(new JLabel("Outgoing messages"), "aligny top");
     panel.add(outgoing.panel, "growx, wmin 0");
+    panel.add(new JLabel("Delivery indicators"), "aligny top");
+    panel.add(outgoingDeliveryIndicators, "alignx left");
 
     return panel;
   }
@@ -6105,7 +6275,12 @@ public class PreferencesDialog {
   private JPanel buildIrcv3CapabilitiesPanel(
       JCheckBox typingIndicatorsSendEnabled,
       JCheckBox typingIndicatorsReceiveEnabled,
+      JCheckBox typingIndicatorsTreeDisplayEnabled,
+      JCheckBox typingIndicatorsUsersListDisplayEnabled,
+      JCheckBox typingIndicatorsTranscriptDisplayEnabled,
+      JCheckBox typingIndicatorsSendSignalDisplayEnabled,
       JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle,
+      JCheckBox serverTreeNotificationBadgesEnabled,
       JSpinner serverTreeUnreadBadgeScalePercent,
       Ircv3CapabilitiesControls ircv3Capabilities) {
     JPanel form =
@@ -6133,7 +6308,8 @@ public class PreferencesDialog {
     typingHelp.setToolTipText("How typing indicators affect IRCafe");
     JPanel typingRow =
         new JPanel(
-            new MigLayout("insets 8, fillx, wrap 1, hidemode 3", "[grow,fill]6[]", "[]2[]2[]"));
+            new MigLayout(
+                "insets 8, fillx, wrap 1, hidemode 3", "[grow,fill]6[]", "[]2[]2[]2[]2[]"));
     typingRow.setBorder(
         BorderFactory.createCompoundBorder(
             BorderFactory.createTitledBorder("Typing indicators"),
@@ -6147,6 +6323,17 @@ public class PreferencesDialog {
     treeStyleRow.add(new JLabel("Server tree marker style"));
     treeStyleRow.add(typingTreeIndicatorStyle, "growx, wmin 180");
     typingRow.add(treeStyleRow, "growx, wmin 0");
+    JPanel displaysRow =
+        new JPanel(
+            new MigLayout(
+                "insets 0, fillx, wrap 2, hidemode 3", "[grow,fill]16[grow,fill]", "[]2[]"));
+    displaysRow.setOpaque(false);
+    displaysRow.add(typingIndicatorsTreeDisplayEnabled, "growx, wmin 0");
+    displaysRow.add(typingIndicatorsUsersListDisplayEnabled, "growx, wmin 0");
+    displaysRow.add(typingIndicatorsTranscriptDisplayEnabled, "growx, wmin 0");
+    displaysRow.add(typingIndicatorsSendSignalDisplayEnabled, "growx, wmin 0");
+    typingRow.add(displaysRow, "growx, wmin 0");
+    typingRow.add(serverTreeNotificationBadgesEnabled, "growx, wmin 0");
     JPanel badgeScaleRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[]6[]", "[]"));
     badgeScaleRow.setOpaque(false);
     badgeScaleRow.add(new JLabel("Unread badge size"));
@@ -6156,7 +6343,9 @@ public class PreferencesDialog {
     JTextArea typingImpact = subtleInfoText();
     typingImpact.setText(
         "Send controls your outbound typing state; Display controls incoming typing state from others.\n"
+            + "Display toggles control where typing hints render: server tree, user list, transcript, and send telemetry arrows.\n"
             + "Server tree marker style controls the channel typing activity indicator.\n"
+            + "Show unread/highlight badges toggles server tree notification count badges.\n"
             + "Unread badge size scales channel unread/highlight count badges in the server tree.");
     typingImpact.setBorder(BorderFactory.createEmptyBorder(0, 18, 0, 0));
     JPanel typingTab =
@@ -6274,7 +6463,7 @@ public class PreferencesDialog {
       case "draft/multiline" -> "Multiline messages (draft)";
       case "draft/typing" -> "Typing transport (draft)";
       case "typing" -> "Typing transport";
-      case "read-marker" -> "Read markers";
+      case "draft/read-marker", "read-marker" -> "Read markers";
       case "draft/channel-context" -> "Channel context metadata";
       case "draft/reply" -> "Reply metadata";
       case "draft/react" -> "Reaction metadata";
@@ -6332,6 +6521,7 @@ public class PreferencesDialog {
           "message-redaction",
           "draft/typing",
           "typing",
+          "draft/read-marker",
           "read-marker",
           "multiline",
           "draft/multiline" ->
@@ -6374,7 +6564,7 @@ public class PreferencesDialog {
       case "draft/multiline" -> 220;
       case "draft/typing" -> 225;
       case "typing" -> 230;
-      case "read-marker" -> 240;
+      case "draft/read-marker", "read-marker" -> 240;
       case "draft/channel-context" -> 245;
       case "draft/reply" -> 250;
       case "draft/react" -> 260;
@@ -6411,7 +6601,8 @@ public class PreferencesDialog {
           "Allows sending and receiving multiline messages as a single logical message.";
       case "typing", "draft/typing" ->
           "Transport for typing indicators; required to send/receive typing events.";
-      case "read-marker" -> "Enables read-position markers on servers that support them.";
+      case "draft/read-marker", "read-marker" ->
+          "Enables read-position markers on servers that support them.";
       case "draft/channel-context" ->
           "Carries channel context for client-tagged metadata sent outside the channel buffer.";
       case "draft/reply" -> "Carries reply context so quoted/reply relationships can be preserved.";
@@ -6458,13 +6649,35 @@ public class PreferencesDialog {
   private static String normalizeIrcv3CapabilityKey(String capability) {
     if (capability == null) return "";
     String k = capability.trim().toLowerCase(Locale.ROOT);
+    if ("draft/read-marker".equals(k)) return "read-marker";
     return k;
   }
 
-  private JPanel buildEmbedsAndPreviewsPanel(ImageEmbedControls image, LinkPreviewControls links) {
+  private JButton buildAdvancedEmbedPolicyButton(
+      Window owner,
+      java.util.concurrent.atomic.AtomicReference<RuntimeConfigStore.EmbedLoadPolicySnapshot>
+          pendingEmbedLoadPolicy) {
+    JButton advanced = new JButton("Advanced Policy...");
+    advanced.setToolTipText(
+        "Open advanced allow/deny controls for embed/link loading by user, channel, URL/domain, and network.");
+    advanced.addActionListener(
+        e -> {
+          if (embedLoadPolicyDialog == null || pendingEmbedLoadPolicy == null) return;
+          RuntimeConfigStore.EmbedLoadPolicySnapshot current =
+              pendingEmbedLoadPolicy.get() != null
+                  ? pendingEmbedLoadPolicy.get()
+                  : RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults();
+          embedLoadPolicyDialog.open(owner, current).ifPresent(pendingEmbedLoadPolicy::set);
+        });
+    return advanced;
+  }
+
+  private JPanel buildEmbedsAndPreviewsPanel(
+      ImageEmbedControls image, LinkPreviewControls links, JButton advancedPolicyButton) {
     JPanel form =
         new JPanel(
-            new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]"));
+            new MigLayout(
+                "insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]10[]"));
 
     form.add(tabTitle("Embeds & Previews"), "span 2, growx, wmin 0, wrap");
     form.add(sectionTitle("Inline images"), "span 2, growx, wmin 0, wrap");
@@ -6474,6 +6687,15 @@ public class PreferencesDialog {
     form.add(sectionTitle("Link previews"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("OpenGraph cards"), "aligny top");
     form.add(links.panel, "growx");
+
+    form.add(sectionTitle("Access policy"), "span 2, growx, wmin 0, wrap");
+    form.add(new JLabel("Advanced matching rules"), "aligny top");
+    JPanel buttonRow = new JPanel(new MigLayout("insets 0", "[]", "[]"));
+    buttonRow.setOpaque(false);
+    if (advancedPolicyButton != null) {
+      buttonRow.add(advancedPolicyButton);
+    }
+    form.add(buttonRow, "growx");
 
     return form;
   }
@@ -10323,7 +10545,8 @@ public class PreferencesDialog {
       JCheckBox animateGifs,
       JPanel panel) {}
 
-  private record LinkPreviewControls(JCheckBox enabled, JCheckBox collapsed, JPanel panel) {}
+  private record LinkPreviewControls(
+      JCheckBox enabled, JCheckBox collapsed, JComboBox<EmbedCardStyle> cardStyle, JPanel panel) {}
 
   private record LaunchGcOption(String id, String label) {
     @Override

@@ -98,7 +98,7 @@ class NotificationRuleMatcherTest {
   }
 
   private static UiSettingsSnapshot snapshot(NotificationRule... rules) {
-    return new UiSettingsSnapshot(List.of(rules), 15, 30, true, true);
+    return new UiSettingsSnapshot(List.of(rules), 15, 30, true, true, true, true, true);
   }
 
   private static final class MutableUiSettingsPort implements UiSettingsPort {

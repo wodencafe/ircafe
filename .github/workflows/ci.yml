@@ -13,7 +13,53 @@ permissions:
   contents: read
 
 jobs:
+  conventional-commits:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate Conventional Commit messages
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/validate-conventional-commit-msg.sh
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            commit_list="$(git rev-list --no-merges "origin/${{ github.base_ref }}..HEAD")"
+          else
+            before="${{ github.event.before }}"
+            after="${{ github.sha }}"
+            if [[ -n "$before" && ! "$before" =~ ^0+$ ]]; then
+              commit_list="$(git rev-list --no-merges "$before..$after")"
+            else
+              commit_list="$after"
+            fi
+          fi
+
+          if [[ -z "${commit_list:-}" ]]; then
+            echo "No commits to validate."
+            exit 0
+          fi
+
+          failed=0
+          while read -r commit; do
+            [[ -z "$commit" ]] && continue
+            subject="$(git log -1 --pretty=%s "$commit")"
+            if ! ./scripts/validate-conventional-commit-msg.sh "$subject"; then
+              echo "::error::Commit $commit failed conventional commit validation"
+              failed=1
+            fi
+          done <<< "$commit_list"
+
+          exit "$failed"
+
   lint:
+    needs: conventional-commits
     runs-on: ubuntu-latest
 
     env:
@@ -38,6 +84,7 @@ jobs:
         run: ./gradlew --no-daemon clean lint
 
   test:
+    needs: conventional-commits
     runs-on: ubuntu-latest
 
     env:
@@ -61,6 +108,7 @@ jobs:
         run: ./gradlew --no-daemon test bootJar
 
   integrationTest:
+    needs: conventional-commits
     runs-on: ubuntu-latest
 
     env:
@@ -84,6 +132,7 @@ jobs:
         run: ./gradlew --no-daemon integrationTest
 
   architectureTest:
+    needs: conventional-commits
     runs-on: ubuntu-latest
 
     env:
@@ -107,6 +156,7 @@ jobs:
         run: ./gradlew --no-daemon architectureTest
 
   functionalTest:
+    needs: conventional-commits
     runs-on: ubuntu-latest
 
     env:

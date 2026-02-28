@@ -40,6 +40,8 @@ import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
@@ -53,10 +55,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -72,6 +76,11 @@ public class IrcMediator implements MediatorControlPort {
   private static final int PENDING_ECHO_TIMEOUT_BATCH_MAX = 64;
   private static final long NETSPLIT_NOTIFY_DEBOUNCE_MS = 20_000L;
   private static final int NETSPLIT_NOTIFY_MAX_KEYS = 512;
+  private static final int INBOUND_MSGID_DEDUP_MAX_KEYS = 50_000;
+  private static final Duration INBOUND_MSGID_DEDUP_TTL = Duration.ofMinutes(30);
+  private static final int INBOUND_MSGID_DEDUP_COUNTER_MAX_KEYS = 4_096;
+  private static final Duration INBOUND_MSGID_DEDUP_COUNTER_TTL = Duration.ofHours(6);
+  private static final long INBOUND_MSGID_DEDUP_DIAG_MIN_EMIT_MS = 10_000L;
 
   private final IrcClientService irc;
   private final UiPort ui;
@@ -91,6 +100,7 @@ public class IrcMediator implements MediatorControlPort {
   private final UserInfoEnrichmentService userInfoEnrichmentService;
   private final UserListStore userListStore;
   private final InboundIgnorePolicyPort inboundIgnorePolicy;
+  private final ApplicationEventPublisher applicationEventPublisher;
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final WhoisRoutingState whoisRoutingState;
   private final CtcpRoutingState ctcpRoutingState;
@@ -114,10 +124,41 @@ public class IrcMediator implements MediatorControlPort {
   // Dedup cache
   private final Map<String, TypingLogState> lastTypingByKey = new ConcurrentHashMap<>();
   private final Map<String, Long> lastNetsplitNotifyAtMs = new ConcurrentHashMap<>();
+  private final Cache<InboundMessageDedupKey, Boolean> inboundMessageIdDedup =
+      Caffeine.newBuilder()
+          .maximumSize(INBOUND_MSGID_DEDUP_MAX_KEYS)
+          .expireAfterAccess(INBOUND_MSGID_DEDUP_TTL)
+          .build();
+  private final Cache<InboundMessageDedupCounterKey, Long>
+      inboundMessageIdDedupSuppressedCountByKey =
+          Caffeine.newBuilder()
+              .maximumSize(INBOUND_MSGID_DEDUP_COUNTER_MAX_KEYS)
+              .expireAfterAccess(INBOUND_MSGID_DEDUP_COUNTER_TTL)
+              .build();
+  private final Cache<InboundMessageDedupCounterKey, Long>
+      inboundMessageIdDedupDiagLastEmitMsByKey =
+          Caffeine.newBuilder()
+              .maximumSize(INBOUND_MSGID_DEDUP_COUNTER_MAX_KEYS)
+              .expireAfterAccess(INBOUND_MSGID_DEDUP_COUNTER_TTL)
+              .build();
+  private final AtomicLong inboundMessageIdDedupSuppressedTotal = new AtomicLong();
   private static final long TYPING_LOG_DEDUP_MS = 5_000;
   private static final int TYPING_LOG_MAX_KEYS = 512;
 
   private record TypingLogState(String state, long atMs) {}
+
+  private record InboundMessageDedupKey(
+      String serverId, String target, String eventType, String msgId) {}
+
+  private record InboundMessageDedupCounterKey(String serverId, String target, String eventType) {}
+
+  public record InboundMessageDedupDiagnostics(
+      String serverId,
+      String target,
+      String eventType,
+      long suppressedCount,
+      long suppressedTotal,
+      String messageIdSample) {}
 
   @PostConstruct
   void init() {
@@ -161,7 +202,8 @@ public class IrcMediator implements MediatorControlPort {
       IrcEventNotifierPort ircEventNotifierPort,
       InterceptorIngestPort interceptorIngestPort,
       InboundIgnorePolicyPort inboundIgnorePolicy,
-      MonitorFallbackPort monitorFallbackPort) {
+      MonitorFallbackPort monitorFallbackPort,
+      ApplicationEventPublisher applicationEventPublisher) {
 
     this.irc = irc;
     this.ui = ui;
@@ -195,6 +237,7 @@ public class IrcMediator implements MediatorControlPort {
     this.interceptorIngestPort = interceptorIngestPort;
     this.inboundIgnorePolicy = inboundIgnorePolicy;
     this.monitorFallbackPort = monitorFallbackPort;
+    this.applicationEventPublisher = applicationEventPublisher;
   }
 
   public void start() {
@@ -526,6 +569,11 @@ public class IrcMediator implements MediatorControlPort {
     connectionCoordinator.connectAll();
   }
 
+  @Override
+  public void connectAutoConnectOnStartServers() {
+    connectionCoordinator.connectAutoConnectOnStartServers();
+  }
+
   public void disconnectAll() {
     connectionCoordinator.disconnectAll();
   }
@@ -627,6 +675,10 @@ public class IrcMediator implements MediatorControlPort {
             sid, chan, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags())) {
           return;
         }
+        if (shouldSuppressInboundDuplicateByMsgId(
+            sid, chan, "channel-message", ev.messageId(), ev.ircv3Tags())) {
+          return;
+        }
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           postTo(
@@ -690,6 +742,10 @@ public class IrcMediator implements MediatorControlPort {
         InboundIgnorePolicyPort.Decision decision =
             decideInbound(sid, ev.from(), true, ev.channel(), ev.action(), "ACTIONS", "CTCPS");
         if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
+        if (shouldSuppressInboundDuplicateByMsgId(
+            sid, chan, "channel-action", ev.messageId(), ev.ircv3Tags())) {
+          return;
+        }
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           postTo(
@@ -843,6 +899,10 @@ public class IrcMediator implements MediatorControlPort {
             sid, pm, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags())) {
           return;
         }
+        if (shouldSuppressInboundDuplicateByMsgId(
+            sid, pm, "private-message", ev.messageId(), ev.ircv3Tags())) {
+          return;
+        }
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           if (allowAutoOpen) {
@@ -932,6 +992,10 @@ public class IrcMediator implements MediatorControlPort {
                 ? InboundIgnorePolicyPort.Decision.ALLOW
                 : decideInbound(sid, ev.from(), true, "", ev.action(), "ACTIONS", "CTCPS");
         if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
+        if (shouldSuppressInboundDuplicateByMsgId(
+            sid, pm, "private-action", ev.messageId(), ev.ircv3Tags())) {
+          return;
+        }
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           if (allowAutoOpen) {
@@ -1031,6 +1095,10 @@ public class IrcMediator implements MediatorControlPort {
 
         if (maybeApplyMessageEditFromTaggedLine(
             sid, dest, ev.at(), ev.from(), ev.text(), ev.messageId(), ev.ircv3Tags())) {
+          return;
+        }
+        if (shouldSuppressInboundDuplicateByMsgId(
+            sid, dest, "notice", ev.messageId(), ev.ircv3Tags())) {
           return;
         }
 
@@ -1552,7 +1620,9 @@ public class IrcMediator implements MediatorControlPort {
               st,
               ev.at(),
               "(join)",
-              "Stayed detached from " + ev.channel() + " (right-click channel and choose Join).");
+              "Stayed disconnected from "
+                  + ev.channel()
+                  + " (right-click channel and choose Reconnect).");
           break;
         }
 
@@ -1737,9 +1807,18 @@ public class IrcMediator implements MediatorControlPort {
         String state = Objects.toString(ev.state(), "").trim().toLowerCase(Locale.ROOT);
         if (state.isEmpty()) state = "active";
 
-        boolean prefEnabled = false;
+        boolean receiveEnabled = false;
+        boolean treeDisplayEnabled = false;
+        boolean usersListDisplayEnabled = false;
+        boolean transcriptDisplayEnabled = false;
         try {
-          prefEnabled = uiSettingsPort.get().typingIndicatorsReceiveEnabled();
+          var uiSettings = uiSettingsPort.get();
+          if (uiSettings != null) {
+            receiveEnabled = uiSettings.typingIndicatorsReceiveEnabled();
+            treeDisplayEnabled = uiSettings.typingIndicatorsTreeEnabled();
+            usersListDisplayEnabled = uiSettings.typingIndicatorsUsersListEnabled();
+            transcriptDisplayEnabled = uiSettings.typingIndicatorsTranscriptEnabled();
+          }
         } catch (Exception ignored) {
         }
         boolean typingAvailable = false;
@@ -1748,11 +1827,15 @@ public class IrcMediator implements MediatorControlPort {
         } catch (Exception ignored) {
         }
         maybeLogTypingObserved(
-            sid, Objects.toString(ev.target(), ""), from, state, prefEnabled, typingAvailable);
+            sid, Objects.toString(ev.target(), ""), from, state, receiveEnabled, typingAvailable);
 
-        ui.showTypingIndicator(dest, from, state);
-        if (prefEnabled) {
+        if (receiveEnabled && transcriptDisplayEnabled) {
+          ui.showTypingIndicator(dest, from, state);
+        }
+        if (receiveEnabled && treeDisplayEnabled) {
           ui.showTypingActivity(dest, state);
+        }
+        if (receiveEnabled && usersListDisplayEnabled) {
           ui.showUsersTypingIndicator(dest, from, state);
         }
       }
@@ -1763,6 +1846,7 @@ public class IrcMediator implements MediatorControlPort {
         TargetRef dest = resolveReadMarkerTarget(sid, ev.target(), status);
         long markerEpochMs = parseReadMarkerEpochMs(ev.marker(), ev.at());
         ui.setReadMarker(dest, markerEpochMs);
+        ui.clearUnread(dest);
       }
 
       case IrcEvent.MessageReplyObserved ev -> {
@@ -2809,6 +2893,79 @@ public class IrcMediator implements MediatorControlPort {
     return isFromSelf(sid, f);
   }
 
+  private boolean shouldSuppressInboundDuplicateByMsgId(
+      String sid, TargetRef target, String eventType, String messageId, Map<String, String> tags) {
+    if (hasMessageMutationTag(tags)) return false;
+
+    String msgId = effectiveMessageIdForDedup(messageId, tags);
+    if (msgId.isBlank()) return false;
+
+    String sidKey = Objects.toString(sid, "").trim().toLowerCase(Locale.ROOT);
+    String targetKey = normalizeDedupTarget(target);
+    String eventKey = Objects.toString(eventType, "").trim().toLowerCase(Locale.ROOT);
+    InboundMessageDedupKey key = new InboundMessageDedupKey(sidKey, targetKey, eventKey, msgId);
+    boolean duplicate = inboundMessageIdDedup.asMap().putIfAbsent(key, Boolean.TRUE) != null;
+    if (duplicate) {
+      recordInboundMessageIdSuppression(sidKey, targetKey, eventKey, msgId);
+    }
+    return duplicate;
+  }
+
+  private static String normalizeDedupTarget(TargetRef target) {
+    if (target == null) return "";
+    return Objects.toString(target.target(), "").trim().toLowerCase(Locale.ROOT);
+  }
+
+  private void recordInboundMessageIdSuppression(
+      String serverId, String target, String eventType, String messageId) {
+    InboundMessageDedupCounterKey counterKey =
+        new InboundMessageDedupCounterKey(serverId, target, eventType);
+    long keyCount =
+        inboundMessageIdDedupSuppressedCountByKey
+            .asMap()
+            .compute(counterKey, (k, prev) -> prev == null ? 1L : (prev + 1L));
+    long total = inboundMessageIdDedupSuppressedTotal.incrementAndGet();
+    maybePublishInboundMessageIdSuppression(counterKey, keyCount, total, messageId);
+  }
+
+  private void maybePublishInboundMessageIdSuppression(
+      InboundMessageDedupCounterKey key, long keyCount, long total, String messageId) {
+    if (applicationEventPublisher == null || key == null) return;
+    if (keyCount > 1 && (keyCount % 25L) != 0L) return;
+
+    long now = System.currentTimeMillis();
+    Long last = inboundMessageIdDedupDiagLastEmitMsByKey.asMap().get(key);
+    if (last != null && (now - last.longValue()) < INBOUND_MSGID_DEDUP_DIAG_MIN_EMIT_MS) return;
+    inboundMessageIdDedupDiagLastEmitMsByKey.put(key, now);
+
+    try {
+      applicationEventPublisher.publishEvent(
+          new InboundMessageDedupDiagnostics(
+              key.serverId(),
+              key.target(),
+              key.eventType(),
+              keyCount,
+              total,
+              Objects.toString(messageId, "")));
+    } catch (Exception ignored) {
+    }
+  }
+
+  private static String effectiveMessageIdForDedup(String messageId, Map<String, String> tags) {
+    String direct = Objects.toString(messageId, "").trim();
+    if (!direct.isBlank()) return direct;
+    return firstIrcv3TagValue(
+        tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid", "znc.in/msgid", "+znc.in/msgid");
+  }
+
+  private static boolean hasMessageMutationTag(Map<String, String> tags) {
+    return !firstIrcv3TagValue(tags, "draft/edit", "+draft/edit").isBlank()
+        || !firstIrcv3TagValue(tags, "draft/react", "+draft/react").isBlank()
+        || !firstIrcv3TagValue(tags, "draft/unreact", "+draft/unreact").isBlank()
+        || !firstIrcv3TagValue(tags, "draft/delete", "+draft/delete").isBlank()
+        || !firstIrcv3TagValue(tags, "draft/redact", "+draft/redact").isBlank();
+  }
+
   private static String firstIrcv3TagValue(Map<String, String> tags, String... keys) {
     if (tags == null || tags.isEmpty() || keys == null) return "";
     for (String key : keys) {
@@ -2847,17 +3004,27 @@ public class IrcMediator implements MediatorControlPort {
   private static long parseReadMarkerEpochMs(String marker, Instant fallbackAt) {
     Instant fallback = (fallbackAt != null) ? fallbackAt : Instant.now();
     String raw = Objects.toString(marker, "").trim();
-    if (raw.isEmpty()) return fallback.toEpochMilli();
+    if (raw.isEmpty() || "*".equals(raw)) return 0L;
+
+    String value = raw;
+    int eq = raw.indexOf('=');
+    if (eq > 0 && eq < (raw.length() - 1)) {
+      String key = raw.substring(0, eq).trim();
+      if ("timestamp".equalsIgnoreCase(key)) {
+        value = raw.substring(eq + 1).trim();
+      }
+    }
+    if (value.isEmpty() || "*".equals(value)) return 0L;
 
     try {
-      return Instant.parse(raw).toEpochMilli();
+      return Instant.parse(value).toEpochMilli();
     } catch (Exception ignored) {
     }
 
     try {
-      long parsed = Long.parseLong(raw);
+      long parsed = Long.parseLong(value);
       if (parsed <= 0) return fallback.toEpochMilli();
-      if (raw.length() <= 10) {
+      if (value.length() <= 10) {
         return Math.multiplyExact(parsed, 1000L);
       }
       return parsed;

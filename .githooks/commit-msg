@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+message_file="${1-}"
+if [[ -z "$message_file" || ! -f "$message_file" ]]; then
+  exit 0
+fi
+
+subject="$(grep -v '^[[:space:]]*#' "$message_file" | sed -n '1p' | sed 's/[[:space:]]*$//')"
+if [[ -z "$subject" ]]; then
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+"$repo_root/scripts/validate-conventional-commit-msg.sh" "$subject"
+

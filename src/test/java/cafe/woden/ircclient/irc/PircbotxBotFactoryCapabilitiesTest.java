@@ -36,6 +36,7 @@ class PircbotxBotFactoryCapabilitiesTest {
     assertTrue(caps.contains("draft/typing"));
     assertTrue(caps.contains("typing"));
     assertTrue(caps.contains("read-marker"));
+    assertTrue(caps.contains("draft/read-marker"));
     assertTrue(caps.contains("multiline"));
     assertTrue(caps.contains("draft/multiline"));
     assertTrue(caps.contains("chathistory"));

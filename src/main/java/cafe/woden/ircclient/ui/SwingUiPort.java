@@ -8,10 +8,17 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
+import cafe.woden.ircclient.ui.bus.OutboundLineBus;
+import cafe.woden.ircclient.ui.bus.TargetActivationBus;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
+import cafe.woden.ircclient.ui.controls.ConnectButton;
+import cafe.woden.ircclient.ui.controls.DisconnectButton;
+import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
+import cafe.woden.ircclient.ui.shell.StatusBar;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -266,8 +273,13 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public Flowable<TargetRef> detachChannelRequests() {
-    return serverTree.detachChannelRequests();
+  public Flowable<TargetRef> disconnectChannelRequests() {
+    return serverTree.disconnectChannelRequests();
+  }
+
+  @Override
+  public Flowable<TargetRef> bouncerDetachChannelRequests() {
+    return serverTree.bouncerDetachChannelRequests();
   }
 
   @Override
@@ -311,18 +323,18 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public void setChannelDetached(TargetRef target, boolean detached) {
-    onEdt(() -> serverTree.setChannelDetached(target, detached));
+  public void setChannelDisconnected(TargetRef target, boolean detached) {
+    onEdt(() -> serverTree.setChannelDisconnected(target, detached));
   }
 
   @Override
-  public void setChannelDetached(TargetRef target, boolean detached, String warningReason) {
-    onEdt(() -> serverTree.setChannelDetached(target, detached, warningReason));
+  public void setChannelDisconnected(TargetRef target, boolean detached, String warningReason) {
+    onEdt(() -> serverTree.setChannelDisconnected(target, detached, warningReason));
   }
 
   @Override
-  public boolean isChannelDetached(TargetRef target) {
-    return onEdtCall(() -> serverTree.isChannelDetached(target), false);
+  public boolean isChannelDisconnected(TargetRef target) {
+    return onEdtCall(() -> serverTree.isChannelDisconnected(target), false);
   }
 
   @Override

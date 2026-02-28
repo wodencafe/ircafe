@@ -58,6 +58,10 @@ public record UiProperties(
     Boolean memoryUsageWarningSoundEnabled,
     Boolean clientLineColorEnabled,
     String clientLineColor,
+    /** Visual send-status indicators for outbound messages (pending spinner + confirmed dot). */
+    Boolean outgoingDeliveryIndicatorsEnabled,
+    /** Show unread/highlight notification badges in the server tree. */
+    Boolean serverTreeNotificationBadgesEnabled,
     Boolean imageEmbedsEnabled,
     Boolean imageEmbedsCollapsedByDefault,
     Integer imageEmbedsMaxWidthPx,
@@ -93,6 +97,7 @@ public record UiProperties(
     MonitorFallback monitorFallback,
     Boolean linkPreviewsEnabled,
     Boolean linkPreviewsCollapsedByDefault,
+    String embedCardStyle,
     Boolean nickColoringEnabled,
     Boolean presenceFoldsEnabled,
 
@@ -108,6 +113,18 @@ public record UiProperties(
      * <p>Allowed values: {@code dots}, {@code keyboard}, {@code glow-dot}.
      */
     String typingTreeIndicatorStyle,
+
+    /** Show typing markers next to channels in the server tree. */
+    Boolean typingIndicatorsTreeEnabled,
+
+    /** Show typing markers next to nicks in the user list. */
+    Boolean typingIndicatorsUsersListEnabled,
+
+    /** Show typing status text ("X is typing") in the chat transcript input area. */
+    Boolean typingIndicatorsTranscriptEnabled,
+
+    /** Show local typing-send telemetry arrows near the send button. */
+    Boolean typingIndicatorsSendSignalEnabled,
 
     /** Enable spell checking in the message input. */
     Boolean spellcheckEnabled,
@@ -725,6 +742,13 @@ public record UiProperties(
     }
     // Default outgoing message color if enabled but not set explicitly.
     clientLineColor = normalizeHexOrDefault(clientLineColor, "#6AA2FF");
+    // Delivery indicators default: enabled.
+    if (outgoingDeliveryIndicatorsEnabled == null) {
+      outgoingDeliveryIndicatorsEnabled = true;
+    }
+    if (serverTreeNotificationBadgesEnabled == null) {
+      serverTreeNotificationBadgesEnabled = true;
+    }
 
     if (layout == null) {
       layout = new Layout(null, null);
@@ -784,6 +808,7 @@ public record UiProperties(
     if (linkPreviewsCollapsedByDefault == null) {
       linkPreviewsCollapsedByDefault = false;
     }
+    embedCardStyle = normalizeEmbedCardStyle(embedCardStyle);
     // Nick coloring defaults.
     if (nickColorMinContrast <= 0) {
       nickColorMinContrast = 3.0;
@@ -807,6 +832,18 @@ public record UiProperties(
       typingIndicatorsReceiveEnabled = typingIndicatorsEnabled;
     }
     typingTreeIndicatorStyle = normalizeTypingTreeIndicatorStyle(typingTreeIndicatorStyle);
+    if (typingIndicatorsTreeEnabled == null) {
+      typingIndicatorsTreeEnabled = typingIndicatorsReceiveEnabled;
+    }
+    if (typingIndicatorsUsersListEnabled == null) {
+      typingIndicatorsUsersListEnabled = typingIndicatorsReceiveEnabled;
+    }
+    if (typingIndicatorsTranscriptEnabled == null) {
+      typingIndicatorsTranscriptEnabled = typingIndicatorsReceiveEnabled;
+    }
+    if (typingIndicatorsSendSignalEnabled == null) {
+      typingIndicatorsSendSignalEnabled = typingIndicatorsEnabled;
+    }
 
     // Spellcheck defaults.
     if (spellcheckEnabled == null) {
@@ -930,6 +967,16 @@ public record UiProperties(
       case "keyboard", "kbd" -> "keyboard";
       case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> "glow-dot";
       default -> "dots";
+    };
+  }
+
+  static String normalizeEmbedCardStyle(String raw) {
+    String s = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+    return switch (s) {
+      case "minimal", "min" -> "minimal";
+      case "glassy", "glass" -> "glassy";
+      case "denser", "dense", "compact" -> "denser";
+      default -> "default";
     };
   }
 

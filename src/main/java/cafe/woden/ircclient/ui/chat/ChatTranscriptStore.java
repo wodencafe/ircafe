@@ -58,6 +58,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private static final int RESTYLE_ELEMENTS_PER_SLICE = 180;
   private static final int DEFAULT_TRANSCRIPT_MAX_LINES_PER_TARGET = 4000;
   private static final int MAX_TRANSCRIPT_LINES_PER_TARGET = 200_000;
+  private static final String MANUAL_PREVIEW_MARKER = " \uD83D\uDC41";
 
   /**
    * Step 5.2: Safety cap for history/backfill. After this many filtered placeholder/hint runs are
@@ -125,7 +126,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       Long epochMs,
       Set<String> tags,
       String messageId,
-      String ircv3Tags) {
+      String ircv3Tags,
+      Map<String, String> ircv3TagsMap) {
     String tagsDisplay() {
       if (tags == null || tags.isEmpty()) return "";
       return String.join(" ", tags);
@@ -163,7 +165,15 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     Map<String, String> tagsMap = normalizeIrcv3Tags(ircv3Tags);
     Set<String> tags = computeTags(kind, dir, fromNick, presenceEvent, msgId, tagsMap);
     return new LineMeta(
-        bufferKey(ref), kind, dir, fromNick, epochMs, tags, msgId, formatIrcv3Tags(tagsMap));
+        bufferKey(ref),
+        kind,
+        dir,
+        fromNick,
+        epochMs,
+        tags,
+        msgId,
+        formatIrcv3Tags(tagsMap),
+        tagsMap);
   }
 
   private Set<String> computeTags(
@@ -1048,7 +1058,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private LineMeta buildFilteredOverflowMeta(LineMeta base, long tsEpochMs, Set<String> unionTags) {
     if (base == null) {
       base =
-          new LineMeta("", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of(), "", "");
+          new LineMeta(
+              "", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of(), "", "", Map.of());
     }
 
     java.util.LinkedHashSet<String> tags = new java.util.LinkedHashSet<>();
@@ -1069,7 +1080,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         tsEpochMs,
         Set.copyOf(tags),
         base.messageId(),
-        base.ircv3Tags());
+        base.ircv3Tags(),
+        base.ircv3TagsMap());
   }
 
   private void updateFilteredOverflowRunAttributes(StyledDocument doc, FilteredOverflowRun run) {
@@ -1144,7 +1156,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     if (base == null) {
       // Fallback meta: should be rare (only if a caller fails to provide meta).
       base =
-          new LineMeta("", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of(), "", "");
+          new LineMeta(
+              "", LogKind.STATUS, LogDirection.SYSTEM, null, tsEpochMs, Set.of(), "", "", Map.of());
     }
 
     java.util.LinkedHashSet<String> tags = new java.util.LinkedHashSet<>();
@@ -1165,7 +1178,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         tsEpochMs,
         Set.copyOf(tags),
         base.messageId(),
-        base.ircv3Tags());
+        base.ircv3Tags(),
+        base.ircv3TagsMap());
   }
 
   private void attachFilterMatch(
@@ -1446,42 +1460,35 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     TranscriptState st = stateByTarget.get(ref);
     if (doc == null || st == null) return;
 
-    removeReadMarkerControl(ref, doc, st);
-
     long markerMs = markerEpochMs > 0 ? markerEpochMs : System.currentTimeMillis();
-    int firstUnreadStart = findFirstUnreadLineStart(doc, markerMs);
-    if (firstUnreadStart < 0) return;
+    st.readMarkerEpochMs = markerMs;
 
-    LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, null, markerMs, null);
+    removeReadMarkerControl(ref, doc, st);
+    tryInsertReadMarkerControl(ref, doc, st, markerMs);
+  }
 
-    int beforeLen = doc.getLength();
-    int pos = normalizeInsertAtLineStart(doc, firstUnreadStart);
-    pos = ensureAtLineStartForInsert(doc, pos);
-    final int insertionStart = pos;
+  public synchronized void clearReadMarker(TargetRef ref) {
+    if (ref == null) return;
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
+    if (doc == null || st == null) return;
+    removeReadMarkerControl(ref, doc, st);
+    st.readMarkerEpochMs = null;
+  }
 
-    HistoryDividerComponent comp = new HistoryDividerComponent("Unread");
-    Font f = safeTranscriptFont();
-    if (f != null) {
-      try {
-        comp.setTranscriptFont(f);
-      } catch (Exception ignored) {
-      }
+  public synchronized void clearReadMarkersForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    java.util.ArrayList<TargetRef> targets = new java.util.ArrayList<>(stateByTarget.keySet());
+    for (TargetRef ref : targets) {
+      if (ref == null || !sid.equals(Objects.toString(ref.serverId(), "").trim())) continue;
+      StyledDocument doc = docs.get(ref);
+      TranscriptState st = stateByTarget.get(ref);
+      if (doc == null || st == null) continue;
+      removeReadMarkerControl(ref, doc, st);
+      st.readMarkerEpochMs = null;
     }
-
-    try {
-      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
-      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
-      StyleConstants.setComponent(attrs, comp);
-      doc.insertString(pos, " ", attrs);
-      Position p = doc.createPosition(pos);
-      doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
-      st.readMarker = new ReadMarkerControl(p);
-    } catch (Exception ignored) {
-      st.readMarker = null;
-    }
-
-    int delta = doc.getLength() - beforeLen;
-    shiftCurrentPresenceBlock(ref, insertionStart, delta);
   }
 
   public synchronized int readMarkerJumpOffset(TargetRef ref) {
@@ -1926,21 +1933,104 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         doc.insertString(doc.getLength(), " ", a);
       }
 
+      int lineEndOffset = doc.getLength();
       doc.insertString(doc.getLength(), "\n", tsStyle);
 
       if (!allowEmbeds) {
         enforceTranscriptLineCap(ref, doc);
+        maybeRenderPendingReadMarker(ref, epochMs);
         return;
       }
+      String embedFrom = meta != null ? meta.fromNick() : from;
+      Map<String, String> embedTags = meta != null ? meta.ircv3TagsMap() : Map.of();
+      LinkedHashSet<String> blockedManualPreviewUrls = new LinkedHashSet<>();
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
-        imageEmbeds.appendEmbeds(ref, doc, text);
+        ChatImageEmbedder.AppendResult imageResult =
+            imageEmbeds.appendEmbeds(ref, doc, text, embedFrom, embedTags);
+        if (imageResult != null && imageResult.blockedUrls() != null) {
+          blockedManualPreviewUrls.addAll(imageResult.blockedUrls());
+        }
       }
       if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
-        linkPreviews.appendPreviews(ref, doc, text);
+        ChatLinkPreviewEmbedder.AppendResult linkResult =
+            linkPreviews.appendPreviews(ref, doc, text, embedFrom, embedTags);
+        if (linkResult != null && linkResult.blockedUrls() != null) {
+          blockedManualPreviewUrls.addAll(linkResult.blockedUrls());
+        }
+      }
+      if (!blockedManualPreviewUrls.isEmpty()) {
+        insertManualPreviewMarkers(
+            doc, lineEndOffset, meta, match, List.copyOf(blockedManualPreviewUrls));
       }
       enforceTranscriptLineCap(ref, doc);
+      maybeRenderPendingReadMarker(ref, epochMs);
     } catch (Exception ignored) {
     }
+  }
+
+  private void insertManualPreviewMarkers(
+      StyledDocument doc,
+      int lineEndOffset,
+      LineMeta meta,
+      FilterEngine.Match match,
+      Collection<String> blockedUrls) {
+    if (doc == null || blockedUrls == null || blockedUrls.isEmpty()) return;
+
+    LinkedHashSet<String> deduped = new LinkedHashSet<>();
+    for (String blockedUrl : blockedUrls) {
+      String normalized = normalizeManualPreviewUrl(blockedUrl);
+      if (!normalized.isEmpty()) {
+        deduped.add(normalized);
+      }
+    }
+    if (deduped.isEmpty()) return;
+
+    int pos = Math.max(0, Math.min(lineEndOffset, doc.getLength()));
+    for (String blockedUrl : deduped) {
+      try {
+        SimpleAttributeSet attrs = withLineMeta(styles.link(), meta);
+        attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_LINK);
+        attrs.addAttribute(ChatStyles.ATTR_MANUAL_PREVIEW_URL, blockedUrl);
+        if (match != null) {
+          attrs = withFilterMatch(attrs, match);
+        }
+        doc.insertString(pos, MANUAL_PREVIEW_MARKER, attrs);
+        pos += MANUAL_PREVIEW_MARKER.length();
+      } catch (Exception ignored) {
+      }
+    }
+  }
+
+  public synchronized boolean insertManualPreviewAt(TargetRef ref, int insertAt, String rawUrl) {
+    if (ref == null || ref.isUiOnly()) return false;
+    String url = normalizeManualPreviewUrl(rawUrl);
+    if (url.isEmpty()) return false;
+
+    ensureTargetExists(ref);
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return false;
+
+    int pos = Math.max(0, Math.min(insertAt, doc.getLength()));
+    int beforeLen = doc.getLength();
+    boolean inserted = false;
+    if (imageEmbeds != null) {
+      inserted = imageEmbeds.insertEmbedForUrlAt(ref, doc, url, pos);
+    }
+    if (!inserted && linkPreviews != null) {
+      inserted = linkPreviews.insertPreviewForUrlAt(ref, doc, url, pos);
+    }
+    if (!inserted) return false;
+
+    int delta = doc.getLength() - beforeLen;
+    if (delta != 0) {
+      shiftCurrentPresenceBlock(ref, pos, delta);
+    }
+    enforceTranscriptLineCap(ref, doc);
+    return true;
+  }
+
+  private static String normalizeManualPreviewUrl(String rawUrl) {
+    return Objects.toString(rawUrl, "").trim();
   }
 
   public void appendChat(TargetRef ref, String from, String text) {
@@ -1973,11 +2063,30 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
   public void appendChatFromHistory(
       TargetRef ref, String from, String text, boolean outgoingLocalEcho, long tsEpochMs) {
+    appendChatFromHistory(ref, from, text, outgoingLocalEcho, tsEpochMs, "", Map.of());
+  }
+
+  public void appendChatFromHistory(
+      TargetRef ref,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     ensureTargetExists(ref);
     noteEpochMs(ref, tsEpochMs);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank()) {
+      StyledDocument existingDoc = docs.get(ref);
+      if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+        return;
+      }
+    }
 
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
-    LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null);
+    LineMeta meta =
+        buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null, messageId, ircv3Tags);
     FilterEngine.Match m = hideMatch(ref, LogKind.CHAT, dir, from, text, meta.tags());
     if (m != null) {
       onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
@@ -2102,6 +2211,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     ms.addAttribute(ChatStyles.ATTR_META_PENDING_ID, pid);
     ms.addAttribute(ChatStyles.ATTR_META_PENDING_STATE, "pending");
 
+    if (!outgoingDeliveryIndicatorsEnabled()) {
+      appendLineInternal(ref, from, Objects.toString(text, ""), fs, ms, true, meta);
+      return;
+    }
+
     // Replace the old textual "[pending]" suffix with an inline spinner indicator.
     java.awt.Color spinnerColor = null;
     try {
@@ -2179,13 +2293,31 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       String text,
       boolean outgoingLocalEcho,
       long tsEpochMs) {
+    return insertChatFromHistoryAt(
+        ref, insertAt, from, text, outgoingLocalEcho, tsEpochMs, "", Map.of());
+  }
+
+  public synchronized int insertChatFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
     noteEpochMs(ref, tsEpochMs);
     if (doc == null) return Math.max(0, insertAt);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank() && findLineStartByMessageId(doc, normalizedMsgId) >= 0) {
+      return Math.max(0, insertAt);
+    }
 
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
-    LineMeta meta = buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null);
+    LineMeta meta =
+        buildLineMeta(ref, LogKind.CHAT, dir, from, tsEpochMs, null, messageId, ircv3Tags);
     FilterEngine.Match m = hideMatch(ref, LogKind.CHAT, dir, from, text, meta.tags());
     if (m != null) {
       FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
@@ -2221,13 +2353,31 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       String action,
       boolean outgoingLocalEcho,
       long tsEpochMs) {
+    return insertActionFromHistoryAt(
+        ref, insertAt, from, action, outgoingLocalEcho, tsEpochMs, "", Map.of());
+  }
+
+  public synchronized int insertActionFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     ensureTargetExists(ref);
     noteEpochMs(ref, tsEpochMs);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return Math.max(0, insertAt);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank() && findLineStartByMessageId(doc, normalizedMsgId) >= 0) {
+      return Math.max(0, insertAt);
+    }
 
     LogDirection dir = outgoingLocalEcho ? LogDirection.OUT : LogDirection.IN;
-    LineMeta meta = buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null);
+    LineMeta meta =
+        buildLineMeta(ref, LogKind.ACTION, dir, from, tsEpochMs, null, messageId, ircv3Tags);
     FilterEngine.Match m = firstFilterMatch(ref, LogKind.ACTION, dir, from, action, meta.tags());
     if (m != null && m.isHide()) {
       FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
@@ -2314,6 +2464,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     if (trimmed > 0) {
       pos = Math.max(0, pos - trimmed);
     }
+    maybeRenderPendingReadMarker(ref, tsEpochMs);
     return pos;
   }
 
@@ -2324,12 +2475,29 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
   public synchronized int insertNoticeFromHistoryAt(
       TargetRef ref, int insertAt, String from, String text, long tsEpochMs) {
+    return insertNoticeFromHistoryAt(ref, insertAt, from, text, tsEpochMs, "", Map.of());
+  }
+
+  public synchronized int insertNoticeFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
     noteEpochMs(ref, tsEpochMs);
     if (doc == null) return Math.max(0, insertAt);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank() && findLineStartByMessageId(doc, normalizedMsgId) >= 0) {
+      return Math.max(0, insertAt);
+    }
 
-    LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null);
+    LineMeta meta =
+        buildLineMeta(
+            ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null, messageId, ircv3Tags);
     FilterEngine.Match m = hideMatch(ref, LogKind.NOTICE, LogDirection.IN, from, text, meta.tags());
     if (m != null) {
       FilterEngine.Effective eff = filterEngine.effectiveFor(ref);
@@ -2752,6 +2920,62 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     } finally {
       st.readMarker = null;
     }
+  }
+
+  private boolean tryInsertReadMarkerControl(
+      TargetRef ref, StyledDocument doc, TranscriptState st, long markerEpochMs) {
+    if (ref == null || doc == null || st == null) return false;
+    if (markerEpochMs <= 0L) return false;
+
+    int firstUnreadStart = findFirstUnreadLineStart(doc, markerEpochMs);
+    if (firstUnreadStart < 0) return false;
+
+    LineMeta meta =
+        buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, null, markerEpochMs, null);
+
+    int beforeLen = doc.getLength();
+    int pos = normalizeInsertAtLineStart(doc, firstUnreadStart);
+    pos = ensureAtLineStartForInsert(doc, pos);
+    final int insertionStart = pos;
+
+    HistoryDividerComponent comp = new HistoryDividerComponent("Unread");
+    Font f = safeTranscriptFont();
+    if (f != null) {
+      try {
+        comp.setTranscriptFont(f);
+      } catch (Exception ignored) {
+      }
+    }
+
+    try {
+      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+      StyleConstants.setComponent(attrs, comp);
+      doc.insertString(pos, " ", attrs);
+      Position p = doc.createPosition(pos);
+      doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
+      st.readMarker = new ReadMarkerControl(p);
+    } catch (Exception ignored) {
+      st.readMarker = null;
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, insertionStart, delta);
+    return st.readMarker != null;
+  }
+
+  private void maybeRenderPendingReadMarker(TargetRef ref, Long lineEpochMs) {
+    if (ref == null) return;
+    TranscriptState st = stateByTarget.get(ref);
+    StyledDocument doc = docs.get(ref);
+    if (st == null || doc == null) return;
+    if (st.readMarker != null) return;
+
+    Long markerEpochMs = st.readMarkerEpochMs;
+    if (markerEpochMs == null || markerEpochMs <= 0L) return;
+    if (lineEpochMs != null && lineEpochMs <= markerEpochMs) return;
+
+    tryInsertReadMarkerControl(ref, doc, st, markerEpochMs);
   }
 
   private int findFirstUnreadLineStart(StyledDocument doc, long markerEpochMs) {
@@ -3317,33 +3541,35 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     int after = insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, meta);
 
     // Inline delivery confirmation dot that fades away.
-    try {
-      StyledDocument docForDot = docs.get(ref);
-      if (docForDot != null) {
-        int insertPos = Math.max(0, Math.min(after - 1, docForDot.getLength()));
-        if (insertPos >= 0 && insertPos <= docForDot.getLength()) {
-          java.awt.Color green = new java.awt.Color(0x2ecc71);
-          final OutgoingSendIndicator.ConfirmedDot[] holder =
-              new OutgoingSendIndicator.ConfirmedDot[1];
-          holder[0] =
-              new OutgoingSendIndicator.ConfirmedDot(
-                  green,
-                  200,
-                  900,
-                  () -> {
-                    try {
-                      removeInlineComponentNear(docForDot, holder[0]);
-                    } catch (Exception ignored) {
-                    }
-                  });
+    if (outgoingDeliveryIndicatorsEnabled()) {
+      try {
+        StyledDocument docForDot = docs.get(ref);
+        if (docForDot != null) {
+          int insertPos = Math.max(0, Math.min(after - 1, docForDot.getLength()));
+          if (insertPos >= 0 && insertPos <= docForDot.getLength()) {
+            java.awt.Color green = new java.awt.Color(0x2ecc71);
+            final OutgoingSendIndicator.ConfirmedDot[] holder =
+                new OutgoingSendIndicator.ConfirmedDot[1];
+            holder[0] =
+                new OutgoingSendIndicator.ConfirmedDot(
+                    green,
+                    200,
+                    900,
+                    () -> {
+                      try {
+                        removeInlineComponentNear(docForDot, holder[0]);
+                      } catch (Exception ignored) {
+                      }
+                    });
 
-          SimpleAttributeSet attrs = new SimpleAttributeSet(ms);
-          attrs = withLineMeta(attrs, meta);
-          StyleConstants.setComponent(attrs, holder[0]);
-          docForDot.insertString(insertPos, " ", attrs);
+            SimpleAttributeSet attrs = new SimpleAttributeSet(ms);
+            attrs = withLineMeta(attrs, meta);
+            StyleConstants.setComponent(attrs, holder[0]);
+            docForDot.insertString(insertPos, " ", attrs);
+          }
         }
+      } catch (Exception ignored) {
       }
-    } catch (Exception ignored) {
     }
 
     StyledDocument doc = docs.get(ref);
@@ -3493,6 +3719,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     } catch (Exception ignored) {
       return null;
     }
+  }
+
+  private boolean outgoingDeliveryIndicatorsEnabled() {
+    UiSettings s = safeSettings();
+    return s == null || s.outgoingDeliveryIndicatorsEnabled();
   }
 
   private Color configuredOutgoingLineColor(UiSettings s) {
@@ -3920,8 +4151,19 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
   public void appendActionFromHistory(
       TargetRef ref, String from, String action, boolean outgoingLocalEcho, long tsEpochMs) {
+    appendActionFromHistory(ref, from, action, outgoingLocalEcho, tsEpochMs, "", Map.of());
+  }
+
+  public void appendActionFromHistory(
+      TargetRef ref,
+      String from,
+      String action,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     appendActionInternal(
-        ref, from, action, outgoingLocalEcho, false, tsEpochMs, "", Map.of(), null);
+        ref, from, action, outgoingLocalEcho, false, tsEpochMs, messageId, ircv3Tags, null);
   }
 
   /** Append an action (/me) with a timestamp, allowing embeds. */
@@ -4056,21 +4298,37 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         doc.insertString(doc.getLength(), a, ms);
       }
 
+      int lineEndOffset = doc.getLength();
       doc.insertString(doc.getLength(), "\n", tsStyle);
 
       if (!allowEmbeds) {
         enforceTranscriptLineCap(ref, doc);
+        maybeRenderPendingReadMarker(ref, tsEpochMs);
         return;
       }
 
+      LinkedHashSet<String> blockedManualPreviewUrls = new LinkedHashSet<>();
       if (imageEmbeds != null && uiSettings != null && uiSettings.get().imageEmbedsEnabled()) {
-        imageEmbeds.appendEmbeds(ref, doc, a);
+        ChatImageEmbedder.AppendResult imageResult =
+            imageEmbeds.appendEmbeds(ref, doc, a, from, ircv3Tags);
+        if (imageResult != null && imageResult.blockedUrls() != null) {
+          blockedManualPreviewUrls.addAll(imageResult.blockedUrls());
+        }
       }
 
       if (linkPreviews != null && uiSettings != null && uiSettings.get().linkPreviewsEnabled()) {
-        linkPreviews.appendPreviews(ref, doc, a);
+        ChatLinkPreviewEmbedder.AppendResult linkResult =
+            linkPreviews.appendPreviews(ref, doc, a, from, ircv3Tags);
+        if (linkResult != null && linkResult.blockedUrls() != null) {
+          blockedManualPreviewUrls.addAll(linkResult.blockedUrls());
+        }
+      }
+      if (!blockedManualPreviewUrls.isEmpty()) {
+        insertManualPreviewMarkers(
+            doc, lineEndOffset, meta, m, List.copyOf(blockedManualPreviewUrls));
       }
       enforceTranscriptLineCap(ref, doc);
+      maybeRenderPendingReadMarker(ref, tsEpochMs);
     } catch (Exception ignored) {
     }
 
@@ -4124,9 +4382,28 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   }
 
   public void appendNoticeFromHistory(TargetRef ref, String from, String text, long tsEpochMs) {
+    appendNoticeFromHistory(ref, from, text, tsEpochMs, "", Map.of());
+  }
+
+  public void appendNoticeFromHistory(
+      TargetRef ref,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     ensureTargetExists(ref);
     noteEpochMs(ref, tsEpochMs);
-    LineMeta meta = buildLineMeta(ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null);
+    String normalizedMsgId = normalizeMessageId(messageId);
+    if (!normalizedMsgId.isBlank()) {
+      StyledDocument existingDoc = docs.get(ref);
+      if (findLineStartByMessageId(existingDoc, normalizedMsgId) >= 0) {
+        return;
+      }
+    }
+    LineMeta meta =
+        buildLineMeta(
+            ref, LogKind.NOTICE, LogDirection.IN, from, tsEpochMs, null, messageId, ircv3Tags);
     FilterEngine.Match m = hideMatch(ref, LogKind.NOTICE, LogDirection.IN, from, text, meta.tags());
     if (m != null) {
       onFilteredLineAppend(ref, previewChatLine(from, text), meta, m);
@@ -4368,6 +4645,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       doc.remove(0, removeLen);
       resetStateAfterHeadTrim(ref);
+      maybeRenderPendingReadMarker(ref, null);
       return removeLen;
     } catch (Exception ignored) {
       return 0;
@@ -4377,6 +4655,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private void resetStateAfterHeadTrim(TargetRef ref) {
     TranscriptState st = stateByTarget.get(ref);
     if (st == null) return;
+
+    Long readMarkerEpochMs = st.readMarkerEpochMs;
 
     st.earliestEpochMsSeen = null;
     st.currentPresenceBlock = null;
@@ -4392,6 +4672,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     st.historyDivider = null;
     st.pendingHistoryDividerLabel = null;
     st.readMarker = null;
+    st.readMarkerEpochMs = readMarkerEpochMs;
     st.reactionsByTargetMsgId.clear();
   }
 
@@ -4473,6 +4754,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     String pendingHistoryDividerLabel;
 
     ReadMarkerControl readMarker;
+    Long readMarkerEpochMs;
     Map<String, ReactionState> reactionsByTargetMsgId = new HashMap<>();
   }
 
@@ -4849,6 +5131,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       Object url = old.getAttribute(ChatStyles.ATTR_URL);
       if (url != null) {
         fresh.addAttribute(ChatStyles.ATTR_URL, url);
+      }
+      Object manualPreviewUrl = old.getAttribute(ChatStyles.ATTR_MANUAL_PREVIEW_URL);
+      if (manualPreviewUrl != null) {
+        fresh.addAttribute(ChatStyles.ATTR_MANUAL_PREVIEW_URL, manualPreviewUrl);
       }
       Object chan = old.getAttribute(ChatStyles.ATTR_CHANNEL);
       if (chan != null) {

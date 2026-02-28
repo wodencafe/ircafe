@@ -11,10 +11,10 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.ZncProperties;
-import cafe.woden.ircclient.ui.MainFrame;
 import cafe.woden.ircclient.ui.settings.ThemeIdUtils;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.shell.MainFrame;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeHub;
 import cafe.woden.ircclient.ui.tray.TrayService;
 import cafe.woden.ircclient.util.VirtualThreads;
@@ -52,8 +52,17 @@ public class IrcSwingApp {
 
   public static void main(String[] args) {
     ConsoleTeeHub.install();
+    installSwingSafetyDefaults();
 
     new SpringApplicationBuilder(IrcSwingApp.class).headless(false).run(args);
+  }
+
+  private static void installSwingSafetyDefaults() {
+    // Prevent a known Swing repaint edge-case where volatile offscreen buffers can be requested
+    // with zero dimensions, which throws IllegalArgumentException on the EDT.
+    if (System.getProperty("swing.volatileImageBufferEnabled") == null) {
+      System.setProperty("swing.volatileImageBufferEnabled", "false");
+    }
   }
 
   @Bean
@@ -94,7 +103,7 @@ public class IrcSwingApp {
 
               MediatorControlPort mediator = mediatorProvider.getObject();
               if (settingsBus.get().autoConnectOnStart()) {
-                mediator.connectAll();
+                mediator.connectAutoConnectOnStartServers();
               }
               startupCompleted = true;
             } finally {

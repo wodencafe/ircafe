@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
+import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -70,6 +71,22 @@ class ApplicationDiagnosticsServiceTest {
   }
 
   @Test
+  void unhandledExceptionsAreBufferedAndCanBeCleared() throws Exception {
+    UiPort ui = Mockito.mock(UiPort.class);
+    ApplicationDiagnosticsService service = new ApplicationDiagnosticsService(ui);
+
+    invokeHandleUncaughtException(service, new IllegalArgumentException("boom"));
+
+    assertTrue(
+        service.recentUnhandledErrorEvents(20).stream()
+            .anyMatch(e -> e.summary().contains("IllegalArgumentException: boom")));
+
+    service.clearUnhandledErrorEvents();
+
+    assertTrue(service.recentUnhandledErrorEvents(10).isEmpty());
+  }
+
+  @Test
   void changeStreamsEmitOnAppendAndClear() {
     UiPort ui = Mockito.mock(UiPort.class);
     ApplicationDiagnosticsService service = new ApplicationDiagnosticsService(ui);
@@ -84,5 +101,27 @@ class ApplicationDiagnosticsServiceTest {
 
     assertEquals(java.util.List.of(1L, 2L), assertjChanges.values());
     assertEquals(java.util.List.of(1L, 2L), jhiccupChanges.values());
+  }
+
+  @Test
+  void unhandledErrorChangeStreamEmitsOnAppendAndClear() throws Exception {
+    UiPort ui = Mockito.mock(UiPort.class);
+    ApplicationDiagnosticsService service = new ApplicationDiagnosticsService(ui);
+
+    var unhandledChanges = service.unhandledErrorChangeStream().test();
+
+    invokeHandleUncaughtException(service, new IllegalStateException("first"));
+    service.clearUnhandledErrorEvents();
+
+    assertEquals(java.util.List.of(1L, 2L), unhandledChanges.values());
+  }
+
+  private static void invokeHandleUncaughtException(
+      ApplicationDiagnosticsService service, Throwable error) throws Exception {
+    Method m =
+        ApplicationDiagnosticsService.class.getDeclaredMethod(
+            "handleUncaughtException", Thread.class, Throwable.class);
+    m.setAccessible(true);
+    m.invoke(service, Thread.currentThread(), error);
   }
 }

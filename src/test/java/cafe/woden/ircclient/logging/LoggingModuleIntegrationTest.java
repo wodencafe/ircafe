@@ -189,7 +189,9 @@ class LoggingModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
             eq("alice"),
             eq("history replay check"),
             eq(false),
-            eq(tsEpochMs));
+            eq(tsEpochMs),
+            eq("history-replay-1"),
+            eq(Map.of()));
     verify(chatHistoryTranscriptPort, timeout(3_000).atLeastOnce())
         .endHistoryInsertBatch(selectedTarget);
 
@@ -208,7 +210,9 @@ class LoggingModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
             eq("alice"),
             eq("history replay check"),
             eq(false),
-            eq(tsEpochMs));
+            eq(tsEpochMs),
+            eq("history-replay-1"),
+            eq(Map.of()));
   }
 
   @Test
@@ -240,7 +244,9 @@ class LoggingModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
             eq("Alice"),
             eq("pm history replay check"),
             eq(false),
-            eq(tsEpochMs));
+            eq(tsEpochMs),
+            eq("pm-history-replay-1"),
+            eq(Map.of()));
     verify(chatHistoryTranscriptPort, timeout(3_000).atLeastOnce())
         .endHistoryInsertBatch(selectedTarget);
 
@@ -259,6 +265,8 @@ class LoggingModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
             eq("Alice"),
             eq("pm history replay check"),
             eq(false),
-            eq(tsEpochMs));
+            eq(tsEpochMs),
+            eq("pm-history-replay-1"),
+            eq(Map.of()));
   }
 }

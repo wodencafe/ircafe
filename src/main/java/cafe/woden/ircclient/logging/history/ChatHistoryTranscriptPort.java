@@ -2,6 +2,7 @@ package cafe.woden.ircclient.logging.history;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import java.awt.Component;
+import java.util.Map;
 import java.util.OptionalLong;
 import java.util.function.BooleanSupplier;
 import javax.swing.text.StyledDocument;
@@ -42,6 +43,18 @@ public interface ChatHistoryTranscriptPort {
       boolean outgoingLocalEcho,
       long tsEpochMs);
 
+  default int insertChatFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return insertChatFromHistoryAt(ref, insertAt, from, text, outgoingLocalEcho, tsEpochMs);
+  }
+
   int insertActionFromHistoryAt(
       TargetRef ref,
       int insertAt,
@@ -50,8 +63,31 @@ public interface ChatHistoryTranscriptPort {
       boolean outgoingLocalEcho,
       long tsEpochMs);
 
+  default int insertActionFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return insertActionFromHistoryAt(ref, insertAt, from, text, outgoingLocalEcho, tsEpochMs);
+  }
+
   int insertNoticeFromHistoryAt(
       TargetRef ref, int insertAt, String from, String text, long tsEpochMs);
+
+  default int insertNoticeFromHistoryAt(
+      TargetRef ref,
+      int insertAt,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    return insertNoticeFromHistoryAt(ref, insertAt, from, text, tsEpochMs);
+  }
 
   int insertStatusFromHistoryAt(
       TargetRef ref, int insertAt, String from, String text, long tsEpochMs);
@@ -67,10 +103,42 @@ public interface ChatHistoryTranscriptPort {
   void appendChatFromHistory(
       TargetRef ref, String from, String text, boolean outgoingLocalEcho, long tsEpochMs);
 
+  default void appendChatFromHistory(
+      TargetRef ref,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    appendChatFromHistory(ref, from, text, outgoingLocalEcho, tsEpochMs);
+  }
+
   void appendActionFromHistory(
       TargetRef ref, String from, String text, boolean outgoingLocalEcho, long tsEpochMs);
 
+  default void appendActionFromHistory(
+      TargetRef ref,
+      String from,
+      String text,
+      boolean outgoingLocalEcho,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    appendActionFromHistory(ref, from, text, outgoingLocalEcho, tsEpochMs);
+  }
+
   void appendNoticeFromHistory(TargetRef ref, String from, String text, long tsEpochMs);
+
+  default void appendNoticeFromHistory(
+      TargetRef ref,
+      String from,
+      String text,
+      long tsEpochMs,
+      String messageId,
+      Map<String, String> ircv3Tags) {
+    appendNoticeFromHistory(ref, from, text, tsEpochMs);
+  }
 
   void appendStatusFromHistory(TargetRef ref, String from, String text, long tsEpochMs);
 

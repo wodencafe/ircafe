@@ -28,6 +28,7 @@ public final class TargetRef {
   public static final String APPLICATION_UNHANDLED_ERRORS_TARGET = "__app_unhandled_errors__";
   public static final String APPLICATION_ASSERTJ_SWING_TARGET = "__app_assertj_swing__";
   public static final String APPLICATION_JHICCUP_TARGET = "__app_jhiccup__";
+  public static final String APPLICATION_INBOUND_DEDUP_TARGET = "__app_inbound_dedup__";
   public static final String APPLICATION_JFR_TARGET = "__app_jfr__";
   public static final String APPLICATION_SPRING_TARGET = "__app_spring__";
   public static final String APPLICATION_TERMINAL_TARGET = "__app_terminal__";
@@ -89,6 +90,10 @@ public final class TargetRef {
 
   public static TargetRef applicationJhiccup() {
     return new TargetRef(APPLICATION_SERVER_ID, APPLICATION_JHICCUP_TARGET);
+  }
+
+  public static TargetRef applicationInboundDedup() {
+    return new TargetRef(APPLICATION_SERVER_ID, APPLICATION_INBOUND_DEDUP_TARGET);
   }
 
   public static TargetRef applicationJfr() {
@@ -188,6 +193,10 @@ public final class TargetRef {
     return APPLICATION_JHICCUP_TARGET.equals(key);
   }
 
+  public boolean isApplicationInboundDedup() {
+    return APPLICATION_INBOUND_DEDUP_TARGET.equals(key);
+  }
+
   public boolean isApplicationJfr() {
     return APPLICATION_JFR_TARGET.equals(key);
   }
@@ -205,6 +214,7 @@ public final class TargetRef {
     return isApplicationUnhandledErrors()
         || isApplicationAssertjSwing()
         || isApplicationJhiccup()
+        || isApplicationInboundDedup()
         || isApplicationJfr()
         || isApplicationSpring()
         || isApplicationTerminal();
@@ -258,6 +268,7 @@ public final class TargetRef {
     if (APPLICATION_UNHANDLED_ERRORS_TARGET.equals(t)) return APPLICATION_UNHANDLED_ERRORS_TARGET;
     if (APPLICATION_ASSERTJ_SWING_TARGET.equals(t)) return APPLICATION_ASSERTJ_SWING_TARGET;
     if (APPLICATION_JHICCUP_TARGET.equals(t)) return APPLICATION_JHICCUP_TARGET;
+    if (APPLICATION_INBOUND_DEDUP_TARGET.equals(t)) return APPLICATION_INBOUND_DEDUP_TARGET;
     if (APPLICATION_JFR_TARGET.equals(t)) return APPLICATION_JFR_TARGET;
     if (APPLICATION_SPRING_TARGET.equals(t)) return APPLICATION_SPRING_TARGET;
     if (APPLICATION_TERMINAL_TARGET.equals(t)) return APPLICATION_TERMINAL_TARGET;

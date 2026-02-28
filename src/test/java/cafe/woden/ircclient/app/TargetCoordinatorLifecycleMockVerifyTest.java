@@ -38,10 +38,10 @@ class TargetCoordinatorLifecycleMockVerifyTest {
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.partChannel("libera", "#ircafe", null)).thenReturn(Completable.complete());
 
-    coordinator.detachChannel(channel);
+    coordinator.disconnectChannel(channel);
 
     InOrder inOrder = inOrder(ui, irc);
-    inOrder.verify(ui).setChannelDetached(channel, true);
+    inOrder.verify(ui).setChannelDisconnected(channel, true);
     inOrder.verify(irc).partChannel("libera", "#ircafe", null);
   }
 
@@ -54,7 +54,7 @@ class TargetCoordinatorLifecycleMockVerifyTest {
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
     TargetRef channel = new TargetRef("libera", "#ircafe");
 
-    when(ui.isChannelDetached(channel)).thenReturn(false);
+    when(ui.isChannelDisconnected(channel)).thenReturn(false);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.partChannel("libera", "#ircafe", null)).thenReturn(Completable.complete());
 
@@ -84,9 +84,9 @@ class TargetCoordinatorLifecycleMockVerifyTest {
     assertTrue(accepted);
     verify(runtimeConfig).rememberJoinedChannel("libera", "#ircafe");
     InOrder inOrder = inOrder(ui, irc);
-    inOrder.verify(ui).setChannelDetached(channel, true);
+    inOrder.verify(ui).setChannelDisconnected(channel, true);
     inOrder.verify(irc).joinChannel("libera", "#ircafe");
-    inOrder.verify(ui).setChannelDetached(channel, false);
+    inOrder.verify(ui).setChannelDisconnected(channel, false);
     verify(irc, never()).partChannel("libera", "#ircafe");
   }
 

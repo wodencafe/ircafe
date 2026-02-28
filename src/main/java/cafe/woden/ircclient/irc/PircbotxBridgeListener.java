@@ -544,6 +544,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     String from = nickFromPrefix(pl.prefix());
     String text = pl.trailing();
     if (text == null) text = "";
+    Map<String, String> ircv3Tags = PircbotxIrcv3Tags.fromRawLine(originalLineWithTags);
+    String messageId = ircv3MessageId(ircv3Tags);
 
     String target =
         (buf.target == null || buf.target.isBlank())
@@ -554,14 +556,19 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String action = PircbotxUtil.parseCtcpAction(text);
       if (action != null) {
         buf.entries.add(
-            new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
+            new ChatHistoryEntry(
+                at, ChatHistoryEntry.Kind.ACTION, target, from, action, messageId, ircv3Tags));
         return true;
       }
-      buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.PRIVMSG, target, from, text));
+      buf.entries.add(
+          new ChatHistoryEntry(
+              at, ChatHistoryEntry.Kind.PRIVMSG, target, from, text, messageId, ircv3Tags));
       return true;
     }
 
-    buf.entries.add(new ChatHistoryEntry(at, ChatHistoryEntry.Kind.NOTICE, target, from, text));
+    buf.entries.add(
+        new ChatHistoryEntry(
+            at, ChatHistoryEntry.Kind.NOTICE, target, from, text, messageId, ircv3Tags));
     return true;
   }
 
@@ -645,7 +652,13 @@ final class PircbotxBridgeListener extends ListenerAdapter {
    * live pipeline.
    */
   private boolean maybeCaptureZncPlayback(
-      String target, Instant at, ChatHistoryEntry.Kind kind, String from, String text) {
+      String target,
+      Instant at,
+      ChatHistoryEntry.Kind kind,
+      String from,
+      String text,
+      String messageId,
+      Map<String, String> ircv3Tags) {
     try {
       if (!conn.zncPlaybackCapture.shouldCapture(target, at)) return false;
       conn.zncPlaybackCapture.addEntry(
@@ -654,7 +667,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
               kind == null ? ChatHistoryEntry.Kind.PRIVMSG : kind,
               target,
               from == null ? "" : from,
-              text == null ? "" : text));
+              text == null ? "" : text,
+              messageId,
+              ircv3Tags));
       return true;
     } catch (Exception ignored) {
       return false;
@@ -800,6 +815,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         String from = (event.getUser() != null) ? event.getUser().getNick() : "";
         String msg = PircbotxUtil.safeStr(event::getMessage, "");
         String action = PircbotxUtil.parseCtcpAction(msg);
+        Map<String, String> tags = ircv3TagsFromEvent(event);
+        String messageId = ircv3MessageId(tags);
 
         String target =
             (buf.target == null || buf.target.isBlank())
@@ -808,10 +825,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
         if (action != null) {
           buf.entries.add(
-              new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
+              new ChatHistoryEntry(
+                  at, ChatHistoryEntry.Kind.ACTION, target, from, action, messageId, tags));
         } else {
           buf.entries.add(
-              new ChatHistoryEntry(at, ChatHistoryEntry.Kind.PRIVMSG, target, from, msg));
+              new ChatHistoryEntry(
+                  at, ChatHistoryEntry.Kind.PRIVMSG, target, from, msg, messageId, tags));
         }
         return;
       }
@@ -841,7 +860,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
     String action = PircbotxUtil.parseCtcpAction(msg);
     if (action != null) {
-      if (maybeCaptureZncPlayback(channel, at, ChatHistoryEntry.Kind.ACTION, from, action)) {
+      if (maybeCaptureZncPlayback(
+          channel, at, ChatHistoryEntry.Kind.ACTION, from, action, messageId, ircv3Tags)) {
         return;
       }
       bus.onNext(
@@ -851,7 +871,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       return;
     }
 
-    if (maybeCaptureZncPlayback(channel, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg)) {
+    if (maybeCaptureZncPlayback(
+        channel, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg, messageId, ircv3Tags)) {
       return;
     }
 
@@ -893,7 +914,14 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
         String target = (buf.target == null || buf.target.isBlank()) ? fallbackTarget : buf.target;
         buf.entries.add(
-            new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
+            new ChatHistoryEntry(
+                at,
+                ChatHistoryEntry.Kind.ACTION,
+                target,
+                from,
+                action,
+                batchMsgId,
+                ircv3TagsFromEvent(event)));
         return;
       }
     }
@@ -922,7 +950,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       String channel = event.getChannel().getName();
       maybeEmitHostmaskObserved(channel, event.getUser());
 
-      if (maybeCaptureZncPlayback(channel, at, ChatHistoryEntry.Kind.ACTION, from, action)) {
+      if (maybeCaptureZncPlayback(
+          channel, at, ChatHistoryEntry.Kind.ACTION, from, action, messageId, ircv3Tags)) {
         return;
       }
       bus.onNext(
@@ -936,7 +965,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
       // For queries, use the conversation peer nick as the "target" key.
       if (!"*playback".equalsIgnoreCase(from)
-          && maybeCaptureZncPlayback(convTarget, at, ChatHistoryEntry.Kind.ACTION, from, action)) {
+          && maybeCaptureZncPlayback(
+              convTarget, at, ChatHistoryEntry.Kind.ACTION, from, action, messageId, ircv3Tags)) {
         return;
       }
 
@@ -1061,10 +1091,24 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
         if (action != null) {
           buf.entries.add(
-              new ChatHistoryEntry(at, ChatHistoryEntry.Kind.ACTION, target, from, action));
+              new ChatHistoryEntry(
+                  at,
+                  ChatHistoryEntry.Kind.ACTION,
+                  target,
+                  from,
+                  action,
+                  batchMsgId,
+                  ircv3TagsFromEvent(event)));
         } else {
           buf.entries.add(
-              new ChatHistoryEntry(at, ChatHistoryEntry.Kind.PRIVMSG, target, from, msg));
+              new ChatHistoryEntry(
+                  at,
+                  ChatHistoryEntry.Kind.PRIVMSG,
+                  target,
+                  from,
+                  msg,
+                  batchMsgId,
+                  ircv3TagsFromEvent(event)));
         }
         return;
       }
@@ -1153,11 +1197,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     if (!"*playback".equalsIgnoreCase(from)) {
       String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
-        if (maybeCaptureZncPlayback(convTarget, at, ChatHistoryEntry.Kind.ACTION, from, action))
+        if (maybeCaptureZncPlayback(
+            convTarget, at, ChatHistoryEntry.Kind.ACTION, from, action, messageId, ircv3Tags))
           return;
       } else {
-        if (maybeCaptureZncPlayback(convTarget, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg))
-          return;
+        if (maybeCaptureZncPlayback(
+            convTarget, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg, messageId, ircv3Tags)) return;
       }
     }
 
@@ -1196,8 +1241,11 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         Instant at = inboundAt(event);
         String notice = PircbotxUtil.safeStr(event::getNotice, "");
         String target = (buf.target == null || buf.target.isBlank()) ? "status" : buf.target;
+        Map<String, String> tags = ircv3TagsFromEvent(event);
+        String messageId = ircv3MessageId(tags);
         buf.entries.add(
-            new ChatHistoryEntry(at, ChatHistoryEntry.Kind.NOTICE, target, from, notice));
+            new ChatHistoryEntry(
+                at, ChatHistoryEntry.Kind.NOTICE, target, from, notice, messageId, tags));
         return;
       }
     }
@@ -1249,7 +1297,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       } catch (Exception ignored) {
       }
       if (t == null || t.isBlank()) t = from;
-      if (t != null && maybeCaptureZncPlayback(t, at, ChatHistoryEntry.Kind.NOTICE, from, notice)) {
+      if (t != null
+          && maybeCaptureZncPlayback(
+              t, at, ChatHistoryEntry.Kind.NOTICE, from, notice, messageId, ircv3Tags)) {
         return;
       }
     }
@@ -1628,6 +1678,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       if (pl != null && pl.command() != null) {
         String cmd = pl.command().toUpperCase(Locale.ROOT);
         if ("PRIVMSG".equals(cmd) || "NOTICE".equals(cmd)) {
+          Map<String, String> ircv3Tags = PircbotxIrcv3Tags.fromRawLine(line);
+          String messageId = ircv3MessageId(ircv3Tags);
           Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(line);
           if (at == null) at = Instant.now();
           String from = nickFromPrefix(pl.prefix());
@@ -1691,7 +1743,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             }
           }
 
-          if (maybeCaptureZncPlayback(target, at, kind, from, payload)) {
+          if (maybeCaptureZncPlayback(target, at, kind, from, payload, messageId, ircv3Tags)) {
             return;
           }
         }
@@ -3451,7 +3503,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   }
 
   private static String ircv3MessageId(Map<String, String> tags) {
-    return PircbotxIrcv3Tags.firstTagValue(tags, "msgid", "draft/msgid");
+    return PircbotxIrcv3Tags.firstTagValue(tags, "msgid", "draft/msgid", "znc.in/msgid");
   }
 
   private static Object reflectCall(Object target, String method) {

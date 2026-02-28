@@ -67,7 +67,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "style: apply lint autofix (Spotless)"
+          git commit -m "chore(style): apply spotless autofix"
           git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
 
       - name: Fail when lint cannot be auto-fixed

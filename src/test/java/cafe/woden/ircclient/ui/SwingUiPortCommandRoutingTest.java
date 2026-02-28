@@ -6,9 +6,16 @@ import static org.mockito.Mockito.mock;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
+import cafe.woden.ircclient.ui.bus.OutboundLineBus;
+import cafe.woden.ircclient.ui.bus.TargetActivationBus;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
+import cafe.woden.ircclient.ui.controls.ConnectButton;
+import cafe.woden.ircclient.ui.controls.DisconnectButton;
+import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
+import cafe.woden.ircclient.ui.shell.StatusBar;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Map;

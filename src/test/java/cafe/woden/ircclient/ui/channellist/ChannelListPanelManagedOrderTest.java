@@ -106,6 +106,33 @@ class ChannelListPanelManagedOrderTest {
   }
 
   @Test
+  void mostRecentActivityModeDisablesManualMoveButtons() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ChannelListPanel panel = new ChannelListPanel();
+            panel.setServerId("libera");
+            panel.setManagedChannels(
+                "libera",
+                List.of(
+                    new ChannelListPanel.ManagedChannelRow("#alpha", false, true),
+                    new ChannelListPanel.ManagedChannelRow("#beta", false, true)),
+                ChannelListPanel.ManagedSortMode.MOST_RECENT_ACTIVITY);
+
+            JTable managedTable = field(panel, "managedTable", JTable.class);
+            JButton moveUpButton = field(panel, "moveUpButton", JButton.class);
+            JButton moveDownButton = field(panel, "moveDownButton", JButton.class);
+            managedTable.getSelectionModel().setSelectionInterval(1, 1);
+
+            assertFalse(moveUpButton.isEnabled());
+            assertFalse(moveDownButton.isEnabled());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
   void appendEntriesPopulatesServerListTable() throws Exception {
     onEdt(
         () -> {

@@ -67,7 +67,8 @@ class NotificationStoreTest {
   @Test
   void cooldownCanBeDisabledViaUiSettingsPort() {
     UiSettingsPort settings = mock(UiSettingsPort.class);
-    when(settings.get()).thenReturn(new UiSettingsSnapshot(List.of(), 0, 30, true, true));
+    when(settings.get())
+        .thenReturn(new UiSettingsSnapshot(List.of(), 0, 30, true, true, true, true, true));
 
     NotificationStore store = new NotificationStore(settings, 2000);
     TargetRef chan = new TargetRef("libera", "#ircafe");

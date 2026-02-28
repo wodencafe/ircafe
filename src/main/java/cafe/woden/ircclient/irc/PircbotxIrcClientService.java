@@ -253,7 +253,13 @@ public class PircbotxIrcClientService implements IrcClientService {
               }
 
               PircBotX bot = c.botRef.getAndSet(null);
-              if (bot == null) return;
+              if (bot == null) {
+                bus.onNext(
+                    new ServerIrcEvent(
+                        serverId,
+                        new IrcEvent.Disconnected(Instant.now(), "Client requested disconnect")));
+                return;
+              }
 
               String quitReason = reason == null ? "" : reason.trim();
               if (quitReason.contains("\r") || quitReason.contains("\n")) {
@@ -574,7 +580,8 @@ public class PircbotxIrcClientService implements IrcClientService {
               PircbotxConnectionState c = conn(serverId);
               if (c == null || !c.readMarkerCapAcked.get()) {
                 throw new IllegalStateException(
-                    "read-marker capability not negotiated: " + serverId);
+                    "read-marker capability not negotiated (requires read-marker or draft/read-marker): "
+                        + serverId);
               }
               if (c.botRef.get() == null) {
                 throw new IllegalStateException("Not connected: " + serverId);
@@ -583,7 +590,7 @@ public class PircbotxIrcClientService implements IrcClientService {
               String dest = sanitizeTarget(target);
               Instant at = (markerAt == null) ? Instant.now() : markerAt;
               String ts = MARKREAD_TS_FMT.format(at);
-              requireBot(serverId).sendRaw().rawLine("MARKREAD " + dest + " :" + ts);
+              requireBot(serverId).sendRaw().rawLine("MARKREAD " + dest + " timestamp=" + ts);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -875,6 +882,26 @@ public class PircbotxIrcClientService implements IrcClientService {
     try {
       PircbotxConnectionState c = conn(serverId);
       return c != null && c.zncPlaybackCapAcked.get();
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
+  public boolean isZncBouncerDetected(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      return c != null && (c.zncDetected.get() || c.zncPlaybackCapAcked.get());
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  @Override
+  public boolean isSojuBouncerAvailable(String serverId) {
+    try {
+      PircbotxConnectionState c = conn(serverId);
+      return c != null && c.sojuBouncerNetworksCapAcked.get();
     } catch (Exception e) {
       return false;
     }

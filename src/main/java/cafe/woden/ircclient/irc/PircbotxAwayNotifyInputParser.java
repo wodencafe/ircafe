@@ -941,14 +941,11 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
               "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
-      case "read-marker" -> {
+      case "draft/read-marker", "read-marker" -> {
         boolean prev = conn.readMarkerCapAcked.getAndSet(enabled);
         if (prev != enabled) {
           log.info(
-              "[{}] CAP {}: read-marker {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
+              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       case "monitor" -> {

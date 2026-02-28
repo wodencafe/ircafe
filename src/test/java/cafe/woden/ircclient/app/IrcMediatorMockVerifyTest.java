@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.app;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -11,6 +13,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.InterceptorEventType;
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatch;
@@ -52,8 +55,11 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
+import org.springframework.context.ApplicationEventPublisher;
 
 class IrcMediatorMockVerifyTest {
 
@@ -101,6 +107,8 @@ class IrcMediatorMockVerifyTest {
       mock(cafe.woden.ircclient.app.api.InterceptorIngestPort.class);
   private final InboundIgnorePolicyPort inboundIgnorePolicy = mock(InboundIgnorePolicyPort.class);
   private final MonitorFallbackPort monitorFallbackPort = mock(MonitorFallbackPort.class);
+  private final ApplicationEventPublisher applicationEventPublisher =
+      mock(ApplicationEventPublisher.class);
 
   private final IrcMediator mediator =
       new IrcMediator(
@@ -135,7 +143,8 @@ class IrcMediatorMockVerifyTest {
           ircEventNotifierPort,
           interceptorIngestPort,
           inboundIgnorePolicy,
-          monitorFallbackPort);
+          monitorFallbackPort,
+          applicationEventPublisher);
 
   @Test
   void startBindsUiIrcAndConnectionCollaboratorsInOrderOnce() {
@@ -245,6 +254,78 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void duplicateChannelMessageByMsgIdIsSuppressedBeforeUiAndSideEffects() throws Exception {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("bob"));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ChannelMessage(
+                Instant.now(), "#ircafe", "alice", "hello", "dup-1", Map.of("msgid", "dup-1"))));
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ChannelMessage(
+                Instant.now(),
+                "#ircafe",
+                "alice",
+                "hello again",
+                "dup-1",
+                Map.of("msgid", "dup-1"))));
+
+    verify(ui, times(1))
+        .appendChatAt(
+            eq(chan), any(), eq("alice"), anyString(), eq(false), eq("dup-1"), any(), any());
+    verify(interceptorIngestPort, times(1))
+        .ingestEvent(
+            eq("libera"),
+            eq("#ircafe"),
+            eq("alice"),
+            anyString(),
+            anyString(),
+            eq(InterceptorEventType.MESSAGE));
+    ArgumentCaptor<Object> published = ArgumentCaptor.forClass(Object.class);
+    verify(applicationEventPublisher, times(1)).publishEvent(published.capture());
+    IrcMediator.InboundMessageDedupDiagnostics event =
+        assertInstanceOf(IrcMediator.InboundMessageDedupDiagnostics.class, published.getValue());
+    assertEquals("libera", event.serverId());
+    assertEquals("#ircafe", event.target());
+    assertEquals("channel-message", event.eventType());
+    assertEquals(1L, event.suppressedCount());
+  }
+
+  @Test
+  void duplicatePrivateMessageFallsBackToTagMsgIdWhenMessageIdFieldIsBlank() throws Exception {
+    TargetRef pm = new TargetRef("libera", "alice");
+    when(targetCoordinator.allowPrivateAutoOpenFromInbound(eq(pm), eq(false))).thenReturn(false);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.PrivateMessage(
+                Instant.now(), "alice", "hello", "", Map.of("msgid", "pm-dup-1"))));
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.PrivateMessage(
+                Instant.now(), "alice", "hello again", "", Map.of("msgid", "pm-dup-1"))));
+
+    verify(ui, times(1))
+        .appendChatAt(eq(pm), any(), eq("alice"), anyString(), eq(false), anyString(), any());
+    verify(interceptorIngestPort, times(1))
+        .ingestEvent(
+            eq("libera"),
+            eq("pm:alice"),
+            eq("alice"),
+            anyString(),
+            anyString(),
+            eq(InterceptorEventType.PRIVATE_MESSAGE));
+    verify(trayNotificationsPort, times(1)).notifyPrivateMessage("libera", "alice", "hello");
+  }
+
+  @Test
   void ruleMatchInActiveChannelStillRecordsNotificationWithoutUnreadHighlight() throws Exception {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
@@ -302,7 +383,44 @@ class IrcMediatorMockVerifyTest {
     invokeOnServerIrcEvent(new ServerIrcEvent("libera", event));
 
     verify(targetCoordinator).onUserSetNameObserved("libera", event);
-    verify(ui).appendStatusAt(any(), any(), eq("(setname)"), eq("alice set name to: Alice Liddell"));
+    verify(ui)
+        .appendStatusAt(any(), any(), eq("(setname)"), eq("alice set name to: Alice Liddell"));
+  }
+
+  @Test
+  void readMarkerTimestampSelectorParsesAndAppliesEpoch() throws Exception {
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ReadMarkerObserved(
+                Instant.parse("2026-02-16T12:31:00.000Z"),
+                "server",
+                "#ircafe",
+                "timestamp=2026-02-16T12:30:00.000Z")));
+
+    verify(ui)
+        .setReadMarker(
+            new TargetRef("libera", "#ircafe"),
+            Instant.parse("2026-02-16T12:30:00.000Z").toEpochMilli());
+    verify(ui).clearUnread(new TargetRef("libera", "#ircafe"));
+  }
+
+  @Test
+  void readMarkerWildcardAppliesZeroEpoch() throws Exception {
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ReadMarkerObserved(
+                Instant.parse("2026-02-16T12:31:00.000Z"), "server", "#ircafe", "*")));
+
+    verify(ui).setReadMarker(new TargetRef("libera", "#ircafe"), 0L);
+    verify(ui).clearUnread(new TargetRef("libera", "#ircafe"));
   }
 
   private void invokeHandleOutgoingLine(String raw) throws Exception {

@@ -49,6 +49,7 @@ public sealed interface ParsedInput
         ParsedInput.ChatHistoryLatest,
         ParsedInput.ChatHistoryBetween,
         ParsedInput.ChatHistoryAround,
+        ParsedInput.MarkRead,
         ParsedInput.Monitor,
         ParsedInput.Help,
         ParsedInput.ReplyMessage,
@@ -220,6 +221,9 @@ public sealed interface ParsedInput
 
   /** /chathistory around <selector> [limit] */
   record ChatHistoryAround(String selector, int limit) implements ParsedInput {}
+
+  /** /markread */
+  record MarkRead() implements ParsedInput {}
 
   /**
    * /monitor <+|-|list|status|clear> [nicks]

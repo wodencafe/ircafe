@@ -122,7 +122,7 @@ class TargetCoordinatorHistoryResetTest {
         newCoordinator(ui, irc, connectionCoordinator, runtimeConfig, history);
 
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    when(ui.isChannelDetached(channel)).thenReturn(false);
+    when(ui.isChannelDisconnected(channel)).thenReturn(false);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.partChannel("libera", "#ircafe", null)).thenReturn(Completable.complete());
 
@@ -145,7 +145,7 @@ class TargetCoordinatorHistoryResetTest {
         newCoordinator(ui, irc, connectionCoordinator, runtimeConfig, history);
 
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    when(ui.isChannelDetached(channel)).thenReturn(true);
+    when(ui.isChannelDisconnected(channel)).thenReturn(true);
     when(connectionCoordinator.isConnected("libera")).thenReturn(false);
 
     coordinator.closeChannel(channel);
@@ -166,7 +166,7 @@ class TargetCoordinatorHistoryResetTest {
         newCoordinator(ui, irc, connectionCoordinator, runtimeConfig, history);
 
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    when(ui.isChannelDetached(channel)).thenReturn(true);
+    when(ui.isChannelDisconnected(channel)).thenReturn(true);
     when(connectionCoordinator.isConnected("libera")).thenReturn(false);
 
     coordinator.onTargetSelected(channel);

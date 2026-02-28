@@ -15,11 +15,14 @@ import cafe.woden.ircclient.ui.util.ViewportWrapRevalidateDecorator;
 import cafe.woden.ircclient.util.VirtualThreads;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.net.URI;
@@ -103,6 +106,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
                 this::redactContextActionVisible,
                 this::onEditMessageRequested,
                 this::onRedactMessageRequested));
+    decorators.add(installTranscriptMouseBehavior());
     this.followTailScroll =
         decorators.add(
             new FollowTailScrollDecorator(
@@ -250,6 +254,16 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
    * @return true if the click was handled/consumed
    */
   protected boolean onMessageReferenceClicked(String messageId) {
+    return false;
+  }
+
+  /**
+   * Called when the user clicks a manual-preview marker ("eye") attached to a blocked embed URL.
+   *
+   * @param insertOffset transcript offset where the preview should be inserted (line-below click)
+   * @return true if handled/consumed
+   */
+  protected boolean onManualPreviewRequested(String url, int insertOffset) {
     return false;
   }
 
@@ -485,6 +499,29 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     }
   }
 
+  private ManualPreviewHit manualPreviewHitAt(Point p) {
+    try {
+      int pos = chat.viewToModel2D(p);
+      if (pos < 0) return null;
+
+      StyledDocument doc = (StyledDocument) chat.getDocument();
+      Element el = doc.getCharacterElement(pos);
+      if (el == null) return null;
+
+      AttributeSet attrs = el.getAttributes();
+      Object marker = attrs.getAttribute(ChatStyles.ATTR_MANUAL_PREVIEW_URL);
+      if (marker == null) return null;
+
+      String url = Objects.toString(marker, "").trim();
+      if (url.isEmpty()) return null;
+
+      int insertOffset = insertionOffsetBelowLine(doc, pos);
+      return new ManualPreviewHit(url, insertOffset);
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
   private String nickAt(Point p) {
     try {
       int pos = chat.viewToModel2D(p);
@@ -570,6 +607,88 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     } catch (Exception ignored) {
       return null;
     }
+  }
+
+  private AutoCloseable installTranscriptMouseBehavior() {
+    Cursor hand = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
+    Cursor text = Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
+    MouseAdapter listener =
+        new MouseAdapter() {
+          @Override
+          public void mouseMoved(MouseEvent e) {
+            if (e == null || chat == null) return;
+            ManualPreviewHit manual = manualPreviewHitAt(e.getPoint());
+            String url = urlAt(e.getPoint());
+            String ch = channelAt(e.getPoint());
+            String nick = nickAt(e.getPoint());
+            String msgRef = messageReferenceAt(e.getPoint());
+            chat.setCursor(
+                (manual != null || url != null || ch != null || nick != null || msgRef != null)
+                    ? hand
+                    : text);
+          }
+
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            if (e == null || chat == null) return;
+            if (!SwingUtilities.isLeftMouseButton(e)) return;
+
+            ManualPreviewHit manual = manualPreviewHitAt(e.getPoint());
+            if (manual != null) {
+              try {
+                if (onManualPreviewRequested(manual.url(), manual.insertOffset())) return;
+              } catch (Exception ignored) {
+              }
+            }
+
+            String url = urlAt(e.getPoint());
+            if (url != null) {
+              openUrl(url);
+              return;
+            }
+
+            String ch = channelAt(e.getPoint());
+            if (ch != null) {
+              try {
+                if (onChannelClicked(ch)) return;
+              } catch (Exception ignored) {
+              }
+            }
+
+            String nick = nickAt(e.getPoint());
+            if (nick != null) {
+              try {
+                if (onNickClicked(nick)) return;
+              } catch (Exception ignored) {
+              }
+            }
+
+            String msgRef = messageReferenceAt(e.getPoint());
+            if (msgRef != null) {
+              try {
+                if (onMessageReferenceClicked(msgRef)) return;
+              } catch (Exception ignored) {
+              }
+            }
+
+            try {
+              onTranscriptClicked();
+            } catch (Exception ignored) {
+            }
+          }
+        };
+    chat.addMouseMotionListener(listener);
+    chat.addMouseListener(listener);
+    return () -> {
+      try {
+        chat.removeMouseMotionListener(listener);
+      } catch (Exception ignored) {
+      }
+      try {
+        chat.removeMouseListener(listener);
+      } catch (Exception ignored) {
+      }
+    };
   }
 
   // Keep in sync with ChatRichTextRenderer#isNickChar.
@@ -773,6 +892,24 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     }
     return -1;
   }
+
+  private static int insertionOffsetBelowLine(StyledDocument doc, int pos) {
+    if (doc == null) return 0;
+    int len = doc.getLength();
+    int clamped = Math.max(0, Math.min(pos, len));
+    try {
+      Element root = doc.getDefaultRootElement();
+      if (root == null) return clamped;
+      int line = root.getElementIndex(clamped);
+      Element el = root.getElement(line);
+      if (el == null) return clamped;
+      return Math.max(0, Math.min(el.getEndOffset(), len));
+    } catch (Exception ignored) {
+      return clamped;
+    }
+  }
+
+  private record ManualPreviewHit(String url, int insertOffset) {}
 
   // If the docking framework wraps a Dockable in a JScrollPane, we do NOT want a second set of
   // scrollbars.

@@ -27,7 +27,10 @@ public class UiSettingsPortAdapter implements UiSettingsPort {
         settings.notificationRuleCooldownSeconds(),
         settings.monitorIsonFallbackPollIntervalSeconds(),
         settings.ctcpRequestsInActiveTargetEnabled(),
-        settings.typingIndicatorsReceiveEnabled());
+        settings.typingIndicatorsReceiveEnabled(),
+        settings.typingIndicatorsTreeEnabled(),
+        settings.typingIndicatorsUsersListEnabled(),
+        settings.typingIndicatorsTranscriptEnabled());
   }
 
   @Override

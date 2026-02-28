@@ -364,6 +364,10 @@ public class CommandParser {
       return parseChatHistoryInput(rest);
     }
 
+    if (matchesCommand(line, "/markread")) {
+      return new ParsedInput.MarkRead();
+    }
+
     if (matchesCommand(line, "/help") || matchesCommand(line, "/commands")) {
       String topic =
           matchesCommand(line, "/help") ? argAfter(line, "/help") : argAfter(line, "/commands");

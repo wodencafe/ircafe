@@ -66,6 +66,7 @@ public class PircbotxBotFactory {
           "draft/typing",
           "typing",
           "read-marker",
+          "draft/read-marker",
           "multiline",
           "draft/multiline",
           "batch",

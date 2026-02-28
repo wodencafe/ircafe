@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -888,16 +889,38 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     if (line == null || target == null) return insertAt;
     boolean outgoing = line.outgoingLocalEcho() || line.direction() == LogDirection.OUT;
     LogKind kind = line.kind() == null ? LogKind.STATUS : line.kind();
+    String messageId = extractMessageId(line.metaJson());
+    Map<String, String> ircv3Tags = Map.of();
     return switch (kind) {
       case CHAT ->
           transcripts.insertChatFromHistoryAt(
-              target, insertAt, line.fromNick(), line.text(), outgoing, line.tsEpochMs());
+              target,
+              insertAt,
+              line.fromNick(),
+              line.text(),
+              outgoing,
+              line.tsEpochMs(),
+              messageId,
+              ircv3Tags);
       case ACTION ->
           transcripts.insertActionFromHistoryAt(
-              target, insertAt, line.fromNick(), line.text(), outgoing, line.tsEpochMs());
+              target,
+              insertAt,
+              line.fromNick(),
+              line.text(),
+              outgoing,
+              line.tsEpochMs(),
+              messageId,
+              ircv3Tags);
       case NOTICE ->
           transcripts.insertNoticeFromHistoryAt(
-              target, insertAt, line.fromNick(), line.text(), line.tsEpochMs());
+              target,
+              insertAt,
+              line.fromNick(),
+              line.text(),
+              line.tsEpochMs(),
+              messageId,
+              ircv3Tags);
       case STATUS ->
           transcripts.insertStatusFromHistoryAt(
               target, insertAt, line.fromNick(), line.text(), line.tsEpochMs());
@@ -913,6 +936,38 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
           transcripts.insertStatusFromHistoryAt(
               target, insertAt, line.fromNick(), line.text(), line.tsEpochMs());
     };
+  }
+
+  private static String extractMessageId(String metaJson) {
+    String meta = Objects.toString(metaJson, "").trim();
+    if (meta.isEmpty()) return "";
+    String key = "\"messageId\"";
+    int keyPos = meta.indexOf(key);
+    if (keyPos < 0) return "";
+    int colon = meta.indexOf(':', keyPos + key.length());
+    if (colon < 0) return "";
+    int firstQuote = meta.indexOf('"', colon + 1);
+    if (firstQuote < 0) return "";
+
+    StringBuilder out = new StringBuilder(32);
+    boolean escaped = false;
+    for (int i = firstQuote + 1; i < meta.length(); i++) {
+      char c = meta.charAt(i);
+      if (escaped) {
+        out.append(c);
+        escaped = false;
+        continue;
+      }
+      if (c == '\\') {
+        escaped = true;
+        continue;
+      }
+      if (c == '"') {
+        break;
+      }
+      out.append(c);
+    }
+    return out.toString().trim();
   }
 
   private static String safe(String s) {

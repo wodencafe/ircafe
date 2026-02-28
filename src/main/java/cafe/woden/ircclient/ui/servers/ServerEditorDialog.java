@@ -50,6 +50,8 @@ public class ServerEditorDialog extends JDialog {
   private final JTextField portField = new JTextField();
   private final JCheckBox tlsBox = new JCheckBox("Use TLS (SSL)");
   private final JTextField serverPassField = new JTextField();
+  private final JCheckBox autoConnectOnStartBox =
+      new JCheckBox("Auto-connect this server on startup");
 
   private final JTextField nickField = new JTextField();
   private final JTextField loginField = new JTextField();
@@ -125,6 +127,11 @@ public class ServerEditorDialog extends JDialog {
   }
 
   public ServerEditorDialog(Window parent, String title, IrcProperties.Server seed) {
+    this(parent, title, seed, true);
+  }
+
+  public ServerEditorDialog(
+      Window parent, String title, IrcProperties.Server seed, boolean autoConnectOnStart) {
     super(parent, title, ModalityType.APPLICATION_MODAL);
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
     setLayout(new BorderLayout(10, 10));
@@ -195,6 +202,7 @@ public class ServerEditorDialog extends JDialog {
 
       seedProxy(null);
     }
+    autoConnectOnStartBox.setSelected(autoConnectOnStart);
 
     // Placeholders / styling
     applyFieldStyle(idField, "libera");
@@ -625,6 +633,10 @@ public class ServerEditorDialog extends JDialog {
     return result;
   }
 
+  public boolean autoConnectOnStartSelected() {
+    return autoConnectOnStartBox.isSelected();
+  }
+
   private JPanel buildConnectionPanel() {
     JPanel p = new JPanel(new GridBagLayout());
     p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
@@ -652,8 +664,9 @@ public class ServerEditorDialog extends JDialog {
 
     addRow(p, g, 2, "Port", portRow);
     addRow(p, g, 3, "Server password", serverPassField);
+    addRow(p, g, 4, "Startup", autoConnectOnStartBox);
 
-    g.gridy = 5;
+    g.gridy = 6;
     g.gridx = 0;
     g.gridwidth = 2;
     g.weighty = 1.0;

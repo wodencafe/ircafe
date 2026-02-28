@@ -270,6 +270,8 @@ public class MediatorHistoryIngestOrchestrator {
         String text = Objects.toString(entry.text(), "");
         long tsEpochMs =
             entry.at() == null ? System.currentTimeMillis() : entry.at().toEpochMilli();
+        String messageId = Objects.toString(entry.messageId(), "");
+        var ircv3Tags = entry.ircv3Tags();
         boolean outgoing = !myNick.isBlank() && !from.isBlank() && from.equalsIgnoreCase(myNick);
 
         ChatHistoryEntry.Kind kind =
@@ -279,21 +281,39 @@ public class MediatorHistoryIngestOrchestrator {
               switch (kind) {
                 case ACTION ->
                     transcripts.insertActionFromHistoryAt(
-                        renderTarget, insertAt, from, text, outgoing, tsEpochMs);
+                        renderTarget,
+                        insertAt,
+                        from,
+                        text,
+                        outgoing,
+                        tsEpochMs,
+                        messageId,
+                        ircv3Tags);
                 case NOTICE ->
                     transcripts.insertNoticeFromHistoryAt(
-                        renderTarget, insertAt, from, text, tsEpochMs);
+                        renderTarget, insertAt, from, text, tsEpochMs, messageId, ircv3Tags);
                 case PRIVMSG ->
                     transcripts.insertChatFromHistoryAt(
-                        renderTarget, insertAt, from, text, outgoing, tsEpochMs);
+                        renderTarget,
+                        insertAt,
+                        from,
+                        text,
+                        outgoing,
+                        tsEpochMs,
+                        messageId,
+                        ircv3Tags);
               };
         } else {
           switch (kind) {
             case ACTION ->
-                transcripts.appendActionFromHistory(renderTarget, from, text, outgoing, tsEpochMs);
-            case NOTICE -> transcripts.appendNoticeFromHistory(renderTarget, from, text, tsEpochMs);
+                transcripts.appendActionFromHistory(
+                    renderTarget, from, text, outgoing, tsEpochMs, messageId, ircv3Tags);
+            case NOTICE ->
+                transcripts.appendNoticeFromHistory(
+                    renderTarget, from, text, tsEpochMs, messageId, ircv3Tags);
             case PRIVMSG ->
-                transcripts.appendChatFromHistory(renderTarget, from, text, outgoing, tsEpochMs);
+                transcripts.appendChatFromHistory(
+                    renderTarget, from, text, outgoing, tsEpochMs, messageId, ircv3Tags);
           }
         }
         displayed++;
@@ -362,6 +382,7 @@ public class MediatorHistoryIngestOrchestrator {
   private record HistoryRenderKey(TargetRef target, HistoryFingerprint fingerprint) {}
 
   private record HistoryFingerprint(
+      String messageId,
       long tsEpochMs,
       ChatHistoryEntry.Kind kind,
       String from,
@@ -369,13 +390,22 @@ public class MediatorHistoryIngestOrchestrator {
       int textLength) {
     static HistoryFingerprint from(ChatHistoryEntry entry) {
       if (entry == null) {
-        return new HistoryFingerprint(0L, ChatHistoryEntry.Kind.PRIVMSG, "", 0L, 0);
+        return new HistoryFingerprint("", 0L, ChatHistoryEntry.Kind.PRIVMSG, "", 0L, 0);
+      }
+      ChatHistoryEntry.Kind k = entry.kind() == null ? ChatHistoryEntry.Kind.PRIVMSG : entry.kind();
+      String messageId = Objects.toString(entry.messageId(), "").trim();
+      if (!messageId.isBlank()) {
+        return new HistoryFingerprint(messageId, 0L, k, "", 0L, 0);
       }
       long ts = entry.at() == null ? 0L : entry.at().toEpochMilli();
-      ChatHistoryEntry.Kind k = entry.kind() == null ? ChatHistoryEntry.Kind.PRIVMSG : entry.kind();
       String text = Objects.toString(entry.text(), "");
       return new HistoryFingerprint(
-          ts, k, Objects.toString(entry.from(), ""), computeTextFingerprint(text), text.length());
+          "",
+          ts,
+          k,
+          Objects.toString(entry.from(), ""),
+          computeTextFingerprint(text),
+          text.length());
     }
   }
 

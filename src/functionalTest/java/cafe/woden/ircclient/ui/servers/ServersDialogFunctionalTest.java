@@ -39,7 +39,7 @@ class ServersDialogFunctionalTest {
         new RuntimeConfigStore(tempDir.resolve("ircafe.yml").toString(), initial);
     ServerRegistry registry = new ServerRegistry(initial, runtimeConfig);
 
-    ServersDialog dialog = onEdtCall(() -> new ServersDialog(null, registry));
+    ServersDialog dialog = onEdtCall(() -> new ServersDialog(null, registry, runtimeConfig));
     JButton addBtn = readField(dialog, "addBtn", JButton.class);
     JButton editBtn = readField(dialog, "editBtn", JButton.class);
     JButton removeBtn = readField(dialog, "removeBtn", JButton.class);

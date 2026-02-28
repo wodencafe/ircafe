@@ -73,6 +73,7 @@ public final class ChannelListPanel extends JPanel {
 
   public enum ManagedSortMode {
     ALPHABETICAL,
+    MOST_RECENT_ACTIVITY,
     CUSTOM
   }
 
@@ -149,7 +150,7 @@ public final class ChannelListPanel extends JPanel {
   private static final String DEFAULT_HINT =
       "Use the refresh button to request /list (heavy) or the ALIS search button for filtered results.";
   private static final String MANAGED_HINT =
-      "Managed channels include attached and detached channels for this server.";
+      "Managed channels include connected and disconnected channels for this server.";
 
   private static final int ACTION_ICON_SIZE = 16;
   private static final Dimension ACTION_BUTTON_SIZE = new Dimension(28, 28);
@@ -195,8 +196,8 @@ public final class ChannelListPanel extends JPanel {
   private volatile Runnable onRunListRequest;
   private volatile Consumer<String> onRunAlisRequest;
   private volatile Consumer<String> onAddChannelRequest;
-  private volatile Consumer<String> onAttachChannelRequest;
-  private volatile Consumer<String> onDetachChannelRequest;
+  private volatile Consumer<String> onReconnectChannelRequest;
+  private volatile Consumer<String> onDisconnectChannelRequest;
   private volatile Consumer<String> onCloseChannelRequest;
   private volatile BiConsumer<String, Boolean> onAutoReattachChanged;
   private volatile Consumer<ManagedSortMode> onManagedSortModeChanged;
@@ -352,8 +353,8 @@ public final class ChannelListPanel extends JPanel {
     configureActionButton(
         attachDetachButton,
         "play",
-        "Attach selected channel if detached, or detach if attached",
-        "Attach/Detach");
+        "Reconnect selected channel if disconnected, or disconnect if connected",
+        "Reconnect/Disconnect");
     configureActionButton(
         closeChannelButton, "close", "Close selected channel and remove it from the list", "Close");
     configureActionButton(
@@ -363,11 +364,10 @@ public final class ChannelListPanel extends JPanel {
 
     sortModeCombo.setToolTipText("Sort mode for managed channels on this server.");
     sortModeCombo.setRenderer(
-        (list, value, index, isSelected, cellHasFocus) ->
-            new JLabel(value == ManagedSortMode.ALPHABETICAL ? "Alphabetical" : "Manual"));
+        (list, value, index, isSelected, cellHasFocus) -> new JLabel(sortModeLabel(value)));
 
     addChannelButton.addActionListener(e -> addChannelRequested());
-    attachDetachButton.addActionListener(e -> attachDetachSelectedRequested());
+    attachDetachButton.addActionListener(e -> connectDisconnectSelectedRequested());
     closeChannelButton.addActionListener(e -> closeSelectedRequested());
     managedDetailsButton.addActionListener(e -> showManagedDetailsForSelection());
     moveUpButton.addActionListener(e -> moveSelectedBy(-1));
@@ -381,7 +381,7 @@ public final class ChannelListPanel extends JPanel {
     toolbar.add(moveUpButton);
     toolbar.add(moveDownButton);
     toolbar.add(new JLabel("Order:"));
-    toolbar.add(sortModeCombo, "w 150!");
+    toolbar.add(sortModeCombo, "w 200!");
 
     managedTable.setFillsViewportHeight(true);
     managedTable.setRowSelectionAllowed(true);
@@ -559,12 +559,12 @@ public final class ChannelListPanel extends JPanel {
     this.onAddChannelRequest = onAddChannelRequest;
   }
 
-  public void setOnAttachChannelRequest(Consumer<String> onAttachChannelRequest) {
-    this.onAttachChannelRequest = onAttachChannelRequest;
+  public void setOnReconnectChannelRequest(Consumer<String> onReconnectChannelRequest) {
+    this.onReconnectChannelRequest = onReconnectChannelRequest;
   }
 
-  public void setOnDetachChannelRequest(Consumer<String> onDetachChannelRequest) {
-    this.onDetachChannelRequest = onDetachChannelRequest;
+  public void setOnDisconnectChannelRequest(Consumer<String> onDisconnectChannelRequest) {
+    this.onDisconnectChannelRequest = onDisconnectChannelRequest;
   }
 
   public void setOnCloseChannelRequest(Consumer<String> onCloseChannelRequest) {
@@ -796,9 +796,9 @@ public final class ChannelListPanel extends JPanel {
             + total
             + " channels ("
             + attached
-            + " attached, "
+            + " connected, "
             + detached
-            + " detached)");
+            + " disconnected)");
   }
 
   private void applyListFilter() {
@@ -1014,7 +1014,7 @@ public final class ChannelListPanel extends JPanel {
     if (cb != null) cb.accept(channel);
   }
 
-  private void attachDetachSelectedRequested() {
+  private void connectDisconnectSelectedRequested() {
     int row = managedTable.getSelectedRow();
     if (row < 0) return;
     ManagedChannelRow current = managedModel.rowAt(row);
@@ -1023,10 +1023,10 @@ public final class ChannelListPanel extends JPanel {
     if (channel.isEmpty()) return;
 
     if (current.detached()) {
-      Consumer<String> cb = onAttachChannelRequest;
+      Consumer<String> cb = onReconnectChannelRequest;
       if (cb != null) cb.accept(channel);
     } else {
-      Consumer<String> cb = onDetachChannelRequest;
+      Consumer<String> cb = onDisconnectChannelRequest;
       if (cb != null) cb.accept(channel);
     }
   }
@@ -1112,6 +1112,15 @@ public final class ChannelListPanel extends JPanel {
     return ManagedSortMode.CUSTOM;
   }
 
+  private static String sortModeLabel(ManagedSortMode mode) {
+    if (mode == null) return "Manual";
+    return switch (mode) {
+      case ALPHABETICAL -> "Alphabetical";
+      case MOST_RECENT_ACTIVITY -> "Most Recent Activity";
+      case CUSTOM -> "Manual";
+    };
+  }
+
   private void updateListButtons() {
     int row = listTable.getSelectedRow();
     boolean hasServer = !this.serverId.isBlank();
@@ -1130,13 +1139,13 @@ public final class ChannelListPanel extends JPanel {
     if (selected != null && selected.detached()) {
       attachDetachButton.setIcon(SvgIcons.action("play", ACTION_ICON_SIZE));
       attachDetachButton.setDisabledIcon(SvgIcons.actionDisabled("play", ACTION_ICON_SIZE));
-      attachDetachButton.setToolTipText("Attach selected channel");
-      attachDetachButton.getAccessibleContext().setAccessibleName("Attach");
+      attachDetachButton.setToolTipText("Reconnect selected channel");
+      attachDetachButton.getAccessibleContext().setAccessibleName("Reconnect");
     } else {
       attachDetachButton.setIcon(SvgIcons.action("pause", ACTION_ICON_SIZE));
       attachDetachButton.setDisabledIcon(SvgIcons.actionDisabled("pause", ACTION_ICON_SIZE));
-      attachDetachButton.setToolTipText("Detach selected channel");
-      attachDetachButton.getAccessibleContext().setAccessibleName("Detach");
+      attachDetachButton.setToolTipText("Disconnect selected channel");
+      attachDetachButton.getAccessibleContext().setAccessibleName("Disconnect");
     }
 
     boolean customMode = currentManagedSortMode() == ManagedSortMode.CUSTOM;
@@ -1180,7 +1189,7 @@ public final class ChannelListPanel extends JPanel {
             sid,
             ChannelDetailsSource.MANAGED,
             selected.channel(),
-            selected.detached() ? "Detached" : "Attached",
+            selected.detached() ? "Disconnected" : "Connected",
             topic,
             selected.modes(),
             selected.detached() ? -1 : selected.users(),
@@ -1200,7 +1209,8 @@ public final class ChannelListPanel extends JPanel {
     if (sid.isBlank()) return;
 
     ManagedChannelRow managed = findManagedRowByChannel(sid, selected.channel());
-    String state = managed == null ? "Not managed" : (managed.detached() ? "Detached" : "Attached");
+    String state =
+        managed == null ? "Not managed" : (managed.detached() ? "Disconnected" : "Connected");
     String modes = managed == null ? "(Unknown)" : managed.modes();
     int notifications = managed == null ? 0 : managed.notifications();
     boolean autoReattach = managed != null && managed.autoReattach();
@@ -1311,7 +1321,7 @@ public final class ChannelListPanel extends JPanel {
     Row list = findListRowByChannel(sid, channel);
 
     String statusText =
-        managed == null ? "Not managed" : (managed.detached() ? "Detached" : "Attached");
+        managed == null ? "Not managed" : (managed.detached() ? "Disconnected" : "Connected");
     String modesText = managed == null ? "(Unknown)" : displayManagedModes(managed);
     String notificationsText =
         managed == null ? "0" : String.valueOf(Math.max(0, managed.notifications()));
@@ -1323,7 +1333,7 @@ public final class ChannelListPanel extends JPanel {
         usersText = "Not available";
       } else {
         usersText =
-            managed.detached() ? "Unavailable while detached" : String.valueOf(managed.users());
+            managed.detached() ? "Unavailable while disconnected" : String.valueOf(managed.users());
       }
     } else if (list != null) {
       usersText = String.valueOf(Math.max(0, list.visibleUsers()));
@@ -1358,7 +1368,9 @@ public final class ChannelListPanel extends JPanel {
     JTextField stateField = readOnlyField(details.state());
     JTextField usersField =
         readOnlyField(
-            details.users() < 0 ? "Unavailable while detached" : String.valueOf(details.users()));
+            details.users() < 0
+                ? "Unavailable while disconnected"
+                : String.valueOf(details.users()));
     JTextField notificationsField =
         readOnlyField(String.valueOf(Math.max(0, details.notifications())));
     JTextField modesField = readOnlyField(fallback(details.modes(), "(Unknown)"));
@@ -1885,7 +1897,7 @@ public final class ChannelListPanel extends JPanel {
       if (row == null) return "";
       return switch (columnIndex) {
         case MANAGED_COL_CHANNEL -> row.channel();
-        case MANAGED_COL_STATE -> row.detached() ? "Detached" : "Attached";
+        case MANAGED_COL_STATE -> row.detached() ? "Disconnected" : "Connected";
         case MANAGED_COL_USERS -> displayManagedUsers(row);
         case MANAGED_COL_NOTIFICATIONS -> displayManagedNotifications(row);
         case MANAGED_COL_MODES -> displayManagedModes(row);

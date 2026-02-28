@@ -28,6 +28,7 @@ import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
 import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
+import cafe.woden.ircclient.ui.chat.embed.EmbedLoadPolicyBus;
 import cafe.woden.ircclient.ui.filter.FilterSettings;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
@@ -255,9 +256,19 @@ class PreferencesDialogFunctionalTest {
 
     JCheckBox send = (JCheckBox) invoke(dialog, "buildTypingIndicatorsSendCheckbox", current);
     JCheckBox receive = (JCheckBox) invoke(dialog, "buildTypingIndicatorsReceiveCheckbox", current);
+    JCheckBox treeDisplay =
+        (JCheckBox) invoke(dialog, "buildTypingIndicatorsTreeDisplayCheckbox", current);
+    JCheckBox usersDisplay =
+        (JCheckBox) invoke(dialog, "buildTypingIndicatorsUsersListDisplayCheckbox", current);
+    JCheckBox transcriptDisplay =
+        (JCheckBox) invoke(dialog, "buildTypingIndicatorsTranscriptDisplayCheckbox", current);
+    JCheckBox sendSignalDisplay =
+        (JCheckBox) invoke(dialog, "buildTypingIndicatorsSendSignalDisplayCheckbox", current);
     @SuppressWarnings("unchecked")
     JComboBox<Object> style =
         (JComboBox<Object>) invoke(dialog, "buildTypingTreeIndicatorStyleCombo", current);
+    JCheckBox badgesEnabled =
+        (JCheckBox) invoke(dialog, "buildServerTreeNotificationBadgesCheckbox", current);
     JSpinner badgeScale = new JSpinner(new javax.swing.SpinnerNumberModel(100, 50, 150, 5));
     Object capabilities = invoke(dialog, "buildIrcv3CapabilitiesControls");
 
@@ -268,7 +279,12 @@ class PreferencesDialogFunctionalTest {
                 "buildIrcv3CapabilitiesPanel",
                 send,
                 receive,
+                treeDisplay,
+                usersDisplay,
+                transcriptDisplay,
+                sendSignalDisplay,
                 style,
+                badgesEnabled,
                 badgeScale,
                 capabilities);
     assertNotNull(findLabel(panel, "Unread badge size"));
@@ -340,6 +356,7 @@ class PreferencesDialogFunctionalTest {
       ExecutorService pushyTestExecutor, ExecutorService notificationRuleTestExecutor) {
     return new PreferencesDialog(
         mock(UiSettingsBus.class),
+        mock(EmbedCardStyleBus.class),
         mock(ThemeManager.class),
         mock(ThemeAccentSettingsBus.class),
         mock(ThemeTweakSettingsBus.class),
@@ -350,6 +367,8 @@ class PreferencesDialogFunctionalTest {
         mock(NickColorSettingsBus.class),
         mock(NickColorService.class),
         mock(NickColorOverridesDialog.class),
+        mock(EmbedLoadPolicyDialog.class),
+        mock(EmbedLoadPolicyBus.class),
         mock(PircbotxIrcClientService.class),
         mock(FilterSettingsBus.class),
         mock(TranscriptRebuildService.class),

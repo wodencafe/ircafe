@@ -13,11 +13,11 @@ import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
-import cafe.woden.ircclient.ui.StatusBar;
 import cafe.woden.ircclient.ui.settings.MemoryUsageDisplayMode;
 import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.shell.StatusBar;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -35,8 +35,8 @@ class TrayNotificationFunctionalTest {
     when(settingsBus.get()).thenReturn(baseSettings());
 
     TrayService trayService = mock(TrayService.class);
-    cafe.woden.ircclient.ui.ServerTreeDockable serverTree =
-        mock(cafe.woden.ircclient.ui.ServerTreeDockable.class);
+    cafe.woden.ircclient.ui.servertree.ServerTreeDockable serverTree =
+        mock(cafe.woden.ircclient.ui.servertree.ServerTreeDockable.class);
     StatusBar statusBar = mock(StatusBar.class);
     NotificationSoundService soundService = mock(NotificationSoundService.class);
     ActiveTargetPort activeTargetPort = mock(ActiveTargetPort.class);
@@ -59,7 +59,7 @@ class TrayNotificationFunctionalTest {
     when(trayProvider.getObject()).thenReturn(trayService);
 
     @SuppressWarnings("unchecked")
-    ObjectProvider<cafe.woden.ircclient.ui.MainFrame> mainFrameProvider =
+    ObjectProvider<cafe.woden.ircclient.ui.shell.MainFrame> mainFrameProvider =
         mock(ObjectProvider.class);
     when(mainFrameProvider.getIfAvailable()).thenReturn(null);
 
@@ -72,7 +72,7 @@ class TrayNotificationFunctionalTest {
     when(targetPortProvider.getIfAvailable()).thenReturn(activeTargetPort);
 
     @SuppressWarnings("unchecked")
-    ObjectProvider<cafe.woden.ircclient.ui.ServerTreeDockable> serverTreeProvider =
+    ObjectProvider<cafe.woden.ircclient.ui.servertree.ServerTreeDockable> serverTreeProvider =
         mock(ObjectProvider.class);
     when(serverTreeProvider.getIfAvailable()).thenReturn(serverTree);
     when(serverTreeProvider.getObject()).thenReturn(serverTree);
@@ -152,6 +152,10 @@ class TrayNotificationFunctionalTest {
         true,
         "dots",
         true,
+        true,
+        true,
+        true,
+        true,
         "HH:mm:ss",
         true,
         true,
@@ -169,6 +173,8 @@ class TrayNotificationFunctionalTest {
         4000,
         true,
         "#6AA2FF",
+        true,
+        true,
         true,
         7,
         6,

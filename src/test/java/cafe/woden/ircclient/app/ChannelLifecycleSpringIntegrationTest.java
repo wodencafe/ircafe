@@ -2,10 +2,12 @@ package cafe.woden.ircclient.app;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,6 +17,7 @@ import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
@@ -30,6 +33,8 @@ import cafe.woden.ircclient.modulith.AbstractApplicationModuleIntegrationTest;
 import io.reactivex.rxjava3.core.Completable;
 import java.lang.reflect.Method;
 import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -59,6 +64,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
   private final RuntimeConfigStore runtimeConfig;
   private final ServerRegistry serverRegistry;
   private final IrcClientService ircClientService;
+  private final TrayNotificationsPort trayNotificationsPort;
   private final UiPort swingUiPort;
   private final Method onServerIrcEvent;
 
@@ -69,6 +75,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
       RuntimeConfigStore runtimeConfig,
       ServerRegistry serverRegistry,
       IrcClientService ircClientService,
+      TrayNotificationsPort trayNotificationsPort,
       @Qualifier("swingUiPort") UiPort swingUiPort)
       throws NoSuchMethodException {
     this.mediator = mediator;
@@ -77,6 +84,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     this.runtimeConfig = runtimeConfig;
     this.serverRegistry = serverRegistry;
     this.ircClientService = ircClientService;
+    this.trayNotificationsPort = trayNotificationsPort;
     this.swingUiPort = swingUiPort;
     this.onServerIrcEvent =
         IrcMediator.class.getDeclaredMethod("onServerIrcEvent", ServerIrcEvent.class);
@@ -85,7 +93,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
 
   @BeforeEach
   void clearMockHistory() {
-    clearInvocations(ircClientService, swingUiPort);
+    clearInvocations(ircClientService, swingUiPort, trayNotificationsPort);
   }
 
   @Test
@@ -98,7 +106,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     stubJoinAndPart(sid, channel);
     markConnected(sid);
 
-    targetCoordinator.detachChannel(ref);
+    targetCoordinator.disconnectChannel(ref);
     connectionCoordinator.handleConnectivityEvent(
         sid, new IrcEvent.Disconnected(Instant.now(), "test disconnect"), null);
     markConnected(sid);
@@ -106,7 +114,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     boolean accepted = targetCoordinator.onJoinedChannel(sid, channel);
 
     assertFalse(accepted);
-    verify(swingUiPort, atLeastOnce()).setChannelDetached(ref, true);
+    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, true);
     verify(ircClientService, atLeastOnce()).partChannel(sid, channel);
   }
 
@@ -119,7 +127,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     runtimeConfig.forgetJoinedChannel(sid, channel);
     emitServerEvent(sid, new IrcEvent.KickedFromChannel(Instant.now(), channel, "chanop", "bye"));
 
-    verify(swingUiPort, atLeastOnce()).setChannelDetached(eq(ref), eq(true), anyString());
+    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(eq(ref), eq(true), anyString());
     assertFalse(targetCoordinator.onJoinedChannel(sid, channel));
   }
 
@@ -140,7 +148,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
 
     assertTrue(accepted);
     verify(ircClientService, atLeastOnce()).joinChannel(sid, channel);
-    verify(swingUiPort, atLeastOnce()).setChannelDetached(ref, false);
+    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, false);
   }
 
   @Test
@@ -155,7 +163,33 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     markConnected(sid);
 
     verify(swingUiPort, atLeastOnce()).ensureTargetExists(ref);
-    verify(swingUiPort, atLeastOnce()).setChannelDetached(ref, true);
+    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, true);
+  }
+
+  @Test
+  void reconnectReplayDuplicateMsgIdRendersAndNotifiesOnlyOnce() {
+    String sid = primaryServerId();
+    String channel = "#it-replay-msgid";
+    TargetRef chan = new TargetRef(sid, channel);
+    String msgId = "replay-dup-1";
+    when(ircClientService.currentNick(sid)).thenReturn(Optional.of("tester"));
+
+    emitServerEvent(
+        sid,
+        new IrcEvent.ChannelMessage(
+            Instant.now(), channel, "alice", "hi tester", msgId, Map.of("msgid", msgId)));
+    emitServerEvent(sid, new IrcEvent.Disconnected(Instant.now(), "test disconnect"));
+    emitServerEvent(sid, new IrcEvent.Connected(Instant.now(), "irc.example.net", 6697, "tester"));
+    emitServerEvent(
+        sid,
+        new IrcEvent.ChannelMessage(
+            Instant.now(), channel, "alice", "hi tester (replay)", msgId, Map.of("msgid", msgId)));
+
+    verify(swingUiPort, times(1))
+        .appendChatAt(
+            eq(chan), any(), eq("alice"), anyString(), eq(false), eq(msgId), any(), any());
+    verify(trayNotificationsPort, times(1))
+        .notifyHighlight(eq(sid), eq(channel), eq("alice"), anyString());
   }
 
   private void emitServerEvent(String serverId, IrcEvent event) {

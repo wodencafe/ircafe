@@ -30,9 +30,16 @@ import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
+import cafe.woden.ircclient.ui.bus.OutboundLineBus;
+import cafe.woden.ircclient.ui.bus.TargetActivationBus;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
+import cafe.woden.ircclient.ui.controls.ConnectButton;
+import cafe.woden.ircclient.ui.controls.DisconnectButton;
+import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
+import cafe.woden.ircclient.ui.shell.StatusBar;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.Component;
@@ -67,8 +74,8 @@ class DetachedChannelLifecycleFunctionalTest {
     Disposable detachSub =
         fixture
             .serverTree
-            .detachChannelRequests()
-            .subscribe(fixture.targetCoordinator::detachChannel);
+            .disconnectChannelRequests()
+            .subscribe(fixture.targetCoordinator::disconnectChannel);
     try {
       TargetRef channel = new TargetRef("libera", "#functional-detach");
 
@@ -80,14 +87,15 @@ class DetachedChannelLifecycleFunctionalTest {
           () -> {
             JMenuItem detachItem =
                 findMenuItem(
-                    popupForTarget(fixture.serverTree, channel), "Detach \"#functional-detach\"");
+                    popupForTarget(fixture.serverTree, channel),
+                    "Disconnect \"#functional-detach\"");
             assertNotNull(detachItem);
             detachItem.doClick();
           });
       flushEdt();
 
       assertTrue(hasLeaf(fixture.serverTree, channel), "detached channel should remain in tree");
-      assertTrue(fixture.serverTree.isChannelDetached(channel), "channel should be detached");
+      assertTrue(fixture.serverTree.isChannelDisconnected(channel), "channel should be detached");
       assertTrue(
           isRenderedItalic(fixture.serverTree, channel),
           "detached channel should render as detached");
@@ -110,7 +118,7 @@ class DetachedChannelLifecycleFunctionalTest {
       onEdt(
           () -> {
             fixture.targetCoordinator.onTargetSelected(channel);
-            fixture.targetCoordinator.detachChannel(channel);
+            fixture.targetCoordinator.disconnectChannel(channel);
           });
       flushEdt();
       fixture.inputEnabledStates.clear();
@@ -119,7 +127,7 @@ class DetachedChannelLifecycleFunctionalTest {
           () -> {
             JMenuItem joinItem =
                 findMenuItem(
-                    popupForTarget(fixture.serverTree, channel), "Join \"#functional-join\"");
+                    popupForTarget(fixture.serverTree, channel), "Reconnect \"#functional-join\"");
             assertNotNull(joinItem);
             joinItem.doClick();
           });
@@ -127,13 +135,15 @@ class DetachedChannelLifecycleFunctionalTest {
 
       verify(fixture.irc).joinChannel("libera", "#functional-join");
       assertTrue(
-          fixture.serverTree.isChannelDetached(channel), "channel stays detached until JOIN event");
+          fixture.serverTree.isChannelDisconnected(channel),
+          "channel stays detached until JOIN event");
 
       onEdt(() -> fixture.targetCoordinator.onJoinedChannel("libera", "#functional-join"));
       flushEdt();
 
       assertFalse(
-          fixture.serverTree.isChannelDetached(channel), "JOIN event should attach the channel");
+          fixture.serverTree.isChannelDisconnected(channel),
+          "JOIN event should attach the channel");
       assertFalse(
           isRenderedItalic(fixture.serverTree, channel),
           "attached channel should not render detached");
@@ -141,7 +151,8 @@ class DetachedChannelLifecycleFunctionalTest {
           () ->
               assertNotNull(
                   findMenuItem(
-                      popupForTarget(fixture.serverTree, channel), "Detach \"#functional-join\"")));
+                      popupForTarget(fixture.serverTree, channel),
+                      "Disconnect \"#functional-join\"")));
       assertTrue(Boolean.TRUE.equals(fixture.lastInputEnabledState()), "input should be enabled");
     } finally {
       joinSub.dispose();
@@ -163,12 +174,13 @@ class DetachedChannelLifecycleFunctionalTest {
           });
       flushEdt();
 
-      assertTrue(fixture.serverTree.isChannelDetached(channel));
+      assertTrue(fixture.serverTree.isChannelDisconnected(channel));
       onEdt(
           () ->
               assertNotNull(
                   findMenuItem(
-                      popupForTarget(fixture.serverTree, channel), "Join \"#functional-kick\"")));
+                      popupForTarget(fixture.serverTree, channel),
+                      "Reconnect \"#functional-kick\"")));
       assertFalse(
           Boolean.TRUE.equals(fixture.lastInputEnabledState()),
           "detached active channel should disable input");
@@ -185,7 +197,7 @@ class DetachedChannelLifecycleFunctionalTest {
 
       assertTrue(hasLeaf(fixture.serverTree, channel), "startup-restored channel should exist");
       assertTrue(
-          fixture.serverTree.isChannelDetached(channel),
+          fixture.serverTree.isChannelDisconnected(channel),
           "startup-restored channel should start detached");
 
       fixture.markConnected();
@@ -193,7 +205,7 @@ class DetachedChannelLifecycleFunctionalTest {
       flushEdt();
 
       assertTrue(
-          fixture.serverTree.isChannelDetached(channel),
+          fixture.serverTree.isChannelDisconnected(channel),
           "channel should remain detached before JOIN");
       assertFalse(
           Boolean.TRUE.equals(fixture.lastInputEnabledState()),
@@ -203,7 +215,7 @@ class DetachedChannelLifecycleFunctionalTest {
       flushEdt();
 
       assertFalse(
-          fixture.serverTree.isChannelDetached(channel),
+          fixture.serverTree.isChannelDisconnected(channel),
           "JOIN event should attach restored channel");
       assertTrue(
           Boolean.TRUE.equals(fixture.lastInputEnabledState()), "input should enable after attach");

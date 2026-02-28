@@ -1,0 +1,296 @@
+package cafe.woden.ircclient.ui.coordinator;
+
+import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.ui.ChatDockable;
+import cafe.woden.ircclient.ui.application.InboundDedupDiagnosticsPanel;
+import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
+import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
+import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
+import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
+import cafe.woden.ircclient.ui.ignore.IgnoresPanel;
+import cafe.woden.ircclient.ui.interceptors.InterceptorPanel;
+import cafe.woden.ircclient.ui.logviewer.LogViewerPanel;
+import cafe.woden.ircclient.ui.monitor.MonitorPanel;
+import cafe.woden.ircclient.ui.notifications.NotificationsPanel;
+import java.awt.CardLayout;
+import java.util.Objects;
+import java.util.function.Consumer;
+import javax.swing.JPanel;
+
+/** Routes active targets to the correct center card in {@link ChatDockable}. */
+public final class ChatTargetViewRouter {
+
+  public static final String CARD_TRANSCRIPT = "transcript";
+  public static final String CARD_NOTIFICATIONS = "notifications";
+  public static final String CARD_CHANNEL_LIST = "channel-list";
+  public static final String CARD_IGNORES = "ignores";
+  public static final String CARD_DCC_TRANSFERS = "dcc-transfers";
+  public static final String CARD_MONITOR = "monitor";
+  public static final String CARD_LOG_VIEWER = "log-viewer";
+  public static final String CARD_INTERCEPTOR = "interceptor";
+  public static final String CARD_APP_UNHANDLED_ERRORS = "app-unhandled-errors";
+  public static final String CARD_APP_ASSERTJ = "app-assertj";
+  public static final String CARD_APP_JHICCUP = "app-jhiccup";
+  public static final String CARD_APP_INBOUND_DEDUP = "app-inbound-dedup";
+  public static final String CARD_APP_JFR = "app-jfr";
+  public static final String CARD_APP_SPRING = "app-spring";
+  public static final String CARD_TERMINAL = "terminal";
+
+  public enum TargetViewType {
+    TRANSCRIPT,
+    UI_ONLY
+  }
+
+  private final JPanel centerCards;
+  private final NotificationsPanel notificationsPanel;
+  private final ChannelListPanel channelListPanel;
+  private final IgnoresPanel ignoresPanel;
+  private final DccTransfersPanel dccTransfersPanel;
+  private final MonitorPanel monitorPanel;
+  private final LogViewerPanel logViewerPanel;
+  private final InterceptorPanel interceptorPanel;
+  private final RuntimeEventsPanel appUnhandledErrorsPanel;
+  private final RuntimeEventsPanel appAssertjPanel;
+  private final RuntimeEventsPanel appJhiccupPanel;
+  private final InboundDedupDiagnosticsPanel appInboundDedupPanel;
+  private final JfrDiagnosticsPanel appJfrPanel;
+  private final RuntimeEventsPanel appSpringPanel;
+  private final Consumer<String> managedChannelRefresher;
+  private final Consumer<String> monitorRowsRefresher;
+
+  public ChatTargetViewRouter(
+      JPanel centerCards,
+      NotificationsPanel notificationsPanel,
+      ChannelListPanel channelListPanel,
+      IgnoresPanel ignoresPanel,
+      DccTransfersPanel dccTransfersPanel,
+      MonitorPanel monitorPanel,
+      LogViewerPanel logViewerPanel,
+      InterceptorPanel interceptorPanel,
+      RuntimeEventsPanel appUnhandledErrorsPanel,
+      RuntimeEventsPanel appAssertjPanel,
+      RuntimeEventsPanel appJhiccupPanel,
+      InboundDedupDiagnosticsPanel appInboundDedupPanel,
+      JfrDiagnosticsPanel appJfrPanel,
+      RuntimeEventsPanel appSpringPanel,
+      Consumer<String> managedChannelRefresher,
+      Consumer<String> monitorRowsRefresher) {
+    this.centerCards = Objects.requireNonNull(centerCards, "centerCards");
+    this.notificationsPanel = Objects.requireNonNull(notificationsPanel, "notificationsPanel");
+    this.channelListPanel = Objects.requireNonNull(channelListPanel, "channelListPanel");
+    this.ignoresPanel = Objects.requireNonNull(ignoresPanel, "ignoresPanel");
+    this.dccTransfersPanel = Objects.requireNonNull(dccTransfersPanel, "dccTransfersPanel");
+    this.monitorPanel = Objects.requireNonNull(monitorPanel, "monitorPanel");
+    this.logViewerPanel = Objects.requireNonNull(logViewerPanel, "logViewerPanel");
+    this.interceptorPanel = Objects.requireNonNull(interceptorPanel, "interceptorPanel");
+    this.appUnhandledErrorsPanel =
+        Objects.requireNonNull(appUnhandledErrorsPanel, "appUnhandledErrorsPanel");
+    this.appAssertjPanel = Objects.requireNonNull(appAssertjPanel, "appAssertjPanel");
+    this.appJhiccupPanel = Objects.requireNonNull(appJhiccupPanel, "appJhiccupPanel");
+    this.appInboundDedupPanel =
+        Objects.requireNonNull(appInboundDedupPanel, "appInboundDedupPanel");
+    this.appJfrPanel = Objects.requireNonNull(appJfrPanel, "appJfrPanel");
+    this.appSpringPanel = Objects.requireNonNull(appSpringPanel, "appSpringPanel");
+    this.managedChannelRefresher =
+        Objects.requireNonNull(managedChannelRefresher, "managedChannelRefresher");
+    this.monitorRowsRefresher =
+        Objects.requireNonNull(monitorRowsRefresher, "monitorRowsRefresher");
+  }
+
+  public TargetViewType route(TargetRef target) {
+    if (target == null) {
+      showTranscriptCard();
+      return TargetViewType.TRANSCRIPT;
+    }
+
+    if (target.isNotifications()) {
+      showNotificationsCard(target.serverId());
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isChannelList()) {
+      showChannelListCard(target.serverId());
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isIgnores()) {
+      showIgnoresCard(target.serverId());
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isDccTransfers()) {
+      showDccTransfersCard(target.serverId());
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isMonitorGroup()) {
+      showMonitorCard(target.serverId());
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isApplicationUnhandledErrors()) {
+      showApplicationUnhandledErrorsCard();
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isApplicationAssertjSwing()) {
+      showApplicationAssertjCard();
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isApplicationJhiccup()) {
+      showApplicationJhiccupCard();
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isApplicationInboundDedup()) {
+      showApplicationInboundDedupCard();
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isApplicationJfr()) {
+      showApplicationJfrCard();
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isApplicationSpring()) {
+      showApplicationSpringCard();
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isApplicationTerminal()) {
+      showTerminalCard();
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isLogViewer()) {
+      showLogViewerCard(target.serverId());
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isInterceptorsGroup()) {
+      showInterceptorCard(target.serverId(), "");
+      return TargetViewType.UI_ONLY;
+    }
+    if (target.isInterceptor()) {
+      showInterceptorCard(target.serverId(), target.interceptorId());
+      return TargetViewType.UI_ONLY;
+    }
+
+    showTranscriptCard();
+    return TargetViewType.TRANSCRIPT;
+  }
+
+  public void showTranscriptCard() {
+    try {
+      showCard(CARD_TRANSCRIPT);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showNotificationsCard(String serverId) {
+    try {
+      notificationsPanel.setServerId(serverId);
+      showCard(CARD_NOTIFICATIONS);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showChannelListCard(String serverId) {
+    try {
+      channelListPanel.setServerId(serverId);
+      managedChannelRefresher.accept(serverId);
+      showCard(CARD_CHANNEL_LIST);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showDccTransfersCard(String serverId) {
+    try {
+      dccTransfersPanel.setServerId(serverId);
+      showCard(CARD_DCC_TRANSFERS);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showIgnoresCard(String serverId) {
+    try {
+      ignoresPanel.setServerId(serverId);
+      showCard(CARD_IGNORES);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showMonitorCard(String serverId) {
+    try {
+      String sid = Objects.toString(serverId, "").trim();
+      monitorPanel.setServerId(sid);
+      monitorRowsRefresher.accept(sid);
+      showCard(CARD_MONITOR);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showLogViewerCard(String serverId) {
+    try {
+      logViewerPanel.setServerId(serverId);
+      showCard(CARD_LOG_VIEWER);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showTerminalCard() {
+    try {
+      showCard(CARD_TERMINAL);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationJfrCard() {
+    try {
+      appJfrPanel.refreshNow();
+      showCard(CARD_APP_JFR);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationInboundDedupCard() {
+    try {
+      appInboundDedupPanel.refreshNow();
+      showCard(CARD_APP_INBOUND_DEDUP);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationUnhandledErrorsCard() {
+    try {
+      appUnhandledErrorsPanel.refreshNow();
+      showCard(CARD_APP_UNHANDLED_ERRORS);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationAssertjCard() {
+    try {
+      appAssertjPanel.refreshNow();
+      showCard(CARD_APP_ASSERTJ);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationJhiccupCard() {
+    try {
+      appJhiccupPanel.refreshNow();
+      showCard(CARD_APP_JHICCUP);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showApplicationSpringCard() {
+    try {
+      appSpringPanel.refreshNow();
+      showCard(CARD_APP_SPRING);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showInterceptorCard(String serverId, String interceptorId) {
+    try {
+      interceptorPanel.setInterceptorTarget(serverId, interceptorId);
+      showCard(CARD_INTERCEPTOR);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void showCard(String cardId) {
+    CardLayout cardLayout = (CardLayout) centerCards.getLayout();
+    cardLayout.show(centerCards, cardId);
+  }
+}

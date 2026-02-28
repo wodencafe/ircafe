@@ -87,10 +87,19 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
 
     disposables.add(
-        ui.detachChannelRequests()
+        ui.disconnectChannelRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
-                targetCoordinator::detachChannel,
+                targetCoordinator::disconnectChannel,
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
+
+    disposables.add(
+        ui.bouncerDetachChannelRequests()
+            .observeOn(AppSchedulers.edt())
+            .subscribe(
+                targetCoordinator::bouncerDetachChannel,
                 err ->
                     ui.appendError(
                         targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));

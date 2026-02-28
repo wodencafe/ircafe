@@ -3,11 +3,11 @@ package cafe.woden.ircclient.ui.chat;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
-import cafe.woden.ircclient.ui.ActiveInputRouter;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
-import cafe.woden.ircclient.ui.MessageInputPanel;
-import cafe.woden.ircclient.ui.OutboundLineBus;
+import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
+import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
+import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -453,6 +453,12 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     if (line.isBlank()) return false;
     emitHistoryCommand(line);
     return true;
+  }
+
+  @Override
+  protected boolean onManualPreviewRequested(String url, int insertOffset) {
+    if (target == null || target.isUiOnly()) return false;
+    return transcripts.insertManualPreviewAt(target, insertOffset, url);
   }
 
   @Override

@@ -84,6 +84,35 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
   }
 
   @Test
+  void channelStateReadsMostRecentActivitySortModeToken() throws Exception {
+    Path cfg = tempDir.resolve("ircafe.yml");
+    Files.writeString(
+        cfg,
+        """
+        irc:
+          servers:
+            - id: libera
+        ircafe:
+          ui:
+            serverTree:
+              channelsByServer:
+                libera:
+                  sortMode: most-recent-activity
+                  channels:
+                    - name: "#alpha"
+                      autoReattach: true
+        """);
+
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
+
+    assertEquals(
+        RuntimeConfigStore.ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY,
+        store.readServerTreeChannelSortMode(
+            "libera", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM));
+  }
+
+  @Test
   void rememberServerTreeChannelKeepsExistingAutoReattachPreference() throws Exception {
     Path cfg = tempDir.resolve("ircafe.yml");
     Files.writeString(
@@ -136,14 +165,14 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
     store.rememberServerTreeChannel("oftc", "#beta");
     store.rememberServerTreeChannel("oftc", "#alpha");
     store.rememberServerTreeChannelSortMode(
-        "oftc", RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL);
+        "oftc", RuntimeConfigStore.ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY);
 
     assertEquals(
         RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM,
         store.readServerTreeChannelSortMode(
             "libera", RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL));
     assertEquals(
-        RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL,
+        RuntimeConfigStore.ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY,
         store.readServerTreeChannelSortMode(
             "oftc", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM));
     assertEquals(List.of("#beta", "#alpha"), store.readServerTreeChannelCustomOrder("libera"));

@@ -108,9 +108,10 @@ class AssertjSwingDiagnosticsServiceTest {
   void formatStackTraceForLogIncludesFrameLinesAndRemainder() throws Exception {
     StackTraceElement[] stack =
         new StackTraceElement[] {
-          new StackTraceElement("cafe.woden.ircclient.ui.MainFrame", "show", "MainFrame.java", 42),
           new StackTraceElement(
-              "cafe.woden.ircclient.ui.ServerTreeDockable",
+              "cafe.woden.ircclient.ui.shell.MainFrame", "show", "MainFrame.java", 42),
+          new StackTraceElement(
+              "cafe.woden.ircclient.ui.servertree.ServerTreeDockable",
               "refresh",
               "ServerTreeDockable.java",
               99),
@@ -122,7 +123,8 @@ class AssertjSwingDiagnosticsServiceTest {
         invokeFormatStackTraceForLog("AWT-EventQueue-0", Thread.State.BLOCKED, stack, 2);
 
     assertTrue(formatted.contains("AWT-EventQueue-0 state=BLOCKED"));
-    assertTrue(formatted.contains("at cafe.woden.ircclient.ui.MainFrame.show(MainFrame.java:42)"));
+    assertTrue(
+        formatted.contains("at cafe.woden.ircclient.ui.shell.MainFrame.show(MainFrame.java:42)"));
     assertTrue(formatted.contains("... 1 more"));
   }
 

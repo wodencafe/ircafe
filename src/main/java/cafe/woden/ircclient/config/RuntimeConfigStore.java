@@ -75,8 +75,107 @@ public class RuntimeConfigStore {
     }
   }
 
+  public enum ServerTreeBuiltInLayoutNode {
+    SERVER("server"),
+    NOTIFICATIONS("notifications"),
+    LOG_VIEWER("logViewer"),
+    FILTERS("filters"),
+    IGNORES("ignores"),
+    MONITOR("monitor"),
+    INTERCEPTORS("interceptors");
+
+    private final String token;
+
+    ServerTreeBuiltInLayoutNode(String token) {
+      this.token = token;
+    }
+
+    public String token() {
+      return token;
+    }
+
+    public static ServerTreeBuiltInLayoutNode fromToken(String token) {
+      String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
+      return switch (raw) {
+        case "server", "status" -> SERVER;
+        case "notifications", "notification" -> NOTIFICATIONS;
+        case "logviewer", "log-viewer", "log_viewer", "logviewernode", "log_viewer_node" ->
+            LOG_VIEWER;
+        case "filters", "weechatfilters", "weechat-filters", "weechat_filters" -> FILTERS;
+        case "ignores", "ignore" -> IGNORES;
+        case "monitor" -> MONITOR;
+        case "interceptors", "interceptor" -> INTERCEPTORS;
+        default -> null;
+      };
+    }
+  }
+
+  public record ServerTreeBuiltInLayout(
+      List<ServerTreeBuiltInLayoutNode> rootOrder, List<ServerTreeBuiltInLayoutNode> otherOrder) {
+    public static ServerTreeBuiltInLayout defaults() {
+      return new ServerTreeBuiltInLayout(
+          List.of(),
+          List.of(
+              ServerTreeBuiltInLayoutNode.SERVER,
+              ServerTreeBuiltInLayoutNode.NOTIFICATIONS,
+              ServerTreeBuiltInLayoutNode.LOG_VIEWER,
+              ServerTreeBuiltInLayoutNode.FILTERS,
+              ServerTreeBuiltInLayoutNode.IGNORES,
+              ServerTreeBuiltInLayoutNode.MONITOR,
+              ServerTreeBuiltInLayoutNode.INTERCEPTORS));
+    }
+
+    public boolean isDefaultLayout() {
+      return this.equals(defaults());
+    }
+  }
+
+  public enum ServerTreeRootSiblingNode {
+    CHANNEL_LIST("channelList"),
+    NOTIFICATIONS("notifications"),
+    OTHER("other"),
+    PRIVATE_MESSAGES("privateMessages");
+
+    private final String token;
+
+    ServerTreeRootSiblingNode(String token) {
+      this.token = token;
+    }
+
+    public String token() {
+      return token;
+    }
+
+    public static ServerTreeRootSiblingNode fromToken(String token) {
+      String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
+      return switch (raw) {
+        case "channellist", "channel-list", "channel_list" -> CHANNEL_LIST;
+        case "notifications", "notification" -> NOTIFICATIONS;
+        case "other" -> OTHER;
+        case "privatemessages", "private-messages", "private_messages", "pm" -> PRIVATE_MESSAGES;
+        default -> null;
+      };
+    }
+  }
+
+  public record ServerTreeRootSiblingOrder(List<ServerTreeRootSiblingNode> order) {
+    public static ServerTreeRootSiblingOrder defaults() {
+      return new ServerTreeRootSiblingOrder(
+          List.of(
+              ServerTreeRootSiblingNode.CHANNEL_LIST,
+              ServerTreeRootSiblingNode.NOTIFICATIONS,
+              ServerTreeRootSiblingNode.OTHER,
+              ServerTreeRootSiblingNode.PRIVATE_MESSAGES));
+    }
+
+    public boolean isDefaultOrder() {
+      return this.equals(defaults());
+    }
+  }
+
   public enum ServerTreeChannelSortMode {
     ALPHABETICAL("alphabetical"),
+    MOST_RECENT_ACTIVITY("most-recent-activity"),
     CUSTOM("custom");
 
     private final String token;
@@ -94,6 +193,12 @@ public class RuntimeConfigStore {
       if ("alphabetical".equals(raw) || "alpha".equals(raw) || "a-z".equals(raw)) {
         return ALPHABETICAL;
       }
+      if ("most-recent-activity".equals(raw)
+          || "recent-activity".equals(raw)
+          || "recent".equals(raw)
+          || "activity".equals(raw)) {
+        return MOST_RECENT_ACTIVITY;
+      }
       return CUSTOM;
     }
   }
@@ -106,6 +211,82 @@ public class RuntimeConfigStore {
       List<ServerTreeChannelPreference> channels) {
     public static ServerTreeChannelState defaults() {
       return new ServerTreeChannelState(ServerTreeChannelSortMode.CUSTOM, List.of(), List.of());
+    }
+  }
+
+  public record EmbedLoadPolicyScope(
+      List<String> userWhitelist,
+      List<String> userBlacklist,
+      List<String> channelWhitelist,
+      List<String> channelBlacklist,
+      boolean requireVoiceOrOp,
+      boolean requireLoggedIn,
+      int minAccountAgeDays,
+      List<String> linkWhitelist,
+      List<String> linkBlacklist,
+      List<String> domainWhitelist,
+      List<String> domainBlacklist) {
+    public EmbedLoadPolicyScope {
+      userWhitelist = sanitizePolicyPatternList(userWhitelist);
+      userBlacklist = sanitizePolicyPatternList(userBlacklist);
+      channelWhitelist = sanitizePolicyPatternList(channelWhitelist);
+      channelBlacklist = sanitizePolicyPatternList(channelBlacklist);
+      linkWhitelist = sanitizePolicyPatternList(linkWhitelist);
+      linkBlacklist = sanitizePolicyPatternList(linkBlacklist);
+      domainWhitelist = sanitizePolicyPatternList(domainWhitelist);
+      domainBlacklist = sanitizePolicyPatternList(domainBlacklist);
+      if (minAccountAgeDays < 0) minAccountAgeDays = 0;
+    }
+
+    public static EmbedLoadPolicyScope defaults() {
+      return new EmbedLoadPolicyScope(
+          List.of(), List.of(), List.of(), List.of(), false, false, 0, List.of(), List.of(),
+          List.of(), List.of());
+    }
+
+    public boolean isDefaultScope() {
+      return this.equals(defaults());
+    }
+  }
+
+  public record EmbedLoadPolicySnapshot(
+      EmbedLoadPolicyScope global, Map<String, EmbedLoadPolicyScope> byServer) {
+    public EmbedLoadPolicySnapshot {
+      if (global == null) global = EmbedLoadPolicyScope.defaults();
+
+      LinkedHashMap<String, EmbedLoadPolicyScope> normalized = new LinkedHashMap<>();
+      if (byServer != null) {
+        for (Map.Entry<String, EmbedLoadPolicyScope> entry : byServer.entrySet()) {
+          String serverId = Objects.toString(entry.getKey(), "").trim();
+          if (serverId.isEmpty()) continue;
+          EmbedLoadPolicyScope scope =
+              entry.getValue() == null ? EmbedLoadPolicyScope.defaults() : entry.getValue();
+          if (scope.isDefaultScope()) continue;
+          normalized.put(serverId, scope);
+        }
+      }
+      byServer = normalized.isEmpty() ? Map.of() : Map.copyOf(normalized);
+    }
+
+    public static EmbedLoadPolicySnapshot defaults() {
+      return new EmbedLoadPolicySnapshot(EmbedLoadPolicyScope.defaults(), Map.of());
+    }
+
+    public boolean isDefaultPolicy() {
+      return this.equals(defaults());
+    }
+
+    public EmbedLoadPolicyScope scopeForServer(String serverId) {
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty() || byServer == null || byServer.isEmpty()) return global;
+      EmbedLoadPolicyScope exact = byServer.get(sid);
+      if (exact != null) return exact;
+      for (Map.Entry<String, EmbedLoadPolicyScope> entry : byServer.entrySet()) {
+        if (sid.equalsIgnoreCase(Objects.toString(entry.getKey(), "").trim())) {
+          return entry.getValue();
+        }
+      }
+      return global;
     }
   }
 
@@ -363,6 +544,33 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist servers list to '{}'", file, e);
+    }
+  }
+
+  /** Returns configured server ids from runtime config, falling back to boot defaults. */
+  public synchronized List<String> readServerIds() {
+    try {
+      if (file.toString().isBlank()) return defaultServerIds();
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Object ircObj = doc.get("irc");
+      if (!(ircObj instanceof Map<?, ?> irc)) return defaultServerIds();
+      Object serversObj = irc.get("servers");
+      if (!(serversObj instanceof List<?> servers) || servers.isEmpty()) return defaultServerIds();
+
+      ArrayList<String> out = new ArrayList<>();
+      for (Object item : servers) {
+        if (!(item instanceof Map<?, ?> server)) continue;
+        String id = Objects.toString(server.get("id"), "").trim();
+        if (id.isEmpty()) continue;
+        if (containsIgnoreCase(out, id)) continue;
+        out.add(id);
+      }
+      if (out.isEmpty()) return defaultServerIds();
+      return List.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read server ids from '{}'", file, e);
+      return defaultServerIds();
     }
   }
 
@@ -803,6 +1011,67 @@ public class RuntimeConfigStore {
       if (!v.isEmpty()) out.add(v);
     }
     return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private List<String> defaultServerIds() {
+    if (defaults == null || defaults.servers() == null || defaults.servers().isEmpty()) {
+      return List.of();
+    }
+    ArrayList<String> out = new ArrayList<>();
+    for (IrcProperties.Server server : defaults.servers()) {
+      if (server == null) continue;
+      String id = Objects.toString(server.id(), "").trim();
+      if (id.isEmpty()) continue;
+      if (containsIgnoreCase(out, id)) continue;
+      out.add(id);
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private static List<String> sanitizePolicyPatternList(List<String> raw) {
+    if (raw == null || raw.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(raw.size());
+    for (String entry : raw) {
+      String v = Objects.toString(entry, "").trim();
+      if (v.isEmpty()) continue;
+      if (out.contains(v)) continue;
+      out.add(v);
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private static EmbedLoadPolicyScope parseEmbedLoadPolicyScope(Object raw) {
+    if (!(raw instanceof Map<?, ?> scope)) return EmbedLoadPolicyScope.defaults();
+    return new EmbedLoadPolicyScope(
+        sanitizeStringList(scope.get("userWhitelist")),
+        sanitizeStringList(scope.get("userBlacklist")),
+        sanitizeStringList(scope.get("channelWhitelist")),
+        sanitizeStringList(scope.get("channelBlacklist")),
+        asBoolean(scope.get("requireVoiceOrOp")).orElse(Boolean.FALSE),
+        asBoolean(scope.get("requireLoggedIn")).orElse(Boolean.FALSE),
+        Math.max(0, asInt(scope.get("minAccountAgeDays")).orElse(0)),
+        sanitizeStringList(scope.get("linkWhitelist")),
+        sanitizeStringList(scope.get("linkBlacklist")),
+        sanitizeStringList(scope.get("domainWhitelist")),
+        sanitizeStringList(scope.get("domainBlacklist")));
+  }
+
+  private static void writeEmbedLoadPolicyScopeMap(
+      Map<String, Object> out, EmbedLoadPolicyScope scope) {
+    if (out == null) return;
+    out.clear();
+    EmbedLoadPolicyScope s = (scope == null) ? EmbedLoadPolicyScope.defaults() : scope;
+    if (!s.userWhitelist().isEmpty()) out.put("userWhitelist", s.userWhitelist());
+    if (!s.userBlacklist().isEmpty()) out.put("userBlacklist", s.userBlacklist());
+    if (!s.channelWhitelist().isEmpty()) out.put("channelWhitelist", s.channelWhitelist());
+    if (!s.channelBlacklist().isEmpty()) out.put("channelBlacklist", s.channelBlacklist());
+    if (s.requireVoiceOrOp()) out.put("requireVoiceOrOp", true);
+    if (s.requireLoggedIn()) out.put("requireLoggedIn", true);
+    if (s.minAccountAgeDays() > 0) out.put("minAccountAgeDays", s.minAccountAgeDays());
+    if (!s.linkWhitelist().isEmpty()) out.put("linkWhitelist", s.linkWhitelist());
+    if (!s.linkBlacklist().isEmpty()) out.put("linkBlacklist", s.linkBlacklist());
+    if (!s.domainWhitelist().isEmpty()) out.put("domainWhitelist", s.domainWhitelist());
+    if (!s.domainBlacklist().isEmpty()) out.put("domainBlacklist", s.domainBlacklist());
   }
 
   private static String normalizeChannelName(Object channel) {
@@ -1246,6 +1515,296 @@ public class RuntimeConfigStore {
     }
   }
 
+  /**
+   * Reads persisted per-server layout for movable built-in server tree nodes.
+   *
+   * <p>Stored under {@code ircafe.ui.serverTree.builtInLayoutByServer.<serverId>}.
+   */
+  public synchronized Map<String, ServerTreeBuiltInLayout> readServerTreeBuiltInLayoutByServer() {
+    try {
+      if (file.toString().isBlank()) return Map.of();
+      if (!Files.exists(file)) return Map.of();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Map.of();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Map.of();
+
+      Object serverTreeObj = ui.get("serverTree");
+      if (!(serverTreeObj instanceof Map<?, ?> serverTree)) return Map.of();
+
+      Object byServerObj = serverTree.get("builtInLayoutByServer");
+      if (!(byServerObj instanceof Map<?, ?> byServer)) return Map.of();
+
+      LinkedHashMap<String, ServerTreeBuiltInLayout> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : byServer.entrySet()) {
+        String sid = Objects.toString(entry.getKey(), "").trim();
+        if (sid.isEmpty()) continue;
+        if (!(entry.getValue() instanceof Map<?, ?> raw)) continue;
+
+        List<ServerTreeBuiltInLayoutNode> root =
+            parseBuiltInLayoutNodeOrder(raw.get("root"), List.of());
+        List<ServerTreeBuiltInLayoutNode> other =
+            parseBuiltInLayoutNodeOrder(raw.get("other"), List.of());
+        ServerTreeBuiltInLayout layout =
+            normalizeBuiltInLayout(new ServerTreeBuiltInLayout(root, other));
+        if (layout.isDefaultLayout()) continue;
+        out.put(sid, layout);
+      }
+
+      if (out.isEmpty()) return Map.of();
+      return Map.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read server-tree built-in layout from '{}'", file, e);
+      return Map.of();
+    }
+  }
+
+  /**
+   * Persists per-server layout for movable built-in server tree nodes.
+   *
+   * <p>When layout matches defaults, the server entry is removed to keep config compact.
+   */
+  public synchronized void rememberServerTreeBuiltInLayout(
+      String serverId, ServerTreeBuiltInLayout layout) {
+    try {
+      if (file.toString().isBlank()) return;
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+
+      ServerTreeBuiltInLayout next =
+          normalizeBuiltInLayout(layout == null ? ServerTreeBuiltInLayout.defaults() : layout);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> serverTree = getOrCreateMap(ui, "serverTree");
+      Map<String, Object> byServer = getOrCreateMap(serverTree, "builtInLayoutByServer");
+
+      if (next.isDefaultLayout()) {
+        byServer.remove(sid);
+      } else {
+        Map<String, Object> out = new LinkedHashMap<>();
+        List<String> root = builtInLayoutNodeTokens(next.rootOrder());
+        List<String> other = builtInLayoutNodeTokens(next.otherOrder());
+        if (!root.isEmpty()) out.put("root", root);
+        if (!other.isEmpty()) out.put("other", other);
+        byServer.put(sid, out);
+      }
+
+      if (byServer.isEmpty()) serverTree.remove("builtInLayoutByServer");
+      if (serverTree.isEmpty()) ui.remove("serverTree");
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist server-tree built-in layout to '{}'", file, e);
+    }
+  }
+
+  /**
+   * Reads persisted per-server order for top-level server sibling nodes.
+   *
+   * <p>Stored under {@code ircafe.ui.serverTree.rootSiblingOrderByServer.<serverId>}.
+   */
+  public synchronized Map<String, ServerTreeRootSiblingOrder>
+      readServerTreeRootSiblingOrderByServer() {
+    try {
+      if (file.toString().isBlank()) return Map.of();
+      if (!Files.exists(file)) return Map.of();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Map.of();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Map.of();
+
+      Object serverTreeObj = ui.get("serverTree");
+      if (!(serverTreeObj instanceof Map<?, ?> serverTree)) return Map.of();
+
+      Object byServerObj = serverTree.get("rootSiblingOrderByServer");
+      if (!(byServerObj instanceof Map<?, ?> byServer)) return Map.of();
+
+      LinkedHashMap<String, ServerTreeRootSiblingOrder> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : byServer.entrySet()) {
+        String sid = Objects.toString(entry.getKey(), "").trim();
+        if (sid.isEmpty()) continue;
+
+        List<ServerTreeRootSiblingNode> parsed =
+            parseRootSiblingNodeOrder(entry.getValue(), List.of());
+        ServerTreeRootSiblingOrder order =
+            normalizeRootSiblingOrder(new ServerTreeRootSiblingOrder(parsed));
+        if (order.isDefaultOrder()) continue;
+        out.put(sid, order);
+      }
+
+      if (out.isEmpty()) return Map.of();
+      return Map.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read server-tree root sibling order from '{}'", file, e);
+      return Map.of();
+    }
+  }
+
+  /**
+   * Persists per-server order for top-level server sibling nodes.
+   *
+   * <p>When order matches defaults, the server entry is removed to keep config compact.
+   */
+  public synchronized void rememberServerTreeRootSiblingOrder(
+      String serverId, ServerTreeRootSiblingOrder order) {
+    try {
+      if (file.toString().isBlank()) return;
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+
+      ServerTreeRootSiblingOrder next =
+          normalizeRootSiblingOrder(order == null ? ServerTreeRootSiblingOrder.defaults() : order);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> serverTree = getOrCreateMap(ui, "serverTree");
+      Map<String, Object> byServer = getOrCreateMap(serverTree, "rootSiblingOrderByServer");
+
+      if (next.isDefaultOrder()) {
+        byServer.remove(sid);
+      } else {
+        byServer.put(sid, rootSiblingNodeTokens(next.order()));
+      }
+
+      if (byServer.isEmpty()) serverTree.remove("rootSiblingOrderByServer");
+      if (serverTree.isEmpty()) ui.remove("serverTree");
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist server-tree root sibling order to '{}'", file, e);
+    }
+  }
+
+  private static ServerTreeBuiltInLayout normalizeBuiltInLayout(ServerTreeBuiltInLayout layout) {
+    ServerTreeBuiltInLayout defaults = ServerTreeBuiltInLayout.defaults();
+    List<ServerTreeBuiltInLayoutNode> defaultOther = defaults.otherOrder();
+
+    List<ServerTreeBuiltInLayoutNode> rawRoot =
+        layout == null ? List.of() : parseBuiltInLayoutNodeOrder(layout.rootOrder(), List.of());
+    List<ServerTreeBuiltInLayoutNode> rawOther =
+        layout == null ? List.of() : parseBuiltInLayoutNodeOrder(layout.otherOrder(), List.of());
+
+    ArrayList<ServerTreeBuiltInLayoutNode> root = new ArrayList<>();
+    java.util.EnumSet<ServerTreeBuiltInLayoutNode> seen =
+        java.util.EnumSet.noneOf(ServerTreeBuiltInLayoutNode.class);
+    for (ServerTreeBuiltInLayoutNode node : rawRoot) {
+      if (node == null || seen.contains(node)) continue;
+      root.add(node);
+      seen.add(node);
+    }
+
+    ArrayList<ServerTreeBuiltInLayoutNode> other = new ArrayList<>();
+    for (ServerTreeBuiltInLayoutNode node : rawOther) {
+      if (node == null || seen.contains(node)) continue;
+      other.add(node);
+      seen.add(node);
+    }
+
+    for (ServerTreeBuiltInLayoutNode node : defaultOther) {
+      if (node == null || seen.contains(node)) continue;
+      other.add(node);
+      seen.add(node);
+    }
+
+    return new ServerTreeBuiltInLayout(List.copyOf(root), List.copyOf(other));
+  }
+
+  private static List<ServerTreeBuiltInLayoutNode> parseBuiltInLayoutNodeOrder(
+      Object rawOrder, List<ServerTreeBuiltInLayoutNode> fallback) {
+    ArrayList<ServerTreeBuiltInLayoutNode> out = new ArrayList<>();
+
+    if (rawOrder instanceof List<?> list) {
+      for (Object entry : list) {
+        ServerTreeBuiltInLayoutNode node =
+            ServerTreeBuiltInLayoutNode.fromToken(Objects.toString(entry, ""));
+        if (node == null || out.contains(node)) continue;
+        out.add(node);
+      }
+    } else if (rawOrder instanceof ServerTreeBuiltInLayoutNode node) {
+      out.add(node);
+    } else if (rawOrder instanceof String token) {
+      ServerTreeBuiltInLayoutNode node = ServerTreeBuiltInLayoutNode.fromToken(token);
+      if (node != null) out.add(node);
+    }
+
+    if (out.isEmpty()) return fallback == null ? List.of() : List.copyOf(fallback);
+    return List.copyOf(out);
+  }
+
+  private static List<String> builtInLayoutNodeTokens(List<ServerTreeBuiltInLayoutNode> order) {
+    if (order == null || order.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(order.size());
+    for (ServerTreeBuiltInLayoutNode node : order) {
+      if (node == null) continue;
+      out.add(node.token());
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private static ServerTreeRootSiblingOrder normalizeRootSiblingOrder(
+      ServerTreeRootSiblingOrder order) {
+    ServerTreeRootSiblingOrder defaults = ServerTreeRootSiblingOrder.defaults();
+    List<ServerTreeRootSiblingNode> raw =
+        order == null ? List.of() : parseRootSiblingNodeOrder(order.order(), List.of());
+
+    ArrayList<ServerTreeRootSiblingNode> out = new ArrayList<>();
+    for (ServerTreeRootSiblingNode node : raw) {
+      if (node == null || out.contains(node)) continue;
+      out.add(node);
+    }
+    for (ServerTreeRootSiblingNode node : defaults.order()) {
+      if (node == null || out.contains(node)) continue;
+      out.add(node);
+    }
+
+    return new ServerTreeRootSiblingOrder(List.copyOf(out));
+  }
+
+  private static List<ServerTreeRootSiblingNode> parseRootSiblingNodeOrder(
+      Object rawOrder, List<ServerTreeRootSiblingNode> fallback) {
+    Object raw = rawOrder;
+    if (raw instanceof Map<?, ?> map) {
+      raw = map.get("order");
+    }
+
+    ArrayList<ServerTreeRootSiblingNode> out = new ArrayList<>();
+    if (raw instanceof List<?> list) {
+      for (Object entry : list) {
+        ServerTreeRootSiblingNode node =
+            ServerTreeRootSiblingNode.fromToken(Objects.toString(entry, ""));
+        if (node == null || out.contains(node)) continue;
+        out.add(node);
+      }
+    } else if (raw instanceof ServerTreeRootSiblingNode node) {
+      out.add(node);
+    } else if (raw instanceof String token) {
+      ServerTreeRootSiblingNode node = ServerTreeRootSiblingNode.fromToken(token);
+      if (node != null) out.add(node);
+    }
+
+    if (out.isEmpty()) return fallback == null ? List.of() : List.copyOf(fallback);
+    return List.copyOf(out);
+  }
+
+  private static List<String> rootSiblingNodeTokens(List<ServerTreeRootSiblingNode> order) {
+    if (order == null || order.isEmpty()) return List.of();
+    ArrayList<String> out = new ArrayList<>(order.size());
+    for (ServerTreeRootSiblingNode node : order) {
+      if (node == null) continue;
+      out.add(node.token());
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
   public synchronized void rememberAccentColor(String accentColor) {
     try {
       if (file.toString().isBlank()) return;
@@ -1520,6 +2079,96 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist autoConnectOnStart setting to '{}'", file, e);
+    }
+  }
+
+  /**
+   * Reads persisted per-server startup auto-connect overrides.
+   *
+   * <p>Stored under {@code ircafe.ui.serverAutoConnectOnStartByServer.<serverId>}. Default behavior
+   * is enabled, so this map usually contains only {@code false} entries.
+   */
+  public synchronized Map<String, Boolean> readServerAutoConnectOnStartByServer() {
+    try {
+      if (file.toString().isBlank()) return Map.of();
+      if (!Files.exists(file)) return Map.of();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Map.of();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Map.of();
+
+      Object byServerObj = ui.get("serverAutoConnectOnStartByServer");
+      if (!(byServerObj instanceof Map<?, ?> byServer)) return Map.of();
+
+      LinkedHashMap<String, Boolean> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : byServer.entrySet()) {
+        String sid = Objects.toString(entry.getKey(), "").trim();
+        if (sid.isEmpty()) continue;
+        Optional<Boolean> enabled = asBoolean(entry.getValue());
+        enabled.ifPresent(value -> out.put(sid, value));
+      }
+      if (out.isEmpty()) return Map.of();
+      return Map.copyOf(out);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not read per-server startup auto-connect settings from '{}'", file, e);
+      return Map.of();
+    }
+  }
+
+  /**
+   * Reads whether a server should auto-connect on startup.
+   *
+   * <p>Returns {@code defaultValue} when no override is present.
+   */
+  public synchronized boolean readServerAutoConnectOnStart(String serverId, boolean defaultValue) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return defaultValue;
+
+    Map<String, Boolean> byServer = readServerAutoConnectOnStartByServer();
+    Boolean exact = byServer.get(sid);
+    if (exact != null) return exact;
+
+    for (Map.Entry<String, Boolean> entry : byServer.entrySet()) {
+      if (sid.equalsIgnoreCase(Objects.toString(entry.getKey(), "").trim())) {
+        return Boolean.TRUE.equals(entry.getValue());
+      }
+    }
+    return defaultValue;
+  }
+
+  /**
+   * Persists whether a server should auto-connect on startup.
+   *
+   * <p>Enabled is the default, so enabled values are removed to keep the YAML concise.
+   */
+  public synchronized void rememberServerAutoConnectOnStart(String serverId, boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> byServer = getOrCreateMap(ui, "serverAutoConnectOnStartByServer");
+
+      if (enabled) {
+        byServer.remove(sid);
+      } else {
+        byServer.put(sid, false);
+      }
+      if (byServer.isEmpty()) {
+        ui.remove("serverAutoConnectOnStartByServer");
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist per-server startup auto-connect settings to '{}'", file, e);
     }
   }
 
@@ -3391,6 +4040,116 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberEmbedCardStyle(String styleToken) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String token = Objects.toString(styleToken, "").trim().toLowerCase(Locale.ROOT);
+      if (token.isBlank()) token = "default";
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("embedCardStyle", token);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist embed card style setting to '{}'", file, e);
+    }
+  }
+
+  /** Reads advanced embed/link loading policy settings under {@code ircafe.ui.embedLoadPolicy}. */
+  public synchronized EmbedLoadPolicySnapshot readEmbedLoadPolicy() {
+    try {
+      if (file.toString().isBlank()) return EmbedLoadPolicySnapshot.defaults();
+      if (!Files.exists(file)) return EmbedLoadPolicySnapshot.defaults();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return EmbedLoadPolicySnapshot.defaults();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return EmbedLoadPolicySnapshot.defaults();
+
+      Object rawPolicy = ui.get("embedLoadPolicy");
+      if (!(rawPolicy instanceof Map<?, ?> policy)) return EmbedLoadPolicySnapshot.defaults();
+
+      EmbedLoadPolicyScope global = parseEmbedLoadPolicyScope(policy.get("global"));
+
+      LinkedHashMap<String, EmbedLoadPolicyScope> byServer = new LinkedHashMap<>();
+      Object rawByServer = policy.get("byServer");
+      if (rawByServer instanceof Map<?, ?> map) {
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+          String serverId = Objects.toString(entry.getKey(), "").trim();
+          if (serverId.isEmpty()) continue;
+          EmbedLoadPolicyScope scope = parseEmbedLoadPolicyScope(entry.getValue());
+          if (scope.isDefaultScope()) continue;
+          byServer.put(serverId, scope);
+        }
+      }
+
+      return new EmbedLoadPolicySnapshot(global, byServer);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read embed/link load policy from '{}'", file, e);
+      return EmbedLoadPolicySnapshot.defaults();
+    }
+  }
+
+  /**
+   * Persists advanced embed/link loading policy settings under {@code ircafe.ui.embedLoadPolicy}.
+   */
+  public synchronized void rememberEmbedLoadPolicy(EmbedLoadPolicySnapshot snapshot) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      EmbedLoadPolicySnapshot normalized =
+          snapshot == null ? EmbedLoadPolicySnapshot.defaults() : snapshot;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      if (normalized.isDefaultPolicy()) {
+        ui.remove("embedLoadPolicy");
+        writeFile(doc);
+        return;
+      }
+
+      Map<String, Object> policy = getOrCreateMap(ui, "embedLoadPolicy");
+      Map<String, Object> global = getOrCreateMap(policy, "global");
+      writeEmbedLoadPolicyScopeMap(global, normalized.global());
+
+      if (normalized.byServer() == null || normalized.byServer().isEmpty()) {
+        policy.remove("byServer");
+      } else {
+        Map<String, Object> byServer = getOrCreateMap(policy, "byServer");
+        byServer.clear();
+        for (Map.Entry<String, EmbedLoadPolicyScope> entry : normalized.byServer().entrySet()) {
+          String serverId = Objects.toString(entry.getKey(), "").trim();
+          if (serverId.isEmpty()) continue;
+          EmbedLoadPolicyScope scope =
+              entry.getValue() == null ? EmbedLoadPolicyScope.defaults() : entry.getValue();
+          if (scope.isDefaultScope()) continue;
+          Map<String, Object> scopeMap = new LinkedHashMap<>();
+          writeEmbedLoadPolicyScopeMap(scopeMap, scope);
+          byServer.put(serverId, scopeMap);
+        }
+        if (byServer.isEmpty()) {
+          policy.remove("byServer");
+        }
+      }
+
+      if (policy.isEmpty()) {
+        ui.remove("embedLoadPolicy");
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist embed/link load policy to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberPresenceFoldsEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -3503,6 +4262,38 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist typing tree indicator style to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberTypingIndicatorsTreeEnabled(boolean enabled) {
+    rememberTypingIndicatorDisplayBoolean("typingIndicatorsTreeEnabled", enabled);
+  }
+
+  public synchronized void rememberTypingIndicatorsUsersListEnabled(boolean enabled) {
+    rememberTypingIndicatorDisplayBoolean("typingIndicatorsUsersListEnabled", enabled);
+  }
+
+  public synchronized void rememberTypingIndicatorsTranscriptEnabled(boolean enabled) {
+    rememberTypingIndicatorDisplayBoolean("typingIndicatorsTranscriptEnabled", enabled);
+  }
+
+  public synchronized void rememberTypingIndicatorsSendSignalEnabled(boolean enabled) {
+    rememberTypingIndicatorDisplayBoolean("typingIndicatorsSendSignalEnabled", enabled);
+  }
+
+  private void rememberTypingIndicatorDisplayBoolean(String key, boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put(key, enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist {} to '{}'", key, file, e);
     }
   }
 
@@ -4438,9 +5229,7 @@ public class RuntimeConfigStore {
       return asBoolean(raw).orElse(defaultValue);
     } catch (Exception e) {
       log.warn(
-          "[ircafe] Could not read ui.chatHistoryLockViewportDuringLoadOlder from '{}'",
-          file,
-          e);
+          "[ircafe] Could not read ui.chatHistoryLockViewportDuringLoadOlder from '{}'", file, e);
       return defaultValue;
     }
   }
@@ -4457,8 +5246,7 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn(
-          "[ircafe] Could not persist chat history viewport-lock setting to '{}'", file, e);
+      log.warn("[ircafe] Could not persist chat history viewport-lock setting to '{}'", file, e);
     }
   }
 
@@ -4590,6 +5378,39 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist outgoing message color setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberOutgoingDeliveryIndicatorsEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("outgoingDeliveryIndicatorsEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist outgoing delivery indicators setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberServerTreeNotificationBadgesEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("serverTreeNotificationBadgesEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist server tree notification badges setting to '{}'", file, e);
     }
   }
 
@@ -5996,7 +6817,9 @@ public class RuntimeConfigStore {
 
   private static String normalizeCapabilityKey(String capability) {
     String c = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
-    return c.isEmpty() ? null : c;
+    if (c.isEmpty()) return null;
+    if ("draft/read-marker".equals(c)) return "read-marker";
+    return c;
   }
 
   private static String normalizeHostKey(String host) {

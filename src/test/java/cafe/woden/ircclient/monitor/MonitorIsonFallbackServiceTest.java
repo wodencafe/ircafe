@@ -96,6 +96,6 @@ class MonitorIsonFallbackServiceTest {
   }
 
   private static UiSettingsSnapshot defaultUiSettings() {
-    return new UiSettingsSnapshot(List.of(), 15, 30, true, true);
+    return new UiSettingsSnapshot(List.of(), 15, 30, true, true, true, true, true);
   }
 }

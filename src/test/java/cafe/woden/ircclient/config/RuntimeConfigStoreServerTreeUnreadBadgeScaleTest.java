@@ -53,6 +53,18 @@ class RuntimeConfigStoreServerTreeUnreadBadgeScaleTest {
   }
 
   @Test
+  void serverTreeNotificationBadgesEnabledPersists() throws Exception {
+    Path cfg = tempDir.resolve("ircafe.yml");
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
+
+    store.rememberServerTreeNotificationBadgesEnabled(false);
+
+    String yaml = Files.readString(cfg);
+    assertTrue(yaml.contains("serverTreeNotificationBadgesEnabled: false"));
+  }
+
+  @Test
   void chatHistoryViewportLockRoundTrips() throws Exception {
     Path cfg = tempDir.resolve("ircafe.yml");
     RuntimeConfigStore store =

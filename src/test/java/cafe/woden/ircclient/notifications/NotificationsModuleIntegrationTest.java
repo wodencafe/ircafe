@@ -158,7 +158,8 @@ class NotificationsModuleIntegrationTest {
   void uiSettingsCooldownOverrideAffectsNotificationStoreDeduplication() {
     String serverId = "libera";
     TargetRef channelTarget = new TargetRef(serverId, "#ircafe");
-    when(uiSettingsPort.get()).thenReturn(new UiSettingsSnapshot(List.of(), 0, 30, true, true));
+    when(uiSettingsPort.get())
+        .thenReturn(new UiSettingsSnapshot(List.of(), 0, 30, true, true, true, true, true));
 
     notificationStore.clearServer(serverId);
     notificationStore.recordRuleMatch(channelTarget, "alice", "Rule A", "first");

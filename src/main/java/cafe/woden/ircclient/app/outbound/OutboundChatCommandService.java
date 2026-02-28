@@ -179,7 +179,7 @@ public class OutboundChatCommandService {
       }
     }
 
-    targetCoordinator.detachChannel(target, msg);
+    targetCoordinator.disconnectChannel(target, msg);
   }
 
   public void handleConnect(String target) {
@@ -891,6 +891,40 @@ public class OutboundChatCommandService {
                 () -> {}, err -> ui.appendError(status, "(list-error)", String.valueOf(err))));
   }
 
+  public void handleMarkRead(CompositeDisposable disposables) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(markread)", "Select a server first.");
+      return;
+    }
+
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    if (at.isStatus() || at.isUiOnly()) {
+      ui.appendStatus(status, "(markread)", "Select a channel or PM first.");
+      return;
+    }
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(status, "(conn)", "Not connected");
+      return;
+    }
+
+    if (!irc.isReadMarkerAvailable(at.serverId())) {
+      ui.appendStatus(status, "(markread)", "read-marker is not negotiated on this server.");
+      return;
+    }
+
+    Instant now = Instant.now();
+    long nowMs = now.toEpochMilli();
+    ui.setReadMarker(at, nowMs);
+    ui.clearUnread(at);
+
+    disposables.add(
+        irc.sendReadMarker(at.serverId(), at.target(), now)
+            .subscribe(
+                () -> {}, err -> ui.appendError(status, "(markread-error)", String.valueOf(err))));
+  }
+
   public void handleHelp(String topic) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef out = (at != null) ? at : targetCoordinator.safeStatusTarget();
@@ -909,6 +943,10 @@ public class OutboundChatCommandService {
           appendDccHelp(out);
           return;
         }
+        case "markread" -> {
+          appendMarkReadHelp(out);
+          return;
+        }
         default ->
             ui.appendStatus(
                 out, "(help)", "No dedicated help for '" + t + "'. Showing common commands.");
@@ -919,6 +957,7 @@ public class OutboundChatCommandService {
         out,
         "(help)",
         "Common: /join /part /msg /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc");
+    appendMarkReadHelp(out);
     ui.appendStatus(
         out,
         "(help)",
@@ -931,7 +970,8 @@ public class OutboundChatCommandService {
     appendEditHelp(out);
     appendRedactHelp(out);
     ui.appendStatus(out, "(help)", "Tip: /help dcc for direct-chat/file-transfer commands.");
-    ui.appendStatus(out, "(help)", "Tip: /help edit or /help redact for focused details.");
+    ui.appendStatus(
+        out, "(help)", "Tip: /help edit, /help redact, or /help markread for focused details.");
   }
 
   private void appendDccHelp(TargetRef out) {
@@ -2047,6 +2087,16 @@ public class OutboundChatCommandService {
                 available, "requires negotiated draft/message-edit or message-edit"));
   }
 
+  private void appendMarkReadHelp(TargetRef out) {
+    boolean available = isReadMarkerSupportedForServer(out);
+    ui.appendStatus(
+        out,
+        "(help)",
+        "/markread"
+            + availabilitySuffix(
+                available, "requires negotiated read-marker or draft/read-marker"));
+  }
+
   private void appendRedactHelp(TargetRef out) {
     boolean available = isMessageRedactionSupportedForServer(out);
     ui.appendStatus(
@@ -2074,6 +2124,17 @@ public class OutboundChatCommandService {
     if (sid.isEmpty()) return false;
     try {
       return irc.isMessageRedactionAvailable(sid);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isReadMarkerSupportedForServer(TargetRef target) {
+    if (target == null) return false;
+    String sid = Objects.toString(target.serverId(), "").trim();
+    if (sid.isEmpty()) return false;
+    try {
+      return irc.isReadMarkerAvailable(sid);
     } catch (Exception ignored) {
       return false;
     }

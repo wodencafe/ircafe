@@ -240,7 +240,7 @@ public interface IrcClientService {
   }
 
   /**
-   * @return true if IRCv3 {@code read-marker} is negotiated on this connection.
+   * @return true if IRCv3 {@code read-marker} (or {@code draft/read-marker}) is negotiated.
    */
   default boolean isReadMarkerAvailable(String serverId) {
     return false;
@@ -317,6 +317,20 @@ public interface IrcClientService {
    * @return true if the connection negotiated {@code znc.in/playback} (ZNC playback module).
    */
   default boolean isZncPlaybackAvailable(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return true when this connection appears to be backed by a ZNC bouncer session.
+   */
+  default boolean isZncBouncerDetected(String serverId) {
+    return false;
+  }
+
+  /**
+   * @return true if the connection negotiated {@code soju.im/bouncer-networks}.
+   */
+  default boolean isSojuBouncerAvailable(String serverId) {
     return false;
   }
 

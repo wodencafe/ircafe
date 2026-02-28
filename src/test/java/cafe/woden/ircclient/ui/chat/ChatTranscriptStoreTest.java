@@ -3,10 +3,16 @@ package cafe.woden.ircclient.ui.chat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
+import cafe.woden.ircclient.ui.chat.embed.ChatLinkPreviewEmbedder;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.settings.MemoryUsageDisplayMode;
 import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
@@ -14,6 +20,7 @@ import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.util.List;
 import java.util.Map;
+import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import org.junit.jupiter.api.Test;
 
@@ -150,6 +157,128 @@ class ChatTranscriptStoreTest {
     assertEquals(3, lineCount(doc));
   }
 
+  @Test
+  void readMarkerPersistsWhenSetBeforeUnreadLinesExist() {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.updateReadMarker(ref, 1_000L);
+    assertEquals(-1, store.readMarkerJumpOffset(ref));
+
+    store.appendChatAt(ref, "alice", "older", false, 900L);
+    assertEquals(-1, store.readMarkerJumpOffset(ref));
+
+    store.appendChatAt(ref, "alice", "newer", false, 1_100L);
+    assertTrue(store.readMarkerJumpOffset(ref) >= 0);
+  }
+
+  @Test
+  void clearReadMarkersForServerRemovesMarkerStateWithoutAffectingOtherServers() {
+    ChatTranscriptStore store = newStore();
+    TargetRef onServer = new TargetRef("srv", "#chan");
+    TargetRef otherServer = new TargetRef("other", "#chan");
+
+    store.appendChatAt(onServer, "alice", "older", false, 900L);
+    store.appendChatAt(onServer, "alice", "newer", false, 1_100L);
+    store.updateReadMarker(onServer, 1_000L);
+    assertTrue(store.readMarkerJumpOffset(onServer) >= 0);
+
+    store.appendChatAt(otherServer, "alice", "older", false, 900L);
+    store.appendChatAt(otherServer, "alice", "newer", false, 1_100L);
+    store.updateReadMarker(otherServer, 1_000L);
+    assertTrue(store.readMarkerJumpOffset(otherServer) >= 0);
+
+    store.clearReadMarkersForServer("srv");
+
+    assertEquals(-1, store.readMarkerJumpOffset(onServer));
+    assertTrue(store.readMarkerJumpOffset(otherServer) >= 0);
+
+    store.appendChatAt(onServer, "alice", "latest", false, 1_200L);
+    assertEquals(-1, store.readMarkerJumpOffset(onServer));
+  }
+
+  @Test
+  void appendChatAtAddsManualPreviewMarkerForPolicyBlockedUrls() throws Exception {
+    ChatStyles styles = new ChatStyles(null);
+    ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);
+    UiSettingsBus settingsBus = mock(UiSettingsBus.class);
+    when(settingsBus.get()).thenReturn(settingsWithTranscriptCap(0));
+
+    ChatImageEmbedder imageEmbeds = mock(ChatImageEmbedder.class);
+    ChatLinkPreviewEmbedder linkPreviews = mock(ChatLinkPreviewEmbedder.class);
+    when(imageEmbeds.appendEmbeds(any(), any(), anyString(), anyString(), any()))
+        .thenReturn(
+            new ChatImageEmbedder.AppendResult(0, List.of("https://blocked.example/a.png")));
+    when(linkPreviews.appendPreviews(any(), any(), anyString(), anyString(), any()))
+        .thenReturn(new ChatLinkPreviewEmbedder.AppendResult(0, List.of()));
+
+    ChatTranscriptStore store =
+        new ChatTranscriptStore(
+            styles, renderer, null, null, null, imageEmbeds, linkPreviews, settingsBus, null);
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "https://blocked.example/a.png", false, 9_000L);
+
+    StyledDocument doc = store.document(ref);
+    String text = transcriptText(doc);
+    int marker = text.indexOf("👁");
+    assertTrue(marker >= 0);
+    Object markerUrl =
+        doc.getCharacterElement(marker)
+            .getAttributes()
+            .getAttribute(ChatStyles.ATTR_MANUAL_PREVIEW_URL);
+    assertEquals("https://blocked.example/a.png", markerUrl);
+  }
+
+  @Test
+  void insertManualPreviewAtFallsBackToLinkPreviewWhenImageInsertDeclines() {
+    ChatStyles styles = new ChatStyles(null);
+    ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);
+    ChatImageEmbedder imageEmbeds = mock(ChatImageEmbedder.class);
+    ChatLinkPreviewEmbedder linkPreviews = mock(ChatLinkPreviewEmbedder.class);
+
+    ChatTranscriptStore store =
+        new ChatTranscriptStore(
+            styles, renderer, null, null, null, imageEmbeds, linkPreviews, null, null);
+    TargetRef ref = new TargetRef("srv", "#chan");
+    store.appendChat(ref, "alice", "line");
+
+    when(imageEmbeds.insertEmbedForUrlAt(any(), any(), anyString(), anyInt())).thenReturn(false);
+    when(linkPreviews.insertPreviewForUrlAt(any(), any(), anyString(), anyInt())).thenReturn(true);
+
+    assertTrue(store.insertManualPreviewAt(ref, 0, "https://example.com/x"));
+    verify(imageEmbeds).insertEmbedForUrlAt(any(), any(), anyString(), anyInt());
+    verify(linkPreviews).insertPreviewForUrlAt(any(), any(), anyString(), anyInt());
+  }
+
+  @Test
+  void appendPendingOutgoingChatSkipsSpinnerWhenDeliveryIndicatorsAreDisabled() {
+    ChatTranscriptStore store = newStoreWithTranscriptCapAndDeliveryIndicators(0, false);
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendPendingOutgoingChat(ref, "pending-1", "me", "hello", 10_000L);
+
+    StyledDocument doc = store.document(ref);
+    assertTrue(transcriptTextUnchecked(doc).contains("hello"));
+    assertEquals(0, inlineComponentCount(doc, OutgoingSendIndicator.PendingSpinner.class));
+  }
+
+  @Test
+  void resolvePendingOutgoingChatSkipsConfirmedDotWhenDeliveryIndicatorsAreDisabled() {
+    ChatTranscriptStore store = newStoreWithTranscriptCapAndDeliveryIndicators(0, false);
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendPendingOutgoingChat(ref, "pending-2", "me", "hello", 10_000L);
+    boolean resolved =
+        store.resolvePendingOutgoingChat(
+            ref, "pending-2", "me", "hello", 10_100L, "msg-1", Map.of("msgid", "msg-1"));
+
+    assertTrue(resolved);
+    StyledDocument doc = store.document(ref);
+    assertTrue(transcriptTextUnchecked(doc).contains("hello"));
+    assertEquals(0, inlineComponentCount(doc, OutgoingSendIndicator.ConfirmedDot.class));
+  }
+
   private static ChatTranscriptStore newStore() {
     ChatStyles styles = new ChatStyles(null);
     ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);
@@ -165,7 +294,22 @@ class ChatTranscriptStoreTest {
         styles, renderer, null, null, null, null, null, settingsBus, null);
   }
 
+  private static ChatTranscriptStore newStoreWithTranscriptCapAndDeliveryIndicators(
+      int maxLines, boolean enabled) {
+    ChatStyles styles = new ChatStyles(null);
+    ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);
+    UiSettingsBus settingsBus = mock(UiSettingsBus.class);
+    when(settingsBus.get()).thenReturn(settingsWithTranscriptCap(maxLines, enabled));
+    return new ChatTranscriptStore(
+        styles, renderer, null, null, null, null, null, settingsBus, null);
+  }
+
   private static UiSettings settingsWithTranscriptCap(int maxLines) {
+    return settingsWithTranscriptCap(maxLines, true);
+  }
+
+  private static UiSettings settingsWithTranscriptCap(
+      int maxLines, boolean outgoingDeliveryIndicatorsEnabled) {
     return new UiSettings(
         "darcula",
         "Monospaced",
@@ -183,18 +327,22 @@ class ChatTranscriptStoreTest {
         false,
         true,
         NotificationBackendMode.AUTO,
-        false,
+        true,
         false,
         0,
         0,
         true,
-        false,
+        true,
         false,
         true,
         true,
         true,
         true,
         "dots",
+        true,
+        true,
+        true,
+        true,
         true,
         "HH:mm:ss",
         true,
@@ -213,6 +361,8 @@ class ChatTranscriptStoreTest {
         maxLines,
         true,
         "#6AA2FF",
+        outgoingDeliveryIndicatorsEnabled,
+        true,
         true,
         7,
         6,
@@ -251,5 +401,26 @@ class ChatTranscriptStoreTest {
     } catch (Exception ignored) {
       return 0;
     }
+  }
+
+  private static String transcriptTextUnchecked(StyledDocument doc) {
+    try {
+      return transcriptText(doc);
+    } catch (Exception ignored) {
+      return "";
+    }
+  }
+
+  private static int inlineComponentCount(StyledDocument doc, Class<?> componentType) {
+    if (doc == null || componentType == null) return 0;
+    int count = 0;
+    int len = doc.getLength();
+    for (int i = 0; i < len; i++) {
+      Object component = StyleConstants.getComponent(doc.getCharacterElement(i).getAttributes());
+      if (component != null && componentType.isInstance(component)) {
+        count++;
+      }
+    }
+    return count;
   }
 }
