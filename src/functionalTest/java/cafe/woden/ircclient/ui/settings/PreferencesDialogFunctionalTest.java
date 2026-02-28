@@ -256,6 +256,14 @@ class PreferencesDialogFunctionalTest {
 
     JCheckBox send = (JCheckBox) invoke(dialog, "buildTypingIndicatorsSendCheckbox", current);
     JCheckBox receive = (JCheckBox) invoke(dialog, "buildTypingIndicatorsReceiveCheckbox", current);
+    JCheckBox treeDisplay =
+        (JCheckBox) invoke(dialog, "buildTypingIndicatorsTreeDisplayCheckbox", current);
+    JCheckBox usersDisplay =
+        (JCheckBox) invoke(dialog, "buildTypingIndicatorsUsersListDisplayCheckbox", current);
+    JCheckBox transcriptDisplay =
+        (JCheckBox) invoke(dialog, "buildTypingIndicatorsTranscriptDisplayCheckbox", current);
+    JCheckBox sendSignalDisplay =
+        (JCheckBox) invoke(dialog, "buildTypingIndicatorsSendSignalDisplayCheckbox", current);
     @SuppressWarnings("unchecked")
     JComboBox<Object> style =
         (JComboBox<Object>) invoke(dialog, "buildTypingTreeIndicatorStyleCombo", current);
@@ -271,6 +279,10 @@ class PreferencesDialogFunctionalTest {
                 "buildIrcv3CapabilitiesPanel",
                 send,
                 receive,
+                treeDisplay,
+                usersDisplay,
+                transcriptDisplay,
+                sendSignalDisplay,
                 style,
                 badgesEnabled,
                 badgeScale,

@@ -142,7 +142,8 @@ class ServerTreeDockableDetachedChannelTest {
             AtomicReference<TargetRef> joined = new AtomicReference<>();
             AtomicReference<TargetRef> closed = new AtomicReference<>();
             detachSub = dockable.disconnectChannelRequests().subscribe(detached::set);
-            bouncerDetachSub = dockable.bouncerDetachChannelRequests().subscribe(bouncerDetached::set);
+            bouncerDetachSub =
+                dockable.bouncerDetachChannelRequests().subscribe(bouncerDetached::set);
             joinSub = dockable.joinChannelRequests().subscribe(joined::set);
             closeSub = dockable.closeChannelRequests().subscribe(closed::set);
 
@@ -197,7 +198,8 @@ class ServerTreeDockableDetachedChannelTest {
             dockable.ensureNode(chan);
 
             AtomicReference<TargetRef> bouncerDetached = new AtomicReference<>();
-            bouncerDetachSub = dockable.bouncerDetachChannelRequests().subscribe(bouncerDetached::set);
+            bouncerDetachSub =
+                dockable.bouncerDetachChannelRequests().subscribe(bouncerDetached::set);
 
             JMenuItem bouncerDetach =
                 findMenuItem(

@@ -9,7 +9,10 @@ public record UiSettingsSnapshot(
     int notificationRuleCooldownSeconds,
     int monitorIsonFallbackPollIntervalSeconds,
     boolean ctcpRequestsInActiveTargetEnabled,
-    boolean typingIndicatorsReceiveEnabled) {
+    boolean typingIndicatorsReceiveEnabled,
+    boolean typingIndicatorsTreeEnabled,
+    boolean typingIndicatorsUsersListEnabled,
+    boolean typingIndicatorsTranscriptEnabled) {
 
   private static final int DEFAULT_NOTIFICATION_RULE_COOLDOWN_SECONDS = 15;
   private static final int DEFAULT_MONITOR_ISON_FALLBACK_POLL_INTERVAL_SECONDS = 30;
@@ -30,6 +33,9 @@ public record UiSettingsSnapshot(
         List.of(),
         DEFAULT_NOTIFICATION_RULE_COOLDOWN_SECONDS,
         DEFAULT_MONITOR_ISON_FALLBACK_POLL_INTERVAL_SECONDS,
+        true,
+        true,
+        true,
         true,
         true);
   }

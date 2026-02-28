@@ -127,8 +127,7 @@ class DetachedChannelLifecycleFunctionalTest {
           () -> {
             JMenuItem joinItem =
                 findMenuItem(
-                    popupForTarget(fixture.serverTree, channel),
-                    "Reconnect \"#functional-join\"");
+                    popupForTarget(fixture.serverTree, channel), "Reconnect \"#functional-join\"");
             assertNotNull(joinItem);
             joinItem.doClick();
           });
@@ -136,13 +135,15 @@ class DetachedChannelLifecycleFunctionalTest {
 
       verify(fixture.irc).joinChannel("libera", "#functional-join");
       assertTrue(
-          fixture.serverTree.isChannelDisconnected(channel), "channel stays detached until JOIN event");
+          fixture.serverTree.isChannelDisconnected(channel),
+          "channel stays detached until JOIN event");
 
       onEdt(() -> fixture.targetCoordinator.onJoinedChannel("libera", "#functional-join"));
       flushEdt();
 
       assertFalse(
-          fixture.serverTree.isChannelDisconnected(channel), "JOIN event should attach the channel");
+          fixture.serverTree.isChannelDisconnected(channel),
+          "JOIN event should attach the channel");
       assertFalse(
           isRenderedItalic(fixture.serverTree, channel),
           "attached channel should not render detached");

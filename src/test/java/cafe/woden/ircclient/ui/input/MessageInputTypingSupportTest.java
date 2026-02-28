@@ -123,6 +123,33 @@ class MessageInputTypingSupportTest {
   }
 
   @Test
+  void transcriptDisplayToggleOffSuppressesIncomingTypingBanner() throws Exception {
+    AtomicReference<UiSettings> settings =
+        new AtomicReference<>(defaultSettings().withTypingIndicatorsTranscriptEnabled(false));
+    Fixture f = newFixture(settings::get);
+    onEdt(
+        () -> {
+          f.support.showRemoteTypingIndicator("alice", "active");
+          assertFalse(f.banner.isVisible());
+          assertEquals("", f.label.getText());
+        });
+  }
+
+  @Test
+  void sendSignalDisplayToggleOffSuppressesLocalTypingTelemetry() throws Exception {
+    AtomicReference<UiSettings> settings =
+        new AtomicReference<>(defaultSettings().withTypingIndicatorsSendSignalEnabled(false));
+    Fixture f = newFixture(settings::get);
+    onEdt(
+        () -> {
+          f.support.setTypingSignalAvailable(true);
+          f.support.onLocalTypingIndicatorSent("active");
+          assertFalse(f.signal.isVisible());
+          assertFalse(f.signal.isArrowVisible());
+        });
+  }
+
+  @Test
   void sendToggleStillEmitsWhenReceiveToggleIsOff() throws Exception {
     AtomicReference<UiSettings> settings =
         new AtomicReference<>(

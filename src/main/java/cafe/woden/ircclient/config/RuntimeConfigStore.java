@@ -4265,6 +4265,38 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberTypingIndicatorsTreeEnabled(boolean enabled) {
+    rememberTypingIndicatorDisplayBoolean("typingIndicatorsTreeEnabled", enabled);
+  }
+
+  public synchronized void rememberTypingIndicatorsUsersListEnabled(boolean enabled) {
+    rememberTypingIndicatorDisplayBoolean("typingIndicatorsUsersListEnabled", enabled);
+  }
+
+  public synchronized void rememberTypingIndicatorsTranscriptEnabled(boolean enabled) {
+    rememberTypingIndicatorDisplayBoolean("typingIndicatorsTranscriptEnabled", enabled);
+  }
+
+  public synchronized void rememberTypingIndicatorsSendSignalEnabled(boolean enabled) {
+    rememberTypingIndicatorDisplayBoolean("typingIndicatorsSendSignalEnabled", enabled);
+  }
+
+  private void rememberTypingIndicatorDisplayBoolean(String key, boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put(key, enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist {} to '{}'", key, file, e);
+    }
+  }
+
   public synchronized int readServerTreeUnreadBadgeScalePercent(int defaultValue) {
     int fallback = clampServerTreeUnreadBadgeScalePercent(defaultValue);
     try {
@@ -5361,8 +5393,7 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn(
-          "[ircafe] Could not persist outgoing delivery indicators setting to '{}'", file, e);
+      log.warn("[ircafe] Could not persist outgoing delivery indicators setting to '{}'", file, e);
     }
   }
 

@@ -114,6 +114,18 @@ public record UiProperties(
      */
     String typingTreeIndicatorStyle,
 
+    /** Show typing markers next to channels in the server tree. */
+    Boolean typingIndicatorsTreeEnabled,
+
+    /** Show typing markers next to nicks in the user list. */
+    Boolean typingIndicatorsUsersListEnabled,
+
+    /** Show typing status text ("X is typing") in the chat transcript input area. */
+    Boolean typingIndicatorsTranscriptEnabled,
+
+    /** Show local typing-send telemetry arrows near the send button. */
+    Boolean typingIndicatorsSendSignalEnabled,
+
     /** Enable spell checking in the message input. */
     Boolean spellcheckEnabled,
 
@@ -820,6 +832,18 @@ public record UiProperties(
       typingIndicatorsReceiveEnabled = typingIndicatorsEnabled;
     }
     typingTreeIndicatorStyle = normalizeTypingTreeIndicatorStyle(typingTreeIndicatorStyle);
+    if (typingIndicatorsTreeEnabled == null) {
+      typingIndicatorsTreeEnabled = typingIndicatorsReceiveEnabled;
+    }
+    if (typingIndicatorsUsersListEnabled == null) {
+      typingIndicatorsUsersListEnabled = typingIndicatorsReceiveEnabled;
+    }
+    if (typingIndicatorsTranscriptEnabled == null) {
+      typingIndicatorsTranscriptEnabled = typingIndicatorsReceiveEnabled;
+    }
+    if (typingIndicatorsSendSignalEnabled == null) {
+      typingIndicatorsSendSignalEnabled = typingIndicatorsEnabled;
+    }
 
     // Spellcheck defaults.
     if (spellcheckEnabled == null) {

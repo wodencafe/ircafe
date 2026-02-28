@@ -1333,9 +1333,7 @@ public final class ChannelListPanel extends JPanel {
         usersText = "Not available";
       } else {
         usersText =
-            managed.detached()
-                ? "Unavailable while disconnected"
-                : String.valueOf(managed.users());
+            managed.detached() ? "Unavailable while disconnected" : String.valueOf(managed.users());
       }
     } else if (list != null) {
       usersText = String.valueOf(Math.max(0, list.visibleUsers()));

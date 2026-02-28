@@ -880,6 +880,14 @@ public class PreferencesDialog {
     CtcpAutoReplyControls ctcpAutoReplies = buildCtcpAutoReplyControls();
     JCheckBox typingIndicatorsSendEnabled = buildTypingIndicatorsSendCheckbox(current);
     JCheckBox typingIndicatorsReceiveEnabled = buildTypingIndicatorsReceiveCheckbox(current);
+    JCheckBox typingIndicatorsTreeDisplayEnabled =
+        buildTypingIndicatorsTreeDisplayCheckbox(current);
+    JCheckBox typingIndicatorsUsersListDisplayEnabled =
+        buildTypingIndicatorsUsersListDisplayCheckbox(current);
+    JCheckBox typingIndicatorsTranscriptDisplayEnabled =
+        buildTypingIndicatorsTranscriptDisplayCheckbox(current);
+    JCheckBox typingIndicatorsSendSignalDisplayEnabled =
+        buildTypingIndicatorsSendSignalDisplayCheckbox(current);
     JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle =
         buildTypingTreeIndicatorStyleCombo(current);
     JCheckBox serverTreeNotificationBadgesEnabled =
@@ -943,6 +951,10 @@ public class PreferencesDialog {
         buildIrcv3CapabilitiesPanel(
             typingIndicatorsSendEnabled,
             typingIndicatorsReceiveEnabled,
+            typingIndicatorsTreeDisplayEnabled,
+            typingIndicatorsUsersListDisplayEnabled,
+            typingIndicatorsTranscriptDisplayEnabled,
+            typingIndicatorsSendSignalDisplayEnabled,
             typingTreeIndicatorStyle,
             serverTreeNotificationBadgesEnabled,
             serverTreeUnreadBadgeScalePercent,
@@ -1227,6 +1239,14 @@ public class PreferencesDialog {
           boolean ctcpAutoReplyTimeEnabledV = ctcpAutoReplies.time.isSelected();
           boolean typingIndicatorsSendEnabledV = typingIndicatorsSendEnabled.isSelected();
           boolean typingIndicatorsReceiveEnabledV = typingIndicatorsReceiveEnabled.isSelected();
+          boolean typingIndicatorsTreeDisplayEnabledV =
+              typingIndicatorsTreeDisplayEnabled.isSelected();
+          boolean typingIndicatorsUsersListDisplayEnabledV =
+              typingIndicatorsUsersListDisplayEnabled.isSelected();
+          boolean typingIndicatorsTranscriptDisplayEnabledV =
+              typingIndicatorsTranscriptDisplayEnabled.isSelected();
+          boolean typingIndicatorsSendSignalDisplayEnabledV =
+              typingIndicatorsSendSignalDisplayEnabled.isSelected();
           String typingIndicatorsTreeStyleV =
               typingTreeIndicatorStyleValue(typingTreeIndicatorStyle);
           boolean serverTreeNotificationBadgesEnabledV =
@@ -1549,6 +1569,10 @@ public class PreferencesDialog {
                   typingIndicatorsSendEnabledV,
                   typingIndicatorsReceiveEnabledV,
                   typingIndicatorsTreeStyleV,
+                  typingIndicatorsTreeDisplayEnabledV,
+                  typingIndicatorsUsersListDisplayEnabledV,
+                  typingIndicatorsTranscriptDisplayEnabledV,
+                  typingIndicatorsSendSignalDisplayEnabledV,
                   timestampsEnabledV,
                   timestampFormatV,
                   timestampsIncludeChatMessagesV,
@@ -1738,6 +1762,13 @@ public class PreferencesDialog {
             runtimeConfig.rememberTypingIndicatorsReceiveEnabled(
                 next.typingIndicatorsReceiveEnabled());
             runtimeConfig.rememberTypingTreeIndicatorStyle(next.typingIndicatorsTreeStyle());
+            runtimeConfig.rememberTypingIndicatorsTreeEnabled(next.typingIndicatorsTreeEnabled());
+            runtimeConfig.rememberTypingIndicatorsUsersListEnabled(
+                next.typingIndicatorsUsersListEnabled());
+            runtimeConfig.rememberTypingIndicatorsTranscriptEnabled(
+                next.typingIndicatorsTranscriptEnabled());
+            runtimeConfig.rememberTypingIndicatorsSendSignalEnabled(
+                next.typingIndicatorsSendSignalEnabled());
             runtimeConfig.rememberSpellcheckEnabled(nextSpellcheck.enabled());
             runtimeConfig.rememberSpellcheckUnderlineEnabled(nextSpellcheck.underlineEnabled());
             runtimeConfig.rememberSpellcheckSuggestOnTabEnabled(
@@ -3889,8 +3920,7 @@ public class PreferencesDialog {
 
   private JCheckBox buildOutgoingDeliveryIndicatorsCheckbox(UiSettings current) {
     JCheckBox cb =
-        new JCheckBox(
-            "Show send-status indicators for my outgoing messages (spinner + green dot)");
+        new JCheckBox("Show send-status indicators for my outgoing messages (spinner + green dot)");
     cb.setSelected(current.outgoingDeliveryIndicatorsEnabled());
     cb.setToolTipText(
         "When enabled, outgoing messages show a pending spinner and a brief green confirmation dot when server echo reconciliation completes.\n"
@@ -3911,6 +3941,42 @@ public class PreferencesDialog {
     cb.setSelected(current.typingIndicatorsReceiveEnabled());
     cb.setToolTipText(
         "When enabled, IRCafe will display incoming IRCv3 typing indicators from other users.");
+    return cb;
+  }
+
+  private JCheckBox buildTypingIndicatorsTreeDisplayCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Show typing marker next to channels");
+    cb.setSelected(current.typingIndicatorsTreeEnabled());
+    cb.setToolTipText(
+        "Controls typing markers in the server tree channel list.\n"
+            + "Typing transport behavior is unchanged.");
+    return cb;
+  }
+
+  private JCheckBox buildTypingIndicatorsUsersListDisplayCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Show typing marker next to users");
+    cb.setSelected(current.typingIndicatorsUsersListEnabled());
+    cb.setToolTipText(
+        "Controls typing markers beside nicknames in the channel user list.\n"
+            + "Typing transport behavior is unchanged.");
+    return cb;
+  }
+
+  private JCheckBox buildTypingIndicatorsTranscriptDisplayCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Show typing status in the transcript input area");
+    cb.setSelected(current.typingIndicatorsTranscriptEnabled());
+    cb.setToolTipText(
+        "Controls the incoming typing banner above the input field (\"X is typing\").\n"
+            + "Typing transport behavior is unchanged.");
+    return cb;
+  }
+
+  private JCheckBox buildTypingIndicatorsSendSignalDisplayCheckbox(UiSettings current) {
+    JCheckBox cb = new JCheckBox("Show local typing-send arrows near Send");
+    cb.setSelected(current.typingIndicatorsSendSignalEnabled());
+    cb.setToolTipText(
+        "Controls the local send telemetry arrows near the Send button.\n"
+            + "Typing transport behavior is unchanged.");
     return cb;
   }
 
@@ -6209,6 +6275,10 @@ public class PreferencesDialog {
   private JPanel buildIrcv3CapabilitiesPanel(
       JCheckBox typingIndicatorsSendEnabled,
       JCheckBox typingIndicatorsReceiveEnabled,
+      JCheckBox typingIndicatorsTreeDisplayEnabled,
+      JCheckBox typingIndicatorsUsersListDisplayEnabled,
+      JCheckBox typingIndicatorsTranscriptDisplayEnabled,
+      JCheckBox typingIndicatorsSendSignalDisplayEnabled,
       JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle,
       JCheckBox serverTreeNotificationBadgesEnabled,
       JSpinner serverTreeUnreadBadgeScalePercent,
@@ -6238,7 +6308,8 @@ public class PreferencesDialog {
     typingHelp.setToolTipText("How typing indicators affect IRCafe");
     JPanel typingRow =
         new JPanel(
-            new MigLayout("insets 8, fillx, wrap 1, hidemode 3", "[grow,fill]6[]", "[]2[]2[]"));
+            new MigLayout(
+                "insets 8, fillx, wrap 1, hidemode 3", "[grow,fill]6[]", "[]2[]2[]2[]2[]"));
     typingRow.setBorder(
         BorderFactory.createCompoundBorder(
             BorderFactory.createTitledBorder("Typing indicators"),
@@ -6252,6 +6323,16 @@ public class PreferencesDialog {
     treeStyleRow.add(new JLabel("Server tree marker style"));
     treeStyleRow.add(typingTreeIndicatorStyle, "growx, wmin 180");
     typingRow.add(treeStyleRow, "growx, wmin 0");
+    JPanel displaysRow =
+        new JPanel(
+            new MigLayout(
+                "insets 0, fillx, wrap 2, hidemode 3", "[grow,fill]16[grow,fill]", "[]2[]"));
+    displaysRow.setOpaque(false);
+    displaysRow.add(typingIndicatorsTreeDisplayEnabled, "growx, wmin 0");
+    displaysRow.add(typingIndicatorsUsersListDisplayEnabled, "growx, wmin 0");
+    displaysRow.add(typingIndicatorsTranscriptDisplayEnabled, "growx, wmin 0");
+    displaysRow.add(typingIndicatorsSendSignalDisplayEnabled, "growx, wmin 0");
+    typingRow.add(displaysRow, "growx, wmin 0");
     typingRow.add(serverTreeNotificationBadgesEnabled, "growx, wmin 0");
     JPanel badgeScaleRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[]6[]", "[]"));
     badgeScaleRow.setOpaque(false);
@@ -6262,6 +6343,7 @@ public class PreferencesDialog {
     JTextArea typingImpact = subtleInfoText();
     typingImpact.setText(
         "Send controls your outbound typing state; Display controls incoming typing state from others.\n"
+            + "Display toggles control where typing hints render: server tree, user list, transcript, and send telemetry arrows.\n"
             + "Server tree marker style controls the channel typing activity indicator.\n"
             + "Show unread/highlight badges toggles server tree notification count badges.\n"
             + "Unread badge size scales channel unread/highlight count badges in the server tree.");

@@ -341,6 +341,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private PropertyChangeListener settingsListener;
   private PropertyChangeListener jfrStateListener;
   private volatile TreeTypingIndicatorStyle typingIndicatorStyle = TreeTypingIndicatorStyle.DOTS;
+  private volatile boolean typingIndicatorsTreeEnabled = true;
   private volatile int unreadBadgeScalePercent = TREE_BADGE_SCALE_PERCENT_DEFAULT;
   private volatile boolean serverTreeNotificationBadgesEnabled = true;
   private volatile boolean showChannelListNodes = true;
@@ -410,6 +411,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.builtInLayoutCoordinator = new ServerTreeBuiltInLayoutCoordinator(runtimeConfig);
     this.rootSiblingOrderCoordinator = new ServerTreeRootSiblingOrderCoordinator(runtimeConfig);
     loadPersistedBuiltInNodesVisibility();
+    syncTypingTreeEnabledFromSettings(false);
     syncTypingIndicatorStyleFromSettings();
     syncUnreadBadgeScaleFromRuntimeConfig();
     syncServerTreeNotificationBadgesFromSettings();
@@ -590,6 +592,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       settingsListener =
           evt -> {
             if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
+            syncTypingTreeEnabledFromSettings(true);
             syncTypingIndicatorStyleFromSettings();
             syncUnreadBadgeScaleFromRuntimeConfig();
             syncServerTreeNotificationBadgesFromSettings();
@@ -1810,8 +1813,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
               menu.add(closeAndPart);
 
               if (supportsBouncerDetach(nd.ref.serverId())) {
-                JMenuItem bouncerDetach =
-                    new JMenuItem("Detach (Bouncer) \"" + nd.label + "\"");
+                JMenuItem bouncerDetach = new JMenuItem("Detach (Bouncer) \"" + nd.label + "\"");
                 bouncerDetach.addActionListener(ev -> bouncerDetachChannelRequests.onNext(nd.ref));
                 menu.add(bouncerDetach);
               }
@@ -2512,8 +2514,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           if (prev == next) return;
           channelSortModeByServer.put(sid, next);
           if (runtimeConfig != null) {
-            runtimeConfig.rememberServerTreeChannelSortMode(
-                sid, runtimeChannelSortMode(next));
+            runtimeConfig.rememberServerTreeChannelSortMode(sid, runtimeChannelSortMode(next));
           }
           sortChannelsUnderChannelList(sid);
           emitManagedChannelsChanged(sid);
@@ -4462,9 +4463,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         runtimeConfig.rememberServerTreeChannelCustomOrder(sid, customOrder);
       }
     }
-    channelActivityRankByServer
-        .computeIfAbsent(sid, __ -> new HashMap<>())
-        .putIfAbsent(key, 0L);
+    channelActivityRankByServer.computeIfAbsent(sid, __ -> new HashMap<>()).putIfAbsent(key, 0L);
   }
 
   private List<ManagedChannelEntry> snapshotManagedChannelsForServer(String serverId) {
@@ -4531,8 +4530,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     ArrayList<DefaultMutableTreeNode> sorted = new ArrayList<>(channelNodes);
     if (sortMode == ChannelSortMode.ALPHABETICAL) {
-      sorted.sort(
-          (a, b) -> compareChannelLabels(channelLabelForNode(a), channelLabelForNode(b)));
+      sorted.sort((a, b) -> compareChannelLabels(channelLabelForNode(a), channelLabelForNode(b)));
     } else if (sortMode == ChannelSortMode.MOST_RECENT_ACTIVITY) {
       Map<String, Long> byKey = channelActivityRankByServer.getOrDefault(sid, Map.of());
       sorted.sort(
@@ -4750,6 +4748,18 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return;
     if (!(node.getUserObject() instanceof NodeData nd)) return;
+
+    if (!typingIndicatorsTreeEnabled) {
+      boolean changed = nd.clearTypingActivityNow();
+      typingActivityNodes.remove(node);
+      if (typingActivityNodes.isEmpty()) {
+        typingActivityTimer.stop();
+      }
+      if (changed) {
+        repaintTreeNode(node);
+      }
+      return;
+    }
 
     if (nd.detached) {
       boolean changed = nd.clearTypingActivityNow();
@@ -5613,6 +5623,23 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
   }
 
+  private void syncTypingTreeEnabledFromSettings(boolean clearIfDisabled) {
+    boolean enabled = true;
+    try {
+      enabled =
+          settingsBus == null
+              || settingsBus.get() == null
+              || settingsBus.get().typingIndicatorsTreeEnabled();
+    } catch (Exception ignored) {
+      enabled = true;
+    }
+    boolean wasEnabled = typingIndicatorsTreeEnabled;
+    typingIndicatorsTreeEnabled = enabled;
+    if (clearIfDisabled && wasEnabled && !enabled) {
+      clearTypingIndicatorsFromTree();
+    }
+  }
+
   private void syncTypingIndicatorStyleFromSettings() {
     String configured = null;
     try {
@@ -5623,6 +5650,26 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     } catch (Exception ignored) {
     }
     this.typingIndicatorStyle = TreeTypingIndicatorStyle.from(configured);
+  }
+
+  private void clearTypingIndicatorsFromTree() {
+    if (typingActivityNodes.isEmpty()) return;
+    java.util.ArrayList<DefaultMutableTreeNode> changedNodes = new java.util.ArrayList<>();
+    for (DefaultMutableTreeNode node : typingActivityNodes) {
+      if (node == null) continue;
+      Object uo = node.getUserObject();
+      if (!(uo instanceof NodeData nd)) continue;
+      if (nd.clearTypingActivityNow()) {
+        changedNodes.add(node);
+      }
+    }
+    typingActivityNodes.clear();
+    if (typingActivityTimer != null) {
+      typingActivityTimer.stop();
+    }
+    for (DefaultMutableTreeNode node : changedNodes) {
+      repaintTreeNode(node);
+    }
   }
 
   private void syncServerTreeNotificationBadgesFromSettings() {
@@ -5889,9 +5936,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             setTreeIcon("settings");
           }
           if (supportsTypingActivity(nd.ref)) {
-            typingIndicatorSlotVisible = true;
             detachedWarningIndicatorVisible = nd.hasDetachedWarning();
-            if (!detachedWarningIndicatorVisible) {
+            typingIndicatorSlotVisible =
+                detachedWarningIndicatorVisible || typingIndicatorsTreeEnabled;
+            if (typingIndicatorsTreeEnabled && !detachedWarningIndicatorVisible) {
               typingIndicatorAlpha =
                   nd.typingDotAlpha(
                       System.currentTimeMillis(),
@@ -5916,7 +5964,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         } else if (isIrcRootNode(node)) {
           setText(IRC_ROOT_LABEL);
           setFont(base.deriveFont(Font.PLAIN));
-          setTreeIcon("terminal");
+          setTreeIcon("chat");
         } else if (isApplicationRootNode(node)) {
           setText(APPLICATION_ROOT_LABEL);
           setFont(base.deriveFont(Font.PLAIN));

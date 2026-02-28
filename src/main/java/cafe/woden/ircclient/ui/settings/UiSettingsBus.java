@@ -105,6 +105,29 @@ public class UiSettingsBus {
     boolean enrichmentEnabled = ue != null && Boolean.TRUE.equals(ue.enabled());
     boolean whoisFallbackEnabled = ue != null && Boolean.TRUE.equals(ue.whoisFallbackEnabled());
     boolean periodicRefreshEnabled = ue != null && Boolean.TRUE.equals(ue.periodicRefreshEnabled());
+    boolean typingIndicatorsSendEnabled =
+        props.typingIndicatorsEnabled() == null
+            || Boolean.TRUE.equals(props.typingIndicatorsEnabled());
+    boolean typingIndicatorsReceiveEnabled =
+        props.typingIndicatorsReceiveEnabled() == null
+            ? typingIndicatorsSendEnabled
+            : Boolean.TRUE.equals(props.typingIndicatorsReceiveEnabled());
+    boolean typingIndicatorsTreeEnabled =
+        props.typingIndicatorsTreeEnabled() == null
+            ? typingIndicatorsReceiveEnabled
+            : Boolean.TRUE.equals(props.typingIndicatorsTreeEnabled());
+    boolean typingIndicatorsUsersListEnabled =
+        props.typingIndicatorsUsersListEnabled() == null
+            ? typingIndicatorsReceiveEnabled
+            : Boolean.TRUE.equals(props.typingIndicatorsUsersListEnabled());
+    boolean typingIndicatorsTranscriptEnabled =
+        props.typingIndicatorsTranscriptEnabled() == null
+            ? typingIndicatorsReceiveEnabled
+            : Boolean.TRUE.equals(props.typingIndicatorsTranscriptEnabled());
+    boolean typingIndicatorsSendSignalEnabled =
+        props.typingIndicatorsSendSignalEnabled() == null
+            ? typingIndicatorsSendEnabled
+            : Boolean.TRUE.equals(props.typingIndicatorsSendSignalEnabled());
 
     List<NotificationRule> notificationRules =
         props.notificationRules() == null
@@ -156,11 +179,13 @@ public class UiSettingsBus {
             props.presenceFoldsEnabled(),
             props.ctcpRequestsInActiveTargetEnabled() == null
                 || Boolean.TRUE.equals(props.ctcpRequestsInActiveTargetEnabled()),
-            props.typingIndicatorsEnabled(),
-            props.typingIndicatorsReceiveEnabled() == null
-                ? props.typingIndicatorsEnabled()
-                : props.typingIndicatorsReceiveEnabled(),
+            typingIndicatorsSendEnabled,
+            typingIndicatorsReceiveEnabled,
             props.typingTreeIndicatorStyle(),
+            typingIndicatorsTreeEnabled,
+            typingIndicatorsUsersListEnabled,
+            typingIndicatorsTranscriptEnabled,
+            typingIndicatorsSendSignalEnabled,
             timestampsEnabled,
             timestampFormat,
             timestampsIncludeChatMessages,

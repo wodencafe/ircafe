@@ -1807,9 +1807,18 @@ public class IrcMediator implements MediatorControlPort {
         String state = Objects.toString(ev.state(), "").trim().toLowerCase(Locale.ROOT);
         if (state.isEmpty()) state = "active";
 
-        boolean prefEnabled = false;
+        boolean receiveEnabled = false;
+        boolean treeDisplayEnabled = false;
+        boolean usersListDisplayEnabled = false;
+        boolean transcriptDisplayEnabled = false;
         try {
-          prefEnabled = uiSettingsPort.get().typingIndicatorsReceiveEnabled();
+          var uiSettings = uiSettingsPort.get();
+          if (uiSettings != null) {
+            receiveEnabled = uiSettings.typingIndicatorsReceiveEnabled();
+            treeDisplayEnabled = uiSettings.typingIndicatorsTreeEnabled();
+            usersListDisplayEnabled = uiSettings.typingIndicatorsUsersListEnabled();
+            transcriptDisplayEnabled = uiSettings.typingIndicatorsTranscriptEnabled();
+          }
         } catch (Exception ignored) {
         }
         boolean typingAvailable = false;
@@ -1818,11 +1827,15 @@ public class IrcMediator implements MediatorControlPort {
         } catch (Exception ignored) {
         }
         maybeLogTypingObserved(
-            sid, Objects.toString(ev.target(), ""), from, state, prefEnabled, typingAvailable);
+            sid, Objects.toString(ev.target(), ""), from, state, receiveEnabled, typingAvailable);
 
-        ui.showTypingIndicator(dest, from, state);
-        if (prefEnabled) {
+        if (receiveEnabled && transcriptDisplayEnabled) {
+          ui.showTypingIndicator(dest, from, state);
+        }
+        if (receiveEnabled && treeDisplayEnabled) {
           ui.showTypingActivity(dest, state);
+        }
+        if (receiveEnabled && usersListDisplayEnabled) {
           ui.showUsersTypingIndicator(dest, from, state);
         }
       }

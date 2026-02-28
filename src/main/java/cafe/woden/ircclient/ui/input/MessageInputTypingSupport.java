@@ -63,6 +63,8 @@ final class MessageInputTypingSupport {
   // Track the last applied settings so we can react specifically to "toggle OFF".
   private boolean lastTypingSendEnabled = true;
   private boolean lastTypingReceiveEnabled = true;
+  private boolean lastTypingTranscriptEnabled = true;
+  private boolean lastTypingSendSignalEnabled = true;
   private boolean typingSignalAvailable;
 
   MessageInputTypingSupport(
@@ -91,8 +93,12 @@ final class MessageInputTypingSupport {
     UiSettings initial = this.settingsSupplier.get();
     this.lastTypingSendEnabled = initial == null || initial.typingIndicatorsEnabled();
     this.lastTypingReceiveEnabled = initial == null || initial.typingIndicatorsReceiveEnabled();
+    this.lastTypingTranscriptEnabled =
+        initial == null || initial.typingIndicatorsTranscriptEnabled();
+    this.lastTypingSendSignalEnabled =
+        initial == null || initial.typingIndicatorsSendSignalEnabled();
     this.typingSignalAvailable = false;
-    this.typingSignalIndicator.setAvailable(false);
+    refreshTypingSignalAvailability();
   }
 
   void setOnTypingStateChanged(Consumer<String> onTypingStateChanged) {
@@ -101,11 +107,11 @@ final class MessageInputTypingSupport {
 
   void setTypingSignalAvailable(boolean available) {
     typingSignalAvailable = available;
-    typingSignalIndicator.setAvailable(available);
+    refreshTypingSignalAvailability();
   }
 
   void onLocalTypingIndicatorSent(String state) {
-    if (!typingSignalAvailable) return;
+    if (!typingSignalAvailable || !typingSignalDisplayEnabled()) return;
     String s = normalizeTypingState(state);
     if (s.isEmpty()) return;
     typingSignalIndicator.pulse(s);
@@ -159,6 +165,8 @@ final class MessageInputTypingSupport {
     if (s == null) return;
     boolean sendEnabledNow = s.typingIndicatorsEnabled();
     boolean receiveEnabledNow = s.typingIndicatorsReceiveEnabled();
+    boolean transcriptEnabledNow = s.typingIndicatorsTranscriptEnabled();
+    boolean sendSignalEnabledNow = s.typingIndicatorsSendSignalEnabled();
 
     // If outgoing typing was just toggled OFF, immediately emit DONE (cleanup).
     if (lastTypingSendEnabled && !sendEnabledNow) {
@@ -168,12 +176,21 @@ final class MessageInputTypingSupport {
     if (lastTypingReceiveEnabled && !receiveEnabledNow) {
       clearRemoteTypingIndicator();
     }
+    if (lastTypingTranscriptEnabled && !transcriptEnabledNow) {
+      clearRemoteTypingIndicator();
+    }
+    if (lastTypingSendSignalEnabled && !sendSignalEnabledNow) {
+      typingSignalIndicator.pulse("done");
+    }
     lastTypingSendEnabled = sendEnabledNow;
     lastTypingReceiveEnabled = receiveEnabledNow;
+    lastTypingTranscriptEnabled = transcriptEnabledNow;
+    lastTypingSendSignalEnabled = sendSignalEnabledNow;
+    refreshTypingSignalAvailability();
   }
 
   void showRemoteTypingIndicator(String nick, String state) {
-    if (!typingIndicatorsReceiveEnabled()) return;
+    if (!typingIndicatorsReceiveEnabled() || !typingIndicatorsTranscriptEnabled()) return;
 
     String n = nick == null ? "" : nick.trim();
     if (n.isEmpty()) return;
@@ -304,6 +321,32 @@ final class MessageInputTypingSupport {
     } catch (Exception ex) {
       return true;
     }
+  }
+
+  private boolean typingIndicatorsTranscriptEnabled() {
+    try {
+      UiSettings s = settingsSupplier.get();
+      return s == null || s.typingIndicatorsTranscriptEnabled();
+    } catch (Exception ex) {
+      return true;
+    }
+  }
+
+  private boolean typingIndicatorsSendSignalEnabled() {
+    try {
+      UiSettings s = settingsSupplier.get();
+      return s == null || s.typingIndicatorsSendSignalEnabled();
+    } catch (Exception ex) {
+      return true;
+    }
+  }
+
+  private boolean typingSignalDisplayEnabled() {
+    return typingIndicatorsSendEnabled() && typingIndicatorsSendSignalEnabled();
+  }
+
+  private void refreshTypingSignalAvailability() {
+    typingSignalIndicator.setAvailable(typingSignalAvailable && typingSignalDisplayEnabled());
   }
 
   private void emitTypingState(String state) {

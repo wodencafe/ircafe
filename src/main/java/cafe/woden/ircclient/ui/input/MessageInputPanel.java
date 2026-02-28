@@ -149,13 +149,14 @@ public class MessageInputPanel extends JPanel {
   }
 
   private void buildLayout() {
-    JPanel right = new JPanel(new BorderLayout(0, 0));
+    JPanel right = new JPanel();
     right.setOpaque(false);
-    right.add(send, BorderLayout.CENTER);
+    right.setLayout(new OverlayLayout(right));
 
     configureTypingBanner();
     configureTypingSignalIndicator();
-    right.add(typingSignalIndicator, BorderLayout.SOUTH);
+    right.add(send);
+    right.add(typingSignalIndicator);
 
     JPanel center = new JPanel(new BorderLayout(0, 2));
     center.setOpaque(false);
@@ -188,7 +189,11 @@ public class MessageInputPanel extends JPanel {
 
   private void configureTypingSignalIndicator() {
     typingSignalIndicator.setVisible(false);
-    typingSignalIndicator.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+    typingSignalIndicator.setAlignmentX(1f);
+    typingSignalIndicator.setAlignmentY(1f);
+    typingSignalIndicator.setBorder(BorderFactory.createEmptyBorder(0, 0, 3, 4));
+    send.setAlignmentX(0.5f);
+    send.setAlignmentY(0.5f);
   }
 
   private void installSupports() {

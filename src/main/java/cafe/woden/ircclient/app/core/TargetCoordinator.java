@@ -518,7 +518,8 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     disposables.add(
         bouncerDetach(sid, target.target())
-            .subscribe(() -> {}, err -> ui.appendError(status, "(detach-error)", String.valueOf(err))));
+            .subscribe(
+                () -> {}, err -> ui.appendError(status, "(detach-error)", String.valueOf(err))));
   }
 
   public void joinChannel(TargetRef target) {
