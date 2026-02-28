@@ -2,6 +2,8 @@ package cafe.woden.ircclient.ui.chat.embed;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
+import cafe.woden.ircclient.ui.settings.EmbedCardStyle;
+import cafe.woden.ircclient.ui.settings.EmbedCardStyleBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -22,6 +24,7 @@ public class ChatImageEmbedder {
   private final ChatStyles styles;
   private final ImageFetchService fetch;
   private final EmbedLoadPolicyMatcher policyMatcher;
+  private final EmbedCardStyleBus embedCardStyleBus;
 
   private final java.util.Map<StyledDocument, DocState> perDocState =
       java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
@@ -30,11 +33,13 @@ public class ChatImageEmbedder {
       UiSettingsBus uiSettings,
       ChatStyles styles,
       ImageFetchService fetch,
-      EmbedLoadPolicyMatcher policyMatcher) {
+      EmbedLoadPolicyMatcher policyMatcher,
+      EmbedCardStyleBus embedCardStyleBus) {
     this.uiSettings = uiSettings;
     this.styles = styles;
     this.fetch = fetch;
     this.policyMatcher = policyMatcher;
+    this.embedCardStyleBus = embedCardStyleBus;
   }
 
   private DocState stateFor(StyledDocument doc) {
@@ -142,6 +147,7 @@ public class ChatImageEmbedder {
             fetch,
             uiSettings.get().imageEmbedsCollapsedByDefault(),
             uiSettings,
+            embedCardStyleBus != null ? embedCardStyleBus.get() : EmbedCardStyle.DEFAULT,
             st.gifCoordinator,
             seq);
 

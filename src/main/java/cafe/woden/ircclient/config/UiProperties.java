@@ -93,6 +93,7 @@ public record UiProperties(
     MonitorFallback monitorFallback,
     Boolean linkPreviewsEnabled,
     Boolean linkPreviewsCollapsedByDefault,
+    String embedCardStyle,
     Boolean nickColoringEnabled,
     Boolean presenceFoldsEnabled,
 
@@ -784,6 +785,7 @@ public record UiProperties(
     if (linkPreviewsCollapsedByDefault == null) {
       linkPreviewsCollapsedByDefault = false;
     }
+    embedCardStyle = normalizeEmbedCardStyle(embedCardStyle);
     // Nick coloring defaults.
     if (nickColorMinContrast <= 0) {
       nickColorMinContrast = 3.0;
@@ -930,6 +932,16 @@ public record UiProperties(
       case "keyboard", "kbd" -> "keyboard";
       case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> "glow-dot";
       default -> "dots";
+    };
+  }
+
+  static String normalizeEmbedCardStyle(String raw) {
+    String s = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+    return switch (s) {
+      case "minimal", "min" -> "minimal";
+      case "glassy", "glass" -> "glassy";
+      case "denser", "dense", "compact" -> "denser";
+      default -> "default";
     };
   }
 

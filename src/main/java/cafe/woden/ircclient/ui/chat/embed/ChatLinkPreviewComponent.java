@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.chat.embed;
 
 import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.settings.EmbedCardStyle;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -64,13 +65,12 @@ final class ChatLinkPreviewComponent extends JPanel {
   private static final int IMGUR_MAX_DESC_LINES = 24;
   private static final int NEWS_MAX_DESC_LINES = 22;
 
-  // Padding tweaks for collapsed vs expanded previews.
-  private static final Insets OUTER_PAD_EXPANDED = new Insets(4, 0, 8, 0);
-  private static final Insets OUTER_PAD_COLLAPSED = new Insets(2, 0, 4, 0);
-
-  private static final Insets CARD_PAD_EXPANDED = new Insets(10, 12, 10, 12);
-  private static final Insets CARD_PAD_COLLAPSED = new Insets(6, 12, 6, 12);
-  private static final int CARD_CORNER_ARC = 18;
+  // Default style (kept as the current look).
+  private static final Insets OUTER_PAD_EXPANDED_DEFAULT = new Insets(4, 0, 8, 0);
+  private static final Insets OUTER_PAD_COLLAPSED_DEFAULT = new Insets(2, 0, 4, 0);
+  private static final Insets CARD_PAD_EXPANDED_DEFAULT = new Insets(10, 12, 10, 12);
+  private static final Insets CARD_PAD_COLLAPSED_DEFAULT = new Insets(6, 12, 6, 12);
+  private static final int CARD_CORNER_ARC_DEFAULT = 18;
   private static final int COLLAPSE_ICON_SIZE = 12;
   private static final Icon COLLAPSED_ICON = SvgIcons.action("play", COLLAPSE_ICON_SIZE);
   private static final Icon EXPANDED_ICON = SvgIcons.action("arrow-down", COLLAPSE_ICON_SIZE);
@@ -80,6 +80,7 @@ final class ChatLinkPreviewComponent extends JPanel {
   private final LinkPreviewFetchService fetch;
   private final ImageFetchService imageFetch;
   private final boolean collapsedByDefault;
+  private final EmbedCardStyle cardStyle;
 
   private final JLabel status = new JLabel("Loading preview…");
 
@@ -143,23 +144,26 @@ final class ChatLinkPreviewComponent extends JPanel {
       String url,
       LinkPreviewFetchService fetch,
       ImageFetchService imageFetch,
-      boolean collapsedByDefault) {
+      boolean collapsedByDefault,
+      EmbedCardStyle cardStyle) {
     super(new FlowLayout(FlowLayout.LEFT, 0, 0));
     this.serverId = serverId;
     this.url = url;
     this.fetch = fetch;
     this.imageFetch = imageFetch;
     this.collapsedByDefault = collapsedByDefault;
+    this.cardStyle = cardStyle != null ? cardStyle : EmbedCardStyle.DEFAULT;
     this.collapsed = collapsedByDefault;
 
     setOpaque(false);
-    setBorder(
-        BorderFactory.createEmptyBorder(
-            OUTER_PAD_EXPANDED.top, OUTER_PAD_EXPANDED.left,
-            OUTER_PAD_EXPANDED.bottom, OUTER_PAD_EXPANDED.right));
+    Insets outer = outerPadExpanded();
+    setBorder(BorderFactory.createEmptyBorder(outer.top, outer.left, outer.bottom, outer.right));
 
     status.setOpaque(false);
-    status.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+    Insets statusPad = statusPadding();
+    status.setBorder(
+        BorderFactory.createEmptyBorder(
+            statusPad.top, statusPad.left, statusPad.bottom, statusPad.right));
     status.setForeground(metaTextColor());
     add(status);
 
@@ -223,7 +227,7 @@ final class ChatLinkPreviewComponent extends JPanel {
     boolean newsBySite = NewsPreviewUtil.isLikelyNewsSiteName(previewSite);
     newsExtended = !instagramExtended && !imgurExtended && (newsByTarget || newsBySite);
     // Header: collapse button + site + title.
-    header = new JPanel(new BorderLayout(10, 0));
+    header = new JPanel(new BorderLayout(headerGap(), 0));
     header.setOpaque(false);
 
     collapseBtn = new JButton();
@@ -283,8 +287,8 @@ final class ChatLinkPreviewComponent extends JPanel {
     body =
         new JPanel(
             new BorderLayout(
-                (instagramExtended || imgurExtended) ? 0 : 12,
-                (instagramExtended || imgurExtended) ? 10 : 0));
+                (instagramExtended || imgurExtended) ? 0 : bodyHorizontalGap(),
+                (instagramExtended || imgurExtended) ? bodyVerticalGap() : 0));
     body.setOpaque(false);
 
     thumb = new JLabel();
@@ -314,7 +318,7 @@ final class ChatLinkPreviewComponent extends JPanel {
     thumb.setVerticalAlignment(javax.swing.SwingConstants.CENTER);
     thumb.setBorder(
         BorderFactory.createCompoundBorder(
-            new javax.swing.border.LineBorder(borderColor(), 1, true),
+            new javax.swing.border.LineBorder(borderColor(cardStyle), 1, true),
             BorderFactory.createEmptyBorder(0, 0, 0, 0)));
 
     // Badge for multi-media posts (e.g., Mastodon with multiple attachments).
@@ -647,7 +651,7 @@ final class ChatLinkPreviewComponent extends JPanel {
     }
 
     if (body.getComponentCount() > 0) {
-      body.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
+      body.setBorder(BorderFactory.createEmptyBorder(bodyTopGap(), 0, 0, 0));
     }
     styleTextContent();
     card.add(header, BorderLayout.NORTH);
@@ -923,8 +927,8 @@ final class ChatLinkPreviewComponent extends JPanel {
                   0,
                   Math.max(0, getWidth() - 1),
                   Math.max(0, getHeight() - 1),
-                  CARD_CORNER_ARC,
-                  CARD_CORNER_ARC);
+                  cardCornerArc(),
+                  cardCornerArc());
             } finally {
               g2.dispose();
             }
@@ -964,10 +968,24 @@ final class ChatLinkPreviewComponent extends JPanel {
 
   private Color cardBackgroundColor() {
     Color base = baseBackgroundColor();
-    if (isDark(base)) {
-      return blend(base, Color.WHITE, collapsed ? 0.06 : 0.10);
-    }
-    return blend(base, Color.BLACK, collapsed ? 0.02 : 0.04);
+    return switch (cardStyle) {
+      case MINIMAL -> {
+        if (isDark(base)) yield blend(base, Color.WHITE, collapsed ? 0.01 : 0.03);
+        yield blend(base, Color.BLACK, collapsed ? 0.005 : 0.015);
+      }
+      case GLASSY -> {
+        if (isDark(base)) yield blend(base, Color.WHITE, collapsed ? 0.10 : 0.16);
+        yield blend(base, Color.BLACK, collapsed ? 0.04 : 0.07);
+      }
+      case DENSER -> {
+        if (isDark(base)) yield blend(base, Color.WHITE, collapsed ? 0.05 : 0.08);
+        yield blend(base, Color.BLACK, collapsed ? 0.015 : 0.03);
+      }
+      case DEFAULT -> {
+        if (isDark(base)) yield blend(base, Color.WHITE, collapsed ? 0.06 : 0.10);
+        yield blend(base, Color.BLACK, collapsed ? 0.02 : 0.04);
+      }
+    };
   }
 
   private static ImdbDescParts splitImdbDesc(String rawDesc) {
@@ -1425,26 +1443,60 @@ final class ChatLinkPreviewComponent extends JPanel {
   }
 
   private void applyBordersForState() {
-    Insets outer = collapsed ? OUTER_PAD_COLLAPSED : OUTER_PAD_EXPANDED;
+    Insets outer = collapsed ? outerPadCollapsed() : outerPadExpanded();
     setBorder(BorderFactory.createEmptyBorder(outer.top, outer.left, outer.bottom, outer.right));
     if (card != null) {
       card.setBorder(buildCardBorder(collapsed));
     }
   }
 
-  private static javax.swing.border.Border buildCardBorder(boolean collapsed) {
-    Insets pad = collapsed ? CARD_PAD_COLLAPSED : CARD_PAD_EXPANDED;
+  private javax.swing.border.Border buildCardBorder(boolean collapsed) {
+    return buildCardBorder(cardStyle, collapsed);
+  }
+
+  static javax.swing.border.Border buildCardBorder(EmbedCardStyle style, boolean collapsed) {
+    Insets pad = cardPadding(style, collapsed);
     return BorderFactory.createCompoundBorder(
-        new javax.swing.border.LineBorder(borderColor(), 1, true),
+        new javax.swing.border.LineBorder(borderColor(style), 1, true),
         BorderFactory.createEmptyBorder(pad.top, pad.left, pad.bottom, pad.right));
   }
 
-  private static java.awt.Color borderColor() {
+  private static Insets cardPadding(EmbedCardStyle style, boolean collapsed) {
+    EmbedCardStyle s = style != null ? style : EmbedCardStyle.DEFAULT;
+    return switch (s) {
+      case MINIMAL -> collapsed ? new Insets(3, 8, 3, 8) : new Insets(6, 8, 6, 8);
+      case GLASSY -> collapsed ? new Insets(7, 14, 7, 14) : new Insets(12, 14, 12, 14);
+      case DENSER -> collapsed ? new Insets(2, 8, 2, 8) : new Insets(5, 8, 5, 8);
+      case DEFAULT ->
+          collapsed
+              ? new Insets(
+                  CARD_PAD_COLLAPSED_DEFAULT.top,
+                  CARD_PAD_COLLAPSED_DEFAULT.left,
+                  CARD_PAD_COLLAPSED_DEFAULT.bottom,
+                  CARD_PAD_COLLAPSED_DEFAULT.right)
+              : new Insets(
+                  CARD_PAD_EXPANDED_DEFAULT.top,
+                  CARD_PAD_EXPANDED_DEFAULT.left,
+                  CARD_PAD_EXPANDED_DEFAULT.bottom,
+                  CARD_PAD_EXPANDED_DEFAULT.right);
+    };
+  }
+
+  private static java.awt.Color borderColor(EmbedCardStyle style) {
+    EmbedCardStyle s = style != null ? style : EmbedCardStyle.DEFAULT;
     java.awt.Color base = javax.swing.UIManager.getColor("Component.borderColor");
     if (base == null) {
       base = blend(foregroundColor(), baseBackgroundColor(), 0.35);
     }
-    return withAlpha(base, 170);
+    return switch (s) {
+      case MINIMAL -> withAlpha(base, 105);
+      case GLASSY ->
+          withAlpha(
+              blend(base, firstNonNullColor("Component.linkColor", "Component.focusColor"), 0.20),
+              205);
+      case DENSER -> withAlpha(base, 190);
+      case DEFAULT -> withAlpha(base, 170);
+    };
   }
 
   private static Color siteTextColor() {
@@ -1511,5 +1563,98 @@ final class ChatLinkPreviewComponent extends JPanel {
   private static boolean isDark(Color c) {
     double luminance = (0.2126 * c.getRed() + 0.7152 * c.getGreen() + 0.0722 * c.getBlue()) / 255d;
     return luminance < 0.52;
+  }
+
+  private Insets outerPadExpanded() {
+    return switch (cardStyle) {
+      case MINIMAL -> new Insets(1, 0, 4, 0);
+      case GLASSY -> new Insets(6, 0, 10, 0);
+      case DENSER -> new Insets(2, 0, 5, 0);
+      case DEFAULT ->
+          new Insets(
+              OUTER_PAD_EXPANDED_DEFAULT.top,
+              OUTER_PAD_EXPANDED_DEFAULT.left,
+              OUTER_PAD_EXPANDED_DEFAULT.bottom,
+              OUTER_PAD_EXPANDED_DEFAULT.right);
+    };
+  }
+
+  private Insets outerPadCollapsed() {
+    return switch (cardStyle) {
+      case MINIMAL -> new Insets(0, 0, 2, 0);
+      case GLASSY -> new Insets(3, 0, 6, 0);
+      case DENSER -> new Insets(1, 0, 3, 0);
+      case DEFAULT ->
+          new Insets(
+              OUTER_PAD_COLLAPSED_DEFAULT.top,
+              OUTER_PAD_COLLAPSED_DEFAULT.left,
+              OUTER_PAD_COLLAPSED_DEFAULT.bottom,
+              OUTER_PAD_COLLAPSED_DEFAULT.right);
+    };
+  }
+
+  private Insets statusPadding() {
+    return switch (cardStyle) {
+      case MINIMAL -> new Insets(2, 6, 2, 6);
+      case GLASSY -> new Insets(6, 10, 6, 10);
+      case DENSER -> new Insets(3, 7, 3, 7);
+      case DEFAULT -> new Insets(4, 8, 4, 8);
+    };
+  }
+
+  private int cardCornerArc() {
+    return switch (cardStyle) {
+      case MINIMAL -> 10;
+      case GLASSY -> 24;
+      case DENSER -> 12;
+      case DEFAULT -> CARD_CORNER_ARC_DEFAULT;
+    };
+  }
+
+  private int headerGap() {
+    return switch (cardStyle) {
+      case MINIMAL -> 8;
+      case GLASSY -> 12;
+      case DENSER -> 6;
+      case DEFAULT -> 10;
+    };
+  }
+
+  private int bodyHorizontalGap() {
+    return switch (cardStyle) {
+      case MINIMAL -> 8;
+      case GLASSY -> 14;
+      case DENSER -> 8;
+      case DEFAULT -> 12;
+    };
+  }
+
+  private int bodyVerticalGap() {
+    return switch (cardStyle) {
+      case MINIMAL -> 6;
+      case GLASSY -> 12;
+      case DENSER -> 6;
+      case DEFAULT -> 10;
+    };
+  }
+
+  private int bodyTopGap() {
+    return switch (cardStyle) {
+      case MINIMAL -> 4;
+      case GLASSY -> 10;
+      case DENSER -> 5;
+      case DEFAULT -> 8;
+    };
+  }
+
+  private static Color firstNonNullColor(String... keys) {
+    if (keys != null) {
+      for (String key : keys) {
+        if (key == null || key.isBlank()) continue;
+        Color c = javax.swing.UIManager.getColor(key);
+        if (c != null) return c;
+      }
+    }
+    return foregroundColor();
   }
 }

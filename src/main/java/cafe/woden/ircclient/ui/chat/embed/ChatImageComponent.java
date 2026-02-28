@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.chat.embed;
 
 import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.settings.EmbedCardStyle;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
@@ -10,7 +11,9 @@ import java.awt.BorderLayout;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Graphics2D;
 import java.awt.Insets;
+import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.datatransfer.StringSelection;
@@ -38,11 +41,17 @@ final class ChatImageComponent extends JPanel {
   private static final int COLLAPSE_ICON_SIZE = 12;
   private static final Icon COLLAPSED_ICON = SvgIcons.action("play", COLLAPSE_ICON_SIZE);
   private static final Icon EXPANDED_ICON = SvgIcons.action("arrow-down", COLLAPSE_ICON_SIZE);
+  private static final Insets OUTER_PAD_EXPANDED_DEFAULT = new Insets(4, 0, 8, 0);
+  private static final Insets OUTER_PAD_COLLAPSED_DEFAULT = new Insets(2, 0, 4, 0);
+  private static final Insets CARD_PAD_EXPANDED_DEFAULT = new Insets(10, 12, 10, 12);
+  private static final Insets CARD_PAD_COLLAPSED_DEFAULT = new Insets(6, 12, 6, 12);
+  private static final int CARD_CORNER_ARC_DEFAULT = 18;
 
   private final String url;
   private final String serverId;
   private final ImageFetchService fetch;
   private final UiSettingsBus uiSettingsBus;
+  private final EmbedCardStyle cardStyle;
 
   // Coordinates "only newest GIF animates" within a transcript.
   private final GifAnimationCoordinator gifCoordinator;
@@ -107,6 +116,7 @@ final class ChatImageComponent extends JPanel {
       ImageFetchService fetch,
       boolean collapsedByDefault,
       UiSettingsBus uiSettingsBus,
+      EmbedCardStyle cardStyle,
       GifAnimationCoordinator gifCoordinator,
       long embedSeq) {
     super(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -114,12 +124,15 @@ final class ChatImageComponent extends JPanel {
     this.url = url;
     this.fetch = fetch;
     this.uiSettingsBus = uiSettingsBus;
+    this.cardStyle = cardStyle != null ? cardStyle : EmbedCardStyle.DEFAULT;
     this.gifCoordinator = gifCoordinator;
     this.embedSeq = embedSeq;
 
     this.collapsed = collapsedByDefault;
 
     setOpaque(false);
+    Insets outer = outerPadExpanded();
+    setBorder(BorderFactory.createEmptyBorder(outer.top, outer.left, outer.bottom, outer.right));
 
     renderScaffold();
     beginLoad();
@@ -147,12 +160,8 @@ final class ChatImageComponent extends JPanel {
   private void renderScaffold() {
     removeAll();
 
-    card = new JPanel(new BorderLayout());
-    card.setOpaque(true);
-    card.setBorder(
-        BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(borderColor()),
-            BorderFactory.createEmptyBorder(8, 8, 8, 8)));
+    card = createCardPanel();
+    card.setBorder(buildCardBorder(collapsed));
 
     header = buildHeader();
     body = buildBody();
@@ -171,7 +180,7 @@ final class ChatImageComponent extends JPanel {
   }
 
   private JPanel buildHeader() {
-    JPanel h = new JPanel(new BorderLayout(8, 0));
+    JPanel h = new JPanel(new BorderLayout(headerGap(), 0));
     h.setOpaque(false);
 
     collapseBtn = new JButton();
@@ -204,9 +213,15 @@ final class ChatImageComponent extends JPanel {
   private JPanel buildBody() {
     JPanel b = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
     b.setOpaque(false);
+    b.setBorder(BorderFactory.createEmptyBorder(bodyTopGap(), 0, 0, 0));
 
     imageLabel.setOpaque(false);
-    imageLabel.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
+    Insets mediaPad = mediaPadding();
+    imageLabel.setBorder(
+        BorderFactory.createCompoundBorder(
+            new javax.swing.border.LineBorder(borderColor(), 1, true),
+            BorderFactory.createEmptyBorder(
+                mediaPad.top, mediaPad.left, mediaPad.bottom, mediaPad.right)));
     imageLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     imageLabel.setToolTipText(url);
 
@@ -234,6 +249,7 @@ final class ChatImageComponent extends JPanel {
     if (body != null) {
       body.setVisible(!collapsed);
     }
+    applyBorderForState();
 
     if (gifPlayer != null) {
       syncGifPlaybackState();
@@ -582,11 +598,220 @@ final class ChatImageComponent extends JPanel {
     ImageViewerDialog.show(w, url, b);
   }
 
-  private static java.awt.Color borderColor() {
-    java.awt.Color c = javax.swing.UIManager.getColor("Component.borderColor");
-    if (c == null) c = javax.swing.UIManager.getColor("Separator.foreground");
-    if (c == null) c = new java.awt.Color(100, 100, 100, 120);
-    return c;
+  private JPanel createCardPanel() {
+    JPanel panel =
+        new JPanel(new BorderLayout()) {
+          @Override
+          protected void paintComponent(java.awt.Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+              g2.setRenderingHint(
+                  RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+              g2.setColor(cardBackgroundColor());
+              g2.fillRoundRect(
+                  0,
+                  0,
+                  Math.max(0, getWidth() - 1),
+                  Math.max(0, getHeight() - 1),
+                  cardCornerArc(),
+                  cardCornerArc());
+            } finally {
+              g2.dispose();
+            }
+          }
+        };
+    panel.setOpaque(false);
+    return panel;
+  }
+
+  private void applyBorderForState() {
+    Insets outer = collapsed ? outerPadCollapsed() : outerPadExpanded();
+    setBorder(BorderFactory.createEmptyBorder(outer.top, outer.left, outer.bottom, outer.right));
+    if (card != null) {
+      card.setBorder(buildCardBorder(collapsed));
+    }
+  }
+
+  private javax.swing.border.Border buildCardBorder(boolean collapsedState) {
+    Insets pad = cardPadding(collapsedState);
+    return BorderFactory.createCompoundBorder(
+        new javax.swing.border.LineBorder(borderColor(), 1, true),
+        BorderFactory.createEmptyBorder(pad.top, pad.left, pad.bottom, pad.right));
+  }
+
+  private java.awt.Color borderColor() {
+    java.awt.Color base = javax.swing.UIManager.getColor("Component.borderColor");
+    if (base == null) {
+      base = blend(foregroundColor(), baseBackgroundColor(), 0.35);
+    }
+    return switch (cardStyle) {
+      case MINIMAL -> withAlpha(base, 105);
+      case GLASSY ->
+          withAlpha(
+              blend(base, firstNonNullColor("Component.linkColor", "Component.focusColor"), 0.20),
+              205);
+      case DENSER -> withAlpha(base, 190);
+      case DEFAULT -> withAlpha(base, 170);
+    };
+  }
+
+  private java.awt.Color cardBackgroundColor() {
+    java.awt.Color base = baseBackgroundColor();
+    return switch (cardStyle) {
+      case MINIMAL -> {
+        if (isDark(base)) yield blend(base, java.awt.Color.WHITE, collapsed ? 0.01 : 0.03);
+        yield blend(base, java.awt.Color.BLACK, collapsed ? 0.005 : 0.015);
+      }
+      case GLASSY -> {
+        if (isDark(base)) yield blend(base, java.awt.Color.WHITE, collapsed ? 0.10 : 0.16);
+        yield blend(base, java.awt.Color.BLACK, collapsed ? 0.04 : 0.07);
+      }
+      case DENSER -> {
+        if (isDark(base)) yield blend(base, java.awt.Color.WHITE, collapsed ? 0.05 : 0.08);
+        yield blend(base, java.awt.Color.BLACK, collapsed ? 0.015 : 0.03);
+      }
+      case DEFAULT -> {
+        if (isDark(base)) yield blend(base, java.awt.Color.WHITE, collapsed ? 0.06 : 0.10);
+        yield blend(base, java.awt.Color.BLACK, collapsed ? 0.02 : 0.04);
+      }
+    };
+  }
+
+  private Insets outerPadExpanded() {
+    return switch (cardStyle) {
+      case MINIMAL -> new Insets(1, 0, 4, 0);
+      case GLASSY -> new Insets(6, 0, 10, 0);
+      case DENSER -> new Insets(2, 0, 5, 0);
+      case DEFAULT ->
+          new Insets(
+              OUTER_PAD_EXPANDED_DEFAULT.top,
+              OUTER_PAD_EXPANDED_DEFAULT.left,
+              OUTER_PAD_EXPANDED_DEFAULT.bottom,
+              OUTER_PAD_EXPANDED_DEFAULT.right);
+    };
+  }
+
+  private Insets outerPadCollapsed() {
+    return switch (cardStyle) {
+      case MINIMAL -> new Insets(0, 0, 2, 0);
+      case GLASSY -> new Insets(3, 0, 6, 0);
+      case DENSER -> new Insets(1, 0, 3, 0);
+      case DEFAULT ->
+          new Insets(
+              OUTER_PAD_COLLAPSED_DEFAULT.top,
+              OUTER_PAD_COLLAPSED_DEFAULT.left,
+              OUTER_PAD_COLLAPSED_DEFAULT.bottom,
+              OUTER_PAD_COLLAPSED_DEFAULT.right);
+    };
+  }
+
+  private Insets cardPadding(boolean collapsedState) {
+    if (collapsedState) {
+      return switch (cardStyle) {
+        case MINIMAL -> new Insets(3, 8, 3, 8);
+        case GLASSY -> new Insets(7, 14, 7, 14);
+        case DENSER -> new Insets(2, 8, 2, 8);
+        case DEFAULT ->
+            new Insets(
+                CARD_PAD_COLLAPSED_DEFAULT.top,
+                CARD_PAD_COLLAPSED_DEFAULT.left,
+                CARD_PAD_COLLAPSED_DEFAULT.bottom,
+                CARD_PAD_COLLAPSED_DEFAULT.right);
+      };
+    }
+    return switch (cardStyle) {
+      case MINIMAL -> new Insets(6, 8, 6, 8);
+      case GLASSY -> new Insets(12, 14, 12, 14);
+      case DENSER -> new Insets(5, 8, 5, 8);
+      case DEFAULT ->
+          new Insets(
+              CARD_PAD_EXPANDED_DEFAULT.top,
+              CARD_PAD_EXPANDED_DEFAULT.left,
+              CARD_PAD_EXPANDED_DEFAULT.bottom,
+              CARD_PAD_EXPANDED_DEFAULT.right);
+    };
+  }
+
+  private Insets mediaPadding() {
+    return switch (cardStyle) {
+      case MINIMAL -> new Insets(1, 1, 1, 1);
+      case GLASSY -> new Insets(3, 3, 3, 3);
+      case DENSER -> new Insets(1, 1, 1, 1);
+      case DEFAULT -> new Insets(2, 2, 2, 2);
+    };
+  }
+
+  private int cardCornerArc() {
+    return switch (cardStyle) {
+      case MINIMAL -> 10;
+      case GLASSY -> 24;
+      case DENSER -> 12;
+      case DEFAULT -> CARD_CORNER_ARC_DEFAULT;
+    };
+  }
+
+  private int headerGap() {
+    return switch (cardStyle) {
+      case MINIMAL -> 8;
+      case GLASSY -> 12;
+      case DENSER -> 6;
+      case DEFAULT -> 8;
+    };
+  }
+
+  private int bodyTopGap() {
+    return switch (cardStyle) {
+      case MINIMAL -> 4;
+      case GLASSY -> 10;
+      case DENSER -> 5;
+      case DEFAULT -> 8;
+    };
+  }
+
+  private static java.awt.Color firstNonNullColor(String... keys) {
+    if (keys != null) {
+      for (String key : keys) {
+        if (key == null || key.isBlank()) continue;
+        java.awt.Color c = javax.swing.UIManager.getColor(key);
+        if (c != null) return c;
+      }
+    }
+    return foregroundColor();
+  }
+
+  private static java.awt.Color foregroundColor() {
+    java.awt.Color fg = javax.swing.UIManager.getColor("Label.foreground");
+    if (fg == null) fg = java.awt.Color.DARK_GRAY;
+    return fg;
+  }
+
+  private static java.awt.Color baseBackgroundColor() {
+    java.awt.Color bg = javax.swing.UIManager.getColor("TextPane.background");
+    if (bg == null) bg = javax.swing.UIManager.getColor("Panel.background");
+    if (bg == null) bg = java.awt.Color.WHITE;
+    return bg;
+  }
+
+  private static java.awt.Color blend(java.awt.Color a, java.awt.Color b, double ratioB) {
+    double clamped = Math.max(0d, Math.min(1d, ratioB));
+    double ratioA = 1d - clamped;
+    int r = (int) Math.round(a.getRed() * ratioA + b.getRed() * clamped);
+    int g = (int) Math.round(a.getGreen() * ratioA + b.getGreen() * clamped);
+    int bl = (int) Math.round(a.getBlue() * ratioA + b.getBlue() * clamped);
+    return new java.awt.Color(clampChannel(r), clampChannel(g), clampChannel(bl), 255);
+  }
+
+  private static java.awt.Color withAlpha(java.awt.Color c, int alpha) {
+    return new java.awt.Color(c.getRed(), c.getGreen(), c.getBlue(), clampChannel(alpha));
+  }
+
+  private static int clampChannel(int value) {
+    return Math.max(0, Math.min(255, value));
+  }
+
+  private static boolean isDark(java.awt.Color c) {
+    double luminance = (0.2126 * c.getRed() + 0.7152 * c.getGreen() + 0.0722 * c.getBlue()) / 255d;
+    return luminance < 0.52;
   }
 
   private static String displayTitle(String url) {

@@ -4033,6 +4033,25 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized void rememberEmbedCardStyle(String styleToken) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String token = Objects.toString(styleToken, "").trim().toLowerCase(Locale.ROOT);
+      if (token.isBlank()) token = "default";
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("embedCardStyle", token);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist embed card style setting to '{}'", file, e);
+    }
+  }
+
   /** Reads advanced embed/link loading policy settings under {@code ircafe.ui.embedLoadPolicy}. */
   public synchronized EmbedLoadPolicySnapshot readEmbedLoadPolicy() {
     try {

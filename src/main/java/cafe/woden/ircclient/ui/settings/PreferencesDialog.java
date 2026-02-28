@@ -149,6 +149,7 @@ public class PreferencesDialog {
       "Overrides the global Swing UI font family and size for controls, menus, tabs, and dialogs.";
 
   private final UiSettingsBus settingsBus;
+  private final EmbedCardStyleBus embedCardStyleBus;
   private final ThemeManager themeManager;
   private final ThemeAccentSettingsBus accentSettingsBus;
   private final ThemeTweakSettingsBus tweakSettingsBus;
@@ -182,6 +183,7 @@ public class PreferencesDialog {
 
   public PreferencesDialog(
       UiSettingsBus settingsBus,
+      EmbedCardStyleBus embedCardStyleBus,
       ThemeManager themeManager,
       ThemeAccentSettingsBus accentSettingsBus,
       ThemeTweakSettingsBus tweakSettingsBus,
@@ -212,6 +214,7 @@ public class PreferencesDialog {
       @Qualifier(ExecutorConfig.PREFERENCES_NOTIFICATION_RULE_TEST_EXECUTOR)
           ExecutorService notificationRuleTestExecutor) {
     this.settingsBus = settingsBus;
+    this.embedCardStyleBus = embedCardStyleBus;
     this.themeManager = themeManager;
     this.accentSettingsBus = accentSettingsBus;
     this.tweakSettingsBus = tweakSettingsBus;
@@ -858,8 +861,10 @@ public class PreferencesDialog {
             : new PushyProperties(false, null, null, null, null, null, null, null);
     TrayControls trayControls = buildTrayControls(current, soundSettings, pushySettings);
 
+    EmbedCardStyle currentEmbedCardStyle =
+        embedCardStyleBus != null ? embedCardStyleBus.get() : EmbedCardStyle.DEFAULT;
     ImageEmbedControls imageEmbeds = buildImageEmbedControls(current, closeables);
-    LinkPreviewControls linkPreviews = buildLinkPreviewControls(current);
+    LinkPreviewControls linkPreviews = buildLinkPreviewControls(current, currentEmbedCardStyle);
     JButton advancedEmbedPolicyButton =
         buildAdvancedEmbedPolicyButton(owner, pendingEmbedLoadPolicy);
     TimestampControls timestamps = buildTimestampControls(current);
@@ -1231,6 +1236,14 @@ public class PreferencesDialog {
 
           int maxImageW = ((Number) imageEmbeds.maxWidth.getValue()).intValue();
           int maxImageH = ((Number) imageEmbeds.maxHeight.getValue()).intValue();
+          EmbedCardStyle embedCardStyleV =
+              linkPreviews.cardStyle.getSelectedItem() instanceof EmbedCardStyle style
+                  ? style
+                  : EmbedCardStyle.DEFAULT;
+          EmbedCardStyle prevEmbedCardStyle =
+              embedCardStyleBus != null ? embedCardStyleBus.get() : EmbedCardStyle.DEFAULT;
+          boolean embedCardStyleChanged =
+              !java.util.Objects.equals(prevEmbedCardStyle, embedCardStyleV);
 
           int historyInitialLoadV = ((Number) history.initialLoadLines.getValue()).intValue();
           int historyPageSizeV = ((Number) history.pageSize.getValue()).intValue();
@@ -1687,6 +1700,10 @@ public class PreferencesDialog {
             runtimeConfig.rememberImageEmbedsMaxWidthPx(next.imageEmbedsMaxWidthPx());
             runtimeConfig.rememberImageEmbedsMaxHeightPx(next.imageEmbedsMaxHeightPx());
             runtimeConfig.rememberImageEmbedsAnimateGifs(next.imageEmbedsAnimateGifs());
+            runtimeConfig.rememberEmbedCardStyle(embedCardStyleV.token());
+            if (embedCardStyleBus != null) {
+              embedCardStyleBus.set(embedCardStyleV);
+            }
             runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
             runtimeConfig.rememberLinkPreviewsCollapsedByDefault(
                 next.linkPreviewsCollapsedByDefault());
@@ -1880,6 +1897,14 @@ public class PreferencesDialog {
             } else if (chatThemeChanged) {
               // Only the transcript palette changed
               themeManager.refreshChatStyles();
+            }
+          }
+          if (embedCardStyleChanged) {
+            try {
+              TargetRef active = targetCoordinator.getActiveTarget();
+              if (active != null) transcriptRebuildService.rebuild(active);
+            } catch (Exception ignored) {
+              // best-effort
             }
           }
 
@@ -4383,7 +4408,8 @@ public class PreferencesDialog {
         imageEmbeds, imageEmbedsCollapsed, imageMaxWidth, imageMaxHeight, animateGifs, imagePanel);
   }
 
-  private LinkPreviewControls buildLinkPreviewControls(UiSettings current) {
+  private LinkPreviewControls buildLinkPreviewControls(
+      UiSettings current, EmbedCardStyle currentEmbedCardStyle) {
     JCheckBox linkPreviews = new JCheckBox("Enable link previews (OpenGraph cards)");
     linkPreviews.setSelected(current.linkPreviewsEnabled());
     linkPreviews.setToolTipText(
@@ -4398,12 +4424,24 @@ public class PreferencesDialog {
     linkPreviews.addActionListener(
         e -> linkPreviewsCollapsed.setEnabled(linkPreviews.isSelected()));
 
-    JPanel linkPanel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]4[]"));
+    JComboBox<EmbedCardStyle> cardStyle = new JComboBox<>(EmbedCardStyle.values());
+    cardStyle.setSelectedItem(
+        currentEmbedCardStyle != null ? currentEmbedCardStyle : EmbedCardStyle.DEFAULT);
+    cardStyle.setToolTipText(
+        "Visual preset for inline cards used by link previews and image embeds.");
+
+    JPanel linkPanel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]4[]8[]"));
     linkPanel.setOpaque(false);
     linkPanel.add(linkPreviews);
     linkPanel.add(linkPreviewsCollapsed);
+    JPanel styleRow = new JPanel(new MigLayout("insets 0", "[][grow,fill]", "[]"));
+    styleRow.setOpaque(false);
+    styleRow.add(new JLabel("Card style"));
+    styleRow.add(cardStyle, "w 180!");
+    linkPanel.add(styleRow, "growx");
 
-    return new LinkPreviewControls(linkPreviews, linkPreviewsCollapsed, linkPanel);
+    return new LinkPreviewControls(linkPreviews, linkPreviewsCollapsed, cardStyle, linkPanel);
   }
 
   private TimestampControls buildTimestampControls(UiSettings current) {
@@ -10379,7 +10417,8 @@ public class PreferencesDialog {
       JCheckBox animateGifs,
       JPanel panel) {}
 
-  private record LinkPreviewControls(JCheckBox enabled, JCheckBox collapsed, JPanel panel) {}
+  private record LinkPreviewControls(
+      JCheckBox enabled, JCheckBox collapsed, JComboBox<EmbedCardStyle> cardStyle, JPanel panel) {}
 
   private record LaunchGcOption(String id, String label) {
     @Override

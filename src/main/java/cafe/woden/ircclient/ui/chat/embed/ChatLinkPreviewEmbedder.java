@@ -2,6 +2,8 @@ package cafe.woden.ircclient.ui.chat.embed;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
+import cafe.woden.ircclient.ui.settings.EmbedCardStyle;
+import cafe.woden.ircclient.ui.settings.EmbedCardStyleBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -24,6 +26,7 @@ public class ChatLinkPreviewEmbedder {
   private final LinkPreviewFetchService fetch;
   private final ImageFetchService imageFetch;
   private final EmbedLoadPolicyMatcher policyMatcher;
+  private final EmbedCardStyleBus embedCardStyleBus;
 
   public record AppendResult(int appendedCount, List<String> blockedUrls) {
     static AppendResult empty() {
@@ -38,12 +41,14 @@ public class ChatLinkPreviewEmbedder {
       ChatStyles styles,
       LinkPreviewFetchService fetch,
       ImageFetchService imageFetch,
-      EmbedLoadPolicyMatcher policyMatcher) {
+      EmbedLoadPolicyMatcher policyMatcher,
+      EmbedCardStyleBus embedCardStyleBus) {
     this.uiSettings = uiSettings;
     this.styles = styles;
     this.fetch = fetch;
     this.imageFetch = imageFetch;
     this.policyMatcher = policyMatcher;
+    this.embedCardStyleBus = embedCardStyleBus;
   }
 
   public AppendResult appendPreviews(
@@ -117,7 +122,12 @@ public class ChatLinkPreviewEmbedder {
 
     ChatLinkPreviewComponent comp =
         new ChatLinkPreviewComponent(
-            serverId, url, fetch, imageFetch, uiSettings.get().linkPreviewsCollapsedByDefault());
+            serverId,
+            url,
+            fetch,
+            imageFetch,
+            uiSettings.get().linkPreviewsCollapsedByDefault(),
+            embedCardStyleBus != null ? embedCardStyleBus.get() : EmbedCardStyle.DEFAULT);
 
     SimpleAttributeSet a = new SimpleAttributeSet(styles.message());
     a.addAttribute(ChatStyles.ATTR_URL, url);

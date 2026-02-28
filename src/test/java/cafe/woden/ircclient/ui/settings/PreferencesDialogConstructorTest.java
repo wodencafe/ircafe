@@ -70,6 +70,7 @@ class PreferencesDialogConstructorTest {
       ExecutorService pushyTestExecutor, ExecutorService notificationRuleTestExecutor) {
     return new PreferencesDialog(
         mock(UiSettingsBus.class),
+        mock(EmbedCardStyleBus.class),
         mock(ThemeManager.class),
         mock(ThemeAccentSettingsBus.class),
         mock(ThemeTweakSettingsBus.class),
