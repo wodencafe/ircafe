@@ -14,6 +14,8 @@ import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
+import cafe.woden.ircclient.ui.userlist.UserListIgnorePromptHandler;
+import cafe.woden.ircclient.ui.userlist.UserListNickTooltipBuilder;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
@@ -146,7 +148,9 @@ class UserListDockableFunctionalTest {
         null,
         new TargetActivationBus(),
         new OutboundLineBus(),
-        new NickContextMenuFactory());
+        new NickContextMenuFactory(),
+        new UserListNickTooltipBuilder(),
+        new UserListIgnorePromptHandler(null, null));
   }
 
   private static JMenuItem findMenuItem(JPopupMenu menu, String text) {

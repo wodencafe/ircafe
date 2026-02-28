@@ -14,6 +14,7 @@ import cafe.woden.ircclient.ui.coordinator.DccActionCoordinator;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.userlist.UserListIgnorePromptHandler;
 import cafe.woden.ircclient.ui.userlist.UserListNickCellRenderer;
+import cafe.woden.ircclient.ui.userlist.UserListNickListView;
 import cafe.woden.ircclient.ui.userlist.UserListNickTooltipBuilder;
 import cafe.woden.ircclient.ui.userlist.UserListTypingIndicators;
 import cafe.woden.ircclient.ui.util.CloseableScope;
@@ -48,39 +49,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   private static final int TYPING_TICK_MS = 100;
 
   private final DefaultListModel<NickInfo> model = new DefaultListModel<>();
-  private final JList<NickInfo> list =
-      new JList<>(model) {
-
-        @Override
-        public Dimension getMinimumSize() {
-          Dimension d = super.getMinimumSize();
-          int h = (d == null) ? 0 : Math.max(0, d.height);
-          // Allow the users dock to collapse narrower without the list enforcing a wide minimum.
-          return new Dimension(0, h);
-        }
-
-        @Override
-        public boolean getScrollableTracksViewportWidth() {
-          return true;
-        }
-
-        @Override
-        public String getToolTipText(MouseEvent e) {
-          if (e == null) return null;
-
-          int index = locationToIndex(e.getPoint());
-          if (index < 0) return null;
-
-          Rectangle r = getCellBounds(index, index);
-          if (r == null || !r.contains(e.getPoint())) return null;
-
-          NickInfo ni = model.getElementAt(index);
-          if (ni == null) return null;
-
-          UserListNickCellRenderer.IgnoreMark mark = ignoreMark(ni);
-          return tooltipBuilder.build(ni, mark.ignore(), mark.softIgnore());
-        }
-      };
+  private final JList<NickInfo> list;
 
   /**
    * Lifetime-managed resources for this dockable.
@@ -111,7 +80,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   private final NickContextMenuFactory.NickContextMenu nickContextMenu;
   private final JScrollPane scroll;
   private final DccActionCoordinator dccActionCoordinator;
-  private final UserListNickTooltipBuilder tooltipBuilder = new UserListNickTooltipBuilder();
+  private final UserListNickTooltipBuilder tooltipBuilder;
   private final UserListIgnorePromptHandler ignorePromptHandler;
 
   private TargetRef active = new TargetRef("default", "status");
@@ -129,19 +98,27 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
       IgnoreStatusService ignoreStatusService,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
-      NickContextMenuFactory nickContextMenuFactory) {
+      NickContextMenuFactory nickContextMenuFactory,
+      UserListNickTooltipBuilder tooltipBuilder,
+      UserListIgnorePromptHandler ignorePromptHandler) {
     super(new BorderLayout());
     setMinimumSize(new Dimension(0, 0));
 
     this.nickColorSettingsBus = nickColorSettingsBus;
 
     this.ignoreListService = ignoreListService;
-
+    this.tooltipBuilder = Objects.requireNonNull(tooltipBuilder, "tooltipBuilder");
     this.ignoreStatusService = ignoreStatusService;
-    this.ignorePromptHandler =
-        new UserListIgnorePromptHandler(ignoreListService, ignoreStatusService);
+    this.ignorePromptHandler = Objects.requireNonNull(ignorePromptHandler, "ignorePromptHandler");
     this.activationBus = activationBus;
     this.outboundBus = outboundBus;
+    this.list =
+        new UserListNickListView(
+            model,
+            ni -> {
+              UserListNickCellRenderer.IgnoreMark mark = ignoreMark(ni);
+              return this.tooltipBuilder.build(ni, mark.ignore(), mark.softIgnore());
+            });
     this.dccActionCoordinator =
         new DccActionCoordinator(
             this,
@@ -533,24 +510,6 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
       if (nick.isBlank()) return;
       if (ignorePromptHandler.prompt(this, active, nickInfo, nick, removing, soft)) {
         list.repaint();
-      }
-    } catch (Exception ignored) {
-    }
-  }
-
-  private void emitSelected(UserActionRequest.Action action) {
-    try {
-      if (active == null) return;
-      int idx = list.getSelectedIndex();
-      if (idx < 0) return;
-
-      String nick = selectedNick(idx);
-      if (nick.isBlank()) return;
-
-      if (action == UserActionRequest.Action.OPEN_QUERY) {
-        openPrivate.onNext(new PrivateMessageRequest(active.serverId(), nick));
-      } else {
-        userActions.onNext(new UserActionRequest(active, nick, action));
       }
     } catch (Exception ignored) {
     }

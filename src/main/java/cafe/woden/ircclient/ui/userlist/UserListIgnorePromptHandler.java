@@ -5,17 +5,20 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreMaskMatcher;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
-import java.awt.Component;
 import java.awt.Window;
 import java.util.Objects;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
+@Component
 public final class UserListIgnorePromptHandler {
   private final IgnoreListService ignoreListService;
   private final IgnoreStatusService ignoreStatusService;
   private final Dialogs dialogs;
 
+  @Autowired
   public UserListIgnorePromptHandler(
       IgnoreListService ignoreListService, IgnoreStatusService ignoreStatusService) {
     this(ignoreListService, ignoreStatusService, new JOptionPaneDialogs());
@@ -31,7 +34,7 @@ public final class UserListIgnorePromptHandler {
   }
 
   public boolean prompt(
-      Component parent,
+      java.awt.Component parent,
       TargetRef active,
       NickInfo nickInfo,
       String nick,
@@ -49,7 +52,7 @@ public final class UserListIgnorePromptHandler {
               : ignoreStatusService.bestSeedForMask(active.serverId(), normalizedNick, hostmask);
       String seed = IgnoreListService.normalizeMaskOrNickToHostmask(seedBase);
       IgnoreDialogCopy copy = dialogCopy(removing, soft);
-      Component owner = dialogOwner(parent);
+      java.awt.Component owner = dialogOwner(parent);
 
       String input = dialogs.showInput(owner, copy.prompt(), copy.title(), seed);
       if (input == null) return false;
@@ -105,7 +108,7 @@ public final class UserListIgnorePromptHandler {
         : new IgnoreDialogCopy("Ignore", "Add ignore mask (per-server):");
   }
 
-  private static Component dialogOwner(Component parent) {
+  private static java.awt.Component dialogOwner(java.awt.Component parent) {
     if (parent == null) return null;
     Window owner = SwingUtilities.getWindowAncestor(parent);
     return owner != null ? owner : parent;
@@ -114,21 +117,21 @@ public final class UserListIgnorePromptHandler {
   private record IgnoreDialogCopy(String title, String prompt) {}
 
   interface Dialogs {
-    String showInput(Component parent, String prompt, String title, String seed);
+    String showInput(java.awt.Component parent, String prompt, String title, String seed);
 
-    void showInfo(Component parent, String message, String title);
+    void showInfo(java.awt.Component parent, String message, String title);
   }
 
   static final class JOptionPaneDialogs implements Dialogs {
     @Override
-    public String showInput(Component parent, String prompt, String title, String seed) {
+    public String showInput(java.awt.Component parent, String prompt, String title, String seed) {
       return (String)
           JOptionPane.showInputDialog(
               parent, prompt, title, JOptionPane.PLAIN_MESSAGE, null, null, seed);
     }
 
     @Override
-    public void showInfo(Component parent, String message, String title) {
+    public void showInfo(java.awt.Component parent, String message, String title) {
       JOptionPane.showMessageDialog(parent, message, title, JOptionPane.INFORMATION_MESSAGE);
     }
   }
