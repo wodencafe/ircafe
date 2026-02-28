@@ -4870,7 +4870,8 @@ public class PreferencesDialog {
     dbNextToConfig.setSelected(dbNextToConfigCurrent);
     dbNextToConfig.setToolTipText(
         "If enabled, the DB files are stored alongside your runtime YAML config (recommended).\n"
-            + "If disabled, IRCafe uses the default ~/.config/ircafe directory.");
+            + "If disabled, IRCafe uses the default runtime-config directory\n"
+            + "(XDG_CONFIG_HOME/ircafe when set, otherwise ~/.config/ircafe).");
 
     JTextArea loggingInfo =
         new JTextArea(

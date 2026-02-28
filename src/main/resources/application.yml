@@ -9,7 +9,7 @@ spring:
   config:
     # Load runtime state/config after application.yml so it can override defaults.
     # This file is also where we persist changes like auto-join channels and nick.
-    import: "optional:file:${ircafe.runtime-config:${user.home}/.config/ircafe/ircafe.yml}"
+    import: "optional:file:${ircafe.runtime-config:${XDG_CONFIG_HOME:${user.home}/.config}/ircafe/ircafe.yml}"
 
 ircafe:
   ui:

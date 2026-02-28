@@ -303,7 +303,9 @@ public class RuntimeConfigStore {
   private final boolean fileExistedOnStartup;
 
   public RuntimeConfigStore(
-      @Value("${ircafe.runtime-config:${user.home}/.config/ircafe/ircafe.yml}") String filePath,
+      @Value(
+              "${ircafe.runtime-config:${XDG_CONFIG_HOME:${user.home}/.config}/ircafe/ircafe.yml}")
+          String filePath,
       IrcProperties defaults) {
     this.file = Paths.get(Objects.requireNonNullElse(filePath, "").trim());
     this.defaults = defaults;
