@@ -233,6 +233,26 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     return merged.isEmpty() ? List.of() : List.copyOf(merged);
   }
 
+  /**
+   * Returns best-effort suggestions for hover UI without blocking the EDT.
+   *
+   * <p>On cache miss this may return fewer suggestions and asynchronously warm the cache for a
+   * later hover/update.
+   */
+  List<String> suggestionsForMisspelledWordNonBlocking(
+      MisspelledWord misspelledWord, int maxSuggestions) {
+    if (misspelledWord == null || maxSuggestions <= 0) return List.of();
+
+    ArrayList<String> raw = new ArrayList<>();
+    if (misspelledWord.suggestions() != null) {
+      raw.addAll(misspelledWord.suggestions());
+    }
+    if (raw.size() < maxSuggestions) {
+      raw.addAll(suggestWords(misspelledWord.token(), maxSuggestions));
+    }
+    return filterAndLimit(raw, maxSuggestions);
+  }
+
   boolean replaceMisspelledWord(MisspelledWord misspelledWord, String replacement) {
     if (misspelledWord == null) return false;
 

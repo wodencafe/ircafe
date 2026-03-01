@@ -1218,6 +1218,8 @@ public class PreferencesDialog {
           boolean spellcheckEnabledV = spellcheck.enabled.isSelected();
           boolean spellcheckUnderlineEnabledV = spellcheck.underlineEnabled.isSelected();
           boolean spellcheckSuggestOnTabEnabledV = spellcheck.suggestOnTabEnabled.isSelected();
+          boolean spellcheckHoverSuggestionsEnabledV =
+              spellcheck.hoverSuggestionsEnabled.isSelected();
           String spellcheckLanguageTagV = spellcheckLanguageTagValue(spellcheck.languageTag);
           List<String> spellcheckCustomDictionaryV =
               parseSpellcheckCustomDictionary(spellcheck.customDictionary.getText());
@@ -1623,6 +1625,7 @@ public class PreferencesDialog {
                   spellcheckEnabledV,
                   spellcheckUnderlineEnabledV,
                   spellcheckSuggestOnTabEnabledV,
+                  spellcheckHoverSuggestionsEnabledV,
                   spellcheckLanguageTagV,
                   spellcheckCustomDictionaryV,
                   spellcheckCompletionPresetV,
@@ -1773,6 +1776,8 @@ public class PreferencesDialog {
             runtimeConfig.rememberSpellcheckUnderlineEnabled(nextSpellcheck.underlineEnabled());
             runtimeConfig.rememberSpellcheckSuggestOnTabEnabled(
                 nextSpellcheck.suggestOnTabEnabled());
+            runtimeConfig.rememberSpellcheckHoverSuggestionsEnabled(
+                nextSpellcheck.hoverSuggestionsEnabled());
             runtimeConfig.rememberSpellcheckLanguageTag(nextSpellcheck.languageTag());
             runtimeConfig.rememberSpellcheckCustomDictionary(nextSpellcheck.customDictionary());
             runtimeConfig.rememberSpellcheckCompletionPreset(nextSpellcheck.completionPreset());
@@ -4053,6 +4058,12 @@ public class PreferencesDialog {
     suggestOnTab.setToolTipText(
         "When enabled, Tab completion can suggest dictionary words and spelling corrections.");
 
+    JCheckBox hoverSuggestions =
+        new JCheckBox("Show hover correction popup for misspelled words");
+    hoverSuggestions.setSelected(initial.hoverSuggestionsEnabled());
+    hoverSuggestions.setToolTipText(
+        "When enabled, hovering over a misspelled word shows quick correction suggestions.");
+
     SpellcheckLanguageOption[] languages =
         new SpellcheckLanguageOption[] {
           new SpellcheckLanguageOption("en-US", "English (US)"),
@@ -4201,11 +4212,13 @@ public class PreferencesDialog {
         () -> {
           boolean on = enabled.isSelected();
           boolean suggestionsOn = on && suggestOnTab.isSelected();
+          boolean hoverOn = on && underline.isSelected();
           boolean customSelected =
               SpellcheckSettings.COMPLETION_PRESET_CUSTOM.equals(
                   spellcheckCompletionPresetValue(completionPreset));
           underline.setEnabled(on);
           suggestOnTab.setEnabled(on);
+          hoverSuggestions.setEnabled(hoverOn);
           languageTag.setEnabled(on);
           customDictionary.setEnabled(on);
           completionPreset.setEnabled(suggestionsOn);
@@ -4220,6 +4233,7 @@ public class PreferencesDialog {
         };
     enabled.addActionListener(e -> syncEnabled.run());
     suggestOnTab.addActionListener(e -> syncEnabled.run());
+    underline.addActionListener(e -> syncEnabled.run());
     completionPreset.addActionListener(e -> syncEnabled.run());
     syncEnabled.run();
 
@@ -4231,6 +4245,7 @@ public class PreferencesDialog {
     panel.add(enabled, "growx, wmin 0, wrap");
     panel.add(underline, "growx, wmin 0, gapleft 18, wrap");
     panel.add(suggestOnTab, "growx, wmin 0, gapleft 18, wrap");
+    panel.add(hoverSuggestions, "growx, wmin 0, gapleft 18, wrap");
 
     JPanel langRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[grow,fill]", "[]"));
     langRow.setOpaque(false);
@@ -4260,6 +4275,7 @@ public class PreferencesDialog {
         enabled,
         underline,
         suggestOnTab,
+        hoverSuggestions,
         languageTag,
         customDictionary,
         completionPreset,
@@ -10577,6 +10593,7 @@ public class PreferencesDialog {
       JCheckBox enabled,
       JCheckBox underlineEnabled,
       JCheckBox suggestOnTabEnabled,
+      JCheckBox hoverSuggestionsEnabled,
       JComboBox<SpellcheckLanguageOption> languageTag,
       JTextArea customDictionary,
       JComboBox<SpellcheckPresetOption> completionPreset,

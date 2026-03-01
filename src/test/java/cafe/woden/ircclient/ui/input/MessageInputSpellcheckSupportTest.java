@@ -203,6 +203,31 @@ class MessageInputSpellcheckSupportTest {
   }
 
   @Test
+  void nonBlockingMisspelledSuggestionsReturnSnapshotSuggestionsFirst() {
+    MessageInputSpellcheckSupport support =
+        new MessageInputSpellcheckSupport(new JTextField(), SpellcheckSettings.defaults());
+    MessageInputSpellcheckSupport.MisspelledWord misspelledWord =
+        new MessageInputSpellcheckSupport.MisspelledWord(
+            0, 5, "teest", List.of("test", "toast", "text"));
+
+    List<String> suggestions = support.suggestionsForMisspelledWordNonBlocking(misspelledWord, 2);
+
+    assertEquals(List.of("test", "toast"), suggestions);
+  }
+
+  @Test
+  void nonBlockingMisspelledSuggestionsDeduplicateCaseInsensitively() {
+    MessageInputSpellcheckSupport support =
+        new MessageInputSpellcheckSupport(new JTextField(), SpellcheckSettings.defaults());
+    MessageInputSpellcheckSupport.MisspelledWord misspelledWord =
+        new MessageInputSpellcheckSupport.MisspelledWord(0, 3, "teh", List.of("the", "The"));
+
+    List<String> suggestions = support.suggestionsForMisspelledWordNonBlocking(misspelledWord, 1);
+
+    assertEquals(List.of("the"), suggestions);
+  }
+
+  @Test
   void shutdownDisposesSpellcheckSubscription() throws Exception {
     MessageInputSpellcheckSupport support =
         new MessageInputSpellcheckSupport(new JTextField("teh"), SpellcheckSettings.defaults());

@@ -268,7 +268,18 @@ public class AppMenuBar extends JMenuBar {
     JMenuItem exit = new JMenuItem("Exit");
     exit.setIcon(SvgIcons.action("exit", 16));
     exit.setDisabledIcon(SvgIcons.actionDisabled("exit", 16));
-    exit.addActionListener(e -> shutdownCoordinator.shutdown());
+    exit.addActionListener(
+        e -> {
+          try {
+            Window window = SwingUtilities.getWindowAncestor(this);
+            if (window != null) {
+              window.setVisible(false);
+              window.dispose();
+            }
+          } catch (Exception ignored) {
+          }
+          shutdownCoordinator.shutdown();
+        });
     file.add(exit);
 
     int menuMask = menuShortcutMask();

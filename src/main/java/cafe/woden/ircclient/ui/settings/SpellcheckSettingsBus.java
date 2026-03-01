@@ -27,6 +27,9 @@ public class SpellcheckSettingsBus {
             props == null || props.spellcheckSuggestOnTabEnabled() == null
                 ? true
                 : Boolean.TRUE.equals(props.spellcheckSuggestOnTabEnabled()),
+            props == null || props.spellcheckHoverSuggestionsEnabled() == null
+                ? false
+                : Boolean.TRUE.equals(props.spellcheckHoverSuggestionsEnabled()),
             props != null ? props.spellcheckLanguageTag() : SpellcheckSettings.DEFAULT_LANGUAGE_TAG,
             props != null ? props.spellcheckCustomDictionary() : java.util.List.of(),
             props != null

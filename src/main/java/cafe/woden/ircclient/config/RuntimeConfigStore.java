@@ -4427,6 +4427,10 @@ public class RuntimeConfigStore {
     rememberSpellcheckBoolean("spellcheckSuggestOnTabEnabled", enabled);
   }
 
+  public synchronized void rememberSpellcheckHoverSuggestionsEnabled(boolean enabled) {
+    rememberSpellcheckBoolean("spellcheckHoverSuggestionsEnabled", enabled);
+  }
+
   public synchronized void rememberSpellcheckCompletionPreset(String preset) {
     try {
       if (file.toString().isBlank()) return;
