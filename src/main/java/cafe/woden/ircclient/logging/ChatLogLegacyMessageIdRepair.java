@@ -64,6 +64,7 @@ public final class ChatLogLegacyMessageIdRepair implements AutoCloseable {
     int skippedMissingMessageId = 0;
     int updated = 0;
     int deletedDuplicates = 0;
+
     int batches = 0;
 
     while (afterId < maxRowId) {
@@ -91,13 +92,18 @@ public final class ChatLogLegacyMessageIdRepair implements AutoCloseable {
       }
     }
 
+    Integer deletedExact =
+        tx.execute(status -> repo.deleteExactDuplicatesWithoutMessageIdUpTo(maxRowId));
+    int deletedExactNullMessageIdDuplicates = deletedExact == null ? 0 : Math.max(0, deletedExact);
+
     long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
-    if (updated > 0 || deletedDuplicates > 0) {
+    if (updated > 0 || deletedDuplicates > 0 || deletedExactNullMessageIdDuplicates > 0) {
       log.info(
-          "[ircafe] Legacy message-id repair completed (scanned={}, updated={}, deletedDuplicates={}, skippedMissingMessageId={}, batches={}, tookMs={})",
+          "[ircafe] Legacy message-id repair completed (scanned={}, updated={}, deletedDuplicates={}, deletedExactNullMessageIdDuplicates={}, skippedMissingMessageId={}, batches={}, tookMs={})",
           scanned,
           updated,
           deletedDuplicates,
+          deletedExactNullMessageIdDuplicates,
           skippedMissingMessageId,
           batches,
           durationMs);

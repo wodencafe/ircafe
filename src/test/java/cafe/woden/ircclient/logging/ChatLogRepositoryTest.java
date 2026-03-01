@@ -138,6 +138,56 @@ class ChatLogRepositoryTest {
   }
 
   @Test
+  void exactDuplicatesWithoutMessageIdCanBeCollapsedToFirstRow() {
+    try (Fixture fixture = openFixture(tempDir.resolve("chatlog-null-msgid-exact-dedupe"))) {
+      insertLegacyRowWithNullMessageId(fixture, "srv", "#chan", 1_700_011_000_000L, "same", "");
+      insertLegacyRowWithNullMessageId(fixture, "srv", "#chan", 1_700_011_000_000L, "same", "");
+      insertLegacyRowWithNullMessageId(fixture, "srv", "#chan", 1_700_011_000_000L, "same", "");
+      insertLegacyRowWithNullMessageId(fixture, "srv", "#chan", 1_700_011_001_000L, "same", "");
+
+      int deleted = fixture.repo.deleteExactDuplicatesWithoutMessageIdUpTo(Long.MAX_VALUE);
+      assertEquals(2, deleted);
+
+      Integer keptSameTsCount =
+          fixture.jdbc.queryForObject(
+              """
+              SELECT COUNT(*)
+                FROM chat_log
+               WHERE server_id = ?
+                 AND LOWER(target) = LOWER(?)
+                 AND ts_epoch_ms = ?
+                 AND COALESCE(message_id, '') = ''
+                 AND text = ?
+              """,
+              Integer.class,
+              "srv",
+              "#chan",
+              1_700_011_000_000L,
+              "same");
+      Integer keptDifferentTsCount =
+          fixture.jdbc.queryForObject(
+              """
+              SELECT COUNT(*)
+                FROM chat_log
+               WHERE server_id = ?
+                 AND LOWER(target) = LOWER(?)
+                 AND ts_epoch_ms = ?
+                 AND COALESCE(message_id, '') = ''
+                 AND text = ?
+              """,
+              Integer.class,
+              "srv",
+              "#chan",
+              1_700_011_001_000L,
+              "same");
+
+      assertEquals(1, keptSameTsCount == null ? 0 : keptSameTsCount);
+      assertEquals(1, keptDifferentTsCount == null ? 0 : keptDifferentTsCount);
+      assertEquals(2, fixture.repo.fetchRecent("srv", "#chan", 10).size());
+    }
+  }
+
+  @Test
   void targetLookupsAreCaseInsensitive() {
     try (Fixture fixture = openFixture(tempDir.resolve("chatlog-case-insensitive-target"))) {
       TargetRef target = new TargetRef("srv", "#ChanCase");
@@ -194,7 +244,8 @@ class ChatLogRepositoryTest {
       long tsEpochMs,
       String text,
       String messageId) {
-    String metaJson = "{\"messageId\":\"" + messageId + "\"}";
+    String msgId = messageId == null ? "" : messageId.trim();
+    String metaJson = msgId.isBlank() ? null : "{\"messageId\":\"" + msgId + "\"}";
     fixture.jdbc.update(
         """
         INSERT INTO chat_log(

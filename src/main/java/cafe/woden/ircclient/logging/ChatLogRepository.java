@@ -136,6 +136,27 @@ public class ChatLogRepository {
        WHERE id = ?
       """;
 
+  private static final String DELETE_EXACT_DUPLICATES_WITHOUT_MESSAGE_ID_UP_TO_SQL =
+      """
+      DELETE FROM chat_log c
+       WHERE c.id <= ?
+         AND c.message_id IS NULL
+         AND EXISTS (
+               SELECT 1
+                 FROM chat_log k
+                WHERE k.id <= ?
+                  AND k.id < c.id
+                  AND k.message_id IS NULL
+                  AND k.server_id = c.server_id
+                  AND LOWER(k.target) = LOWER(c.target)
+                  AND k.ts_epoch_ms = c.ts_epoch_ms
+                  AND k.direction = c.direction
+                  AND k.kind = c.kind
+                  AND COALESCE(k.from_nick, '') = COALESCE(c.from_nick, '')
+                  AND k.text = c.text
+         )
+      """;
+
   private static final String SELECT_MAX_TS_FOR_SERVER_SQL =
       """
       SELECT MAX(ts_epoch_ms)
@@ -478,6 +499,16 @@ public class ChatLogRepository {
           ? LegacyMessageIdRepairOutcome.DELETED_DUPLICATE
           : LegacyMessageIdRepairOutcome.SKIPPED;
     }
+  }
+
+  /**
+   * Delete exact duplicate rows without message ids up to a high-watermark id (keeping first-seen
+   * row id per signature).
+   */
+  public int deleteExactDuplicatesWithoutMessageIdUpTo(long maxRowIdInclusive) {
+    if (maxRowIdInclusive < 0L) return 0;
+    return jdbc.update(
+        DELETE_EXACT_DUPLICATES_WITHOUT_MESSAGE_ID_UP_TO_SQL, maxRowIdInclusive, maxRowIdInclusive);
   }
 
   private boolean hasMessageIdConflict(LegacyMessageIdRow row, String messageId) {
