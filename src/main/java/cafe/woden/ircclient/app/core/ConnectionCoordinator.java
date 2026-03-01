@@ -490,11 +490,14 @@ public class ConnectionCoordinator {
       }
 
       case IrcEvent.Reconnecting ev -> {
-        if (!isDesiredOnline(id)) {
+        if (!isDesiredOnline(id) && previous == ConnectionState.DISCONNECTING) {
           ui.ensureTargetExists(status);
           ui.appendStatus(status, "(conn)", "Reconnect suppressed (server set offline)");
           requestDisconnect(id, null, false);
           return ConnectivityChange.CHANGED;
+        }
+        if (!isDesiredOnline(id)) {
+          setDesiredOnline(id, true);
         }
 
         setState(id, ConnectionState.RECONNECTING);

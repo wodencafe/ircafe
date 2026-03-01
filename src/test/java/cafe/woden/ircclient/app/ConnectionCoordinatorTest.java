@@ -171,6 +171,36 @@ class ConnectionCoordinatorTest {
   }
 
   @Test
+  void externalReconnectingEventPromotesDesiredIntentInsteadOfForcingDisconnect() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
+    when(serverCatalog.containsId("libera")).thenReturn(true);
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    coordinator.handleConnectivityEvent(
+        "libera", new IrcEvent.Reconnecting(Instant.now(), 1, 5_000L, "Ping timeout"), null);
+
+    verify(irc, never()).disconnect(anyString(), any());
+    verify(ui, atLeastOnce()).setServerDesiredOnline("libera", true);
+    verify(ui, atLeastOnce()).setConnectionControlsEnabled(false, true);
+  }
+
+  @Test
   void reconnectingEventPublishesRetryDiagnostics() {
     IrcClientService irc = mock(IrcClientService.class);
     UiPort ui = mock(UiPort.class);
