@@ -13,8 +13,7 @@ import javax.swing.*;
  * <p>Behavior:
  *
  * <ul>
- *   <li>Unavailable/default: steady theme-aware arrow (dark on light themes, white on dark
- *       themes).
+ *   <li>Unavailable/default: steady theme-aware arrow (dark on light themes, white on dark themes).
  *   <li>Idle (typing available): steady green arrow.
  *   <li>Active: glowing blue arrow pulse.
  *   <li>Paused: light gray arrow (fades from active).
