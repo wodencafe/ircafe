@@ -5813,54 +5813,17 @@ public class PreferencesDialog {
       TweakControls tweaks) {
     JPanel form =
         new JPanel(
-            new MigLayout(
-                "insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]10[]6[]10[]6[]"));
+            new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[grow,push]8[]"));
 
-    form.add(tabTitle("Appearance"), "span 2, growx, wmin 0, wrap");
-    form.add(sectionTitle("Look & feel"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Theme"));
-    form.add(theme.combo, "growx");
+    form.add(tabTitle("Appearance"), "growx, wmin 0, wrap");
 
-    JPanel accentLabel = new JPanel(new MigLayout("insets 0", "[]6[]", "[]"));
-    accentLabel.setOpaque(false);
-    accentLabel.add(new JLabel("Accent"));
-    accentLabel.add(accent.chip);
-    form.add(accentLabel);
-    form.add(accent.panel, "growx");
-
-    form.add(new JLabel("Accent strength"));
-    form.add(accent.strength, "growx");
-
-    form.add(new JLabel("Density"));
-    form.add(tweaks.density, "growx");
-
-    form.add(new JLabel("Corner radius"));
-    form.add(tweaks.cornerRadius, "growx");
-
-    JTextArea tweakHint = subtleInfoText();
-    tweakHint.setText("Density and corner radius are available for FlatLaf-based themes.");
-    form.add(new JLabel(""));
-    form.add(tweakHint, "growx, wmin 0");
-
-    form.add(sectionTitle("UI text"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Font override"));
-    form.add(tweaks.uiFontOverrideEnabled, "growx");
-    form.add(new JLabel("Font family"));
-    form.add(tweaks.uiFontFamily, "growx");
-    form.add(new JLabel("Font size"));
-    form.add(tweaks.uiFontSize, "w 110!");
-
-    JTextArea uiFontHint = subtleInfoText();
-    uiFontHint.setText(
-        "Applies globally to menus, dialogs, tabs, forms, and controls for all themes.");
-    form.add(new JLabel(""));
-    form.add(uiFontHint, "growx, wmin 0");
-
-    form.add(sectionTitle("Chat transcript"), "span 2, growx, wmin 0, wrap");
-    JTabbedPane chatTabs = new JTabbedPane();
-    chatTabs.addTab("Palette", padSubTab(buildChatThemePaletteSubTab(chatTheme)));
-    chatTabs.addTab("Message colors", padSubTab(buildChatMessageColorsSubTab(chatTheme)));
-    form.add(chatTabs, "span 2, growx, wmin 0");
+    JTabbedPane appearanceTabs = new JTabbedPane();
+    appearanceTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+    appearanceTabs.addTab("Theme", padSubTab(buildAppearanceThemeSubTab(theme, accent, tweaks)));
+    appearanceTabs.addTab("UI font", padSubTab(buildAppearanceUiFontSubTab(tweaks)));
+    appearanceTabs.addTab("Chat colors", padSubTab(buildAppearanceChatColorsSubTab(chatTheme)));
+    appearanceTabs.addTab("Chat text", padSubTab(buildAppearanceChatTextSubTab(fonts)));
+    form.add(appearanceTabs, "grow, push, wmin 0");
 
     JButton reset = new JButton("Reset to defaults");
     reset.setToolTipText(
@@ -5911,16 +5874,98 @@ public class PreferencesDialog {
           accent.syncPresetFromHex.run();
           tweaks.applyUiFontEnabledState.run();
         });
-    form.add(new JLabel(""));
-    form.add(reset, "alignx left");
-
-    form.add(sectionTitle("Chat text"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Font family"));
-    form.add(fonts.fontFamily, "growx");
-    form.add(new JLabel("Font size"));
-    form.add(fonts.fontSize, "w 110!");
+    form.add(reset, "split 2, alignx left");
+    form.add(
+        helpText("Changes preview live. Use Apply or OK to save."),
+        "alignx left, gapleft 12, growx, wmin 0");
 
     return form;
+  }
+
+  private JPanel buildAppearanceThemeSubTab(
+      ThemeControls theme, AccentControls accent, TweakControls tweaks) {
+    JPanel panel =
+        new JPanel(
+            new MigLayout(
+                "insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]6[]6[]6[]"));
+    panel.setOpaque(false);
+
+    panel.add(sectionTitle("Look & feel"), "span 2, growx, wmin 0, wrap");
+    panel.add(new JLabel("Theme"));
+    panel.add(theme.combo, "growx");
+
+    JPanel accentLabel = new JPanel(new MigLayout("insets 0", "[]6[]", "[]"));
+    accentLabel.setOpaque(false);
+    accentLabel.add(new JLabel("Accent"));
+    accentLabel.add(accent.chip);
+    panel.add(accentLabel);
+    panel.add(accent.panel, "growx");
+
+    panel.add(new JLabel("Accent strength"));
+    panel.add(accent.strength, "growx");
+
+    panel.add(new JLabel("Density"));
+    panel.add(tweaks.density, "growx");
+
+    panel.add(new JLabel("Corner radius"));
+    panel.add(tweaks.cornerRadius, "growx");
+
+    JTextArea tweakHint = subtleInfoText();
+    tweakHint.setText("Density and corner radius are available for FlatLaf-based themes.");
+    panel.add(new JLabel(""));
+    panel.add(tweakHint, "growx, wmin 0");
+
+    return panel;
+  }
+
+  private JPanel buildAppearanceUiFontSubTab(TweakControls tweaks) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]6[]"));
+    panel.setOpaque(false);
+
+    panel.add(sectionTitle("UI text"), "span 2, growx, wmin 0, wrap");
+    panel.add(new JLabel("Font override"));
+    panel.add(tweaks.uiFontOverrideEnabled, "growx");
+    panel.add(new JLabel("Font family"));
+    panel.add(tweaks.uiFontFamily, "growx");
+    panel.add(new JLabel("Font size"));
+    panel.add(tweaks.uiFontSize, "w 110!");
+
+    JTextArea uiFontHint = subtleInfoText();
+    uiFontHint.setText(
+        "Applies globally to menus, dialogs, tabs, forms, and controls for all themes.");
+    panel.add(new JLabel(""));
+    panel.add(uiFontHint, "growx, wmin 0");
+
+    return panel;
+  }
+
+  private JPanel buildAppearanceChatColorsSubTab(ChatThemeControls chatTheme) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]8[]12[]8[]"));
+    panel.setOpaque(false);
+
+    panel.add(sectionTitle("Palette"), "growx, wmin 0, wrap");
+    panel.add(buildChatThemePaletteSubTab(chatTheme), "growx, wmin 0, wrap");
+
+    panel.add(sectionTitle("Message colors"), "growx, wmin 0, wrap");
+    panel.add(buildChatMessageColorsSubTab(chatTheme), "growx, wmin 0");
+
+    return panel;
+  }
+
+  private JPanel buildAppearanceChatTextSubTab(FontControls fonts) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]"));
+    panel.setOpaque(false);
+
+    panel.add(sectionTitle("Chat text"), "span 2, growx, wmin 0, wrap");
+    panel.add(new JLabel("Font family"));
+    panel.add(fonts.fontFamily, "growx");
+    panel.add(new JLabel("Font size"));
+    panel.add(fonts.fontSize, "w 110!");
+
+    return panel;
   }
 
   private JPanel buildChatThemePaletteSubTab(ChatThemeControls chatTheme) {
