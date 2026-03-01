@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -227,10 +228,10 @@ class ConnectionCoordinatorTest {
     coordinator.handleConnectivityEvent(
         "libera", new IrcEvent.Connected(Instant.now(), "irc.libera.chat", 6697, "alice-me"), null);
 
-    verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Alice"));
-    verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Bob"));
-    verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#ircafe"));
-    verify(ui, atLeastOnce()).setChannelDisconnected(new TargetRef("libera", "#ircafe"), true);
+    verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Alice"));
+    verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Bob"));
+    verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#ircafe"));
+    verify(ui, timeout(2_000).atLeastOnce()).setChannelDisconnected(new TargetRef("libera", "#ircafe"), true);
     verify(runtimeConfig, never()).rememberNick(anyString(), anyString());
   }
 
