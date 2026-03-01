@@ -235,10 +235,6 @@ public final class ServerTreeChannelStateCoordinator {
       channelNodes.add(child);
     }
     if (channelNodes.size() <= 1) {
-      if (channelSortModeByServer.getOrDefault(sid, ServerTreeDockable.ChannelSortMode.CUSTOM)
-          == ServerTreeDockable.ChannelSortMode.CUSTOM) {
-        persistCustomOrderFromTree(sid);
-      }
       return;
     }
 
@@ -333,9 +329,6 @@ public final class ServerTreeChannelStateCoordinator {
       context.restoreExpandedTreePaths(expanded);
     }
 
-    if (sortMode == ServerTreeDockable.ChannelSortMode.CUSTOM) {
-      persistCustomOrderFromTree(sid);
-    }
   }
 
   public void persistCustomOrderFromTreeIfCustom(String serverId) {
