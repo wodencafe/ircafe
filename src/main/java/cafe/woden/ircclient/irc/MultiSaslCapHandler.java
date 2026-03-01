@@ -193,9 +193,12 @@ public final class MultiSaslCapHandler implements CapHandler {
     data = data.trim();
 
     if ("+".equals(data)) {
-      // Empty data.
-      authInB64.setLength(0);
-      handleServerAuthMessage(bot, new byte[0]);
+      // '+' can be an empty initial challenge or a terminator after full 400-byte chunks.
+      if (authInB64.length() > 0) {
+        decodeAndHandleAuthBuffer(bot);
+      } else {
+        handleServerAuthMessage(bot, new byte[0]);
+      }
       return;
     }
 
@@ -204,6 +207,10 @@ public final class MultiSaslCapHandler implements CapHandler {
       // More chunks will follow.
       return;
     }
+    decodeAndHandleAuthBuffer(bot);
+  }
+
+  private void decodeAndHandleAuthBuffer(PircBotX bot) throws CAPException {
     String joined = authInB64.toString();
     authInB64.setLength(0);
     byte[] decoded;
