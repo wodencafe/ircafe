@@ -188,6 +188,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   public enum ChannelSortMode {
     ALPHABETICAL,
     MOST_RECENT_ACTIVITY,
+    MOST_UNREAD_MESSAGES,
+    MOST_UNREAD_NOTIFICATIONS,
     CUSTOM
   }
 
@@ -333,6 +335,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final Map<String, ArrayList<String>> channelCustomOrderByServer = new HashMap<>();
   private final Map<String, Map<String, Boolean>> channelAutoReattachByServer = new HashMap<>();
   private final Map<String, Map<String, Long>> channelActivityRankByServer = new HashMap<>();
+  private final Map<String, Map<String, Boolean>> channelPinnedByServer = new HashMap<>();
 
   private final ServerTreeRuntimeState runtimeState;
   private final Timer typingActivityTimer;
@@ -525,6 +528,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             channelCustomOrderByServer,
             channelAutoReattachByServer,
             channelActivityRankByServer,
+            channelPinnedByServer,
             leaves,
             typingActivityNodes,
             this::clearPrivateMessageOnlineStates);
@@ -576,6 +580,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             channelCustomOrderByServer,
             channelAutoReattachByServer,
             channelActivityRankByServer,
+            channelPinnedByServer,
             model,
             createChannelStateCoordinatorContext());
     this.ensureNodeParentResolver = new ServerTreeEnsureNodeParentResolver();
@@ -591,6 +596,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             channelAutoReattachByServer,
             channelActivityRankByServer,
             channelCustomOrderByServer,
+            channelPinnedByServer,
             createTargetRemovalStateCoordinatorContext());
     this.detachedWarningClickHandler =
         new ServerTreeDetachedWarningClickHandler(tree, this::clearChannelDisconnectedWarning);
@@ -675,6 +681,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             new ServerTreeNodeReorderPolicy(
                 this::isServerNode,
                 this::isChannelListLeafNode,
+                this::isChannelPinned,
                 this::targetRefForNode,
                 this::nodeLabelForNode),
             n -> {
@@ -699,7 +706,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
               if (uo instanceof ServerTreeNodeData nd && nd.ref != null && nd.ref.isChannel()) {
                 if (!isChannelListLeafNode(parent)) return;
                 String sid = owningServerIdForNode(parent);
-                channelStateCoordinator.persistCustomOrderFromTreeIfCustom(sid);
+                channelStateCoordinator.persistOrderAndResortAfterManualMove(sid);
                 return;
               }
               if (isRootSiblingReorderableNode(movedNode)) {
@@ -1579,6 +1586,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         requestEmitter::emitBouncerDetachChannel,
         this::isChannelAutoReattach,
         this::setChannelAutoReattach,
+        this::isChannelPinned,
+        this::setChannelPinned,
         requestEmitter::emitCloseTarget,
         target -> {
           if (interceptorStore == null || target == null || !target.isInterceptor()) {
@@ -1872,7 +1881,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         parentNode -> {
           String serverId = owningServerIdForNode(parentNode);
           if (serverId.isBlank()) return;
-          channelStateCoordinator.persistCustomOrderFromTreeIfCustom(serverId);
+          channelStateCoordinator.persistOrderAndResortAfterManualMove(serverId);
         },
         this::persistBuiltInLayoutFromTree,
         this::persistRootSiblingOrderFromTree,
@@ -2098,6 +2107,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         () -> typingIndicatorsTreeEnabled,
         this::isPrivateMessageTarget,
         privateMessageOnlineStateStore::isOnline,
+        this::isChannelPinned,
         this::isApplicationJfrActive,
         this::isInterceptorEnabled,
         this::isMonitorGroupNode,
@@ -2886,6 +2896,33 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
   }
 
+  public boolean isChannelPinned(TargetRef ref) {
+    if (ref == null || !ref.isChannel()) return false;
+
+    if (SwingUtilities.isEventDispatchThread()) {
+      return channelStateCoordinator.isChannelPinned(ref);
+    }
+
+    AtomicReference<Boolean> out = new AtomicReference<>(Boolean.FALSE);
+    try {
+      SwingUtilities.invokeAndWait(() -> out.set(channelStateCoordinator.isChannelPinned(ref)));
+      return out.get();
+    } catch (Exception ex) {
+      return false;
+    }
+  }
+
+  public void setChannelPinned(TargetRef ref, boolean pinned) {
+    if (ref == null || !ref.isChannel()) return;
+    Runnable apply = () -> channelStateCoordinator.setChannelPinned(ref, pinned);
+
+    if (SwingUtilities.isEventDispatchThread()) {
+      apply.run();
+    } else {
+      SwingUtilities.invokeLater(apply);
+    }
+  }
+
   private void emitManagedChannelsChanged(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
@@ -2927,6 +2964,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     nd.unread++;
     noteChannelActivity(ref);
     model.nodeChanged(node);
+    channelStateCoordinator.onChannelUnreadCountsChanged(ref);
     if (ref != null && ref.isChannel()) {
       emitManagedChannelsChanged(ref.serverId());
     }
@@ -2939,6 +2977,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     nd.highlightUnread++;
     noteChannelActivity(ref);
     model.nodeChanged(node);
+    channelStateCoordinator.onChannelUnreadCountsChanged(ref);
     if (ref != null && ref.isChannel()) {
       emitManagedChannelsChanged(ref.serverId());
     }
@@ -2952,6 +2991,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     nd.unread = 0;
     nd.highlightUnread = 0;
     model.nodeChanged(node);
+    channelStateCoordinator.onChannelUnreadCountsChanged(ref);
     if (ref != null && ref.isChannel()) {
       emitManagedChannelsChanged(ref.serverId());
     }

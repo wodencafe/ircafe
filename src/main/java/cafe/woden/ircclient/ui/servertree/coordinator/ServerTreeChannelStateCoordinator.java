@@ -34,6 +34,7 @@ public final class ServerTreeChannelStateCoordinator {
   private final Map<String, ArrayList<String>> channelCustomOrderByServer;
   private final Map<String, Map<String, Boolean>> channelAutoReattachByServer;
   private final Map<String, Map<String, Long>> channelActivityRankByServer;
+  private final Map<String, Map<String, Boolean>> channelPinnedByServer;
   private final DefaultTreeModel model;
   private final Context context;
   private long channelActivityRankCounter = 0L;
@@ -44,6 +45,7 @@ public final class ServerTreeChannelStateCoordinator {
       Map<String, ArrayList<String>> channelCustomOrderByServer,
       Map<String, Map<String, Boolean>> channelAutoReattachByServer,
       Map<String, Map<String, Long>> channelActivityRankByServer,
+      Map<String, Map<String, Boolean>> channelPinnedByServer,
       DefaultTreeModel model,
       Context context) {
     this.runtimeConfig = runtimeConfig;
@@ -53,6 +55,7 @@ public final class ServerTreeChannelStateCoordinator {
         Objects.requireNonNull(channelAutoReattachByServer, "autoReattach");
     this.channelActivityRankByServer =
         Objects.requireNonNull(channelActivityRankByServer, "activityRanks");
+    this.channelPinnedByServer = Objects.requireNonNull(channelPinnedByServer, "pinned");
     this.model = Objects.requireNonNull(model, "model");
     this.context = Objects.requireNonNull(context, "context");
   }
@@ -88,10 +91,7 @@ public final class ServerTreeChannelStateCoordinator {
     if (runtimeConfig != null) {
       runtimeConfig.rememberServerTreeChannelCustomOrder(sid, normalized);
     }
-    if (channelSortModeByServer.getOrDefault(sid, ServerTreeDockable.ChannelSortMode.CUSTOM)
-        == ServerTreeDockable.ChannelSortMode.CUSTOM) {
-      sortChannelsUnderChannelList(sid);
-    }
+    sortChannelsUnderChannelList(sid);
     context.emitManagedChannelsChanged(sid);
   }
 
@@ -118,6 +118,40 @@ public final class ServerTreeChannelStateCoordinator {
     context.emitManagedChannelsChanged(sid);
   }
 
+  public boolean isChannelPinned(TargetRef ref) {
+    if (ref == null || !ref.isChannel()) return false;
+    String sid = context.normalizeServerId(ref.serverId());
+    String key = foldChannelKey(ref.target());
+    if (sid.isEmpty() || key.isEmpty()) return false;
+    return channelPinnedByServer.getOrDefault(sid, Map.of()).getOrDefault(key, Boolean.FALSE);
+  }
+
+  public void setChannelPinned(TargetRef ref, boolean pinned) {
+    if (ref == null || !ref.isChannel()) return;
+    String sid = context.normalizeServerId(ref.serverId());
+    String channel = Objects.toString(ref.target(), "").trim();
+    String key = foldChannelKey(channel);
+    if (sid.isEmpty() || key.isEmpty()) return;
+
+    ensureChannelKnownInConfig(ref);
+    persistCustomOrderFromTree(sid);
+
+    Map<String, Boolean> pinnedByChannel =
+        channelPinnedByServer.computeIfAbsent(sid, __ -> new HashMap<>());
+    if (pinned) {
+      pinnedByChannel.put(key, true);
+    } else {
+      pinnedByChannel.remove(key);
+    }
+
+    if (runtimeConfig != null) {
+      runtimeConfig.rememberServerTreeChannelPinned(sid, channel, pinned);
+    }
+
+    sortChannelsUnderChannelList(sid);
+    context.emitManagedChannelsChanged(sid);
+  }
+
   public void ensureChannelKnownInConfig(TargetRef ref) {
     if (ref == null || !ref.isChannel()) return;
     String sid = context.normalizeServerId(ref.serverId());
@@ -136,6 +170,16 @@ public final class ServerTreeChannelStateCoordinator {
       autoByChannel.put(key, autoReattach);
       if (runtimeConfig != null) {
         runtimeConfig.rememberServerTreeChannel(sid, channel);
+      }
+    }
+
+    Map<String, Boolean> pinnedByChannel =
+        channelPinnedByServer.computeIfAbsent(sid, __ -> new HashMap<>());
+    if (!pinnedByChannel.containsKey(key)) {
+      boolean pinned =
+          runtimeConfig != null && runtimeConfig.readServerTreeChannelPinned(sid, channel, false);
+      if (pinned) {
+        pinnedByChannel.put(key, true);
       }
     }
 
@@ -204,12 +248,43 @@ public final class ServerTreeChannelStateCoordinator {
     ServerTreeDockable.ChannelSortMode sortMode =
         channelSortModeByServer.getOrDefault(sid, ServerTreeDockable.ChannelSortMode.CUSTOM);
 
-    ArrayList<DefaultMutableTreeNode> sorted = new ArrayList<>(channelNodes);
+    ArrayList<String> customOrder = channelCustomOrderByServer.getOrDefault(sid, new ArrayList<>());
+    Map<String, Integer> customIndexByKey = new HashMap<>();
+    for (int i = 0; i < customOrder.size(); i++) {
+      String channel = Objects.toString(customOrder.get(i), "").trim();
+      if (channel.isEmpty()) continue;
+      customIndexByKey.putIfAbsent(foldChannelKey(channel), i);
+    }
+
+    ArrayList<DefaultMutableTreeNode> pinned = new ArrayList<>();
+    ArrayList<DefaultMutableTreeNode> unpinned = new ArrayList<>();
+    for (DefaultMutableTreeNode node : channelNodes) {
+      String label = channelLabelForNode(node);
+      String key = foldChannelKey(label);
+      if (channelPinnedByServer.getOrDefault(sid, Map.of()).getOrDefault(key, Boolean.FALSE)) {
+        pinned.add(node);
+      } else {
+        unpinned.add(node);
+      }
+    }
+
+    java.util.Comparator<DefaultMutableTreeNode> customComparator =
+        (a, b) -> {
+          String ac = channelLabelForNode(a);
+          String bc = channelLabelForNode(b);
+          int ai = customIndexByKey.getOrDefault(foldChannelKey(ac), Integer.MAX_VALUE);
+          int bi = customIndexByKey.getOrDefault(foldChannelKey(bc), Integer.MAX_VALUE);
+          if (ai != bi) return Integer.compare(ai, bi);
+          return compareChannelLabels(ac, bc);
+        };
+
+    pinned.sort(customComparator);
+
     if (sortMode == ServerTreeDockable.ChannelSortMode.ALPHABETICAL) {
-      sorted.sort((a, b) -> compareChannelLabels(channelLabelForNode(a), channelLabelForNode(b)));
+      unpinned.sort((a, b) -> compareChannelLabels(channelLabelForNode(a), channelLabelForNode(b)));
     } else if (sortMode == ServerTreeDockable.ChannelSortMode.MOST_RECENT_ACTIVITY) {
       Map<String, Long> byKey = channelActivityRankByServer.getOrDefault(sid, Map.of());
-      sorted.sort(
+      unpinned.sort(
           (a, b) -> {
             String ac = channelLabelForNode(a);
             String bc = channelLabelForNode(b);
@@ -218,25 +293,29 @@ public final class ServerTreeChannelStateCoordinator {
             if (ai != bi) return Long.compare(bi, ai);
             return compareChannelLabels(ac, bc);
           });
-    } else {
-      ArrayList<String> customOrder =
-          channelCustomOrderByServer.getOrDefault(sid, new ArrayList<>());
-      Map<String, Integer> byKey = new HashMap<>();
-      for (int i = 0; i < customOrder.size(); i++) {
-        String channel = Objects.toString(customOrder.get(i), "").trim();
-        if (channel.isEmpty()) continue;
-        byKey.putIfAbsent(foldChannelKey(channel), i);
-      }
-      sorted.sort(
+    } else if (sortMode == ServerTreeDockable.ChannelSortMode.MOST_UNREAD_MESSAGES) {
+      unpinned.sort(
           (a, b) -> {
-            String ac = channelLabelForNode(a);
-            String bc = channelLabelForNode(b);
-            int ai = byKey.getOrDefault(foldChannelKey(ac), Integer.MAX_VALUE);
-            int bi = byKey.getOrDefault(foldChannelKey(bc), Integer.MAX_VALUE);
-            if (ai != bi) return Integer.compare(ai, bi);
-            return compareChannelLabels(ac, bc);
+            int au = unreadCountForNode(a);
+            int bu = unreadCountForNode(b);
+            if (au != bu) return Integer.compare(bu, au);
+            return compareChannelLabels(channelLabelForNode(a), channelLabelForNode(b));
           });
+    } else if (sortMode == ServerTreeDockable.ChannelSortMode.MOST_UNREAD_NOTIFICATIONS) {
+      unpinned.sort(
+          (a, b) -> {
+            int ah = highlightCountForNode(a);
+            int bh = highlightCountForNode(b);
+            if (ah != bh) return Integer.compare(bh, ah);
+            return compareChannelLabels(channelLabelForNode(a), channelLabelForNode(b));
+          });
+    } else {
+      unpinned.sort(customComparator);
     }
+
+    ArrayList<DefaultMutableTreeNode> sorted = new ArrayList<>(channelNodes.size());
+    sorted.addAll(pinned);
+    sorted.addAll(unpinned);
 
     boolean changed = false;
     for (int i = 0; i < channelNodes.size(); i++) {
@@ -294,6 +373,14 @@ public final class ServerTreeChannelStateCoordinator {
     }
   }
 
+  public void persistOrderAndResortAfterManualMove(String serverId) {
+    String sid = context.normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    persistCustomOrderFromTree(sid);
+    sortChannelsUnderChannelList(sid);
+    context.emitManagedChannelsChanged(sid);
+  }
+
   public void loadChannelStateForServer(String serverId) {
     String sid = context.normalizeServerId(serverId);
     if (sid.isEmpty()) return;
@@ -301,6 +388,7 @@ public final class ServerTreeChannelStateCoordinator {
     ServerTreeDockable.ChannelSortMode sortMode = ServerTreeDockable.ChannelSortMode.CUSTOM;
     ArrayList<String> customOrder = new ArrayList<>();
     Map<String, Boolean> autoByChannel = new HashMap<>();
+    Map<String, Boolean> pinnedByChannel = new HashMap<>();
 
     if (runtimeConfig != null) {
       RuntimeConfigStore.ServerTreeChannelState state =
@@ -316,7 +404,11 @@ public final class ServerTreeChannelStateCoordinator {
           if (pref == null) continue;
           String channel = Objects.toString(pref.channel(), "").trim();
           if (channel.isEmpty()) continue;
-          autoByChannel.put(foldChannelKey(channel), pref.autoReattach());
+          String key = foldChannelKey(channel);
+          autoByChannel.put(key, pref.autoReattach());
+          if (pref.pinned()) {
+            pinnedByChannel.put(key, true);
+          }
         }
       }
     }
@@ -324,6 +416,7 @@ public final class ServerTreeChannelStateCoordinator {
     channelSortModeByServer.put(sid, sortMode);
     channelCustomOrderByServer.put(sid, customOrder);
     channelAutoReattachByServer.put(sid, autoByChannel);
+    channelPinnedByServer.put(sid, pinnedByChannel);
     channelActivityRankByServer.put(sid, new HashMap<>());
   }
 
@@ -344,12 +437,28 @@ public final class ServerTreeChannelStateCoordinator {
     }
   }
 
+  public void onChannelUnreadCountsChanged(TargetRef ref) {
+    if (ref == null || !ref.isChannel()) return;
+    String sid = context.normalizeServerId(ref.serverId());
+    if (sid.isEmpty()) return;
+    ServerTreeDockable.ChannelSortMode mode =
+        channelSortModeByServer.getOrDefault(sid, ServerTreeDockable.ChannelSortMode.CUSTOM);
+    if (mode == ServerTreeDockable.ChannelSortMode.MOST_UNREAD_MESSAGES
+        || mode == ServerTreeDockable.ChannelSortMode.MOST_UNREAD_NOTIFICATIONS) {
+      sortChannelsUnderChannelList(sid);
+    }
+  }
+
   private static RuntimeConfigStore.ServerTreeChannelSortMode runtimeChannelSortMode(
       ServerTreeDockable.ChannelSortMode mode) {
     return switch (mode) {
       case ALPHABETICAL -> RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL;
       case MOST_RECENT_ACTIVITY ->
           RuntimeConfigStore.ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY;
+      case MOST_UNREAD_MESSAGES ->
+          RuntimeConfigStore.ServerTreeChannelSortMode.MOST_UNREAD_MESSAGES;
+      case MOST_UNREAD_NOTIFICATIONS ->
+          RuntimeConfigStore.ServerTreeChannelSortMode.MOST_UNREAD_NOTIFICATIONS;
       case CUSTOM -> RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM;
     };
   }
@@ -360,6 +469,9 @@ public final class ServerTreeChannelStateCoordinator {
     return switch (mode) {
       case ALPHABETICAL -> ServerTreeDockable.ChannelSortMode.ALPHABETICAL;
       case MOST_RECENT_ACTIVITY -> ServerTreeDockable.ChannelSortMode.MOST_RECENT_ACTIVITY;
+      case MOST_UNREAD_MESSAGES -> ServerTreeDockable.ChannelSortMode.MOST_UNREAD_MESSAGES;
+      case MOST_UNREAD_NOTIFICATIONS ->
+          ServerTreeDockable.ChannelSortMode.MOST_UNREAD_NOTIFICATIONS;
       case CUSTOM -> ServerTreeDockable.ChannelSortMode.CUSTOM;
     };
   }
@@ -381,6 +493,20 @@ public final class ServerTreeChannelStateCoordinator {
     Object userObject = node.getUserObject();
     if (!(userObject instanceof ServerTreeNodeData nodeData) || nodeData.ref == null) return "";
     return Objects.toString(nodeData.ref.target(), "").trim();
+  }
+
+  private static int unreadCountForNode(DefaultMutableTreeNode node) {
+    if (node == null) return 0;
+    Object userObject = node.getUserObject();
+    if (!(userObject instanceof ServerTreeNodeData nodeData)) return 0;
+    return Math.max(0, nodeData.unread);
+  }
+
+  private static int highlightCountForNode(DefaultMutableTreeNode node) {
+    if (node == null) return 0;
+    Object userObject = node.getUserObject();
+    if (!(userObject instanceof ServerTreeNodeData nodeData)) return 0;
+    return Math.max(0, nodeData.highlightUnread);
   }
 
   private static int compareChannelLabels(String left, String right) {

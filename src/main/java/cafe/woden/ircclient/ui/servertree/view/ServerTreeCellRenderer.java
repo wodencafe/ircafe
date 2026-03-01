@@ -39,6 +39,8 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
 
     boolean isPrivateMessageOnline(TargetRef ref);
 
+    boolean isChannelPinned(TargetRef ref);
+
     boolean isApplicationJfrActive();
 
     boolean isInterceptorEnabled(TargetRef ref);
@@ -165,7 +167,7 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           if (muted != null) setForeground(muted);
         }
         if (nodeData.ref != null && nodeData.ref.isChannel()) {
-          setTreeIcon("channel");
+          setTreeIcon(context.isChannelPinned(nodeData.ref) ? "star" : "channel");
         } else if (context.isPrivateMessageTarget(nodeData.ref)) {
           boolean online = context.isPrivateMessageOnline(nodeData.ref);
           String name = online ? "pm-online" : "pm-offline";

@@ -152,7 +152,46 @@ class ServerTreeNodeReorderPolicyTest {
     assertNull(plan);
   }
 
+  @Test
+  void pinnedChannelCannotMoveBelowUnpinnedInChannelList() {
+    DefaultMutableTreeNode server = serverNode("test");
+    DefaultMutableTreeNode channelList = channelListNode("test");
+    DefaultMutableTreeNode pinned = channelNode("test", "#pinned");
+    DefaultMutableTreeNode normal = channelNode("test", "#normal");
+    channelList.add(pinned);
+    channelList.add(normal);
+    server.add(channelList);
+
+    ServerTreeNodeReorderPolicy policy =
+        policyForServerLabel("test", ref -> "#pinned".equals(ref.target()));
+    TreeNodeReorderPolicy.MovePlan plan = policy.planMove(pinned, +1);
+
+    assertNull(plan);
+  }
+
+  @Test
+  void unpinnedChannelCannotMoveAbovePinnedInChannelList() {
+    DefaultMutableTreeNode server = serverNode("test");
+    DefaultMutableTreeNode channelList = channelListNode("test");
+    DefaultMutableTreeNode pinned = channelNode("test", "#pinned");
+    DefaultMutableTreeNode normal = channelNode("test", "#normal");
+    channelList.add(pinned);
+    channelList.add(normal);
+    server.add(channelList);
+
+    ServerTreeNodeReorderPolicy policy =
+        policyForServerLabel("test", ref -> "#pinned".equals(ref.target()));
+    TreeNodeReorderPolicy.MovePlan plan = policy.planMove(normal, -1);
+
+    assertNull(plan);
+  }
+
   private static ServerTreeNodeReorderPolicy policyForServerLabel(String label) {
+    return policyForServerLabel(label, __ -> false);
+  }
+
+  private static ServerTreeNodeReorderPolicy policyForServerLabel(
+      String label, java.util.function.Predicate<TargetRef> isPinned) {
     return new ServerTreeNodeReorderPolicy(
         node -> node != null && label.equals(node.getUserObject()),
         node -> {
@@ -161,6 +200,7 @@ class ServerTreeNodeReorderPolicyTest {
           if (!(uo instanceof ServerTreeNodeData nd)) return false;
           return nd.ref != null && nd.ref.isChannelList();
         },
+        isPinned,
         node -> {
           if (node == null) return null;
           Object uo = node.getUserObject();

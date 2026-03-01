@@ -25,6 +25,7 @@ public final class ServerTreeServerStateCleaner {
   private final Map<String, ArrayList<String>> channelCustomOrderByServer;
   private final Map<String, Map<String, Boolean>> channelAutoReattachByServer;
   private final Map<String, Map<String, Long>> channelActivityRankByServer;
+  private final Map<String, Map<String, Boolean>> channelPinnedByServer;
   private final Map<TargetRef, DefaultMutableTreeNode> leaves;
   private final Set<DefaultMutableTreeNode> typingActivityNodes;
   private final Context context;
@@ -37,6 +38,7 @@ public final class ServerTreeServerStateCleaner {
       Map<String, ArrayList<String>> channelCustomOrderByServer,
       Map<String, Map<String, Boolean>> channelAutoReattachByServer,
       Map<String, Map<String, Long>> channelActivityRankByServer,
+      Map<String, Map<String, Boolean>> channelPinnedByServer,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
       Set<DefaultMutableTreeNode> typingActivityNodes,
       Context context) {
@@ -51,6 +53,8 @@ public final class ServerTreeServerStateCleaner {
         Objects.requireNonNull(channelAutoReattachByServer, "channelAutoReattachByServer");
     this.channelActivityRankByServer =
         Objects.requireNonNull(channelActivityRankByServer, "channelActivityRankByServer");
+    this.channelPinnedByServer =
+        Objects.requireNonNull(channelPinnedByServer, "channelPinnedByServer");
     this.leaves = Objects.requireNonNull(leaves, "leaves");
     this.typingActivityNodes = Objects.requireNonNull(typingActivityNodes, "typingActivityNodes");
     this.context = Objects.requireNonNull(context, "context");
@@ -73,6 +77,7 @@ public final class ServerTreeServerStateCleaner {
     channelCustomOrderByServer.remove(sid);
     channelAutoReattachByServer.remove(sid);
     channelActivityRankByServer.remove(sid);
+    channelPinnedByServer.remove(sid);
     context.clearPrivateMessageOnlineStates(sid);
     leaves.entrySet().removeIf(entry -> Objects.equals(entry.getKey().serverId(), sid));
     typingActivityNodes.removeIf(

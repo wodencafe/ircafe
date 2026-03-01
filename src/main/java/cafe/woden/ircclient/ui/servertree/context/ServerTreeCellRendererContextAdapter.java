@@ -20,6 +20,7 @@ public final class ServerTreeCellRendererContextAdapter implements ServerTreeCel
   private final Supplier<Boolean> typingIndicatorsTreeEnabled;
   private final Predicate<TargetRef> isPrivateMessageTarget;
   private final Predicate<TargetRef> isPrivateMessageOnline;
+  private final Predicate<TargetRef> isChannelPinned;
   private final Supplier<Boolean> isApplicationJfrActive;
   private final Predicate<TargetRef> isInterceptorEnabled;
   private final Predicate<DefaultMutableTreeNode> isMonitorGroupNode;
@@ -42,6 +43,7 @@ public final class ServerTreeCellRendererContextAdapter implements ServerTreeCel
       Supplier<Boolean> typingIndicatorsTreeEnabled,
       Predicate<TargetRef> isPrivateMessageTarget,
       Predicate<TargetRef> isPrivateMessageOnline,
+      Predicate<TargetRef> isChannelPinned,
       Supplier<Boolean> isApplicationJfrActive,
       Predicate<TargetRef> isInterceptorEnabled,
       Predicate<DefaultMutableTreeNode> isMonitorGroupNode,
@@ -69,6 +71,7 @@ public final class ServerTreeCellRendererContextAdapter implements ServerTreeCel
         Objects.requireNonNull(isPrivateMessageTarget, "isPrivateMessageTarget");
     this.isPrivateMessageOnline =
         Objects.requireNonNull(isPrivateMessageOnline, "isPrivateMessageOnline");
+    this.isChannelPinned = Objects.requireNonNull(isChannelPinned, "isChannelPinned");
     this.isApplicationJfrActive =
         Objects.requireNonNull(isApplicationJfrActive, "isApplicationJfrActive");
     this.isInterceptorEnabled =
@@ -122,6 +125,11 @@ public final class ServerTreeCellRendererContextAdapter implements ServerTreeCel
   @Override
   public boolean isPrivateMessageOnline(TargetRef ref) {
     return isPrivateMessageOnline.test(ref);
+  }
+
+  @Override
+  public boolean isChannelPinned(TargetRef ref) {
+    return isChannelPinned.test(ref);
   }
 
   @Override

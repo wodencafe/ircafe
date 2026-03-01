@@ -62,6 +62,8 @@ public final class ServerTreeContextMenuBuilderContextAdapter
   private final Consumer<TargetRef> requestBouncerDetachChannel;
   private final Predicate<TargetRef> isChannelAutoReattach;
   private final BiConsumer<TargetRef, Boolean> setChannelAutoReattach;
+  private final Predicate<TargetRef> isChannelPinned;
+  private final BiConsumer<TargetRef, Boolean> setChannelPinned;
   private final Consumer<TargetRef> requestCloseTarget;
   private final Function<TargetRef, InterceptorDefinition> interceptorDefinition;
   private final BiConsumer<TargetRef, Boolean> setInterceptorEnabled;
@@ -115,6 +117,8 @@ public final class ServerTreeContextMenuBuilderContextAdapter
       Consumer<TargetRef> requestBouncerDetachChannel,
       Predicate<TargetRef> isChannelAutoReattach,
       BiConsumer<TargetRef, Boolean> setChannelAutoReattach,
+      Predicate<TargetRef> isChannelPinned,
+      BiConsumer<TargetRef, Boolean> setChannelPinned,
       Consumer<TargetRef> requestCloseTarget,
       Function<TargetRef, InterceptorDefinition> interceptorDefinition,
       BiConsumer<TargetRef, Boolean> setInterceptorEnabled,
@@ -191,6 +195,8 @@ public final class ServerTreeContextMenuBuilderContextAdapter
         Objects.requireNonNull(isChannelAutoReattach, "isChannelAutoReattach");
     this.setChannelAutoReattach =
         Objects.requireNonNull(setChannelAutoReattach, "setChannelAutoReattach");
+    this.isChannelPinned = Objects.requireNonNull(isChannelPinned, "isChannelPinned");
+    this.setChannelPinned = Objects.requireNonNull(setChannelPinned, "setChannelPinned");
     this.requestCloseTarget = Objects.requireNonNull(requestCloseTarget, "requestCloseTarget");
     this.interceptorDefinition =
         Objects.requireNonNull(interceptorDefinition, "interceptorDefinition");
@@ -405,6 +411,16 @@ public final class ServerTreeContextMenuBuilderContextAdapter
   @Override
   public void setChannelAutoReattach(TargetRef target, boolean autoReattach) {
     setChannelAutoReattach.accept(target, autoReattach);
+  }
+
+  @Override
+  public boolean isChannelPinned(TargetRef target) {
+    return isChannelPinned.test(target);
+  }
+
+  @Override
+  public void setChannelPinned(TargetRef target, boolean pinned) {
+    setChannelPinned.accept(target, pinned);
   }
 
   @Override

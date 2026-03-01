@@ -102,6 +102,42 @@ class ChatChannelListCoordinatorTest {
   }
 
   @Test
+  void refreshManagedChannelsCardMapsMostUnreadModes() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            new OutboundLineBus(),
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            (sid, channel) -> "",
+            (sid, channel) -> List.of());
+
+    when(serverTree.managedChannelsForServer("libera")).thenReturn(List.of());
+    when(serverTree.channelSortModeForServer("libera"))
+        .thenReturn(ServerTreeDockable.ChannelSortMode.MOST_UNREAD_MESSAGES);
+    coordinator.refreshManagedChannelsCard("libera");
+    verify(channelListPanel)
+        .setManagedChannels(
+            eq("libera"), anyList(), eq(ChannelListPanel.ManagedSortMode.MOST_UNREAD_MESSAGES));
+
+    when(serverTree.channelSortModeForServer("libera"))
+        .thenReturn(ServerTreeDockable.ChannelSortMode.MOST_UNREAD_NOTIFICATIONS);
+    coordinator.refreshManagedChannelsCard("libera");
+    verify(channelListPanel)
+        .setManagedChannels(
+            eq("libera"),
+            anyList(),
+            eq(ChannelListPanel.ManagedSortMode.MOST_UNREAD_NOTIFICATIONS));
+  }
+
+  @Test
   void refreshManagedChannelsCardUsesCustomModeForBlankServerId() {
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
     UserListStore userListStore = mock(UserListStore.class);

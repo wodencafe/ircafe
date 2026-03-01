@@ -102,6 +102,10 @@ public final class ServerTreeContextMenuBuilder {
 
     void setChannelAutoReattach(TargetRef target, boolean autoReattach);
 
+    boolean isChannelPinned(TargetRef target);
+
+    void setChannelPinned(TargetRef target, boolean pinned);
+
     void requestCloseTarget(TargetRef target);
 
     InterceptorDefinition interceptorDefinition(TargetRef target);
@@ -351,6 +355,11 @@ public final class ServerTreeContextMenuBuilder {
     autoReattach.addActionListener(
         ev -> context.setChannelAutoReattach(ref, autoReattach.isSelected()));
     menu.add(autoReattach);
+
+    boolean pinned = context.isChannelPinned(ref);
+    JMenuItem pinToggle = new JMenuItem(pinned ? "Unpin Channel" : "Pin Channel");
+    pinToggle.addActionListener(ev -> context.setChannelPinned(ref, !pinned));
+    menu.add(pinToggle);
 
     if (detached) {
       JMenuItem closeChannel = new JMenuItem("Close Channel \"" + nodeData.label + "\"");

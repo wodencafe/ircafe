@@ -25,6 +25,7 @@ public final class ServerTreeTargetRemovalStateCoordinator {
   private final Map<String, Map<String, Boolean>> channelAutoReattachByServer;
   private final Map<String, Map<String, Long>> channelActivityRankByServer;
   private final Map<String, ArrayList<String>> channelCustomOrderByServer;
+  private final Map<String, Map<String, Boolean>> channelPinnedByServer;
   private final Context context;
 
   public ServerTreeTargetRemovalStateCoordinator(
@@ -33,6 +34,7 @@ public final class ServerTreeTargetRemovalStateCoordinator {
       Map<String, Map<String, Boolean>> channelAutoReattachByServer,
       Map<String, Map<String, Long>> channelActivityRankByServer,
       Map<String, ArrayList<String>> channelCustomOrderByServer,
+      Map<String, Map<String, Boolean>> channelPinnedByServer,
       Context context) {
     this.privateMessageOnlineStateStore =
         Objects.requireNonNull(privateMessageOnlineStateStore, "privateMessageOnlineStateStore");
@@ -43,6 +45,8 @@ public final class ServerTreeTargetRemovalStateCoordinator {
         Objects.requireNonNull(channelActivityRankByServer, "channelActivityRankByServer");
     this.channelCustomOrderByServer =
         Objects.requireNonNull(channelCustomOrderByServer, "channelCustomOrderByServer");
+    this.channelPinnedByServer =
+        Objects.requireNonNull(channelPinnedByServer, "channelPinnedByServer");
     this.context = Objects.requireNonNull(context, "context");
   }
 
@@ -68,6 +72,10 @@ public final class ServerTreeTargetRemovalStateCoordinator {
     Map<String, Long> activityByChannel = channelActivityRankByServer.get(sid);
     if (activityByChannel != null) {
       activityByChannel.remove(key);
+    }
+    Map<String, Boolean> pinnedByChannel = channelPinnedByServer.get(sid);
+    if (pinnedByChannel != null) {
+      pinnedByChannel.remove(key);
     }
     ArrayList<String> customOrder = channelCustomOrderByServer.get(sid);
     if (customOrder != null) {

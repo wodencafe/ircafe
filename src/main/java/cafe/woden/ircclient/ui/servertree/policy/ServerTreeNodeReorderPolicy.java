@@ -21,16 +21,19 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
 
   private final Predicate<DefaultMutableTreeNode> isServerNode;
   private final Predicate<DefaultMutableTreeNode> isChannelListNode;
+  private final Predicate<TargetRef> isChannelPinned;
   private final Function<DefaultMutableTreeNode, TargetRef> targetRefForNode;
   private final Function<DefaultMutableTreeNode, String> nodeLabelForNode;
 
   public ServerTreeNodeReorderPolicy(
       Predicate<DefaultMutableTreeNode> isServerNode,
       Predicate<DefaultMutableTreeNode> isChannelListNode,
+      Predicate<TargetRef> isChannelPinned,
       Function<DefaultMutableTreeNode, TargetRef> targetRefForNode,
       Function<DefaultMutableTreeNode, String> nodeLabelForNode) {
     this.isServerNode = Objects.requireNonNull(isServerNode, "isServerNode");
     this.isChannelListNode = Objects.requireNonNull(isChannelListNode, "isChannelListNode");
+    this.isChannelPinned = Objects.requireNonNull(isChannelPinned, "isChannelPinned");
     this.targetRefForNode = Objects.requireNonNull(targetRefForNode, "targetRefForNode");
     this.nodeLabelForNode = Objects.requireNonNull(nodeLabelForNode, "nodeLabelForNode");
   }
@@ -76,7 +79,14 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     int max = maxMovableIndex(parentIsServer, parent);
     if (idx < min || idx > max) return null;
 
-    int next = idx + (dir > 0 ? 1 : -1);
+    int step = dir > 0 ? 1 : -1;
+    int next = idx + step;
+    if (parentIsChannelList && nodeRef.isChannel()) {
+      int firstUnpinned = firstUnpinnedChannelIndex(parent);
+      boolean pinned = isChannelPinned.test(nodeRef);
+      if (pinned && next >= firstUnpinned) return null;
+      if (!pinned && next < firstUnpinned) return null;
+    }
     next = Math.max(min, Math.min(max, next));
     if (next == idx) return null;
 
@@ -126,6 +136,18 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
       }
     }
     return idx;
+  }
+
+  private int firstUnpinnedChannelIndex(DefaultMutableTreeNode channelListNode) {
+    if (channelListNode == null) return 0;
+    int count = channelListNode.getChildCount();
+    for (int i = 0; i < count; i++) {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) channelListNode.getChildAt(i);
+      TargetRef ref = targetRefForNode.apply(child);
+      if (ref == null || !ref.isChannel()) continue;
+      if (!isChannelPinned.test(ref)) return i;
+    }
+    return count;
   }
 
   private int minMovableBuiltInServerIndex(DefaultMutableTreeNode parent) {

@@ -176,6 +176,8 @@ public class RuntimeConfigStore {
   public enum ServerTreeChannelSortMode {
     ALPHABETICAL("alphabetical"),
     MOST_RECENT_ACTIVITY("most-recent-activity"),
+    MOST_UNREAD_MESSAGES("most-unread-messages"),
+    MOST_UNREAD_NOTIFICATIONS("most-unread-notifications"),
     CUSTOM("custom");
 
     private final String token;
@@ -199,11 +201,30 @@ public class RuntimeConfigStore {
           || "activity".equals(raw)) {
         return MOST_RECENT_ACTIVITY;
       }
+      if ("most-unread-messages".equals(raw)
+          || "most-unread-message".equals(raw)
+          || "unread-messages".equals(raw)
+          || "unread-message".equals(raw)
+          || "unread".equals(raw)) {
+        return MOST_UNREAD_MESSAGES;
+      }
+      if ("most-unread-notifications".equals(raw)
+          || "most-unread-notification".equals(raw)
+          || "unread-notifications".equals(raw)
+          || "unread-notification".equals(raw)
+          || "mentions".equals(raw)
+          || "highlights".equals(raw)) {
+        return MOST_UNREAD_NOTIFICATIONS;
+      }
       return CUSTOM;
     }
   }
 
-  public record ServerTreeChannelPreference(String channel, boolean autoReattach) {}
+  public record ServerTreeChannelPreference(String channel, boolean autoReattach, boolean pinned) {
+    public ServerTreeChannelPreference(String channel, boolean autoReattach) {
+      this(channel, autoReattach, false);
+    }
+  }
 
   public record ServerTreeChannelState(
       ServerTreeChannelSortMode sortMode,
@@ -676,7 +697,54 @@ public class RuntimeConfigStore {
     ServerTreeChannelState state = readServerTreeChannelState(sid);
     LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
     String key = foldChannelKey(chan);
-    byKey.put(key, new ServerTreeChannelPreference(chan, autoReattach));
+    ServerTreeChannelPreference current = byKey.get(key);
+    byKey.put(
+        key,
+        new ServerTreeChannelPreference(chan, autoReattach, current != null && current.pinned()));
+
+    ArrayList<String> customOrder = sanitizeCustomOrder(state, byKey);
+    if (!containsIgnoreCase(customOrder, chan)) {
+      customOrder.add(chan);
+    }
+
+    writeServerTreeChannelState(
+        sid,
+        new ServerTreeChannelState(
+            state.sortMode(), List.copyOf(customOrder), List.copyOf(byKey.values())));
+  }
+
+  public synchronized boolean readServerTreeChannelPinned(
+      String serverId, String channel, boolean defaultValue) {
+    String sid = Objects.toString(serverId, "").trim();
+    String chan = normalizeChannelName(channel);
+    if (sid.isEmpty() || chan.isEmpty()) return defaultValue;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    if (state == null || state.channels() == null) return defaultValue;
+
+    for (ServerTreeChannelPreference pref : state.channels()) {
+      if (pref == null) continue;
+      String existing = normalizeChannelName(pref.channel());
+      if (existing.isEmpty()) continue;
+      if (existing.equalsIgnoreCase(chan)) {
+        return pref.pinned();
+      }
+    }
+    return defaultValue;
+  }
+
+  public synchronized void rememberServerTreeChannelPinned(
+      String serverId, String channel, boolean pinned) {
+    String sid = Objects.toString(serverId, "").trim();
+    String chan = normalizeChannelName(channel);
+    if (sid.isEmpty() || chan.isEmpty()) return;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
+    String key = foldChannelKey(chan);
+    ServerTreeChannelPreference current = byKey.get(key);
+    boolean autoReattach = current == null || current.autoReattach();
+    byKey.put(key, new ServerTreeChannelPreference(chan, autoReattach, pinned));
 
     ArrayList<String> customOrder = sanitizeCustomOrder(state, byKey);
     if (!containsIgnoreCase(customOrder, chan)) {
@@ -764,7 +832,8 @@ public class RuntimeConfigStore {
           String key = foldChannelKey(channel);
           if (byKey.containsKey(key)) continue;
           boolean auto = asBoolean(item.get("autoReattach")).orElse(Boolean.TRUE);
-          byKey.put(key, new ServerTreeChannelPreference(channel, auto));
+          boolean pinned = asBoolean(item.get("pinned")).orElse(Boolean.FALSE);
+          byKey.put(key, new ServerTreeChannelPreference(channel, auto, pinned));
         }
       }
 
@@ -902,6 +971,9 @@ public class RuntimeConfigStore {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("name", channel);
             item.put("autoReattach", pref.autoReattach());
+            if (pref.pinned()) {
+              item.put("pinned", true);
+            }
             channelsOut.add(item);
           }
           if (!channelsOut.isEmpty()) {
@@ -958,7 +1030,7 @@ public class RuntimeConfigStore {
       String channel = normalizeChannelName(pref.channel());
       if (channel.isEmpty()) continue;
       String key = foldChannelKey(channel);
-      byKey.put(key, new ServerTreeChannelPreference(channel, pref.autoReattach()));
+      byKey.put(key, new ServerTreeChannelPreference(channel, pref.autoReattach(), pref.pinned()));
     }
     return byKey;
   }
