@@ -56,6 +56,7 @@ import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import io.github.andrewauclair.moderndocking.Dockable;
+import io.github.andrewauclair.moderndocking.app.Docking;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -220,7 +221,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             this.interceptorStore,
             this::getName,
             this::setName,
-            SwingUtilities::invokeLater);
+            SwingUtilities::invokeLater,
+            () -> Docking.updateTabInfo(this));
     this.terminalPanel = java.util.Objects.requireNonNull(terminalDockable, "terminalDockable");
     this.appUnhandledErrorsPanel = createUnhandledErrorsPanel(applicationDiagnosticsService);
     this.appAssertjPanel = createAssertjEventsPanel(applicationDiagnosticsService);

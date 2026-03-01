@@ -1,12 +1,14 @@
 package cafe.woden.ircclient.ui.coordinator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import java.awt.BorderLayout;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
@@ -113,5 +115,27 @@ class ChatDockTitleCoordinatorTest {
 
     assertEquals("Notifications", dockName.get());
     assertEquals("Notifications", tabs.getTitleAt(0));
+  }
+
+  @Test
+  void updateDockTitleInvokesDockingTabInfoUpdater() {
+    AtomicReference<TargetRef> activeTarget =
+        new AtomicReference<>(new TargetRef("libera", "#ircafe"));
+    AtomicReference<String> dockName = new AtomicReference<>("old");
+    AtomicBoolean dockingUpdated = new AtomicBoolean(false);
+
+    ChatDockTitleCoordinator coordinator =
+        new ChatDockTitleCoordinator(
+            new JPanel(),
+            activeTarget::get,
+            mock(InterceptorStore.class),
+            dockName::get,
+            dockName::set,
+            Runnable::run,
+            () -> dockingUpdated.set(true));
+
+    coordinator.updateDockTitle();
+
+    assertTrue(dockingUpdated.get());
   }
 }
