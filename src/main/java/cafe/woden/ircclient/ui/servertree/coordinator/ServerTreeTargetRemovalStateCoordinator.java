@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.servertree.coordinator;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeChannelStateStore;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreePrivateMessageOnlineStateStore;
 import java.util.ArrayList;
 import java.util.Map;
@@ -31,22 +32,17 @@ public final class ServerTreeTargetRemovalStateCoordinator {
   public ServerTreeTargetRemovalStateCoordinator(
       ServerTreePrivateMessageOnlineStateStore privateMessageOnlineStateStore,
       RuntimeConfigStore runtimeConfig,
-      Map<String, Map<String, Boolean>> channelAutoReattachByServer,
-      Map<String, Map<String, Long>> channelActivityRankByServer,
-      Map<String, ArrayList<String>> channelCustomOrderByServer,
-      Map<String, Map<String, Boolean>> channelPinnedByServer,
+      ServerTreeChannelStateStore channelStateStore,
       Context context) {
+    ServerTreeChannelStateStore stateStore =
+        Objects.requireNonNull(channelStateStore, "channelStateStore");
     this.privateMessageOnlineStateStore =
         Objects.requireNonNull(privateMessageOnlineStateStore, "privateMessageOnlineStateStore");
     this.runtimeConfig = runtimeConfig;
-    this.channelAutoReattachByServer =
-        Objects.requireNonNull(channelAutoReattachByServer, "channelAutoReattachByServer");
-    this.channelActivityRankByServer =
-        Objects.requireNonNull(channelActivityRankByServer, "channelActivityRankByServer");
-    this.channelCustomOrderByServer =
-        Objects.requireNonNull(channelCustomOrderByServer, "channelCustomOrderByServer");
-    this.channelPinnedByServer =
-        Objects.requireNonNull(channelPinnedByServer, "channelPinnedByServer");
+    this.channelAutoReattachByServer = stateStore.channelAutoReattachByServer();
+    this.channelActivityRankByServer = stateStore.channelActivityRankByServer();
+    this.channelCustomOrderByServer = stateStore.channelCustomOrderByServer();
+    this.channelPinnedByServer = stateStore.channelPinnedByServer();
     this.context = Objects.requireNonNull(context, "context");
   }
 

@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeChannelStateStore;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -41,21 +42,17 @@ public final class ServerTreeChannelStateCoordinator {
 
   public ServerTreeChannelStateCoordinator(
       RuntimeConfigStore runtimeConfig,
-      Map<String, ServerTreeDockable.ChannelSortMode> channelSortModeByServer,
-      Map<String, ArrayList<String>> channelCustomOrderByServer,
-      Map<String, Map<String, Boolean>> channelAutoReattachByServer,
-      Map<String, Map<String, Long>> channelActivityRankByServer,
-      Map<String, Map<String, Boolean>> channelPinnedByServer,
+      ServerTreeChannelStateStore channelStateStore,
       DefaultTreeModel model,
       Context context) {
+    ServerTreeChannelStateStore stateStore =
+        Objects.requireNonNull(channelStateStore, "channelStateStore");
     this.runtimeConfig = runtimeConfig;
-    this.channelSortModeByServer = Objects.requireNonNull(channelSortModeByServer, "sortModes");
-    this.channelCustomOrderByServer = Objects.requireNonNull(channelCustomOrderByServer, "custom");
-    this.channelAutoReattachByServer =
-        Objects.requireNonNull(channelAutoReattachByServer, "autoReattach");
-    this.channelActivityRankByServer =
-        Objects.requireNonNull(channelActivityRankByServer, "activityRanks");
-    this.channelPinnedByServer = Objects.requireNonNull(channelPinnedByServer, "pinned");
+    this.channelSortModeByServer = stateStore.channelSortModeByServer();
+    this.channelCustomOrderByServer = stateStore.channelCustomOrderByServer();
+    this.channelAutoReattachByServer = stateStore.channelAutoReattachByServer();
+    this.channelActivityRankByServer = stateStore.channelActivityRankByServer();
+    this.channelPinnedByServer = stateStore.channelPinnedByServer();
     this.model = Objects.requireNonNull(model, "model");
     this.context = Objects.requireNonNull(context, "context");
   }

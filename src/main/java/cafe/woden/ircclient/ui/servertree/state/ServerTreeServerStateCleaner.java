@@ -2,10 +2,8 @@ package cafe.woden.ircclient.ui.servertree.state;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
-import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -21,11 +19,7 @@ public final class ServerTreeServerStateCleaner {
   private final InterceptorStore interceptorStore;
   private final ServerTreeServerActionOverlay serverActionOverlay;
   private final ServerTreeRuntimeState runtimeState;
-  private final Map<String, ServerTreeDockable.ChannelSortMode> channelSortModeByServer;
-  private final Map<String, ArrayList<String>> channelCustomOrderByServer;
-  private final Map<String, Map<String, Boolean>> channelAutoReattachByServer;
-  private final Map<String, Map<String, Long>> channelActivityRankByServer;
-  private final Map<String, Map<String, Boolean>> channelPinnedByServer;
+  private final ServerTreeChannelStateStore channelStateStore;
   private final Map<TargetRef, DefaultMutableTreeNode> leaves;
   private final Set<DefaultMutableTreeNode> typingActivityNodes;
   private final Context context;
@@ -34,27 +28,14 @@ public final class ServerTreeServerStateCleaner {
       InterceptorStore interceptorStore,
       ServerTreeServerActionOverlay serverActionOverlay,
       ServerTreeRuntimeState runtimeState,
-      Map<String, ServerTreeDockable.ChannelSortMode> channelSortModeByServer,
-      Map<String, ArrayList<String>> channelCustomOrderByServer,
-      Map<String, Map<String, Boolean>> channelAutoReattachByServer,
-      Map<String, Map<String, Long>> channelActivityRankByServer,
-      Map<String, Map<String, Boolean>> channelPinnedByServer,
+      ServerTreeChannelStateStore channelStateStore,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
       Set<DefaultMutableTreeNode> typingActivityNodes,
       Context context) {
     this.interceptorStore = interceptorStore;
     this.serverActionOverlay = Objects.requireNonNull(serverActionOverlay, "serverActionOverlay");
     this.runtimeState = Objects.requireNonNull(runtimeState, "runtimeState");
-    this.channelSortModeByServer =
-        Objects.requireNonNull(channelSortModeByServer, "channelSortModeByServer");
-    this.channelCustomOrderByServer =
-        Objects.requireNonNull(channelCustomOrderByServer, "channelCustomOrderByServer");
-    this.channelAutoReattachByServer =
-        Objects.requireNonNull(channelAutoReattachByServer, "channelAutoReattachByServer");
-    this.channelActivityRankByServer =
-        Objects.requireNonNull(channelActivityRankByServer, "channelActivityRankByServer");
-    this.channelPinnedByServer =
-        Objects.requireNonNull(channelPinnedByServer, "channelPinnedByServer");
+    this.channelStateStore = Objects.requireNonNull(channelStateStore, "channelStateStore");
     this.leaves = Objects.requireNonNull(leaves, "leaves");
     this.typingActivityNodes = Objects.requireNonNull(typingActivityNodes, "typingActivityNodes");
     this.context = Objects.requireNonNull(context, "context");
@@ -73,11 +54,7 @@ public final class ServerTreeServerStateCleaner {
 
     serverActionOverlay.clearHoveredServer(sid);
     runtimeState.removeServer(sid);
-    channelSortModeByServer.remove(sid);
-    channelCustomOrderByServer.remove(sid);
-    channelAutoReattachByServer.remove(sid);
-    channelActivityRankByServer.remove(sid);
-    channelPinnedByServer.remove(sid);
+    channelStateStore.clearServer(sid);
     context.clearPrivateMessageOnlineStates(sid);
     leaves.entrySet().removeIf(entry -> Objects.equals(entry.getKey().serverId(), sid));
     typingActivityNodes.removeIf(
