@@ -1628,8 +1628,10 @@ public class IrcMediator implements MediatorControlPort {
         TargetRef joinOrigin =
             joinRoutingState.recentOriginIfFresh(sid, ev.channel(), Duration.ofSeconds(15));
         joinRoutingState.clear(sid, ev.channel());
+        connectionCoordinator.noteJoinedChannel(sid, ev.channel());
 
         if (!targetCoordinator.onJoinedChannel(sid, ev.channel())) {
+          connectionCoordinator.clearJoinedChannelObservation(sid, ev.channel());
           TargetRef st = new TargetRef(sid, "status");
           ensureTargetExists(st);
           ui.appendStatusAt(

@@ -23,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.SwingUtilities;
 import org.jmolecules.architecture.layered.ApplicationLayer;
@@ -65,6 +66,8 @@ public class ConnectionCoordinator {
   private final Set<String> configuredServers = new HashSet<>();
   private final Map<String, Long> restoreRunByServer = new HashMap<>();
   private final AtomicLong restoreRunSequence = new AtomicLong();
+  private final Map<String, Set<String>> observedJoinedChannelKeysByServer =
+      new ConcurrentHashMap<>();
 
   private record PersistedTargetRestore(List<String> privateTargets, List<String> joinedChannels) {
     private static final PersistedTargetRestore EMPTY =
@@ -112,6 +115,27 @@ public class ConnectionCoordinator {
       if (s == ConnectionState.CONNECTED) n++;
     }
     return n;
+  }
+
+  public void noteJoinedChannel(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String key = foldChannelKey(channel);
+    if (sid.isEmpty() || key.isEmpty()) return;
+    observedJoinedChannelKeysByServer
+        .computeIfAbsent(sid, __ -> ConcurrentHashMap.newKeySet())
+        .add(key);
+  }
+
+  public void clearJoinedChannelObservation(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String key = foldChannelKey(channel);
+    if (sid.isEmpty() || key.isEmpty()) return;
+    Set<String> keys = observedJoinedChannelKeysByServer.get(sid);
+    if (keys == null) return;
+    keys.remove(key);
+    if (keys.isEmpty()) {
+      observedJoinedChannelKeysByServer.remove(sid);
+    }
   }
 
   public Set<String> connectedServerIdsSnapshot() {
@@ -501,6 +525,7 @@ public class ConnectionCoordinator {
 
       case IrcEvent.Disconnected ev -> {
         restoreRunByServer.remove(id);
+        observedJoinedChannelKeysByServer.remove(id);
         setState(id, ConnectionState.DISCONNECTED);
         String msg = "Disconnected: " + ev.reason();
         ui.appendStatus(status, "(conn)", msg);
@@ -674,6 +699,7 @@ public class ConnectionCoordinator {
       String channel = channels.get(i);
       String ch = Objects.toString(channel, "").trim();
       if (ch.isEmpty()) continue;
+      if (observedChannelJoin(serverId, ch)) continue;
       try {
         TargetRef target = new TargetRef(serverId, ch);
         if (!target.isChannel()) continue;
@@ -704,6 +730,18 @@ public class ConnectionCoordinator {
       out.add(t);
     }
     return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private boolean observedChannelJoin(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String key = foldChannelKey(channel);
+    if (sid.isEmpty() || key.isEmpty()) return false;
+    Set<String> keys = observedJoinedChannelKeysByServer.get(sid);
+    return keys != null && keys.contains(key);
+  }
+
+  private static String foldChannelKey(String channel) {
+    return Objects.toString(channel, "").trim().toLowerCase(Locale.ROOT);
   }
 
   private void restoreJoinedChannelTargets(String serverId) {
