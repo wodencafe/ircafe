@@ -3,7 +3,7 @@
 IRCafe is a Java 25 desktop IRC client with a Swing UI and a Spring Boot backend.
 
 <figure>
-  <img width="50%" height="618" alt="Screenshot_20260301_120309" src="https://github.com/user-attachments/assets/8df8d59d-4d56-4632-83ff-e7b7c4ae8d6a" />
+  <img width="50%" height="619" alt="Screenshot_20260301_164811" src="https://github.com/user-attachments/assets/b22feaac-3d33-469f-879b-a2efb22cca20" />
   <figcaption style="font-size: 0.8rem; text-align: center; color: grey;">
       <BR>
       <sub>* Light Theme</sub>
@@ -11,7 +11,7 @@ IRCafe is a Java 25 desktop IRC client with a Swing UI and a Spring Boot backend
 </figure>
 <P></P>
 <figure>
-  <img width="50%" height="620" alt="Screenshot_20260301_120158" src="https://github.com/user-attachments/assets/904e0e36-1495-4d28-97af-f7d7f2dc354a" />
+  <img width="50%" height="620" alt="Screenshot_20260301_164951" src="https://github.com/user-attachments/assets/92365818-1839-4471-b3dd-52688925f272" />
   <figcaption style="font-size: 0.8rem; text-align: center; color: grey;">
       <BR>
       <sub>* Dark Theme</sub>
