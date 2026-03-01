@@ -2088,9 +2088,25 @@ public class PreferencesDialog {
   }
 
   private static void installDynamicTabSizing(JDialog d, JTabbedPane tabs, Window owner) {
-    ChangeListener listener = e -> packClampAndKeepCenter(d, owner);
+    ChangeListener listener =
+        e -> {
+          packClampAndKeepCenter(d, owner);
+          // Some tabs with nested panels/subtabs report final preferred sizes only after
+          // the first layout pass on selection.
+          SwingUtilities.invokeLater(
+              () -> {
+                if (!d.isDisplayable()) return;
+                packClampAndKeepCenter(d, owner);
+              });
+        };
     tabs.addChangeListener(listener);
     packClampAndKeepCenter(d, owner);
+    // Run one more pass after the dialog is realized so viewport measurements are final.
+    SwingUtilities.invokeLater(
+        () -> {
+          if (!d.isDisplayable()) return;
+          packClampAndKeepCenter(d, owner);
+        });
   }
 
   private static void packClampAndKeepCenter(JDialog d, Window owner) {
@@ -2140,7 +2156,7 @@ public class PreferencesDialog {
   }
 
   private static void nudgeToAvoidUnnecessaryVerticalScroll(JDialog d, int maxDialogHeight) {
-    if (d == null) return;
+    if (d == null || !d.isShowing()) return;
     java.awt.Container root = d.getContentPane();
     if (root == null) return;
 
@@ -3822,7 +3838,8 @@ public class PreferencesDialog {
     }
     linuxTab.add(linuxGroup, "growx, wmin 0");
 
-    JTabbedPane subTabs = new JTabbedPane();
+    JTabbedPane subTabs = new DynamicTabbedPane();
+    subTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
     subTabs.addTab("Tray", padSubTab(trayTab));
     subTabs.addTab("Desktop notifications", padSubTab(notificationsTab));
     subTabs.addTab("Sounds", padSubTab(soundsTab));
