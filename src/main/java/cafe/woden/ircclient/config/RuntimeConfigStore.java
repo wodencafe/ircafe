@@ -596,6 +596,37 @@ public class RuntimeConfigStore {
     }
   }
 
+  /**
+   * Returns runtime {@code autoJoin} entries for servers that explicitly define that key.
+   *
+   * <p>Only servers with an explicit {@code autoJoin} key are included. This allows callers to
+   * treat runtime config as authoritative without conflating missing keys with inherited defaults.
+   */
+  public synchronized Map<String, List<String>> readExplicitServerAutoJoinById() {
+    try {
+      if (file.toString().isBlank()) return Map.of();
+      if (!Files.exists(file)) return Map.of();
+
+      Map<String, Object> doc = loadFile();
+      Map<String, Object> irc = readMap(doc.get("irc"));
+      Object serversObj = irc.get("servers");
+      if (!(serversObj instanceof List<?> servers) || servers.isEmpty()) return Map.of();
+
+      LinkedHashMap<String, List<String>> out = new LinkedHashMap<>();
+      for (Object item : servers) {
+        if (!(item instanceof Map<?, ?> server)) continue;
+        String id = Objects.toString(server.get("id"), "").trim();
+        if (id.isEmpty()) continue;
+        if (!server.containsKey("autoJoin")) continue;
+        out.put(id, sanitizeStringList(server.get("autoJoin")));
+      }
+      return out.isEmpty() ? Map.of() : Map.copyOf(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read explicit auto-join lists from '{}'", file, e);
+      return Map.of();
+    }
+  }
+
   public synchronized void rememberJoinedChannel(String serverId, String channel) {
     rememberServerTreeChannel(serverId, channel);
   }
