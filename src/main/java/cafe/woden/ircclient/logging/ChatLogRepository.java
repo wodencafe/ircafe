@@ -98,11 +98,55 @@ public class ChatLogRepository {
        WHERE ts_epoch_ms < ?
       """;
 
+  private static final String SELECT_LEGACY_ROWS_WITHOUT_MESSAGE_ID_AFTER_SQL =
+      """
+      SELECT id, server_id, target, direction, kind, meta
+        FROM chat_log
+       WHERE id > ?
+         AND message_id IS NULL
+         AND meta IS NOT NULL
+    ORDER BY id ASC
+       LIMIT ?
+      """;
+
+  private static final String SELECT_MESSAGE_ID_CONFLICT_SQL =
+      """
+      SELECT 1
+        FROM chat_log
+       WHERE server_id = ?
+         AND target = ?
+         AND direction = ?
+         AND kind = ?
+         AND message_id = ?
+         AND id <> ?
+       LIMIT 1
+      """;
+
+  private static final String UPDATE_MESSAGE_ID_IF_MISSING_SQL =
+      """
+      UPDATE chat_log
+         SET message_id = ?
+       WHERE id = ?
+         AND message_id IS NULL
+      """;
+
+  private static final String DELETE_BY_ID_SQL =
+      """
+      DELETE FROM chat_log
+       WHERE id = ?
+      """;
+
   private static final String SELECT_MAX_TS_FOR_SERVER_SQL =
       """
       SELECT MAX(ts_epoch_ms)
         FROM chat_log
        WHERE server_id = ?
+      """;
+
+  private static final String SELECT_MAX_ROW_ID_SQL =
+      """
+      SELECT MAX(id)
+        FROM chat_log
       """;
 
   private static final String SELECT_DISTINCT_TARGETS_SQL =
@@ -115,7 +159,7 @@ public class ChatLogRepository {
       """;
 
   // Exact-existence check used for remote history ingestion de-duplication.
-  // NOTE: there is no unique constraint in the schema, so we must check before insert.
+  // This remains useful for rows without message ids (which are intentionally not keyed).
   private static final String SELECT_EXISTS_EXACT_SQL =
       """
       SELECT 1
@@ -160,7 +204,26 @@ public class ChatLogRepository {
                   rs.getBoolean("soft_ignored"),
                   rs.getString("meta")));
 
+  private static final RowMapper<LegacyMessageIdRow> LEGACY_MESSAGE_ID_ROW_MAPPER =
+      (rs, rowNum) ->
+          new LegacyMessageIdRow(
+              rs.getLong("id"),
+              rs.getString("server_id"),
+              rs.getString("target"),
+              rs.getString("direction"),
+              rs.getString("kind"),
+              rs.getString("meta"));
+
   private final JdbcTemplate jdbc;
+
+  public record LegacyMessageIdRow(
+      long id, String serverId, String target, String direction, String kind, String metaJson) {}
+
+  public enum LegacyMessageIdRepairOutcome {
+    UPDATED,
+    DELETED_DUPLICATE,
+    SKIPPED
+  }
 
   public ChatLogRepository(JdbcTemplate jdbc) {
     this.jdbc = jdbc;
@@ -256,6 +319,17 @@ public class ChatLogRepository {
     if (serverId == null || serverId.isBlank()) return OptionalLong.empty();
     try {
       Long v = jdbc.queryForObject(SELECT_MAX_TS_FOR_SERVER_SQL, Long.class, serverId);
+      if (v == null) return OptionalLong.empty();
+      return OptionalLong.of(v);
+    } catch (Exception ex) {
+      return OptionalLong.empty();
+    }
+  }
+
+  /** Fetch the maximum persisted row id (if any). */
+  public OptionalLong maxRowId() {
+    try {
+      Long v = jdbc.queryForObject(SELECT_MAX_ROW_ID_SQL, Long.class);
       if (v == null) return OptionalLong.empty();
       return OptionalLong.of(v);
     } catch (Exception ex) {
@@ -361,6 +435,66 @@ public class ChatLogRepository {
   }
 
   /**
+   * Fetch legacy rows that still have {@code message_id} missing but contain metadata.
+   *
+   * <p>Rows are returned oldest-first by identity id, so callers can maintain a deterministic
+   * cursor.
+   */
+  public List<LegacyMessageIdRow> fetchLegacyRowsWithoutMessageIdAfter(long afterId, int limit) {
+    if (limit <= 0) return List.of();
+    return jdbc.query(
+        SELECT_LEGACY_ROWS_WITHOUT_MESSAGE_ID_AFTER_SQL,
+        LEGACY_MESSAGE_ID_ROW_MAPPER,
+        afterId,
+        limit);
+  }
+
+  /**
+   * Backfill {@code message_id} for a legacy row, deleting it if the message-id is already present
+   * in another persisted row.
+   */
+  public LegacyMessageIdRepairOutcome backfillMessageIdOrDeleteDuplicate(
+      LegacyMessageIdRow row, String messageId) {
+    long rowId = row == null ? Long.MIN_VALUE : row.id();
+    String normalized = normalizeMessageId(messageId);
+    if (rowId < 0L || normalized == null) return LegacyMessageIdRepairOutcome.SKIPPED;
+
+    if (row != null && hasMessageIdConflict(row, normalized)) {
+      int deleted = jdbc.update(DELETE_BY_ID_SQL, rowId);
+      return deleted > 0
+          ? LegacyMessageIdRepairOutcome.DELETED_DUPLICATE
+          : LegacyMessageIdRepairOutcome.SKIPPED;
+    }
+
+    try {
+      int updated = jdbc.update(UPDATE_MESSAGE_ID_IF_MISSING_SQL, normalized, rowId);
+      return updated > 0
+          ? LegacyMessageIdRepairOutcome.UPDATED
+          : LegacyMessageIdRepairOutcome.SKIPPED;
+    } catch (DataAccessException ex) {
+      if (!isDuplicateKey(ex)) throw ex;
+      int deleted = jdbc.update(DELETE_BY_ID_SQL, rowId);
+      return deleted > 0
+          ? LegacyMessageIdRepairOutcome.DELETED_DUPLICATE
+          : LegacyMessageIdRepairOutcome.SKIPPED;
+    }
+  }
+
+  private boolean hasMessageIdConflict(LegacyMessageIdRow row, String messageId) {
+    List<Integer> rows =
+        jdbc.query(
+            SELECT_MESSAGE_ID_CONFLICT_SQL,
+            (rs, rowNum) -> rs.getInt(1),
+            row.serverId(),
+            row.target(),
+            row.direction(),
+            row.kind(),
+            messageId,
+            row.id());
+    return rows != null && !rows.isEmpty();
+  }
+
+  /**
    * Permanently delete all persisted lines for a specific server+target.
    *
    * @return number of deleted rows
@@ -421,7 +555,7 @@ public class ChatLogRepository {
     return false;
   }
 
-  private static String extractMessageId(String metaJson) {
+  static String extractMessageId(String metaJson) {
     String meta = Objects.toString(metaJson, "").trim();
     if (meta.isEmpty()) return "";
     String key = "\"messageId\"";

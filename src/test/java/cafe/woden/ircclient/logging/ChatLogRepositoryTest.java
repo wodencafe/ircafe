@@ -105,6 +105,39 @@ class ChatLogRepositoryTest {
   }
 
   @Test
+  void legacyRowsCanBeBackfilledAndDeduplicatedByMessageId() {
+    try (Fixture fixture = openFixture(tempDir.resolve("chatlog-legacy-message-id-repair"))) {
+      insertLegacyRowWithNullMessageId(
+          fixture, "srv", "#chan", 1_700_010_000_000L, "first", "legacy-dup-1");
+      insertLegacyRowWithNullMessageId(
+          fixture, "srv", "#chan", 1_700_010_001_000L, "second", "legacy-dup-1");
+      insertLegacyRowWithNullMessageId(
+          fixture, "srv", "#chan", 1_700_010_002_000L, "third", "legacy-unique-1");
+
+      runLegacyMessageIdRepair(fixture.repo);
+
+      Integer dupCount =
+          fixture.jdbc.queryForObject(
+              "SELECT COUNT(*) FROM chat_log WHERE message_id = ?", Integer.class, "legacy-dup-1");
+      Integer uniqueCount =
+          fixture.jdbc.queryForObject(
+              "SELECT COUNT(*) FROM chat_log WHERE message_id = ?",
+              Integer.class,
+              "legacy-unique-1");
+
+      assertEquals(1, dupCount == null ? 0 : dupCount);
+      assertEquals(1, uniqueCount == null ? 0 : uniqueCount);
+
+      List<LogLine> rows = fixture.repo.fetchRecent("srv", "#chan", 10);
+      List<Map<String, Object>> rawRows =
+          fixture.jdbc.queryForList("SELECT id, text, message_id, meta FROM chat_log ORDER BY id");
+      assertEquals(2, rows.size(), rawRows.toString());
+      assertEquals("third", rows.getFirst().text());
+      assertEquals("first", rows.get(1).text());
+    }
+  }
+
+  @Test
   void targetLookupsAreCaseInsensitive() {
     try (Fixture fixture = openFixture(tempDir.resolve("chatlog-case-insensitive-target"))) {
       TargetRef target = new TargetRef("srv", "#ChanCase");
@@ -136,6 +169,59 @@ class ChatLogRepositoryTest {
 
   private static Clock fixedClock(long epochMs) {
     return Clock.fixed(Instant.ofEpochMilli(epochMs), ZoneOffset.UTC);
+  }
+
+  private static void runLegacyMessageIdRepair(ChatLogRepository repo) {
+    long afterId = -1L;
+    while (true) {
+      List<ChatLogRepository.LegacyMessageIdRow> batch =
+          repo.fetchLegacyRowsWithoutMessageIdAfter(afterId, 2);
+      if (batch == null || batch.isEmpty()) return;
+      afterId = batch.get(batch.size() - 1).id();
+
+      for (ChatLogRepository.LegacyMessageIdRow row : batch) {
+        String messageId = ChatLogRepository.extractMessageId(row.metaJson());
+        if (messageId.isBlank()) continue;
+        repo.backfillMessageIdOrDeleteDuplicate(row, messageId);
+      }
+    }
+  }
+
+  private static void insertLegacyRowWithNullMessageId(
+      Fixture fixture,
+      String serverId,
+      String target,
+      long tsEpochMs,
+      String text,
+      String messageId) {
+    String metaJson = "{\"messageId\":\"" + messageId + "\"}";
+    fixture.jdbc.update(
+        """
+        INSERT INTO chat_log(
+          server_id,
+          target,
+          ts_epoch_ms,
+          direction,
+          kind,
+          from_nick,
+          text,
+          outgoing_local_echo,
+          soft_ignored,
+          meta,
+          message_id
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        serverId,
+        target,
+        tsEpochMs,
+        "IN",
+        "CHAT",
+        "alice",
+        text,
+        false,
+        false,
+        metaJson,
+        null);
   }
 
   private static Fixture openFixture(Path basePath) {
