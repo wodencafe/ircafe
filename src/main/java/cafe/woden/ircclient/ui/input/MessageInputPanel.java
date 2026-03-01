@@ -220,10 +220,8 @@ public class MessageInputPanel extends JPanel {
     send.setOpaque(false);
     send.setContentAreaFilled(false);
     send.setFocusPainted(false);
-    send.setBorder(
-        BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 1, 0, 0, resolveInputDividerColor()),
-            BorderFactory.createEmptyBorder(5, 10, 5, 10)));
+    // Avoid divider paint artifacts from overlapping borders in some themes.
+    send.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
     send.setPreferredSize(new Dimension(38, 30));
   }
 
@@ -241,14 +239,6 @@ public class MessageInputPanel extends JPanel {
     if (c == null) c = UIManager.getColor("TextField.borderColor");
     if (c == null) c = UIManager.getColor("Separator.foreground");
     if (c == null) c = new Color(0x8B8F95);
-    return c;
-  }
-
-  private static Color resolveInputDividerColor() {
-    Color c = UIManager.getColor("Component.borderColor");
-    if (c == null) c = UIManager.getColor("Separator.foreground");
-    if (c == null) c = UIManager.getColor("Label.disabledForeground");
-    if (c == null) c = new Color(0x9AA0A6);
     return c;
   }
 

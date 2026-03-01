@@ -13,7 +13,8 @@ import javax.swing.*;
  * <p>Behavior:
  *
  * <ul>
- *   <li>Unavailable/default: steady white arrow.
+ *   <li>Unavailable/default: steady theme-aware arrow (dark on light themes, white on dark
+ *       themes).
  *   <li>Idle (typing available): steady green arrow.
  *   <li>Active: glowing blue arrow pulse.
  *   <li>Paused: light gray arrow (fades from active).
@@ -27,6 +28,8 @@ final class TypingSignalIndicator extends JComponent {
   private static final int PAUSE_FADE_MS = 240;
   private static final int RETURN_TO_IDLE_MS = 420;
   private static final float IDLE_GLOW_ALPHA = 0.12f;
+  private static final Color DARK_THEME_FALLBACK_ARROW = new Color(0xFFFFFF);
+  private static final Color LIGHT_THEME_FALLBACK_ARROW = new Color(0x2B313A);
 
   private final Timer fadeTimer;
 
@@ -227,7 +230,7 @@ final class TypingSignalIndicator extends JComponent {
 
   private ArrowVisual visualAt(long now) {
     if (!available) {
-      return new ArrowVisual(defaultWhiteColor(), 0f);
+      return new ArrowVisual(unavailableFallbackColor(), 0f);
     }
     if (mode == Mode.PAUSING) {
       float t = clamp01((float) (Math.max(0L, now - modeStartMs) / (double) PAUSE_FADE_MS));
@@ -265,8 +268,14 @@ final class TypingSignalIndicator extends JComponent {
     return new Color(0x35C86E);
   }
 
-  private static Color defaultWhiteColor() {
-    return new Color(0xFFFFFF);
+  private Color unavailableFallbackColor() {
+    Color bg = resolveFallbackBackgroundColor();
+    if (isDark(bg)) return DARK_THEME_FALLBACK_ARROW;
+
+    Color fg = UIManager.getColor("Label.foreground");
+    if (fg == null) fg = UIManager.getColor("TextField.foreground");
+    if (fg != null && isDark(fg)) return fg;
+    return LIGHT_THEME_FALLBACK_ARROW;
   }
 
   private static Color activeBlueBaseColor() {
@@ -301,6 +310,37 @@ final class TypingSignalIndicator extends JComponent {
   private static float easeOutCubic(float t) {
     float x = 1f - clamp01(t);
     return 1f - (x * x * x);
+  }
+
+  private Color resolveFallbackBackgroundColor() {
+    for (Container c = getParent(); c != null; c = c.getParent()) {
+      Color bg = c.getBackground();
+      if (bg == null) continue;
+      if (c instanceof JComponent jc && !jc.isOpaque()) continue;
+      return bg;
+    }
+
+    Color bg = UIManager.getColor("TextField.background");
+    if (bg == null) bg = UIManager.getColor("TextPane.background");
+    if (bg == null) bg = UIManager.getColor("Panel.background");
+    if (bg == null) bg = UIManager.getColor("control");
+    return bg;
+  }
+
+  private static boolean isDark(Color c) {
+    if (c == null) return true;
+    return relativeLuminance(c) < 0.45;
+  }
+
+  private static double relativeLuminance(Color c) {
+    double r = srgbToLinear(c.getRed() / 255.0);
+    double g = srgbToLinear(c.getGreen() / 255.0);
+    double b = srgbToLinear(c.getBlue() / 255.0);
+    return 0.2126d * r + 0.7152d * g + 0.0722d * b;
+  }
+
+  private static double srgbToLinear(double v) {
+    return (v <= 0.04045d) ? (v / 12.92d) : Math.pow((v + 0.055d) / 1.055d, 2.4d);
   }
 
   private enum SignalEvent {
