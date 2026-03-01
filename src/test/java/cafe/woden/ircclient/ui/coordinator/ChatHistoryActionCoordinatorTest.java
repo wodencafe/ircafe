@@ -33,11 +33,15 @@ class ChatHistoryActionCoordinatorTest {
             () -> {},
             () -> {},
             cmd -> {},
-            (target, msgId) -> {},
+            (target, msgId, preview, jumpAction) -> {},
             (target, msgId) -> {},
             text -> {},
             () -> "/chathistory latest * 200",
-            msgId -> "/chathistory around msgid=" + msgId + " 200");
+            msgId -> "/chathistory around msgid=" + msgId + " 200",
+            (target, msgId) -> "",
+            (target, msgId) -> -1,
+            () -> {},
+            offset -> {});
 
     assertTrue(coordinator.replyContextActionVisible());
   }
@@ -52,6 +56,7 @@ class ChatHistoryActionCoordinatorTest {
     AtomicInteger focusInputCalls = new AtomicInteger();
     AtomicReference<String> replyTarget = new AtomicReference<>();
     AtomicReference<String> replyMessageId = new AtomicReference<>();
+    AtomicReference<String> replyPreview = new AtomicReference<>();
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
@@ -63,14 +68,19 @@ class ChatHistoryActionCoordinatorTest {
             focusInputCalls::incrementAndGet,
             () -> {},
             cmd -> {},
-            (target, msgId) -> {
+            (target, msgId, preview, jumpAction) -> {
               replyTarget.set(target);
               replyMessageId.set(msgId);
+              replyPreview.set(preview);
             },
             (target, msgId) -> {},
             text -> {},
             () -> "/chathistory latest * 200",
-            msgId -> "/chathistory around msgid=" + msgId + " 200");
+            msgId -> "/chathistory around msgid=" + msgId + " 200",
+            (target, msgId) -> "alice: earlier line",
+            (target, msgId) -> 12,
+            () -> {},
+            offset -> {});
 
     coordinator.onReplyToMessageRequested("msg-42");
 
@@ -79,6 +89,7 @@ class ChatHistoryActionCoordinatorTest {
     assertEquals(1, focusInputCalls.get());
     assertEquals("#ircafe", replyTarget.get());
     assertEquals("msg-42", replyMessageId.get());
+    assertEquals("alice: earlier line", replyPreview.get());
   }
 
   @Test
@@ -98,11 +109,15 @@ class ChatHistoryActionCoordinatorTest {
             () -> {},
             () -> {},
             cmd -> {},
-            (target, msgId) -> {},
+            (target, msgId, preview, jumpAction) -> {},
             (target, msgId) -> {},
             text -> {},
             () -> "/chathistory latest * 200",
-            msgId -> "/chathistory around msgid=" + msgId + " 200");
+            msgId -> "/chathistory around msgid=" + msgId + " 200",
+            (target, msgId) -> "",
+            (target, msgId) -> -1,
+            () -> {},
+            offset -> {});
 
     assertTrue(coordinator.unreactContextActionVisible());
     when(irc.isDraftUnreactAvailable("libera")).thenReturn(false);
@@ -130,11 +145,15 @@ class ChatHistoryActionCoordinatorTest {
             focusInputCalls::incrementAndGet,
             () -> {},
             cmd -> {},
-            (target, msgId) -> {},
+            (target, msgId, preview, jumpAction) -> {},
             (target, msgId) -> {},
             draftText::set,
             () -> "/chathistory latest * 200",
-            msgId -> "/chathistory around msgid=" + msgId + " 200");
+            msgId -> "/chathistory around msgid=" + msgId + " 200",
+            (target, msgId) -> "",
+            (target, msgId) -> -1,
+            () -> {},
+            offset -> {});
 
     coordinator.onUnreactToMessageRequested("msg-88");
 
@@ -165,11 +184,15 @@ class ChatHistoryActionCoordinatorTest {
             () -> {},
             armTailPinCalls::incrementAndGet,
             emittedCommand::set,
-            (target, msgId) -> {},
+            (target, msgId, preview, jumpAction) -> {},
             (target, msgId) -> {},
             text -> {},
             () -> "/chathistory latest * 200",
-            msgId -> "/chathistory around msgid=" + msgId + " 200");
+            msgId -> "/chathistory around msgid=" + msgId + " 200",
+            (target, msgId) -> "",
+            (target, msgId) -> -1,
+            () -> {},
+            offset -> {});
 
     coordinator.onLoadNewerHistoryRequested();
 
@@ -199,11 +222,15 @@ class ChatHistoryActionCoordinatorTest {
             () -> {},
             () -> {},
             cmd -> {},
-            (target, msgId) -> {},
+            (target, msgId, preview, jumpAction) -> {},
             (target, msgId) -> {},
             text -> {},
             () -> "/chathistory latest * 200",
-            msgId -> "/chathistory around msgid=" + msgId + " 200");
+            msgId -> "/chathistory around msgid=" + msgId + " 200",
+            (target, msgId) -> "",
+            (target, msgId) -> -1,
+            () -> {},
+            offset -> {});
 
     coordinator.onLoadNewerHistoryRequested();
 
@@ -226,11 +253,15 @@ class ChatHistoryActionCoordinatorTest {
             () -> {},
             () -> {},
             cmd -> {},
-            (target, msgId) -> {},
+            (target, msgId, preview, jumpAction) -> {},
             (target, msgId) -> {},
             text -> {},
             () -> "/chathistory latest * 200",
-            msgId -> "/chathistory around msgid=" + msgId + " 200");
+            msgId -> "/chathistory around msgid=" + msgId + " 200",
+            (target, msgId) -> "",
+            (target, msgId) -> -1,
+            () -> {},
+            offset -> {});
 
     assertFalse(coordinator.requestHistoryAroundMessage("msg-1"));
   }
@@ -252,11 +283,15 @@ class ChatHistoryActionCoordinatorTest {
             () -> {},
             () -> {},
             emittedCommand::set,
-            (target, msgId) -> {},
+            (target, msgId, preview, jumpAction) -> {},
             (target, msgId) -> {},
             text -> {},
             () -> "/chathistory latest * 200",
-            msgId -> "/chathistory around msgid=" + msgId + " 200");
+            msgId -> "/chathistory around msgid=" + msgId + " 200",
+            (target, msgId) -> "",
+            (target, msgId) -> -1,
+            () -> {},
+            offset -> {});
 
     coordinator.onRedactMessageRequested("abc123");
 

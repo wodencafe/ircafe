@@ -377,7 +377,21 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     if (activate != null) {
       activate.accept(target);
     }
-    inputPanel.beginReplyCompose(target.target(), msgId);
+    String preview = transcripts.messagePreviewById(target, msgId);
+    Runnable jumpAction =
+        () -> {
+          int offset = transcripts.messageOffsetById(target, msgId);
+          if (offset >= 0) {
+            setFollowTail(false);
+            scrollToTranscriptOffset(offset);
+            return;
+          }
+          String line = buildChatHistoryAroundByMsgIdCommand(msgId);
+          if (!line.isBlank()) {
+            emitHistoryCommand(line);
+          }
+        };
+    inputPanel.beginReplyCompose(target.target(), msgId, preview, jumpAction);
     inputPanel.focusInput();
   }
 
@@ -432,6 +446,11 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     String msgId = Objects.toString(messageId, "").trim();
     if (msgId.isEmpty()) return;
     emitHistoryCommand("/redact " + msgId);
+  }
+
+  @Override
+  protected boolean isOwnMessageForContextActions(String messageId) {
+    return transcripts != null && transcripts.isOwnMessage(target, messageId);
   }
 
   private void emitHistoryCommand(String line) {

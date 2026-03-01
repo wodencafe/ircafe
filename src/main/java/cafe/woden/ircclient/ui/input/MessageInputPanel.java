@@ -558,6 +558,11 @@ public class MessageInputPanel extends JPanel {
     composeSupport.beginReplyCompose(ircTarget, messageId);
   }
 
+  public void beginReplyCompose(
+      String ircTarget, String messageId, String previewText, Runnable jumpAction) {
+    composeSupport.beginReplyCompose(ircTarget, messageId, previewText, jumpAction);
+  }
+
   public void clearReplyCompose() {
     composeSupport.clearReplyCompose();
   }

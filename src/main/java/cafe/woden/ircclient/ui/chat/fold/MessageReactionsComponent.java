@@ -1,16 +1,21 @@
 package cafe.woden.ircclient.ui.chat.fold;
 
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Insets;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -25,6 +30,8 @@ public final class MessageReactionsComponent extends JPanel {
 
   private final Map<String, ChipState> chipsByReaction = new LinkedHashMap<>();
   private Font transcriptBaseFont;
+  private Consumer<String> onReactRequested = reaction -> {};
+  private Consumer<String> onUnreactRequested = reaction -> {};
 
   public MessageReactionsComponent() {
     super(new FlowLayout(FlowLayout.LEFT, 6, 0));
@@ -34,6 +41,14 @@ public final class MessageReactionsComponent extends JPanel {
   public void setTranscriptFont(Font base) {
     this.transcriptBaseFont = base;
     refreshChipFonts();
+  }
+
+  public void setOnReactRequested(Consumer<String> onReactRequested) {
+    this.onReactRequested = Objects.requireNonNullElse(onReactRequested, reaction -> {});
+  }
+
+  public void setOnUnreactRequested(Consumer<String> onUnreactRequested) {
+    this.onUnreactRequested = Objects.requireNonNullElse(onUnreactRequested, reaction -> {});
   }
 
   public void setReactions(Map<String, ? extends Collection<String>> reactions) {
@@ -90,11 +105,47 @@ public final class MessageReactionsComponent extends JPanel {
     applyChipFont(l);
     l.setForeground(resolveChipForeground());
     l.setBackground(resolveChipBackground());
+    l.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     l.setBorder(
         BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(resolveChipBorderColor()),
             BorderFactory.createEmptyBorder(1, 6, 1, 6)));
     l.setToolTipText(tooltip(st));
+    l.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mousePressed(MouseEvent e) {
+            if (e != null && e.isPopupTrigger()) {
+              dispatchUnreact(e);
+            }
+          }
+
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            if (e == null) return;
+            if (e.isPopupTrigger() || MouseEvent.BUTTON3 == e.getButton()) {
+              dispatchUnreact(e);
+              return;
+            }
+            if (MouseEvent.BUTTON1 == e.getButton()) {
+              dispatchReact(e);
+            }
+          }
+
+          private void dispatchReact(MouseEvent e) {
+            String token = normalizeReactionToken(st.reaction);
+            if (token.isEmpty()) return;
+            onReactRequested.accept(token);
+            e.consume();
+          }
+
+          private void dispatchUnreact(MouseEvent e) {
+            String token = normalizeReactionToken(st.reaction);
+            if (token.isEmpty()) return;
+            onUnreactRequested.accept(token);
+            e.consume();
+          }
+        });
     return l;
   }
 
@@ -116,10 +167,11 @@ public final class MessageReactionsComponent extends JPanel {
   }
 
   private static String tooltip(ChipState st) {
+    String actionHint = " [Left click react, right click remove]";
     if (st.nicks.isEmpty()) return st.reaction;
     List<String> sorted = new ArrayList<>(st.nicks);
     sorted.sort(String.CASE_INSENSITIVE_ORDER);
-    return st.reaction + " by " + String.join(", ", sorted);
+    return st.reaction + " by " + String.join(", ", sorted) + actionHint;
   }
 
   @Override

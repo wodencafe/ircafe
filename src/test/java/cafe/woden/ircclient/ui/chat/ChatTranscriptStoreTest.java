@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.chat;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -13,13 +14,20 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
 import cafe.woden.ircclient.ui.chat.embed.ChatLinkPreviewEmbedder;
+import cafe.woden.ircclient.ui.chat.fold.MessageReactionsComponent;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.settings.MemoryUsageDisplayMode;
 import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.JLabel;
+import javax.swing.text.Element;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import org.junit.jupiter.api.Test;
@@ -162,6 +170,60 @@ class ChatTranscriptStoreTest {
 
     String text = transcriptText(store.document(ref));
     assertTrue(text.contains("-> bob replied to m-1 (alice: after (edited))"));
+  }
+
+  @Test
+  void messagePreviewByIdReturnsCachedReplySnippet() {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "hello from preview cache", false, 6_000L, "m-1", Map.of());
+
+    assertEquals("alice: hello from preview cache", store.messagePreviewById(ref, "m-1"));
+  }
+
+  @Test
+  void reactionChipClickDispatchesConfiguredActionHandler() {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+    AtomicReference<TargetRef> clickedTarget = new AtomicReference<>();
+    AtomicReference<String> clickedMsgId = new AtomicReference<>();
+    AtomicReference<String> clickedReaction = new AtomicReference<>();
+    AtomicBoolean unreact = new AtomicBoolean();
+
+    store.setReactionChipActionHandler(
+        (target, messageId, reactionToken, unreactRequested) -> {
+          clickedTarget.set(target);
+          clickedMsgId.set(messageId);
+          clickedReaction.set(reactionToken);
+          unreact.set(unreactRequested);
+        });
+
+    store.appendChatAt(ref, "alice", "hello", false, 6_000L, "m-42", Map.of("msgid", "m-42"));
+    store.applyMessageReaction(ref, "m-42", ":+1:", "bob", 6_050L);
+
+    MessageReactionsComponent reactions = reactionComponent(store.document(ref));
+    assertNotNull(reactions);
+    JLabel chip = (JLabel) reactions.getComponent(0);
+    MouseEvent click =
+        new MouseEvent(
+            chip,
+            MouseEvent.MOUSE_RELEASED,
+            System.currentTimeMillis(),
+            0,
+            4,
+            4,
+            1,
+            false,
+            MouseEvent.BUTTON1);
+    for (MouseListener listener : chip.getMouseListeners()) {
+      listener.mouseReleased(click);
+    }
+
+    assertEquals(ref, clickedTarget.get());
+    assertEquals("m-42", clickedMsgId.get());
+    assertEquals(":+1:", clickedReaction.get());
+    assertFalse(unreact.get());
   }
 
   @Test
@@ -433,6 +495,23 @@ class ChatTranscriptStoreTest {
 
   private static String transcriptText(StyledDocument doc) throws Exception {
     return doc.getText(0, doc.getLength());
+  }
+
+  private static MessageReactionsComponent reactionComponent(StyledDocument doc) {
+    Element root = doc.getDefaultRootElement();
+    if (root == null) return null;
+    int len = doc.getLength();
+    for (int i = 0; i < root.getElementCount(); i++) {
+      Element line = root.getElement(i);
+      if (line == null) continue;
+      int start = Math.max(0, line.getStartOffset());
+      if (start >= len) continue;
+      Object comp = StyleConstants.getComponent(doc.getCharacterElement(start).getAttributes());
+      if (comp instanceof MessageReactionsComponent reactions) {
+        return reactions;
+      }
+    }
+    return null;
   }
 
   private static int lineCount(StyledDocument doc) {

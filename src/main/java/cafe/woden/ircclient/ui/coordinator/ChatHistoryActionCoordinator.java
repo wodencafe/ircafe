@@ -5,12 +5,19 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import java.util.Objects;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 /** Owns transcript context-action capability checks and history command flows. */
 public final class ChatHistoryActionCoordinator {
+
+  @FunctionalInterface
+  public interface ReplyComposeStarter {
+    void begin(String target, String messageId, String previewText, Runnable jumpAction);
+  }
 
   private final IrcClientService irc;
   private final ChatHistoryService chatHistoryService;
@@ -20,11 +27,15 @@ public final class ChatHistoryActionCoordinator {
   private final Runnable focusInput;
   private final Runnable armTailPinOnNextAppendIfAtBottom;
   private final Consumer<String> outboundEmitter;
-  private final BiConsumer<String, String> beginReplyCompose;
+  private final ReplyComposeStarter beginReplyCompose;
   private final BiConsumer<String, String> openQuickReactionPicker;
   private final Consumer<String> setDraftText;
   private final Supplier<String> historyLatestCommandSupplier;
   private final Function<String, String> historyAroundByMessageIdCommandBuilder;
+  private final BiFunction<TargetRef, String, String> messagePreviewLookup;
+  private final BiFunction<TargetRef, String, Integer> messageOffsetLookup;
+  private final Runnable disableFollowTail;
+  private final IntConsumer scrollToTranscriptOffset;
 
   public ChatHistoryActionCoordinator(
       IrcClientService irc,
@@ -35,11 +46,15 @@ public final class ChatHistoryActionCoordinator {
       Runnable focusInput,
       Runnable armTailPinOnNextAppendIfAtBottom,
       Consumer<String> outboundEmitter,
-      BiConsumer<String, String> beginReplyCompose,
+      ReplyComposeStarter beginReplyCompose,
       BiConsumer<String, String> openQuickReactionPicker,
       Consumer<String> setDraftText,
       Supplier<String> historyLatestCommandSupplier,
-      Function<String, String> historyAroundByMessageIdCommandBuilder) {
+      Function<String, String> historyAroundByMessageIdCommandBuilder,
+      BiFunction<TargetRef, String, String> messagePreviewLookup,
+      BiFunction<TargetRef, String, Integer> messageOffsetLookup,
+      Runnable disableFollowTail,
+      IntConsumer scrollToTranscriptOffset) {
     this.irc = irc;
     this.chatHistoryService = chatHistoryService;
     this.activeTargetSupplier =
@@ -61,6 +76,12 @@ public final class ChatHistoryActionCoordinator {
     this.historyAroundByMessageIdCommandBuilder =
         Objects.requireNonNull(
             historyAroundByMessageIdCommandBuilder, "historyAroundByMessageIdCommandBuilder");
+    this.messagePreviewLookup =
+        Objects.requireNonNull(messagePreviewLookup, "messagePreviewLookup");
+    this.messageOffsetLookup = Objects.requireNonNull(messageOffsetLookup, "messageOffsetLookup");
+    this.disableFollowTail = Objects.requireNonNull(disableFollowTail, "disableFollowTail");
+    this.scrollToTranscriptOffset =
+        Objects.requireNonNull(scrollToTranscriptOffset, "scrollToTranscriptOffset");
   }
 
   public boolean replyContextActionVisible() {
@@ -150,7 +171,9 @@ public final class ChatHistoryActionCoordinator {
     String msgId = Objects.toString(messageId, "").trim();
     if (msgId.isEmpty()) return;
     activateInputForTarget(target);
-    beginReplyCompose.accept(target.target(), msgId);
+    String preview = Objects.toString(messagePreviewLookup.apply(target, msgId), "").trim();
+    Runnable jumpAction = () -> jumpToMessage(target, msgId);
+    beginReplyCompose.begin(target.target(), msgId, preview, jumpAction);
     focusInput.run();
   }
 
@@ -204,6 +227,22 @@ public final class ChatHistoryActionCoordinator {
     activateInputForTarget(target);
     armTailPinOnNextAppendIfAtBottom.run();
     outboundEmitter.accept(cmd);
+  }
+
+  private void jumpToMessage(TargetRef target, String msgId) {
+    if (target == null) return;
+    int offset;
+    try {
+      offset = messageOffsetLookup.apply(target, msgId);
+    } catch (Exception ignored) {
+      offset = -1;
+    }
+    if (offset >= 0) {
+      disableFollowTail.run();
+      scrollToTranscriptOffset.accept(offset);
+      return;
+    }
+    requestHistoryAroundMessage(msgId);
   }
 
   private void activateInputForTarget(TargetRef target) {

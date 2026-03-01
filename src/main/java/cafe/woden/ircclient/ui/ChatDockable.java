@@ -281,6 +281,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.dccActionCoordinator = inputBundle.dccActionCoordinator();
     this.readMarkerCoordinator = inputBundle.readMarkerCoordinator();
     this.activeTargetCoordinator = inputBundle.activeTargetCoordinator();
+    configureReactionChipActions(transcripts, irc, activationBus, outboundBus);
     inputPanel.setOnTypingStateChanged(typingCoordinator::onLocalTypingStateChanged);
     bindInputOutboundMessages(outboundBus);
 
@@ -597,11 +598,48 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         inputPanel::focusInput,
         this::armTailPinOnNextAppendIfAtBottom,
         outboundBus::emit,
-        inputPanel::beginReplyCompose,
+        (target, msgId, preview, jumpAction) ->
+            inputPanel.beginReplyCompose(target, msgId, preview, jumpAction),
         inputPanel::openQuickReactionPicker,
         inputPanel::setDraftText,
         ChatDockable::buildChatHistoryLatestCommand,
-        ChatDockable::buildChatHistoryAroundByMsgIdCommand);
+        ChatDockable::buildChatHistoryAroundByMsgIdCommand,
+        transcripts::messagePreviewById,
+        transcripts::messageOffsetById,
+        () -> setFollowTail(false),
+        this::scrollToTranscriptOffset);
+  }
+
+  private void configureReactionChipActions(
+      ChatTranscriptStore transcripts,
+      IrcClientService irc,
+      TargetActivationBus activationBus,
+      OutboundLineBus outboundBus) {
+    if (transcripts == null) return;
+    transcripts.setReactionChipActionHandler(
+        (target, messageId, reactionToken, unreactRequested) -> {
+          if (target == null || target.isUiOnly()) return;
+          String msgId = Objects.toString(messageId, "").trim();
+          String token = Objects.toString(reactionToken, "").trim();
+          if (msgId.isEmpty() || token.isEmpty()) return;
+
+          if (irc != null) {
+            try {
+              boolean supported =
+                  unreactRequested
+                      ? irc.isDraftReplyAvailable(target.serverId())
+                          && irc.isDraftUnreactAvailable(target.serverId())
+                      : irc.isDraftReactAvailable(target.serverId());
+              if (!supported) return;
+            } catch (Exception ignored) {
+              return;
+            }
+          }
+
+          activationBus.activate(target);
+          armTailPinOnNextAppendIfAtBottom();
+          outboundBus.emit((unreactRequested ? "/unreact " : "/react ") + msgId + " " + token);
+        });
   }
 
   private ChatTranscriptInteractionCoordinator createTranscriptInteractionCoordinator(
@@ -1064,6 +1102,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     historyActionCoordinator.onRedactMessageRequested(messageId);
   }
 
+  @Override
+  protected boolean isOwnMessageForContextActions(String messageId) {
+    TargetRef target = activeTarget;
+    if (target == null || target.isUiOnly()) return false;
+    return transcripts != null && transcripts.isOwnMessage(target, messageId);
+  }
+
   private void requestDccAction(
       TargetRef ctx, String nick, NickContextMenuFactory.DccAction action) {
     dccActionCoordinator.requestAction(ctx, nick, action);
@@ -1157,6 +1202,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     }
     try {
       readMarkerCoordinator.clearAll();
+    } catch (Exception ignored) {
+    }
+    try {
+      transcripts.setReactionChipActionHandler(null);
     } catch (Exception ignored) {
     }
     // Ensure decorator listeners/subscriptions are removed when Spring disposes this dock.

@@ -14,6 +14,7 @@ public final class MessageInputComposeSupport {
   private static final String[] QUICK_REACTION_TOKENS = {
     ":+1:", ":heart:", ":laughing:", ":thinking:", ":eyes:"
   };
+  private static final int REPLY_PREVIEW_TEXT_MAX_CHARS = 96;
 
   private final JComponent layoutTarget;
   private final Component dialogOwner;
@@ -23,10 +24,14 @@ public final class MessageInputComposeSupport {
 
   private final JPanel composeBanner = new JPanel(new BorderLayout(6, 0));
   private final JLabel composeBannerLabel = new JLabel();
+  private final JPanel composeBannerActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+  private final JButton composeBannerJump = new JButton("Jump");
   private final JButton composeBannerCancel = new JButton("Cancel");
 
   private String replyComposeTarget = "";
   private String replyComposeMessageId = "";
+  private String replyComposePreview = "";
+  private Runnable replyComposeJumpAction = null;
 
   public MessageInputComposeSupport(
       JComponent layoutTarget,
@@ -52,11 +57,18 @@ public final class MessageInputComposeSupport {
   }
 
   public void beginReplyCompose(String ircTarget, String messageId) {
+    beginReplyCompose(ircTarget, messageId, "", null);
+  }
+
+  public void beginReplyCompose(
+      String ircTarget, String messageId, String previewText, Runnable jumpAction) {
     String target = normalizeComposeTarget(ircTarget);
     String msgId = normalizeComposeMessageId(messageId);
     if (target.isEmpty() || msgId.isEmpty()) return;
     replyComposeTarget = target;
     replyComposeMessageId = msgId;
+    replyComposePreview = normalizeReplyPreviewText(previewText);
+    replyComposeJumpAction = jumpAction;
     updateComposeBanner();
   }
 
@@ -68,6 +80,8 @@ public final class MessageInputComposeSupport {
     boolean hadCompose = hasReplyCompose();
     replyComposeTarget = "";
     replyComposeMessageId = "";
+    replyComposePreview = "";
+    replyComposeJumpAction = null;
     updateComposeBanner();
 
     if (focusInputAfter) {
@@ -169,22 +183,44 @@ public final class MessageInputComposeSupport {
     composeBanner.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
     composeBannerLabel.setText("");
 
+    composeBannerActions.setOpaque(false);
+
+    composeBannerJump.setFocusable(false);
+    composeBannerJump.addActionListener(
+        e -> {
+          Runnable jump = replyComposeJumpAction;
+          if (jump == null) return;
+          try {
+            jump.run();
+          } catch (Exception ex) {
+            log.warn("[MessageInputComposeSupport] jump action failed", ex);
+          }
+          try {
+            hooks.focusInput();
+          } catch (Exception ex) {
+            log.warn("[MessageInputComposeSupport] hooks.focusInput failed after jump", ex);
+          }
+        });
+
     composeBannerCancel.setFocusable(false);
     composeBannerCancel.addActionListener(e -> clearReplyCompose());
 
+    composeBannerActions.add(composeBannerJump);
+    composeBannerActions.add(composeBannerCancel);
     composeBanner.add(composeBannerLabel, BorderLayout.CENTER);
-    composeBanner.add(composeBannerCancel, BorderLayout.EAST);
+    composeBanner.add(composeBannerActions, BorderLayout.EAST);
     composeBanner.setVisible(false);
   }
 
   private void updateComposeBanner() {
     if (hasReplyCompose()) {
-      composeBannerLabel.setText(
-          "Replying to message " + abbreviateMessageId(replyComposeMessageId));
+      composeBannerLabel.setText(replyComposeBannerText());
+      composeBannerJump.setVisible(replyComposeJumpAction != null);
       composeBanner.setVisible(true);
       updateSendButtonHint("Send reply");
     } else {
       composeBannerLabel.setText("");
+      composeBannerJump.setVisible(false);
       composeBanner.setVisible(false);
       updateSendButtonHint("Send message");
     }
@@ -211,6 +247,41 @@ public final class MessageInputComposeSupport {
     String id = Objects.toString(raw, "").trim();
     if (id.length() <= 18) return id;
     return id.substring(0, 18) + "...";
+  }
+
+  private String replyComposeBannerText() {
+    String base = "Replying to message " + abbreviateMessageId(replyComposeMessageId);
+    if (replyComposePreview.isBlank()) return base;
+    return base + " - " + replyComposePreview;
+  }
+
+  private static String normalizeReplyPreviewText(String rawText) {
+    String raw = Objects.toString(rawText, "");
+    if (raw.isBlank()) return "";
+
+    StringBuilder out = new StringBuilder(Math.min(REPLY_PREVIEW_TEXT_MAX_CHARS, raw.length()));
+    boolean pendingSpace = false;
+    for (int i = 0; i < raw.length(); i++) {
+      char c = raw.charAt(i);
+      if (Character.isWhitespace(c)) {
+        pendingSpace = out.length() > 0;
+        continue;
+      }
+      if (c < 0x20 && c != '\t') continue;
+      if (pendingSpace && out.length() > 0) {
+        out.append(' ');
+        pendingSpace = false;
+      }
+      out.append(c);
+      if (out.length() >= REPLY_PREVIEW_TEXT_MAX_CHARS) break;
+    }
+
+    String normalized = out.toString().trim();
+    if (normalized.length() >= REPLY_PREVIEW_TEXT_MAX_CHARS && raw.length() > normalized.length()) {
+      int max = Math.max(1, REPLY_PREVIEW_TEXT_MAX_CHARS - 3);
+      normalized = normalized.substring(0, Math.min(max, normalized.length())).trim() + "...";
+    }
+    return normalized;
   }
 
   private static String normalizeComposeTarget(String raw) {

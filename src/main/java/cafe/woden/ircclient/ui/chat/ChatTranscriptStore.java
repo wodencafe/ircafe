@@ -87,6 +87,14 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private int restylePassDocOffset = 0;
   private boolean restylePassRunning = false;
   private boolean restylePassRestartRequested = false;
+  private volatile ReactionChipActionHandler reactionChipActionHandler =
+      (target, messageId, reactionToken, unreactRequested) -> {};
+
+  @FunctionalInterface
+  public interface ReactionChipActionHandler {
+    void onReactionAction(
+        TargetRef target, String messageId, String reactionToken, boolean unreactRequested);
+  }
 
   public ChatTranscriptStore(
       ChatStyles styles,
@@ -1584,6 +1592,34 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     StyledDocument doc = docs.get(ref);
     if (doc == null) return -1;
     return findLineStartByMessageId(doc, msgId);
+  }
+
+  public synchronized String messagePreviewById(TargetRef ref, String messageId) {
+    if (ref == null) return "";
+    String msgId = normalizeMessageId(messageId);
+    if (msgId.isEmpty()) return "";
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null) return "";
+    return previewForMessageId(st, msgId);
+  }
+
+  public synchronized void setReactionChipActionHandler(ReactionChipActionHandler handler) {
+    reactionChipActionHandler =
+        (handler != null) ? handler : (target, messageId, reactionToken, unreactRequested) -> {};
+    for (Map.Entry<TargetRef, TranscriptState> entry : stateByTarget.entrySet()) {
+      TargetRef ref = entry.getKey();
+      TranscriptState st = entry.getValue();
+      if (ref == null || st == null) continue;
+      for (Map.Entry<String, ReactionState> reactionEntry : st.reactionsByTargetMsgId.entrySet()) {
+        String msgId = normalizeMessageId(reactionEntry.getKey());
+        ReactionState state = reactionEntry.getValue();
+        if (msgId.isEmpty()
+            || state == null
+            || state.control == null
+            || state.control.component == null) continue;
+        configureReactionControlCallbacks(state.control.component, ref, msgId);
+      }
+    }
   }
 
   public synchronized boolean isOwnMessage(TargetRef ref, String messageId) {
@@ -3419,6 +3455,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     state.observe(reactionToken, nick);
     if (state.control != null && state.control.component != null) {
       try {
+        configureReactionControlCallbacks(state.control.component, ref, targetMsgId);
         state.control.component.setReactions(state.reactionsSnapshot());
       } catch (Exception ignored) {
       }
@@ -3456,6 +3493,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     if (state.control != null && state.control.component != null) {
       try {
+        configureReactionControlCallbacks(state.control.component, ref, targetMsgId);
         state.control.component.setReactions(state.reactionsSnapshot());
       } catch (Exception ignored) {
       }
@@ -3506,6 +3544,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       } catch (Exception ignored) {
       }
     }
+    configureReactionControlCallbacks(comp, ref, targetMsgId);
     comp.setReactions(state.reactionsSnapshot());
 
     LineMeta meta =
@@ -3533,6 +3572,29 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     int delta = doc.getLength() - beforeLen;
     shiftCurrentPresenceBlock(ref, insertionStart, delta);
+  }
+
+  private void configureReactionControlCallbacks(
+      MessageReactionsComponent comp, TargetRef ref, String targetMsgId) {
+    if (comp == null || ref == null) return;
+    String msgId = normalizeMessageId(targetMsgId);
+    if (msgId.isEmpty()) return;
+    comp.setOnReactRequested(token -> dispatchReactionChipAction(ref, msgId, token, false));
+    comp.setOnUnreactRequested(token -> dispatchReactionChipAction(ref, msgId, token, true));
+  }
+
+  private void dispatchReactionChipAction(
+      TargetRef ref, String targetMsgId, String reactionToken, boolean unreactRequested) {
+    if (ref == null) return;
+    String msgId = normalizeMessageId(targetMsgId);
+    String token = Objects.toString(reactionToken, "").trim();
+    if (msgId.isEmpty() || token.isEmpty()) return;
+    ReactionChipActionHandler handler = reactionChipActionHandler;
+    if (handler == null) return;
+    try {
+      handler.onReactionAction(ref, msgId, token, unreactRequested);
+    } catch (Exception ignored) {
+    }
   }
 
   private int findLineStartByMessageId(StyledDocument doc, String messageId) {
