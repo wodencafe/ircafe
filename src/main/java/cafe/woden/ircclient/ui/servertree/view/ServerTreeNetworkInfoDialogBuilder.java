@@ -14,9 +14,11 @@ import java.awt.Window;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -53,6 +55,20 @@ public final class ServerTreeNetworkInfoDialogBuilder {
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z").withZone(ZoneId.systemDefault());
   private static final DateTimeFormatter CAP_TRANSITION_TIME_FMT =
       DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
+  private static final List<CapabilityFeatureDefinition> CAPABILITY_FEATURES =
+      List.of(
+          new CapabilityFeatureDefinition("Replies", List.of("draft/reply"), List.of()),
+          new CapabilityFeatureDefinition(
+              "Reactions", List.of("draft/reply", "draft/react"), List.of()),
+          new CapabilityFeatureDefinition(
+              "Reaction removal", List.of("draft/reply", "draft/unreact"), List.of()),
+          new CapabilityFeatureDefinition("Message edit", List.of("draft/message-edit"), List.of()),
+          new CapabilityFeatureDefinition(
+              "Message redaction", List.of("draft/message-redaction"), List.of()),
+          new CapabilityFeatureDefinition(
+              "History", List.of(), List.of("chathistory", "draft/chathistory", "znc.in/playback")),
+          new CapabilityFeatureDefinition("Typing", List.of("typing"), List.of()),
+          new CapabilityFeatureDefinition("Read markers", List.of("draft/read-marker"), List.of()));
 
   private final RuntimeConfigStore runtimeConfig;
   private final Context context;
@@ -197,12 +213,13 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     JPanel panel =
         new JPanel(
             new MigLayout(
-                "insets 8, fill, wrap 1", "[grow,fill]", "[]6[]6[]6[grow,fill]6[grow,fill]"));
+                "insets 8, fill, wrap 1", "[grow,fill]", "[]6[]6[]6[]6[grow,fill]6[grow,fill]"));
     panel.add(buildCapabilityCountsRow(metadata), "growx");
     panel.add(new JLabel(capabilityStatusSummary(metadata)), "growx");
     panel.add(
         new JLabel("Toggle Requested to send CAP REQ now and persist the startup preference."),
         "growx");
+    panel.add(buildCapabilityFeatureSummaryPanel(metadata), "growx");
 
     TreeMap<String, ServerRuntimeMetadata.CapabilityState> sortedObserved =
         new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
@@ -284,6 +301,104 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     panel.add(buildCapabilityTransitionsPanel(metadata), "grow");
     return panel;
   }
+
+  private JComponent buildCapabilityFeatureSummaryPanel(ServerRuntimeMetadata metadata) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[][grow,fill]"));
+    panel.setBorder(BorderFactory.createTitledBorder("Feature readiness"));
+
+    List<CapabilityFeatureStatus> statuses = computeCapabilityFeatureStatuses(metadata);
+    if (statuses.isEmpty()) {
+      panel.add(new JLabel("No mapped IRCv3 feature requirements."), "growx");
+      return panel;
+    }
+
+    Object[][] rows = new Object[statuses.size()][3];
+    for (int i = 0; i < statuses.size(); i++) {
+      CapabilityFeatureStatus status = statuses.get(i);
+      rows[i][0] = status.feature();
+      rows[i][1] = status.status();
+      rows[i][2] = status.detail();
+    }
+
+    JTable table = buildReadOnlyTable(new String[] {"Feature", "Status", "Details"}, rows);
+    JScrollPane scroll = new JScrollPane(table);
+    scroll.setPreferredSize(new Dimension(1, 140));
+    scroll.getVerticalScrollBar().setUnitIncrement(16);
+    panel.add(scroll, "growx");
+    return panel;
+  }
+
+  static List<CapabilityFeatureStatus> computeCapabilityFeatureStatuses(
+      ServerRuntimeMetadata metadata) {
+    Set<String> enabled = new LinkedHashSet<>();
+    if (metadata != null) {
+      for (Map.Entry<String, ServerRuntimeMetadata.CapabilityState> entry : metadata.ircv3Caps.entrySet()) {
+        if (!ServerRuntimeMetadata.CapabilityState.ENABLED.equals(entry.getValue())) {
+          continue;
+        }
+        String cap = normalizeCapability(entry.getKey());
+        if (!cap.isEmpty()) {
+          enabled.add(cap);
+        }
+      }
+    }
+
+    List<CapabilityFeatureStatus> out = new ArrayList<>(CAPABILITY_FEATURES.size());
+    for (CapabilityFeatureDefinition feature : CAPABILITY_FEATURES) {
+      List<String> missing = new ArrayList<>();
+      int satisfiedRequired = 0;
+
+      for (String required : feature.requiredAll()) {
+        String cap = normalizeCapability(required);
+        if (cap.isEmpty()) {
+          continue;
+        }
+        if (enabled.contains(cap)) {
+          satisfiedRequired++;
+        } else {
+          missing.add(cap);
+        }
+      }
+
+      boolean anySatisfied = feature.requiredAny().isEmpty();
+      if (!anySatisfied) {
+        for (String candidate : feature.requiredAny()) {
+          String cap = normalizeCapability(candidate);
+          if (!cap.isEmpty() && enabled.contains(cap)) {
+            anySatisfied = true;
+            break;
+          }
+        }
+      }
+      if (!feature.requiredAny().isEmpty() && !anySatisfied) {
+        missing.add("one of: " + String.join(", ", feature.requiredAny()));
+      }
+
+      String status;
+      if (missing.isEmpty()) {
+        status = "Ready";
+      } else if (satisfiedRequired > 0 || anySatisfied) {
+        status = "Partial";
+      } else {
+        status = "Unavailable";
+      }
+
+      String detail =
+          missing.isEmpty() ? "All required capabilities are enabled." : "Missing: " + String.join(", ", missing);
+      out.add(new CapabilityFeatureStatus(feature.label(), status, detail));
+    }
+    return out;
+  }
+
+  private static String normalizeCapability(String capability) {
+    return Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
+  }
+
+  static record CapabilityFeatureStatus(String feature, String status, String detail) {}
+
+  private record CapabilityFeatureDefinition(
+      String label, List<String> requiredAll, List<String> requiredAny) {}
 
   private JComponent buildCapabilityTransitionsPanel(ServerRuntimeMetadata metadata) {
     JPanel panel =

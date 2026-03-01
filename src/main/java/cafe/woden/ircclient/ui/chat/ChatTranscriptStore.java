@@ -58,6 +58,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private static final int RESTYLE_ELEMENTS_PER_SLICE = 180;
   private static final int DEFAULT_TRANSCRIPT_MAX_LINES_PER_TARGET = 4000;
   private static final int MAX_TRANSCRIPT_LINES_PER_TARGET = 200_000;
+  private static final int REPLY_PREVIEW_CACHE_LIMIT_PER_TARGET = 512;
+  private static final int REPLY_PREVIEW_TEXT_MAX_CHARS = 120;
   private static final String MANUAL_PREVIEW_MARKER = " \uD83D\uDC41";
 
   /**
@@ -1140,6 +1142,79 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     return "* " + f + " " + a;
   }
 
+  private void rememberMessagePreview(TranscriptState st, LineMeta meta, String from, String text) {
+    if (st == null || meta == null) return;
+    String msgId = normalizeMessageId(meta.messageId());
+    if (msgId.isEmpty()) return;
+    LogKind kind = meta.kind();
+    if (kind != LogKind.CHAT
+        && kind != LogKind.ACTION
+        && kind != LogKind.NOTICE
+        && kind != LogKind.SPOILER) {
+      return;
+    }
+
+    String preview = formatReplyPreviewSnippet(kind, from, text);
+    if (preview.isBlank()) return;
+    st.messagePreviewByMsgId.put(msgId, preview);
+  }
+
+  private String formatReplyPreviewSnippet(LogKind kind, String from, String text) {
+    String body = normalizeReplyPreviewText(text);
+    if (body.isEmpty()) return "";
+    String nick = Objects.toString(from, "").trim();
+    return switch (kind) {
+      case ACTION -> nick.isEmpty() ? ("* " + body) : ("* " + nick + " " + body);
+      case NOTICE -> nick.isEmpty() ? ("[notice] " + body) : ("[notice] " + nick + ": " + body);
+      default -> nick.isEmpty() ? body : (nick + ": " + body);
+    };
+  }
+
+  private String previewForMessageId(TranscriptState st, String messageId) {
+    if (st == null) return "";
+    String msgId = normalizeMessageId(messageId);
+    if (msgId.isEmpty()) return "";
+    return Objects.toString(st.messagePreviewByMsgId.get(msgId), "").trim();
+  }
+
+  private static String normalizeReplyPreviewText(String rawText) {
+    String raw = Objects.toString(rawText, "");
+    if (raw.isEmpty()) return "";
+
+    StringBuilder out = new StringBuilder(Math.min(REPLY_PREVIEW_TEXT_MAX_CHARS, raw.length()));
+    boolean pendingSpace = false;
+    for (int i = 0; i < raw.length(); i++) {
+      char c = raw.charAt(i);
+      if (Character.isWhitespace(c)) {
+        pendingSpace = out.length() > 0;
+        continue;
+      }
+      if (c < 0x20 && c != '\t') continue;
+      if (pendingSpace && out.length() > 0) {
+        out.append(' ');
+        pendingSpace = false;
+      }
+      out.append(c);
+      if (out.length() >= REPLY_PREVIEW_TEXT_MAX_CHARS) break;
+    }
+
+    String normalized = out.toString().trim();
+    if (normalized.length() >= REPLY_PREVIEW_TEXT_MAX_CHARS && raw.length() > normalized.length()) {
+      int max = Math.max(1, REPLY_PREVIEW_TEXT_MAX_CHARS - 3);
+      normalized = normalized.substring(0, Math.min(max, normalized.length())).trim() + "...";
+    }
+    return normalized;
+  }
+
+  private static LinkedHashMap<String, String> createBoundedReplyPreviewCache() {
+    return new LinkedHashMap<>() {
+      @Override
+      protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+        return size() > REPLY_PREVIEW_CACHE_LIMIT_PER_TARGET;
+      }
+    };
+  }
+
   private Font safeTranscriptFont() {
     try {
       if (uiSettings != null && uiSettings.get() != null) {
@@ -1935,6 +2010,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       int lineEndOffset = doc.getLength();
       doc.insertString(doc.getLength(), "\n", tsStyle);
+      rememberMessagePreview(stateByTarget.get(ref), meta, from, text);
 
       if (!allowEmbeds) {
         enforceTranscriptLineCap(ref, doc);
@@ -2455,6 +2531,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       doc.insertString(pos, "\n", tsStyle);
       pos += 1;
+      rememberMessagePreview(stateByTarget.get(ref), meta, from, a);
     } catch (Exception ignored) {
     }
 
@@ -2826,6 +2903,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       doc.insertString(pos, "\n", tsStyle);
       pos += 1;
+      rememberMessagePreview(stateByTarget.get(ref), meta, from, text);
 
       if (allowEmbeds) {
         // (Embeds are intentionally skipped here; rich inserts during history prefill can be
@@ -3036,6 +3114,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     if (targetMsgId.isEmpty()) return;
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
     if (doc == null) return;
 
     ensureAtLineStart(doc);
@@ -3052,6 +3131,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     String from = Objects.toString(fromNick, "").trim();
     String prefix = from.isEmpty() ? "-> Reply to " : ("-> " + from + " replied to ");
+    String preview = previewForMessageId(st, targetMsgId);
 
     try {
       if (ts != null && ts.enabled()) {
@@ -3059,6 +3139,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       }
       doc.insertString(doc.getLength(), prefix, prefixStyle);
       doc.insertString(doc.getLength(), targetMsgId, msgRefStyle);
+      if (!preview.isBlank()) {
+        doc.insertString(doc.getLength(), " (" + preview + ")", prefixStyle);
+      }
       doc.insertString(doc.getLength(), "\n", tsStyle);
     } catch (Exception ignored) {
     }
@@ -3125,6 +3208,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     if (kind == LogKind.ACTION) {
       insertActionLineInternalAt(ref, lineStart, from, text, outgoingLocalEcho, meta);
+      rememberMessagePreview(stateByTarget.get(ref), meta, from, text);
       return true;
     }
 
@@ -3142,6 +3226,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     SimpleAttributeSet ms = withLineMeta(msgStyle, meta);
     applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
     insertLineInternalAt(ref, lineStart, from, text, fs, ms, false, meta);
+    rememberMessagePreview(stateByTarget.get(ref), meta, from, text);
     return true;
   }
 
@@ -4300,6 +4385,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       int lineEndOffset = doc.getLength();
       doc.insertString(doc.getLength(), "\n", tsStyle);
+      rememberMessagePreview(stateByTarget.get(ref), meta, from, a);
 
       if (!allowEmbeds) {
         enforceTranscriptLineCap(ref, doc);
@@ -4756,6 +4842,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     ReadMarkerControl readMarker;
     Long readMarkerEpochMs;
     Map<String, ReactionState> reactionsByTargetMsgId = new HashMap<>();
+    Map<String, String> messagePreviewByMsgId = createBoundedReplyPreviewCache();
   }
 
   /** Tracks a contiguous run of filtered lines (represented by a single placeholder component). */

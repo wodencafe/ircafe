@@ -82,6 +82,69 @@ class ChatHistoryActionCoordinatorTest {
   }
 
   @Test
+  void unreactContextActionVisibleRequiresReplyAndUnreactCapabilities() {
+    IrcClientService irc = mock(IrcClientService.class);
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
+
+    ChatHistoryActionCoordinator coordinator =
+        new ChatHistoryActionCoordinator(
+            irc,
+            null,
+            () -> channel,
+            target -> {},
+            () -> {},
+            () -> {},
+            () -> {},
+            cmd -> {},
+            (target, msgId) -> {},
+            (target, msgId) -> {},
+            text -> {},
+            () -> "/chathistory latest * 200",
+            msgId -> "/chathistory around msgid=" + msgId + " 200");
+
+    assertTrue(coordinator.unreactContextActionVisible());
+    when(irc.isDraftUnreactAvailable("libera")).thenReturn(false);
+    assertFalse(coordinator.unreactContextActionVisible());
+  }
+
+  @Test
+  void onUnreactToMessageRequestedPrefillsCommandAndFocusesInput() {
+    IrcClientService irc = mock(IrcClientService.class);
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
+    AtomicReference<TargetRef> activatedTarget = new AtomicReference<>();
+    AtomicInteger activateInputCalls = new AtomicInteger();
+    AtomicInteger focusInputCalls = new AtomicInteger();
+    AtomicReference<String> draftText = new AtomicReference<>();
+
+    ChatHistoryActionCoordinator coordinator =
+        new ChatHistoryActionCoordinator(
+            irc,
+            null,
+            () -> channel,
+            activatedTarget::set,
+            activateInputCalls::incrementAndGet,
+            focusInputCalls::incrementAndGet,
+            () -> {},
+            cmd -> {},
+            (target, msgId) -> {},
+            (target, msgId) -> {},
+            draftText::set,
+            () -> "/chathistory latest * 200",
+            msgId -> "/chathistory around msgid=" + msgId + " 200");
+
+    coordinator.onUnreactToMessageRequested("msg-88");
+
+    assertEquals(channel, activatedTarget.get());
+    assertEquals(1, activateInputCalls.get());
+    assertEquals(1, focusInputCalls.get());
+    assertEquals("/unreact msg-88 ", draftText.get());
+  }
+
+  @Test
   void onLoadNewerHistoryRequestedEmitsLatestCommandWhenChatHistorySupported() {
     IrcClientService irc = mock(IrcClientService.class);
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);

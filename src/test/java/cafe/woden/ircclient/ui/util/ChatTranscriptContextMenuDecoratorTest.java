@@ -76,6 +76,7 @@ class ChatTranscriptContextMenuDecoratorTest {
     JMenuItem loadAroundMessageItem = (JMenuItem) readField(decorator, "loadAroundMessageItem");
     JMenuItem replyToMessageItem = (JMenuItem) readField(decorator, "replyToMessageItem");
     JMenuItem reactToMessageItem = (JMenuItem) readField(decorator, "reactToMessageItem");
+    JMenuItem unreactToMessageItem = (JMenuItem) readField(decorator, "unreactToMessageItem");
     JMenuItem editMessageItem = (JMenuItem) readField(decorator, "editMessageItem");
     JMenuItem redactMessageItem = (JMenuItem) readField(decorator, "redactMessageItem");
 
@@ -83,6 +84,7 @@ class ChatTranscriptContextMenuDecoratorTest {
     assertSame(menu, loadAroundMessageItem.getParent());
     assertSame(menu, replyToMessageItem.getParent());
     assertSame(menu, reactToMessageItem.getParent());
+    assertSame(menu, unreactToMessageItem.getParent());
     assertSame(menu, editMessageItem.getParent());
     assertSame(menu, redactMessageItem.getParent());
 
@@ -102,6 +104,10 @@ class ChatTranscriptContextMenuDecoratorTest {
     assertFalse(reactToMessageItem.isEnabled());
     assertEquals(
         "Unavailable: this line has no IRCv3 message ID.", reactToMessageItem.getToolTipText());
+
+    assertFalse(unreactToMessageItem.isEnabled());
+    assertEquals(
+        "Unavailable: this line has no IRCv3 message ID.", unreactToMessageItem.getToolTipText());
 
     assertFalse(editMessageItem.isEnabled());
     assertEquals(
@@ -125,6 +131,7 @@ class ChatTranscriptContextMenuDecoratorTest {
     JMenuItem loadAroundMessageItem = (JMenuItem) readField(decorator, "loadAroundMessageItem");
     JMenuItem replyToMessageItem = (JMenuItem) readField(decorator, "replyToMessageItem");
     JMenuItem reactToMessageItem = (JMenuItem) readField(decorator, "reactToMessageItem");
+    JMenuItem unreactToMessageItem = (JMenuItem) readField(decorator, "unreactToMessageItem");
     JMenuItem editMessageItem = (JMenuItem) readField(decorator, "editMessageItem");
     JMenuItem redactMessageItem = (JMenuItem) readField(decorator, "redactMessageItem");
 
@@ -132,6 +139,7 @@ class ChatTranscriptContextMenuDecoratorTest {
     assertTrue(loadAroundMessageItem.isEnabled());
     assertTrue(replyToMessageItem.isEnabled());
     assertTrue(reactToMessageItem.isEnabled());
+    assertTrue(unreactToMessageItem.isEnabled());
     assertTrue(editMessageItem.isEnabled());
     assertTrue(redactMessageItem.isEnabled());
   }
@@ -147,11 +155,13 @@ class ChatTranscriptContextMenuDecoratorTest {
 
     JMenuItem replyToMessageItem = (JMenuItem) readField(decorator, "replyToMessageItem");
     JMenuItem reactToMessageItem = (JMenuItem) readField(decorator, "reactToMessageItem");
+    JMenuItem unreactToMessageItem = (JMenuItem) readField(decorator, "unreactToMessageItem");
     JMenuItem editMessageItem = (JMenuItem) readField(decorator, "editMessageItem");
     JMenuItem redactMessageItem = (JMenuItem) readField(decorator, "redactMessageItem");
 
     assertTrue(replyToMessageItem.isEnabled());
     assertTrue(reactToMessageItem.isEnabled());
+    assertTrue(unreactToMessageItem.isEnabled());
     assertFalse(editMessageItem.isEnabled());
     assertFalse(redactMessageItem.isEnabled());
     assertEquals(
@@ -176,6 +186,8 @@ class ChatTranscriptContextMenuDecoratorTest {
         msgId -> {},
         () -> replyReactVisible,
         () -> replyReactVisible,
+        () -> replyReactVisible,
+        msgId -> {},
         msgId -> {},
         msgId -> {},
         () -> editRedactVisible,

@@ -83,6 +83,17 @@ public final class ChatHistoryActionCoordinator {
     }
   }
 
+  public boolean unreactContextActionVisible() {
+    TargetRef target = activeMessageTarget();
+    if (target == null || irc == null) return false;
+    try {
+      return irc.isDraftReplyAvailable(target.serverId())
+          && irc.isDraftUnreactAvailable(target.serverId());
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
   public boolean editContextActionVisible() {
     TargetRef target = activeMessageTarget();
     if (target == null) return false;
@@ -151,6 +162,17 @@ public final class ChatHistoryActionCoordinator {
     if (msgId.isEmpty()) return;
     activateInputForTarget(target);
     openQuickReactionPicker.accept(target.target(), msgId);
+    focusInput.run();
+  }
+
+  public void onUnreactToMessageRequested(String messageId) {
+    TargetRef target = activeMessageTarget();
+    if (target == null) return;
+    if (!unreactContextActionVisible()) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
+    activateInputForTarget(target);
+    setDraftText.accept("/unreact " + msgId + " ");
     focusInput.run();
   }
 

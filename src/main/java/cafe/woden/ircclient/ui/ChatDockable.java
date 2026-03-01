@@ -1005,6 +1005,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   @Override
+  protected boolean unreactContextActionVisible() {
+    return historyActionCoordinator.unreactContextActionVisible();
+  }
+
+  @Override
   protected boolean editContextActionVisible() {
     return historyActionCoordinator.editContextActionVisible();
   }
@@ -1042,6 +1047,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   @Override
   protected void onReactToMessageRequested(String messageId) {
     historyActionCoordinator.onReactToMessageRequested(messageId);
+  }
+
+  @Override
+  protected void onUnreactToMessageRequested(String messageId) {
+    historyActionCoordinator.onUnreactToMessageRequested(messageId);
   }
 
   @Override

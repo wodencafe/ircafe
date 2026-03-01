@@ -60,10 +60,12 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final Consumer<String> onLoadContextAroundMessage;
   private final Supplier<Boolean> replyActionVisibleSupplier;
   private final Supplier<Boolean> reactActionVisibleSupplier;
+  private final Supplier<Boolean> unreactActionVisibleSupplier;
   private final Supplier<Boolean> editActionVisibleSupplier;
   private final Supplier<Boolean> redactActionVisibleSupplier;
   private final Consumer<String> onReplyToMessage;
   private final Consumer<String> onReactToMessage;
+  private final Consumer<String> onUnreactToMessage;
   private final Consumer<String> onEditMessage;
   private final Consumer<String> onRedactMessage;
   private final boolean historyActionsConfigured;
@@ -83,6 +85,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final JMenuItem loadAroundMessageItem = new JMenuItem("Load Context Around Message…");
   private final JMenuItem replyToMessageItem = new JMenuItem("Reply to Message…");
   private final JMenuItem reactToMessageItem = new JMenuItem("React to Message…");
+  private final JMenuItem unreactToMessageItem = new JMenuItem("Remove Reaction…");
   private final JMenuItem editMessageItem = new JMenuItem("Edit Message…");
   private final JMenuItem redactMessageItem = new JMenuItem("Redact Message…");
 
@@ -120,8 +123,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Consumer<String> onLoadContextAroundMessage,
       Supplier<Boolean> replyActionVisibleSupplier,
       Supplier<Boolean> reactActionVisibleSupplier,
+      Supplier<Boolean> unreactActionVisibleSupplier,
       Consumer<String> onReplyToMessage,
       Consumer<String> onReactToMessage,
+      Consumer<String> onUnreactToMessage,
       Supplier<Boolean> editActionVisibleSupplier,
       Supplier<Boolean> redactActionVisibleSupplier,
       Consumer<String> onEditMessage,
@@ -139,10 +144,12 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     this.messageActionsConfigured =
         replyActionVisibleSupplier != null
             || reactActionVisibleSupplier != null
+            || unreactActionVisibleSupplier != null
             || editActionVisibleSupplier != null
             || redactActionVisibleSupplier != null
             || onReplyToMessage != null
             || onReactToMessage != null
+            || onUnreactToMessage != null
             || onEditMessage != null
             || onRedactMessage != null;
     this.loadNewerActionVisibleSupplier =
@@ -156,8 +163,11 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         (replyActionVisibleSupplier != null) ? replyActionVisibleSupplier : () -> false;
     this.reactActionVisibleSupplier =
         (reactActionVisibleSupplier != null) ? reactActionVisibleSupplier : () -> false;
+    this.unreactActionVisibleSupplier =
+        (unreactActionVisibleSupplier != null) ? unreactActionVisibleSupplier : () -> false;
     this.onReplyToMessage = (onReplyToMessage != null) ? onReplyToMessage : msgId -> {};
     this.onReactToMessage = (onReactToMessage != null) ? onReactToMessage : msgId -> {};
+    this.onUnreactToMessage = (onUnreactToMessage != null) ? onUnreactToMessage : msgId -> {};
     this.editActionVisibleSupplier =
         (editActionVisibleSupplier != null) ? editActionVisibleSupplier : () -> false;
     this.redactActionVisibleSupplier =
@@ -177,6 +187,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     loadAroundMessageItem.addActionListener(this::onLoadContextAroundMessage);
     replyToMessageItem.addActionListener(this::onReplyToMessage);
     reactToMessageItem.addActionListener(this::onReactToMessage);
+    unreactToMessageItem.addActionListener(this::onUnreactToMessage);
     editMessageItem.addActionListener(this::onEditMessage);
     redactMessageItem.addActionListener(this::onRedactMessage);
 
@@ -267,6 +278,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 
@@ -282,6 +295,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         null,
         openUrl,
         openFind,
+        null,
+        null,
         null,
         null,
         null,
@@ -311,6 +326,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         nickMenuFor,
         openUrl,
         openFind,
+        null,
+        null,
         null,
         null,
         null,
@@ -353,6 +370,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 
@@ -370,8 +389,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Consumer<String> onLoadContextAroundMessage,
       Supplier<Boolean> replyActionVisibleSupplier,
       Supplier<Boolean> reactActionVisibleSupplier,
+      Supplier<Boolean> unreactActionVisibleSupplier,
       Consumer<String> onReplyToMessage,
       Consumer<String> onReactToMessage,
+      Consumer<String> onUnreactToMessage,
       Supplier<Boolean> editActionVisibleSupplier,
       Supplier<Boolean> redactActionVisibleSupplier,
       Consumer<String> onEditMessage,
@@ -390,8 +411,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         onLoadContextAroundMessage,
         replyActionVisibleSupplier,
         reactActionVisibleSupplier,
+        unreactActionVisibleSupplier,
         onReplyToMessage,
         onReactToMessage,
+        onUnreactToMessage,
         editActionVisibleSupplier,
         redactActionVisibleSupplier,
         onEditMessage,
@@ -453,6 +476,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     menu.addSeparator();
     menu.add(replyToMessageItem);
     menu.add(reactToMessageItem);
+    menu.add(unreactToMessageItem);
     menu.add(editMessageItem);
     menu.add(redactMessageItem);
   }
@@ -525,6 +549,15 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         reactEnabled
             ? "Send an IRCv3 reaction linked to this message."
             : messageActionUnavailableReason(hasMessageId, reactAvailable, false, "reaction"));
+
+    boolean unreactAvailable = isActionVisible(unreactActionVisibleSupplier);
+    boolean unreactEnabled = unreactAvailable && hasMessageId;
+    unreactToMessageItem.setEnabled(unreactEnabled);
+    unreactToMessageItem.setToolTipText(
+        unreactEnabled
+            ? "Remove your reaction metadata for this IRCv3 message."
+            : messageActionUnavailableReason(
+                hasMessageId, unreactAvailable, false, "reaction removal"));
 
     boolean editAvailable = isActionVisible(editActionVisibleSupplier);
     boolean editEnabled = editAvailable && hasMessageId && currentPopupOwnMessage;
@@ -638,6 +671,16 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     if (msgId == null || msgId.isBlank()) return;
     try {
       onReactToMessage.accept(msgId);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onUnreactToMessage(ActionEvent e) {
+    if (!isActionVisible(unreactActionVisibleSupplier)) return;
+    String msgId = currentPopupMessageId;
+    if (msgId == null || msgId.isBlank()) return;
+    try {
+      onUnreactToMessage.accept(msgId);
     } catch (Exception ignored) {
     }
   }

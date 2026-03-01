@@ -124,6 +124,47 @@ class ChatTranscriptStoreTest {
   }
 
   @Test
+  void replyContextLineShowsCachedSnippetWhenReferencedMessageIsKnown() throws Exception {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(
+        ref, "alice", "original message text", false, 6_000L, "m-1", Map.of("msgid", "m-1"));
+    store.appendChatAt(
+        ref,
+        "bob",
+        "reply body",
+        false,
+        6_050L,
+        "m-2",
+        Map.of("msgid", "m-2", "draft/reply", "m-1"));
+
+    String text = transcriptText(store.document(ref));
+    assertTrue(text.contains("-> bob replied to m-1 (alice: original message text)"));
+  }
+
+  @Test
+  void replyContextLineUsesEditedTextPreviewAfterMessageEdit() throws Exception {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "before", false, 6_000L, "m-1", Map.of("msgid", "m-1"));
+    assertTrue(store.applyMessageEdit(ref, "m-1", "after", "alice", 6_030L, "", Map.of()));
+
+    store.appendChatAt(
+        ref,
+        "bob",
+        "reply body",
+        false,
+        6_050L,
+        "m-2",
+        Map.of("msgid", "m-2", "draft/reply", "m-1"));
+
+    String text = transcriptText(store.document(ref));
+    assertTrue(text.contains("-> bob replied to m-1 (alice: after (edited))"));
+  }
+
+  @Test
   void appendChatAtTrimsOldestLinesWhenTranscriptCapIsExceeded() throws Exception {
     ChatTranscriptStore store = newStoreWithTranscriptCap(2);
     TargetRef ref = new TargetRef("srv", "#chan");

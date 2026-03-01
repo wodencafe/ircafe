@@ -100,8 +100,10 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
                 this::onLoadContextAroundMessageRequested,
                 this::replyContextActionVisible,
                 this::reactContextActionVisible,
+                this::unreactContextActionVisible,
                 this::onReplyToMessageRequested,
                 this::onReactToMessageRequested,
+                this::onUnreactToMessageRequested,
                 this::editContextActionVisible,
                 this::redactContextActionVisible,
                 this::onEditMessageRequested,
@@ -296,6 +298,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     return false;
   }
 
+  /** Whether the transcript context menu should show "Remove Reaction…". */
+  protected boolean unreactContextActionVisible() {
+    return false;
+  }
+
   /** Whether the transcript context menu should show "Edit Message…". */
   protected boolean editContextActionVisible() {
     return false;
@@ -333,6 +340,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
   /** Called by transcript context menu action "React to Message…". */
   protected void onReactToMessageRequested(String messageId) {
+    // default: no-op
+  }
+
+  /** Called by transcript context menu action "Remove Reaction…". */
+  protected void onUnreactToMessageRequested(String messageId) {
     // default: no-op
   }
 
