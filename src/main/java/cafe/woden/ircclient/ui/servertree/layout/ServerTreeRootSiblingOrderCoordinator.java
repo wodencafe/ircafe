@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.ui.servertree;
+package cafe.woden.ircclient.ui.servertree.layout;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -12,24 +12,24 @@ import java.util.function.Predicate;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 /** Coordinates per-server root sibling order state and runtime-config persistence. */
-final class ServerTreeRootSiblingOrderCoordinator {
+public final class ServerTreeRootSiblingOrderCoordinator {
 
   private final RuntimeConfigStore runtimeConfig;
   private final Map<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> byServer =
       new HashMap<>();
 
-  ServerTreeRootSiblingOrderCoordinator(RuntimeConfigStore runtimeConfig) {
+  public ServerTreeRootSiblingOrderCoordinator(RuntimeConfigStore runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
     loadPersisted();
   }
 
-  RuntimeConfigStore.ServerTreeRootSiblingOrder orderForServer(String serverId) {
+  public RuntimeConfigStore.ServerTreeRootSiblingOrder orderForServer(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults();
     return byServer.getOrDefault(sid, RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults());
   }
 
-  void rememberOrder(String serverId, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
+  public void rememberOrder(String serverId, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
     RuntimeConfigStore.ServerTreeRootSiblingOrder normalized =
@@ -47,7 +47,7 @@ final class ServerTreeRootSiblingOrderCoordinator {
     }
   }
 
-  RuntimeConfigStore.ServerTreeRootSiblingNode nodeKindForNode(
+  public RuntimeConfigStore.ServerTreeRootSiblingNode nodeKindForNode(
       DefaultMutableTreeNode node,
       Predicate<DefaultMutableTreeNode> isOtherGroupNode,
       Predicate<DefaultMutableTreeNode> isPrivateMessagesGroupNode,
@@ -63,14 +63,14 @@ final class ServerTreeRootSiblingOrderCoordinator {
     return nodeKindForRef(nodeRefExtractor.apply(node));
   }
 
-  static RuntimeConfigStore.ServerTreeRootSiblingNode nodeKindForRef(TargetRef ref) {
+  public static RuntimeConfigStore.ServerTreeRootSiblingNode nodeKindForRef(TargetRef ref) {
     if (ref == null) return null;
     if (ref.isChannelList()) return RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST;
     if (ref.isNotifications()) return RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS;
     return null;
   }
 
-  static RuntimeConfigStore.ServerTreeRootSiblingOrder normalizeOrder(
+  public static RuntimeConfigStore.ServerTreeRootSiblingOrder normalizeOrder(
       RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
     List<RuntimeConfigStore.ServerTreeRootSiblingNode> defaults =
         RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults().order();

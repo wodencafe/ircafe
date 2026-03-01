@@ -10,6 +10,7 @@ import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.Color;
 import java.awt.Component;
@@ -402,8 +403,8 @@ class ServerTreeDockableDetachedChannelTest {
 
             DefaultMutableTreeNode node = findLeafNode(dockable, chan);
             assertNotNull(node);
-            assertTrue(node.getUserObject() instanceof ServerTreeDockable.NodeData);
-            ServerTreeDockable.NodeData nd = (ServerTreeDockable.NodeData) node.getUserObject();
+            assertTrue(node.getUserObject() instanceof ServerTreeNodeData);
+            ServerTreeNodeData nd = (ServerTreeNodeData) node.getUserObject();
             assertTrue(nd.hasTypingActivity());
             assertTrue(typingActivityNodes(dockable).contains(node));
 
@@ -470,7 +471,7 @@ class ServerTreeDockableDetachedChannelTest {
             assertTrue(handled);
             assertTrue(dockable.isChannelDisconnected(chan));
 
-            ServerTreeDockable.NodeData nd = (ServerTreeDockable.NodeData) node.getUserObject();
+            ServerTreeNodeData nd = (ServerTreeNodeData) node.getUserObject();
             assertFalse(nd.hasDetachedWarning());
           } catch (Exception e) {
             throw new RuntimeException(e);

@@ -1,12 +1,14 @@
-package cafe.woden.ircclient.ui.servertree;
+package cafe.woden.ircclient.ui.servertree.policy;
 
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.util.TreeNodeReorderPolicy;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 /**
- * Move/close rules for {@link ServerTreeDockable}.
+ * Move/close rules for the server tree UI.
  *
  * <p>Protects server root nodes and reserved group boundaries while allowing:
  *
@@ -19,12 +21,18 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
 
   private final Predicate<DefaultMutableTreeNode> isServerNode;
   private final Predicate<DefaultMutableTreeNode> isChannelListNode;
+  private final Function<DefaultMutableTreeNode, TargetRef> targetRefForNode;
+  private final Function<DefaultMutableTreeNode, String> nodeLabelForNode;
 
   public ServerTreeNodeReorderPolicy(
       Predicate<DefaultMutableTreeNode> isServerNode,
-      Predicate<DefaultMutableTreeNode> isChannelListNode) {
+      Predicate<DefaultMutableTreeNode> isChannelListNode,
+      Function<DefaultMutableTreeNode, TargetRef> targetRefForNode,
+      Function<DefaultMutableTreeNode, String> nodeLabelForNode) {
     this.isServerNode = Objects.requireNonNull(isServerNode, "isServerNode");
     this.isChannelListNode = Objects.requireNonNull(isChannelListNode, "isChannelListNode");
+    this.targetRefForNode = Objects.requireNonNull(targetRefForNode, "targetRefForNode");
+    this.nodeLabelForNode = Objects.requireNonNull(nodeLabelForNode, "nodeLabelForNode");
   }
 
   @Override
@@ -33,8 +41,9 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     if (dir == 0) return null;
 
     // Allow moving the movable built-in nodes within their current parent region.
-    Object uo = node.getUserObject();
-    if (!(uo instanceof ServerTreeDockable.NodeData nd)) return null;
+    TargetRef nodeRef = targetRefForNode.apply(node);
+    String nodeLabel = normalizeLabel(nodeLabelForNode.apply(node));
+    if (nodeRef == null && nodeLabel.isBlank()) return null;
 
     DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
     if (parent == null) return null;
@@ -44,7 +53,7 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     boolean parentIsPmGroup = isPrivateMessagesGroupNode(parent);
     boolean parentIsOther = isOtherGroupNode(parent);
 
-    if (isMovableBuiltInNode(nd)) {
+    if (isMovableBuiltInNode(nodeRef, nodeLabel)) {
       if (!parentIsServer && !parentIsOther) return null;
 
       int idx = parent.getIndex(node);
@@ -59,7 +68,7 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     }
 
     // Channel/PM move policy (existing behavior).
-    if (nd.ref == null || nd.ref.isStatus() || nd.ref.isUiOnly()) return null;
+    if (nodeRef == null || nodeRef.isStatus() || nodeRef.isUiOnly()) return null;
     if (!parentIsServer && !parentIsPmGroup && !parentIsChannelList) return null;
 
     int idx = parent.getIndex(node);
@@ -77,10 +86,9 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
   @Override
   public boolean canClose(DefaultMutableTreeNode node) {
     if (node == null) return false;
-    Object uo = node.getUserObject();
-    if (!(uo instanceof ServerTreeDockable.NodeData nd)) return false;
-    if (nd.ref == null) return false;
-    return !nd.ref.isStatus() && !nd.ref.isUiOnly();
+    TargetRef ref = targetRefForNode.apply(node);
+    if (ref == null) return false;
+    return !ref.isStatus() && !ref.isUiOnly();
   }
 
   private int minMovableIndex(boolean parentIsServer, DefaultMutableTreeNode parent) {
@@ -90,12 +98,11 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     int min = 0;
     int count = parent.getChildCount();
     while (min < count) {
-      Object uo = ((DefaultMutableTreeNode) parent.getChildAt(min)).getUserObject();
-      if (uo instanceof ServerTreeDockable.NodeData nd) {
-        if (nd.ref == null || nd.ref.isStatus() || nd.ref.isUiOnly()) {
-          min++;
-          continue;
-        }
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(min);
+      TargetRef ref = targetRefForNode.apply(child);
+      if (ref == null || ref.isStatus() || ref.isUiOnly()) {
+        min++;
+        continue;
       }
       break;
     }
@@ -167,21 +174,19 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
 
   private boolean isFixedServerHeadNode(DefaultMutableTreeNode node) {
     if (node == null) return false;
-    Object uo = node.getUserObject();
-    if (!(uo instanceof ServerTreeDockable.NodeData nd) || nd.ref == null) return false;
-    return nd.ref.isChannelList() || nd.ref.isDccTransfers();
+    TargetRef ref = targetRefForNode.apply(node);
+    if (ref == null) return false;
+    return ref.isChannelList() || ref.isDccTransfers();
   }
 
-  private boolean isMovableBuiltInNode(ServerTreeDockable.NodeData nd) {
-    if (nd == null) return false;
-    if (nd.ref != null) {
-      return nd.ref.isStatus()
-          || nd.ref.isNotifications()
-          || nd.ref.isLogViewer()
-          || nd.ref.isWeechatFilters()
-          || nd.ref.isIgnores();
+  private boolean isMovableBuiltInNode(TargetRef ref, String label) {
+    if (ref != null) {
+      return ref.isStatus()
+          || ref.isNotifications()
+          || ref.isLogViewer()
+          || ref.isWeechatFilters()
+          || ref.isIgnores();
     }
-    String label = Objects.toString(nd.label, "").trim();
     return label.equalsIgnoreCase("Monitor") || label.equalsIgnoreCase("Interceptors");
   }
 
@@ -220,10 +225,13 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     if (uo instanceof String s) {
       return s.trim().equalsIgnoreCase("Other");
     }
-    if (uo instanceof ServerTreeDockable.NodeData nd) {
-      if (nd.ref != null) return false;
-      return Objects.toString(nd.label, "").trim().equalsIgnoreCase("Other");
-    }
-    return false;
+    TargetRef ref = targetRefForNode.apply(node);
+    if (ref != null) return false;
+    String label = normalizeLabel(nodeLabelForNode.apply(node));
+    return label.equalsIgnoreCase("Other");
+  }
+
+  private static String normalizeLabel(String value) {
+    return Objects.toString(value, "").trim();
   }
 }
