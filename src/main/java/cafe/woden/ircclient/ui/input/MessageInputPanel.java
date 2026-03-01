@@ -41,6 +41,7 @@ public class MessageInputPanel extends JPanel {
   private final TypingSignalIndicator typingSignalIndicator = new TypingSignalIndicator();
   private final MessageInputUndoSupport undoSupport;
   private final MessageInputSpellcheckSupport spellcheckSupport;
+  private final MessageInputSpellcheckHoverPopupSupport spellcheckHoverPopupSupport;
   private final MessageInputNickCompletionSupport nickCompletionSupport;
   private final MessageInputHintPopupSupport hintPopupSupport;
   private final MessageInputContextMenuSupport contextMenuSupport;
@@ -74,6 +75,8 @@ public class MessageInputPanel extends JPanel {
     SpellcheckSettings spellcheck =
         spellcheckSettingsBus != null ? spellcheckSettingsBus.get() : SpellcheckSettings.defaults();
     this.spellcheckSupport = new MessageInputSpellcheckSupport(input, spellcheck);
+    this.spellcheckHoverPopupSupport =
+        new MessageInputSpellcheckHoverPopupSupport(this, input, spellcheckSupport, spellcheck);
     this.nickCompletionSupport =
         new MessageInputNickCompletionSupport(this, input, this.undoSupport, spellcheckSupport);
     this.hintPopupSupport =
@@ -220,10 +223,8 @@ public class MessageInputPanel extends JPanel {
     send.setOpaque(false);
     send.setContentAreaFilled(false);
     send.setFocusPainted(false);
-    send.setBorder(
-        BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 1, 0, 0, resolveInputDividerColor()),
-            BorderFactory.createEmptyBorder(5, 10, 5, 10)));
+    // Avoid divider paint artifacts from overlapping borders in some themes.
+    send.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
     send.setPreferredSize(new Dimension(38, 30));
   }
 
@@ -244,16 +245,9 @@ public class MessageInputPanel extends JPanel {
     return c;
   }
 
-  private static Color resolveInputDividerColor() {
-    Color c = UIManager.getColor("Component.borderColor");
-    if (c == null) c = UIManager.getColor("Separator.foreground");
-    if (c == null) c = UIManager.getColor("Label.disabledForeground");
-    if (c == null) c = new Color(0x9AA0A6);
-    return c;
-  }
-
   private void installSupports() {
     hintPopupSupport.installListeners();
+    spellcheckHoverPopupSupport.installListeners();
 
     undoSupport.installKeybindings();
     nickCompletionSupport.install();
@@ -440,6 +434,7 @@ public class MessageInputPanel extends JPanel {
 
   @Override
   public void removeNotify() {
+    spellcheckHoverPopupSupport.onDraftChanged();
     hintPopupSupport.hide();
     typingSupport.onRemoveNotify();
     spellcheckSupport.onRemoveNotify();
@@ -452,6 +447,15 @@ public class MessageInputPanel extends JPanel {
   public void shutdownResources() {
     if (shutdown) return;
     shutdown = true;
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(this::shutdownResourcesOnEdt);
+      return;
+    }
+    shutdownResourcesOnEdt();
+  }
+
+  private void shutdownResourcesOnEdt() {
+    spellcheckHoverPopupSupport.shutdown();
     hintPopupSupport.shutdown();
     nickCompletionSupport.shutdown();
     spellcheckSupport.shutdown();
@@ -471,6 +475,7 @@ public class MessageInputPanel extends JPanel {
   private void onSpellcheckChanged(PropertyChangeEvent evt) {
     if (!SpellcheckSettingsBus.PROP_SPELLCHECK_SETTINGS.equals(evt.getPropertyName())) return;
     if (evt.getNewValue() instanceof SpellcheckSettings s) {
+      spellcheckHoverPopupSupport.onSettingsApplied(s);
       spellcheckSupport.onSettingsApplied(s);
       hintPopupSupport.updateHint();
       nickCompletionSupport.markUiDirty();
@@ -487,6 +492,7 @@ public class MessageInputPanel extends JPanel {
       typingDotsIndicator.setFont(typingBannerLabel.getFont());
       typingSignalIndicator.setFont(typingBannerLabel.getFont());
       hintPopupSupport.onAppearanceChanged(f);
+      spellcheckHoverPopupSupport.onAppearanceChanged(f);
 
       // Mark completion popup UI dirty when appearance changes (e.g., accent sliders).
       // Refresh existing popup windows if present.
@@ -507,6 +513,7 @@ public class MessageInputPanel extends JPanel {
   private void onDraftDocumentChanged() {
     hintPopupSupport.updateHint();
     nickCompletionSupport.markUiDirty();
+    spellcheckHoverPopupSupport.onDraftChanged();
     spellcheckSupport.onDraftChanged();
     fireDraftChanged();
     historySupport.onUserEdit(programmaticEdit);
@@ -551,6 +558,11 @@ public class MessageInputPanel extends JPanel {
     composeSupport.beginReplyCompose(ircTarget, messageId);
   }
 
+  public void beginReplyCompose(
+      String ircTarget, String messageId, String previewText, Runnable jumpAction) {
+    composeSupport.beginReplyCompose(ircTarget, messageId, previewText, jumpAction);
+  }
+
   public void clearReplyCompose() {
     composeSupport.clearReplyCompose();
   }
@@ -573,10 +585,18 @@ public class MessageInputPanel extends JPanel {
   }
 
   public void flushTypingDone() {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(this::flushTypingDone);
+      return;
+    }
     typingSupport.flushTypingDone();
   }
 
   public void flushTypingForBufferSwitch() {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(this::flushTypingForBufferSwitch);
+      return;
+    }
     typingSupport.flushTypingForBufferSwitch();
   }
 
@@ -685,6 +705,7 @@ public class MessageInputPanel extends JPanel {
     }
     hintPopupSupport.updateHint();
     nickCompletionSupport.markUiDirty();
+    spellcheckHoverPopupSupport.onInputEnabledChanged(enabled);
     spellcheckSupport.onInputEnabledChanged(enabled);
   }
 

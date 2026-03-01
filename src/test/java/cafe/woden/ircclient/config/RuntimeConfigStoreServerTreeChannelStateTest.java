@@ -37,6 +37,7 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
                   channels:
                     - name: "#alpha"
                       autoReattach: true
+                      pinned: true
                     - name: "#beta"
                       autoReattach: false
         """);
@@ -52,6 +53,8 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
     assertEquals(List.of("#alpha", "#beta"), store.readKnownChannels("libera"));
     assertTrue(store.readServerTreeChannelAutoReattach("libera", "#alpha", false));
     assertFalse(store.readServerTreeChannelAutoReattach("libera", "#beta", true));
+    assertTrue(store.readServerTreeChannelPinned("libera", "#alpha", false));
+    assertFalse(store.readServerTreeChannelPinned("libera", "#beta", true));
   }
 
   @Test
@@ -110,6 +113,45 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
         RuntimeConfigStore.ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY,
         store.readServerTreeChannelSortMode(
             "libera", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM));
+  }
+
+  @Test
+  void channelStateReadsMostUnreadSortModeTokens() throws Exception {
+    Path cfg = tempDir.resolve("ircafe.yml");
+    Files.writeString(
+        cfg,
+        """
+        irc:
+          servers:
+            - id: libera
+            - id: oftc
+        ircafe:
+          ui:
+            serverTree:
+              channelsByServer:
+                libera:
+                  sortMode: most-unread-messages
+                  channels:
+                    - name: "#alpha"
+                      autoReattach: true
+                oftc:
+                  sortMode: most-unread-notifications
+                  channels:
+                    - name: "#beta"
+                      autoReattach: true
+        """);
+
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
+
+    assertEquals(
+        RuntimeConfigStore.ServerTreeChannelSortMode.MOST_UNREAD_MESSAGES,
+        store.readServerTreeChannelSortMode(
+            "libera", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM));
+    assertEquals(
+        RuntimeConfigStore.ServerTreeChannelSortMode.MOST_UNREAD_NOTIFICATIONS,
+        store.readServerTreeChannelSortMode(
+            "oftc", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM));
   }
 
   @Test
@@ -177,5 +219,29 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
             "oftc", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM));
     assertEquals(List.of("#beta", "#alpha"), store.readServerTreeChannelCustomOrder("libera"));
     assertEquals(List.of("#beta", "#alpha"), store.readServerTreeChannelCustomOrder("oftc"));
+  }
+
+  @Test
+  void rememberChannelPinnedPersistsAndCanToggleOff() throws Exception {
+    Path cfg = tempDir.resolve("ircafe.yml");
+    Files.writeString(
+        cfg,
+        """
+        irc:
+          servers:
+            - id: libera
+        """);
+
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
+
+    store.rememberServerTreeChannel("libera", "#alpha");
+    assertFalse(store.readServerTreeChannelPinned("libera", "#alpha", true));
+
+    store.rememberServerTreeChannelPinned("libera", "#alpha", true);
+    assertTrue(store.readServerTreeChannelPinned("libera", "#alpha", false));
+
+    store.rememberServerTreeChannelPinned("libera", "#alpha", false);
+    assertFalse(store.readServerTreeChannelPinned("libera", "#alpha", true));
   }
 }

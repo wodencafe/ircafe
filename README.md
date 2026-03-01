@@ -251,7 +251,8 @@ Additional verification/reporting tasks:
 
 When running IRCafe as a packaged jar, edit the runtime config file (loaded on startup and overrides the defaults in `application.yml`):
 
-- Default path: `~/.config/ircafe/ircafe.yml` (i.e. `${user.home}/.config/ircafe/ircafe.yml`)
+- Default path: `${XDG_CONFIG_HOME}/ircafe/ircafe.yml` when `XDG_CONFIG_HOME` is set.
+- Otherwise falls back to: `~/.config/ircafe/ircafe.yml` (i.e. `${user.home}/.config/ircafe/ircafe.yml`)
 
 To use a different location, set `ircafe.runtime-config` (environment variable: `IRCAFE_RUNTIME_CONFIG`) or pass it on the command line:
 
@@ -337,7 +338,7 @@ To enable SASL, set `irc.servers[].sasl.enabled: true` in your config and set `I
 
 ### Data locations
 
-- Runtime config and UI state default to `~/.config/ircafe/ircafe.yml`.
+- Runtime config and UI state default to `${XDG_CONFIG_HOME}/ircafe/ircafe.yml` when `XDG_CONFIG_HOME` is set, otherwise `~/.config/ircafe/ircafe.yml`.
 - With logging enabled (default `ircafe.logging.hsqldb.nextToRuntimeConfig: true`), HSQLDB files (for example `ircafe-chatlog.*`) are stored next to the runtime config file.
 - Linux `uninstall.sh` removes the installed app image and desktop entry, but does not remove user config/history data.
 

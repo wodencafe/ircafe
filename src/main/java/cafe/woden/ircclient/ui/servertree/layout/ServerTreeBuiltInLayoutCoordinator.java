@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.ui.servertree;
+package cafe.woden.ircclient.ui.servertree.layout;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -12,23 +12,23 @@ import java.util.function.Predicate;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 /** Coordinates per-server built-in node layout state and runtime-config persistence. */
-final class ServerTreeBuiltInLayoutCoordinator {
+public final class ServerTreeBuiltInLayoutCoordinator {
 
   private final RuntimeConfigStore runtimeConfig;
   private final Map<String, RuntimeConfigStore.ServerTreeBuiltInLayout> byServer = new HashMap<>();
 
-  ServerTreeBuiltInLayoutCoordinator(RuntimeConfigStore runtimeConfig) {
+  public ServerTreeBuiltInLayoutCoordinator(RuntimeConfigStore runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
     loadPersisted();
   }
 
-  RuntimeConfigStore.ServerTreeBuiltInLayout layoutForServer(String serverId) {
+  public RuntimeConfigStore.ServerTreeBuiltInLayout layoutForServer(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return RuntimeConfigStore.ServerTreeBuiltInLayout.defaults();
     return byServer.getOrDefault(sid, RuntimeConfigStore.ServerTreeBuiltInLayout.defaults());
   }
 
-  void rememberLayout(String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
+  public void rememberLayout(String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
     RuntimeConfigStore.ServerTreeBuiltInLayout normalized =
@@ -46,7 +46,7 @@ final class ServerTreeBuiltInLayoutCoordinator {
     }
   }
 
-  RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKindForNode(
+  public RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKindForNode(
       DefaultMutableTreeNode node,
       Predicate<DefaultMutableTreeNode> isMonitorGroupNode,
       Predicate<DefaultMutableTreeNode> isInterceptorsGroupNode,
@@ -62,7 +62,7 @@ final class ServerTreeBuiltInLayoutCoordinator {
     return nodeKindForRef(nodeRefExtractor.apply(node));
   }
 
-  static RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKindForRef(TargetRef ref) {
+  public static RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKindForRef(TargetRef ref) {
     if (ref == null) return null;
     if (ref.isStatus()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER;
     if (ref.isNotifications()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS;
@@ -72,7 +72,7 @@ final class ServerTreeBuiltInLayoutCoordinator {
     return null;
   }
 
-  static RuntimeConfigStore.ServerTreeBuiltInLayout normalizeLayout(
+  public static RuntimeConfigStore.ServerTreeBuiltInLayout normalizeLayout(
       RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
     List<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> defaultOther =
         RuntimeConfigStore.ServerTreeBuiltInLayout.defaults().otherOrder();

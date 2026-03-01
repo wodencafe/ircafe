@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.settings;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ class SpellcheckSettingsTest {
     SpellcheckSettings settings = SpellcheckSettings.defaults();
     SpellcheckSettings.CompletionProfile profile = settings.completionProfile();
 
+    assertFalse(settings.hoverSuggestionsEnabled());
     assertEquals(SpellcheckSettings.COMPLETION_PRESET_ANDROID_LIKE, settings.completionPreset());
     assertEquals(
         SpellcheckSettings.DEFAULT_CUSTOM_MIN_PREFIX_COMPLETION_TOKEN_LENGTH,
@@ -33,6 +35,7 @@ class SpellcheckSettingsTest {
   void conservativePresetUsesPresetValuesInsteadOfCustomOverrides() {
     SpellcheckSettings settings =
         new SpellcheckSettings(
+            true,
             true,
             true,
             true,
@@ -60,6 +63,7 @@ class SpellcheckSettingsTest {
             true,
             true,
             true,
+            true,
             "en-US",
             List.of(),
             SpellcheckSettings.COMPLETION_PRESET_STANDARD,
@@ -81,6 +85,7 @@ class SpellcheckSettingsTest {
   void customPresetNormalizesOutOfRangeKnobs() {
     SpellcheckSettings settings =
         new SpellcheckSettings(
+            true,
             true,
             true,
             true,

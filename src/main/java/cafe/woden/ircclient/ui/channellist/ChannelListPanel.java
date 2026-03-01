@@ -74,6 +74,8 @@ public final class ChannelListPanel extends JPanel {
   public enum ManagedSortMode {
     ALPHABETICAL,
     MOST_RECENT_ACTIVITY,
+    MOST_UNREAD_MESSAGES,
+    MOST_UNREAD_NOTIFICATIONS,
     CUSTOM
   }
 
@@ -1117,6 +1119,8 @@ public final class ChannelListPanel extends JPanel {
     return switch (mode) {
       case ALPHABETICAL -> "Alphabetical";
       case MOST_RECENT_ACTIVITY -> "Most Recent Activity";
+      case MOST_UNREAD_MESSAGES -> "Most Unread Messages";
+      case MOST_UNREAD_NOTIFICATIONS -> "Most Unread Notifications";
       case CUSTOM -> "Manual";
     };
   }

@@ -26,13 +26,17 @@ public class ServerRegistry {
 
   public ServerRegistry(IrcProperties props, RuntimeConfigStore runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
+    Map<String, List<String>> runtimeAutoJoinByServer =
+        (runtimeConfig == null)
+            ? Map.of()
+            : Objects.requireNonNullElse(runtimeConfig.readExplicitServerAutoJoinById(), Map.of());
 
     if (props != null && props.servers() != null) {
       for (IrcProperties.Server s : props.servers()) {
         if (s == null) continue;
         String id = Objects.toString(s.id(), "").trim();
         if (id.isEmpty()) continue;
-        byId.put(id, s);
+        byId.put(id, withRuntimeAutoJoinOverride(s, runtimeAutoJoinByServer));
       }
     }
     updates.onNext(snapshot());
@@ -107,5 +111,47 @@ public class ServerRegistry {
 
   private List<IrcProperties.Server> snapshot() {
     return List.copyOf(byId.values());
+  }
+
+  private static IrcProperties.Server withRuntimeAutoJoinOverride(
+      IrcProperties.Server server, Map<String, List<String>> runtimeAutoJoinByServer) {
+    if (server == null || runtimeAutoJoinByServer == null || runtimeAutoJoinByServer.isEmpty()) {
+      return server;
+    }
+    List<String> runtimeAutoJoin = findAutoJoinForServer(runtimeAutoJoinByServer, server.id());
+    if (runtimeAutoJoin == null) return server;
+    return copyServerWithAutoJoin(server, runtimeAutoJoin);
+  }
+
+  private static List<String> findAutoJoinForServer(
+      Map<String, List<String>> runtimeAutoJoinByServer, String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return null;
+    List<String> exact = runtimeAutoJoinByServer.get(sid);
+    if (exact != null) return exact;
+    for (Map.Entry<String, List<String>> entry : runtimeAutoJoinByServer.entrySet()) {
+      String key = Objects.toString(entry.getKey(), "").trim();
+      if (!key.isEmpty() && key.equalsIgnoreCase(sid)) {
+        return entry.getValue();
+      }
+    }
+    return null;
+  }
+
+  private static IrcProperties.Server copyServerWithAutoJoin(
+      IrcProperties.Server server, List<String> autoJoin) {
+    return new IrcProperties.Server(
+        server.id(),
+        server.host(),
+        server.port(),
+        server.tls(),
+        server.serverPassword(),
+        server.nick(),
+        server.login(),
+        server.realName(),
+        server.sasl(),
+        autoJoin == null ? List.of() : List.copyOf(autoJoin),
+        server.perform(),
+        server.proxy());
   }
 }

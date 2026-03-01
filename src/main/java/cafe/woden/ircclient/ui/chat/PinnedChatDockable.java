@@ -311,6 +311,18 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   }
 
   @Override
+  protected boolean unreactContextActionVisible() {
+    if (target == null || target.isStatus() || target.isUiOnly()) return false;
+    if (irc == null) return false;
+    try {
+      return irc.isDraftReplyAvailable(target.serverId())
+          && irc.isDraftUnreactAvailable(target.serverId());
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  @Override
   protected boolean editContextActionVisible() {
     if (target == null || target.isStatus() || target.isUiOnly()) return false;
     return isMessageEditSupportedForServer(target.serverId());
@@ -365,7 +377,21 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     if (activate != null) {
       activate.accept(target);
     }
-    inputPanel.beginReplyCompose(target.target(), msgId);
+    String preview = transcripts.messagePreviewById(target, msgId);
+    Runnable jumpAction =
+        () -> {
+          int offset = transcripts.messageOffsetById(target, msgId);
+          if (offset >= 0) {
+            setFollowTail(false);
+            scrollToTranscriptOffset(offset);
+            return;
+          }
+          String line = buildChatHistoryAroundByMsgIdCommand(msgId);
+          if (!line.isBlank()) {
+            emitHistoryCommand(line);
+          }
+        };
+    inputPanel.beginReplyCompose(target.target(), msgId, preview, jumpAction);
     inputPanel.focusInput();
   }
 
@@ -381,6 +407,21 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       activate.accept(target);
     }
     inputPanel.openQuickReactionPicker(target.target(), msgId);
+    inputPanel.focusInput();
+  }
+
+  @Override
+  protected void onUnreactToMessageRequested(String messageId) {
+    if (!unreactContextActionVisible()) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
+    if (activeInputRouter != null) {
+      activeInputRouter.activate(inputPanel);
+    }
+    if (activate != null) {
+      activate.accept(target);
+    }
+    inputPanel.setDraftText("/unreact " + msgId + " ");
     inputPanel.focusInput();
   }
 
@@ -405,6 +446,11 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     String msgId = Objects.toString(messageId, "").trim();
     if (msgId.isEmpty()) return;
     emitHistoryCommand("/redact " + msgId);
+  }
+
+  @Override
+  protected boolean isOwnMessageForContextActions(String messageId) {
+    return transcripts != null && transcripts.isOwnMessage(target, messageId);
   }
 
   private void emitHistoryCommand(String line) {

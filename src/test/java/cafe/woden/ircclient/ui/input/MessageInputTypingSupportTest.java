@@ -94,14 +94,15 @@ class MessageInputTypingSupportTest {
   }
 
   @Test
-  void localTypingSignalTelemetryFallsBackToWhiteArrowWhenUnavailable() throws Exception {
+  void localTypingSignalTelemetryFallsBackToThemeAwareArrowWhenUnavailable() throws Exception {
+    int fallbackArrow = unavailableFallbackArrowColorHex();
     Fixture f = newFixture();
     onEdt(
         () -> {
           f.support.setTypingSignalAvailable(false);
           f.support.onLocalTypingIndicatorSent("active");
           assertTrue(f.signal.isVisible());
-          assertEquals(0xFFFFFF, rgbHex(f.signal.debugArrowColorForTest()));
+          assertEquals(fallbackArrow, rgbHex(f.signal.debugArrowColorForTest()));
           assertEquals(0f, f.signal.debugArrowGlowForTest());
           assertTrue(f.signal.isArrowVisible());
 
@@ -109,7 +110,7 @@ class MessageInputTypingSupportTest {
           f.support.onLocalTypingIndicatorSent("active");
           assertTrue(f.signal.isVisible());
           assertTrue(f.signal.isArrowVisible());
-          assertNotEquals(0xFFFFFF, rgbHex(f.signal.debugArrowColorForTest()));
+          assertNotEquals(fallbackArrow, rgbHex(f.signal.debugArrowColorForTest()));
           assertTrue(f.signal.debugArrowGlowForTest() > 0f);
         });
   }
@@ -141,7 +142,8 @@ class MessageInputTypingSupportTest {
   }
 
   @Test
-  void sendSignalDisplayToggleOffUsesWhiteArrowFallback() throws Exception {
+  void sendSignalDisplayToggleOffUsesThemeAwareArrowFallback() throws Exception {
+    int fallbackArrow = unavailableFallbackArrowColorHex();
     AtomicReference<UiSettings> settings =
         new AtomicReference<>(defaultSettings().withTypingIndicatorsSendSignalEnabled(false));
     Fixture f = newFixture(settings::get);
@@ -150,7 +152,7 @@ class MessageInputTypingSupportTest {
           f.support.setTypingSignalAvailable(true);
           f.support.onLocalTypingIndicatorSent("active");
           assertTrue(f.signal.isVisible());
-          assertEquals(0xFFFFFF, rgbHex(f.signal.debugArrowColorForTest()));
+          assertEquals(fallbackArrow, rgbHex(f.signal.debugArrowColorForTest()));
           assertEquals(0f, f.signal.debugArrowGlowForTest());
           assertTrue(f.signal.isArrowVisible());
         });
@@ -333,6 +335,18 @@ class MessageInputTypingSupportTest {
 
   private static int rgbHex(java.awt.Color color) {
     return color == null ? 0 : (color.getRGB() & 0xFFFFFF);
+  }
+
+  private static int unavailableFallbackArrowColorHex()
+      throws InvocationTargetException, InterruptedException {
+    final int[] out = new int[1];
+    onEdt(
+        () -> {
+          TypingSignalIndicator indicator = new TypingSignalIndicator();
+          indicator.setAvailable(false);
+          out[0] = rgbHex(indicator.debugArrowColorForTest());
+        });
+    return out[0];
   }
 
   private record Fixture(

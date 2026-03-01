@@ -219,6 +219,9 @@ public final class ChatChannelListCoordinator {
     return switch (mode) {
       case ALPHABETICAL -> ServerTreeDockable.ChannelSortMode.ALPHABETICAL;
       case MOST_RECENT_ACTIVITY -> ServerTreeDockable.ChannelSortMode.MOST_RECENT_ACTIVITY;
+      case MOST_UNREAD_MESSAGES -> ServerTreeDockable.ChannelSortMode.MOST_UNREAD_MESSAGES;
+      case MOST_UNREAD_NOTIFICATIONS ->
+          ServerTreeDockable.ChannelSortMode.MOST_UNREAD_NOTIFICATIONS;
       case CUSTOM -> ServerTreeDockable.ChannelSortMode.CUSTOM;
     };
   }
@@ -229,6 +232,8 @@ public final class ChatChannelListCoordinator {
     return switch (mode) {
       case ALPHABETICAL -> ChannelListPanel.ManagedSortMode.ALPHABETICAL;
       case MOST_RECENT_ACTIVITY -> ChannelListPanel.ManagedSortMode.MOST_RECENT_ACTIVITY;
+      case MOST_UNREAD_MESSAGES -> ChannelListPanel.ManagedSortMode.MOST_UNREAD_MESSAGES;
+      case MOST_UNREAD_NOTIFICATIONS -> ChannelListPanel.ManagedSortMode.MOST_UNREAD_NOTIFICATIONS;
       case CUSTOM -> ChannelListPanel.ManagedSortMode.CUSTOM;
     };
   }

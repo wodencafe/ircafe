@@ -135,6 +135,9 @@ public record UiProperties(
     /** Include dictionary suggestions in TAB completion popup. */
     Boolean spellcheckSuggestOnTabEnabled,
 
+    /** Show hover popup suggestions for misspelled words in the message input. */
+    Boolean spellcheckHoverSuggestionsEnabled,
+
     /** BCP-47 language tag for spell checking (for example {@code en-US}). */
     String spellcheckLanguageTag,
 
@@ -854,6 +857,9 @@ public record UiProperties(
     }
     if (spellcheckSuggestOnTabEnabled == null) {
       spellcheckSuggestOnTabEnabled = true;
+    }
+    if (spellcheckHoverSuggestionsEnabled == null) {
+      spellcheckHoverSuggestionsEnabled = false;
     }
     spellcheckLanguageTag = normalizeSpellcheckLanguageTag(spellcheckLanguageTag);
     if (spellcheckCustomDictionary == null) {

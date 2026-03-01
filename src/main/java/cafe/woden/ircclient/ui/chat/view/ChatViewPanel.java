@@ -32,6 +32,8 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollBar;
@@ -39,6 +41,7 @@ import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.Element;
@@ -69,6 +72,15 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   private final ChatTranscriptContextMenuDecorator transcriptMenu;
 
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
+  private final JPopupMenu hoverActionRail = new JPopupMenu();
+  private final JButton hoverReplyButton = createHoverRailButton("Reply");
+  private final JButton hoverReactButton = createHoverRailButton("React");
+  private final JButton hoverUnreactButton = createHoverRailButton("Unreact");
+  private final JButton hoverEditButton = createHoverRailButton("Edit");
+  private final JButton hoverRedactButton = createHoverRailButton("Redact");
+  private final Timer hoverActionRailHideTimer = new Timer(2400, e -> hideHoverActionRail());
+  private String hoverActionRailMessageId = "";
+  private int hoverActionRailAnchorY = Integer.MIN_VALUE;
 
   protected ChatViewPanel(UiSettingsBus settingsBus) {
     super(new BorderLayout());
@@ -100,12 +112,15 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
                 this::onLoadContextAroundMessageRequested,
                 this::replyContextActionVisible,
                 this::reactContextActionVisible,
+                this::unreactContextActionVisible,
                 this::onReplyToMessageRequested,
                 this::onReactToMessageRequested,
+                this::onUnreactToMessageRequested,
                 this::editContextActionVisible,
                 this::redactContextActionVisible,
                 this::onEditMessageRequested,
                 this::onRedactMessageRequested));
+    configureHoverActionRail();
     decorators.add(installTranscriptMouseBehavior());
     this.followTailScroll =
         decorators.add(
@@ -296,6 +311,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     return false;
   }
 
+  /** Whether the transcript context menu should show "Remove Reaction…". */
+  protected boolean unreactContextActionVisible() {
+    return false;
+  }
+
   /** Whether the transcript context menu should show "Edit Message…". */
   protected boolean editContextActionVisible() {
     return false;
@@ -336,6 +356,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     // default: no-op
   }
 
+  /** Called by transcript context menu action "Remove Reaction…". */
+  protected void onUnreactToMessageRequested(String messageId) {
+    // default: no-op
+  }
+
   /** Called by transcript context menu action "Edit Message…". */
   protected void onEditMessageRequested(String messageId) {
     // default: no-op
@@ -344,6 +369,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
   /** Called by transcript context menu action "Redact Message…". */
   protected void onRedactMessageRequested(String messageId) {
     // default: no-op
+  }
+
+  /** Whether this message id belongs to the local user and is eligible for edit/redact actions. */
+  protected boolean isOwnMessageForContextActions(String messageId) {
+    return false;
   }
 
   /**
@@ -470,6 +500,8 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
    * their lifecycle shutdown (@PreDestroy).
    */
   protected void closeDecorators() {
+    hideHoverActionRail();
+    hoverActionRailHideTimer.stop();
     decorators.closeQuietly();
   }
 
@@ -609,6 +641,36 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     }
   }
 
+  private String messageIdAt(Point p) {
+    try {
+      int pos = chat.viewToModel2D(p);
+      if (pos < 0) return null;
+
+      StyledDocument doc = (StyledDocument) chat.getDocument();
+      Element el = doc.getCharacterElement(pos);
+      if (el == null) return null;
+
+      AttributeSet attrs = el.getAttributes();
+      if (!lineSupportsHoverMessageActions(attrs)) return null;
+
+      String msgId = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_MSGID), "").trim();
+      return msgId.isEmpty() ? null : msgId;
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private static boolean lineSupportsHoverMessageActions(AttributeSet attrs) {
+    if (attrs == null) return false;
+    String kind = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_KIND), "").trim();
+    if (kind.isEmpty()) return false;
+    String upper = kind.toUpperCase(Locale.ROOT);
+    return "CHAT".equals(upper)
+        || "ACTION".equals(upper)
+        || "NOTICE".equals(upper)
+        || "SPOILER".equals(upper);
+  }
+
   private AutoCloseable installTranscriptMouseBehavior() {
     Cursor hand = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
     Cursor text = Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR);
@@ -622,16 +684,26 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
             String ch = channelAt(e.getPoint());
             String nick = nickAt(e.getPoint());
             String msgRef = messageReferenceAt(e.getPoint());
+            String msgId = messageIdAt(e.getPoint());
             chat.setCursor(
                 (manual != null || url != null || ch != null || nick != null || msgRef != null)
                     ? hand
                     : text);
+            updateHoverActionRail(e, msgId, manual, url, ch, nick, msgRef);
+          }
+
+          @Override
+          public void mousePressed(MouseEvent e) {
+            if (e != null && (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e))) {
+              hideHoverActionRail();
+            }
           }
 
           @Override
           public void mouseClicked(MouseEvent e) {
             if (e == null || chat == null) return;
             if (!SwingUtilities.isLeftMouseButton(e)) return;
+            hideHoverActionRail();
 
             ManualPreviewHit manual = manualPreviewHitAt(e.getPoint());
             if (manual != null) {
@@ -676,6 +748,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
             } catch (Exception ignored) {
             }
           }
+
+          @Override
+          public void mouseExited(MouseEvent e) {
+            scheduleHoverActionRailHide();
+          }
         };
     chat.addMouseMotionListener(listener);
     chat.addMouseListener(listener);
@@ -688,7 +765,167 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
         chat.removeMouseListener(listener);
       } catch (Exception ignored) {
       }
+      hideHoverActionRail();
     };
+  }
+
+  private void configureHoverActionRail() {
+    hoverActionRail.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 3));
+    hoverActionRail.setBorder(
+        BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(resolveHoverRailBorderColor()),
+            BorderFactory.createEmptyBorder(0, 1, 0, 1)));
+    hoverActionRail.setFocusable(false);
+
+    hoverActionRail.add(hoverReplyButton);
+    hoverActionRail.add(hoverReactButton);
+    hoverActionRail.add(hoverUnreactButton);
+    hoverActionRail.add(hoverEditButton);
+    hoverActionRail.add(hoverRedactButton);
+
+    hoverReplyButton.addActionListener(e -> triggerHoverAction(this::onReplyToMessageRequested));
+    hoverReactButton.addActionListener(e -> triggerHoverAction(this::onReactToMessageRequested));
+    hoverUnreactButton.addActionListener(
+        e -> triggerHoverAction(this::onUnreactToMessageRequested));
+    hoverEditButton.addActionListener(e -> triggerHoverAction(this::onEditMessageRequested));
+    hoverRedactButton.addActionListener(e -> triggerHoverAction(this::onRedactMessageRequested));
+
+    hoverActionRailHideTimer.setRepeats(false);
+  }
+
+  private static Color resolveHoverRailBorderColor() {
+    Color border = UIManager.getColor("Component.borderColor");
+    if (border == null) border = UIManager.getColor("Separator.foreground");
+    if (border == null) border = new Color(0x8B8F95);
+    return border;
+  }
+
+  private static JButton createHoverRailButton(String label) {
+    JButton button = new JButton(label);
+    button.setFocusable(false);
+    button.setMargin(new java.awt.Insets(1, 6, 1, 6));
+    return button;
+  }
+
+  private void triggerHoverAction(java.util.function.Consumer<String> action) {
+    if (action == null) return;
+    String msgId = Objects.toString(hoverActionRailMessageId, "").trim();
+    if (msgId.isEmpty()) return;
+    try {
+      action.accept(msgId);
+    } catch (Exception ignored) {
+    } finally {
+      hideHoverActionRail();
+    }
+  }
+
+  private void updateHoverActionRail(
+      MouseEvent e,
+      String messageId,
+      ManualPreviewHit manual,
+      String url,
+      String channel,
+      String nick,
+      String msgRef) {
+    if (e == null || messageId == null || messageId.isBlank()) {
+      hideHoverActionRail();
+      return;
+    }
+    if (manual != null || url != null || channel != null || nick != null || msgRef != null) {
+      hideHoverActionRail();
+      return;
+    }
+    if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+      hideHoverActionRail();
+      return;
+    }
+
+    boolean showReply = replyContextActionVisible();
+    boolean showReact = reactContextActionVisible();
+    boolean showUnreact = unreactContextActionVisible();
+    boolean ownMessage = isOwnMessageForContextActions(messageId);
+    boolean showEdit = editContextActionVisible() && ownMessage;
+    boolean showRedact = redactContextActionVisible() && ownMessage;
+    if (!showReply && !showReact && !showUnreact && !showEdit && !showRedact) {
+      hideHoverActionRail();
+      return;
+    }
+
+    showHoverActionRail(
+        e.getPoint(), messageId, showReply, showReact, showUnreact, showEdit, showRedact);
+  }
+
+  private void showHoverActionRail(
+      Point anchor,
+      String messageId,
+      boolean showReply,
+      boolean showReact,
+      boolean showUnreact,
+      boolean showEdit,
+      boolean showRedact) {
+    if (anchor == null || messageId == null || messageId.isBlank()) {
+      hideHoverActionRail();
+      return;
+    }
+    int pos = chat.viewToModel2D(anchor);
+    if (pos < 0) {
+      hideHoverActionRail();
+      return;
+    }
+
+    java.awt.geom.Rectangle2D lineRect;
+    try {
+      lineRect = chat.modelToView2D(pos);
+    } catch (Exception ignored) {
+      lineRect = null;
+    }
+    if (lineRect == null) {
+      hideHoverActionRail();
+      return;
+    }
+
+    hoverReplyButton.setVisible(showReply);
+    hoverReactButton.setVisible(showReact);
+    hoverUnreactButton.setVisible(showUnreact);
+    hoverEditButton.setVisible(showEdit);
+    hoverRedactButton.setVisible(showRedact);
+    String previousMessageId = hoverActionRailMessageId;
+    hoverActionRailMessageId = messageId;
+
+    Dimension pref = hoverActionRail.getPreferredSize();
+    Rectangle visible = chat.getVisibleRect();
+    int x = visible.x + Math.max(2, visible.width - pref.width - 8);
+    int y = Math.max(visible.y + 2, (int) Math.round(lineRect.getY()) - 2);
+    int maxY = visible.y + Math.max(2, visible.height - pref.height - 2);
+    y = Math.min(y, maxY);
+
+    if (hoverActionRail.isVisible()
+        && messageId.equals(previousMessageId)
+        && Math.abs(y - hoverActionRailAnchorY) <= 2) {
+      hoverActionRailHideTimer.restart();
+      return;
+    }
+
+    hoverActionRailAnchorY = y;
+    if (hoverActionRail.isVisible()) {
+      hoverActionRail.setVisible(false);
+    }
+    hoverActionRail.show(chat, x, y);
+    hoverActionRailHideTimer.restart();
+  }
+
+  private void scheduleHoverActionRailHide() {
+    if (!hoverActionRail.isVisible()) return;
+    hoverActionRailHideTimer.restart();
+  }
+
+  private void hideHoverActionRail() {
+    hoverActionRailHideTimer.stop();
+    hoverActionRailMessageId = "";
+    hoverActionRailAnchorY = Integer.MIN_VALUE;
+    if (hoverActionRail.isVisible()) {
+      hoverActionRail.setVisible(false);
+    }
   }
 
   // Keep in sync with ChatRichTextRenderer#isNickChar.

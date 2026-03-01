@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -53,7 +54,7 @@ class ServerTreeDockableWeechatFiltersNodeTest {
   private static boolean isOtherGroup(DefaultMutableTreeNode node) {
     if (node == null) return false;
     Object uo = node.getUserObject();
-    if (!(uo instanceof ServerTreeDockable.NodeData nd)) return false;
+    if (!(uo instanceof ServerTreeNodeData nd)) return false;
     return nd.ref == null && "Other".equals(nd.label);
   }
 

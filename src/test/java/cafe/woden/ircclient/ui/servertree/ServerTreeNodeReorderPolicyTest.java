@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeNodeReorderPolicy;
 import cafe.woden.ircclient.ui.util.TreeNodeReorderPolicy;
 import javax.swing.tree.DefaultMutableTreeNode;
 import org.junit.jupiter.api.Test;
@@ -150,14 +152,67 @@ class ServerTreeNodeReorderPolicyTest {
     assertNull(plan);
   }
 
+  @Test
+  void pinnedChannelCannotMoveBelowUnpinnedInChannelList() {
+    DefaultMutableTreeNode server = serverNode("test");
+    DefaultMutableTreeNode channelList = channelListNode("test");
+    DefaultMutableTreeNode pinned = channelNode("test", "#pinned");
+    DefaultMutableTreeNode normal = channelNode("test", "#normal");
+    channelList.add(pinned);
+    channelList.add(normal);
+    server.add(channelList);
+
+    ServerTreeNodeReorderPolicy policy =
+        policyForServerLabel("test", ref -> "#pinned".equals(ref.target()));
+    TreeNodeReorderPolicy.MovePlan plan = policy.planMove(pinned, +1);
+
+    assertNull(plan);
+  }
+
+  @Test
+  void unpinnedChannelCannotMoveAbovePinnedInChannelList() {
+    DefaultMutableTreeNode server = serverNode("test");
+    DefaultMutableTreeNode channelList = channelListNode("test");
+    DefaultMutableTreeNode pinned = channelNode("test", "#pinned");
+    DefaultMutableTreeNode normal = channelNode("test", "#normal");
+    channelList.add(pinned);
+    channelList.add(normal);
+    server.add(channelList);
+
+    ServerTreeNodeReorderPolicy policy =
+        policyForServerLabel("test", ref -> "#pinned".equals(ref.target()));
+    TreeNodeReorderPolicy.MovePlan plan = policy.planMove(normal, -1);
+
+    assertNull(plan);
+  }
+
   private static ServerTreeNodeReorderPolicy policyForServerLabel(String label) {
+    return policyForServerLabel(label, __ -> false);
+  }
+
+  private static ServerTreeNodeReorderPolicy policyForServerLabel(
+      String label, java.util.function.Predicate<TargetRef> isPinned) {
     return new ServerTreeNodeReorderPolicy(
         node -> node != null && label.equals(node.getUserObject()),
         node -> {
           if (node == null) return false;
           Object uo = node.getUserObject();
-          if (!(uo instanceof ServerTreeDockable.NodeData nd)) return false;
+          if (!(uo instanceof ServerTreeNodeData nd)) return false;
           return nd.ref != null && nd.ref.isChannelList();
+        },
+        isPinned,
+        node -> {
+          if (node == null) return null;
+          Object uo = node.getUserObject();
+          if (uo instanceof ServerTreeNodeData nd) return nd.ref;
+          return null;
+        },
+        node -> {
+          if (node == null) return "";
+          Object uo = node.getUserObject();
+          if (uo instanceof ServerTreeNodeData nd) return nd.label;
+          if (uo instanceof String s) return s;
+          return "";
         });
   }
 
@@ -182,18 +237,18 @@ class ServerTreeNodeReorderPolicyTest {
   }
 
   private static DefaultMutableTreeNode interceptorsGroupNode() {
-    return new DefaultMutableTreeNode(new ServerTreeDockable.NodeData(null, "Interceptors"));
+    return new DefaultMutableTreeNode(new ServerTreeNodeData(null, "Interceptors"));
   }
 
   private static DefaultMutableTreeNode monitorGroupNode() {
-    return new DefaultMutableTreeNode(new ServerTreeDockable.NodeData(null, "Monitor"));
+    return new DefaultMutableTreeNode(new ServerTreeNodeData(null, "Monitor"));
   }
 
   private static DefaultMutableTreeNode otherGroupNode() {
-    return new DefaultMutableTreeNode(new ServerTreeDockable.NodeData(null, "Other"));
+    return new DefaultMutableTreeNode(new ServerTreeNodeData(null, "Other"));
   }
 
   private static DefaultMutableTreeNode leafNode(TargetRef ref, String label) {
-    return new DefaultMutableTreeNode(new ServerTreeDockable.NodeData(ref, label));
+    return new DefaultMutableTreeNode(new ServerTreeNodeData(ref, label));
   }
 }

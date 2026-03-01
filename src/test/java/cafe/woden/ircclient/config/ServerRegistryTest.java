@@ -8,17 +8,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ServerRegistryTest {
+
+  @TempDir Path tempDir;
 
   @Test
   void constructorLoadsServersAndPublishesInitialSnapshot() {
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    when(runtimeConfig.readExplicitServerAutoJoinById()).thenReturn(java.util.Map.of());
     IrcProperties.Server initialLibera = server("libera", "old.libera.example");
     IrcProperties.Server oftc = server("oftc", "irc.oftc.net");
     IrcProperties.Server overrideLibera = server("libera", "irc.libera.chat");
@@ -34,7 +41,8 @@ class ServerRegistryTest {
     assertSame(overrideLibera, registry.require("libera"));
     assertTrue(registry.containsId(" oftc "));
     assertFalse(registry.find(" ").isPresent());
-    verifyNoInteractions(runtimeConfig);
+    verify(runtimeConfig).readExplicitServerAutoJoinById();
+    verifyNoMoreInteractions(runtimeConfig);
     observer.cancel();
   }
 
@@ -108,7 +116,59 @@ class ServerRegistryTest {
     assertEquals("Unknown server id: missing", ex.getMessage());
   }
 
+  @Test
+  void constructorUsesRuntimeAutoJoinWhenRuntimeExplicitlyDefinesIt() throws Exception {
+    Path cfg = tempDir.resolve("ircafe.yml");
+    Files.writeString(
+        cfg,
+        """
+        irc:
+          servers:
+            - id: "libera"
+              autoJoin:
+                - "#runtime"
+                - "#support"
+        """);
+
+    RuntimeConfigStore runtimeConfig =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
+    IrcProperties.Server mergedServer =
+        server("libera", "irc.libera.chat", List.of("#app-default", "#runtime", "#support"));
+
+    ServerRegistry registry =
+        new ServerRegistry(new IrcProperties(null, List.of(mergedServer)), runtimeConfig);
+
+    assertEquals(List.of("#runtime", "#support"), registry.require("libera").autoJoin());
+  }
+
+  @Test
+  void constructorKeepsBoundAutoJoinWhenRuntimeDoesNotDefineAutoJoin() throws Exception {
+    Path cfg = tempDir.resolve("ircafe.yml");
+    Files.writeString(
+        cfg,
+        """
+        irc:
+          servers:
+            - id: "libera"
+              nick: "runtimeNick"
+        """);
+
+    RuntimeConfigStore runtimeConfig =
+        new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
+    IrcProperties.Server boundServer =
+        server("libera", "irc.libera.chat", List.of("#app-default", "#still-app"));
+
+    ServerRegistry registry =
+        new ServerRegistry(new IrcProperties(null, List.of(boundServer)), runtimeConfig);
+
+    assertEquals(List.of("#app-default", "#still-app"), registry.require("libera").autoJoin());
+  }
+
   private static IrcProperties.Server server(String id, String host) {
+    return server(id, host, List.of());
+  }
+
+  private static IrcProperties.Server server(String id, String host, List<String> autoJoin) {
     return new IrcProperties.Server(
         id,
         host,
@@ -119,7 +179,7 @@ class ServerRegistryTest {
         "ircafe",
         "IRCafe User",
         null,
-        List.of(),
+        autoJoin,
         List.of(),
         null);
   }

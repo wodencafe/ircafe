@@ -3,11 +3,16 @@ package cafe.woden.ircclient.util;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.reactivex.rxjava3.core.Scheduler;
 import java.lang.reflect.Field;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -41,6 +46,36 @@ class RxVirtualSchedulersLifecycleIntegrationTest {
       ctx.close();
     }
 
+    assertNull(readIoExec());
+    assertNull(readComputationExec());
+  }
+
+  @Test
+  void shutdownLetsShortRunningIoTaskFinishBeforeForcedInterrupt() throws Exception {
+    RxVirtualSchedulers.io();
+    ExecutorService ioExec = readIoExec();
+    assertNotNull(ioExec);
+
+    AtomicBoolean interrupted = new AtomicBoolean(false);
+    CountDownLatch started = new CountDownLatch(1);
+    Future<?> task =
+        ioExec.submit(
+            () -> {
+              started.countDown();
+              try {
+                Thread.sleep(120);
+              } catch (InterruptedException ie) {
+                interrupted.set(true);
+                Thread.currentThread().interrupt();
+              }
+            });
+
+    assertTrue(started.await(1, TimeUnit.SECONDS));
+
+    RxVirtualSchedulers.shutdown();
+
+    task.get(1, TimeUnit.SECONDS);
+    assertFalse(interrupted.get());
     assertNull(readIoExec());
     assertNull(readComputationExec());
   }

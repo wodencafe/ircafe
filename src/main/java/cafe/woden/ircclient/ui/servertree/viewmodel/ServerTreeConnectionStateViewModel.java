@@ -1,26 +1,26 @@
-package cafe.woden.ircclient.ui.servertree;
+package cafe.woden.ircclient.ui.servertree.viewmodel;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 
 /** UI presentation policy for server-node connection state controls and labels. */
-final class ServerTreeConnectionStateViewModel {
+public final class ServerTreeConnectionStateViewModel {
 
   private ServerTreeConnectionStateViewModel() {}
 
-  static boolean canConnect(ConnectionState state) {
+  public static boolean canConnect(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     return st == ConnectionState.DISCONNECTED;
   }
 
-  static boolean canDisconnect(ConnectionState state) {
+  public static boolean canDisconnect(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     return st == ConnectionState.CONNECTING
         || st == ConnectionState.CONNECTED
         || st == ConnectionState.RECONNECTING;
   }
 
-  static String stateLabel(ConnectionState state) {
+  public static String stateLabel(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     return switch (st) {
       case CONNECTED -> "Connected";
@@ -31,11 +31,11 @@ final class ServerTreeConnectionStateViewModel {
     };
   }
 
-  static String desiredIntentLabel(boolean desiredOnline) {
+  public static String desiredIntentLabel(boolean desiredOnline) {
     return desiredOnline ? "Online" : "Offline";
   }
 
-  static String desiredBadge(ConnectionState state, boolean desiredOnline) {
+  public static String desiredBadge(ConnectionState state, boolean desiredOnline) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     boolean online = isOnlineState(st);
     if (desiredOnline && !online) {
@@ -48,7 +48,7 @@ final class ServerTreeConnectionStateViewModel {
     return "";
   }
 
-  static String intentQueueTip(ConnectionState state, boolean desiredOnline) {
+  public static String intentQueueTip(ConnectionState state, boolean desiredOnline) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     boolean online = isOnlineState(st);
     if (desiredOnline && st == ConnectionState.DISCONNECTING) {
@@ -63,7 +63,7 @@ final class ServerTreeConnectionStateViewModel {
     return "";
   }
 
-  static String actionHint(ConnectionState state) {
+  public static String actionHint(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     return canConnect(st)
         ? "Click the row action to connect."
@@ -72,7 +72,7 @@ final class ServerTreeConnectionStateViewModel {
             : "Connection state is changing.";
   }
 
-  static String serverNodeIconName(ConnectionState state) {
+  public static String serverNodeIconName(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     return switch (st) {
       case CONNECTED -> "check";
@@ -81,7 +81,7 @@ final class ServerTreeConnectionStateViewModel {
     };
   }
 
-  static Palette serverNodeIconPalette(ConnectionState state) {
+  public static Palette serverNodeIconPalette(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     return switch (st) {
       case CONNECTED, CONNECTING, RECONNECTING -> Palette.TREE;
@@ -89,7 +89,7 @@ final class ServerTreeConnectionStateViewModel {
     };
   }
 
-  static String serverActionIconName(ConnectionState state) {
+  public static String serverActionIconName(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
     return switch (st) {
       case DISCONNECTED -> "plus";

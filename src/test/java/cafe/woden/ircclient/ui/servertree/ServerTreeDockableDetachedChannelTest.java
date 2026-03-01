@@ -4,12 +4,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.Color;
 import java.awt.Component;
@@ -116,6 +119,31 @@ class ServerTreeDockableDetachedChannelTest {
 
             autoReattach.doClick();
             assertFalse(dockable.isChannelAutoReattach(chan));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void channelContextMenuShowsPinAndUnpinActions() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+
+            TargetRef chan = new TargetRef("libera", "#ircafe");
+            dockable.ensureNode(chan);
+
+            JPopupMenu unpinnedMenu = buildPopupMenuForTarget(dockable, chan);
+            JMenuItem pin = findMenuItem(unpinnedMenu, "Pin Channel");
+            assertNotNull(pin);
+            pin.doClick();
+            assertTrue(dockable.isChannelPinned(chan));
+
+            JPopupMenu pinnedMenu = buildPopupMenuForTarget(dockable, chan);
+            assertNotNull(findMenuItem(pinnedMenu, "Unpin Channel"));
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -280,6 +308,38 @@ class ServerTreeDockableDetachedChannelTest {
   }
 
   @Test
+  void pinnedChannelRendererUsesStarIcon() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+
+            TargetRef chan = new TargetRef("libera", "#ircafe");
+            dockable.ensureNode(chan);
+            dockable.setChannelPinned(chan, true);
+
+            JTree tree = getTree(dockable);
+            DefaultMutableTreeNode node = findLeafNode(dockable, chan);
+            assertNotNull(node);
+
+            Component rendered =
+                tree.getCellRenderer()
+                    .getTreeCellRendererComponent(tree, node, false, false, true, 0, false);
+
+            assertTrue(rendered instanceof JLabel);
+            JLabel label = (JLabel) rendered;
+            assertSame(
+                SvgIcons.icon("star", 13, SvgIcons.Palette.TREE),
+                label.getIcon(),
+                "pinned channels should render with the star icon");
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
   void unreadAndHighlightCountsRenderAsBadgesWithoutMutatingLabelText() throws Exception {
     onEdt(
         () -> {
@@ -402,8 +462,8 @@ class ServerTreeDockableDetachedChannelTest {
 
             DefaultMutableTreeNode node = findLeafNode(dockable, chan);
             assertNotNull(node);
-            assertTrue(node.getUserObject() instanceof ServerTreeDockable.NodeData);
-            ServerTreeDockable.NodeData nd = (ServerTreeDockable.NodeData) node.getUserObject();
+            assertTrue(node.getUserObject() instanceof ServerTreeNodeData);
+            ServerTreeNodeData nd = (ServerTreeNodeData) node.getUserObject();
             assertTrue(nd.hasTypingActivity());
             assertTrue(typingActivityNodes(dockable).contains(node));
 
@@ -470,7 +530,7 @@ class ServerTreeDockableDetachedChannelTest {
             assertTrue(handled);
             assertTrue(dockable.isChannelDisconnected(chan));
 
-            ServerTreeDockable.NodeData nd = (ServerTreeDockable.NodeData) node.getUserObject();
+            ServerTreeNodeData nd = (ServerTreeNodeData) node.getUserObject();
             assertFalse(nd.hasDetachedWarning());
           } catch (Exception e) {
             throw new RuntimeException(e);
@@ -612,6 +672,121 @@ class ServerTreeDockableDetachedChannelTest {
                     .toList();
 
             assertEquals(List.of("#gamma", "#beta", "#alpha"), order);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void mostUnreadMessagesSortPromotesUnreadBadgeCount() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+            TargetRef alpha = new TargetRef("libera", "#alpha");
+            TargetRef beta = new TargetRef("libera", "#beta");
+            TargetRef gamma = new TargetRef("libera", "#gamma");
+
+            dockable.ensureNode(alpha);
+            dockable.ensureNode(beta);
+            dockable.ensureNode(gamma);
+
+            dockable.setChannelSortModeForServer(
+                "libera", ServerTreeDockable.ChannelSortMode.MOST_UNREAD_MESSAGES);
+            dockable.markUnread(beta);
+            dockable.markUnread(alpha);
+            dockable.markUnread(alpha);
+            dockable.markHighlight(gamma);
+
+            List<String> order =
+                dockable.managedChannelsForServer("libera").stream()
+                    .map(ServerTreeDockable.ManagedChannelEntry::channel)
+                    .toList();
+
+            assertEquals(List.of("#alpha", "#beta", "#gamma"), order);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void mostUnreadNotificationsSortPromotesHighlightBadgeCount() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+            TargetRef alpha = new TargetRef("libera", "#alpha");
+            TargetRef beta = new TargetRef("libera", "#beta");
+            TargetRef gamma = new TargetRef("libera", "#gamma");
+
+            dockable.ensureNode(alpha);
+            dockable.ensureNode(beta);
+            dockable.ensureNode(gamma);
+
+            dockable.setChannelSortModeForServer(
+                "libera", ServerTreeDockable.ChannelSortMode.MOST_UNREAD_NOTIFICATIONS);
+            dockable.markUnread(alpha);
+            dockable.markHighlight(beta);
+            dockable.markHighlight(beta);
+
+            List<String> order =
+                dockable.managedChannelsForServer("libera").stream()
+                    .map(ServerTreeDockable.ManagedChannelEntry::channel)
+                    .toList();
+
+            assertEquals(List.of("#beta", "#alpha", "#gamma"), order);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void pinnedChannelsStayAtTopAcrossSortModesAndCannotMoveBelowUnpinned() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+            TargetRef alpha = new TargetRef("libera", "#alpha");
+            TargetRef beta = new TargetRef("libera", "#beta");
+            TargetRef gamma = new TargetRef("libera", "#gamma");
+
+            dockable.ensureNode(alpha);
+            dockable.ensureNode(beta);
+            dockable.ensureNode(gamma);
+            dockable.setChannelPinned(gamma, true);
+            dockable.setChannelPinned(alpha, true);
+
+            dockable.setChannelSortModeForServer(
+                "libera", ServerTreeDockable.ChannelSortMode.MOST_UNREAD_MESSAGES);
+            dockable.setChannelCustomOrderForServer("libera", List.of("#gamma", "#alpha", "#beta"));
+            dockable.markUnread(beta);
+            dockable.markUnread(beta);
+
+            List<String> order =
+                dockable.managedChannelsForServer("libera").stream()
+                    .map(ServerTreeDockable.ManagedChannelEntry::channel)
+                    .toList();
+            assertEquals(List.of("#gamma", "#alpha", "#beta"), order);
+
+            JTree tree = getTree(dockable);
+            DefaultMutableTreeNode pinnedNode = findLeafNode(dockable, gamma);
+            assertNotNull(pinnedNode);
+            tree.setSelectionPath(new TreePath(pinnedNode.getPath()));
+            dockable
+                .moveNodeDownAction()
+                .actionPerformed(new ActionEvent(tree, ActionEvent.ACTION_PERFORMED, "move-down"));
+
+            List<String> afterMoveAttempt =
+                dockable.managedChannelsForServer("libera").stream()
+                    .map(ServerTreeDockable.ManagedChannelEntry::channel)
+                    .toList();
+            assertEquals(List.of("#alpha", "#gamma", "#beta"), afterMoveAttempt);
           } catch (Exception e) {
             throw new RuntimeException(e);
           }

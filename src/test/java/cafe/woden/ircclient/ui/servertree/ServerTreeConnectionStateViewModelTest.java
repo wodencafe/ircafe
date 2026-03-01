@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
+import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import org.junit.jupiter.api.Test;
 
 class ServerTreeConnectionStateViewModelTest {
