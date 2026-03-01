@@ -171,7 +171,10 @@ class ChatTranscriptContextMenuDecoratorTest {
   }
 
   private static ChatTranscriptContextMenuDecorator buildDecorator(
-      JTextPane transcript, boolean historyVisible, boolean replyReactVisible, boolean editRedactVisible) {
+      JTextPane transcript,
+      boolean historyVisible,
+      boolean replyReactVisible,
+      boolean editRedactVisible) {
     return ChatTranscriptContextMenuDecorator.decorate(
         transcript,
         p -> null,

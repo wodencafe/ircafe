@@ -333,7 +333,8 @@ public final class ServerTreeNetworkInfoDialogBuilder {
       ServerRuntimeMetadata metadata) {
     Set<String> enabled = new LinkedHashSet<>();
     if (metadata != null) {
-      for (Map.Entry<String, ServerRuntimeMetadata.CapabilityState> entry : metadata.ircv3Caps.entrySet()) {
+      for (Map.Entry<String, ServerRuntimeMetadata.CapabilityState> entry :
+          metadata.ircv3Caps.entrySet()) {
         if (!ServerRuntimeMetadata.CapabilityState.ENABLED.equals(entry.getValue())) {
           continue;
         }
@@ -385,7 +386,9 @@ public final class ServerTreeNetworkInfoDialogBuilder {
       }
 
       String detail =
-          missing.isEmpty() ? "All required capabilities are enabled." : "Missing: " + String.join(", ", missing);
+          missing.isEmpty()
+              ? "All required capabilities are enabled."
+              : "Missing: " + String.join(", ", missing);
       out.add(new CapabilityFeatureStatus(feature.label(), status, detail));
     }
     return out;

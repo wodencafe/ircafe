@@ -49,8 +49,7 @@ class ServerRegistryTest {
   @Test
   void upsertWritesRuntimeConfigAndEmitsUpdatedSnapshot() {
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
-    ServerRegistry registry =
-        new ServerRegistry(new IrcProperties(null, List.of()), runtimeConfig);
+    ServerRegistry registry = new ServerRegistry(new IrcProperties(null, List.of()), runtimeConfig);
     var observer = registry.updates().test();
 
     IrcProperties.Server libera = server("libera", "irc.libera.chat");
@@ -109,8 +108,7 @@ class ServerRegistryTest {
   @Test
   void requireThrowsForUnknownServer() {
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
-    ServerRegistry registry =
-        new ServerRegistry(new IrcProperties(null, List.of()), runtimeConfig);
+    ServerRegistry registry = new ServerRegistry(new IrcProperties(null, List.of()), runtimeConfig);
 
     IllegalArgumentException ex =
         assertThrows(IllegalArgumentException.class, () -> registry.require("missing"));

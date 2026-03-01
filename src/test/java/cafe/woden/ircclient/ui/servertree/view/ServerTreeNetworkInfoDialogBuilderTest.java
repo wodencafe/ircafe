@@ -43,7 +43,8 @@ class ServerTreeNetworkInfoDialogBuilderTest {
     assertEquals("Partial", reactions.status());
     assertTrue(reactions.detail().contains("draft/react"));
     assertEquals("Unavailable", history.status());
-    assertTrue(history.detail().contains("one of: chathistory, draft/chathistory, znc.in/playback"));
+    assertTrue(
+        history.detail().contains("one of: chathistory, draft/chathistory, znc.in/playback"));
   }
 
   private static ServerTreeNetworkInfoDialogBuilder.CapabilityFeatureStatus statusForFeature(

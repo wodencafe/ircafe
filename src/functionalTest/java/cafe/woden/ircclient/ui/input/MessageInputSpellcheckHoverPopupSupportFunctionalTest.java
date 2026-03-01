@@ -90,8 +90,7 @@ class MessageInputSpellcheckHoverPopupSupportFunctionalTest {
 
       onEdt(
           () ->
-              popupSupport.showSuggestionsAtScreen(
-                  misspelled, List.of("the"), new Point(20, 20)));
+              popupSupport.showSuggestionsAtScreen(misspelled, List.of("the"), new Point(20, 20)));
 
       assertFalse(onEdtCall(popupSupport::isPopupVisible));
       assertEquals(0, popupDisplay.showCount.get());
@@ -117,15 +116,16 @@ class MessageInputSpellcheckHoverPopupSupportFunctionalTest {
           new MessageInputSpellcheckSupport.MisspelledWord(0, 3, "teh", List.of("the", "ten"));
 
       onEdt(
-          () -> popupSupport.showSuggestionsAtScreen(misspelled, List.of("the", "ten"), new Point(20, 20)));
+          () ->
+              popupSupport.showSuggestionsAtScreen(
+                  misspelled, List.of("the", "ten"), new Point(20, 20)));
       int firstX = onEdtCall(() -> popupX(popupSupport));
       int firstY = onEdtCall(() -> popupY(popupSupport));
       assertEquals(1, popupDisplay.showCount.get(), "popup should be shown once initially");
 
       onEdt(
           () ->
-              invokeShowPopup(
-                  popupSupport, misspelled, List.of("the", "ten"), new Point(240, 20)));
+              invokeShowPopup(popupSupport, misspelled, List.of("the", "ten"), new Point(240, 20)));
 
       assertEquals(1, popupDisplay.showCount.get(), "popup should not be recreated for same word");
       assertEquals(firstX, onEdtCall(() -> popupX(popupSupport)));
@@ -244,7 +244,8 @@ class MessageInputSpellcheckHoverPopupSupportFunctionalTest {
     private final AtomicInteger showCount = new AtomicInteger();
 
     @Override
-    public Popup create(javax.swing.JComponent owner, javax.swing.JComponent content, int x, int y) {
+    public Popup create(
+        javax.swing.JComponent owner, javax.swing.JComponent content, int x, int y) {
       return new Popup() {
         @Override
         public void show() {

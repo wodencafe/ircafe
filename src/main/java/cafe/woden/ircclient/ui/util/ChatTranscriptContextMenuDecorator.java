@@ -565,7 +565,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     editMessageItem.setToolTipText(
         editEnabled
             ? "Edit your message via IRCv3 message-edit."
-            : messageActionUnavailableReason(hasMessageId, editAvailable, currentPopupOwnMessage, "edit"));
+            : messageActionUnavailableReason(
+                hasMessageId, editAvailable, currentPopupOwnMessage, "edit"));
 
     boolean redactAvailable = isActionVisible(redactActionVisibleSupplier);
     boolean redactEnabled = redactAvailable && hasMessageId && currentPopupOwnMessage;

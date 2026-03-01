@@ -4058,8 +4058,7 @@ public class PreferencesDialog {
     suggestOnTab.setToolTipText(
         "When enabled, Tab completion can suggest dictionary words and spelling corrections.");
 
-    JCheckBox hoverSuggestions =
-        new JCheckBox("Show hover correction popup for misspelled words");
+    JCheckBox hoverSuggestions = new JCheckBox("Show hover correction popup for misspelled words");
     hoverSuggestions.setSelected(initial.hoverSuggestionsEnabled());
     hoverSuggestions.setToolTipText(
         "When enabled, hovering over a misspelled word shows quick correction suggestions.");

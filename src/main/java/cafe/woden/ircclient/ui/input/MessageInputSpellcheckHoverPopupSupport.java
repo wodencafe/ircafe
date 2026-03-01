@@ -20,8 +20,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Shows a tiny hover popup with top spell-correction suggestions for misspelled words.
  *
- * <p>The popup is strictly best-effort: it only uses non-blocking suggestion lookups so mouse
- * hover never blocks the EDT.
+ * <p>The popup is strictly best-effort: it only uses non-blocking suggestion lookups so mouse hover
+ * never blocks the EDT.
  */
 final class MessageInputSpellcheckHoverPopupSupport {
 
@@ -142,7 +142,8 @@ final class MessageInputSpellcheckHoverPopupSupport {
           }
         };
 
-    popupPanel.setLayout(new FlowLayout(FlowLayout.LEFT, POPUP_BUTTON_HGAP_PX, POPUP_BUTTON_VGAP_PX));
+    popupPanel.setLayout(
+        new FlowLayout(FlowLayout.LEFT, POPUP_BUTTON_HGAP_PX, POPUP_BUTTON_VGAP_PX));
     popupPanel.setOpaque(true);
     popupPanel.setAlpha(1f);
     applyTheme();
@@ -181,7 +182,8 @@ final class MessageInputSpellcheckHoverPopupSupport {
   }
 
   void onAppearanceChanged(Font chatFont) {
-    popupFont = chatFont != null ? chatFont.deriveFont(Math.max(10f, chatFont.getSize2D() - 2f)) : null;
+    popupFont =
+        chatFont != null ? chatFont.deriveFont(Math.max(10f, chatFont.getSize2D() - 2f)) : null;
     applyTheme();
     hidePopup();
   }
@@ -513,7 +515,9 @@ final class MessageInputSpellcheckHoverPopupSupport {
       if (button.getAccessibleContext() != null) {
         String text = button.getText();
         button.getAccessibleContext().setAccessibleName("Replace misspelled word with " + text);
-        button.getAccessibleContext().setAccessibleDescription("Replace misspelled word with " + text);
+        button
+            .getAccessibleContext()
+            .setAccessibleDescription("Replace misspelled word with " + text);
       }
     }
   }
@@ -531,9 +535,7 @@ final class MessageInputSpellcheckHoverPopupSupport {
       MessageInputSpellcheckSupport.MisspelledWord b) {
     if (a == b) return true;
     if (a == null || b == null) return false;
-    return a.start() == b.start()
-        && a.end() == b.end()
-        && Objects.equals(a.token(), b.token());
+    return a.start() == b.start() && a.end() == b.end() && Objects.equals(a.token(), b.token());
   }
 
   private static int clamp(int value, int min, int max) {
