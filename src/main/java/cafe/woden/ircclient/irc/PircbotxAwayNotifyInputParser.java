@@ -365,12 +365,13 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
 
     try {
       super.processServerResponse(code, line, parsedLine);
-    } catch (NumberFormatException ex) {
+    } catch (RuntimeException ex) {
       PircbotxChannelModeParsers.ParsedRpl324 parsed = parseRpl324Fallback(line, parsedLine);
       if (parsed != null) {
         log.warn(
-            "[{}] recovered from PircBotX RPL 324 parse failure: channel={} details={} line={}",
+            "[{}] recovered from PircBotX RPL 324 parse failure ({}): channel={} details={} line={}",
             serverId,
+            ex.getClass().getSimpleName(),
             parsed.channel(),
             parsed.details(),
             Objects.toString(line, ""));
