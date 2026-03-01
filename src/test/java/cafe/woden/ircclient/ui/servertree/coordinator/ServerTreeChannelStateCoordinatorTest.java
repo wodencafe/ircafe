@@ -23,9 +23,7 @@ class ServerTreeChannelStateCoordinatorTest {
   void customOrderLoadedBeforeIncrementalChannelsIsPreserved() {
     TestFixture fixture =
         newFixture(
-            List.of("#gamma", "#alpha", "#beta"),
-            Map.of(),
-            List.of("#alpha", "#beta", "#gamma"));
+            List.of("#gamma", "#alpha", "#beta"), Map.of(), List.of("#alpha", "#beta", "#gamma"));
 
     assertEquals(List.of("#gamma", "#alpha", "#beta"), fixture.treeChannelOrder());
   }
@@ -92,7 +90,8 @@ class ServerTreeChannelStateCoordinatorTest {
 
     private void addChannel(String channel) {
       TargetRef ref = new TargetRef("libera", channel);
-      DefaultMutableTreeNode node = new DefaultMutableTreeNode(new ServerTreeNodeData(ref, channel));
+      DefaultMutableTreeNode node =
+          new DefaultMutableTreeNode(new ServerTreeNodeData(ref, channel));
       model.insertNodeInto(node, channelListNode, channelListNode.getChildCount());
       coordinator.ensureChannelKnownInConfig(ref);
     }

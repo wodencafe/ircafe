@@ -328,7 +328,6 @@ public final class ServerTreeChannelStateCoordinator {
       }
       context.restoreExpandedTreePaths(expanded);
     }
-
   }
 
   public void persistCustomOrderFromTreeIfCustom(String serverId) {

@@ -231,7 +231,8 @@ class ConnectionCoordinatorTest {
     verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Alice"));
     verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Bob"));
     verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#ircafe"));
-    verify(ui, timeout(2_000).atLeastOnce()).setChannelDisconnected(new TargetRef("libera", "#ircafe"), true);
+    verify(ui, timeout(2_000).atLeastOnce())
+        .setChannelDisconnected(new TargetRef("libera", "#ircafe"), true);
     verify(runtimeConfig, never()).rememberNick(anyString(), anyString());
   }
 

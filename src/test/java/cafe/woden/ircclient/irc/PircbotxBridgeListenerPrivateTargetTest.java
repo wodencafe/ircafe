@@ -59,14 +59,11 @@ class PircbotxBridgeListenerPrivateTargetTest {
 
   @Test
   void parseChannelRedirectExtractsBothChannelsFromErrLinkchannel() throws Exception {
-    Method m =
-        PircbotxBridgeListener.class.getDeclaredMethod("parseChannelRedirect", String.class);
+    Method m = PircbotxBridgeListener.class.getDeclaredMethod("parseChannelRedirect", String.class);
     m.setAccessible(true);
 
     Object parsed =
-        m.invoke(
-            null,
-            ":irc.example.net 470 chris #old #new :Forwarding to another channel");
+        m.invoke(null, ":irc.example.net 470 chris #old #new :Forwarding to another channel");
     assertNotNull(parsed);
 
     Method from = parsed.getClass().getDeclaredMethod("fromChannel");
@@ -80,14 +77,11 @@ class PircbotxBridgeListenerPrivateTargetTest {
 
   @Test
   void parseChannelRedirectReturnsNullWhenRedirectTargetMissing() throws Exception {
-    Method m =
-        PircbotxBridgeListener.class.getDeclaredMethod("parseChannelRedirect", String.class);
+    Method m = PircbotxBridgeListener.class.getDeclaredMethod("parseChannelRedirect", String.class);
     m.setAccessible(true);
 
     Object parsed =
-        m.invoke(
-            null,
-            ":irc.example.net 470 chris #old :Forwarding to another channel");
+        m.invoke(null, ":irc.example.net 470 chris #old :Forwarding to another channel");
     assertNull(parsed);
   }
 
