@@ -1607,13 +1607,31 @@ public class IrcMediator implements MediatorControlPort {
             InterceptorEventType.NICK);
       }
 
+      case IrcEvent.ChannelRedirected ev -> {
+        String fromChannel = Objects.toString(ev.fromChannel(), "").trim();
+        String toChannel = Objects.toString(ev.toChannel(), "").trim();
+        if (fromChannel.isEmpty() || toChannel.isEmpty()) break;
+
+        TargetRef origin =
+            joinRoutingState.recentOriginIfFresh(sid, fromChannel, Duration.ofSeconds(15));
+        if (origin != null) {
+          joinRoutingState.rememberOrigin(sid, toChannel, origin);
+        }
+        joinRoutingState.clear(sid, fromChannel);
+
+        runtimeConfig.rememberJoinedChannel(sid, toChannel);
+        targetCoordinator.joinChannel(new TargetRef(sid, toChannel));
+      }
+
       case IrcEvent.JoinedChannel ev -> {
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef joinOrigin =
             joinRoutingState.recentOriginIfFresh(sid, ev.channel(), Duration.ofSeconds(15));
         joinRoutingState.clear(sid, ev.channel());
+        connectionCoordinator.noteJoinedChannel(sid, ev.channel());
 
         if (!targetCoordinator.onJoinedChannel(sid, ev.channel())) {
+          connectionCoordinator.clearJoinedChannelObservation(sid, ev.channel());
           TargetRef st = new TargetRef(sid, "status");
           ensureTargetExists(st);
           ui.appendStatusAt(

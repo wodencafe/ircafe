@@ -80,6 +80,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private static final int ERR_SASL_TOO_LONG = 905;
   private static final int ERR_SASL_ABORTED = 906;
   private static final int ERR_SASL_ALREADY = 907;
+  private static final int ERR_LINKCHANNEL = 470;
   private static final int RPL_MONONLINE = 730;
   private static final int RPL_MONOFFLINE = 731;
   private static final int RPL_MONLIST = 732;
@@ -101,6 +102,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   }
 
   private record ParsedJoinFailure(String channel, String message) {}
+
+  private record ParsedChannelRedirect(String fromChannel, String toChannel, String message) {}
 
   private record ParsedInviteLine(
       String fromNick, String inviteeNick, String channel, String reason) {}
@@ -604,6 +607,30 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     if (channel == null || channel.isBlank()) return null;
 
     return new ParsedJoinFailure(channel, trailing);
+  }
+
+  private static ParsedChannelRedirect parseChannelRedirect(String rawLine) {
+    if (rawLine == null || rawLine.isBlank()) return null;
+    String normalized = PircbotxLineParseUtil.normalizeIrcLineForParsing(rawLine);
+    ParsedIrcLine pl = parseIrcLine(normalized);
+    if (pl == null) return null;
+    if (!"470".equals(Objects.toString(pl.command(), "").trim())) return null;
+    List<String> params = pl.params();
+    if (params == null || params.isEmpty()) return null;
+
+    String from = null;
+    String to = null;
+    for (String p : params) {
+      if (!PircbotxLineParseUtil.looksLikeChannel(p)) continue;
+      if (from == null) {
+        from = p;
+      } else if (to == null) {
+        to = p;
+        break;
+      }
+    }
+    if (from == null || from.isBlank() || to == null || to.isBlank()) return null;
+    return new ParsedChannelRedirect(from, to, Objects.toString(pl.trailing(), "").trim());
   }
 
   PircbotxBridgeListener(
@@ -2360,6 +2387,25 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       if (line == null || line.isBlank()) line = String.valueOf(event);
       handleSaslNumeric(code, line);
       return;
+    }
+    if (code == ERR_LINKCHANNEL) {
+      String line = null;
+      Object l = reflectCall(event, "getLine");
+      if (l == null) l = reflectCall(event, "getRawLine");
+      if (l != null) line = String.valueOf(l);
+      if (line == null || line.isBlank()) line = String.valueOf(event);
+      ParsedChannelRedirect redirect = parseChannelRedirect(line);
+      if (redirect != null) {
+        bus.onNext(
+            new ServerIrcEvent(
+                serverId,
+                new IrcEvent.ChannelRedirected(
+                    Instant.now(),
+                    redirect.fromChannel(),
+                    redirect.toChannel(),
+                    code,
+                    redirect.message())));
+      }
     }
     if (isJoinFailureNumeric(code)) {
       String line = null;

@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -162,8 +163,8 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
 
     markConnected(sid);
 
-    verify(swingUiPort, atLeastOnce()).ensureTargetExists(ref);
-    verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, true);
+    verify(swingUiPort, timeout(2_000).atLeastOnce()).ensureTargetExists(ref);
+    verify(swingUiPort, timeout(2_000).atLeastOnce()).setChannelDisconnected(ref, true);
   }
 
   @Test

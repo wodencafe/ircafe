@@ -53,6 +53,7 @@ import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -421,6 +422,24 @@ class IrcMediatorMockVerifyTest {
 
     verify(ui).setReadMarker(new TargetRef("libera", "#ircafe"), 0L);
     verify(ui).clearUnread(new TargetRef("libera", "#ircafe"));
+  }
+
+  @Test
+  void channelRedirectRemapsJoinOriginAndInitiatesJoinOnRedirectTarget() throws Exception {
+    TargetRef origin = new TargetRef("libera", "status");
+    when(joinRoutingState.recentOriginIfFresh("libera", "#old", Duration.ofSeconds(15)))
+        .thenReturn(origin);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ChannelRedirected(
+                Instant.now(), "#old", "#new", 470, "Forwarding to another channel")));
+
+    verify(joinRoutingState).rememberOrigin("libera", "#new", origin);
+    verify(joinRoutingState).clear("libera", "#old");
+    verify(runtimeConfig).rememberJoinedChannel("libera", "#new");
+    verify(targetCoordinator).joinChannel(new TargetRef("libera", "#new"));
   }
 
   private void invokeHandleOutgoingLine(String raw) throws Exception {

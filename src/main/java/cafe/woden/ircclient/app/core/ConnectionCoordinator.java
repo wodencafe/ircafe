@@ -15,12 +15,16 @@ import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PreDestroy;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.SwingUtilities;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.context.annotation.Lazy;
@@ -31,6 +35,7 @@ import org.springframework.stereotype.Component;
 @ApplicationLayer
 public class ConnectionCoordinator {
   private static final Scheduler EDT_SCHEDULER = Schedulers.from(SwingUtilities::invokeLater);
+  private static final int TARGET_RESTORE_CHUNK_SIZE = 48;
 
   public enum ConnectivityChange {
     NONE,
@@ -59,6 +64,15 @@ public class ConnectionCoordinator {
   private final Map<String, Long> nextRetryAtByServer = new HashMap<>();
 
   private final Set<String> configuredServers = new HashSet<>();
+  private final Map<String, Long> restoreRunByServer = new HashMap<>();
+  private final AtomicLong restoreRunSequence = new AtomicLong();
+  private final Map<String, Set<String>> observedJoinedChannelKeysByServer =
+      new ConcurrentHashMap<>();
+
+  private record PersistedTargetRestore(List<String> privateTargets, List<String> joinedChannels) {
+    private static final PersistedTargetRestore EMPTY =
+        new PersistedTargetRestore(List.of(), List.of());
+  }
 
   public ConnectionCoordinator(
       IrcClientService irc,
@@ -88,6 +102,7 @@ public class ConnectionCoordinator {
   @PreDestroy
   void shutdown() {
     disposables.dispose();
+    restoreRunByServer.clear();
   }
 
   public boolean isConnected(String serverId) {
@@ -100,6 +115,27 @@ public class ConnectionCoordinator {
       if (s == ConnectionState.CONNECTED) n++;
     }
     return n;
+  }
+
+  public void noteJoinedChannel(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String key = foldChannelKey(channel);
+    if (sid.isEmpty() || key.isEmpty()) return;
+    observedJoinedChannelKeysByServer
+        .computeIfAbsent(sid, __ -> ConcurrentHashMap.newKeySet())
+        .add(key);
+  }
+
+  public void clearJoinedChannelObservation(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String key = foldChannelKey(channel);
+    if (sid.isEmpty() || key.isEmpty()) return;
+    Set<String> keys = observedJoinedChannelKeysByServer.get(sid);
+    if (keys == null) return;
+    keys.remove(key);
+    if (keys.isEmpty()) {
+      observedJoinedChannelKeysByServer.remove(sid);
+    }
   }
 
   public Set<String> connectedServerIdsSnapshot() {
@@ -353,6 +389,7 @@ public class ConnectionCoordinator {
       if (sid == null || sid.isBlank()) continue;
       setDesiredOnline(sid, false);
       clearConnectionDiagnostics(sid);
+      restoreRunByServer.remove(sid);
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
         String fallback = current.stream().findFirst().orElse("default");
         TargetRef status = new TargetRef(fallback, "status");
@@ -442,8 +479,7 @@ public class ConnectionCoordinator {
         String msg = "Connected as " + ev.nick();
         ui.appendStatus(status, "(conn)", msg);
         ui.setChatCurrentNick(id, ev.nick());
-        restorePrivateMessageTargets(id);
-        restoreJoinedChannelTargets(id);
+        restorePersistedTargetsAsync(id);
 
         try {
           trayNotificationService.notifyConnectionState(id, "Connected", msg);
@@ -454,11 +490,14 @@ public class ConnectionCoordinator {
       }
 
       case IrcEvent.Reconnecting ev -> {
-        if (!isDesiredOnline(id)) {
+        if (!isDesiredOnline(id) && previous == ConnectionState.DISCONNECTING) {
           ui.ensureTargetExists(status);
           ui.appendStatus(status, "(conn)", "Reconnect suppressed (server set offline)");
           requestDisconnect(id, null, false);
           return ConnectivityChange.CHANGED;
+        }
+        if (!isDesiredOnline(id)) {
+          setDesiredOnline(id, true);
         }
 
         setState(id, ConnectionState.RECONNECTING);
@@ -488,6 +527,8 @@ public class ConnectionCoordinator {
       }
 
       case IrcEvent.Disconnected ev -> {
+        restoreRunByServer.remove(id);
+        observedJoinedChannelKeysByServer.remove(id);
         setState(id, ConnectionState.DISCONNECTED);
         String msg = "Disconnected: " + ev.reason();
         ui.appendStatus(status, "(conn)", msg);
@@ -563,6 +604,147 @@ public class ConnectionCoordinator {
       } catch (Exception ignored) {
       }
     }
+  }
+
+  private void restorePersistedTargetsAsync(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty() || runtimeConfig == null) {
+      return;
+    }
+    long runId = restoreRunSequence.incrementAndGet();
+    restoreRunByServer.put(sid, runId);
+
+    disposables.add(
+        io.reactivex.rxjava3.core.Single.fromCallable(() -> loadPersistedTargetsSnapshot(sid))
+            .subscribeOn(Schedulers.io())
+            .observeOn(EDT_SCHEDULER)
+            .subscribe(
+                snapshot -> applyPersistedTargetsSnapshot(sid, runId, snapshot),
+                err -> {
+                  // Best effort: failure here should not disrupt live connection handling.
+                }));
+  }
+
+  private PersistedTargetRestore loadPersistedTargetsSnapshot(String serverId) {
+    if (runtimeConfig == null) return PersistedTargetRestore.EMPTY;
+
+    List<String> privateTargets = List.of();
+    if (logProps != null && Boolean.TRUE.equals(logProps.savePrivateMessageList())) {
+      try {
+        privateTargets = normalizeUniqueTargets(runtimeConfig.readPrivateMessageTargets(serverId));
+      } catch (Exception ignored) {
+        privateTargets = List.of();
+      }
+    }
+
+    List<String> joinedChannels;
+    try {
+      joinedChannels = normalizeUniqueTargets(runtimeConfig.readKnownChannels(serverId));
+    } catch (Exception ignored) {
+      joinedChannels = List.of();
+    }
+    return new PersistedTargetRestore(privateTargets, joinedChannels);
+  }
+
+  private void applyPersistedTargetsSnapshot(
+      String serverId, long runId, PersistedTargetRestore snapshot) {
+    if (!isCurrentRestoreRun(serverId, runId) || !serverCatalog.containsId(serverId)) {
+      return;
+    }
+    PersistedTargetRestore safe = snapshot == null ? PersistedTargetRestore.EMPTY : snapshot;
+    restorePrivateMessageTargetsChunked(serverId, runId, safe.privateTargets(), 0);
+    restoreJoinedChannelTargetsChunked(serverId, runId, safe.joinedChannels(), 0);
+  }
+
+  private boolean isCurrentRestoreRun(String serverId, long runId) {
+    Long active = restoreRunByServer.get(serverId);
+    return active != null && active == runId;
+  }
+
+  private void restorePrivateMessageTargetsChunked(
+      String serverId, long runId, List<String> privateTargets, int startIndex) {
+    if (!isCurrentRestoreRun(serverId, runId)) {
+      return;
+    }
+    if (privateTargets == null || privateTargets.isEmpty() || startIndex >= privateTargets.size()) {
+      return;
+    }
+
+    int end = Math.min(startIndex + TARGET_RESTORE_CHUNK_SIZE, privateTargets.size());
+    for (int i = startIndex; i < end; i++) {
+      String nick = privateTargets.get(i);
+      String n = Objects.toString(nick, "").trim();
+      if (n.isEmpty()) continue;
+      try {
+        ui.ensureTargetExists(new TargetRef(serverId, n));
+      } catch (Exception ignored) {
+      }
+    }
+
+    if (end < privateTargets.size() && isCurrentRestoreRun(serverId, runId)) {
+      int nextIndex = end;
+      SwingUtilities.invokeLater(
+          () -> restorePrivateMessageTargetsChunked(serverId, runId, privateTargets, nextIndex));
+    }
+  }
+
+  private void restoreJoinedChannelTargetsChunked(
+      String serverId, long runId, List<String> channels, int startIndex) {
+    if (!isCurrentRestoreRun(serverId, runId)) {
+      return;
+    }
+    if (channels == null || channels.isEmpty() || startIndex >= channels.size()) {
+      return;
+    }
+
+    int end = Math.min(startIndex + TARGET_RESTORE_CHUNK_SIZE, channels.size());
+    for (int i = startIndex; i < end; i++) {
+      String channel = channels.get(i);
+      String ch = Objects.toString(channel, "").trim();
+      if (ch.isEmpty()) continue;
+      if (observedChannelJoin(serverId, ch)) continue;
+      try {
+        TargetRef target = new TargetRef(serverId, ch);
+        if (!target.isChannel()) continue;
+        ui.ensureTargetExists(target);
+        ui.setChannelDisconnected(target, true);
+      } catch (Exception ignored) {
+      }
+    }
+
+    if (end < channels.size() && isCurrentRestoreRun(serverId, runId)) {
+      int nextIndex = end;
+      SwingUtilities.invokeLater(
+          () -> restoreJoinedChannelTargetsChunked(serverId, runId, channels, nextIndex));
+    }
+  }
+
+  private static List<String> normalizeUniqueTargets(List<String> raw) {
+    if (raw == null || raw.isEmpty()) {
+      return List.of();
+    }
+    ArrayList<String> out = new ArrayList<>(raw.size());
+    Set<String> seen = new HashSet<>();
+    for (String target : raw) {
+      String t = Objects.toString(target, "").trim();
+      if (t.isEmpty()) continue;
+      String key = t.toLowerCase(Locale.ROOT);
+      if (!seen.add(key)) continue;
+      out.add(t);
+    }
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private boolean observedChannelJoin(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String key = foldChannelKey(channel);
+    if (sid.isEmpty() || key.isEmpty()) return false;
+    Set<String> keys = observedJoinedChannelKeysByServer.get(sid);
+    return keys != null && keys.contains(key);
+  }
+
+  private static String foldChannelKey(String channel) {
+    return Objects.toString(channel, "").trim().toLowerCase(Locale.ROOT);
   }
 
   private void restoreJoinedChannelTargets(String serverId) {

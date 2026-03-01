@@ -32,6 +32,7 @@ public sealed interface IrcEvent
         IrcEvent.UserQuitChannel,
         IrcEvent.UserNickChangedChannel,
         IrcEvent.JoinedChannel,
+        IrcEvent.ChannelRedirected,
         IrcEvent.JoinFailed,
         IrcEvent.NickListUpdated,
         IrcEvent.UserHostmaskObserved,
@@ -359,6 +360,15 @@ public sealed interface IrcEvent
       implements IrcEvent {}
 
   record JoinedChannel(Instant at, String channel) implements IrcEvent {}
+
+  /**
+   * Server redirected a channel join attempt to another channel (typically numeric 470 / +L).
+   *
+   * <p>Some networks require the client to explicitly follow the redirect target.
+   */
+  record ChannelRedirected(
+      Instant at, String fromChannel, String toChannel, int code, String message)
+      implements IrcEvent {}
 
   /**
    * Server rejected a join attempt (e.g. +r requires NickServ auth).

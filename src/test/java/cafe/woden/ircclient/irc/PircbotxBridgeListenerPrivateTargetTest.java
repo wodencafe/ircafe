@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.irc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
@@ -53,6 +55,34 @@ class PircbotxBridgeListenerPrivateTargetTest {
                     ":alis!alis@services.libera.chat NOTICE wodencafe2 :#test 12 :topic",
                     "wodencafe2"));
     assertEquals("alis", nick);
+  }
+
+  @Test
+  void parseChannelRedirectExtractsBothChannelsFromErrLinkchannel() throws Exception {
+    Method m = PircbotxBridgeListener.class.getDeclaredMethod("parseChannelRedirect", String.class);
+    m.setAccessible(true);
+
+    Object parsed =
+        m.invoke(null, ":irc.example.net 470 chris #old #new :Forwarding to another channel");
+    assertNotNull(parsed);
+
+    Method from = parsed.getClass().getDeclaredMethod("fromChannel");
+    Method to = parsed.getClass().getDeclaredMethod("toChannel");
+    from.setAccessible(true);
+    to.setAccessible(true);
+
+    assertEquals("#old", from.invoke(parsed));
+    assertEquals("#new", to.invoke(parsed));
+  }
+
+  @Test
+  void parseChannelRedirectReturnsNullWhenRedirectTargetMissing() throws Exception {
+    Method m = PircbotxBridgeListener.class.getDeclaredMethod("parseChannelRedirect", String.class);
+    m.setAccessible(true);
+
+    Object parsed =
+        m.invoke(null, ":irc.example.net 470 chris #old :Forwarding to another channel");
+    assertNull(parsed);
   }
 
   private static final class FakeActionEvent {

@@ -473,15 +473,27 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   }
 
   static void shutdownSharedResources() {
+    ExecutorService toShutdown = null;
     synchronized (SPELLCHECK_EXECUTOR_LOCK) {
-      if (spellcheckExecutor != null) {
-        try {
-          spellcheckExecutor.shutdownNow();
-        } catch (Exception ignored) {
-        }
-      }
+      toShutdown = spellcheckExecutor;
       spellcheckExecutor = null;
       spellcheckScheduler = null;
+    }
+    if (toShutdown != null) {
+      try {
+        toShutdown.shutdown();
+        if (!toShutdown.awaitTermination(2, TimeUnit.SECONDS)) {
+          toShutdown.shutdownNow();
+          toShutdown.awaitTermination(2, TimeUnit.SECONDS);
+        }
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        try {
+          toShutdown.shutdownNow();
+        } catch (Exception ignored) {
+        }
+      } catch (Exception ignored) {
+      }
     }
     CHECKERS_BY_THREAD.remove();
     PREFIX_PRIORITY_BY_LANG.clear();
@@ -1177,7 +1189,20 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
     if (lang == null) {
       throw new IllegalStateException("LanguageTool language unavailable for " + shortCode);
     }
-    return new JLanguageTool(lang);
+    return createCheckerWithInterruptGuard(lang);
+  }
+
+  private static JLanguageTool createCheckerWithInterruptGuard(Language lang) {
+    // LanguageTool's regex token bootstrap can throw when entering with an already-interrupted
+    // thread. Clear stale interrupt state before initialization, then restore it for callers.
+    boolean restoreInterrupt = Thread.interrupted();
+    try {
+      return new JLanguageTool(lang);
+    } finally {
+      if (restoreInterrupt) {
+        Thread.currentThread().interrupt();
+      }
+    }
   }
 
   static record MisspelledWord(int start, int end, String token, List<String> suggestions) {

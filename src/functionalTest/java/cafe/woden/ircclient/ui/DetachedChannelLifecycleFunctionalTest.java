@@ -211,7 +211,11 @@ class DetachedChannelLifecycleFunctionalTest {
           Boolean.TRUE.equals(fixture.lastInputEnabledState()),
           "input should stay disabled while detached");
 
-      onEdt(() -> fixture.targetCoordinator.onJoinedChannel("libera", "#startup-restore"));
+      onEdt(
+          () -> {
+            fixture.connectionCoordinator.noteJoinedChannel("libera", "#startup-restore");
+            fixture.targetCoordinator.onJoinedChannel("libera", "#startup-restore");
+          });
       flushEdt();
 
       assertFalse(
