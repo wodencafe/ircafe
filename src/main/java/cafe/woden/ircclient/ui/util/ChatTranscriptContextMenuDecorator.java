@@ -66,6 +66,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final Consumer<String> onReactToMessage;
   private final Consumer<String> onEditMessage;
   private final Consumer<String> onRedactMessage;
+  private final boolean historyActionsConfigured;
+  private final boolean messageActionsConfigured;
 
   private final JPopupMenu menu = new JPopupMenu();
   private final JMenuItem copyItem = new JMenuItem("Copy");
@@ -129,6 +131,20 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     this.openUrl = openUrl;
     this.openFind = (openFind != null) ? openFind : () -> {};
     this.proxyPlanSupplier = proxyPlanSupplier;
+    this.historyActionsConfigured =
+        loadNewerActionVisibleSupplier != null
+            || loadAroundActionVisibleSupplier != null
+            || onLoadNewerHistory != null
+            || onLoadContextAroundMessage != null;
+    this.messageActionsConfigured =
+        replyActionVisibleSupplier != null
+            || reactActionVisibleSupplier != null
+            || editActionVisibleSupplier != null
+            || redactActionVisibleSupplier != null
+            || onReplyToMessage != null
+            || onReactToMessage != null
+            || onEditMessage != null
+            || onRedactMessage != null;
     this.loadNewerActionVisibleSupplier =
         (loadNewerActionVisibleSupplier != null) ? loadNewerActionVisibleSupplier : () -> false;
     this.loadAroundActionVisibleSupplier =
@@ -391,15 +407,6 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   }
 
   private void rebuildMenu(String url) {
-    boolean hasMessageId = currentPopupMessageId != null && !currentPopupMessageId.isBlank();
-    boolean showLoadNewerAction = isActionVisible(loadNewerActionVisibleSupplier);
-    boolean showLoadAroundAction = isActionVisible(loadAroundActionVisibleSupplier) && hasMessageId;
-    boolean showReplyAction = isActionVisible(replyActionVisibleSupplier);
-    boolean showReactAction = isActionVisible(reactActionVisibleSupplier);
-    boolean showEditAction =
-        isActionVisible(editActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage;
-    boolean showRedactAction =
-        isActionVisible(redactActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage;
     menu.removeAll();
 
     if (url != null) {
@@ -411,9 +418,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(inspectLineItem);
       menu.add(copyMessageIdItem);
       menu.add(copyIrcv3TagsItem);
-      maybeAddHistoryActionItems(showLoadNewerAction, showLoadAroundAction);
-      maybeAddMessageActionItems(
-          showReplyAction, showReactAction, showEditAction, showRedactAction);
+      maybeAddHistoryActionItems();
+      maybeAddMessageActionItems();
       menu.addSeparator();
       menu.add(findItem);
       menu.addSeparator();
@@ -425,9 +431,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       menu.add(inspectLineItem);
       menu.add(copyMessageIdItem);
       menu.add(copyIrcv3TagsItem);
-      maybeAddHistoryActionItems(showLoadNewerAction, showLoadAroundAction);
-      maybeAddMessageActionItems(
-          showReplyAction, showReactAction, showEditAction, showRedactAction);
+      maybeAddHistoryActionItems();
+      maybeAddMessageActionItems();
       menu.addSeparator();
       menu.add(findItem);
       menu.addSeparator();
@@ -436,37 +441,20 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     }
   }
 
-  private void maybeAddHistoryActionItems(
-      boolean showLoadNewerAction, boolean showLoadAroundAction) {
-    if (!showLoadNewerAction && !showLoadAroundAction) return;
+  private void maybeAddHistoryActionItems() {
+    if (!historyActionsConfigured) return;
     menu.addSeparator();
-    if (showLoadNewerAction) {
-      menu.add(loadNewerHistoryItem);
-    }
-    if (showLoadAroundAction) {
-      menu.add(loadAroundMessageItem);
-    }
+    menu.add(loadNewerHistoryItem);
+    menu.add(loadAroundMessageItem);
   }
 
-  private void maybeAddMessageActionItems(
-      boolean showReplyAction,
-      boolean showReactAction,
-      boolean showEditAction,
-      boolean showRedactAction) {
-    if (!showReplyAction && !showReactAction && !showEditAction && !showRedactAction) return;
+  private void maybeAddMessageActionItems() {
+    if (!messageActionsConfigured) return;
     menu.addSeparator();
-    if (showReplyAction) {
-      menu.add(replyToMessageItem);
-    }
-    if (showReactAction) {
-      menu.add(reactToMessageItem);
-    }
-    if (showEditAction) {
-      menu.add(editMessageItem);
-    }
-    if (showRedactAction) {
-      menu.add(redactMessageItem);
-    }
+    menu.add(replyToMessageItem);
+    menu.add(reactToMessageItem);
+    menu.add(editMessageItem);
+    menu.add(redactMessageItem);
   }
 
   private void updateEnabledState(String url) {
@@ -485,15 +473,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     boolean hasMessageId = currentPopupMessageId != null && !currentPopupMessageId.isBlank();
     copyMessageIdItem.setEnabled(hasMessageId);
     copyIrcv3TagsItem.setEnabled(currentPopupIrcv3Tags != null && !currentPopupIrcv3Tags.isBlank());
-    loadNewerHistoryItem.setEnabled(isActionVisible(loadNewerActionVisibleSupplier));
-    loadAroundMessageItem.setEnabled(
-        isActionVisible(loadAroundActionVisibleSupplier) && hasMessageId);
-    replyToMessageItem.setEnabled(isActionVisible(replyActionVisibleSupplier) && hasMessageId);
-    reactToMessageItem.setEnabled(isActionVisible(reactActionVisibleSupplier) && hasMessageId);
-    editMessageItem.setEnabled(
-        isActionVisible(editActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage);
-    redactMessageItem.setEnabled(
-        isActionVisible(redactActionVisibleSupplier) && hasMessageId && currentPopupOwnMessage);
+    updateHistoryActionState(hasMessageId);
+    updateMessageActionState(hasMessageId);
 
     try {
       Document doc = transcript.getDocument();
@@ -505,6 +486,83 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       clearItem.setEnabled(true);
       reloadRecentItem.setEnabled(reloadRecentAction != null);
     }
+  }
+
+  private void updateHistoryActionState(boolean hasMessageId) {
+    if (!historyActionsConfigured) return;
+
+    boolean loadNewerAvailable = isActionVisible(loadNewerActionVisibleSupplier);
+    loadNewerHistoryItem.setEnabled(loadNewerAvailable);
+    loadNewerHistoryItem.setToolTipText(
+        loadNewerAvailable
+            ? "Load newer history from the connected server/bouncer."
+            : "Unavailable: server does not support IRCv3 CHATHISTORY or playback for this target.");
+
+    boolean loadAroundAvailable = isActionVisible(loadAroundActionVisibleSupplier);
+    boolean loadAroundEnabled = loadAroundAvailable && hasMessageId;
+    loadAroundMessageItem.setEnabled(loadAroundEnabled);
+    loadAroundMessageItem.setToolTipText(
+        loadAroundEnabled
+            ? "Load surrounding history around this IRCv3 message ID."
+            : historyActionUnavailableReason(hasMessageId, loadAroundAvailable));
+  }
+
+  private void updateMessageActionState(boolean hasMessageId) {
+    if (!messageActionsConfigured) return;
+
+    boolean replyAvailable = isActionVisible(replyActionVisibleSupplier);
+    boolean replyEnabled = replyAvailable && hasMessageId;
+    replyToMessageItem.setEnabled(replyEnabled);
+    replyToMessageItem.setToolTipText(
+        replyEnabled
+            ? "Compose a reply linked to this IRCv3 message ID."
+            : messageActionUnavailableReason(hasMessageId, replyAvailable, false, "reply"));
+
+    boolean reactAvailable = isActionVisible(reactActionVisibleSupplier);
+    boolean reactEnabled = reactAvailable && hasMessageId;
+    reactToMessageItem.setEnabled(reactEnabled);
+    reactToMessageItem.setToolTipText(
+        reactEnabled
+            ? "Send an IRCv3 reaction linked to this message."
+            : messageActionUnavailableReason(hasMessageId, reactAvailable, false, "reaction"));
+
+    boolean editAvailable = isActionVisible(editActionVisibleSupplier);
+    boolean editEnabled = editAvailable && hasMessageId && currentPopupOwnMessage;
+    editMessageItem.setEnabled(editEnabled);
+    editMessageItem.setToolTipText(
+        editEnabled
+            ? "Edit your message via IRCv3 message-edit."
+            : messageActionUnavailableReason(hasMessageId, editAvailable, currentPopupOwnMessage, "edit"));
+
+    boolean redactAvailable = isActionVisible(redactActionVisibleSupplier);
+    boolean redactEnabled = redactAvailable && hasMessageId && currentPopupOwnMessage;
+    redactMessageItem.setEnabled(redactEnabled);
+    redactMessageItem.setToolTipText(
+        redactEnabled
+            ? "Redact your message via IRCv3 message-redaction."
+            : messageActionUnavailableReason(
+                hasMessageId, redactAvailable, currentPopupOwnMessage, "redaction"));
+  }
+
+  private static String historyActionUnavailableReason(boolean hasMessageId, boolean available) {
+    if (!hasMessageId) return "Unavailable: this line has no IRCv3 message ID.";
+    if (!available) {
+      return "Unavailable: server does not support loading context around message IDs.";
+    }
+    return null;
+  }
+
+  private static String messageActionUnavailableReason(
+      boolean hasMessageId, boolean available, boolean ownMessage, String actionNoun) {
+    if (!hasMessageId) return "Unavailable: this line has no IRCv3 message ID.";
+    if (!ownMessage && ("edit".equals(actionNoun) || "redaction".equals(actionNoun))) {
+      String verb = "edit".equals(actionNoun) ? "edited" : "redacted";
+      return "Unavailable: only your own messages can be " + verb + ".";
+    }
+    if (!available) {
+      return "Unavailable: server did not negotiate IRCv3 " + actionNoun + " support.";
+    }
+    return null;
   }
 
   private void onInspectLine(ActionEvent e) {
