@@ -14,7 +14,8 @@ class UpdateNotifierServiceOpenReleasesAsyncTest {
   void openReleasesPageSchedulesDesktopBrowseOnWorker() {
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     StatusBar statusBar = mock(StatusBar.class);
-    TestableUpdateNotifierService service = new TestableUpdateNotifierService(runtimeConfig, statusBar);
+    TestableUpdateNotifierService service =
+        new TestableUpdateNotifierService(runtimeConfig, statusBar);
 
     try {
       service.openReleasesPage();

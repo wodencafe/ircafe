@@ -634,7 +634,8 @@ public final class ServerTreeServerActionOverlay {
     if (target == null || target.isNone()) return;
     float targetAlpha = clampAlpha(desiredAlpha);
     long now = System.currentTimeMillis();
-    HoverFadeState state = hoverFadeByTarget.computeIfAbsent(target, ignored -> new HoverFadeState());
+    HoverFadeState state =
+        hoverFadeByTarget.computeIfAbsent(target, ignored -> new HoverFadeState());
     float current = resolveHoverAlpha(state, now);
     state.alpha = current;
     if (Math.abs(current - targetAlpha) <= MIN_VISIBLE_ALPHA) {

@@ -59,8 +59,7 @@ class PircbotxIrcClientServiceLagProbeTest {
 
     service.requestLagProbe("libera").blockingAwait();
 
-    verify(outputRaw)
-        .rawLine(argThat(v -> v != null && v.startsWith("PING :ircafe-lag-")));
+    verify(outputRaw).rawLine(argThat(v -> v != null && v.startsWith("PING :ircafe-lag-")));
   }
 
   private static PircbotxIrcClientService newService() {

@@ -1,18 +1,17 @@
 package cafe.woden.ircclient.ui.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.swing.DefaultBoundedRangeModel;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
 class ChatSmoothWheelScrollDecoratorTest {
@@ -63,9 +62,7 @@ class ChatSmoothWheelScrollDecoratorTest {
             invokeWheel(decorator, wheelEvent(scroll, 1, 1_000L));
             invokeWheel(decorator, wheelEvent(scroll, 1, 1_005L));
             assertEquals(
-                initialValue + step,
-                bar.getValue(),
-                "second microburst event should be dropped");
+                initialValue + step, bar.getValue(), "second microburst event should be dropped");
           } finally {
             decorator.close();
           }

@@ -96,8 +96,7 @@ public class LagIndicatorService {
 
     String serverId = resolveActiveServerId();
     if (serverId.isBlank()) {
-      statusBar.setLagIndicatorReading(
-          null, "Lag unavailable: no active IRC server selected.");
+      statusBar.setLagIndicatorReading(null, "Lag unavailable: no active IRC server selected.");
       return;
     }
 
@@ -120,7 +119,7 @@ public class LagIndicatorService {
       statusBar.setLagIndicatorReading(null, "Lag unavailable for '" + serverId + "'.");
     }
 
-    ircClientService.requestLagProbe(serverId).subscribe(() -> {}, ignored -> {});
+    var unused = ircClientService.requestLagProbe(serverId).subscribe(() -> {}, ignored -> {});
   }
 
   private String resolveActiveServerId() {

@@ -897,8 +897,7 @@ public class PircbotxIrcClientService implements IrcClientService {
               }
 
               String token =
-                  "ircafe-lag-"
-                      + Long.toUnsignedString(ThreadLocalRandom.current().nextLong(), 36);
+                  "ircafe-lag-" + Long.toUnsignedString(ThreadLocalRandom.current().nextLong(), 36);
               c.beginLagProbe(token, System.currentTimeMillis());
               bot.sendRaw().rawLine("PING :" + token);
             })

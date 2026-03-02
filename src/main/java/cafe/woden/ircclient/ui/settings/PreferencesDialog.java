@@ -3373,7 +3373,8 @@ public class PreferencesDialog {
     updateNotifierEnabled.setToolTipText(
         "Checks GitHub releases in the background and alerts when a newer IRCafe version exists.");
     JCheckBox lagIndicatorEnabled =
-        new JCheckBox("Show lag indicator in status bar", runtimeConfig.readLagIndicatorEnabled(true));
+        new JCheckBox(
+            "Show lag indicator in status bar", runtimeConfig.readLagIndicatorEnabled(true));
     lagIndicatorEnabled.setToolTipText(
         "Shows measured round-trip server lag for the active server in the status bar.");
 
@@ -6909,8 +6910,7 @@ public class PreferencesDialog {
     JTabbedPane subTabs = new DynamicTabbedPane();
     subTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
     subTabs.addTab("Logging", padSubTab(buildHistoryStorageLoggingSubTab(logging)));
-    subTabs.addTab(
-        "Scrolling & Loading", padSubTab(buildHistoryStorageScrollingSubTab(history)));
+    subTabs.addTab("Scrolling & Loading", padSubTab(buildHistoryStorageScrollingSubTab(history)));
     subTabs.addTab("Remote & Limits", padSubTab(buildHistoryStorageRemoteLimitsSubTab(history)));
 
     panel.add(subTabs, "grow, push, wmin 0");
@@ -6922,7 +6922,8 @@ public class PreferencesDialog {
     tab.setOpaque(false);
     tab.add(logging.info, "growx, wmin 0, wrap");
 
-    JPanel behavior = captionPanel("Logging behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    JPanel behavior =
+        captionPanel("Logging behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
     behavior.add(logging.enabled, "growx");
     behavior.add(logging.logSoftIgnored, "growx");
     behavior.add(logging.logPrivateMessages, "growx");
@@ -6978,8 +6979,7 @@ public class PreferencesDialog {
     tab.add(opening, "growx, wmin 0, wrap");
 
     JPanel loadOlder =
-        captionPanel(
-            "Load older smoothing", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "");
+        captionPanel("Load older smoothing", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "");
     loadOlder.add(new JLabel("Chunk size (lines)"));
     loadOlder.add(history.loadOlderChunkSize, "w 110!, wrap");
     loadOlder.add(new JLabel("Chunk delay (ms)"));

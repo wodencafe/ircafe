@@ -5556,8 +5556,7 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn(
-          "[ircafe] Could not persist chat smooth-wheel scrolling setting to '{}'", file, e);
+      log.warn("[ircafe] Could not persist chat smooth-wheel scrolling setting to '{}'", file, e);
     }
   }
 
