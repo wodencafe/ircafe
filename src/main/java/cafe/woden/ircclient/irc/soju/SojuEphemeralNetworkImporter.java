@@ -92,6 +92,7 @@ public class SojuEphemeralNetworkImporter
         resolved.loginUser(),
         bouncer.realName(),
         updatedSasl,
+        bouncer.nickserv(),
         autoJoinChannels == null ? List.of() : List.copyOf(autoJoinChannels),
         List.of(),
         bouncer.proxy());

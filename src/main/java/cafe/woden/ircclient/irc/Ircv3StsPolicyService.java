@@ -252,6 +252,7 @@ public class Ircv3StsPolicyService {
         s.login(),
         s.realName(),
         s.sasl(),
+        s.nickserv(),
         s.autoJoin(),
         s.perform(),
         s.proxy());

@@ -30,10 +30,12 @@ class ServerEditorDialogFunctionalTest {
     ServerEditorDialog dialog = onEdtCall(() -> new ServerEditorDialog(null, "Add Server", null));
     JCheckBox tlsBox = readField(dialog, "tlsBox", JCheckBox.class);
     JTextField portField = readField(dialog, "portField", JTextField.class);
-    JCheckBox saslEnabledBox = readField(dialog, "saslEnabledBox", JCheckBox.class);
+    JComboBox<?> authModeCombo = readField(dialog, "authModeCombo", JComboBox.class);
     JComboBox<?> saslMechanism = readField(dialog, "saslMechanism", JComboBox.class);
     JTextField saslUserField = readField(dialog, "saslUserField", JTextField.class);
     JPasswordField saslPassField = readField(dialog, "saslPassField", JPasswordField.class);
+    JCheckBox saslContinueOnFailureBox =
+        readField(dialog, "saslContinueOnFailureBox", JCheckBox.class);
     JCheckBox proxyOverrideBox = readField(dialog, "proxyOverrideBox", JCheckBox.class);
     JCheckBox proxyEnabledBox = readField(dialog, "proxyEnabledBox", JCheckBox.class);
     JTextField proxyHostField = readField(dialog, "proxyHostField", JTextField.class);
@@ -49,7 +51,7 @@ class ServerEditorDialogFunctionalTest {
       onEdt(tlsBox::doClick);
       onEdt(() -> assertEquals("6667", portField.getText(), "plain mode should use 6667"));
 
-      onEdt(saslEnabledBox::doClick);
+      onEdt(() -> authModeCombo.setSelectedIndex(1)); // SASL
       onEdt(() -> saslMechanism.setSelectedItem("EXTERNAL"));
       onEdt(
           () -> {
@@ -76,9 +78,11 @@ class ServerEditorDialogFunctionalTest {
             hostField.setText("irc.libera.chat");
             portField.setText("6697");
             nickField.setText("ircafe");
-            if (saslEnabledBox.isSelected()) {
-              saslEnabledBox.doClick();
-            }
+            authModeCombo.setSelectedIndex(1); // SASL
+            saslMechanism.setSelectedItem("SCRAM-SHA-256");
+            saslUserField.setText("ircafe-user");
+            saslPassField.setText("sasl-secret");
+            saslContinueOnFailureBox.setSelected(true);
           });
       waitFor(() -> onEdtBoolean(saveBtn::isEnabled), Duration.ofSeconds(2));
 
@@ -89,6 +93,10 @@ class ServerEditorDialogFunctionalTest {
       Object server = result.get();
       Method id = server.getClass().getMethod("id");
       assertEquals("libera", id.invoke(server));
+      Method sasl = server.getClass().getMethod("sasl");
+      Object saslConfig = sasl.invoke(server);
+      Method disconnectOnFailure = saslConfig.getClass().getMethod("disconnectOnFailure");
+      assertFalse((Boolean) disconnectOnFailure.invoke(saslConfig));
     } finally {
       onEdt(dialog::dispose);
       flushEdt();

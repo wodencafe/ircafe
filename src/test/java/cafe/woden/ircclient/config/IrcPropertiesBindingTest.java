@@ -78,7 +78,11 @@ class IrcPropertiesBindingTest {
             "irc.servers[0].tls=true",
             "irc.servers[0].nick=ircafe-user",
             "irc.servers[0].login=ircafe",
-            "irc.servers[0].real-name=IRCafe User")
+            "irc.servers[0].real-name=IRCafe User",
+            "irc.servers[0].nickserv.enabled=true",
+            "irc.servers[0].nickserv.password=nickserv-secret",
+            "irc.servers[0].nickserv.service=AuthServ",
+            "irc.servers[0].nickserv.delay-join-until-identified=false")
         .run(
             ctx -> {
               IrcProperties props = ctx.getBean(IrcProperties.class);
@@ -119,6 +123,10 @@ class IrcPropertiesBindingTest {
               assertEquals("ircafe-user", server.nick());
               assertEquals("ircafe", server.login());
               assertEquals("IRCafe User", server.realName());
+              assertTrue(server.nickserv().enabled());
+              assertEquals("nickserv-secret", server.nickserv().password());
+              assertEquals("AuthServ", server.nickserv().service());
+              assertFalse(server.nickserv().delayJoinUntilIdentified());
             });
   }
 
@@ -168,6 +176,25 @@ class IrcPropertiesBindingTest {
               IrcProperties.Proxy proxy = props.client().proxy();
               assertEquals(20_000, proxy.connectTimeoutMs());
               assertEquals(30_000, proxy.readTimeoutMs());
+            });
+  }
+
+  @Test
+  void serverNickservDefaultsApplyWhenSectionIsOmitted() {
+    runner
+        .withPropertyValues(
+            "irc.servers[0].id=libera",
+            "irc.servers[0].host=irc.libera.chat",
+            "irc.servers[0].port=6697",
+            "irc.servers[0].tls=true",
+            "irc.servers[0].nick=ircafe-user")
+        .run(
+            ctx -> {
+              IrcProperties.Server server = ctx.getBean(IrcProperties.class).servers().getFirst();
+              assertFalse(server.nickserv().enabled());
+              assertEquals("", server.nickserv().password());
+              assertEquals("NickServ", server.nickserv().service());
+              assertTrue(server.nickserv().delayJoinUntilIdentified());
             });
   }
 

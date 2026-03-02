@@ -6730,6 +6730,21 @@ public class RuntimeConfigStore {
       }
       m.put("sasl", sasl);
     }
+    if (s.nickserv() != null && s.nickserv().enabled()) {
+      Map<String, Object> nickserv = new LinkedHashMap<>();
+      nickserv.put("enabled", true);
+      nickserv.put("password", s.nickserv().password());
+      if (s.nickserv().service() != null
+          && !s.nickserv().service().isBlank()
+          && !"NickServ".equalsIgnoreCase(s.nickserv().service().trim())) {
+        nickserv.put("service", s.nickserv().service());
+      }
+      if (s.nickserv().delayJoinUntilIdentified() != null
+          && !s.nickserv().delayJoinUntilIdentified()) {
+        nickserv.put("delayJoinUntilIdentified", false);
+      }
+      m.put("nickserv", nickserv);
+    }
 
     // Optional per-server SOCKS5 proxy override.
     // If present with enabled=false, this represents an explicit "disable proxy" for this server.
