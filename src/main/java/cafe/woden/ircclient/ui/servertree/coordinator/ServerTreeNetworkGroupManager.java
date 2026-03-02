@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 /** Manages lifecycle and lookup of bouncer-network grouping nodes beneath origin servers. */
@@ -11,6 +13,24 @@ public final class ServerTreeNetworkGroupManager {
     DefaultMutableTreeNode serverNode(String serverId);
 
     DefaultMutableTreeNode privateMessagesNode(String serverId);
+  }
+
+  public static Context context(
+      Function<String, DefaultMutableTreeNode> serverNode,
+      Function<String, DefaultMutableTreeNode> privateMessagesNode) {
+    Objects.requireNonNull(serverNode, "serverNode");
+    Objects.requireNonNull(privateMessagesNode, "privateMessagesNode");
+    return new Context() {
+      @Override
+      public DefaultMutableTreeNode serverNode(String serverId) {
+        return serverNode.apply(serverId);
+      }
+
+      @Override
+      public DefaultMutableTreeNode privateMessagesNode(String serverId) {
+        return privateMessagesNode.apply(serverId);
+      }
+    };
   }
 
   private final String sojuNetworksGroupLabel;
@@ -104,8 +124,8 @@ public final class ServerTreeNetworkGroupManager {
   }
 
   public static String parseOriginFromCompoundServerId(String serverId, String prefix) {
-    String id = normalize(serverId);
-    String p = normalize(prefix);
+    String id = ServerTreeConventions.normalize(serverId);
+    String p = ServerTreeConventions.normalize(prefix);
     if (id.isEmpty() || p.isEmpty() || !id.startsWith(p)) return null;
     int start = p.length();
     int nextColon = id.indexOf(':', start);
@@ -123,6 +143,6 @@ public final class ServerTreeNetworkGroupManager {
   }
 
   private static String normalize(String value) {
-    return Objects.toString(value, "").trim();
+    return ServerTreeConventions.normalize(value);
   }
 }

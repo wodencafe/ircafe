@@ -2,10 +2,13 @@ package cafe.woden.ircclient.ui.servertree.state;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 /** Updates dynamic node badges/labels driven by notifications and auto-connect state. */
@@ -15,6 +18,27 @@ public final class ServerTreeNodeBadgeUpdater {
     void nodeChanged(DefaultMutableTreeNode node);
 
     void nodeChangedForServer(String serverId);
+  }
+
+  public static Context context(
+      Consumer<DefaultMutableTreeNode> nodeChanged,
+      Function<String, DefaultMutableTreeNode> serverNodeById) {
+    Objects.requireNonNull(nodeChanged, "nodeChanged");
+    Objects.requireNonNull(serverNodeById, "serverNodeById");
+    return new Context() {
+      @Override
+      public void nodeChanged(DefaultMutableTreeNode node) {
+        nodeChanged.accept(node);
+      }
+
+      @Override
+      public void nodeChangedForServer(String serverId) {
+        DefaultMutableTreeNode node = serverNodeById.apply(serverId);
+        if (node != null) {
+          nodeChanged.accept(node);
+        }
+      }
+    };
   }
 
   private final NotificationStore notificationStore;
@@ -71,6 +95,6 @@ public final class ServerTreeNodeBadgeUpdater {
   }
 
   private static String normalize(String value) {
-    return Objects.toString(value, "").trim();
+    return ServerTreeConventions.normalize(value);
   }
 }

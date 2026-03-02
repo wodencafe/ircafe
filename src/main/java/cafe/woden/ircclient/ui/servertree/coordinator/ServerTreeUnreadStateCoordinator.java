@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import java.util.Map;
 import java.util.Objects;
@@ -57,7 +58,7 @@ public final class ServerTreeUnreadStateCoordinator {
   }
 
   public void onChannelMutedStateChanged(TargetRef ref, boolean muted) {
-    if (!isChannelTarget(ref)) return;
+    if (!ServerTreeConventions.isChannelTarget(ref)) return;
     if (muted) {
       clearUnreadForMutedChannel(ref);
       return;
@@ -69,7 +70,7 @@ public final class ServerTreeUnreadStateCoordinator {
   }
 
   private void bumpUnreadCounter(TargetRef ref, boolean highlight) {
-    if (isChannelTarget(ref) && isChannelMuted.test(ref)) return;
+    if (ServerTreeConventions.isChannelTarget(ref) && isChannelMuted.test(ref)) return;
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return;
     if (!(node.getUserObject() instanceof ServerTreeNodeData nodeData)) return;
@@ -85,7 +86,7 @@ public final class ServerTreeUnreadStateCoordinator {
   }
 
   private void clearUnreadForMutedChannel(TargetRef ref) {
-    if (!isChannelTarget(ref)) return;
+    if (!ServerTreeConventions.isChannelTarget(ref)) return;
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return;
     if (!(node.getUserObject() instanceof ServerTreeNodeData nodeData)) return;
@@ -101,13 +102,9 @@ public final class ServerTreeUnreadStateCoordinator {
   }
 
   private void emitManagedChannelsChangedIfChannel(TargetRef ref) {
-    if (!isChannelTarget(ref)) return;
+    if (!ServerTreeConventions.isChannelTarget(ref)) return;
     String serverId = Objects.toString(ref.serverId(), "").trim();
     if (serverId.isEmpty()) return;
     emitManagedChannelsChanged.accept(serverId);
-  }
-
-  private static boolean isChannelTarget(TargetRef ref) {
-    return ref != null && ref.isChannel();
   }
 }

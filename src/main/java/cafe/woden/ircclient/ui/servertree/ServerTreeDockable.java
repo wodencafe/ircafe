@@ -26,14 +26,11 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeBouncerDetachPolicyC
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInLayoutOrchestratorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInVisibilityContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeChannelDisconnectStateManagerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeChannelStateCoordinatorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeContextMenuContextFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeInterceptorActionsContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeNetworkGroupManagerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeNetworkInfoDialogContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeNodeBadgeUpdaterContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionFallbackContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerActionOverlayContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
@@ -618,15 +615,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             ZNC_NETWORKS_GROUP_LABEL,
             sojuNetworksGroupByOrigin,
             zncNetworksGroupByOrigin,
-            new ServerTreeNetworkGroupManagerContextAdapter(
-                serverId -> {
-                  ServerNodes nodes = servers.get(Objects.toString(serverId, "").trim());
-                  return nodes == null ? null : nodes.serverNode;
-                },
-                serverId -> {
-                  ServerNodes nodes = servers.get(Objects.toString(serverId, "").trim());
-                  return nodes == null ? null : nodes.pmNode;
-                }));
+            ServerTreeNetworkGroupManager.context(
+                this::serverNodeForServer, this::privateMessagesNodeForServer));
     this.dragReorderSupport =
         new ServerTreeDragReorderSupport(
             tree,
@@ -659,13 +649,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 new ServerTreeServerActionOverlayContextAdapter(uiHooks),
                 new ServerTreeChannelStateCoordinatorContextAdapter(
                     ServerTreeDockable::normalizeServerId,
-                    serverId -> {
-                      String sid = normalizeServerId(serverId);
-                      if (sid.isEmpty()) return null;
-                      ServerNodes nodes = servers.get(sid);
-                      if (nodes == null || nodes.channelListRef == null) return null;
-                      return leaves.get(nodes.channelListRef);
-                    },
+                    this::channelListNodeForServer,
                     this::snapshotExpandedTreePaths,
                     this::restoreExpandedTreePaths,
                     this::emitManagedChannelsChanged),
@@ -686,7 +670,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             sojuOriginByServerId,
             zncOriginByServerId,
             new ServerTreeServerParentResolverContextAdapter(
-                serverId -> servers.containsKey(Objects.toString(serverId, "").trim()),
+                this::hasServer,
                 this::addServerRoot,
                 () -> ircRoot,
                 networkGroupManager::getOrCreateSojuNetworksGroupNode,
@@ -717,12 +701,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             notificationStore,
             ephemeralServerIds,
             leaves,
-            new ServerTreeNodeBadgeUpdaterContextAdapter(
-                model::nodeChanged,
-                serverId -> {
-                  ServerNodes nodes = servers.get(Objects.toString(serverId, "").trim());
-                  return nodes == null ? null : nodes.serverNode;
-                }));
+            ServerTreeNodeBadgeUpdater.context(model::nodeChanged, this::serverNodeForServer));
     this.externalStreamBinder =
         new ServerTreeExternalStreamBinder(
             disposables,
@@ -1056,7 +1035,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeChannelDisconnectStateManager(
             typingActivityNodes,
             typingActivityTimer,
-            new ServerTreeChannelDisconnectStateManagerContextAdapter(
+            ServerTreeChannelDisconnectStateManager.context(
                 this::ensureNode,
                 leaves::get,
                 model::nodeChanged,
@@ -1065,16 +1044,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeTargetSelectionCoordinator(
             new ServerTreeTargetSelectionCoordinatorContextAdapter(
                 this::ensureNode,
-                serverId -> {
-                  ServerNodes nodes = servers.get(normalizeServerId(serverId));
-                  return nodes == null ? null : nodes.monitorNode;
-                },
-                serverId -> {
-                  ServerNodes nodes = servers.get(normalizeServerId(serverId));
-                  return nodes == null ? null : nodes.interceptorsNode;
-                },
+                this::monitorNodeForServer,
+                this::interceptorsNodeForServer,
                 (serverId, node) -> {
-                  ServerNodes nodes = servers.get(normalizeServerId(serverId));
+                  ServerNodes nodes = serverNodesForServer(serverId);
                   if (nodes == null || node == null) return false;
                   return node.getParent() == nodes.serverNode
                       || node.getParent() == nodes.otherNode;
@@ -1212,7 +1185,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private static String normalizeServerId(String serverId) {
-    return Objects.toString(serverId, "").trim();
+    return ServerTreeConventions.normalizeServerId(serverId);
   }
 
   private ServerBuiltInNodesVisibility builtInNodesVisibility(String serverId) {
@@ -1248,7 +1221,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private static boolean isChannelTarget(TargetRef ref) {
-    return ref != null && ref.isChannel();
+    return ServerTreeConventions.isChannelTarget(ref);
   }
 
   private boolean readChannelState(
@@ -1288,12 +1261,44 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return badge.isEmpty() ? base : (base + badge);
   }
 
-  private DefaultMutableTreeNode interceptorsGroupNodeForServer(String serverId) {
-    String sid = Objects.toString(serverId, "").trim();
+  private ServerNodes serverNodesForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return null;
-    ServerNodes nodes = servers.get(sid);
-    if (nodes == null) return null;
-    return nodes.interceptorsNode;
+    return servers.get(sid);
+  }
+
+  private boolean hasServer(String serverId) {
+    return serverNodesForServer(serverId) != null;
+  }
+
+  private DefaultMutableTreeNode serverNodeForServer(String serverId) {
+    ServerNodes nodes = serverNodesForServer(serverId);
+    return nodes == null ? null : nodes.serverNode;
+  }
+
+  private DefaultMutableTreeNode privateMessagesNodeForServer(String serverId) {
+    ServerNodes nodes = serverNodesForServer(serverId);
+    return nodes == null ? null : nodes.pmNode;
+  }
+
+  private DefaultMutableTreeNode channelListNodeForServer(String serverId) {
+    ServerNodes nodes = serverNodesForServer(serverId);
+    if (nodes == null || nodes.channelListRef == null) return null;
+    return leaves.get(nodes.channelListRef);
+  }
+
+  private DefaultMutableTreeNode monitorNodeForServer(String serverId) {
+    ServerNodes nodes = serverNodesForServer(serverId);
+    return nodes == null ? null : nodes.monitorNode;
+  }
+
+  private DefaultMutableTreeNode interceptorsNodeForServer(String serverId) {
+    ServerNodes nodes = serverNodesForServer(serverId);
+    return nodes == null ? null : nodes.interceptorsNode;
+  }
+
+  private DefaultMutableTreeNode interceptorsGroupNodeForServer(String serverId) {
+    return interceptorsNodeForServer(serverId);
   }
 
   private String firstServerIdOrEmpty() {
@@ -1978,7 +1983,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private static String foldChannelKey(String channel) {
-    return Objects.toString(channel, "").trim().toLowerCase(java.util.Locale.ROOT);
+    return ServerTreeConventions.foldChannelKey(channel);
   }
 
   public void markUnread(TargetRef ref) {
