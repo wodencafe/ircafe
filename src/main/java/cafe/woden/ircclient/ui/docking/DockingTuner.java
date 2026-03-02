@@ -56,7 +56,7 @@ public final class DockingTuner {
     int before = split.getDividerLocation();
     if (Math.abs(before - desiredLoc) > 2) {
       setDividerLocationSafely(split, desiredLoc);
-      log.info(
+      log.debug(
           "dock-size: init WEST targetPx={} split#{} side={} divider {} -> {} (splitW={}, dividerSize={})",
           targetWidthPx,
           System.identityHashCode(split),
@@ -91,7 +91,7 @@ public final class DockingTuner {
     int before = split.getDividerLocation();
     if (Math.abs(before - desiredLoc) > 2) {
       setDividerLocationSafely(split, desiredLoc);
-      log.info(
+      log.debug(
           "dock-size: init EAST targetPx={} split#{} side={} divider {} -> {} (splitW={}, dividerSize={})",
           targetWidthPx,
           System.identityHashCode(split),
@@ -340,7 +340,7 @@ public final class DockingTuner {
     }
     split.putClientProperty(CLIENT_PROP_WEST_LOCKED, Boolean.TRUE);
 
-    log.info("dock-lock: install WEST (left-locked) split#{}", System.identityHashCode(split));
+    log.debug("dock-lock: install WEST (left-locked) split#{}", System.identityHashCode(split));
 
     // Give all future extra horizontal space to the right component.
     split.setResizeWeight(0.0);
@@ -350,7 +350,7 @@ public final class DockingTuner {
           if (lockedLeftWidth[0] > 0) {
             int desired = clampDivider(split, lockedLeftWidth[0]);
             setDividerLocationSafely(split, desired);
-            log.info(
+            log.debug(
                 "dock-lock: seeded WEST leftWidthPx={} split#{} -> dividerLoc={} (splitW={}, dividerSize={})",
                 lockedLeftWidth[0],
                 System.identityHashCode(split),
@@ -367,7 +367,7 @@ public final class DockingTuner {
             lockedLeftWidth[0] = w;
             setDividerLocationSafely(split, w);
 
-            log.info(
+            log.debug(
                 "dock-lock: captured WEST leftWidthPx={} split#{} (splitW={}, dividerSize={})",
                 w,
                 System.identityHashCode(split),
@@ -425,7 +425,7 @@ public final class DockingTuner {
     }
     split.putClientProperty(CLIENT_PROP_EAST_LOCKED, Boolean.TRUE);
 
-    log.info("dock-lock: install EAST (right-locked) split#{}", System.identityHashCode(split));
+    log.debug("dock-lock: install EAST (right-locked) split#{}", System.identityHashCode(split));
 
     // Give all future extra horizontal space to the left component.
     split.setResizeWeight(1.0);
@@ -436,7 +436,7 @@ public final class DockingTuner {
             int desiredLoc = desiredDividerForRightWidth(split, lockedRightWidth[0]);
             setDividerLocationSafely(split, clampDivider(split, desiredLoc));
 
-            log.info(
+            log.debug(
                 "dock-lock: seeded EAST rightWidthPx={} split#{} -> dividerLoc={} (splitW={}, dividerSize={})",
                 lockedRightWidth[0],
                 System.identityHashCode(split),
@@ -454,7 +454,7 @@ public final class DockingTuner {
             int desiredLoc = desiredDividerForRightWidth(split, w);
             setDividerLocationSafely(split, desiredLoc);
 
-            log.info(
+            log.debug(
                 "dock-lock: captured EAST rightWidthPx={} split#{} -> dividerLoc={} (splitW={}, dividerSize={})",
                 w,
                 System.identityHashCode(split),

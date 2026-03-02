@@ -209,7 +209,7 @@ public class MainFrame extends JFrame {
           boolean shouldNudge =
               !initialSideSizesApplied.get() || (inStartupStabilization && sideDocksAreHuge);
           if (shouldNudge) {
-            log.info(
+            log.debug(
                 "dock-size: apply initial sizes? initialApplied={} huge={} targets(server={}, users={}) current(server={}, chat={}, users={}) frame={}x{}",
                 initialSideSizesApplied.get(),
                 sideDocksAreHuge,
@@ -227,7 +227,7 @@ public class MainFrame extends JFrame {
               initialSideSizesApplied.set(true);
             }
 
-            log.info(
+            log.debug(
                 "dock-size: init apply results west={} east={} -> now(initialApplied={}) current(server={}, chat={}, users={})",
                 west,
                 east,
