@@ -21,6 +21,7 @@ import org.pircbotx.PircBotX;
 final class PircbotxConnectionState {
   private static final long PRIVATE_TARGET_HINT_TTL_MS = 120_000L;
   private static final int PRIVATE_TARGET_HINT_MAX = 1_024;
+  private static final long LAG_SAMPLE_STALE_AFTER_MS = 120_000L;
 
   private record PrivateTargetHint(
       String fromLower, String target, String kind, String payload, long observedAtMs) {}
@@ -32,6 +33,10 @@ final class PircbotxConnectionState {
   final AtomicLong lastInboundMs = new AtomicLong(0);
   final AtomicBoolean localTimeoutEmitted = new AtomicBoolean(false);
   final AtomicReference<Disposable> heartbeatDisposable = new AtomicReference<>();
+  final AtomicReference<String> lagProbeToken = new AtomicReference<>("");
+  final AtomicLong lagProbeSentAtMs = new AtomicLong(0L);
+  final AtomicLong lagLastMeasuredMs = new AtomicLong(-1L);
+  final AtomicLong lagLastMeasuredAtMs = new AtomicLong(0L);
 
   final AtomicBoolean manualDisconnect = new AtomicBoolean(false);
 
@@ -175,6 +180,7 @@ final class PircbotxConnectionState {
   // Current connection metadata (used by transport/capability policy helpers).
   final AtomicReference<String> connectedHost = new AtomicReference<>("");
   final AtomicBoolean connectedWithTls = new AtomicBoolean(false);
+  final AtomicBoolean registrationComplete = new AtomicBoolean(false);
 
   // Best-effort bridge between InputParser command metadata and PrivateMessageEvent objects.
   private final Map<String, PrivateTargetHint> privateTargetHintByMessageId =
@@ -231,6 +237,8 @@ final class PircbotxConnectionState {
     typingMissingWarned.set(false);
     connectedHost.set("");
     connectedWithTls.set(false);
+    registrationComplete.set(false);
+    resetLagProbeState();
     clearPrivateTargetHints();
   }
 
@@ -287,6 +295,44 @@ final class PircbotxConnectionState {
       }
     }
     return "";
+  }
+
+  void beginLagProbe(String token, long sentAtMs) {
+    String normalizedToken = normalizeLagToken(token);
+    if (normalizedToken.isEmpty()) return;
+    long sent = sentAtMs > 0 ? sentAtMs : System.currentTimeMillis();
+    lagProbeToken.set(normalizedToken);
+    lagProbeSentAtMs.set(sent);
+  }
+
+  void observeLagProbePong(String token, long observedAtMs) {
+    String observedToken = normalizeLagToken(token);
+    if (observedToken.isEmpty()) return;
+    String expected = lagProbeToken.get();
+    if (expected.isEmpty()) return;
+    if (!Objects.equals(expected, observedToken)) return;
+    if (!lagProbeToken.compareAndSet(expected, "")) return;
+
+    long sentAt = lagProbeSentAtMs.getAndSet(0L);
+    long now = observedAtMs > 0 ? observedAtMs : System.currentTimeMillis();
+    long lagMs = Math.max(0L, now - sentAt);
+    lagLastMeasuredMs.set(lagMs);
+    lagLastMeasuredAtMs.set(now);
+  }
+
+  long lagMsIfFresh(long nowMs) {
+    long measuredAt = lagLastMeasuredAtMs.get();
+    if (measuredAt <= 0) return -1L;
+    long now = nowMs > 0 ? nowMs : System.currentTimeMillis();
+    if (now - measuredAt > LAG_SAMPLE_STALE_AFTER_MS) return -1L;
+    return Math.max(-1L, lagLastMeasuredMs.get());
+  }
+
+  void resetLagProbeState() {
+    lagProbeToken.set("");
+    lagProbeSentAtMs.set(0L);
+    lagLastMeasuredMs.set(-1L);
+    lagLastMeasuredAtMs.set(0L);
   }
 
   void clearPrivateTargetHints() {
@@ -348,6 +394,10 @@ final class PircbotxConnectionState {
   }
 
   private static String normalizeMessageId(String raw) {
+    return Objects.toString(raw, "").trim();
+  }
+
+  private static String normalizeLagToken(String raw) {
     return Objects.toString(raw, "").trim();
   }
 

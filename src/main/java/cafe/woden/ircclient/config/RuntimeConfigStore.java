@@ -491,6 +491,34 @@ public class RuntimeConfigStore {
     }
   }
 
+  /**
+   * Reads {@code ircafe.ui.lagIndicator.enabled} from runtime config.
+   *
+   * <p>Returns {@code defaultValue} when the key is missing or invalid.
+   */
+  public synchronized boolean readLagIndicatorEnabled(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+
+      Object lagIndicatorObj = ui.get("lagIndicator");
+      if (!(lagIndicatorObj instanceof Map<?, ?> lagIndicator)) return defaultValue;
+
+      if (!lagIndicator.containsKey("enabled")) return defaultValue;
+      return asBoolean(lagIndicator.get("enabled")).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.lagIndicator.enabled from '{}'", file, e);
+      return defaultValue;
+    }
+  }
+
   public Path runtimeConfigPath() {
     return file;
   }
@@ -2425,6 +2453,23 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist ui.updateNotifier.enabled setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberLagIndicatorEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> lagIndicator = getOrCreateMap(ui, "lagIndicator");
+
+      lagIndicator.put("enabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.lagIndicator.enabled setting to '{}'", file, e);
     }
   }
 
@@ -5472,6 +5517,46 @@ public class RuntimeConfigStore {
     } catch (Exception e) {
       log.warn(
           "[ircafe] Could not persist chat history deferred-rich-text setting to '{}'", file, e);
+    }
+  }
+
+  /**
+   * Reads {@code ircafe.ui.chatSmoothWheelScrollingEnabled} from runtime config.
+   *
+   * <p>Returns {@code defaultValue} when the key is missing or invalid.
+   */
+  public synchronized boolean readChatSmoothWheelScrollingEnabled(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+      Object raw = ui.get("chatSmoothWheelScrollingEnabled");
+      if (raw == null) return defaultValue;
+      return asBoolean(raw).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.chatSmoothWheelScrollingEnabled from '{}'", file, e);
+      return defaultValue;
+    }
+  }
+
+  public synchronized void rememberChatSmoothWheelScrollingEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("chatSmoothWheelScrollingEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat smooth-wheel scrolling setting to '{}'", file, e);
     }
   }
 

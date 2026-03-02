@@ -8,6 +8,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /**
@@ -273,6 +274,22 @@ public interface IrcClientService {
    */
   default int negotiatedMonitorLimit(String serverId) {
     return 0;
+  }
+
+  /**
+   * Send a lightweight server PING probe for measuring connection lag.
+   *
+   * <p>The corresponding lag value can be read via {@link #lastMeasuredLagMs(String)}.
+   */
+  default Completable requestLagProbe(String serverId) {
+    return Completable.complete();
+  }
+
+  /**
+   * @return most recent measured lag (milliseconds) for a server, if available.
+   */
+  default OptionalLong lastMeasuredLagMs(String serverId) {
+    return OptionalLong.empty();
   }
 
   /**

@@ -8,6 +8,7 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -106,9 +107,11 @@ class ServerTreeDockableIgnoresNodeTest {
 
   private static void invokeSyncServers(ServerTreeDockable dockable, List<ServerEntry> entries)
       throws Exception {
-    Method m = ServerTreeDockable.class.getDeclaredMethod("syncServers", List.class);
-    m.setAccessible(true);
-    m.invoke(dockable, entries);
+    Field f = ServerTreeDockable.class.getDeclaredField("serverCatalogSynchronizer");
+    f.setAccessible(true);
+    ServerTreeServerCatalogSynchronizer synchronizer =
+        (ServerTreeServerCatalogSynchronizer) f.get(dockable);
+    synchronizer.syncServers(entries);
   }
 
   private static TargetRef selectedTargetRef(ServerTreeDockable dockable) throws Exception {

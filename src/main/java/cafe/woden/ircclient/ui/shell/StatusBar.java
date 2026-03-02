@@ -38,12 +38,14 @@ public class StatusBar extends JPanel {
   private static final int HISTORY_FLASH_TICK_MS = 180;
   private static final DateTimeFormatter NOTICE_HISTORY_TIME_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
+  private static final String SERVER_DISCONNECTED_TEXT = "(disconnected)";
 
   // TODO: Make these their own individual Spring components.
   private final JLabel channelLabel = new JLabel("Channel: -");
   private final JLabel usersLabel = new JLabel("Users: 0");
   private final JLabel opsLabel = new JLabel("Ops: 0");
-  private final JLabel serverLabel = new JLabel("Server: (disconnected)");
+  private final JLabel serverLabel = new JLabel(SERVER_DISCONNECTED_TEXT);
+  private final JLabel lagLabel = new JLabel("Lag: --");
   private final JLabel noticeLabel = new JLabel();
   private final JButton historyButton = new JButton("Notices");
   private final JButton updateNotifierButton = new JButton();
@@ -80,9 +82,12 @@ public class StatusBar extends JPanel {
   private Runnable updateNotifierDisableAction;
   private Popup updateNotifierTooltipPopup;
   private Timer updateNotifierTooltipHideTimer;
+  private Color lagBaseForeground;
 
   private record StatusNotice(
       String displayText, String fullText, Runnable onClick, long atEpochMs) {}
+
+  private record ServerLabelDisplay(String label, String tooltip) {}
 
   public StatusBar() {
     super(new BorderLayout(12, 0));
@@ -95,6 +100,7 @@ public class StatusBar extends JPanel {
 
     JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 3));
     right.add(serverLabel);
+    right.add(lagLabel);
     right.add(updateNotifierButton);
 
     JPanel center = new JPanel(new BorderLayout(10, 0));
@@ -142,6 +148,9 @@ public class StatusBar extends JPanel {
     center.add(noticeLabel, BorderLayout.CENTER);
     center.add(historyButton, BorderLayout.EAST);
     noticeBaseForeground = noticeLabel.getForeground();
+    lagLabel.setToolTipText("Current measured server lag for the active server.");
+    lagLabel.setVisible(false);
+    lagBaseForeground = lagLabel.getForeground();
 
     noticeLabel.addMouseListener(
         new MouseAdapter() {
@@ -223,6 +232,22 @@ public class StatusBar extends JPanel {
     }
   }
 
+  public void setLagIndicatorEnabled(boolean enabled) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      setLagIndicatorEnabledOnEdt(enabled);
+    } else {
+      SwingUtilities.invokeLater(() -> setLagIndicatorEnabledOnEdt(enabled));
+    }
+  }
+
+  public void setLagIndicatorReading(Long lagMs, String tooltip) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      setLagIndicatorReadingOnEdt(lagMs, tooltip);
+    } else {
+      SwingUtilities.invokeLater(() -> setLagIndicatorReadingOnEdt(lagMs, tooltip));
+    }
+  }
+
   public void setChannel(String channel) {
     channelLabel.setText("Channel: " + (channel == null ? "-" : channel));
   }
@@ -233,7 +258,9 @@ public class StatusBar extends JPanel {
   }
 
   public void setServer(String serverText) {
-    serverLabel.setText("Server: " + (serverText == null ? "(disconnected)" : serverText));
+    ServerLabelDisplay display = serverLabelDisplay(serverText);
+    serverLabel.setText(display.label());
+    serverLabel.setToolTipText(display.tooltip());
   }
 
   /** Enqueue a status-bar notice and cycle through notices one at a time. */
@@ -669,6 +696,7 @@ public class StatusBar extends JPanel {
     usersLabel.setFont(base);
     opsLabel.setFont(base);
     serverLabel.setFont(base);
+    lagLabel.setFont(base);
     noticeLabel.setFont(base);
     historyButton.setFont(buttonFont);
     updateNotifierButton.setFont(buttonFont);
@@ -696,6 +724,47 @@ public class StatusBar extends JPanel {
     this.updateNotifierVisitAction = visitAction;
     this.updateNotifierDisableAction = disableAction;
     ensureUpdateNotifierPopupMenu();
+  }
+
+  private void setLagIndicatorEnabledOnEdt(boolean enabled) {
+    lagBaseForeground = statusTextForeground();
+    if (!enabled) {
+      lagLabel.setVisible(false);
+      lagLabel.setText("Lag: --");
+      lagLabel.setToolTipText(null);
+      lagLabel.setForeground(lagBaseForeground);
+      return;
+    }
+    lagLabel.setVisible(true);
+    if (lagLabel.getToolTipText() == null || lagLabel.getToolTipText().isBlank()) {
+      lagLabel.setToolTipText("Current measured server lag for the active server.");
+    }
+  }
+
+  private void setLagIndicatorReadingOnEdt(Long lagMs, String tooltip) {
+    setLagIndicatorEnabledOnEdt(true);
+    lagBaseForeground = statusTextForeground();
+    lagLabel.setForeground(lagBaseForeground);
+
+    if (lagMs == null || lagMs < 0L) {
+      lagLabel.setText("Lag: --");
+    } else {
+      long value = Math.max(0L, lagMs);
+      lagLabel.setText("Lag: " + formatLag(value));
+    }
+
+    String tip = Objects.toString(tooltip, "").trim();
+    if (!tip.isEmpty()) {
+      lagLabel.setToolTipText(tip);
+    }
+  }
+
+  private static String formatLag(long lagMs) {
+    if (lagMs < 1000L) {
+      return lagMs + " ms";
+    }
+    double seconds = lagMs / 1000.0d;
+    return String.format(java.util.Locale.ROOT, "%.1f s", seconds);
   }
 
   private void setUpdateNotifierEnabledOnEdt(boolean enabled) {
@@ -836,6 +905,41 @@ public class StatusBar extends JPanel {
       action.run();
     } catch (Exception ignored) {
     }
+  }
+
+  private Color statusTextForeground() {
+    Color serverForeground = serverLabel.getForeground();
+    if (serverForeground != null) return serverForeground;
+    return lagLabel.getForeground();
+  }
+
+  private static ServerLabelDisplay serverLabelDisplay(String serverText) {
+    String normalized = Objects.toString(serverText, "").trim();
+    if (normalized.startsWith("Server:")) {
+      normalized = normalized.substring("Server:".length()).trim();
+    }
+    if (normalized.isEmpty()) {
+      return new ServerLabelDisplay(SERVER_DISCONNECTED_TEXT, null);
+    }
+
+    if (normalized.endsWith(")")) {
+      int open = normalized.lastIndexOf(" (");
+      if (open <= 0) {
+        open = normalized.lastIndexOf('(');
+      }
+      if (open > 0 && open < normalized.length() - 1) {
+        String label = normalized.substring(0, open).trim();
+        String detail = normalized.substring(open + 1, normalized.length() - 1).trim();
+        if (detail.startsWith("(")) {
+          detail = detail.substring(1).trim();
+        }
+        if (!label.isEmpty() && !detail.isEmpty()) {
+          return new ServerLabelDisplay(label, detail);
+        }
+      }
+    }
+
+    return new ServerLabelDisplay(normalized, null);
   }
 
   private final class NoticeHistoryTableModel extends AbstractTableModel {

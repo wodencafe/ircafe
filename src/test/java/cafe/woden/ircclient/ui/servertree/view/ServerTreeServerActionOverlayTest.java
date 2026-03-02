@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.view;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
@@ -26,6 +28,24 @@ class ServerTreeServerActionOverlayTest {
   private static final int CHANNEL_BUTTON_GAP = 4;
 
   @Test
+  void channelButtonsIgnoreClicksAndTooltipsWithoutHover() throws Exception {
+    onEdt(
+        () -> {
+          Fixture fixture = new Fixture();
+          ServerTreeServerActionOverlay overlay = fixture.overlay();
+          Point toggleCenter = fixture.channelToggleCenterPoint();
+
+          boolean handled = overlay.maybeHandleActionClick(mousePress(fixture.tree, toggleCenter));
+          String tip = overlay.toolTipForEvent(mouseMove(fixture.tree, toggleCenter));
+
+          assertFalse(handled);
+          assertNull(tip);
+          assertEquals(0, fixture.context.disconnectChannelCalls);
+          assertEquals(0, fixture.context.joinChannelCalls);
+        });
+  }
+
+  @Test
   void channelToggleClickDisconnectsWhenAttachedAndReconnectsWhenDetached() throws Exception {
     onEdt(
         () -> {
@@ -33,6 +53,7 @@ class ServerTreeServerActionOverlayTest {
           ServerTreeServerActionOverlay overlay = fixture.overlay();
 
           Point toggleCenter = fixture.channelToggleCenterPoint();
+          overlay.updateHovered(mouseMove(fixture.tree, toggleCenter));
           MouseEvent firstClick = mousePress(fixture.tree, toggleCenter);
           boolean firstHandled = overlay.maybeHandleActionClick(firstClick);
 
@@ -41,6 +62,7 @@ class ServerTreeServerActionOverlayTest {
           assertEquals(0, fixture.context.joinChannelCalls);
 
           fixture.context.channelDisconnected = true;
+          overlay.updateHovered(mouseMove(fixture.tree, toggleCenter));
           MouseEvent secondClick = mousePress(fixture.tree, toggleCenter);
           boolean secondHandled = overlay.maybeHandleActionClick(secondClick);
 
@@ -59,6 +81,7 @@ class ServerTreeServerActionOverlayTest {
           Point closeCenter = fixture.channelCloseCenterPoint();
 
           fixture.context.confirmCloseResult = false;
+          overlay.updateHovered(mouseMove(fixture.tree, closeCenter));
           boolean firstHandled =
               overlay.maybeHandleActionClick(mousePress(fixture.tree, closeCenter));
           assertTrue(firstHandled);
@@ -66,6 +89,7 @@ class ServerTreeServerActionOverlayTest {
           assertEquals(0, fixture.context.closeChannelCalls);
 
           fixture.context.confirmCloseResult = true;
+          overlay.updateHovered(mouseMove(fixture.tree, closeCenter));
           boolean secondHandled =
               overlay.maybeHandleActionClick(mousePress(fixture.tree, closeCenter));
           assertTrue(secondHandled);
@@ -81,8 +105,10 @@ class ServerTreeServerActionOverlayTest {
           Fixture fixture = new Fixture();
           ServerTreeServerActionOverlay overlay = fixture.overlay();
 
+          overlay.updateHovered(mouseMove(fixture.tree, fixture.channelToggleCenterPoint()));
           String disconnectTip =
               overlay.toolTipForEvent(mouseMove(fixture.tree, fixture.channelToggleCenterPoint()));
+          overlay.updateHovered(mouseMove(fixture.tree, fixture.channelCloseCenterPoint()));
           String closeTip =
               overlay.toolTipForEvent(mouseMove(fixture.tree, fixture.channelCloseCenterPoint()));
 
@@ -90,6 +116,7 @@ class ServerTreeServerActionOverlayTest {
           assertEquals("Close and PART \"#ircafe\"", closeTip);
 
           fixture.context.channelDisconnected = true;
+          overlay.updateHovered(mouseMove(fixture.tree, fixture.channelToggleCenterPoint()));
           String reconnectTip =
               overlay.toolTipForEvent(mouseMove(fixture.tree, fixture.channelToggleCenterPoint()));
           assertEquals("Reconnect \"#ircafe\"", reconnectTip);

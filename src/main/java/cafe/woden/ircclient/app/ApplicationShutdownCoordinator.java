@@ -55,7 +55,6 @@ public class ApplicationShutdownCoordinator {
             ircClientService.shutdownNow();
           } catch (Throwable t) {
             log.warn("[ircafe] Error while shutting down IRC client service", t);
-            exitCode = 1;
           }
 
           try {
@@ -63,7 +62,12 @@ public class ApplicationShutdownCoordinator {
               log.debug(
                   "[ircafe] Spring context already closed before shutdown coordinator exit call.");
             } else {
-              exitCode = SpringApplication.exit(applicationContext, () -> 0);
+              int springExitCode = SpringApplication.exit(applicationContext, () -> 0);
+              if (springExitCode != 0) {
+                log.debug(
+                    "[ircafe] Spring exit code {} ignored for normal desktop shutdown.",
+                    springExitCode);
+              }
             }
           } catch (IllegalStateException ise) {
             if (isAlreadyClosedException(ise)) {
@@ -71,13 +75,12 @@ public class ApplicationShutdownCoordinator {
               log.debug("[ircafe] Spring context already closed during shutdown.", ise);
             } else {
               log.warn("[ircafe] Error while closing Spring context", ise);
-              exitCode = 1;
             }
           } catch (Throwable t) {
             log.warn("[ircafe] Error while closing Spring context", t);
-            exitCode = 1;
           }
 
+          log.debug("[ircafe] normal UI shutdown complete; exiting with code {}", exitCode);
           System.exit(exitCode);
         });
   }

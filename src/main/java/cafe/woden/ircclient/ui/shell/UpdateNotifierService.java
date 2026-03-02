@@ -9,9 +9,11 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.awt.Desktop;
 import java.net.URI;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +36,19 @@ public class UpdateNotifierService {
       URI.create("https://api.github.com/repos/wodencafe/ircafe/releases/latest");
   private static final long INITIAL_CHECK_DELAY_SECONDS = 7L;
   private static final long CHECK_INTERVAL_HOURS = 6L;
+  private static final long PLATFORM_OPEN_EXIT_CHECK_TIMEOUT_MS = 450L;
+  private static final List<String> KNOWN_LINUX_BROWSERS =
+      List.of(
+          "librewolf",
+          "zen-browser",
+          "firefox",
+          "google-chrome",
+          "chromium",
+          "chromium-browser",
+          "brave-browser",
+          "microsoft-edge",
+          "opera",
+          "vivaldi");
 
   private static final Pattern TAG_NAME_PATTERN =
       Pattern.compile("\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
@@ -275,21 +290,105 @@ public class UpdateNotifierService {
     return value == null ? null : value.trim();
   }
 
-  private void openReleasesPage() {
+  void openReleasesPage() {
+    try {
+      executeBackground(this::openReleasesPageOnWorker);
+    } catch (RejectedExecutionException ex) {
+      log.warn(
+          "Could not schedule opening releases page in browser: {} (worker unavailable)",
+          RELEASES_URL,
+          ex);
+      statusBar.enqueueNotification("Could not open browser for updates.", null);
+    } catch (Exception ex) {
+      log.warn("Could not schedule opening releases page in browser: {}", RELEASES_URL, ex);
+      statusBar.enqueueNotification("Could not open browser for updates.", null);
+    }
+  }
+
+  protected void executeBackground(Runnable task) {
+    if (task == null) return;
+    scheduler.execute(task);
+  }
+
+  protected void openReleasesPageOnWorker() {
     String url = RELEASES_URL;
     try {
-      if (!Desktop.isDesktopSupported()) {
-        throw new UnsupportedOperationException("Desktop browsing is not supported");
-      }
-      Desktop desktop = Desktop.getDesktop();
-      if (!desktop.isSupported(Desktop.Action.BROWSE)) {
-        throw new UnsupportedOperationException("Desktop browse action is not supported");
-      }
-      desktop.browse(URI.create(url));
+      if (isLinux() && tryPlatformOpen(url)) return;
+      if (tryDesktopBrowse(url)) return;
+      if (!isLinux() && tryPlatformOpen(url)) return;
+      throw new UnsupportedOperationException("No browser launch strategy succeeded");
     } catch (Exception e) {
       log.warn("Could not open releases page in browser: {}", url, e);
       statusBar.enqueueNotification("Could not open browser for updates.", null);
     }
+  }
+
+  protected boolean tryDesktopBrowse(String url) {
+    try {
+      if (!Desktop.isDesktopSupported()) return false;
+      Desktop desktop = Desktop.getDesktop();
+      if (desktop == null) return false;
+      if (!desktop.isSupported(Desktop.Action.BROWSE)) return false;
+      desktop.browse(URI.create(url));
+      return true;
+    } catch (Exception e) {
+      log.debug("Desktop browse failed for {}", url, e);
+      return false;
+    }
+  }
+
+  protected boolean tryPlatformOpen(String url) {
+    String os = currentOsLowerCase();
+    if (os.contains("linux")) {
+      return tryKnownLinuxBrowser(url)
+          || tryStart("xdg-open", url)
+          || tryStart("gio", "open", url)
+          || tryStart("sensible-browser", url)
+          || tryStart("x-www-browser", url)
+          || tryStart("gnome-open", url)
+          || tryStart("kde-open", url);
+    }
+    if (os.contains("mac") || os.contains("darwin")) {
+      return tryStart("open", url);
+    }
+    if (os.contains("win")) {
+      return tryStart("rundll32", "url.dll,FileProtocolHandler", url)
+          || tryStart("cmd", "/c", "start", "", url);
+    }
+    return false;
+  }
+
+  protected boolean tryKnownLinuxBrowser(String url) {
+    for (String browser : KNOWN_LINUX_BROWSERS) {
+      if (tryStart(browser, url)) return true;
+    }
+    return false;
+  }
+
+  protected boolean tryStart(String... cmd) {
+    if (cmd == null || cmd.length == 0) return false;
+    try {
+      Process process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+      if (process == null) return false;
+      try {
+        if (process.waitFor(PLATFORM_OPEN_EXIT_CHECK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+          return process.exitValue() == 0;
+        }
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+      }
+      return true;
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  protected String currentOsLowerCase() {
+    return Objects.toString(System.getProperty("os.name", ""), "").toLowerCase(Locale.ROOT);
+  }
+
+  protected boolean isLinux() {
+    return currentOsLowerCase().contains("linux");
   }
 
   private static void cancelTask(AtomicReference<ScheduledFuture<?>> ref) {

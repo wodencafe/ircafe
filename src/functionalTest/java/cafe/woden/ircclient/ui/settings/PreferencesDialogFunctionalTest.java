@@ -33,6 +33,7 @@ import cafe.woden.ircclient.ui.filter.FilterSettings;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.shell.LagIndicatorService;
 import cafe.woden.ircclient.ui.shell.UpdateNotifierService;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.TrayService;
@@ -180,6 +181,22 @@ class PreferencesDialogFunctionalTest {
   }
 
   @Test
+  void historyStoragePanelUsesFocusedSubTabs() throws Exception {
+    PreferencesDialog dialog = newPreferencesDialog();
+    List<AutoCloseable> closeables = new ArrayList<>();
+
+    Object history = invoke(dialog, "buildHistoryControls", testUiSettings(), closeables);
+    Object logging = invoke(dialog, "buildLoggingControls", (LogProperties) null, closeables);
+    JPanel panel = (JPanel) invoke(dialog, "buildHistoryAndStoragePanel", logging, history);
+
+    assertNotNull(findTabbedPaneWithTab(panel, "Logging"));
+    assertNotNull(findTabbedPaneWithTab(panel, "Scrolling & Loading"));
+    assertNotNull(findTabbedPaneWithTab(panel, "Remote & Limits"));
+
+    closeAll(closeables);
+  }
+
+  @Test
   void commandsPanelIncludesAliasImportAndUnknownFallbackToggle() throws Exception {
     PreferencesDialog dialog = newPreferencesDialog();
     Object controls =
@@ -215,10 +232,12 @@ class PreferencesDialogFunctionalTest {
 
     JCheckBox soundsEnabled = (JCheckBox) readField(trayControls, "notificationSoundsEnabled");
     JCheckBox useCustom = (JCheckBox) readField(trayControls, "notificationSoundUseCustom");
+    JCheckBox lagIndicatorEnabled = (JCheckBox) readField(trayControls, "lagIndicatorEnabled");
     JTextField customPath = (JTextField) readField(trayControls, "notificationSoundCustomPath");
     JButton browse = (JButton) readField(trayControls, "browseCustomSound");
     JButton clear = (JButton) readField(trayControls, "clearCustomSound");
 
+    assertNotNull(lagIndicatorEnabled);
     assertEquals("sounds/custom.wav", customPath.getText());
     assertTrue(browse.isEnabled());
     soundsEnabled.doClick();
@@ -377,6 +396,7 @@ class PreferencesDialogFunctionalTest {
         mock(TrayService.class),
         mock(TrayNotificationService.class),
         mock(UpdateNotifierService.class),
+        mock(LagIndicatorService.class),
         mock(GnomeDbusNotificationBackend.class),
         mock(NotificationSoundSettingsBus.class),
         mock(PushySettingsBus.class),
