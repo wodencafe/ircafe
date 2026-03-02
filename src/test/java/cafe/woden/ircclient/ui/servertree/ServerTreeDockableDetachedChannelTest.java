@@ -12,7 +12,12 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeRowInteractionHandler;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellRenderer;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeDetachedWarningClickHandler;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeTypingIndicatorStyle;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.Color;
 import java.awt.Component;
@@ -822,9 +827,10 @@ class ServerTreeDockableDetachedChannelTest {
     if (node == null) return null;
     TreePath path = new TreePath(node.getPath());
 
-    Method m = ServerTreeDockable.class.getDeclaredMethod("buildPopupMenu", TreePath.class);
-    m.setAccessible(true);
-    return (JPopupMenu) m.invoke(dockable, path);
+    Field field = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
+    field.setAccessible(true);
+    ServerTreeContextMenuBuilder contextMenuBuilder = (ServerTreeContextMenuBuilder) field.get(dockable);
+    return contextMenuBuilder.build(path);
   }
 
   private static JMenuItem findMenuItem(JPopupMenu menu, String text) {
@@ -878,11 +884,17 @@ class ServerTreeDockableDetachedChannelTest {
 
   private static Rectangle disconnectedWarningBounds(
       ServerTreeDockable dockable, TreePath path, DefaultMutableTreeNode node) throws Exception {
-    Method m =
-        ServerTreeDockable.class.getDeclaredMethod(
-            "disconnectedWarningIndicatorBounds", TreePath.class, DefaultMutableTreeNode.class);
-    m.setAccessible(true);
-    return (Rectangle) m.invoke(dockable, path, node);
+    Field handlerField = ServerTreeDockable.class.getDeclaredField("detachedWarningClickHandler");
+    handlerField.setAccessible(true);
+    ServerTreeDetachedWarningClickHandler handler =
+        (ServerTreeDetachedWarningClickHandler) handlerField.get(dockable);
+
+    Field styleField = ServerTreeDockable.class.getDeclaredField("typingIndicatorStyle");
+    styleField.setAccessible(true);
+    ServerTreeTypingIndicatorStyle style = (ServerTreeTypingIndicatorStyle) styleField.get(dockable);
+
+    return handler.disconnectedWarningIndicatorBounds(
+        path, node, ServerTreeCellRenderer.typingSlotWidthForStyle(style));
   }
 
   private static String invokeTooltip(ServerTreeDockable dockable, MouseEvent event)
@@ -892,11 +904,11 @@ class ServerTreeDockableDetachedChannelTest {
 
   private static boolean invokeMaybeHandleDisconnectedWarningClick(
       ServerTreeDockable dockable, MouseEvent event) throws Exception {
-    Method m =
-        ServerTreeDockable.class.getDeclaredMethod(
-            "maybeHandleDisconnectedWarningClick", MouseEvent.class);
-    m.setAccessible(true);
-    return (Boolean) m.invoke(dockable, event);
+    Field field = ServerTreeDockable.class.getDeclaredField("rowInteractionHandler");
+    field.setAccessible(true);
+    ServerTreeRowInteractionHandler rowInteractionHandler =
+        (ServerTreeRowInteractionHandler) field.get(dockable);
+    return rowInteractionHandler.maybeHandleDisconnectedWarningClick(event);
   }
 
   private static void setServerTreeNotificationBadgesEnabled(

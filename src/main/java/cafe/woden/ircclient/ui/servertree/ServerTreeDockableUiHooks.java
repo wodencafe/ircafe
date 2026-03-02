@@ -124,6 +124,40 @@ public final class ServerTreeDockableUiHooks implements ServerTreeUiHooks {
   }
 
   @Override
+  public void confirmAndClearLog(TargetRef targetRef, String label) {
+    if (targetRef == null) return;
+    if (!(targetRef.isChannel() || targetRef.isStatus())) return;
+    if (GraphicsEnvironment.isHeadless()) {
+      requestEmitter.emitClearLog(targetRef);
+      return;
+    }
+
+    Window owner = SwingUtilities.getWindowAncestor(dialogOwner);
+    String pretty = (label == null || label.isBlank()) ? targetRef.target() : label;
+    String scope = targetRef.isStatus() ? "status" : "channel";
+
+    String message =
+        "Clear log for "
+            + scope
+            + " \""
+            + pretty
+            + "\"?\n\n"
+            + "This will permanently delete the persisted chat history for this target.";
+
+    int choice =
+        JOptionPane.showConfirmDialog(
+            owner,
+            message,
+            "Clear Log",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE);
+
+    if (choice == JOptionPane.YES_OPTION) {
+      requestEmitter.emitClearLog(targetRef);
+    }
+  }
+
+  @Override
   public void closeTarget(TargetRef targetRef) {
     requestEmitter.emitCloseTarget(targetRef);
   }

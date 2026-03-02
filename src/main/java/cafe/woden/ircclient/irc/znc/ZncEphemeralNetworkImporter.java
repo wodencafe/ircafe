@@ -20,7 +20,8 @@ import org.springframework.stereotype.Component;
  * bouncer control session.
  */
 @Component
-public class ZncEphemeralNetworkImporter extends AbstractBouncerEphemeralNetworkImporter<ZncNetwork> {
+public class ZncEphemeralNetworkImporter
+    extends AbstractBouncerEphemeralNetworkImporter<ZncNetwork> {
 
   private static final Logger log = LoggerFactory.getLogger(ZncEphemeralNetworkImporter.class);
 
@@ -52,14 +53,17 @@ public class ZncEphemeralNetworkImporter extends AbstractBouncerEphemeralNetwork
   }
 
   @Override
-  protected ResolvedBouncerNetwork resolveNetwork(IrcProperties.Server bouncer, ZncNetwork network) {
+  protected ResolvedBouncerNetwork resolveNetwork(
+      IrcProperties.Server bouncer, ZncNetwork network) {
     ZncEphemeralNaming.Derived d = ZncEphemeralNaming.derive(bouncer, network);
     return new ResolvedBouncerNetwork(d.serverId(), d.loginUser(), network.name(), network.name());
   }
 
   @Override
   protected IrcProperties.Server buildEphemeralServer(
-      IrcProperties.Server bouncer, ResolvedBouncerNetwork resolved, List<String> autoJoinChannels) {
+      IrcProperties.Server bouncer,
+      ResolvedBouncerNetwork resolved,
+      List<String> autoJoinChannels) {
     IrcProperties.Server.Sasl sasl = bouncer.sasl();
 
     // Always set the derived username variant (even if SASL is disabled) so later toggles

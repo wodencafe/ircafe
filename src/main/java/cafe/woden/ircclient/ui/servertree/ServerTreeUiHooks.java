@@ -37,6 +37,8 @@ public interface ServerTreeUiHooks {
 
   void closeChannel(TargetRef channelRef);
 
+  void confirmAndClearLog(TargetRef targetRef, String label);
+
   void closeTarget(TargetRef targetRef);
 
   void openPinnedChat(TargetRef targetRef);

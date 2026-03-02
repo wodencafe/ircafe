@@ -15,7 +15,8 @@ class ZncAutoConnectStoreTest {
   void initializesFromPropertiesAndMatchesCaseInsensitively() {
     ZncProperties props =
         new ZncProperties(
-            Map.of("znc", Map.of("Libera", true, "OFTC", false)), new ZncProperties.Discovery(true));
+            Map.of("znc", Map.of("Libera", true, "OFTC", false)),
+            new ZncProperties.Discovery(true));
 
     RuntimeConfigStore runtime = new RuntimeConfigStore(" ", new IrcProperties(null, List.of()));
 
