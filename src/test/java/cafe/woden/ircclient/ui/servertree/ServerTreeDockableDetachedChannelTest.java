@@ -829,7 +829,8 @@ class ServerTreeDockableDetachedChannelTest {
 
     Field field = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
     field.setAccessible(true);
-    ServerTreeContextMenuBuilder contextMenuBuilder = (ServerTreeContextMenuBuilder) field.get(dockable);
+    ServerTreeContextMenuBuilder contextMenuBuilder =
+        (ServerTreeContextMenuBuilder) field.get(dockable);
     return contextMenuBuilder.build(path);
   }
 
@@ -884,14 +885,21 @@ class ServerTreeDockableDetachedChannelTest {
 
   private static Rectangle disconnectedWarningBounds(
       ServerTreeDockable dockable, TreePath path, DefaultMutableTreeNode node) throws Exception {
-    Field handlerField = ServerTreeDockable.class.getDeclaredField("detachedWarningClickHandler");
+    Field rowInteractionField = ServerTreeDockable.class.getDeclaredField("rowInteractionHandler");
+    rowInteractionField.setAccessible(true);
+    ServerTreeRowInteractionHandler rowInteractionHandler =
+        (ServerTreeRowInteractionHandler) rowInteractionField.get(dockable);
+
+    Field handlerField =
+        ServerTreeRowInteractionHandler.class.getDeclaredField("detachedWarningClickHandler");
     handlerField.setAccessible(true);
     ServerTreeDetachedWarningClickHandler handler =
-        (ServerTreeDetachedWarningClickHandler) handlerField.get(dockable);
+        (ServerTreeDetachedWarningClickHandler) handlerField.get(rowInteractionHandler);
 
     Field styleField = ServerTreeDockable.class.getDeclaredField("typingIndicatorStyle");
     styleField.setAccessible(true);
-    ServerTreeTypingIndicatorStyle style = (ServerTreeTypingIndicatorStyle) styleField.get(dockable);
+    ServerTreeTypingIndicatorStyle style =
+        (ServerTreeTypingIndicatorStyle) styleField.get(dockable);
 
     return handler.disconnectedWarningIndicatorBounds(
         path, node, ServerTreeCellRenderer.typingSlotWidthForStyle(style));

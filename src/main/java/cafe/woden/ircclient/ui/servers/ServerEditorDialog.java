@@ -104,8 +104,7 @@ public class ServerEditorDialog extends JDialog {
           new String[] {
             "AUTO", "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-1", "EXTERNAL", "ECDSA-NIST256P-CHALLENGE"
           });
-  private final JCheckBox saslContinueOnFailureBox =
-      new JCheckBox(SASL_CONTINUE_ON_FAILURE_TEXT);
+  private final JCheckBox saslContinueOnFailureBox = new JCheckBox(SASL_CONTINUE_ON_FAILURE_TEXT);
 
   private final JLabel saslHintLabel = new JLabel();
   private final JTextField nickservServiceField = new JTextField();
@@ -753,9 +752,7 @@ public class ServerEditorDialog extends JDialog {
     JPanel p =
         new JPanel(
             new MigLayout(
-                "insets 8, fill, wrap 2",
-                "[right]12[grow,fill,min:0]",
-                "[]8[grow,fill,min:0]"));
+                "insets 8, fill, wrap 2", "[right]12[grow,fill,min:0]", "[]8[grow,fill,min:0]"));
 
     p.add(new JLabel("Method"));
     p.add(authModeCombo, "growx, wmin 0, wrap");
@@ -780,9 +777,7 @@ public class ServerEditorDialog extends JDialog {
     JPanel p =
         new JPanel(
             new MigLayout(
-                "insets 0, fillx, wrap 2",
-                "[right]12[grow,fill,min:0]",
-                "[]6[]6[]6[]8[]push"));
+                "insets 0, fillx, wrap 2", "[right]12[grow,fill,min:0]", "[]6[]6[]6[]8[]push"));
     p.add(new JLabel("Username"));
     p.add(saslUserField, "growx, wmin 0, wrap");
     p.add(new JLabel("Secret"));
@@ -803,9 +798,7 @@ public class ServerEditorDialog extends JDialog {
     JPanel p =
         new JPanel(
             new MigLayout(
-                "insets 0, fillx, wrap 2",
-                "[right]12[grow,fill,min:0]",
-                "[]6[]6[]8[]push"));
+                "insets 0, fillx, wrap 2", "[right]12[grow,fill,min:0]", "[]6[]6[]8[]push"));
     p.add(new JLabel("Service"));
     p.add(nickservServiceField, "growx, wmin 0, wrap");
     p.add(new JLabel("Password"));
@@ -1297,8 +1290,7 @@ public class ServerEditorDialog extends JDialog {
         throw new IllegalArgumentException("SASL secret is required for mechanism " + mechUpper);
       }
       sasl =
-          new IrcProperties.Server.Sasl(
-              true, u, p, mech, !saslContinueOnFailureBox.isSelected());
+          new IrcProperties.Server.Sasl(true, u, p, mech, !saslContinueOnFailureBox.isSelected());
     } else {
       sasl = new IrcProperties.Server.Sasl(false, "", "", "PLAIN", null);
     }
@@ -1309,11 +1301,11 @@ public class ServerEditorDialog extends JDialog {
       if (service.isEmpty()) service = "NickServ";
       String pass = new String(nickservPassField.getPassword());
       if (pass.isBlank()) {
-        throw new IllegalArgumentException("NickServ password is required when NickServ is enabled");
+        throw new IllegalArgumentException(
+            "NickServ password is required when NickServ is enabled");
       }
       nickserv =
-          new IrcProperties.Server.Nickserv(
-              true, pass, service, nickservDelayJoinBox.isSelected());
+          new IrcProperties.Server.Nickserv(true, pass, service, nickservDelayJoinBox.isSelected());
     } else {
       nickserv = new IrcProperties.Server.Nickserv(false, "", "NickServ", true);
     }

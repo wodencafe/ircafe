@@ -222,7 +222,20 @@ public record IrcProperties(Client client, List<Server> servers) {
         List<String> autoJoin,
         List<String> perform,
         Proxy proxy) {
-      this(id, host, port, tls, serverPassword, nick, login, realName, sasl, null, autoJoin, perform, proxy);
+      this(
+          id,
+          host,
+          port,
+          tls,
+          serverPassword,
+          nick,
+          login,
+          realName,
+          sasl,
+          null,
+          autoJoin,
+          perform,
+          proxy);
     }
   }
 

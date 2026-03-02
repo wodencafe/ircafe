@@ -12,7 +12,6 @@ import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.notifications.NotificationStore;
-import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
@@ -60,11 +59,12 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalSta
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetSelectionCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTypingActivityManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibilitySynchronizer;
+import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeDragReorderSupport;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionMediator;
-import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionMediatorContextAdapter;
+import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionWiringFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeKeyBindingsInstaller;
-import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeMiddleDragReorderContextAdapter;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeMiddleDragReorderHandler;
+import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeRowInteractionHandler;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutVisibilityFacade;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
@@ -75,7 +75,6 @@ import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeEnsureNodeLeafInser
 import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeNodeVisibilityMutator;
 import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeTargetNodeRemovalMutator;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy;
-import cafe.woden.ircclient.ui.servertree.policy.ServerTreeNodeReorderPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
@@ -97,7 +96,6 @@ import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeSettingsSynchronizer;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellRenderer;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
-import cafe.woden.ircclient.ui.servertree.view.ServerTreeDetachedWarningClickHandler;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeNetworkInfoDialogBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipProvider;
@@ -113,15 +111,11 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
-import java.awt.BasicStroke;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
-import java.awt.Graphics2D;
 import java.awt.Rectangle;
-import java.awt.RenderingHints;
 import java.awt.Window;
 import java.awt.event.MouseEvent;
 import java.time.Instant;
@@ -131,7 +125,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -215,6 +211,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private AutoCloseable treeWheelSelectionDecorator;
 
+  private final ServerTreeNodeActionsFactory nodeActionsFactory = new ServerTreeNodeActionsFactory();
+  private final ServerTreeInteractionWiringFactory interactionWiringFactory =
+      new ServerTreeInteractionWiringFactory();
   private final TreeNodeActions<TargetRef> nodeActions;
 
   private final FlowableProcessor<TargetRef> selections =
@@ -283,33 +282,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final TargetRef applicationTerminalRef = TargetRef.applicationTerminal();
   private final DefaultTreeModel model = new DefaultTreeModel(root);
 
-  private volatile InsertionLine insertionLine;
-
-  private static final class InsertionLine {
-    final int x1;
-    final int x2;
-    final int y;
-
-    InsertionLine(int x1, int y, int x2) {
-      this.x1 = x1;
-      this.x2 = x2;
-      this.y = y;
-    }
-
-    Rectangle repaintRect() {
-      int left = Math.min(x1, x2);
-      int right = Math.max(x1, x2);
-      int w = Math.max(1, right - left);
-      return new Rectangle(left, Math.max(0, y - 3), w, 6);
-    }
-  }
-
   private final JTree tree =
       new JTree(model) {
         @Override
         protected void paintComponent(Graphics g) {
           super.paintComponent(g);
-          ServerTreeDockable.this.paintInsertionLine(g);
+          if (ServerTreeDockable.this.dragReorderSupport != null) {
+            ServerTreeDockable.this.dragReorderSupport.paintInsertionLine(g);
+          }
           if (ServerTreeDockable.this.serverActionOverlay != null) {
             ServerTreeDockable.this.serverActionOverlay.paint(g);
           }
@@ -333,8 +313,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final ServerTreeCellRenderer treeCellRenderer;
   private final ServerTreeServerActionOverlay serverActionOverlay;
-  private final ServerTreeDetachedWarningClickHandler detachedWarningClickHandler;
+
   private final ServerTreeRowInteractionHandler rowInteractionHandler;
+  private final ServerTreeDragReorderSupport dragReorderSupport;
 
   private final JLabel statusLabel = new JLabel("Disconnected");
 
@@ -352,6 +333,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final ServerTreeUiHooks uiHooks;
   private final ServerTreeRuntimeState runtimeState;
+  private final ServerTreeEdtExecutor edtExecutor = new ServerTreeEdtExecutor();
   private final Timer typingActivityTimer;
   private final Set<DefaultMutableTreeNode> typingActivityNodes = new HashSet<>();
   private final ServerTreeTypingActivityManager typingActivityManager;
@@ -407,6 +389,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeTooltipProvider tooltipProvider;
   private final ServerTreeTooltipResolver tooltipResolver;
   private final ServerTreeContextMenuBuilder contextMenuBuilder;
+  private final ServerTreeExternalStreamBinder externalStreamBinder;
 
   private final ServerTreeSettingsSynchronizer settingsSynchronizer;
   private volatile ServerTreeTypingIndicatorStyle typingIndicatorStyle =
@@ -572,11 +555,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::restoreExpandedTreePaths,
                 this::hasValidTreeSelection,
                 this::selectTarget,
-                () ->
-                    servers.values().stream()
-                        .findFirst()
-                        .map(sn -> sn.statusRef.serverId())
-                        .orElse(""),
+                this::firstServerIdOrEmpty,
                 this::selectStartupDefaultForServer,
                 this::defaultSelectionPath));
     this.statusLabelManager =
@@ -602,6 +581,17 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                   ServerNodes nodes = servers.get(Objects.toString(serverId, "").trim());
                   return nodes == null ? null : nodes.pmNode;
                 }));
+    this.dragReorderSupport =
+        new ServerTreeDragReorderSupport(
+            tree,
+            servers,
+            nodeClassifier,
+            uiHooks::isServerNode,
+            this::isChannelListLeafNode,
+            this::builtInLayoutNodeKindForNode,
+            this::rootSiblingNodeKindForNode,
+            networkGroupManager::isSojuNetworksGroupNode,
+            networkGroupManager::isZncNetworksGroupNode);
     ServerTreeStateInteractionCollaborators stateInteractionCollaborators =
         ServerTreeStateInteractionCollaboratorsFactory.create(
             new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
@@ -687,6 +677,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                   ServerNodes nodes = servers.get(Objects.toString(serverId, "").trim());
                   return nodes == null ? null : nodes.serverNode;
                 }));
+    this.externalStreamBinder =
+        new ServerTreeExternalStreamBinder(
+            disposables,
+            serverCatalogSynchronizer::syncServers,
+            nodeBadgeUpdater::refreshNotificationsCount,
+            interceptorActions::refreshInterceptorNodeLabel,
+            interceptorActions::refreshInterceptorGroupCount,
+            nodeBadgeUpdater::refreshSojuAutoConnectBadges,
+            nodeBadgeUpdater::refreshZncAutoConnectBadges);
     this.selectionFallbackPolicy =
         new ServerTreeSelectionFallbackPolicy(
             new ServerTreeSelectionFallbackContextAdapter(
@@ -732,7 +731,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 () -> model.nodeStructureChanged(root),
                 () -> tree.expandPath(new TreePath(applicationRoot.getPath())),
                 this::selectedTargetRef,
-                () -> servers.values().stream().findFirst().map(sn -> sn.statusRef).orElse(null),
+                this::firstServerStatusRefOrNull,
                 ref -> {
                   if (ref != null) {
                     selectTarget(ref);
@@ -755,7 +754,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.targetNodeRemovalMutator = stateInteractionCollaborators.targetNodeRemovalMutator();
     this.targetRemovalStateCoordinator =
         stateInteractionCollaborators.targetRemovalStateCoordinator();
-    this.detachedWarningClickHandler = stateInteractionCollaborators.detachedWarningClickHandler();
+
     this.rowInteractionHandler = stateInteractionCollaborators.rowInteractionHandler();
     this.tooltipProvider =
         new ServerTreeTooltipProvider(
@@ -1036,51 +1035,24 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     tree.addPropertyChangeListener(
         "UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
     this.nodeActions =
-        new TreeNodeActions<>(
-            tree,
-            model,
-            new ServerTreeNodeReorderPolicy(
+        nodeActionsFactory.create(
+            new ServerTreeNodeActionsFactory.Inputs(
+                tree,
+                model,
                 uiHooks::isServerNode,
                 this::isChannelListLeafNode,
                 this::isChannelPinned,
                 this::targetRefForNode,
-                this::nodeLabelForNode),
-            n -> {
-              Object uo = n.getUserObject();
-              if (uo instanceof ServerTreeNodeData nd) return nd.ref;
-              return null;
-            },
-            ref -> {
-              if (ref == null) return;
-              if (ref.isChannel()) {
-                if (!isChannelDisconnected(ref)) {
-                  requestEmitter.emitDisconnectChannel(ref);
-                }
-                return;
-              }
-              requestEmitter.emitCloseTarget(ref);
-            },
-            movedNode -> {
-              if (movedNode == null) return;
-              Object uo = movedNode.getUserObject();
-              DefaultMutableTreeNode parent = (DefaultMutableTreeNode) movedNode.getParent();
-              if (uo instanceof ServerTreeNodeData nd && nd.ref != null && nd.ref.isChannel()) {
-                if (!isChannelListLeafNode(parent)) return;
-                String sid = nodeClassifier.owningServerIdForNode(parent);
-                channelStateCoordinator.persistOrderAndResortAfterManualMove(sid);
-                return;
-              }
-              if (isRootSiblingReorderableNode(movedNode)) {
-                String sid = nodeClassifier.owningServerIdForNode(movedNode);
-                if (sid.isBlank()) return;
-                persistRootSiblingOrderFromTree(sid);
-                return;
-              }
-              if (!isMovableBuiltInNode(movedNode)) return;
-              String sid = nodeClassifier.owningServerIdForNode(movedNode);
-              if (sid.isBlank()) return;
-              persistBuiltInLayoutFromTree(sid);
-            });
+                this::nodeLabelForNode,
+                this::isChannelDisconnected,
+                requestEmitter::emitDisconnectChannel,
+                requestEmitter::emitCloseTarget,
+                dragReorderSupport::isRootSiblingReorderableNode,
+                dragReorderSupport::isMovableBuiltInNode,
+                nodeClassifier::owningServerIdForNode,
+                channelStateCoordinator::persistOrderAndResortAfterManualMove,
+                this::persistRootSiblingOrderFromTree,
+                this::persistBuiltInLayoutFromTree));
     ServerTreeKeyBindingsInstaller.install(
         tree,
         this::moveNodeUpAction,
@@ -1093,103 +1065,43 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     enforceTreeScrollPanePolicies();
     treeWheelSelectionDecorator = TreeWheelSelectionDecorator.decorate(tree, treeScroll);
     add(treeScroll, BorderLayout.CENTER);
-    if (serverCatalog != null) {
-      serverCatalogSynchronizer.syncServers(serverCatalog.entries());
-
-      disposables.add(
-          serverCatalog
-              .updates()
-              .observeOn(SwingEdt.scheduler())
-              .subscribe(
-                  serverCatalogSynchronizer::syncServers,
-                  err -> log.error("[ircafe] server catalog stream error", err)));
-    }
-    if (notificationStore != null) {
-      disposables.add(
-          notificationStore
-              .changes()
-              .observeOn(SwingEdt.scheduler())
-              .subscribe(
-                  ch -> nodeBadgeUpdater.refreshNotificationsCount(ch.serverId()),
-                  err -> log.error("[ircafe] notification store stream error", err)));
-    }
-    if (interceptorStore != null) {
-      disposables.add(
-          interceptorStore
-              .changes()
-              .observeOn(SwingEdt.scheduler())
-              .subscribe(
-                  ch -> {
-                    interceptorActions.refreshInterceptorNodeLabel(
-                        ch.serverId(), ch.interceptorId());
-                    interceptorActions.refreshInterceptorGroupCount(ch.serverId());
-                  },
-                  err -> log.error("[ircafe] interceptor store stream error", err)));
-    }
-
-    if (sojuAutoConnect != null) {
-      disposables.add(
-          sojuAutoConnect
-              .updates()
-              .observeOn(SwingEdt.scheduler())
-              .subscribe(
-                  __ -> nodeBadgeUpdater.refreshSojuAutoConnectBadges(),
-                  err -> log.error("[ircafe] soju auto-connect store stream error", err)));
-    }
-
-    if (zncAutoConnect != null) {
-      disposables.add(
-          zncAutoConnect
-              .updates()
-              .observeOn(SwingEdt.scheduler())
-              .subscribe(
-                  __ -> nodeBadgeUpdater.refreshZncAutoConnectBadges(),
-                  err -> log.error("[ircafe] znc auto-connect store stream error", err)));
-    }
+    externalStreamBinder.bind(
+        serverCatalog, notificationStore, interceptorStore, sojuAutoConnect, zncAutoConnect);
 
     settingsSynchronizer.bindListeners();
 
     ServerTreeMiddleDragReorderHandler.Context middleDragReorderContext =
-        new ServerTreeMiddleDragReorderContextAdapter(
-            tree,
-            model,
-            this::isDraggableChannelNode,
-            this::isRootSiblingReorderableNode,
-            this::isMovableBuiltInNode,
-            nodeClassifier::owningServerIdForNode,
-            serverId -> servers.get(ServerTreeDockable.normalizeServerId(serverId)),
-            this::rootSiblingNodeKindForNode,
-            this::builtInLayoutNodeKindForNode,
-            this::minInsertIndex,
-            this::maxInsertIndex,
-            builtInLayoutVisibilityFacade::rootBuiltInInsertIndex,
-            (parent, insertBeforeIndex) ->
-                setInsertionLine(insertionLineForIndex(parent, insertBeforeIndex)),
-            () -> setInsertionLine(null),
-            this::isChannelListLeafNode,
-            parentNode -> {
-              String serverId = nodeClassifier.owningServerIdForNode(parentNode);
-              if (serverId.isBlank()) return;
-              channelStateCoordinator.persistOrderAndResortAfterManualMove(serverId);
-            },
-            this::persistBuiltInLayoutFromTree,
-            this::persistRootSiblingOrderFromTree,
-            task -> {
-              if (task == null) return;
-              suppressSelectionBroadcast = true;
-              try {
-                task.run();
-              } finally {
-                suppressSelectionBroadcast = false;
-              }
-            },
-            nodeActions::refreshEnabledState);
-
+        interactionWiringFactory.createMiddleDragReorderContext(
+            new ServerTreeInteractionWiringFactory.MiddleDragInputs(
+                tree,
+                model,
+                dragReorderSupport::isDraggableChannelNode,
+                dragReorderSupport::isRootSiblingReorderableNode,
+                dragReorderSupport::isMovableBuiltInNode,
+                nodeClassifier::owningServerIdForNode,
+                serverId -> servers.get(ServerTreeDockable.normalizeServerId(serverId)),
+                this::rootSiblingNodeKindForNode,
+                this::builtInLayoutNodeKindForNode,
+                dragReorderSupport::minInsertIndex,
+                dragReorderSupport::maxInsertIndex,
+                builtInLayoutVisibilityFacade::rootBuiltInInsertIndex,
+                dragReorderSupport::setInsertionLineForIndex,
+                dragReorderSupport::clearInsertionLine,
+                this::isChannelListLeafNode,
+                parentNode -> {
+                  String serverId = nodeClassifier.owningServerIdForNode(parentNode);
+                  if (serverId.isBlank()) return;
+                  channelStateCoordinator.persistOrderAndResortAfterManualMove(serverId);
+                },
+                this::persistBuiltInLayoutFromTree,
+                this::persistRootSiblingOrderFromTree,
+                this::withSuppressedSelectionBroadcast,
+                nodeActions::refreshEnabledState));
     this.interactionMediator =
-        new ServerTreeInteractionMediator(
-            tree,
-            serverActionOverlay,
-            new ServerTreeInteractionMediatorContextAdapter(
+        interactionWiringFactory.createInteractionMediator(
+            new ServerTreeInteractionWiringFactory.MediatorInputs(
+                tree,
+                serverActionOverlay,
                 showing -> {
                   if (showing) {
                     typingActivityManager.startTypingActivityTimerIfNeeded();
@@ -1208,27 +1120,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 nodeClassifier::owningServerIdForNode,
                 rowInteractionHandler::maybeHandleDisconnectedWarningClick,
                 rowInteractionHandler::maybeSelectRowFromLeftClick,
-                rowInteractionHandler::treePathForRowHit,
-                task -> {
-                  if (task == null) return;
-                  suppressSelectionBroadcast = true;
-                  try {
-                    task.run();
-                  } finally {
-                    suppressSelectionBroadcast = false;
-                  }
-                },
+                (x, y) -> rowInteractionHandler.treePathForRowHit(x, y),
+                this::withSuppressedSelectionBroadcast,
                 nodeActions::refreshEnabledState,
                 contextMenuBuilder::build,
                 () -> middleDragReorderContext,
                 () -> startupSelectionCompleted,
                 () -> startupSelectionCompleted = true,
                 this::isPathInCurrentTreeModel,
-                () ->
-                    servers.values().stream()
-                        .findFirst()
-                        .map(sn -> sn.statusRef.serverId())
-                        .orElse(""),
+                this::firstServerIdOrEmpty,
                 this::selectStartupDefaultForServer,
                 this::defaultSelectionPath));
     this.interactionMediator.install();
@@ -1285,6 +1185,69 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         serverId, next, persist, syncUi);
   }
 
+  private void withSuppressedSelectionBroadcast(Runnable task) {
+    if (task == null) return;
+    suppressSelectionBroadcast = true;
+    try {
+      task.run();
+    } finally {
+      suppressSelectionBroadcast = false;
+    }
+  }
+
+  private static boolean isChannelTarget(TargetRef ref) {
+    return ref != null && ref.isChannel();
+  }
+
+  private boolean readChannelState(
+      TargetRef ref, boolean fallback, Function<TargetRef, Boolean> reader) {
+    if (!isChannelTarget(ref)) return fallback;
+    return edtExecutor.read(() -> reader.apply(ref), fallback, null);
+  }
+
+  private void writeChannelState(TargetRef ref, Runnable writer) {
+    if (!isChannelTarget(ref)) return;
+    edtExecutor.write(writer);
+  }
+
+  private void emitChannelRequest(TargetRef target, Consumer<TargetRef> emitter) {
+    if (!isChannelTarget(target)) return;
+    emitter.accept(target);
+  }
+
+  private boolean defaultBuiltInVisibility(Function<ServerBuiltInNodesVisibility, Boolean> getter) {
+    return getter.apply(builtInLayoutVisibilityFacade.defaultVisibility());
+  }
+
+  private boolean serverBuiltInVisibility(
+      String serverId, Function<ServerBuiltInNodesVisibility, Boolean> getter) {
+    return getter.apply(builtInNodesVisibility(serverId));
+  }
+
+  private void setBuiltInVisibilityForServer(
+      String serverId,
+      boolean visible,
+      BiFunction<ServerBuiltInNodesVisibility, Boolean, ServerBuiltInNodesVisibility> updater) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
+    applyBuiltInNodesVisibilityForServer(sid, updater.apply(current, visible), true, true);
+  }
+
+  private void setDefaultBuiltInVisibility(
+      boolean visible,
+      Function<ServerBuiltInNodesVisibility, Boolean> getter,
+      BiFunction<ServerBuiltInNodesVisibility, Boolean, ServerBuiltInNodesVisibility> updater,
+      String propertyName) {
+    ServerBuiltInNodesVisibility current = builtInLayoutVisibilityFacade.defaultVisibility();
+    boolean old = getter.apply(current);
+    builtInLayoutVisibilityFacade.setDefaultVisibility(updater.apply(current, visible));
+    applyBuiltInNodesVisibilityGlobally(v -> updater.apply(v, visible));
+    if (propertyName != null && !propertyName.isBlank()) {
+      firePropertyChange(propertyName, old, visible);
+    }
+  }
+
   private String serverNodeDisplayLabel(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return sid;
@@ -1303,6 +1266,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return nodes.interceptorsNode;
   }
 
+  private String firstServerIdOrEmpty() {
+    return servers.values().stream().findFirst().map(sn -> sn.statusRef.serverId()).orElse("");
+  }
+
+  private TargetRef firstServerStatusRefOrNull() {
+    return servers.values().stream().findFirst().map(sn -> sn.statusRef).orElse(null);
+  }
+
   private boolean isRootServerNode(DefaultMutableTreeNode node) {
     return node != null && node.getParent() == ircRoot && uiHooks.isServerNode(node);
   }
@@ -1313,134 +1284,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private boolean isApplicationRootNode(DefaultMutableTreeNode node) {
     return node != null && node == applicationRoot;
-  }
-
-  private boolean isDraggableChannelNode(DefaultMutableTreeNode node) {
-    if (node == null) return false;
-    Object uo = node.getUserObject();
-    if (!(uo instanceof ServerTreeNodeData nd)) return false;
-    if (nd.ref == null || !nd.ref.isChannel()) return false;
-    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
-    return parent != null && (uiHooks.isServerNode(parent) || isChannelListLeafNode(parent));
-  }
-
-  private boolean isMovableBuiltInNode(DefaultMutableTreeNode node) {
-    RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKind = builtInLayoutNodeKindForNode(node);
-    if (nodeKind == null) return false;
-    String sid = nodeClassifier.owningServerIdForNode(node);
-    if (sid.isBlank()) return false;
-    ServerNodes sn = servers.get(sid);
-    if (sn == null) return false;
-    DefaultMutableTreeNode parent = (DefaultMutableTreeNode) node.getParent();
-    return parent == sn.serverNode || parent == sn.otherNode;
-  }
-
-  private int minInsertIndex(DefaultMutableTreeNode parentNode) {
-    if (parentNode == null) return 0;
-    if (isChannelListLeafNode(parentNode)) return 0;
-
-    int min = 0;
-    int count = parentNode.getChildCount();
-    while (min < count) {
-      DefaultMutableTreeNode child = (DefaultMutableTreeNode) parentNode.getChildAt(min);
-      Object uo = child.getUserObject();
-      if (uo instanceof ServerTreeNodeData nd) {
-        if (nd.ref == null || nd.ref.isStatus() || nd.ref.isUiOnly()) {
-          min++;
-          continue;
-        }
-      } else if (nodeClassifier.isInterceptorsGroupNode(child)) {
-        min++;
-        continue;
-      }
-      break;
-    }
-    return min;
-  }
-
-  private int maxInsertIndex(DefaultMutableTreeNode parentNode) {
-    if (parentNode == null) return 0;
-    if (isChannelListLeafNode(parentNode)) return parentNode.getChildCount();
-
-    int idx = parentNode.getChildCount();
-    while (idx > 0) {
-      DefaultMutableTreeNode tail = (DefaultMutableTreeNode) parentNode.getChildAt(idx - 1);
-      if (isReservedServerTailNode(tail)) {
-        idx--;
-        continue;
-      }
-      break;
-    }
-    return idx;
-  }
-
-  private boolean isReservedServerTailNode(DefaultMutableTreeNode node) {
-    return nodeClassifier.isPrivateMessagesGroupNode(node)
-        || networkGroupManager.isSojuNetworksGroupNode(node)
-        || networkGroupManager.isZncNetworksGroupNode(node);
-  }
-
-  private void setInsertionLine(InsertionLine line) {
-    InsertionLine old = this.insertionLine;
-    this.insertionLine = line;
-    if (old != null) tree.repaint(old.repaintRect());
-    if (line != null) tree.repaint(line.repaintRect());
-  }
-
-  private void paintInsertionLine(Graphics g) {
-    InsertionLine line = this.insertionLine;
-    if (line == null) return;
-
-    Graphics2D g2 = (Graphics2D) g.create();
-    try {
-      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-      Color c = UIManager.getColor("Component.accentColor");
-      if (c == null) c = UIManager.getColor("Tree.selectionBorderColor");
-      if (c == null) c = UIManager.getColor("Tree.selectionForeground");
-      if (c == null) c = Color.BLACK;
-      g2.setColor(c);
-
-      g2.setStroke(new BasicStroke(2f));
-      g2.drawLine(line.x1, line.y, line.x2, line.y);
-    } finally {
-      g2.dispose();
-    }
-  }
-
-  private InsertionLine insertionLineForIndex(
-      DefaultMutableTreeNode parent, int insertBeforeIndex) {
-    if (parent == null) return null;
-
-    int childCount = parent.getChildCount();
-    if (childCount == 0) {
-      Rectangle pr = tree.getPathBounds(new TreePath(parent.getPath()));
-      if (pr == null) return null;
-      int x1 = Math.max(0, pr.x);
-      int x2 = Math.max(x1 + 1, tree.getWidth() - 4);
-      int y = pr.y + pr.height - 1;
-      return new InsertionLine(x1, y, x2);
-    }
-
-    int idx = Math.max(0, Math.min(childCount, insertBeforeIndex));
-
-    Rectangle r;
-    int y;
-    if (idx >= childCount) {
-      DefaultMutableTreeNode last = (DefaultMutableTreeNode) parent.getChildAt(childCount - 1);
-      r = tree.getPathBounds(new TreePath(last.getPath()));
-      if (r == null) return null;
-      y = r.y + r.height - 1;
-    } else {
-      DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(idx);
-      r = tree.getPathBounds(new TreePath(child.getPath()));
-      if (r == null) return null;
-      y = r.y;
-    }
-
-    int x1 = Math.max(0, r.x);
-    int x2 = Math.max(x1 + 1, tree.getWidth() - 4);
-    return new InsertionLine(x1, y, x2);
   }
 
   private boolean isChannelListLeafNode(DefaultMutableTreeNode node) {
@@ -1478,16 +1321,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (uo instanceof ServerTreeNodeData nd) return Objects.toString(nd.label, "");
     if (uo instanceof String s) return s;
     return "";
-  }
-
-  private boolean isRootSiblingReorderableNode(DefaultMutableTreeNode node) {
-    if (node == null) return false;
-    String sid = nodeClassifier.owningServerIdForNode(node);
-    if (sid.isBlank()) return false;
-    ServerNodes sn = servers.get(sid);
-    if (sn == null || sn.serverNode == null) return false;
-    if (node.getParent() != sn.serverNode) return false;
-    return rootSiblingNodeKindForNode(node) != null;
   }
 
   private void configureHeaderButtons(ServerDialogs serverDialogs) {
@@ -1627,96 +1460,54 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   public List<String> openChannelsForServer(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return List.of();
-    if (SwingUtilities.isEventDispatchThread()) {
-      return targetSnapshotProvider.snapshotOpenChannelsForServer(sid);
-    }
-
-    AtomicReference<List<String>> out = new AtomicReference<>(List.of());
-    try {
-      SwingUtilities.invokeAndWait(
-          () -> out.set(targetSnapshotProvider.snapshotOpenChannelsForServer(sid)));
-      return out.get();
-    } catch (Exception ex) {
-      log.debug("[ircafe] open channel snapshot failed for server={}", sid, ex);
-      return List.of();
-    }
+    return edtExecutor.read(
+        () -> targetSnapshotProvider.snapshotOpenChannelsForServer(sid),
+        List.of(),
+        ex -> log.debug("[ircafe] open channel snapshot failed for server={}", sid, ex));
   }
 
   public List<ManagedChannelEntry> managedChannelsForServer(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return List.of();
-    if (SwingUtilities.isEventDispatchThread()) {
-      return channelStateCoordinator.snapshotManagedChannelsForServer(sid);
-    }
-
-    AtomicReference<List<ManagedChannelEntry>> out = new AtomicReference<>(List.of());
-    try {
-      SwingUtilities.invokeAndWait(
-          () -> out.set(channelStateCoordinator.snapshotManagedChannelsForServer(sid)));
-      return out.get();
-    } catch (Exception ex) {
-      log.debug("[ircafe] managed channel snapshot failed for server={}", sid, ex);
-      return List.of();
-    }
+    return edtExecutor.read(
+        () -> channelStateCoordinator.snapshotManagedChannelsForServer(sid),
+        List.of(),
+        ex -> log.debug("[ircafe] managed channel snapshot failed for server={}", sid, ex));
   }
 
   public ChannelSortMode channelSortModeForServer(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return ChannelSortMode.CUSTOM;
-    if (SwingUtilities.isEventDispatchThread()) {
-      return channelStateCoordinator.channelSortModeForServer(sid);
-    }
-
-    AtomicReference<ChannelSortMode> out = new AtomicReference<>(ChannelSortMode.CUSTOM);
-    try {
-      SwingUtilities.invokeAndWait(
-          () -> out.set(channelStateCoordinator.channelSortModeForServer(sid)));
-      return out.get();
-    } catch (Exception ex) {
-      log.debug("[ircafe] channel sort mode snapshot failed for server={}", sid, ex);
-      return ChannelSortMode.CUSTOM;
-    }
+    return edtExecutor.read(
+        () -> channelStateCoordinator.channelSortModeForServer(sid),
+        ChannelSortMode.CUSTOM,
+        ex -> log.debug("[ircafe] channel sort mode snapshot failed for server={}", sid, ex));
   }
 
   public void setChannelSortModeForServer(String serverId, ChannelSortMode mode) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
     ChannelSortMode next = mode == null ? ChannelSortMode.CUSTOM : mode;
-    Runnable apply = () -> channelStateCoordinator.setChannelSortModeForServer(sid, next);
-
-    if (SwingUtilities.isEventDispatchThread()) {
-      apply.run();
-    } else {
-      SwingUtilities.invokeLater(apply);
-    }
+    edtExecutor.write(() -> channelStateCoordinator.setChannelSortModeForServer(sid, next));
   }
 
   public void setChannelCustomOrderForServer(String serverId, List<String> channels) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
     List<String> requested = channels == null ? List.of() : List.copyOf(channels);
-    Runnable apply = () -> channelStateCoordinator.setChannelCustomOrderForServer(sid, requested);
-
-    if (SwingUtilities.isEventDispatchThread()) {
-      apply.run();
-    } else {
-      SwingUtilities.invokeLater(apply);
-    }
+    edtExecutor.write(() -> channelStateCoordinator.setChannelCustomOrderForServer(sid, requested));
   }
 
   public void requestJoinChannel(TargetRef target) {
-    if (target == null || !target.isChannel()) return;
-    requestEmitter.emitJoinChannel(target);
+    emitChannelRequest(target, requestEmitter::emitJoinChannel);
   }
 
   public void requestDisconnectChannel(TargetRef target) {
-    if (target == null || !target.isChannel()) return;
-    requestEmitter.emitDisconnectChannel(target);
+    emitChannelRequest(target, requestEmitter::emitDisconnectChannel);
   }
 
   public void requestCloseChannel(TargetRef target) {
-    if (target == null || !target.isChannel()) return;
-    requestEmitter.emitCloseChannel(target);
+    emitChannelRequest(target, requestEmitter::emitCloseChannel);
   }
 
   public Action moveNodeUpAction() {
@@ -1807,78 +1598,65 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public boolean isServerNodesVisible() {
-    return builtInLayoutVisibilityFacade.defaultVisibility().server();
+    return defaultBuiltInVisibility(ServerBuiltInNodesVisibility::server);
   }
 
   public boolean isLogViewerNodesVisible() {
-    return builtInLayoutVisibilityFacade.defaultVisibility().logViewer();
+    return defaultBuiltInVisibility(ServerBuiltInNodesVisibility::logViewer);
   }
 
   public boolean isNotificationsNodesVisible() {
-    return builtInLayoutVisibilityFacade.defaultVisibility().notifications();
+    return defaultBuiltInVisibility(ServerBuiltInNodesVisibility::notifications);
   }
 
   public boolean isMonitorNodesVisible() {
-    return builtInLayoutVisibilityFacade.defaultVisibility().monitor();
+    return defaultBuiltInVisibility(ServerBuiltInNodesVisibility::monitor);
   }
 
   public boolean isInterceptorsNodesVisible() {
-    return builtInLayoutVisibilityFacade.defaultVisibility().interceptors();
+    return defaultBuiltInVisibility(ServerBuiltInNodesVisibility::interceptors);
   }
 
   public boolean isServerNodeVisibleForServer(String serverId) {
-    return builtInNodesVisibility(serverId).server();
+    return serverBuiltInVisibility(serverId, ServerBuiltInNodesVisibility::server);
   }
 
   public boolean isLogViewerNodeVisibleForServer(String serverId) {
-    return builtInNodesVisibility(serverId).logViewer();
+    return serverBuiltInVisibility(serverId, ServerBuiltInNodesVisibility::logViewer);
   }
 
   public boolean isNotificationsNodeVisibleForServer(String serverId) {
-    return builtInNodesVisibility(serverId).notifications();
+    return serverBuiltInVisibility(serverId, ServerBuiltInNodesVisibility::notifications);
   }
 
   public boolean isMonitorNodeVisibleForServer(String serverId) {
-    return builtInNodesVisibility(serverId).monitor();
+    return serverBuiltInVisibility(serverId, ServerBuiltInNodesVisibility::monitor);
   }
 
   public boolean isInterceptorsNodeVisibleForServer(String serverId) {
-    return builtInNodesVisibility(serverId).interceptors();
+    return serverBuiltInVisibility(serverId, ServerBuiltInNodesVisibility::interceptors);
   }
 
   public void setServerNodeVisibleForServer(String serverId, boolean visible) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
-    applyBuiltInNodesVisibilityForServer(sid, current.withServer(visible), true, true);
+    setBuiltInVisibilityForServer(serverId, visible, ServerBuiltInNodesVisibility::withServer);
   }
 
   public void setLogViewerNodeVisibleForServer(String serverId, boolean visible) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
-    applyBuiltInNodesVisibilityForServer(sid, current.withLogViewer(visible), true, true);
+    setBuiltInVisibilityForServer(serverId, visible, ServerBuiltInNodesVisibility::withLogViewer);
   }
 
   public void setNotificationsNodeVisibleForServer(String serverId, boolean visible) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
-    applyBuiltInNodesVisibilityForServer(sid, current.withNotifications(visible), true, true);
+    setBuiltInVisibilityForServer(
+        serverId, visible, ServerBuiltInNodesVisibility::withNotifications);
   }
 
   public void setMonitorNodeVisibleForServer(String serverId, boolean visible) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
-    applyBuiltInNodesVisibilityForServer(sid, current.withMonitor(visible), true, true);
+    setBuiltInVisibilityForServer(serverId, visible, ServerBuiltInNodesVisibility::withMonitor);
   }
 
   public void setInterceptorsNodeVisibleForServer(String serverId, boolean visible) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    ServerBuiltInNodesVisibility current = builtInNodesVisibility(sid);
-    applyBuiltInNodesVisibilityForServer(sid, current.withInterceptors(visible), true, true);
+    setBuiltInVisibilityForServer(
+        serverId, visible, ServerBuiltInNodesVisibility::withInterceptors);
   }
 
   public boolean isApplicationRootVisible() {
@@ -1911,41 +1689,43 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
    * <p>Per-server callers should use {@link #setServerNodeVisibleForServer(String, boolean)}.
    */
   public void setServerNodesVisible(boolean visible) {
-    ServerBuiltInNodesVisibility current = builtInLayoutVisibilityFacade.defaultVisibility();
-    builtInLayoutVisibilityFacade.setDefaultVisibility(current.withServer(visible));
-    applyBuiltInNodesVisibilityGlobally(v -> v.withServer(visible));
+    setDefaultBuiltInVisibility(
+        visible,
+        ServerBuiltInNodesVisibility::server,
+        ServerBuiltInNodesVisibility::withServer,
+        null);
   }
 
   public void setLogViewerNodesVisible(boolean visible) {
-    ServerBuiltInNodesVisibility current = builtInLayoutVisibilityFacade.defaultVisibility();
-    boolean old = current.logViewer();
-    builtInLayoutVisibilityFacade.setDefaultVisibility(current.withLogViewer(visible));
-    applyBuiltInNodesVisibilityGlobally(v -> v.withLogViewer(visible));
-    firePropertyChange(PROP_LOG_VIEWER_NODES_VISIBLE, old, visible);
+    setDefaultBuiltInVisibility(
+        visible,
+        ServerBuiltInNodesVisibility::logViewer,
+        ServerBuiltInNodesVisibility::withLogViewer,
+        PROP_LOG_VIEWER_NODES_VISIBLE);
   }
 
   public void setNotificationsNodesVisible(boolean visible) {
-    ServerBuiltInNodesVisibility current = builtInLayoutVisibilityFacade.defaultVisibility();
-    boolean old = current.notifications();
-    builtInLayoutVisibilityFacade.setDefaultVisibility(current.withNotifications(visible));
-    applyBuiltInNodesVisibilityGlobally(v -> v.withNotifications(visible));
-    firePropertyChange(PROP_NOTIFICATIONS_NODES_VISIBLE, old, visible);
+    setDefaultBuiltInVisibility(
+        visible,
+        ServerBuiltInNodesVisibility::notifications,
+        ServerBuiltInNodesVisibility::withNotifications,
+        PROP_NOTIFICATIONS_NODES_VISIBLE);
   }
 
   public void setMonitorNodesVisible(boolean visible) {
-    ServerBuiltInNodesVisibility current = builtInLayoutVisibilityFacade.defaultVisibility();
-    boolean old = current.monitor();
-    builtInLayoutVisibilityFacade.setDefaultVisibility(current.withMonitor(visible));
-    applyBuiltInNodesVisibilityGlobally(v -> v.withMonitor(visible));
-    firePropertyChange(PROP_MONITOR_NODES_VISIBLE, old, visible);
+    setDefaultBuiltInVisibility(
+        visible,
+        ServerBuiltInNodesVisibility::monitor,
+        ServerBuiltInNodesVisibility::withMonitor,
+        PROP_MONITOR_NODES_VISIBLE);
   }
 
   public void setInterceptorsNodesVisible(boolean visible) {
-    ServerBuiltInNodesVisibility current = builtInLayoutVisibilityFacade.defaultVisibility();
-    boolean old = current.interceptors();
-    builtInLayoutVisibilityFacade.setDefaultVisibility(current.withInterceptors(visible));
-    applyBuiltInNodesVisibilityGlobally(v -> v.withInterceptors(visible));
-    firePropertyChange(PROP_INTERCEPTORS_NODES_VISIBLE, old, visible);
+    setDefaultBuiltInVisibility(
+        visible,
+        ServerBuiltInNodesVisibility::interceptors,
+        ServerBuiltInNodesVisibility::withInterceptors,
+        PROP_INTERCEPTORS_NODES_VISIBLE);
   }
 
   public void setApplicationRootVisible(boolean visible) {
@@ -2228,58 +2008,20 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public boolean isChannelAutoReattach(TargetRef ref) {
-    if (ref == null || !ref.isChannel()) return true;
-
-    if (SwingUtilities.isEventDispatchThread()) {
-      return channelStateCoordinator.isChannelAutoReattach(ref);
-    }
-
-    AtomicReference<Boolean> out = new AtomicReference<>(Boolean.TRUE);
-    try {
-      SwingUtilities.invokeAndWait(
-          () -> out.set(channelStateCoordinator.isChannelAutoReattach(ref)));
-      return out.get();
-    } catch (Exception ex) {
-      return true;
-    }
+    return readChannelState(ref, true, channelStateCoordinator::isChannelAutoReattach);
   }
 
   public void setChannelAutoReattach(TargetRef ref, boolean autoReattach) {
-    if (ref == null || !ref.isChannel()) return;
-    Runnable apply = () -> channelStateCoordinator.setChannelAutoReattach(ref, autoReattach);
-
-    if (SwingUtilities.isEventDispatchThread()) {
-      apply.run();
-    } else {
-      SwingUtilities.invokeLater(apply);
-    }
+    writeChannelState(
+        ref, () -> channelStateCoordinator.setChannelAutoReattach(ref, autoReattach));
   }
 
   public boolean isChannelPinned(TargetRef ref) {
-    if (ref == null || !ref.isChannel()) return false;
-
-    if (SwingUtilities.isEventDispatchThread()) {
-      return channelStateCoordinator.isChannelPinned(ref);
-    }
-
-    AtomicReference<Boolean> out = new AtomicReference<>(Boolean.FALSE);
-    try {
-      SwingUtilities.invokeAndWait(() -> out.set(channelStateCoordinator.isChannelPinned(ref)));
-      return out.get();
-    } catch (Exception ex) {
-      return false;
-    }
+    return readChannelState(ref, false, channelStateCoordinator::isChannelPinned);
   }
 
   public void setChannelPinned(TargetRef ref, boolean pinned) {
-    if (ref == null || !ref.isChannel()) return;
-    Runnable apply = () -> channelStateCoordinator.setChannelPinned(ref, pinned);
-
-    if (SwingUtilities.isEventDispatchThread()) {
-      apply.run();
-    } else {
-      SwingUtilities.invokeLater(apply);
-    }
+    writeChannelState(ref, () -> channelStateCoordinator.setChannelPinned(ref, pinned));
   }
 
   private void emitManagedChannelsChanged(String serverId) {
@@ -2293,23 +2035,22 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void markUnread(TargetRef ref) {
-    DefaultMutableTreeNode node = leaves.get(ref);
-    if (node == null) return;
-    if (!(node.getUserObject() instanceof ServerTreeNodeData nd)) return;
-    nd.unread++;
-    channelStateCoordinator.noteChannelActivity(ref);
-    model.nodeChanged(node);
-    channelStateCoordinator.onChannelUnreadCountsChanged(ref);
-    if (ref != null && ref.isChannel()) {
-      emitManagedChannelsChanged(ref.serverId());
-    }
+    bumpUnreadCounter(ref, false);
   }
 
   public void markHighlight(TargetRef ref) {
+    bumpUnreadCounter(ref, true);
+  }
+
+  private void bumpUnreadCounter(TargetRef ref, boolean highlight) {
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return;
     if (!(node.getUserObject() instanceof ServerTreeNodeData nd)) return;
-    nd.highlightUnread++;
+    if (highlight) {
+      nd.highlightUnread++;
+    } else {
+      nd.unread++;
+    }
     channelStateCoordinator.noteChannelActivity(ref);
     model.nodeChanged(node);
     channelStateCoordinator.onChannelUnreadCountsChanged(ref);

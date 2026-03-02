@@ -144,7 +144,8 @@ public class PircbotxBotFactory {
         throw new IllegalStateException("NickServ enabled but password not set");
       }
 
-      String service = (s.nickserv().service() == null) ? "NickServ" : s.nickserv().service().trim();
+      String service =
+          (s.nickserv().service() == null) ? "NickServ" : s.nickserv().service().trim();
       if (service.isBlank()) service = "NickServ";
 
       builder.setNickservPassword(password);

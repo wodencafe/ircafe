@@ -146,11 +146,7 @@ public final class ServerTreeDockableUiHooks implements ServerTreeUiHooks {
 
     int choice =
         JOptionPane.showConfirmDialog(
-            owner,
-            message,
-            "Clear Log",
-            JOptionPane.YES_NO_OPTION,
-            JOptionPane.WARNING_MESSAGE);
+            owner, message, "Clear Log", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
 
     if (choice == JOptionPane.YES_OPTION) {
       requestEmitter.emitClearLog(targetRef);
