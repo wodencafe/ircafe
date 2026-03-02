@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -818,6 +819,75 @@ class PircbotxAwayNotifyInputParserTest {
     List<String> parsed = List.of("me", "##politics", "+CLTcnrt");
 
     assertDoesNotThrow(() -> parser.processServerResponse(324, line, parsed));
+  }
+
+  @Test
+  void pongWithServerTimeTagUpdatesPassiveLagSample() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    Instant taggedAt = Instant.now().minusSeconds(10);
+    parser.processCommand(
+        "*",
+        source("server"),
+        "PONG",
+        "@time=" + taggedAt + " :server PONG server :client",
+        List.of("server", ":client"),
+        ImmutableMap.of("time", taggedAt.toString()));
+
+    long lagMs = conn.lagMsIfFresh(System.currentTimeMillis());
+    assertTrue(lagMs >= 9_000L, "expected lag sample close to server-time delta");
+    assertTrue(lagMs <= 30_000L, "lag sample should stay within a sane range");
+  }
+
+  @Test
+  void pingWithServerTimeTagUpdatesPassiveLagSample() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    Instant taggedAt = Instant.now().minusSeconds(8);
+    parser.processCommand(
+        "*",
+        source("server"),
+        "PING",
+        "@time=" + taggedAt + " :server PING :client",
+        List.of(":client"),
+        ImmutableMap.of("time", taggedAt.toString()));
+
+    long lagMs = conn.lagMsIfFresh(System.currentTimeMillis());
+    assertTrue(lagMs >= 7_000L, "expected lag sample close to server-time delta");
+    assertTrue(lagMs <= 30_000L, "lag sample should stay within a sane range");
+  }
+
+  @Test
+  void lagProbePongPrioritizesProbeRttOverPassiveServerTimeSample() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    String token = "ircafe-lag-testtoken";
+    conn.beginLagProbe(token, System.currentTimeMillis() - 700L);
+    Instant taggedAt = Instant.now().minusMillis(10);
+    parser.processCommand(
+        "*",
+        source("server"),
+        "PONG",
+        "@time=" + taggedAt + " :server PONG server :" + token,
+        List.of("server", ":" + token),
+        ImmutableMap.of("time", taggedAt.toString()));
+
+    long lagMs = conn.lagMsIfFresh(System.currentTimeMillis());
+    assertTrue(lagMs >= 400L, "probe RTT sample should win over passive @time sample");
+    assertTrue(lagMs <= 5_000L, "probe RTT should be bounded to a sane test range");
+    assertEquals("", conn.lagProbeToken.get());
   }
 
   private static UserHostmask source(String nick) {

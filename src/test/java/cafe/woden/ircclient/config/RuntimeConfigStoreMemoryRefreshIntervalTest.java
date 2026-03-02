@@ -34,4 +34,3 @@ class RuntimeConfigStoreMemoryRefreshIntervalTest {
     assertTrue(yaml.contains("memoryUsageRefreshIntervalMs"));
   }
 }
-

@@ -6,6 +6,7 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -22,6 +23,7 @@ final class PircbotxConnectionState {
   private static final long PRIVATE_TARGET_HINT_TTL_MS = 120_000L;
   private static final int PRIVATE_TARGET_HINT_MAX = 1_024;
   private static final long LAG_SAMPLE_STALE_AFTER_MS = 120_000L;
+  private static final long MAX_PASSIVE_LAG_SAMPLE_MS = TimeUnit.MINUTES.toMillis(5);
 
   private record PrivateTargetHint(
       String fromLower, String target, String kind, String payload, long observedAtMs) {}
@@ -317,6 +319,14 @@ final class PircbotxConnectionState {
     long now = observedAtMs > 0 ? observedAtMs : System.currentTimeMillis();
     long lagMs = Math.max(0L, now - sentAt);
     lagLastMeasuredMs.set(lagMs);
+    lagLastMeasuredAtMs.set(now);
+  }
+
+  void observePassiveLagSample(long lagMs, long observedAtMs) {
+    long sample = Math.max(0L, lagMs);
+    if (sample > MAX_PASSIVE_LAG_SAMPLE_MS) return;
+    long now = observedAtMs > 0 ? observedAtMs : System.currentTimeMillis();
+    lagLastMeasuredMs.set(sample);
     lagLastMeasuredAtMs.set(now);
   }
 

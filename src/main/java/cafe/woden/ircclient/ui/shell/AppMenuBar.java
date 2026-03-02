@@ -105,7 +105,7 @@ public class AppMenuBar extends JMenuBar {
   private static final int MIN_MEMORY_REFRESH_INTERVAL_MS = 250;
   private static final int MAX_MEMORY_REFRESH_INTERVAL_MS = 60_000;
   private static final int[] MEMORY_REFRESH_INTERVAL_PRESETS_MS =
-      new int[] {250, 500, 1000, 2000, 5000, 10_000};
+      new int[] {2000, 5000, 10_000, 30_000, 60_000};
   private static final long MEMORY_WARNING_COOLDOWN_MS = 120_000L;
   private static final int MOON_ICON_SIZE = 16;
   private static final long MIB = 1024L * 1024L;
@@ -1495,7 +1495,7 @@ public class AppMenuBar extends JMenuBar {
       refreshIntervalMenu.add(item);
     }
     refreshIntervalMenu.addSeparator();
-    JMenuItem customRefresh = new JMenuItem("Custom...");
+    JMenuItem customRefresh = new JMenuItem("Custom");
     customRefresh.addActionListener(e -> promptForCustomMemoryRefreshInterval());
     refreshIntervalMenu.add(customRefresh);
     memoryModePopup.add(refreshIntervalMenu);
