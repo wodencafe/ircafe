@@ -33,7 +33,13 @@ public interface ServerTreeUiHooks {
 
   void disconnectChannel(TargetRef channelRef);
 
+  void bouncerDetachChannel(TargetRef channelRef);
+
   void closeChannel(TargetRef channelRef);
+
+  void closeTarget(TargetRef targetRef);
+
+  void openPinnedChat(TargetRef targetRef);
 
   boolean confirmCloseChannel(TargetRef channelRef, String channelLabel);
 }

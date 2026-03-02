@@ -114,8 +114,23 @@ public final class ServerTreeDockableUiHooks implements ServerTreeUiHooks {
   }
 
   @Override
+  public void bouncerDetachChannel(TargetRef channelRef) {
+    requestEmitter.emitBouncerDetachChannel(channelRef);
+  }
+
+  @Override
   public void closeChannel(TargetRef channelRef) {
     requestEmitter.emitCloseChannel(channelRef);
+  }
+
+  @Override
+  public void closeTarget(TargetRef targetRef) {
+    requestEmitter.emitCloseTarget(targetRef);
+  }
+
+  @Override
+  public void openPinnedChat(TargetRef targetRef) {
+    requestEmitter.emitOpenPinnedChat(targetRef);
   }
 
   @Override
