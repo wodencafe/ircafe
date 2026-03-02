@@ -27,9 +27,13 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteraction
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeBouncerDetachPolicyContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeContextMenuBuilderContextAdapter;
+import cafe.woden.ircclient.ui.servertree.context.ServerTreeInterceptorActionsContextAdapter;
+import cafe.woden.ircclient.ui.servertree.context.ServerTreeNetworkGroupManagerContextAdapter;
+import cafe.woden.ircclient.ui.servertree.context.ServerTreeNodeBadgeUpdaterContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionFallbackContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerActionOverlayContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
+import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerParentResolverContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerRootLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSettingsSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetLifecycleContextAdapter;
@@ -501,7 +505,16 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeNetworkInfoDialogBuilder(runtimeConfig, createNetworkInfoDialogContext());
     this.interceptorActions =
         new ServerTreeInterceptorActions(
-            this, interceptorStore, INTERCEPTORS_GROUP_LABEL, createInterceptorActionsContext());
+            this,
+            interceptorStore,
+            INTERCEPTORS_GROUP_LABEL,
+            new ServerTreeInterceptorActionsContextAdapter(
+                this::ensureNode,
+                this::selectTarget,
+                this::removeTarget,
+                leaves::get,
+                this::interceptorsGroupNodeForServer,
+                model::nodeChanged));
     this.serverCatalogSynchronizer =
         new ServerTreeServerCatalogSynchronizer(
             serverDisplayNames,
@@ -525,7 +538,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             ZNC_NETWORKS_GROUP_LABEL,
             sojuNetworksGroupByOrigin,
             zncNetworksGroupByOrigin,
-            createNetworkGroupManagerContext());
+            new ServerTreeNetworkGroupManagerContextAdapter(
+                serverId -> {
+                  ServerNodes nodes = servers.get(Objects.toString(serverId, "").trim());
+                  return nodes == null ? null : nodes.serverNode;
+                },
+                serverId -> {
+                  ServerNodes nodes = servers.get(Objects.toString(serverId, "").trim());
+                  return nodes == null ? null : nodes.pmNode;
+                }));
     ServerTreeStateInteractionCollaborators stateInteractionCollaborators =
         ServerTreeStateInteractionCollaboratorsFactory.create(
             new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
@@ -556,7 +577,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.serverNodeBuilder = new ServerTreeServerNodeBuilder();
     this.serverParentResolver =
         new ServerTreeServerParentResolver(
-            sojuOriginByServerId, zncOriginByServerId, createServerParentResolverContext());
+            sojuOriginByServerId,
+            zncOriginByServerId,
+            new ServerTreeServerParentResolverContextAdapter(
+                serverId -> servers.containsKey(Objects.toString(serverId, "").trim()),
+                this::addServerRoot,
+                () -> ircRoot,
+                this::getOrCreateSojuNetworksGroupNode,
+                this::getOrCreateZncNetworksGroupNode));
     this.serverLabelPolicy =
         new ServerTreeServerLabelPolicy(
             serverDisplayNames,
@@ -588,7 +616,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 }));
     this.nodeBadgeUpdater =
         new ServerTreeNodeBadgeUpdater(
-            notificationStore, ephemeralServerIds, leaves, createNodeBadgeUpdaterContext());
+            notificationStore,
+            ephemeralServerIds,
+            leaves,
+            new ServerTreeNodeBadgeUpdaterContextAdapter(
+                model::nodeChanged,
+                serverId -> {
+                  ServerNodes nodes = servers.get(Objects.toString(serverId, "").trim());
+                  return nodes == null ? null : nodes.serverNode;
+                }));
     this.selectionFallbackPolicy =
         new ServerTreeSelectionFallbackPolicy(createSelectionFallbackPolicyContext());
     this.uiLeafVisibilitySynchronizer =
@@ -999,133 +1035,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private boolean isApplicationRootNode(DefaultMutableTreeNode node) {
     return node != null && node == applicationRoot;
-  }
-
-  private ServerTreeInterceptorActions.Context createInterceptorActionsContext() {
-    return new ServerTreeInterceptorActions.Context() {
-      @Override
-      public void ensureNode(TargetRef ref) {
-        ServerTreeDockable.this.ensureNode(ref);
-      }
-
-      @Override
-      public void selectTarget(TargetRef ref) {
-        ServerTreeDockable.this.selectTarget(ref);
-      }
-
-      @Override
-      public void removeTarget(TargetRef ref) {
-        ServerTreeDockable.this.removeTarget(ref);
-      }
-
-      @Override
-      public DefaultMutableTreeNode leafNode(TargetRef ref) {
-        return leaves.get(ref);
-      }
-
-      @Override
-      public DefaultMutableTreeNode interceptorsGroupNode(String serverId) {
-        return ServerTreeDockable.this.interceptorsGroupNodeForServer(serverId);
-      }
-
-      @Override
-      public void nodeChanged(DefaultMutableTreeNode node) {
-        model.nodeChanged(node);
-      }
-    };
-  }
-
-  private ServerTreeNetworkGroupManager.Context createNetworkGroupManagerContext() {
-    return new ServerTreeNetworkGroupManager.Context() {
-      @Override
-      public DefaultMutableTreeNode serverNode(String serverId) {
-        ServerNodes nodes = servers.get(Objects.toString(serverId, "").trim());
-        return nodes == null ? null : nodes.serverNode;
-      }
-
-      @Override
-      public DefaultMutableTreeNode privateMessagesNode(String serverId) {
-        ServerNodes nodes = servers.get(Objects.toString(serverId, "").trim());
-        return nodes == null ? null : nodes.pmNode;
-      }
-    };
-  }
-
-  private ServerTreeBouncerDetachPolicy.Context createBouncerDetachPolicyContext() {
-    return new ServerTreeBouncerDetachPolicy.Context() {
-      @Override
-      public ConnectionState connectionStateForServer(String serverId) {
-        return uiHooks.connectionStateForServer(serverId);
-      }
-
-      @Override
-      public boolean isSojuEphemeralServer(String serverId) {
-        return ServerTreeDockable.this.isSojuEphemeralServer(serverId);
-      }
-
-      @Override
-      public boolean isZncEphemeralServer(String serverId) {
-        return ServerTreeDockable.this.isZncEphemeralServer(serverId);
-      }
-
-      @Override
-      public boolean hasBouncerCapability(String serverId, String capability) {
-        String sid = normalizeServerId(serverId);
-        if (sid.isBlank()) return false;
-        ServerRuntimeMetadata metadata = runtimeState.metadataForServerIfPresent(sid);
-        if (metadata == null) return false;
-        String cap = Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
-        if (cap.isEmpty()) return false;
-        ServerRuntimeMetadata.CapabilityState state = metadata.ircv3Caps.get(cap);
-        return state == ServerRuntimeMetadata.CapabilityState.ENABLED
-            || state == ServerRuntimeMetadata.CapabilityState.AVAILABLE
-            || state == ServerRuntimeMetadata.CapabilityState.DISABLED;
-      }
-    };
-  }
-
-  private ServerTreeNodeBadgeUpdater.Context createNodeBadgeUpdaterContext() {
-    return new ServerTreeNodeBadgeUpdater.Context() {
-      @Override
-      public void nodeChanged(DefaultMutableTreeNode node) {
-        model.nodeChanged(node);
-      }
-
-      @Override
-      public void nodeChangedForServer(String serverId) {
-        ServerNodes nodes = servers.get(Objects.toString(serverId, "").trim());
-        if (nodes != null) model.nodeChanged(nodes.serverNode);
-      }
-    };
-  }
-
-  private ServerTreeServerParentResolver.Context createServerParentResolverContext() {
-    return new ServerTreeServerParentResolver.Context() {
-      @Override
-      public boolean hasServer(String serverId) {
-        return servers.containsKey(Objects.toString(serverId, "").trim());
-      }
-
-      @Override
-      public void ensureServerRoot(String serverId) {
-        ServerTreeDockable.this.addServerRoot(serverId);
-      }
-
-      @Override
-      public DefaultMutableTreeNode ircRoot() {
-        return ircRoot;
-      }
-
-      @Override
-      public DefaultMutableTreeNode sojuGroupNode(String originServerId) {
-        return getOrCreateSojuNetworksGroupNode(originServerId);
-      }
-
-      @Override
-      public DefaultMutableTreeNode zncGroupNode(String originServerId) {
-        return getOrCreateZncNetworksGroupNode(originServerId);
-      }
-    };
   }
 
   private ServerTreeApplicationRootVisibilityCoordinator.Context
