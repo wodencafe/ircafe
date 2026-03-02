@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -107,6 +108,31 @@ class AppMenuBarMemoryWidgetTest {
         });
   }
 
+  @Test
+  void memoryRefreshIntervalSettingUpdatesTimerDelay() throws Exception {
+    onEdt(
+        () -> {
+          AppMenuBar menuBar = newMenuBar();
+          setRefreshInterval(menuBar, 2000);
+
+          Timer timer = (Timer) getField(menuBar, "memoryTimer");
+          assertEquals(2000, timer.getDelay());
+          assertEquals(2000, timer.getInitialDelay());
+        });
+  }
+
+  @Test
+  void memoryRefreshIntervalSettingIsClampedToSafeRange() throws Exception {
+    onEdt(
+        () -> {
+          AppMenuBar menuBar = newMenuBar();
+          setRefreshInterval(menuBar, 50);
+
+          Timer timer = (Timer) getField(menuBar, "memoryTimer");
+          assertEquals(250, timer.getDelay());
+        });
+  }
+
   private static AppMenuBar newMenuBar() {
     PreferencesDialog preferencesDialog = mock(PreferencesDialog.class);
     NickColorOverridesDialog nickColorOverridesDialog = mock(NickColorOverridesDialog.class);
@@ -162,6 +188,12 @@ class AppMenuBarMemoryWidgetTest {
             "setMemoryUsageDisplayModeFromUi", MemoryUsageDisplayMode.class);
     m.setAccessible(true);
     m.invoke(menuBar, mode);
+  }
+
+  private static void setRefreshInterval(AppMenuBar menuBar, int intervalMs) throws Exception {
+    Method m = AppMenuBar.class.getDeclaredMethod("setMemoryUsageRefreshIntervalFromUi", int.class);
+    m.setAccessible(true);
+    m.invoke(menuBar, intervalMs);
   }
 
   private static void invokeNoArgs(AppMenuBar menuBar, String methodName) throws Exception {

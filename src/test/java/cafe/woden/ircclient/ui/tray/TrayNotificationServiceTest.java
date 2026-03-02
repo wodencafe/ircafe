@@ -173,6 +173,7 @@ class TrayNotificationServiceTest {
         30,
         15,
         MemoryUsageDisplayMode.LONG,
+        1000,
         5,
         true,
         false,

@@ -46,6 +46,17 @@ class UiPropertiesBindingTest {
             });
   }
 
+  @Test
+  void memoryRefreshIntervalBindsFromConfig() {
+    runner
+        .withPropertyValues("ircafe.ui.memoryUsageRefreshIntervalMs=1500")
+        .run(
+            ctx -> {
+              UiProperties props = ctx.getBean(UiProperties.class);
+              assertEquals(1500, props.memoryUsageRefreshIntervalMs());
+            });
+  }
+
   @Configuration(proxyBeanMethods = false)
   @EnableConfigurationProperties(UiProperties.class)
   static class UiPropertiesTestConfig {}

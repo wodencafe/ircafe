@@ -51,6 +51,7 @@ public record UiProperties(
     Integer commandHistoryMaxSize,
     Integer chatTranscriptMaxLinesPerTarget,
     String memoryUsageDisplayMode,
+    Integer memoryUsageRefreshIntervalMs,
     Integer memoryUsageWarningNearMaxPercent,
     Boolean memoryUsageWarningTooltipEnabled,
     Boolean memoryUsageWarningToastEnabled,

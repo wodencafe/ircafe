@@ -878,6 +878,8 @@ public class PreferencesDialog {
     TimestampControls timestamps = buildTimestampControls(current);
     JComboBox<MemoryUsageDisplayMode> memoryUsageDisplayMode =
         buildMemoryUsageDisplayModeCombo(current);
+    JSpinner memoryUsageRefreshIntervalMs =
+        buildMemoryUsageRefreshIntervalSpinner(current, closeables);
     MemoryWarningControls memoryWarnings = buildMemoryWarningControls(current, closeables);
 
     JCheckBox presenceFolds = buildPresenceFoldsCheckbox(current);
@@ -944,7 +946,8 @@ public class PreferencesDialog {
     AppearanceServerTreeControls appearanceServerTree = buildAppearanceServerTreeControls(current);
     JPanel appearancePanel =
         buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks, appearanceServerTree);
-    JPanel memoryPanel = buildMemoryPanel(memoryUsageDisplayMode, memoryWarnings);
+    JPanel memoryPanel =
+        buildMemoryPanel(memoryUsageDisplayMode, memoryUsageRefreshIntervalMs, memoryWarnings);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart, launchJvm);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
     JPanel chatPanel =
@@ -1315,6 +1318,10 @@ public class PreferencesDialog {
               memoryUsageDisplayMode.getSelectedItem() instanceof MemoryUsageDisplayMode mode
                   ? mode
                   : MemoryUsageDisplayMode.LONG;
+          int memoryUsageRefreshIntervalMsV =
+              ((Number) memoryUsageRefreshIntervalMs.getValue()).intValue();
+          if (memoryUsageRefreshIntervalMsV < 250) memoryUsageRefreshIntervalMsV = 250;
+          if (memoryUsageRefreshIntervalMsV > 60_000) memoryUsageRefreshIntervalMsV = 60_000;
           int memoryWarningNearMaxPercentV =
               ((Number) memoryWarnings.nearMaxPercent.getValue()).intValue();
           boolean memoryWarningTooltipEnabledV = memoryWarnings.tooltipEnabled.isSelected();
@@ -1646,6 +1653,7 @@ public class PreferencesDialog {
                   monitorIsonPollIntervalSecondsV,
                   notificationRuleCooldownSecondsV,
                   memoryUsageDisplayModeV,
+                  memoryUsageRefreshIntervalMsV,
                   memoryWarningNearMaxPercentV,
                   memoryWarningTooltipEnabledV,
                   memoryWarningToastEnabledV,
@@ -1709,6 +1717,7 @@ public class PreferencesDialog {
             runtimeConfig.rememberUiSettings(
                 next.theme(), next.chatFontFamily(), next.chatFontSize());
             runtimeConfig.rememberMemoryUsageDisplayMode(next.memoryUsageDisplayMode().token());
+            runtimeConfig.rememberMemoryUsageRefreshIntervalMs(next.memoryUsageRefreshIntervalMs());
             runtimeConfig.rememberMemoryUsageWarningNearMaxPercent(
                 next.memoryUsageWarningNearMaxPercent());
             runtimeConfig.rememberMemoryUsageWarningTooltipEnabled(
@@ -4694,6 +4703,18 @@ public class PreferencesDialog {
     return combo;
   }
 
+  private JSpinner buildMemoryUsageRefreshIntervalSpinner(
+      UiSettings current, List<AutoCloseable> closeables) {
+    int refreshIntervalMs =
+        current != null && current.memoryUsageRefreshIntervalMs() > 0
+            ? current.memoryUsageRefreshIntervalMs()
+            : 1000;
+    JSpinner spinner = numberSpinner(refreshIntervalMs, 250, 60_000, 250, closeables);
+    spinner.setToolTipText(
+        "How often the memory widget refreshes (milliseconds). Lower values cost more CPU/wakeups.");
+    return spinner;
+  }
+
   private MemoryWarningControls buildMemoryWarningControls(
       UiSettings current, List<AutoCloseable> closeables) {
     int nearMaxPercent =
@@ -6162,6 +6183,7 @@ public class PreferencesDialog {
 
   private JPanel buildMemoryPanel(
       JComboBox<MemoryUsageDisplayMode> memoryUsageDisplayMode,
+      JSpinner memoryUsageRefreshIntervalMs,
       MemoryWarningControls memoryWarnings) {
     JPanel form =
         new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]"));
@@ -6170,6 +6192,8 @@ public class PreferencesDialog {
     form.add(sectionTitle("Widget"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("Memory usage widget"));
     form.add(memoryUsageDisplayMode, "growx");
+    form.add(new JLabel("Refresh interval (ms)"));
+    form.add(memoryUsageRefreshIntervalMs, "w 140!");
 
     form.add(sectionTitle("Warnings"), "span 2, growx, wmin 0, wrap");
     form.add(new JLabel("Warn near max (%)"));
@@ -6196,6 +6220,7 @@ public class PreferencesDialog {
     reset.addActionListener(
         e -> {
           memoryUsageDisplayMode.setSelectedItem(MemoryUsageDisplayMode.LONG);
+          memoryUsageRefreshIntervalMs.setValue(1000);
           memoryWarnings.nearMaxPercent.setValue(5);
           memoryWarnings.tooltipEnabled.setSelected(true);
           memoryWarnings.toastEnabled.setSelected(false);
