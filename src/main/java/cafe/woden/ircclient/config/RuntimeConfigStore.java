@@ -463,6 +463,34 @@ public class RuntimeConfigStore {
     }
   }
 
+  /**
+   * Reads {@code ircafe.ui.updateNotifier.enabled} from runtime config.
+   *
+   * <p>Returns {@code defaultValue} when the key is missing or invalid.
+   */
+  public synchronized boolean readUpdateNotifierEnabled(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+
+      Object updateNotifierObj = ui.get("updateNotifier");
+      if (!(updateNotifierObj instanceof Map<?, ?> updateNotifier)) return defaultValue;
+
+      if (!updateNotifier.containsKey("enabled")) return defaultValue;
+      return asBoolean(updateNotifier.get("enabled")).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.updateNotifier.enabled from '{}'", file, e);
+      return defaultValue;
+    }
+  }
+
   public Path runtimeConfigPath() {
     return file;
   }
@@ -2381,6 +2409,23 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist invites.autoJoinOnInvite setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUpdateNotifierEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> updateNotifier = getOrCreateMap(ui, "updateNotifier");
+
+      updateNotifier.put("enabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.updateNotifier.enabled setting to '{}'", file, e);
     }
   }
 

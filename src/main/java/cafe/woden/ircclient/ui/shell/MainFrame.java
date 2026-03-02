@@ -53,6 +53,7 @@ public class MainFrame extends JFrame {
       ChatDockable chat,
       UserListDockable users,
       ChatDockManager chatDockManager,
+      UpdateNotifierService updateNotifierService,
       StatusBar statusBar,
       ApplicationShutdownCoordinator shutdownCoordinator) {
     super(AppVersion.windowTitle());
@@ -338,15 +339,7 @@ public class MainFrame extends JFrame {
           @Override
           public void windowClosing(WindowEvent e) {
             flushPendingDockWidths.run();
-            if (preserveDockLayout) {
-              try {
-                var dockingApi = Docking.getSingleInstance();
-                if (dockingApi != null && dockingApi.getAppState() != null) {
-                  dockingApi.getAppState().persist();
-                }
-              } catch (Exception ignored) {
-              }
-            }
+            persistDockLayoutSnapshot(preserveDockLayout);
             // Optional "close-to-tray": close button hides to tray (when supported/enabled).
             if (trayService != null
                 && trayService.shouldCloseToTray()
@@ -370,6 +363,12 @@ public class MainFrame extends JFrame {
   @PreDestroy
   void shutdownDocking() {
     resetDockingRuntime("shutdown");
+  }
+
+  @Override
+  public void dispose() {
+    persistDockLayoutSnapshot(true);
+    super.dispose();
   }
 
   private void registerDockableIfNeeded(Dockable dockable) {
@@ -417,6 +416,17 @@ public class MainFrame extends JFrame {
       Docking.uninitialize();
     } catch (Exception e) {
       log.debug("docking: uninitialize skipped during {} ({})", phase, e.toString());
+    }
+  }
+
+  private void persistDockLayoutSnapshot(boolean enabled) {
+    if (!enabled) return;
+    try {
+      var dockingApi = Docking.getSingleInstance();
+      if (dockingApi != null && dockingApi.getAppState() != null) {
+        dockingApi.getAppState().persist();
+      }
+    } catch (Exception ignored) {
     }
   }
 }

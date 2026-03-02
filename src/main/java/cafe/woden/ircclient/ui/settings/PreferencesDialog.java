@@ -39,6 +39,7 @@ import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.shell.UpdateNotifierService;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.TrayService;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
@@ -168,6 +169,7 @@ public class PreferencesDialog {
   private final ActiveTargetPort targetCoordinator;
   private final TrayService trayService;
   private final TrayNotificationService trayNotificationService;
+  private final UpdateNotifierService updateNotifierService;
   private final GnomeDbusNotificationBackend gnomeDbusBackend;
   private final NotificationSoundSettingsBus notificationSoundSettingsBus;
   private final PushySettingsBus pushySettingsBus;
@@ -202,6 +204,7 @@ public class PreferencesDialog {
       ActiveTargetPort targetCoordinator,
       TrayService trayService,
       TrayNotificationService trayNotificationService,
+      UpdateNotifierService updateNotifierService,
       GnomeDbusNotificationBackend gnomeDbusBackend,
       NotificationSoundSettingsBus notificationSoundSettingsBus,
       PushySettingsBus pushySettingsBus,
@@ -233,6 +236,7 @@ public class PreferencesDialog {
     this.targetCoordinator = targetCoordinator;
     this.trayService = trayService;
     this.trayNotificationService = trayNotificationService;
+    this.updateNotifierService = updateNotifierService;
     this.gnomeDbusBackend = gnomeDbusBackend;
     this.notificationSoundSettingsBus = notificationSoundSettingsBus;
     this.pushySettingsBus = pushySettingsBus;
@@ -1132,6 +1136,7 @@ public class PreferencesDialog {
 
           boolean trayNotificationSoundsEnabledV =
               trayEnabledV && trayControls.notificationSoundsEnabled.isSelected();
+          boolean updateNotifierEnabledV = trayControls.updateNotifierEnabled.isSelected();
           BuiltInSound selectedSoundV =
               (BuiltInSound) trayControls.notificationSound.getSelectedItem();
           String trayNotificationSoundIdV =
@@ -1755,6 +1760,10 @@ public class PreferencesDialog {
             runtimeConfig.rememberTrayNotificationSound(trayNotificationSoundIdV);
             runtimeConfig.rememberTrayNotificationSoundUseCustom(trayNotificationSoundUseCustomV);
             runtimeConfig.rememberTrayNotificationSoundCustomPath(trayNotificationSoundCustomPathV);
+            runtimeConfig.rememberUpdateNotifierEnabled(updateNotifierEnabledV);
+            if (updateNotifierService != null) {
+              updateNotifierService.setEnabled(updateNotifierEnabledV);
+            }
             if (pushySettingsBus != null) {
               pushySettingsBus.set(pushyNext);
             }
@@ -3348,6 +3357,10 @@ public class PreferencesDialog {
     JCheckBox notifySuppressWhenTargetActive =
         new JCheckBox(
             "Don't notify for the active buffer", current.trayNotifySuppressWhenTargetActive());
+    JCheckBox updateNotifierEnabled =
+        new JCheckBox("Show update notifier in status bar", runtimeConfig.readUpdateNotifierEnabled(true));
+    updateNotifierEnabled.setToolTipText(
+        "Checks GitHub releases in the background and alerts when a newer IRCafe version exists.");
 
     boolean linuxTmp = false;
     boolean linuxActionsSupportedTmp = false;
@@ -3760,6 +3773,7 @@ public class PreferencesDialog {
     notificationsTab.add(notificationBackendGroup, "growx, wmin 0, wrap");
     JPanel notificationVisibility =
         captionPanel("Suppression and focus rules", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    notificationVisibility.add(updateNotifierEnabled, "growx");
     notificationVisibility.add(notifyOnlyWhenUnfocused, "growx");
     notificationVisibility.add(notifyOnlyWhenMinimizedOrHidden, "growx");
     notificationVisibility.add(notifySuppressWhenTargetActive, "growx, wrap");
@@ -3890,6 +3904,7 @@ public class PreferencesDialog {
         notifyOnlyWhenUnfocused,
         notifyOnlyWhenMinimizedOrHidden,
         notifySuppressWhenTargetActive,
+        updateNotifierEnabled,
         linuxDbusActions,
         notificationBackend,
         testNotification,
@@ -10940,6 +10955,7 @@ public class PreferencesDialog {
       JCheckBox notifyOnlyWhenUnfocused,
       JCheckBox notifyOnlyWhenMinimizedOrHidden,
       JCheckBox notifySuppressWhenTargetActive,
+      JCheckBox updateNotifierEnabled,
       JCheckBox linuxDbusActions,
       JComboBox<NotificationBackendMode> notificationBackend,
       JButton testNotification,

@@ -40,7 +40,10 @@ public class StatusBar extends JPanel {
   private final JLabel serverLabel = new JLabel("Server: (disconnected)");
   private final JLabel noticeLabel = new JLabel();
   private final JButton historyButton = new JButton("Notices");
+  private final JButton updateNotifierButton = new JButton();
   private final Icon historyIcon = SvgIcons.action("info", 14);
+  private final Icon updateNotifierIdleIcon = SvgIcons.action("refresh", 14);
+  private final Icon updateNotifierAvailableIcon = SvgIcons.action("arrow-down", 14);
   private final Color historyFlashBg = new Color(255, 223, 128, 170);
 
   private final Deque<StatusNotice> noticeQueue = new ArrayDeque<>();
@@ -61,6 +64,16 @@ public class StatusBar extends JPanel {
   private JPopupMenu historyPopupMenu;
   private JMenuItem historyPopupOpenItem;
   private JMenuItem historyPopupClearItem;
+  private JPopupMenu updateNotifierPopupMenu;
+  private JMenuItem updateNotifierCheckNowItem;
+  private JMenuItem updateNotifierVisitUpdatesItem;
+  private JMenuItem updateNotifierDisableItem;
+  private Runnable updateNotifierCheckNowAction;
+  private Runnable updateNotifierVisitAction;
+  private Runnable updateNotifierDisableAction;
+  private Popup updateNotifierTooltipPopup;
+  private Timer updateNotifierTooltipHideTimer;
+  private boolean updateNotifierAvailable;
 
   private record StatusNotice(
       String displayText, String fullText, Runnable onClick, long atEpochMs) {}
@@ -76,6 +89,7 @@ public class StatusBar extends JPanel {
 
     JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 3));
     right.add(serverLabel);
+    right.add(updateNotifierButton);
 
     JPanel center = new JPanel(new BorderLayout(10, 0));
     center.setOpaque(false);
@@ -95,6 +109,30 @@ public class StatusBar extends JPanel {
     historyButton.setToolTipText("No recent status-bar notices.");
     historyButton.setEnabled(false);
     historyButton.addActionListener(e -> openHistoryDialog());
+    updateNotifierButton.setIcon(updateNotifierIdleIcon);
+    updateNotifierButton.setText(null);
+    updateNotifierButton.setBorderPainted(false);
+    updateNotifierButton.setContentAreaFilled(false);
+    updateNotifierButton.setOpaque(false);
+    updateNotifierButton.setFocusable(false);
+    updateNotifierButton.setFocusPainted(false);
+    updateNotifierButton.setMargin(new Insets(1, 6, 1, 6));
+    updateNotifierButton.setToolTipText(
+        "IRCafe update notifier is disabled. Enable it from Preferences.");
+    updateNotifierButton.setVisible(false);
+    updateNotifierButton.addActionListener(e -> runUpdateNotifierVisitAction());
+    updateNotifierButton.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mousePressed(MouseEvent e) {
+            maybeShowUpdateNotifierPopup(e);
+          }
+
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            maybeShowUpdateNotifierPopup(e);
+          }
+        });
     center.add(noticeLabel, BorderLayout.CENTER);
     center.add(historyButton, BorderLayout.EAST);
     noticeBaseForeground = noticeLabel.getForeground();
@@ -135,6 +173,48 @@ public class StatusBar extends JPanel {
     addPropertyChangeListener(
         "UI", e -> SwingUtilities.invokeLater(this::applyUiFontsFromDefaults));
     applyUiFontsFromDefaults();
+  }
+
+  public void setUpdateNotifierActions(
+      Runnable checkNowAction, Runnable visitAction, Runnable disableAction) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      setUpdateNotifierActionsOnEdt(checkNowAction, visitAction, disableAction);
+    } else {
+      SwingUtilities.invokeLater(
+          () -> setUpdateNotifierActionsOnEdt(checkNowAction, visitAction, disableAction));
+    }
+  }
+
+  public void setUpdateNotifierEnabled(boolean enabled) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      setUpdateNotifierEnabledOnEdt(enabled);
+    } else {
+      SwingUtilities.invokeLater(() -> setUpdateNotifierEnabledOnEdt(enabled));
+    }
+  }
+
+  public void setUpdateNotifierStatus(String tooltip, boolean updateAvailable) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      setUpdateNotifierStatusOnEdt(tooltip, updateAvailable);
+    } else {
+      SwingUtilities.invokeLater(() -> setUpdateNotifierStatusOnEdt(tooltip, updateAvailable));
+    }
+  }
+
+  public void showUpdateNotifierTooltipAlert(String text) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      showUpdateNotifierTooltipAlertOnEdt(text);
+    } else {
+      SwingUtilities.invokeLater(() -> showUpdateNotifierTooltipAlertOnEdt(text));
+    }
+  }
+
+  public void setUpdateNotifierChecking() {
+    if (SwingUtilities.isEventDispatchThread()) {
+      setUpdateNotifierCheckingOnEdt();
+    } else {
+      SwingUtilities.invokeLater(this::setUpdateNotifierCheckingOnEdt);
+    }
   }
 
   public void setChannel(String channel) {
@@ -585,6 +665,7 @@ public class StatusBar extends JPanel {
     serverLabel.setFont(base);
     noticeLabel.setFont(base);
     historyButton.setFont(buttonFont);
+    updateNotifierButton.setFont(buttonFont);
 
     if (noticeHistoryTable != null) {
       noticeHistoryTable.setFont(tableFont);
@@ -598,6 +679,150 @@ public class StatusBar extends JPanel {
     if (historyClearButton != null) historyClearButton.setFont(buttonFont);
     if (historyPopupOpenItem != null) historyPopupOpenItem.setFont(buttonFont);
     if (historyPopupClearItem != null) historyPopupClearItem.setFont(buttonFont);
+    if (updateNotifierCheckNowItem != null) updateNotifierCheckNowItem.setFont(buttonFont);
+    if (updateNotifierVisitUpdatesItem != null) updateNotifierVisitUpdatesItem.setFont(buttonFont);
+    if (updateNotifierDisableItem != null) updateNotifierDisableItem.setFont(buttonFont);
+  }
+
+  private void setUpdateNotifierActionsOnEdt(
+      Runnable checkNowAction, Runnable visitAction, Runnable disableAction) {
+    this.updateNotifierCheckNowAction = checkNowAction;
+    this.updateNotifierVisitAction = visitAction;
+    this.updateNotifierDisableAction = disableAction;
+    ensureUpdateNotifierPopupMenu();
+  }
+
+  private void setUpdateNotifierEnabledOnEdt(boolean enabled) {
+    if (!enabled) {
+      updateNotifierAvailable = false;
+      updateNotifierButton.setVisible(false);
+      hideUpdateNotifierTooltipPopupOnEdt();
+      return;
+    }
+    updateNotifierButton.setVisible(true);
+    if (updateNotifierButton.getToolTipText() == null
+        || updateNotifierButton.getToolTipText().isBlank()) {
+      updateNotifierButton.setToolTipText("Checking for IRCafe updates…");
+    }
+  }
+
+  private void setUpdateNotifierStatusOnEdt(String tooltip, boolean updateAvailable) {
+    setUpdateNotifierEnabledOnEdt(true);
+    updateNotifierAvailable = updateAvailable;
+    updateNotifierButton.setIcon(updateAvailable ? updateNotifierAvailableIcon : updateNotifierIdleIcon);
+    String tip = Objects.toString(tooltip, "").trim();
+    if (!tip.isEmpty()) {
+      updateNotifierButton.setToolTipText(tip);
+    }
+    ensureUpdateNotifierPopupMenu();
+    if (updateNotifierVisitUpdatesItem != null) {
+      updateNotifierVisitUpdatesItem.setText(
+          updateAvailable ? "Visit updates (new version available)" : "Visit updates");
+    }
+    if (updateNotifierCheckNowItem != null) {
+      updateNotifierCheckNowItem.setEnabled(updateNotifierCheckNowAction != null);
+    }
+  }
+
+  private void setUpdateNotifierCheckingOnEdt() {
+    setUpdateNotifierEnabledOnEdt(true);
+    updateNotifierButton.setToolTipText("Checking for IRCafe updates...");
+    if (updateNotifierCheckNowItem != null) {
+      updateNotifierCheckNowItem.setEnabled(updateNotifierCheckNowAction != null);
+    }
+  }
+
+  private void showUpdateNotifierTooltipAlertOnEdt(String text) {
+    if (!updateNotifierButton.isShowing()) return;
+    String tip = Objects.toString(text, "").trim();
+    if (tip.isEmpty()) return;
+    hideUpdateNotifierTooltipPopupOnEdt();
+
+    JToolTip tooltip = new JToolTip();
+    tooltip.setTipText(tip);
+    Point p = updateNotifierButton.getLocationOnScreen();
+    int x = p.x + Math.max(4, updateNotifierButton.getWidth() / 2 - 150);
+    int y = p.y - 32;
+    updateNotifierTooltipPopup =
+        PopupFactory.getSharedInstance().getPopup(updateNotifierButton, tooltip, x, y);
+    updateNotifierTooltipPopup.show();
+
+    if (updateNotifierTooltipHideTimer == null) {
+      updateNotifierTooltipHideTimer =
+          new Timer(
+              5500,
+              e -> {
+                hideUpdateNotifierTooltipPopupOnEdt();
+                if (updateNotifierTooltipHideTimer != null) {
+                  updateNotifierTooltipHideTimer.stop();
+                }
+              });
+      updateNotifierTooltipHideTimer.setRepeats(false);
+    }
+    updateNotifierTooltipHideTimer.restart();
+  }
+
+  private void hideUpdateNotifierTooltipPopupOnEdt() {
+    if (updateNotifierTooltipHideTimer != null) {
+      updateNotifierTooltipHideTimer.stop();
+    }
+    if (updateNotifierTooltipPopup != null) {
+      try {
+        updateNotifierTooltipPopup.hide();
+      } catch (Exception ignored) {
+      }
+      updateNotifierTooltipPopup = null;
+    }
+  }
+
+  private void ensureUpdateNotifierPopupMenu() {
+    if (updateNotifierPopupMenu != null) return;
+    updateNotifierPopupMenu = new JPopupMenu();
+    updateNotifierCheckNowItem = new JMenuItem("Check now");
+    updateNotifierCheckNowItem.addActionListener(e -> runUpdateNotifierCheckNowAction());
+    updateNotifierVisitUpdatesItem = new JMenuItem("Visit updates");
+    updateNotifierVisitUpdatesItem.addActionListener(e -> runUpdateNotifierVisitAction());
+    updateNotifierDisableItem = new JMenuItem("Disable update notifier");
+    updateNotifierDisableItem.addActionListener(e -> runUpdateNotifierDisableAction());
+    updateNotifierPopupMenu.add(updateNotifierCheckNowItem);
+    updateNotifierPopupMenu.addSeparator();
+    updateNotifierPopupMenu.add(updateNotifierVisitUpdatesItem);
+    updateNotifierPopupMenu.add(updateNotifierDisableItem);
+  }
+
+  private void maybeShowUpdateNotifierPopup(MouseEvent e) {
+    if (e == null || !e.isPopupTrigger()) return;
+    ensureUpdateNotifierPopupMenu();
+    if (updateNotifierPopupMenu == null) return;
+    PopupMenuThemeSupport.prepareForDisplay(updateNotifierPopupMenu);
+    updateNotifierPopupMenu.show(updateNotifierButton, e.getX(), e.getY());
+  }
+
+  private void runUpdateNotifierVisitAction() {
+    Runnable action = updateNotifierVisitAction;
+    if (action == null) return;
+    try {
+      action.run();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void runUpdateNotifierCheckNowAction() {
+    Runnable action = updateNotifierCheckNowAction;
+    if (action == null) return;
+    try {
+      action.run();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void runUpdateNotifierDisableAction() {
+    Runnable action = updateNotifierDisableAction;
+    if (action == null) return;
+    try {
+      action.run();
+    } catch (Exception ignored) {
+    }
   }
 
   private final class NoticeHistoryTableModel extends AbstractTableModel {
