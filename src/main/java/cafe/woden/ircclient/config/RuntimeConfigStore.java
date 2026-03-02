@@ -6509,56 +6509,18 @@ public class RuntimeConfigStore {
 
   public synchronized void rememberSojuAutoConnectNetwork(
       String bouncerServerId, String networkName, boolean enabled) {
-    try {
-      if (file.toString().isBlank()) return;
-
-      String sid = Objects.toString(bouncerServerId, "").trim();
-      String net = Objects.toString(networkName, "").trim();
-      if (sid.isEmpty() || net.isEmpty()) return;
-
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> soju = getOrCreateMap(ircafe, "soju");
-      Map<String, Object> autoConnect = getOrCreateMap(soju, "autoConnect");
-
-      @SuppressWarnings("unchecked")
-      Map<String, Object> nets =
-          (autoConnect.get(sid) instanceof Map<?, ?> mm)
-              ? (Map<String, Object>) mm
-              : new LinkedHashMap<>();
-
-      if (enabled) {
-        nets.put(net, true);
-        autoConnect.put(sid, nets);
-      } else {
-        // Remove case-insensitively so users can toggle based on what the bouncer returns.
-        nets.keySet().removeIf(k -> k != null && k.equalsIgnoreCase(net));
-        if (nets.isEmpty()) {
-          autoConnect.remove(sid);
-        } else {
-          autoConnect.put(sid, nets);
-        }
-
-        // Clean up empty structures to keep the YAML tidy.
-        if (autoConnect.isEmpty()) {
-          soju.remove("autoConnect");
-        }
-        if (soju.isEmpty()) {
-          ircafe.remove("soju");
-        }
-        if (ircafe.isEmpty()) {
-          doc.remove("ircafe");
-        }
-      }
-
-      writeFile(doc);
-    } catch (Exception e) {
-      log.warn("[ircafe] Could not persist soju auto-connect setting to '{}'", file, e);
-    }
+    rememberBouncerAutoConnectNetwork("soju", bouncerServerId, networkName, enabled);
   }
 
   public synchronized void rememberZncAutoConnectNetwork(
       String bouncerServerId, String networkName, boolean enabled) {
+    rememberBouncerAutoConnectNetwork("znc", bouncerServerId, networkName, enabled);
+  }
+
+  private void rememberBouncerAutoConnectNetwork(
+      String backendKey, String bouncerServerId, String networkName, boolean enabled) {
+    String backend = Objects.toString(backendKey, "").trim().toLowerCase(Locale.ROOT);
+    if (backend.isEmpty()) return;
     try {
       if (file.toString().isBlank()) return;
 
@@ -6568,8 +6530,8 @@ public class RuntimeConfigStore {
 
       Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> znc = getOrCreateMap(ircafe, "znc");
-      Map<String, Object> autoConnect = getOrCreateMap(znc, "autoConnect");
+      Map<String, Object> bouncerSection = getOrCreateMap(ircafe, backend);
+      Map<String, Object> autoConnect = getOrCreateMap(bouncerSection, "autoConnect");
 
       @SuppressWarnings("unchecked")
       Map<String, Object> nets =
@@ -6591,10 +6553,10 @@ public class RuntimeConfigStore {
 
         // Clean up empty structures to keep the YAML tidy.
         if (autoConnect.isEmpty()) {
-          znc.remove("autoConnect");
+          bouncerSection.remove("autoConnect");
         }
-        if (znc.isEmpty()) {
-          ircafe.remove("znc");
+        if (bouncerSection.isEmpty()) {
+          ircafe.remove(backend);
         }
         if (ircafe.isEmpty()) {
           doc.remove("ircafe");
@@ -6603,7 +6565,11 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist znc auto-connect setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist {} auto-connect setting to '{}'",
+          Objects.toString(backendKey, "").trim().toLowerCase(Locale.ROOT),
+          file,
+          e);
     }
   }
 
