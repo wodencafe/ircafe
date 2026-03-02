@@ -27,6 +27,10 @@ public record IrcEventNotificationRuleProperties(
     String scriptPath,
     String scriptArgs,
     String scriptWorkingDirectory,
+    CtcpMatchMode ctcpCommandMode,
+    String ctcpCommandPattern,
+    CtcpMatchMode ctcpValueMode,
+    String ctcpValuePattern,
     SourceFilter sourceFilter,
     String channelWhitelist,
     String channelBlacklist) {
@@ -83,6 +87,13 @@ public record IrcEventNotificationRuleProperties(
     ANY,
     FOREGROUND_ONLY,
     BACKGROUND_ONLY
+  }
+
+  public enum CtcpMatchMode {
+    ANY,
+    LIKE,
+    GLOB,
+    REGEX
   }
 
   /** Legacy source mode field kept for runtime-config backward compatibility. */
@@ -171,9 +182,74 @@ public record IrcEventNotificationRuleProperties(
       scriptEnabled = false;
     }
 
+    if (ctcpCommandMode == null) ctcpCommandMode = CtcpMatchMode.ANY;
+    if (ctcpValueMode == null) ctcpValueMode = CtcpMatchMode.ANY;
+    ctcpCommandPattern = trimToNull(ctcpCommandPattern);
+    ctcpValuePattern = trimToNull(ctcpValuePattern);
+    if (ctcpCommandMode == CtcpMatchMode.ANY) ctcpCommandPattern = null;
+    if (ctcpValueMode == CtcpMatchMode.ANY) ctcpValuePattern = null;
+    if (eventType != EventType.CTCP_RECEIVED) {
+      ctcpCommandMode = CtcpMatchMode.ANY;
+      ctcpCommandPattern = null;
+      ctcpValueMode = CtcpMatchMode.ANY;
+      ctcpValuePattern = null;
+    }
+
     sourceFilter = sourceFilter != null ? sourceFilter : SourceFilter.ANY;
     channelWhitelist = includeLegacy;
     channelBlacklist = excludeLegacy;
+  }
+
+  public IrcEventNotificationRuleProperties(
+      Boolean enabled,
+      EventType eventType,
+      SourceMode sourceMode,
+      String sourcePattern,
+      ChannelScope channelScope,
+      String channelPatterns,
+      Boolean toastEnabled,
+      Boolean toastWhenFocused,
+      FocusScope focusScope,
+      Boolean statusBarEnabled,
+      Boolean notificationsNodeEnabled,
+      Boolean soundEnabled,
+      String soundId,
+      Boolean soundUseCustom,
+      String soundCustomPath,
+      Boolean scriptEnabled,
+      String scriptPath,
+      String scriptArgs,
+      String scriptWorkingDirectory,
+      SourceFilter sourceFilter,
+      String channelWhitelist,
+      String channelBlacklist) {
+    this(
+        enabled,
+        eventType,
+        sourceMode,
+        sourcePattern,
+        channelScope,
+        channelPatterns,
+        toastEnabled,
+        toastWhenFocused,
+        focusScope,
+        statusBarEnabled,
+        notificationsNodeEnabled,
+        soundEnabled,
+        soundId,
+        soundUseCustom,
+        soundCustomPath,
+        scriptEnabled,
+        scriptPath,
+        scriptArgs,
+        scriptWorkingDirectory,
+        CtcpMatchMode.ANY,
+        null,
+        CtcpMatchMode.ANY,
+        null,
+        sourceFilter,
+        channelWhitelist,
+        channelBlacklist);
   }
 
   public static List<IrcEventNotificationRuleProperties> defaultRules() {
@@ -200,6 +276,10 @@ public record IrcEventNotificationRuleProperties(
               null,
               null,
               null,
+              CtcpMatchMode.ANY,
+              null,
+              CtcpMatchMode.ANY,
+              null,
               SourceFilter.ANY,
               null,
               null));
@@ -225,6 +305,10 @@ public record IrcEventNotificationRuleProperties(
               false,
               null,
               null,
+              null,
+              CtcpMatchMode.ANY,
+              null,
+              CtcpMatchMode.ANY,
               null,
               SourceFilter.ANY,
               null,

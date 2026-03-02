@@ -22,6 +22,7 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
+import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
@@ -50,6 +51,7 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.lang.reflect.Method;
@@ -325,6 +327,57 @@ class IrcMediatorMockVerifyTest {
             anyString(),
             eq(InterceptorEventType.PRIVATE_MESSAGE));
     verify(trayNotificationsPort, times(1)).notifyPrivateMessage("libera", "alice", "hello");
+  }
+
+  @Test
+  void ctcpReceiveIngestsNormalizedCommandPayloadForInterceptors() throws Exception {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(uiSettingsPort.get()).thenReturn(UiSettingsSnapshot.defaults());
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.CtcpRequestReceived(
+                Instant.now(), "alice", "WODEN", "hello world", null)));
+
+    verify(interceptorIngestPort)
+        .ingestEvent(
+            eq("libera"),
+            eq("status"),
+            eq("alice"),
+            anyString(),
+            eq("WODEN hello world"),
+            eq(InterceptorEventType.CTCP));
+  }
+
+  @Test
+  void ctcpReceivePassesCommandAndValueToIrcEventNotifier() throws Exception {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(uiSettingsPort.get()).thenReturn(UiSettingsSnapshot.defaults());
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.CtcpRequestReceived(
+                Instant.now(), "alice", "VERSION", "HexChat 2.16.2", null)));
+
+    verify(ircEventNotifierPort)
+        .notifyConfigured(
+            eq(IrcEventNotificationRule.EventType.CTCP_RECEIVED),
+            eq("libera"),
+            eq((String) null),
+            eq("alice"),
+            eq(Boolean.FALSE),
+            anyString(),
+            eq("VERSION HexChat 2.16.2"),
+            eq("libera"),
+            eq("status"),
+            eq("VERSION"),
+            eq("HexChat 2.16.2"));
   }
 
   @Test

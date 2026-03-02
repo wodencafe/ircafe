@@ -18,5 +18,29 @@ public interface IrcEventNotifierPort {
       String activeServerId,
       String activeTarget);
 
+  default boolean notifyConfigured(
+      IrcEventNotificationRule.EventType eventType,
+      String serverId,
+      String channel,
+      String sourceNick,
+      Boolean sourceIsSelf,
+      String title,
+      String body,
+      String activeServerId,
+      String activeTarget,
+      String ctcpCommand,
+      String ctcpValue) {
+    return notifyConfigured(
+        eventType,
+        serverId,
+        channel,
+        sourceNick,
+        sourceIsSelf,
+        title,
+        body,
+        activeServerId,
+        activeTarget);
+  }
+
   boolean hasEnabledRuleFor(IrcEventNotificationRule.EventType eventType);
 }

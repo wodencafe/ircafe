@@ -28,7 +28,11 @@ public record IrcEventNotificationRule(
     boolean scriptEnabled,
     String scriptPath,
     String scriptArgs,
-    String scriptWorkingDirectory) {
+    String scriptWorkingDirectory,
+    CtcpMatchMode ctcpCommandMode,
+    String ctcpCommandPattern,
+    CtcpMatchMode ctcpValueMode,
+    String ctcpValuePattern) {
 
   public enum EventType {
     KICKED("Kicked"),
@@ -128,6 +132,24 @@ public record IrcEventNotificationRule(
     }
   }
 
+  public enum CtcpMatchMode {
+    ANY("Any"),
+    LIKE("Like"),
+    GLOB("Glob"),
+    REGEX("Regex");
+
+    private final String label;
+
+    CtcpMatchMode(String label) {
+      this.label = label;
+    }
+
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
+
   public IrcEventNotificationRule {
     if (eventType == null) eventType = EventType.INVITE_RECEIVED;
 
@@ -156,10 +178,67 @@ public record IrcEventNotificationRule(
     if (scriptEnabled && scriptPath == null) scriptEnabled = false;
     scriptArgs = normalizeToNull(scriptArgs);
     scriptWorkingDirectory = normalizeToNull(scriptWorkingDirectory);
+
+    if (ctcpCommandMode == null) ctcpCommandMode = CtcpMatchMode.ANY;
+    if (ctcpValueMode == null) ctcpValueMode = CtcpMatchMode.ANY;
+    ctcpCommandPattern = normalizeToNull(ctcpCommandPattern);
+    ctcpValuePattern = normalizeToNull(ctcpValuePattern);
+    if (ctcpCommandMode == CtcpMatchMode.ANY) ctcpCommandPattern = null;
+    if (ctcpValueMode == CtcpMatchMode.ANY) ctcpValuePattern = null;
+    if (eventType != EventType.CTCP_RECEIVED) {
+      ctcpCommandMode = CtcpMatchMode.ANY;
+      ctcpCommandPattern = null;
+      ctcpValueMode = CtcpMatchMode.ANY;
+      ctcpValuePattern = null;
+    }
+  }
+
+  public IrcEventNotificationRule(
+      boolean enabled,
+      EventType eventType,
+      SourceMode sourceMode,
+      String sourcePattern,
+      ChannelScope channelScope,
+      String channelPatterns,
+      boolean toastEnabled,
+      FocusScope focusScope,
+      boolean statusBarEnabled,
+      boolean notificationsNodeEnabled,
+      boolean soundEnabled,
+      String soundId,
+      boolean soundUseCustom,
+      String soundCustomPath,
+      boolean scriptEnabled,
+      String scriptPath,
+      String scriptArgs,
+      String scriptWorkingDirectory) {
+    this(
+        enabled,
+        eventType,
+        sourceMode,
+        sourcePattern,
+        channelScope,
+        channelPatterns,
+        toastEnabled,
+        focusScope,
+        statusBarEnabled,
+        notificationsNodeEnabled,
+        soundEnabled,
+        soundId,
+        soundUseCustom,
+        soundCustomPath,
+        scriptEnabled,
+        scriptPath,
+        scriptArgs,
+        scriptWorkingDirectory,
+        CtcpMatchMode.ANY,
+        null,
+        CtcpMatchMode.ANY,
+        null);
   }
 
   public boolean matches(EventType type, String sourceNick, Boolean sourceIsSelf, String channel) {
-    return matches(type, sourceNick, sourceIsSelf, channel, false, null);
+    return matches(type, sourceNick, sourceIsSelf, channel, false, null, null, null);
   }
 
   public boolean matches(
@@ -169,15 +248,42 @@ public record IrcEventNotificationRule(
       String channel,
       boolean activeTargetOnSameServer,
       String activeTarget) {
+    return matches(
+        type,
+        sourceNick,
+        sourceIsSelf,
+        channel,
+        activeTargetOnSameServer,
+        activeTarget,
+        null,
+        null);
+  }
+
+  public boolean matches(
+      EventType type,
+      String sourceNick,
+      Boolean sourceIsSelf,
+      String channel,
+      boolean activeTargetOnSameServer,
+      String activeTarget,
+      String ctcpCommand,
+      String ctcpValue) {
     if (!enabled) return false;
     if (type == null || eventType != type) return false;
     if (!matchesSource(sourceNick, sourceIsSelf)) return false;
+    if (!matchesCtcp(ctcpCommand, ctcpValue)) return false;
     return matchesChannel(channel, activeTargetOnSameServer, activeTarget);
   }
 
   /** Backward-compatible overload used by older callers. */
   public boolean matches(EventType type, Boolean sourceIsSelf, String channel) {
     return matches(type, null, sourceIsSelf, channel);
+  }
+
+  public boolean matchesCtcp(String command, String value) {
+    if (eventType != EventType.CTCP_RECEIVED) return true;
+    if (!matchesCtcpMode(ctcpCommandMode, ctcpCommandPattern, command)) return false;
+    return matchesCtcpMode(ctcpValueMode, ctcpValuePattern, value);
   }
 
   public boolean matchesSource(String sourceNick, Boolean sourceIsSelf) {
@@ -351,6 +457,22 @@ public record IrcEventNotificationRule(
       if (token.equalsIgnoreCase(n)) return true;
     }
     return false;
+  }
+
+  private static boolean matchesCtcpMode(CtcpMatchMode mode, String pattern, String value) {
+    CtcpMatchMode effective = mode != null ? mode : CtcpMatchMode.ANY;
+    if (effective == CtcpMatchMode.ANY) return true;
+
+    String p = normalizeToNull(pattern);
+    String v = normalizeToNull(value);
+    if (p == null || v == null) return false;
+
+    return switch (effective) {
+      case ANY -> true;
+      case LIKE -> p.equalsIgnoreCase(v);
+      case GLOB -> globMatch(p.toLowerCase(Locale.ROOT), v.toLowerCase(Locale.ROOT));
+      case REGEX -> regexMatch(p, v);
+    };
   }
 
   private static boolean regexMatch(String regex, String value) {

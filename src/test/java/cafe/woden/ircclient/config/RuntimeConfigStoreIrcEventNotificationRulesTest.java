@@ -23,7 +23,7 @@ class RuntimeConfigStoreIrcEventNotificationRulesTest {
         List.of(
             new IrcEventNotificationRule(
                 true,
-                IrcEventNotificationRule.EventType.KICKED,
+                IrcEventNotificationRule.EventType.CTCP_RECEIVED,
                 IrcEventNotificationRule.SourceMode.OTHERS,
                 null,
                 IrcEventNotificationRule.ChannelScope.ONLY,
@@ -39,11 +39,15 @@ class RuntimeConfigStoreIrcEventNotificationRulesTest {
                 true,
                 "/tmp/ircafe-event-hook.sh",
                 "--flag \"value with spaces\"",
-                "/tmp")));
+                "/tmp",
+                IrcEventNotificationRule.CtcpMatchMode.LIKE,
+                "VERSION",
+                IrcEventNotificationRule.CtcpMatchMode.GLOB,
+                "*hexchat*")));
 
     String yaml = Files.readString(cfg);
     assertTrue(yaml.contains("ircEventNotificationRules"));
-    assertTrue(yaml.contains("eventType: KICKED"));
+    assertTrue(yaml.contains("eventType: CTCP_RECEIVED"));
     assertTrue(yaml.contains("sourceMode: OTHERS"));
     assertTrue(yaml.contains("channelScope: ONLY"));
     assertTrue(
@@ -67,5 +71,12 @@ class RuntimeConfigStoreIrcEventNotificationRulesTest {
         yaml.contains("scriptWorkingDirectory: /tmp")
             || yaml.contains("scriptWorkingDirectory: '/tmp'")
             || yaml.contains("scriptWorkingDirectory: \"/tmp\""));
+    assertTrue(yaml.contains("ctcpCommandMode: LIKE"));
+    assertTrue(yaml.contains("ctcpCommandPattern: VERSION"));
+    assertTrue(yaml.contains("ctcpValueMode: GLOB"));
+    assertTrue(
+        yaml.contains("ctcpValuePattern: '*hexchat*'")
+            || yaml.contains("ctcpValuePattern: \"*hexchat*\"")
+            || yaml.contains("ctcpValuePattern: *hexchat*"));
   }
 }

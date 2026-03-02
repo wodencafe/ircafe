@@ -4,7 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.config.IrcEventNotificationRuleProperties;
+import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import java.beans.PropertyChangeEvent;
 import java.util.ArrayList;
@@ -80,5 +84,47 @@ class IrcEventNotificationRulesBusTest {
     } finally {
       bus.removeListener(listener);
     }
+  }
+
+  @Test
+  void mapsCtcpFilterFieldsFromConfigRules() {
+    IrcEventNotificationRuleProperties propertyRule =
+        new IrcEventNotificationRuleProperties(
+            true,
+            IrcEventNotificationRuleProperties.EventType.CTCP_RECEIVED,
+            IrcEventNotificationRuleProperties.SourceMode.OTHERS,
+            null,
+            IrcEventNotificationRuleProperties.ChannelScope.ALL,
+            null,
+            true,
+            false,
+            IrcEventNotificationRuleProperties.FocusScope.BACKGROUND_ONLY,
+            true,
+            true,
+            false,
+            "SOMEBODY_SENT_CTCP_1",
+            false,
+            null,
+            false,
+            null,
+            null,
+            null,
+            IrcEventNotificationRuleProperties.CtcpMatchMode.LIKE,
+            "VERSION",
+            IrcEventNotificationRuleProperties.CtcpMatchMode.GLOB,
+            "*hexchat*",
+            IrcEventNotificationRuleProperties.SourceFilter.ANY,
+            null,
+            null);
+    UiProperties props = mock(UiProperties.class);
+    when(props.ircEventNotificationRules()).thenReturn(List.of(propertyRule));
+
+    IrcEventNotificationRulesBus bus = new IrcEventNotificationRulesBus(props);
+    IrcEventNotificationRule mapped = bus.get().getFirst();
+
+    assertEquals(IrcEventNotificationRule.CtcpMatchMode.LIKE, mapped.ctcpCommandMode());
+    assertEquals("VERSION", mapped.ctcpCommandPattern());
+    assertEquals(IrcEventNotificationRule.CtcpMatchMode.GLOB, mapped.ctcpValueMode());
+    assertEquals("*hexchat*", mapped.ctcpValuePattern());
   }
 }

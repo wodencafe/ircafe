@@ -1225,11 +1225,9 @@ public class IrcMediator implements MediatorControlPort {
       }
       case IrcEvent.CtcpRequestReceived ev -> {
         markPrivateMessagePeerOnline(sid, ev.from());
-        String ctcpText =
-            Objects.toString(ev.command(), "").trim()
-                + (Objects.toString(ev.argument(), "").isBlank()
-                    ? ""
-                    : (" " + Objects.toString(ev.argument(), "").trim()));
+        String command = Objects.toString(ev.command(), "").trim();
+        String argument = Objects.toString(ev.argument(), "").trim();
+        String ctcpText = command + (argument.isBlank() ? "" : (" " + argument));
         InboundIgnorePolicyPort.Decision decision =
             decideInbound(sid, ev.from(), true, ev.channel(), ctcpText, "CTCPS");
         if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
@@ -1267,14 +1265,12 @@ public class IrcMediator implements MediatorControlPort {
             Objects.toString(ev.channel(), "").trim().isEmpty() ? "status" : ev.channel(),
             ev.from(),
             learnedHostmaskForNick(sid, ev.from()),
-            rendered,
+            ctcpText.isBlank() ? "CTCP" : ctcpText,
             InterceptorEventType.CTCP);
 
         String fromNick = Objects.toString(ev.from(), "").trim();
         String channel = Objects.toString(ev.channel(), "").trim();
         if (channel.isBlank()) channel = null;
-        String command = Objects.toString(ev.command(), "").trim();
-        String argument = Objects.toString(ev.argument(), "").trim();
         String title =
             fromNick.isEmpty()
                 ? "CTCP request received"
@@ -1283,7 +1279,14 @@ public class IrcMediator implements MediatorControlPort {
         if (!argument.isEmpty()) body = body + " " + argument;
 
         notifyIrcEvent(
-            IrcEventNotificationRule.EventType.CTCP_RECEIVED, sid, channel, fromNick, title, body);
+            IrcEventNotificationRule.EventType.CTCP_RECEIVED,
+            sid,
+            channel,
+            fromNick,
+            title,
+            body,
+            command,
+            argument);
       }
       case IrcEvent.AwayStatusChanged ev -> {
         awayRoutingState.setAway(sid, ev.away());
@@ -1964,6 +1967,18 @@ public class IrcMediator implements MediatorControlPort {
       String sourceNick,
       String title,
       String body) {
+    return notifyIrcEvent(eventType, serverId, channel, sourceNick, title, body, null, null);
+  }
+
+  private boolean notifyIrcEvent(
+      IrcEventNotificationRule.EventType eventType,
+      String serverId,
+      String channel,
+      String sourceNick,
+      String title,
+      String body,
+      String ctcpCommand,
+      String ctcpValue) {
     if (eventType == null || ircEventNotifierPort == null) return false;
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
@@ -1975,7 +1990,17 @@ public class IrcMediator implements MediatorControlPort {
     String activeTgt = active != null ? active.target() : null;
     try {
       return ircEventNotifierPort.notifyConfigured(
-          eventType, sid, channel, src, sourceIsSelf, title, body, activeSid, activeTgt);
+          eventType,
+          sid,
+          channel,
+          src,
+          sourceIsSelf,
+          title,
+          body,
+          activeSid,
+          activeTgt,
+          ctcpCommand,
+          ctcpValue);
     } catch (Exception ignored) {
       return false;
     }

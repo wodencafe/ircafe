@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.notifications;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -177,6 +178,92 @@ class IrcEventNotificationServiceTest {
       org.junit.jupiter.api.Assertions.assertFalse(noMatchDifferentChannel);
       org.junit.jupiter.api.Assertions.assertFalse(noMatchDifferentServer);
       assertTrue(matchesActiveChannel);
+    } finally {
+      exec.shutdownNow();
+    }
+  }
+
+  @Test
+  void ctcpRuleMatchesOnlyWhenCommandAndValueFiltersMatch() {
+    IrcEventNotificationRulesBus rulesBus = mock(IrcEventNotificationRulesBus.class);
+    TrayNotificationsPort tray = mock(TrayNotificationsPort.class);
+    NotificationStore store = mock(NotificationStore.class);
+    PushyNotificationService pushy = null;
+
+    IrcEventNotificationRule ctcpRule =
+        new IrcEventNotificationRule(
+            true,
+            IrcEventNotificationRule.EventType.CTCP_RECEIVED,
+            IrcEventNotificationRule.SourceMode.OTHERS,
+            null,
+            IrcEventNotificationRule.ChannelScope.ALL,
+            null,
+            true,
+            IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
+            true,
+            true,
+            false,
+            "SOMEBODY_SENT_CTCP_1",
+            false,
+            null,
+            false,
+            null,
+            null,
+            null,
+            IrcEventNotificationRule.CtcpMatchMode.LIKE,
+            "VERSION",
+            IrcEventNotificationRule.CtcpMatchMode.GLOB,
+            "*hexchat*");
+    when(rulesBus.get()).thenReturn(List.of(ctcpRule));
+
+    ExecutorService exec = Executors.newSingleThreadExecutor();
+    try {
+      IrcEventNotificationService service =
+          new IrcEventNotificationService(rulesBus, tray, store, pushy, exec);
+
+      boolean noMatchWrongCommand =
+          service.notifyConfigured(
+              IrcEventNotificationRule.EventType.CTCP_RECEIVED,
+              "libera",
+              "#ircafe",
+              "alice",
+              Boolean.FALSE,
+              "CTCP request",
+              "PING 12345",
+              "libera",
+              "#ircafe",
+              "PING",
+              "12345");
+      boolean noMatchWrongValue =
+          service.notifyConfigured(
+              IrcEventNotificationRule.EventType.CTCP_RECEIVED,
+              "libera",
+              "#ircafe",
+              "alice",
+              Boolean.FALSE,
+              "CTCP request",
+              "VERSION mIRC",
+              "libera",
+              "#ircafe",
+              "VERSION",
+              "mIRC");
+      boolean match =
+          service.notifyConfigured(
+              IrcEventNotificationRule.EventType.CTCP_RECEIVED,
+              "libera",
+              "#ircafe",
+              "alice",
+              Boolean.FALSE,
+              "CTCP request",
+              "VERSION HexChat",
+              "libera",
+              "#ircafe",
+              "VERSION",
+              "HexChat 2.16.2");
+
+      assertFalse(noMatchWrongCommand);
+      assertFalse(noMatchWrongValue);
+      assertTrue(match);
     } finally {
       exec.shutdownNow();
     }

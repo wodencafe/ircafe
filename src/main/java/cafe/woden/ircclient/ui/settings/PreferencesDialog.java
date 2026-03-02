@@ -7192,6 +7192,7 @@ public class PreferencesDialog {
         helpText(
             "Configure event actions for kicks, bans, invites, joins, and mode changes.\n"
                 + "Source supports self/others/specific nicks/glob/regex. Channel scope supports Active channel only.\n"
+                + "CTCP rules can filter command/value and include quick templates in the Filters tab.\n"
                 + "Apply defaults merges by event type. Reset to IRCafe defaults replaces the full rule list."),
         "growx, wmin 0, wrap");
     tab.add(presetsPanel, "growx, wmin 0, wrap");
@@ -7266,6 +7267,30 @@ public class PreferencesDialog {
 
     JTextField channelPatterns = new JTextField(Objects.toString(base.channelPatterns(), ""));
     channelPatterns.setToolTipText("Comma-separated channel masks (for example: #staff*, #ops).");
+
+    JComboBox<IrcEventNotificationRule.CtcpMatchMode> ctcpCommandMode =
+        new JComboBox<>(IrcEventNotificationRule.CtcpMatchMode.values());
+    ctcpCommandMode.setSelectedItem(
+        base.ctcpCommandMode() != null
+            ? base.ctcpCommandMode()
+            : IrcEventNotificationRule.CtcpMatchMode.ANY);
+    JTextField ctcpCommandPattern = new JTextField(Objects.toString(base.ctcpCommandPattern(), ""));
+    ctcpCommandPattern.setToolTipText(
+        "Filter CTCP command by mode (for example: VERSION, PING, TIME, CLIENTINFO).");
+
+    JComboBox<IrcEventNotificationRule.CtcpMatchMode> ctcpValueMode =
+        new JComboBox<>(IrcEventNotificationRule.CtcpMatchMode.values());
+    ctcpValueMode.setSelectedItem(
+        base.ctcpValueMode() != null
+            ? base.ctcpValueMode()
+            : IrcEventNotificationRule.CtcpMatchMode.ANY);
+    JTextField ctcpValuePattern = new JTextField(Objects.toString(base.ctcpValuePattern(), ""));
+    ctcpValuePattern.setToolTipText("Filter CTCP value/argument by mode.");
+
+    JComboBox<CtcpNotificationRuleTemplate> ctcpTemplate =
+        new JComboBox<>(CtcpNotificationRuleTemplate.values());
+    JButton applyCtcpTemplate = new JButton("Apply");
+    configureIconOnlyButton(applyCtcpTemplate, "check", "Apply selected CTCP template");
 
     JCheckBox toastEnabled = new JCheckBox("Desktop toast", base.toastEnabled());
 
@@ -7347,6 +7372,43 @@ public class PreferencesDialog {
               FlatClientProperties.PLACEHOLDER_TEXT, needsPattern ? "#staff*, #ops" : "");
         };
 
+    Runnable refreshCtcpFieldState =
+        () -> {
+          IrcEventNotificationRule.EventType selectedEvent =
+              eventType.getSelectedItem() instanceof IrcEventNotificationRule.EventType et
+                  ? et
+                  : IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+          boolean ctcp = selectedEvent == IrcEventNotificationRule.EventType.CTCP_RECEIVED;
+
+          IrcEventNotificationRule.CtcpMatchMode selectedCommandMode =
+              ctcpCommandMode.getSelectedItem() instanceof IrcEventNotificationRule.CtcpMatchMode m
+                  ? m
+                  : IrcEventNotificationRule.CtcpMatchMode.ANY;
+          boolean commandNeedsPattern =
+              ctcp && selectedCommandMode != IrcEventNotificationRule.CtcpMatchMode.ANY;
+          ctcpCommandMode.setEnabled(ctcp);
+          ctcpCommandPattern.setEnabled(commandNeedsPattern);
+          ctcpCommandPattern.setEditable(commandNeedsPattern);
+          ctcpCommandPattern.putClientProperty(
+              FlatClientProperties.PLACEHOLDER_TEXT,
+              commandNeedsPattern ? "VERSION / PING / TIME / CLIENTINFO" : "");
+
+          IrcEventNotificationRule.CtcpMatchMode selectedValueMode =
+              ctcpValueMode.getSelectedItem() instanceof IrcEventNotificationRule.CtcpMatchMode m
+                  ? m
+                  : IrcEventNotificationRule.CtcpMatchMode.ANY;
+          boolean valueNeedsPattern =
+              ctcp && selectedValueMode != IrcEventNotificationRule.CtcpMatchMode.ANY;
+          ctcpValueMode.setEnabled(ctcp);
+          ctcpValuePattern.setEnabled(valueNeedsPattern);
+          ctcpValuePattern.setEditable(valueNeedsPattern);
+          ctcpValuePattern.putClientProperty(
+              FlatClientProperties.PLACEHOLDER_TEXT, valueNeedsPattern ? "argument pattern" : "");
+
+          ctcpTemplate.setEnabled(ctcp);
+          applyCtcpTemplate.setEnabled(ctcp);
+        };
+
     Runnable refreshSoundState =
         () -> {
           boolean soundOn = soundEnabled.isSelected();
@@ -7403,10 +7465,13 @@ public class PreferencesDialog {
             }
           }
           priorEvent[0] = selectedEvent;
+          refreshCtcpFieldState.run();
         });
 
     sourceMode.addActionListener(e -> refreshSourceFieldState.run());
     channelScope.addActionListener(e -> refreshChannelFieldState.run());
+    ctcpCommandMode.addActionListener(e -> refreshCtcpFieldState.run());
+    ctcpValueMode.addActionListener(e -> refreshCtcpFieldState.run());
     soundEnabled.addActionListener(e -> refreshSoundState.run());
     soundUseCustom.addActionListener(e -> refreshSoundState.run());
     soundCustomPath.getDocument().addDocumentListener(new SimpleDocListener(refreshSoundState));
@@ -7507,15 +7572,40 @@ public class PreferencesDialog {
           refreshScriptState.run();
         });
 
+    applyCtcpTemplate.addActionListener(
+        e -> {
+          CtcpNotificationRuleTemplate template =
+              ctcpTemplate.getSelectedItem() instanceof CtcpNotificationRuleTemplate t
+                  ? t
+                  : CtcpNotificationRuleTemplate.CUSTOM;
+          eventType.setSelectedItem(IrcEventNotificationRule.EventType.CTCP_RECEIVED);
+          if (template == CtcpNotificationRuleTemplate.CUSTOM) {
+            ctcpCommandMode.setSelectedItem(IrcEventNotificationRule.CtcpMatchMode.ANY);
+            ctcpCommandPattern.setText("");
+            ctcpValueMode.setSelectedItem(IrcEventNotificationRule.CtcpMatchMode.ANY);
+            ctcpValuePattern.setText("");
+            refreshCtcpFieldState.run();
+            return;
+          }
+          ctcpCommandMode.setSelectedItem(IrcEventNotificationRule.CtcpMatchMode.LIKE);
+          ctcpCommandPattern.setText(template.command());
+          ctcpValueMode.setSelectedItem(IrcEventNotificationRule.CtcpMatchMode.ANY);
+          ctcpValuePattern.setText("");
+          refreshCtcpFieldState.run();
+        });
+
     refreshSourceFieldState.run();
     refreshChannelFieldState.run();
+    refreshCtcpFieldState.run();
     refreshSoundState.run();
     refreshScriptState.run();
 
     JPanel filtersPanel =
         new JPanel(
             new MigLayout(
-                "insets 10,fillx,wrap 2,hidemode 3", "[right]8[grow,fill]", "[]6[]6[]6[]6[]6[]"));
+                "insets 10,fillx,wrap 2,hidemode 3",
+                "[right]8[grow,fill]",
+                "[]6[]6[]6[]6[]6[]6[]6[]6[]"));
     filtersPanel.add(enabled, "span 2,wrap");
     filtersPanel.add(new JLabel("Event"));
     filtersPanel.add(eventType, "growx, wmin 220, wrap");
@@ -7527,10 +7617,29 @@ public class PreferencesDialog {
     filtersPanel.add(channelScope, "growx, wrap");
     filtersPanel.add(new JLabel("Channels"));
     filtersPanel.add(channelPatterns, "growx, wrap");
+    JPanel ctcpCommandRow =
+        new JPanel(new MigLayout("insets 0,fillx", "[pref!]8[grow,fill]", "[]"));
+    ctcpCommandRow.add(ctcpCommandMode, "w 110!");
+    ctcpCommandRow.add(ctcpCommandPattern, "growx, pushx, wmin 0");
+    filtersPanel.add(new JLabel("CTCP command"));
+    filtersPanel.add(ctcpCommandRow, "growx, wmin 0, wrap");
+
+    JPanel ctcpValueRow = new JPanel(new MigLayout("insets 0,fillx", "[pref!]8[grow,fill]", "[]"));
+    ctcpValueRow.add(ctcpValueMode, "w 110!");
+    ctcpValueRow.add(ctcpValuePattern, "growx, pushx, wmin 0");
+    filtersPanel.add(new JLabel("CTCP value"));
+    filtersPanel.add(ctcpValueRow, "growx, wmin 0, wrap");
+
+    JPanel ctcpTemplateRow = new JPanel(new MigLayout("insets 0,fillx", "[grow,fill]8[]", "[]"));
+    ctcpTemplateRow.add(ctcpTemplate, "growx, pushx, wmin 0");
+    ctcpTemplateRow.add(applyCtcpTemplate, "w 36!, h 28!");
+    filtersPanel.add(new JLabel("CTCP template"));
+    filtersPanel.add(ctcpTemplateRow, "growx, wmin 0, wrap");
     filtersPanel.add(new JLabel(""));
     filtersPanel.add(
         helpText(
-            "Active channel only means the event target must match the currently selected channel on the same server."),
+            "Active channel only means the event target must match the currently selected channel on the same server.\n"
+                + "CTCP command/value filters only apply when Event is CTCP Request Received."),
         "growx, wmin 0, wrap");
 
     JPanel actionsPanel =
@@ -7585,7 +7694,8 @@ public class PreferencesDialog {
         helpText(
             "If enabled, IRCafe executes the script and sets env vars:\n"
                 + "IRCAFE_EVENT_TYPE, IRCAFE_SERVER_ID, IRCAFE_CHANNEL, IRCAFE_SOURCE_NICK,\n"
-                + "IRCAFE_SOURCE_IS_SELF, IRCAFE_TITLE, IRCAFE_BODY, IRCAFE_TIMESTAMP_MS.\n"
+                + "IRCAFE_SOURCE_IS_SELF, IRCAFE_TITLE, IRCAFE_BODY,\n"
+                + "IRCAFE_CTCP_COMMAND, IRCAFE_CTCP_VALUE, IRCAFE_TIMESTAMP_MS.\n"
                 + "Arguments support quotes/escapes and are passed directly (no shell expansion)."),
         "span 3, growx, wmin 0, wrap");
 
@@ -7672,6 +7782,77 @@ public class PreferencesDialog {
       }
       if (!channelNeedsPattern) channelPatternsValue = null;
 
+      IrcEventNotificationRule.CtcpMatchMode selectedCtcpCommandMode =
+          ctcpCommandMode.getSelectedItem() instanceof IrcEventNotificationRule.CtcpMatchMode mode
+              ? mode
+              : IrcEventNotificationRule.CtcpMatchMode.ANY;
+      IrcEventNotificationRule.CtcpMatchMode selectedCtcpValueMode =
+          ctcpValueMode.getSelectedItem() instanceof IrcEventNotificationRule.CtcpMatchMode mode
+              ? mode
+              : IrcEventNotificationRule.CtcpMatchMode.ANY;
+      String ctcpCommandPatternValue = Objects.toString(ctcpCommandPattern.getText(), "").trim();
+      if (ctcpCommandPatternValue.isEmpty()) ctcpCommandPatternValue = null;
+      String ctcpValuePatternValue = Objects.toString(ctcpValuePattern.getText(), "").trim();
+      if (ctcpValuePatternValue.isEmpty()) ctcpValuePatternValue = null;
+
+      boolean ctcpEvent = selectedEvent == IrcEventNotificationRule.EventType.CTCP_RECEIVED;
+      if (ctcpEvent && selectedCtcpCommandMode != IrcEventNotificationRule.CtcpMatchMode.ANY) {
+        if (ctcpCommandPatternValue == null) {
+          JOptionPane.showMessageDialog(
+              owner,
+              "CTCP command mode \"" + selectedCtcpCommandMode + "\" requires a pattern.",
+              "Invalid IRC Event Rule",
+              JOptionPane.ERROR_MESSAGE);
+          tabs.setSelectedIndex(0);
+          continue;
+        }
+        if (selectedCtcpCommandMode == IrcEventNotificationRule.CtcpMatchMode.REGEX) {
+          try {
+            Pattern.compile(ctcpCommandPatternValue);
+          } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                owner,
+                "Invalid CTCP command regex pattern:\n"
+                    + Objects.toString(ex.getMessage(), "Invalid regex"),
+                "Invalid IRC Event Rule",
+                JOptionPane.ERROR_MESSAGE);
+            tabs.setSelectedIndex(0);
+            continue;
+          }
+        }
+      }
+      if (ctcpEvent && selectedCtcpValueMode != IrcEventNotificationRule.CtcpMatchMode.ANY) {
+        if (ctcpValuePatternValue == null) {
+          JOptionPane.showMessageDialog(
+              owner,
+              "CTCP value mode \"" + selectedCtcpValueMode + "\" requires a pattern.",
+              "Invalid IRC Event Rule",
+              JOptionPane.ERROR_MESSAGE);
+          tabs.setSelectedIndex(0);
+          continue;
+        }
+        if (selectedCtcpValueMode == IrcEventNotificationRule.CtcpMatchMode.REGEX) {
+          try {
+            Pattern.compile(ctcpValuePatternValue);
+          } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                owner,
+                "Invalid CTCP value regex pattern:\n"
+                    + Objects.toString(ex.getMessage(), "Invalid regex"),
+                "Invalid IRC Event Rule",
+                JOptionPane.ERROR_MESSAGE);
+            tabs.setSelectedIndex(0);
+            continue;
+          }
+        }
+      }
+      if (!ctcpEvent) {
+        selectedCtcpCommandMode = IrcEventNotificationRule.CtcpMatchMode.ANY;
+        ctcpCommandPatternValue = null;
+        selectedCtcpValueMode = IrcEventNotificationRule.CtcpMatchMode.ANY;
+        ctcpValuePatternValue = null;
+      }
+
       BuiltInSound selectedSound =
           builtInSound.getSelectedItem() instanceof BuiltInSound sound
               ? sound
@@ -7716,7 +7897,11 @@ public class PreferencesDialog {
           runScript,
           scriptPathValue,
           scriptArgsValue,
-          scriptWorkingDirectoryValue);
+          scriptWorkingDirectoryValue,
+          selectedCtcpCommandMode,
+          ctcpCommandPatternValue,
+          selectedCtcpValueMode,
+          ctcpValuePatternValue);
     }
   }
 
@@ -9518,6 +9703,33 @@ public class PreferencesDialog {
     }
   }
 
+  private enum CtcpNotificationRuleTemplate {
+    CUSTOM("Custom", null),
+    VERSION("VERSION request", "VERSION"),
+    PING("PING request", "PING"),
+    TIME("TIME request", "TIME"),
+    CLIENTINFO("CLIENTINFO request", "CLIENTINFO"),
+    SOURCE("SOURCE request", "SOURCE"),
+    USERINFO("USERINFO request", "USERINFO");
+
+    private final String label;
+    private final String command;
+
+    CtcpNotificationRuleTemplate(String label, String command) {
+      this.label = label;
+      this.command = command;
+    }
+
+    String command() {
+      return command;
+    }
+
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
+
   private static LookupRatePreset detectLookupRatePreset(UiSettings s) {
     if (matchesLookupRatePreset(s, LookupRatePreset.BALANCED)) return LookupRatePreset.BALANCED;
     if (matchesLookupRatePreset(s, LookupRatePreset.CONSERVATIVE))
@@ -9783,9 +9995,44 @@ public class PreferencesDialog {
       IrcEventNotificationRule.SourceMode mode =
           r.sourceMode != null ? r.sourceMode : IrcEventNotificationRule.SourceMode.ANY;
       String label = Objects.toString(mode, "");
-      if (!sourcePatternAllowed(mode)) return label;
-      String pattern = trimToNull(r.sourcePattern);
-      return pattern == null ? label + ": (empty)" : label + ": " + truncate(pattern, 56);
+      String base;
+      if (!sourcePatternAllowed(mode)) {
+        base = label;
+      } else {
+        String pattern = trimToNull(r.sourcePattern);
+        base = pattern == null ? label + ": (empty)" : label + ": " + truncate(pattern, 56);
+      }
+
+      String ctcp = summarizeCtcp(r);
+      if (ctcp.isEmpty()) return base;
+      if (base.isEmpty()) return ctcp;
+      return base + " | " + ctcp;
+    }
+
+    private static String summarizeCtcp(MutableRule r) {
+      if (r == null) return "";
+      if (r.eventType != IrcEventNotificationRule.EventType.CTCP_RECEIVED) return "";
+      IrcEventNotificationRule.CtcpMatchMode commandMode =
+          r.ctcpCommandMode != null
+              ? r.ctcpCommandMode
+              : IrcEventNotificationRule.CtcpMatchMode.ANY;
+      IrcEventNotificationRule.CtcpMatchMode valueMode =
+          r.ctcpValueMode != null ? r.ctcpValueMode : IrcEventNotificationRule.CtcpMatchMode.ANY;
+      String commandPattern = trimToNull(r.ctcpCommandPattern);
+      String valuePattern = trimToNull(r.ctcpValuePattern);
+
+      String commandSummary =
+          commandMode == IrcEventNotificationRule.CtcpMatchMode.ANY
+              ? "cmd:any"
+              : "cmd:"
+                  + commandMode
+                  + "="
+                  + truncate(Objects.toString(commandPattern, "(empty)"), 24);
+      String valueSummary =
+          valueMode == IrcEventNotificationRule.CtcpMatchMode.ANY
+              ? "val:any"
+              : "val:" + valueMode + "=" + truncate(Objects.toString(valuePattern, "(empty)"), 24);
+      return commandSummary + ", " + valueSummary;
     }
 
     private static boolean sourcePatternAllowed(IrcEventNotificationRule.SourceMode mode) {
@@ -9875,6 +10122,10 @@ public class PreferencesDialog {
       String scriptPath;
       String scriptArgs;
       String scriptWorkingDirectory;
+      IrcEventNotificationRule.CtcpMatchMode ctcpCommandMode;
+      String ctcpCommandPattern;
+      IrcEventNotificationRule.CtcpMatchMode ctcpValueMode;
+      String ctcpValuePattern;
 
       IrcEventNotificationRule toRule() {
         return new IrcEventNotificationRule(
@@ -9895,7 +10146,11 @@ public class PreferencesDialog {
             scriptEnabled,
             scriptPath,
             scriptArgs,
-            scriptWorkingDirectory);
+            scriptWorkingDirectory,
+            ctcpCommandMode,
+            ctcpCommandPattern,
+            ctcpValueMode,
+            ctcpValuePattern);
       }
 
       MutableRule copy() {
@@ -9918,6 +10173,10 @@ public class PreferencesDialog {
         m.scriptPath = scriptPath;
         m.scriptArgs = scriptArgs;
         m.scriptWorkingDirectory = scriptWorkingDirectory;
+        m.ctcpCommandMode = ctcpCommandMode;
+        m.ctcpCommandPattern = ctcpCommandPattern;
+        m.ctcpValueMode = ctcpValueMode;
+        m.ctcpValuePattern = ctcpValuePattern;
         return m;
       }
 
@@ -9942,6 +10201,10 @@ public class PreferencesDialog {
           m.scriptPath = null;
           m.scriptArgs = null;
           m.scriptWorkingDirectory = null;
+          m.ctcpCommandMode = IrcEventNotificationRule.CtcpMatchMode.ANY;
+          m.ctcpCommandPattern = null;
+          m.ctcpValueMode = IrcEventNotificationRule.CtcpMatchMode.ANY;
+          m.ctcpValuePattern = null;
           return m;
         }
 
@@ -9963,6 +10226,10 @@ public class PreferencesDialog {
         m.scriptPath = r.scriptPath();
         m.scriptArgs = r.scriptArgs();
         m.scriptWorkingDirectory = r.scriptWorkingDirectory();
+        m.ctcpCommandMode = r.ctcpCommandMode();
+        m.ctcpCommandPattern = r.ctcpCommandPattern();
+        m.ctcpValueMode = r.ctcpValueMode();
+        m.ctcpValuePattern = r.ctcpValuePattern();
         return m;
       }
     }

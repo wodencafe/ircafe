@@ -3681,6 +3681,24 @@ public class RuntimeConfigStore {
           if (!scriptWorkingDirectory.isEmpty())
             m.put("scriptWorkingDirectory", scriptWorkingDirectory);
 
+          if (r.eventType() == IrcEventNotificationRule.EventType.CTCP_RECEIVED) {
+            IrcEventNotificationRule.CtcpMatchMode ctcpCommandMode =
+                r.ctcpCommandMode() != null
+                    ? r.ctcpCommandMode()
+                    : IrcEventNotificationRule.CtcpMatchMode.ANY;
+            IrcEventNotificationRule.CtcpMatchMode ctcpValueMode =
+                r.ctcpValueMode() != null
+                    ? r.ctcpValueMode()
+                    : IrcEventNotificationRule.CtcpMatchMode.ANY;
+            m.put("ctcpCommandMode", ctcpCommandMode.name());
+            m.put("ctcpValueMode", ctcpValueMode.name());
+
+            String ctcpCommandPattern = Objects.toString(r.ctcpCommandPattern(), "").trim();
+            if (!ctcpCommandPattern.isEmpty()) m.put("ctcpCommandPattern", ctcpCommandPattern);
+            String ctcpValuePattern = Objects.toString(r.ctcpValuePattern(), "").trim();
+            if (!ctcpValuePattern.isEmpty()) m.put("ctcpValuePattern", ctcpValuePattern);
+          }
+
           out.add(m);
         }
       }

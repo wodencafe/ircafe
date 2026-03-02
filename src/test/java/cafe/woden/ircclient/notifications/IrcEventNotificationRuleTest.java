@@ -243,6 +243,65 @@ class IrcEventNotificationRuleTest {
             IrcEventNotificationRule.EventType.TOPIC_CHANGED, null, null, "#chat", true, "#chat"));
   }
 
+  @Test
+  void ctcpCommandAndValueFiltersAreAppliedForCtcpEvents() {
+    IrcEventNotificationRule rule =
+        new IrcEventNotificationRule(
+            true,
+            IrcEventNotificationRule.EventType.CTCP_RECEIVED,
+            IrcEventNotificationRule.SourceMode.OTHERS,
+            null,
+            IrcEventNotificationRule.ChannelScope.ALL,
+            null,
+            true,
+            IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
+            true,
+            true,
+            false,
+            BuiltInSound.SOMEBODY_SENT_CTCP_1.name(),
+            false,
+            null,
+            false,
+            null,
+            null,
+            null,
+            IrcEventNotificationRule.CtcpMatchMode.LIKE,
+            "VERSION",
+            IrcEventNotificationRule.CtcpMatchMode.GLOB,
+            "*hexchat*");
+
+    assertTrue(
+        rule.matches(
+            IrcEventNotificationRule.EventType.CTCP_RECEIVED,
+            "alice",
+            Boolean.FALSE,
+            "#irc",
+            true,
+            "#irc",
+            "VERSION",
+            "HexChat 2.16.2"));
+    assertFalse(
+        rule.matches(
+            IrcEventNotificationRule.EventType.CTCP_RECEIVED,
+            "alice",
+            Boolean.FALSE,
+            "#irc",
+            true,
+            "#irc",
+            "PING",
+            "HexChat 2.16.2"));
+    assertFalse(
+        rule.matches(
+            IrcEventNotificationRule.EventType.CTCP_RECEIVED,
+            "alice",
+            Boolean.FALSE,
+            "#irc",
+            true,
+            "#irc",
+            "VERSION",
+            "mIRC"));
+  }
+
   private static void assertHasStatusBarAnyCompanion(
       java.util.List<IrcEventNotificationRule> rules,
       IrcEventNotificationRule.EventType eventType) {
