@@ -58,6 +58,7 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetLifecycleC
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetSelectionCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTypingActivityManager;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUnreadStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibilitySynchronizer;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeDragReorderSupport;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionMediator;
@@ -402,6 +403,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator;
   private final ServerTreeTargetLifecycleCoordinator targetLifecycleCoordinator;
   private final ServerTreeTargetSelectionCoordinator targetSelectionCoordinator;
+  private final ServerTreeUnreadStateCoordinator unreadStateCoordinator;
   private final ServerTreeInteractionMediator interactionMediator;
   private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
   private final ServerTreeTooltipProvider tooltipProvider;
@@ -1063,6 +1065,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                   tree.setSelectionPath(path);
                   tree.scrollPathToVisible(path);
                 }));
+    this.unreadStateCoordinator =
+        new ServerTreeUnreadStateCoordinator(
+            leaves,
+            model,
+            this::isChannelMuted,
+            channelStateCoordinator::noteChannelActivity,
+            channelStateCoordinator::onChannelUnreadCountsChanged,
+            this::emitManagedChannelsChanged);
     ToolTipManager.sharedInstance().registerComponent(tree);
     tree.addPropertyChangeListener(
         "UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
@@ -2109,14 +2119,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         ref,
         () -> {
           channelStateCoordinator.setChannelMuted(ref, muted);
-          if (muted) {
-            clearUnreadCountsForMutedChannel(ref);
-          } else {
-            DefaultMutableTreeNode node = leaves.get(ref);
-            if (node != null) {
-              model.nodeChanged(node);
-            }
-          }
+          unreadStateCoordinator.onChannelMutedStateChanged(ref, muted);
         });
   }
 
@@ -2131,59 +2134,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void markUnread(TargetRef ref) {
-    bumpUnreadCounter(ref, false);
+    unreadStateCoordinator.markUnread(ref);
   }
 
   public void markHighlight(TargetRef ref) {
-    bumpUnreadCounter(ref, true);
-  }
-
-  private void bumpUnreadCounter(TargetRef ref, boolean highlight) {
-    if (isChannelTarget(ref) && isChannelMuted(ref)) return;
-    DefaultMutableTreeNode node = leaves.get(ref);
-    if (node == null) return;
-    if (!(node.getUserObject() instanceof ServerTreeNodeData nd)) return;
-    if (highlight) {
-      nd.highlightUnread++;
-    } else {
-      nd.unread++;
-    }
-    channelStateCoordinator.noteChannelActivity(ref);
-    model.nodeChanged(node);
-    channelStateCoordinator.onChannelUnreadCountsChanged(ref);
-    if (ref != null && ref.isChannel()) {
-      emitManagedChannelsChanged(ref.serverId());
-    }
-  }
-
-  private void clearUnreadCountsForMutedChannel(TargetRef ref) {
-    if (!isChannelTarget(ref)) return;
-    DefaultMutableTreeNode node = leaves.get(ref);
-    if (node == null) return;
-    if (!(node.getUserObject() instanceof ServerTreeNodeData nd)) return;
-    if (nd.unread == 0 && nd.highlightUnread == 0) {
-      model.nodeChanged(node);
-      return;
-    }
-    nd.unread = 0;
-    nd.highlightUnread = 0;
-    model.nodeChanged(node);
-    channelStateCoordinator.onChannelUnreadCountsChanged(ref);
-    emitManagedChannelsChanged(ref.serverId());
+    unreadStateCoordinator.markHighlight(ref);
   }
 
   public void clearUnread(TargetRef ref) {
-    DefaultMutableTreeNode node = leaves.get(ref);
-    if (node == null) return;
-    if (!(node.getUserObject() instanceof ServerTreeNodeData nd)) return;
-    if (nd.unread == 0 && nd.highlightUnread == 0) return;
-    nd.unread = 0;
-    nd.highlightUnread = 0;
-    model.nodeChanged(node);
-    channelStateCoordinator.onChannelUnreadCountsChanged(ref);
-    if (ref != null && ref.isChannel()) {
-      emitManagedChannelsChanged(ref.serverId());
-    }
+    unreadStateCoordinator.clearUnread(ref);
   }
 
   public void markTypingActivity(TargetRef ref, String state) {
