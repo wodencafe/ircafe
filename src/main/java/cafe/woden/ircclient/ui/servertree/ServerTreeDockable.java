@@ -24,14 +24,10 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteraction
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeApplicationRootVisibilityContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInLayoutOrchestratorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeChannelStateCoordinatorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeContextMenuContextFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionFallbackContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerActionOverlayContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerRootLifecycleContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeSettingsSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTooltipContextFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeUiLeafVisibilitySynchronizerContextAdapter;
@@ -639,8 +635,20 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::clearChannelDisconnectedWarning,
                 () -> ServerTreeCellRenderer.typingSlotWidthForStyle(typingIndicatorStyle),
                 this::clearPrivateMessageOnlineStates,
-                new ServerTreeServerActionOverlayContextAdapter(uiHooks),
-                new ServerTreeChannelStateCoordinatorContextAdapter(
+                ServerTreeServerActionOverlay.context(
+                    uiHooks::isServerNode,
+                    uiHooks::isChannelNode,
+                    uiHooks::serverPathForId,
+                    uiHooks::channelPathForRef,
+                    uiHooks::connectionStateForServer,
+                    uiHooks::connectServer,
+                    uiHooks::disconnectServer,
+                    uiHooks::isChannelDisconnected,
+                    uiHooks::joinChannel,
+                    uiHooks::disconnectChannel,
+                    uiHooks::confirmCloseChannel,
+                    uiHooks::closeChannel),
+                ServerTreeChannelStateCoordinator.context(
                     ServerTreeDockable::normalizeServerId,
                     this::channelListNodeForServer,
                     this::snapshotExpandedTreePaths,
@@ -706,7 +714,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             nodeBadgeUpdater::refreshZncAutoConnectBadges);
     this.selectionFallbackPolicy =
         new ServerTreeSelectionFallbackPolicy(
-            new ServerTreeSelectionFallbackContextAdapter(
+            ServerTreeSelectionFallbackPolicy.context(
                 ServerTreeDockable::normalizeServerId,
                 servers,
                 this::builtInNodesVisibility,
@@ -903,7 +911,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 networkGroupManager::removeEmptyGroupIfNeeded));
     this.settingsSynchronizer =
         new ServerTreeSettingsSynchronizer(
-            new ServerTreeSettingsSynchronizerContextAdapter(
+            ServerTreeSettingsSynchronizer.context(
                 settingsBus,
                 jfrRuntimeEventsService,
                 runtimeConfig,

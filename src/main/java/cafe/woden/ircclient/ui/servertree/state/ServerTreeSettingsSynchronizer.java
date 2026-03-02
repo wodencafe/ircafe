@@ -7,6 +7,9 @@ import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import java.awt.Color;
 import java.beans.PropertyChangeListener;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.function.IntConsumer;
+import java.util.function.Supplier;
 import javax.swing.SwingUtilities;
 
 /** Synchronizes server-tree settings state and lifecycle listeners with UI properties. */
@@ -38,6 +41,99 @@ public final class ServerTreeSettingsSynchronizer {
     void refreshTreeLayoutAfterUiChange();
 
     void refreshApplicationJfrNode();
+  }
+
+  public static Context context(
+      UiSettingsBus settingsBus,
+      JfrRuntimeEventsService jfrRuntimeEventsService,
+      RuntimeConfigStore runtimeConfig,
+      Supplier<Boolean> typingIndicatorsTreeEnabled,
+      Consumer<Boolean> setTypingIndicatorsTreeEnabled,
+      Runnable clearTypingIndicatorsFromTree,
+      Consumer<ServerTreeTypingIndicatorStyle> setTypingIndicatorStyle,
+      Consumer<Boolean> setServerTreeNotificationBadgesEnabled,
+      IntConsumer setUnreadBadgeScalePercent,
+      Consumer<Color> setUnreadChannelTextColor,
+      Consumer<Color> setHighlightChannelTextColor,
+      Runnable refreshTreeLayoutAfterUiChange,
+      Runnable refreshApplicationJfrNode) {
+    Objects.requireNonNull(typingIndicatorsTreeEnabled, "typingIndicatorsTreeEnabled");
+    Objects.requireNonNull(setTypingIndicatorsTreeEnabled, "setTypingIndicatorsTreeEnabled");
+    Objects.requireNonNull(clearTypingIndicatorsFromTree, "clearTypingIndicatorsFromTree");
+    Objects.requireNonNull(setTypingIndicatorStyle, "setTypingIndicatorStyle");
+    Objects.requireNonNull(
+        setServerTreeNotificationBadgesEnabled, "setServerTreeNotificationBadgesEnabled");
+    Objects.requireNonNull(setUnreadBadgeScalePercent, "setUnreadBadgeScalePercent");
+    Objects.requireNonNull(setUnreadChannelTextColor, "setUnreadChannelTextColor");
+    Objects.requireNonNull(setHighlightChannelTextColor, "setHighlightChannelTextColor");
+    Objects.requireNonNull(refreshTreeLayoutAfterUiChange, "refreshTreeLayoutAfterUiChange");
+    Objects.requireNonNull(refreshApplicationJfrNode, "refreshApplicationJfrNode");
+    return new Context() {
+      @Override
+      public UiSettingsBus settingsBus() {
+        return settingsBus;
+      }
+
+      @Override
+      public JfrRuntimeEventsService jfrRuntimeEventsService() {
+        return jfrRuntimeEventsService;
+      }
+
+      @Override
+      public RuntimeConfigStore runtimeConfig() {
+        return runtimeConfig;
+      }
+
+      @Override
+      public boolean typingIndicatorsTreeEnabled() {
+        return typingIndicatorsTreeEnabled.get();
+      }
+
+      @Override
+      public void setTypingIndicatorsTreeEnabled(boolean enabled) {
+        setTypingIndicatorsTreeEnabled.accept(enabled);
+      }
+
+      @Override
+      public void clearTypingIndicatorsFromTree() {
+        clearTypingIndicatorsFromTree.run();
+      }
+
+      @Override
+      public void setTypingIndicatorStyle(ServerTreeTypingIndicatorStyle style) {
+        setTypingIndicatorStyle.accept(style);
+      }
+
+      @Override
+      public void setServerTreeNotificationBadgesEnabled(boolean enabled) {
+        setServerTreeNotificationBadgesEnabled.accept(enabled);
+      }
+
+      @Override
+      public void setUnreadBadgeScalePercent(int percent) {
+        setUnreadBadgeScalePercent.accept(percent);
+      }
+
+      @Override
+      public void setUnreadChannelTextColor(Color color) {
+        setUnreadChannelTextColor.accept(color);
+      }
+
+      @Override
+      public void setHighlightChannelTextColor(Color color) {
+        setHighlightChannelTextColor.accept(color);
+      }
+
+      @Override
+      public void refreshTreeLayoutAfterUiChange() {
+        refreshTreeLayoutAfterUiChange.run();
+      }
+
+      @Override
+      public void refreshApplicationJfrNode() {
+        refreshApplicationJfrNode.run();
+      }
+    };
   }
 
   private static final int MIN_BADGE_SCALE_PERCENT = 50;

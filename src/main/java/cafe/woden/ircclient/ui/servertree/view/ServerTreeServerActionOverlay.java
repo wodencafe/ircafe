@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import java.awt.AlphaComposite;
@@ -19,6 +20,10 @@ import java.awt.event.MouseEvent;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiPredicate;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import javax.swing.Icon;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
@@ -54,6 +59,94 @@ public final class ServerTreeServerActionOverlay {
     boolean confirmCloseChannel(TargetRef channelRef, String channelLabel);
 
     void closeChannel(TargetRef channelRef);
+  }
+
+  public static Context context(
+      Predicate<DefaultMutableTreeNode> isServerNode,
+      Predicate<DefaultMutableTreeNode> isChannelNode,
+      Function<String, TreePath> serverPathForId,
+      Function<TargetRef, TreePath> channelPathForRef,
+      Function<String, ConnectionState> connectionStateForServer,
+      Consumer<String> connectServer,
+      Consumer<String> disconnectServer,
+      Predicate<TargetRef> isChannelDisconnected,
+      Consumer<TargetRef> joinChannel,
+      Consumer<TargetRef> disconnectChannel,
+      BiPredicate<TargetRef, String> confirmCloseChannel,
+      Consumer<TargetRef> closeChannel) {
+    Objects.requireNonNull(isServerNode, "isServerNode");
+    Objects.requireNonNull(isChannelNode, "isChannelNode");
+    Objects.requireNonNull(serverPathForId, "serverPathForId");
+    Objects.requireNonNull(channelPathForRef, "channelPathForRef");
+    Objects.requireNonNull(connectionStateForServer, "connectionStateForServer");
+    Objects.requireNonNull(connectServer, "connectServer");
+    Objects.requireNonNull(disconnectServer, "disconnectServer");
+    Objects.requireNonNull(isChannelDisconnected, "isChannelDisconnected");
+    Objects.requireNonNull(joinChannel, "joinChannel");
+    Objects.requireNonNull(disconnectChannel, "disconnectChannel");
+    Objects.requireNonNull(confirmCloseChannel, "confirmCloseChannel");
+    Objects.requireNonNull(closeChannel, "closeChannel");
+    return new Context() {
+      @Override
+      public boolean isServerNode(DefaultMutableTreeNode node) {
+        return isServerNode.test(node);
+      }
+
+      @Override
+      public boolean isChannelNode(DefaultMutableTreeNode node) {
+        return isChannelNode.test(node);
+      }
+
+      @Override
+      public TreePath serverPathForId(String serverId) {
+        return serverPathForId.apply(serverId);
+      }
+
+      @Override
+      public TreePath channelPathForRef(TargetRef channelRef) {
+        return channelPathForRef.apply(channelRef);
+      }
+
+      @Override
+      public ConnectionState connectionStateForServer(String serverId) {
+        return connectionStateForServer.apply(serverId);
+      }
+
+      @Override
+      public void connectServer(String serverId) {
+        connectServer.accept(serverId);
+      }
+
+      @Override
+      public void disconnectServer(String serverId) {
+        disconnectServer.accept(serverId);
+      }
+
+      @Override
+      public boolean isChannelDisconnected(TargetRef channelRef) {
+        return isChannelDisconnected.test(channelRef);
+      }
+
+      @Override
+      public void joinChannel(TargetRef channelRef) {
+        joinChannel.accept(channelRef);
+      }
+
+      @Override
+      public void disconnectChannel(TargetRef channelRef) {
+        disconnectChannel.accept(channelRef);
+      }
+
+      @Override
+      public boolean confirmCloseChannel(TargetRef channelRef, String channelLabel) {
+        return confirmCloseChannel.test(channelRef, channelLabel);
+      }
+
+      @Override
+      public void closeChannel(TargetRef channelRef) {
+        closeChannel.accept(channelRef);
+      }
+    };
   }
 
   private enum RowTargetKind {
@@ -256,7 +349,7 @@ public final class ServerTreeServerActionOverlay {
   }
 
   public boolean isHoveredServer(String serverId) {
-    String sid = Objects.toString(serverId, "").trim();
+    String sid = ServerTreeConventions.normalize(serverId);
     if (sid.isEmpty()) return false;
     return hoveredRowTarget.isServer() && Objects.equals(hoveredRowTarget.serverId(), sid);
   }
