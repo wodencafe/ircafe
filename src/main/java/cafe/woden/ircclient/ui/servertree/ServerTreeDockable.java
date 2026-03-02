@@ -24,6 +24,7 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaborat
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory;
+import cafe.woden.ircclient.ui.servertree.context.ServerTreeBouncerDetachPolicyContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeContextMenuBuilderContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionFallbackContextAdapter;
@@ -32,7 +33,7 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchro
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerRootLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSettingsSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetLifecycleContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeTooltipProviderContextAdapter;
+import cafe.woden.ircclient.ui.servertree.context.ServerTreeTooltipContextFactory;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelDisconnectStateManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
@@ -568,7 +569,23 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeBouncerDetachPolicy(
             sojuBouncerControlServerIds,
             zncBouncerControlServerIds,
-            createBouncerDetachPolicyContext());
+            new ServerTreeBouncerDetachPolicyContextAdapter(
+                uiHooks::connectionStateForServer,
+                this::isSojuEphemeralServer,
+                this::isZncEphemeralServer,
+                (serverId, capability) -> {
+                  String sid = normalizeServerId(serverId);
+                  if (sid.isBlank()) return false;
+                  ServerRuntimeMetadata metadata = runtimeState.metadataForServerIfPresent(sid);
+                  if (metadata == null) return false;
+                  String cap =
+                      Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
+                  if (cap.isEmpty()) return false;
+                  ServerRuntimeMetadata.CapabilityState state = metadata.ircv3Caps.get(cap);
+                  return state == ServerRuntimeMetadata.CapabilityState.ENABLED
+                      || state == ServerRuntimeMetadata.CapabilityState.AVAILABLE
+                      || state == ServerRuntimeMetadata.CapabilityState.DISABLED;
+                }));
     this.nodeBadgeUpdater =
         new ServerTreeNodeBadgeUpdater(
             notificationStore, ephemeralServerIds, leaves, createNodeBadgeUpdaterContext());
@@ -603,7 +620,41 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.rowInteractionHandler = stateInteractionCollaborators.rowInteractionHandler();
     this.tooltipProvider =
         new ServerTreeTooltipProvider(
-            tree, createTooltipProviderContext(sojuAutoConnect, zncAutoConnect));
+            tree,
+            ServerTreeTooltipContextFactory.create(
+                new ServerTreeTooltipContextFactory.Inputs(
+                    rowInteractionHandler::serverIdAt,
+                    uiHooks,
+                    this::isIrcRootNode,
+                    this::isApplicationRootNode,
+                    this::isSojuNetworksGroupNode,
+                    this::isZncNetworksGroupNode,
+                    this::isInterceptorsGroupNode,
+                    this::isMonitorGroupNode,
+                    this::isOtherGroupNode,
+                    runtimeState::desiredOnlineForServer,
+                    runtimeState::connectionDiagnosticsTipForServer,
+                    this::isSojuEphemeralServer,
+                    this::isZncEphemeralServer,
+                    sojuOriginByServerId::get,
+                    zncOriginByServerId::get,
+                    serverId -> serverDisplayNames.getOrDefault(serverId, serverId),
+                    (originId, networkKey) ->
+                        sojuAutoConnect != null && sojuAutoConnect.isEnabled(originId, networkKey),
+                    (originId, networkKey) ->
+                        zncAutoConnect != null && zncAutoConnect.isEnabled(originId, networkKey),
+                    this::isApplicationJfrActive,
+                    nodeData -> {
+                      if (nodeData == null || nodeData.ref == null || !nodeData.ref.isStatus()) {
+                        return false;
+                      }
+                      if (!BOUNCER_CONTROL_LABEL.equals(nodeData.label)) {
+                        return false;
+                      }
+                      String serverId = nodeData.ref.serverId();
+                      return sojuBouncerControlServerIds.contains(serverId)
+                          || zncBouncerControlServerIds.contains(serverId);
+                    })));
     this.tooltipResolver = new ServerTreeTooltipResolver(serverActionOverlay, tooltipProvider);
     this.contextMenuBuilder =
         new ServerTreeContextMenuBuilder(
@@ -1364,45 +1415,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         ServerTreeDockable.this.emitManagedChannelsChanged(serverId);
       }
     };
-  }
-
-  private ServerTreeTooltipProvider.Context createTooltipProviderContext(
-      SojuAutoConnectStore sojuAutoConnect, ZncAutoConnectStore zncAutoConnect) {
-    return new ServerTreeTooltipProviderContextAdapter(
-        rowInteractionHandler::serverIdAt,
-        uiHooks::serverPathForId,
-        this::isIrcRootNode,
-        this::isApplicationRootNode,
-        this::isSojuNetworksGroupNode,
-        this::isZncNetworksGroupNode,
-        this::isInterceptorsGroupNode,
-        this::isMonitorGroupNode,
-        this::isOtherGroupNode,
-        uiHooks::isServerNode,
-        uiHooks::connectionStateForServer,
-        runtimeState::desiredOnlineForServer,
-        runtimeState::connectionDiagnosticsTipForServer,
-        this::isSojuEphemeralServer,
-        this::isZncEphemeralServer,
-        sojuOriginByServerId::get,
-        zncOriginByServerId::get,
-        serverId -> serverDisplayNames.getOrDefault(serverId, serverId),
-        (originId, networkKey) ->
-            sojuAutoConnect != null && sojuAutoConnect.isEnabled(originId, networkKey),
-        (originId, networkKey) ->
-            zncAutoConnect != null && zncAutoConnect.isEnabled(originId, networkKey),
-        this::isApplicationJfrActive,
-        nodeData -> {
-          if (nodeData == null || nodeData.ref == null || !nodeData.ref.isStatus()) {
-            return false;
-          }
-          if (!BOUNCER_CONTROL_LABEL.equals(nodeData.label)) {
-            return false;
-          }
-          String serverId = nodeData.ref.serverId();
-          return sojuBouncerControlServerIds.contains(serverId)
-              || zncBouncerControlServerIds.contains(serverId);
-        });
   }
 
   private ServerTreeServerCatalogSynchronizer.Context createServerCatalogSynchronizerContext() {
