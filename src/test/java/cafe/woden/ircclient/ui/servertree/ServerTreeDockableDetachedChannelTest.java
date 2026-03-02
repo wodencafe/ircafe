@@ -887,9 +887,7 @@ class ServerTreeDockableDetachedChannelTest {
 
   private static String invokeTooltip(ServerTreeDockable dockable, MouseEvent event)
       throws Exception {
-    Method m = ServerTreeDockable.class.getDeclaredMethod("toolTipForEvent", MouseEvent.class);
-    m.setAccessible(true);
-    return (String) m.invoke(dockable, event);
+    return getTree(dockable).getToolTipText(event);
   }
 
   private static boolean invokeMaybeHandleDisconnectedWarningClick(
