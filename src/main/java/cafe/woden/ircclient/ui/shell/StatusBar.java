@@ -24,6 +24,12 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 public class StatusBar extends JPanel {
+  public enum UpdateNotifierState {
+    IDLE,
+    UPDATE_AVAILABLE,
+    ERROR
+  }
+
   private static final int NOTICE_ROTATE_MS = 5500;
   private static final int NOTICE_FADE_MS = 420;
   private static final int NOTICE_FADE_TICK_MS = 35;
@@ -44,6 +50,7 @@ public class StatusBar extends JPanel {
   private final Icon historyIcon = SvgIcons.action("info", 14);
   private final Icon updateNotifierIdleIcon = SvgIcons.action("refresh", 14);
   private final Icon updateNotifierAvailableIcon = SvgIcons.action("arrow-down", 14);
+  private final Icon updateNotifierErrorIcon = SvgIcons.action("close", 14);
   private final Color historyFlashBg = new Color(255, 223, 128, 170);
 
   private final Deque<StatusNotice> noticeQueue = new ArrayDeque<>();
@@ -193,11 +200,11 @@ public class StatusBar extends JPanel {
     }
   }
 
-  public void setUpdateNotifierStatus(String tooltip, boolean updateAvailable) {
+  public void setUpdateNotifierStatus(String tooltip, UpdateNotifierState state) {
     if (SwingUtilities.isEventDispatchThread()) {
-      setUpdateNotifierStatusOnEdt(tooltip, updateAvailable);
+      setUpdateNotifierStatusOnEdt(tooltip, state);
     } else {
-      SwingUtilities.invokeLater(() -> setUpdateNotifierStatusOnEdt(tooltip, updateAvailable));
+      SwingUtilities.invokeLater(() -> setUpdateNotifierStatusOnEdt(tooltip, state));
     }
   }
 
@@ -706,10 +713,17 @@ public class StatusBar extends JPanel {
     }
   }
 
-  private void setUpdateNotifierStatusOnEdt(String tooltip, boolean updateAvailable) {
+  private void setUpdateNotifierStatusOnEdt(String tooltip, UpdateNotifierState state) {
     setUpdateNotifierEnabledOnEdt(true);
+    UpdateNotifierState nextState = state != null ? state : UpdateNotifierState.IDLE;
+    boolean updateAvailable = nextState == UpdateNotifierState.UPDATE_AVAILABLE;
     updateNotifierAvailable = updateAvailable;
-    updateNotifierButton.setIcon(updateAvailable ? updateNotifierAvailableIcon : updateNotifierIdleIcon);
+    updateNotifierButton.setIcon(
+        switch (nextState) {
+          case UPDATE_AVAILABLE -> updateNotifierAvailableIcon;
+          case ERROR -> updateNotifierErrorIcon;
+          default -> updateNotifierIdleIcon;
+        });
     String tip = Objects.toString(tooltip, "").trim();
     if (!tip.isEmpty()) {
       updateNotifierButton.setToolTipText(tip);

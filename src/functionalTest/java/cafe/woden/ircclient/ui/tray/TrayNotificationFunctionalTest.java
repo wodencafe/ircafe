@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import cafe.woden.ircclient.model.NotificationRule;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.ui.settings.MemoryUsageDisplayMode;
 import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
@@ -199,7 +200,10 @@ class TrayNotificationFunctionalTest {
         false,
         false,
         false,
-        List.of());
+        List.<NotificationRule>of(),
+        null,
+        null,
+        false);
   }
 
   private static void waitFor(BooleanSupplier condition, Duration timeout) throws Exception {

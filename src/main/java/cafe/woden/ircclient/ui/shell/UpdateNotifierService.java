@@ -100,7 +100,8 @@ public class UpdateNotifierService {
     }
 
     statusBar.setUpdateNotifierEnabled(true);
-    statusBar.setUpdateNotifierStatus("Checking for IRCafe updates...", false);
+    statusBar.setUpdateNotifierStatus(
+        "Checking for IRCafe updates...", StatusBar.UpdateNotifierState.IDLE);
     scheduleChecksIfNeeded();
   }
 
@@ -138,7 +139,8 @@ public class UpdateNotifierService {
       if (!enabled.get()) return;
       if (latestRelease == null) {
         statusBar.setUpdateNotifierStatus(
-            "Could not check for updates right now. Right-click to visit releases.", false);
+            "Could not check for updates right now. Right-click to visit releases.",
+            StatusBar.UpdateNotifierState.ERROR);
         return;
       }
 
@@ -157,7 +159,7 @@ public class UpdateNotifierService {
                 + " (you are on "
                 + currentDisplay
                 + "). Right-click for actions.",
-            true);
+            StatusBar.UpdateNotifierState.UPDATE_AVAILABLE);
         if (!latestTag.equalsIgnoreCase(Objects.toString(lastAlertedTag, ""))) {
           statusBar.showUpdateNotifierTooltipAlert(
               "A newer IRCafe release is available: "
@@ -169,12 +171,14 @@ public class UpdateNotifierService {
         }
       } else {
         statusBar.setUpdateNotifierStatus(
-            "IRCafe " + currentDisplay + ". Right-click to visit releases.", false);
+            "IRCafe " + currentDisplay + ". Right-click to visit releases.",
+            StatusBar.UpdateNotifierState.IDLE);
       }
     } catch (Exception e) {
       log.debug("update notifier check failed", e);
       statusBar.setUpdateNotifierStatus(
-          "Could not check for updates right now. Right-click to visit releases.", false);
+          "Could not check for updates right now. Right-click to visit releases.",
+          StatusBar.UpdateNotifierState.ERROR);
     } finally {
       checkInProgress.set(false);
     }

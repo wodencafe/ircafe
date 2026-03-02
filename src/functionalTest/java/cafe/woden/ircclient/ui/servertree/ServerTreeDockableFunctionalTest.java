@@ -247,10 +247,12 @@ class ServerTreeDockableFunctionalTest {
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return null;
 
-    Method buildPopupMenu =
-        ServerTreeDockable.class.getDeclaredMethod("buildPopupMenu", TreePath.class);
+    Field contextMenuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
+    contextMenuBuilderField.setAccessible(true);
+    Object contextMenuBuilder = contextMenuBuilderField.get(dockable);
+    Method buildPopupMenu = contextMenuBuilder.getClass().getDeclaredMethod("build", TreePath.class);
     buildPopupMenu.setAccessible(true);
-    return (JPopupMenu) buildPopupMenu.invoke(dockable, new TreePath(node.getPath()));
+    return (JPopupMenu) buildPopupMenu.invoke(contextMenuBuilder, new TreePath(node.getPath()));
   }
 
   private static JMenuItem findMenuItem(JPopupMenu menu, String text) {

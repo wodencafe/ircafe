@@ -33,6 +33,7 @@ import cafe.woden.ircclient.ui.filter.FilterSettings;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.shell.UpdateNotifierService;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.TrayService;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
@@ -75,16 +76,13 @@ class PreferencesDialogFunctionalTest {
                 null,
                 null));
 
-    JTabbedPane chatTabs = findTabbedPaneWithTab(fixture.appearancePanel, "Message colors");
-    assertNotNull(chatTabs, "chat transcript sub-tabs should include Message colors");
-
-    Component messageTab = chatTabs.getComponentAt(chatTabs.indexOfTab("Message colors"));
-    assertNotNull(findLabel(messageTab, "Server/system"));
-    assertNotNull(findLabel(messageTab, "User messages"));
-    assertNotNull(findLabel(messageTab, "Notice messages"));
-    assertNotNull(findLabel(messageTab, "Action messages"));
-    assertNotNull(findLabel(messageTab, "Presence messages"));
-    assertNotNull(findLabel(messageTab, "Error messages"));
+    assertNotNull(findLabel(fixture.appearancePanel, "Message colors"));
+    assertNotNull(findLabel(fixture.appearancePanel, "Server/system"));
+    assertNotNull(findLabel(fixture.appearancePanel, "User messages"));
+    assertNotNull(findLabel(fixture.appearancePanel, "Notice messages"));
+    assertNotNull(findLabel(fixture.appearancePanel, "Action messages"));
+    assertNotNull(findLabel(fixture.appearancePanel, "Presence messages"));
+    assertNotNull(findLabel(fixture.appearancePanel, "Error messages"));
   }
 
   @Test
@@ -330,6 +328,8 @@ class PreferencesDialogFunctionalTest {
             "buildTweakControls",
             new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10),
             closeables);
+    Object appearanceServerTreeControls =
+        invoke(dialog, "buildAppearanceServerTreeControls", current);
 
     JPanel appearancePanel =
         (JPanel)
@@ -340,7 +340,8 @@ class PreferencesDialogFunctionalTest {
                 accentControls,
                 chatThemeControls,
                 fontControls,
-                tweakControls);
+                tweakControls,
+                appearanceServerTreeControls);
     return new AppearanceFixture(appearancePanel, chatThemeControls);
   }
 
@@ -375,6 +376,7 @@ class PreferencesDialogFunctionalTest {
         mock(ActiveTargetPort.class),
         mock(TrayService.class),
         mock(TrayNotificationService.class),
+        mock(UpdateNotifierService.class),
         mock(GnomeDbusNotificationBackend.class),
         mock(NotificationSoundSettingsBus.class),
         mock(PushySettingsBus.class),
