@@ -81,6 +81,7 @@ import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTypingTargetPolicy;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeTargetSnapshotProvider;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeProcessorRequestEmitter;
+import cafe.woden.ircclient.ui.servertree.request.ServerTreeChannelModeRequestBus;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestEmitter;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestLoggingDecorator;
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
@@ -255,14 +256,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final FlowableProcessor<TargetRef> openPinnedChatRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
-  private final FlowableProcessor<TargetRef> channelModeDetailsRequests =
-      PublishProcessor.<TargetRef>create().toSerialized();
-
-  private final FlowableProcessor<TargetRef> channelModeRefreshRequests =
-      PublishProcessor.<TargetRef>create().toSerialized();
-
-  private final FlowableProcessor<ChannelModeSetRequest> channelModeSetRequests =
-      PublishProcessor.<ChannelModeSetRequest>create().toSerialized();
+  private final ServerTreeChannelModeRequestBus channelModeRequestBus =
+      new ServerTreeChannelModeRequestBus();
 
   private final FlowableProcessor<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests =
       PublishProcessor.<Ircv3CapabilityToggleRequest>create().toSerialized();
@@ -851,10 +846,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                     this::setChannelPinned,
                     this::isChannelMuted,
                     this::setChannelMuted,
-                    this::emitChannelModeDetailsRequest,
-                    this::emitChannelModeRefreshRequest,
+                    channelModeRequestBus::emitDetailsRequest,
+                    channelModeRequestBus::emitRefreshRequest,
                     this::canEditChannelModesForTarget,
-                    this::emitChannelModeSetRequest,
+                    channelModeRequestBus::emitSetRequest,
                     uiHooks::closeTarget,
                     interceptorActions::setInterceptorEnabled,
                     interceptorActions::promptRenameInterceptor,
@@ -1245,23 +1240,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     emitter.accept(target);
   }
 
-  private void emitChannelModeDetailsRequest(TargetRef target) {
-    if (!isChannelTarget(target)) return;
-    channelModeDetailsRequests.onNext(target);
-  }
-
-  private void emitChannelModeRefreshRequest(TargetRef target) {
-    if (!isChannelTarget(target)) return;
-    channelModeRefreshRequests.onNext(target);
-  }
-
-  private void emitChannelModeSetRequest(TargetRef target, String modeSpec) {
-    if (!isChannelTarget(target)) return;
-    String spec = Objects.toString(modeSpec, "").trim();
-    if (spec.isEmpty()) return;
-    channelModeSetRequests.onNext(new ChannelModeSetRequest(target, spec));
-  }
-
   private boolean canEditChannelModesForTarget(TargetRef target) {
     if (!isChannelTarget(target)) return false;
     BiPredicate<String, String> predicate = canEditChannelModes;
@@ -1466,15 +1444,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public Flowable<TargetRef> channelModeDetailsRequests() {
-    return channelModeDetailsRequests.onBackpressureLatest();
+    return channelModeRequestBus.detailsRequests();
   }
 
   public Flowable<TargetRef> channelModeRefreshRequests() {
-    return channelModeRefreshRequests.onBackpressureLatest();
+    return channelModeRequestBus.refreshRequests();
   }
 
   public Flowable<ChannelModeSetRequest> channelModeSetRequests() {
-    return channelModeSetRequests.onBackpressureLatest();
+    return channelModeRequestBus.setRequests();
   }
 
   public Flowable<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests() {
