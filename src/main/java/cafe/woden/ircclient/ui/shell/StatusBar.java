@@ -80,7 +80,6 @@ public class StatusBar extends JPanel {
   private Runnable updateNotifierDisableAction;
   private Popup updateNotifierTooltipPopup;
   private Timer updateNotifierTooltipHideTimer;
-  private boolean updateNotifierAvailable;
 
   private record StatusNotice(
       String displayText, String fullText, Runnable onClick, long atEpochMs) {}
@@ -701,7 +700,7 @@ public class StatusBar extends JPanel {
 
   private void setUpdateNotifierEnabledOnEdt(boolean enabled) {
     if (!enabled) {
-      updateNotifierAvailable = false;
+
       updateNotifierButton.setVisible(false);
       hideUpdateNotifierTooltipPopupOnEdt();
       return;
@@ -717,7 +716,7 @@ public class StatusBar extends JPanel {
     setUpdateNotifierEnabledOnEdt(true);
     UpdateNotifierState nextState = state != null ? state : UpdateNotifierState.IDLE;
     boolean updateAvailable = nextState == UpdateNotifierState.UPDATE_AVAILABLE;
-    updateNotifierAvailable = updateAvailable;
+
     updateNotifierButton.setIcon(
         switch (nextState) {
           case UPDATE_AVAILABLE -> updateNotifierAvailableIcon;

@@ -937,8 +937,7 @@ public class PreferencesDialog {
                 : runtimeConfig.readUnknownCommandAsRawEnabled(false));
     DiagnosticsControls diagnostics = buildDiagnosticsControls();
 
-    AppearanceServerTreeControls appearanceServerTree =
-        buildAppearanceServerTreeControls(current);
+    AppearanceServerTreeControls appearanceServerTree = buildAppearanceServerTreeControls(current);
     JPanel appearancePanel =
         buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks, appearanceServerTree);
     JPanel memoryPanel = buildMemoryPanel(memoryUsageDisplayMode, memoryWarnings);
@@ -1446,10 +1445,7 @@ public class PreferencesDialog {
                     "Highlight channel color must be blank or a hex value like #RRGGBB.");
           } catch (IllegalArgumentException ex) {
             JOptionPane.showMessageDialog(
-                dialog,
-                ex.getMessage(),
-                "Invalid server tree color",
-                JOptionPane.ERROR_MESSAGE);
+                dialog, ex.getMessage(), "Invalid server tree color", JOptionPane.ERROR_MESSAGE);
             return;
           }
           boolean preserveDockLayoutBetweenSessionsV =
@@ -3358,7 +3354,8 @@ public class PreferencesDialog {
         new JCheckBox(
             "Don't notify for the active buffer", current.trayNotifySuppressWhenTargetActive());
     JCheckBox updateNotifierEnabled =
-        new JCheckBox("Show update notifier in status bar", runtimeConfig.readUpdateNotifierEnabled(true));
+        new JCheckBox(
+            "Show update notifier in status bar", runtimeConfig.readUpdateNotifierEnabled(true));
     updateNotifierEnabled.setToolTipText(
         "Checks GitHub releases in the background and alerts when a newer IRCafe version exists.");
 

@@ -250,7 +250,8 @@ class ServerTreeDockableFunctionalTest {
     Field contextMenuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
     contextMenuBuilderField.setAccessible(true);
     Object contextMenuBuilder = contextMenuBuilderField.get(dockable);
-    Method buildPopupMenu = contextMenuBuilder.getClass().getDeclaredMethod("build", TreePath.class);
+    Method buildPopupMenu =
+        contextMenuBuilder.getClass().getDeclaredMethod("build", TreePath.class);
     buildPopupMenu.setAccessible(true);
     return (JPopupMenu) buildPopupMenu.invoke(contextMenuBuilder, new TreePath(node.getPath()));
   }

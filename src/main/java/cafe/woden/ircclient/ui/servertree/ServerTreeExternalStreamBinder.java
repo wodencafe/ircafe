@@ -62,7 +62,8 @@ public final class ServerTreeExternalStreamBinder {
               .updates()
               .observeOn(SwingEdt.scheduler())
               .subscribe(
-                  syncServers::accept, err -> log.error("[ircafe] server catalog stream error", err)));
+                  syncServers::accept,
+                  err -> log.error("[ircafe] server catalog stream error", err)));
     }
 
     if (notificationStore != null) {

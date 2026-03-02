@@ -212,7 +212,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private AutoCloseable treeWheelSelectionDecorator;
 
-  private final ServerTreeNodeActionsFactory nodeActionsFactory = new ServerTreeNodeActionsFactory();
+  private final ServerTreeNodeActionsFactory nodeActionsFactory =
+      new ServerTreeNodeActionsFactory();
   private final ServerTreeInteractionWiringFactory interactionWiringFactory =
       new ServerTreeInteractionWiringFactory();
   private final TreeNodeActions<TargetRef> nodeActions;
@@ -2022,8 +2023,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setChannelAutoReattach(TargetRef ref, boolean autoReattach) {
-    writeChannelState(
-        ref, () -> channelStateCoordinator.setChannelAutoReattach(ref, autoReattach));
+    writeChannelState(ref, () -> channelStateCoordinator.setChannelAutoReattach(ref, autoReattach));
   }
 
   public boolean isChannelPinned(TargetRef ref) {

@@ -2242,8 +2242,7 @@ public class RuntimeConfigStore {
   }
 
   public synchronized void rememberServerTreeUnreadChannelColor(String hex) {
-    rememberOptionalUiHex(
-        "serverTreeUnreadChannelColor", hex, "serverTreeUnreadChannelColor");
+    rememberOptionalUiHex("serverTreeUnreadChannelColor", hex, "serverTreeUnreadChannelColor");
   }
 
   public synchronized void rememberServerTreeHighlightChannelColor(String hex) {

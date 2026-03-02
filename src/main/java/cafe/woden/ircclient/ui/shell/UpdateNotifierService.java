@@ -125,7 +125,8 @@ public class UpdateNotifierService {
     ScheduledFuture<?> startup = startupCheckTask.get();
     if (startup == null || startup.isCancelled() || startup.isDone()) {
       startupCheckTask.set(
-          scheduler.schedule(this::checkForUpdatesSafely, INITIAL_CHECK_DELAY_SECONDS, TimeUnit.SECONDS));
+          scheduler.schedule(
+              this::checkForUpdatesSafely, INITIAL_CHECK_DELAY_SECONDS, TimeUnit.SECONDS));
     }
   }
 
@@ -194,8 +195,7 @@ public class UpdateNotifierService {
               "User-Agent", "ircafe-update-notifier/1.0");
 
       HttpLite.Response<String> response =
-          HttpLite.getString(
-              LATEST_RELEASE_API_URI, headers, NetProxyContext.proxy(), 4000, 7000);
+          HttpLite.getString(LATEST_RELEASE_API_URI, headers, NetProxyContext.proxy(), 4000, 7000);
       if (response.statusCode() < 200 || response.statusCode() >= 300) {
         return null;
       }

@@ -62,11 +62,11 @@ public record UiProperties(
     Boolean outgoingDeliveryIndicatorsEnabled,
     /** Show unread/highlight notification badges in the server tree. */
     Boolean serverTreeNotificationBadgesEnabled,
-    /** Optional channel label color used for unread (non-highlight) channel nodes in server tree. */
-    String serverTreeUnreadChannelColor,
     /**
-     * Optional channel label color used for highlight/mention channel nodes in server tree.
+     * Optional channel label color used for unread (non-highlight) channel nodes in server tree.
      */
+    String serverTreeUnreadChannelColor,
+    /** Optional channel label color used for highlight/mention channel nodes in server tree. */
     String serverTreeHighlightChannelColor,
     Boolean imageEmbedsEnabled,
     Boolean imageEmbedsCollapsedByDefault,
