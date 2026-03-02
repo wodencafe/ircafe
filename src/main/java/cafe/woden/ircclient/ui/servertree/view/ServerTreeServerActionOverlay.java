@@ -5,6 +5,7 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
+import cafe.woden.ircclient.ui.servertree.ServerTreeUiHooks;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import java.awt.AlphaComposite;
@@ -147,6 +148,23 @@ public final class ServerTreeServerActionOverlay {
         closeChannel.accept(channelRef);
       }
     };
+  }
+
+  public static Context context(ServerTreeUiHooks uiHooks) {
+    Objects.requireNonNull(uiHooks, "uiHooks");
+    return context(
+        uiHooks::isServerNode,
+        uiHooks::isChannelNode,
+        uiHooks::serverPathForId,
+        uiHooks::channelPathForRef,
+        uiHooks::connectionStateForServer,
+        uiHooks::connectServer,
+        uiHooks::disconnectServer,
+        uiHooks::isChannelDisconnected,
+        uiHooks::joinChannel,
+        uiHooks::disconnectChannel,
+        uiHooks::confirmCloseChannel,
+        uiHooks::closeChannel);
   }
 
   private enum RowTargetKind {
