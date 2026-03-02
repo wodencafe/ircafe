@@ -49,4 +49,19 @@ class PendingEchoMessageStateTest {
     assertTrue(state.consumeByTargetAndText(a, "me", "one").isEmpty());
     assertTrue(state.consumeByTargetAndText(b, "me", "two").isPresent());
   }
+
+  @Test
+  void consumeOldestByTargetRemovesOldestMatchingEntry() {
+    TargetRef pm = new TargetRef("libera", "Friend");
+    state.register(pm, "me", "one", Instant.parse("2026-02-16T00:00:00Z"));
+    var second = state.register(pm, "me", "two", Instant.parse("2026-02-16T00:00:01Z"));
+
+    var consumed = state.consumeOldestByTarget(new TargetRef("libera", "friend"));
+    assertTrue(consumed.isPresent());
+    assertEquals("one", consumed.get().text());
+
+    var next = state.consumeOldestByTarget(pm);
+    assertTrue(next.isPresent());
+    assertEquals(second.pendingId(), next.get().pendingId());
+  }
 }

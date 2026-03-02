@@ -57,6 +57,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -440,6 +441,59 @@ class IrcMediatorMockVerifyTest {
     verify(joinRoutingState).clear("libera", "#old");
     verify(runtimeConfig).rememberJoinedChannel("libera", "#new");
     verify(targetCoordinator).joinChannel(new TargetRef("libera", "#new"));
+  }
+
+  @Test
+  void noSuchNickServerResponseFailsMatchingPendingPmAndAppendsPmError() throws Exception {
+    TargetRef pm = new TargetRef("libera", "ghost");
+    Instant at = Instant.parse("2026-03-02T18:53:57Z");
+    PendingEchoMessageState.PendingOutboundChat pending =
+        new PendingEchoMessageState.PendingOutboundChat("pending-1", pm, "Birbasaurus", "pie", at);
+    when(pendingEchoMessageState.consumeOldestByTarget(eq(pm))).thenReturn(Optional.of(pending));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ServerResponseLine(
+                at,
+                401,
+                "No such nick/channel",
+                ":osmium.libera.chat 401 me ghost :No such nick/channel")));
+
+    verify(ui)
+        .failPendingOutgoingChat(
+            eq(pm),
+            eq("pending-1"),
+            eq(at),
+            eq("Birbasaurus"),
+            eq("pie"),
+            eq("[401] No such nick/channel"));
+    verify(ui)
+        .appendErrorAt(
+            eq(pm),
+            eq(at),
+            eq("(send)"),
+            eq("Cannot deliver to ghost [401]: No such nick/channel"));
+  }
+
+  @Test
+  void noSuchNickWithoutMatchingPendingDoesNotAppendPmError() throws Exception {
+    TargetRef pm = new TargetRef("libera", "ghost");
+    Instant at = Instant.parse("2026-03-02T18:53:57Z");
+    when(pendingEchoMessageState.consumeOldestByTarget(eq(pm))).thenReturn(Optional.empty());
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ServerResponseLine(
+                at,
+                401,
+                "No such nick/channel",
+                ":osmium.libera.chat 401 me ghost :No such nick/channel")));
+
+    verify(ui, never())
+        .failPendingOutgoingChat(eq(pm), anyString(), any(), anyString(), anyString(), anyString());
+    verify(ui, never()).appendErrorAt(eq(pm), any(), eq("(send)"), anyString());
   }
 
   private void invokeHandleOutgoingLine(String raw) throws Exception {

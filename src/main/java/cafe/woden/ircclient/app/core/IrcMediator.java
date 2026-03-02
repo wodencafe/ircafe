@@ -2465,6 +2465,50 @@ public class IrcMediator implements MediatorControlPort {
     }
   }
 
+  private void maybeHandlePendingPrivateMessageDeliveryError(
+      String sid, IrcEvent.ServerResponseLine ev) {
+    if (sid == null || sid.isBlank() || ev == null) return;
+    if (ev.code() != 401) return; // ERR_NOSUCHNICK
+
+    ParsedIrcLine pl = parseIrcLineForMetadata(ev.rawLine());
+    if (pl == null) return;
+    if (pl.params() == null || pl.params().size() < 2) return;
+
+    String targetToken = Objects.toString(pl.params().get(1), "").trim();
+    if (targetToken.isEmpty()) return;
+
+    final TargetRef pmTarget;
+    try {
+      pmTarget = new TargetRef(sid, targetToken);
+    } catch (IllegalArgumentException ignored) {
+      return;
+    }
+    if (pmTarget.isChannel() || pmTarget.isUiOnly() || pmTarget.isStatus()) return;
+
+    PendingEchoMessageState.PendingOutboundChat pending =
+        pendingEchoMessageState.consumeOldestByTarget(pmTarget).orElse(null);
+    if (pending == null) return;
+
+    String reason = Objects.toString(pl.trailing(), "").trim();
+    if (reason.isEmpty()) {
+      reason = Objects.toString(ev.message(), "").trim();
+    }
+    if (reason.isEmpty()) {
+      reason = "No such nick/channel";
+    }
+
+    String pendingReason = "[" + ev.code() + "] " + reason;
+    ui.failPendingOutgoingChat(
+        pmTarget, pending.pendingId(), ev.at(), pending.fromNick(), pending.text(), pendingReason);
+
+    ensureTargetExists(pmTarget);
+    ui.appendErrorAt(
+        pmTarget,
+        ev.at(),
+        "(send)",
+        "Cannot deliver to " + pmTarget.target() + " [" + ev.code() + "]: " + reason);
+  }
+
   private void updateServerMetadataFromServerResponseLine(
       String serverId, IrcEvent.ServerResponseLine ev) {
     if (ev == null) return;
@@ -2574,6 +2618,7 @@ public class IrcMediator implements MediatorControlPort {
     String msg = Objects.toString(ev.message(), "");
     String rendered = "[" + ev.code() + "] " + msg;
     updateServerMetadataFromServerResponseLine(sid, ev);
+    maybeHandlePendingPrivateMessageDeliveryError(sid, ev);
     boolean suppressStatusLine =
         (ev.code() == 322); // /LIST entry rows are shown in the dedicated channel-list panel.
     if (ev.code() == 303 && monitorFallbackPort.shouldSuppressIsonServerResponse(sid)) {
