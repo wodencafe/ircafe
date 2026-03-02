@@ -50,10 +50,7 @@ class ServerTreeDockableIgnoresTooltipRegressionTest {
                     1,
                     false);
 
-            Method tooltip =
-                ServerTreeDockable.class.getDeclaredMethod("toolTipForEvent", MouseEvent.class);
-            tooltip.setAccessible(true);
-            String text = (String) tooltip.invoke(dockable, event);
+            String text = tree.getToolTipText(event);
             assertNotNull(text);
             assertTrue(text.contains("hard and soft ignore rules"));
           } catch (Exception e) {

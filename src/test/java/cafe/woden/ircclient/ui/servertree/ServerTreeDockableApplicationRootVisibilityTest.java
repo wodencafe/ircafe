@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -187,11 +188,10 @@ class ServerTreeDockableApplicationRootVisibilityTest {
     JTree tree = getTree(dockable);
     Object selected = tree.getLastSelectedPathComponent();
     if (!(selected instanceof DefaultMutableTreeNode node)) return false;
-    Method m =
-        ServerTreeDockable.class.getDeclaredMethod(
-            "isMonitorGroupNode", DefaultMutableTreeNode.class);
-    m.setAccessible(true);
-    return Boolean.TRUE.equals(m.invoke(dockable, node));
+    Field f = ServerTreeDockable.class.getDeclaredField("nodeClassifier");
+    f.setAccessible(true);
+    ServerTreeNodeClassifier classifier = (ServerTreeNodeClassifier) f.get(dockable);
+    return classifier.isMonitorGroupNode(node);
   }
 
   private static TargetRef selectedTargetRef(ServerTreeDockable dockable) throws Exception {
