@@ -47,6 +47,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
   private static final int DEFAULT_LOAD_OLDER_CHUNK_DELAY_MS = 10;
   private static final int DEFAULT_LOAD_OLDER_CHUNK_EDT_BUDGET_MS = 6;
   private static final int MIN_LOAD_OLDER_LINES_PER_CHUNK = 2;
+  private static final int INITIAL_PREFILL_FAST_PATH_MAX_LINES = 100;
   private static final int DEFAULT_REMOTE_REQUEST_TIMEOUT_SECONDS = 6;
   private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_TIMEOUT_SECONDS = 18;
   private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_WINDOW_MINUTES = 360;
@@ -529,10 +530,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
           SwingUtilities.invokeLater(
               () -> {
                 try {
-                  // Explicit batch boundary so filtered placeholders/hints don't "bridge" across
-                  // separate loads.
-                  transcripts.beginHistoryInsertBatch(target);
-
                   // If older rows exist beyond this batch, render the in-transcript paging control
                   // first,
                   // so history gets inserted *below* it.
@@ -545,54 +542,274 @@ public final class DbChatHistoryService implements ChatHistoryService {
                   }
 
                   int insertAt = hasMoreFinal ? transcripts.loadOlderInsertOffset(target) : 0;
-                  int pos = insertAt;
-                  int inserted = 0;
-                  long newestHistoryTs = 0L;
-                  for (LogLine line : linesFinal) {
-                    pos = insertLineFromHistoryAt(target, pos, line);
-                    inserted++;
-                    newestHistoryTs = line.tsEpochMs();
-                  }
-
-                  if (inserted > 0) {
+                  long startedNs = System.nanoTime();
+                  if (linesFinal.size() <= INITIAL_PREFILL_FAST_PATH_MAX_LINES) {
+                    log.debug(
+                        "[history] initial-prefill start target={} mode=small-batch lines={} hasMore={} "
+                            + "forceDeferRichText=true maxFastPathLines={}",
+                        target,
+                        linesFinal.size(),
+                        hasMoreFinal,
+                        INITIAL_PREFILL_FAST_PATH_MAX_LINES);
+                    transcripts.beginHistoryInsertBatch(target, true);
                     try {
-                      String label = historyDividerLabel(newestHistoryTs);
-                      boolean hasAfter = transcripts.hasContentAfterOffset(target, pos);
-                      log.debug(
-                          "[history] {} insertedHistoryLines={} posAfter={} hasAfter={} divider={}",
-                          target,
-                          inserted,
-                          pos,
-                          hasAfter,
-                          hasAfter ? "insert" : "pending");
-                      if (hasAfter) {
-                        transcripts.ensureHistoryDivider(target, pos, label);
-                      } else {
-                        // If there's nothing below the history we just inserted (e.g., transcript
-                        // rebuild),
-                        // defer the divider until the next live append.
-                        transcripts.markHistoryDividerPending(target, label);
+                      int pos = insertAt;
+                      int inserted = 0;
+                      long newestHistoryTs = 0L;
+                      for (LogLine line : linesFinal) {
+                        pos = insertLineFromHistoryAt(target, pos, line);
+                        inserted++;
+                        newestHistoryTs = line.tsEpochMs();
                       }
-                    } catch (Exception ignored) {
+                      finishInitialPrefill(
+                          target,
+                          pos,
+                          inserted,
+                          newestHistoryTs,
+                          hasMoreFinal,
+                          cursorCandidateFinal,
+                          "small-batch",
+                          1,
+                          startedNs);
+                    } finally {
+                      try {
+                        transcripts.endHistoryInsertBatch(target);
+                      } catch (Exception ignored) {
+                      }
                     }
+                    return;
                   }
 
-                  oldestCursor.put(target, cursorCandidateFinal);
-                  if (!hasMoreFinal) {
-                    noMoreOlder.put(target, Boolean.TRUE);
-                  } else {
-                    noMoreOlder.remove(target);
-                  }
+                  int chunkSize = configuredLoadOlderChunkSize();
+                  int chunkDelayMs = configuredLoadOlderChunkDelayMs();
+                  int chunkEdtBudgetMs = configuredLoadOlderChunkEdtBudgetMs();
+                  log.debug(
+                      "[history] initial-prefill start target={} mode=chunked lines={} hasMore={} "
+                          + "chunkSize={} chunkDelayMs={} chunkBudgetMs={} forceDeferRichText=true",
+                      target,
+                      linesFinal.size(),
+                      hasMoreFinal,
+                      chunkSize,
+                      chunkDelayMs,
+                      chunkEdtBudgetMs);
+                  transcripts.beginHistoryInsertBatch(target, true);
+                  prependInitialLinesInChunks(
+                      target,
+                      linesFinal,
+                      0,
+                      insertAt,
+                      0,
+                      0L,
+                      hasMoreFinal,
+                      cursorCandidateFinal,
+                      chunkSize,
+                      chunkDelayMs,
+                      chunkEdtBudgetMs,
+                      1,
+                      startedNs,
+                      0L,
+                      -1);
                 } catch (Exception e) {
                   log.debug("History replay error for {} / {}", serverId, tgt, e);
-                } finally {
-                  try {
-                    transcripts.endHistoryInsertBatch(target);
-                  } catch (Exception ignored) {
-                  }
                 }
               });
         });
+  }
+
+  private void prependInitialLinesInChunks(
+      TargetRef target,
+      List<LogLine> lines,
+      int nextIndexInclusive,
+      int insertAt,
+      int insertedSoFar,
+      long newestHistoryTs,
+      boolean hasMore,
+      LogCursor cursorCandidate,
+      int chunkSize,
+      int chunkDelayMs,
+      int chunkEdtBudgetMs,
+      int chunkNumber,
+      long startedNs,
+      long prevChunkEndNs,
+      int prevPlannedDelayMs) {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(
+          () ->
+              prependInitialLinesInChunks(
+                  target,
+                  lines,
+                  nextIndexInclusive,
+                  insertAt,
+                  insertedSoFar,
+                  newestHistoryTs,
+                  hasMore,
+                  cursorCandidate,
+                  chunkSize,
+                  chunkDelayMs,
+                  chunkEdtBudgetMs,
+                  chunkNumber,
+                  startedNs,
+                  prevChunkEndNs,
+                  prevPlannedDelayMs));
+      return;
+    }
+
+    boolean finished = false;
+    try {
+      int maxLines = Math.max(1, chunkSize);
+      long budgetNs = HistoryChunking.chunkBudgetNs(chunkEdtBudgetMs);
+      int minLinesBeforeBudget =
+          HistoryChunking.minLinesBeforeBudget(maxLines, MIN_LOAD_OLDER_LINES_PER_CHUNK);
+      long chunkStartNs = System.nanoTime();
+      long sincePrevChunkMs = -1L;
+      if (prevChunkEndNs > 0L && chunkStartNs >= prevChunkEndNs) {
+        sincePrevChunkMs = TimeUnit.NANOSECONDS.toMillis(chunkStartNs - prevChunkEndNs);
+      }
+      long delayOvershootMs = -1L;
+      if (sincePrevChunkMs >= 0L && prevPlannedDelayMs >= 0) {
+        delayOvershootMs = Math.max(0L, sincePrevChunkMs - prevPlannedDelayMs);
+      }
+      long deadlineNs = chunkStartNs + budgetNs;
+      int nextIndex = Math.max(0, nextIndexInclusive);
+      int safeInsertAt = Math.max(0, insertAt);
+      int inserted = Math.max(0, insertedSoFar);
+      long newestTs = newestHistoryTs;
+      int insertedThisChunk = 0;
+
+      while (nextIndex < lines.size() && insertedThisChunk < maxLines) {
+        LogLine line = lines.get(nextIndex);
+        safeInsertAt = insertLineFromHistoryAt(target, safeInsertAt, line);
+        nextIndex++;
+        inserted++;
+        insertedThisChunk++;
+        newestTs = line != null ? line.tsEpochMs() : newestTs;
+        if (insertedThisChunk >= minLinesBeforeBudget && System.nanoTime() >= deadlineNs) break;
+      }
+
+      long chunkEndNs = System.nanoTime();
+      long elapsedNs = Math.max(0L, chunkEndNs - chunkStartNs);
+      int nextDelayMs = HistoryChunking.effectiveInterChunkDelayMs(chunkDelayMs, elapsedNs);
+      int remaining = Math.max(0, lines.size() - nextIndex);
+      long chunkElapsedMs =
+          Math.max(0L, TimeUnit.NANOSECONDS.toMillis(Math.max(0L, elapsedNs)));
+      if (log.isTraceEnabled()) {
+        log.trace(
+            "[history] initial-prefill chunk target={} chunk={} insertedThisChunk={} insertedTotal={} "
+                + "remaining={} chunkElapsedMs={} sincePrevChunkMs={} prevPlannedDelayMs={} "
+                + "delayOvershootMs={} nextDelayMs={} budgetMs={} maxLines={}",
+            target,
+            chunkNumber,
+            insertedThisChunk,
+            inserted,
+            remaining,
+            chunkElapsedMs,
+            sincePrevChunkMs,
+            prevPlannedDelayMs,
+            delayOvershootMs,
+            nextDelayMs,
+            Math.max(1, Math.min(33, chunkEdtBudgetMs)),
+            maxLines);
+      }
+
+      if (nextIndex < lines.size()) {
+        final int nextIndexFinal = nextIndex;
+        final int nextInsertAt = safeInsertAt;
+        final int nextInserted = inserted;
+        final long nextNewestTs = newestTs;
+        HistoryChunking.scheduleNextChunk(
+            nextDelayMs,
+            () ->
+                prependInitialLinesInChunks(
+                    target,
+                    lines,
+                    nextIndexFinal,
+                    nextInsertAt,
+                    nextInserted,
+                    nextNewestTs,
+                    hasMore,
+                    cursorCandidate,
+                    chunkSize,
+                    chunkDelayMs,
+                    chunkEdtBudgetMs,
+                    chunkNumber + 1,
+                    startedNs,
+                    chunkEndNs,
+                    nextDelayMs));
+        return;
+      }
+
+      finished = true;
+      finishInitialPrefill(
+          target,
+          safeInsertAt,
+          inserted,
+          newestTs,
+          hasMore,
+          cursorCandidate,
+          "chunked",
+          chunkNumber,
+          startedNs);
+    } catch (Exception e) {
+      finished = true;
+      log.debug("Chunked initial history replay failed for {}", target, e);
+    } finally {
+      if (!finished) return;
+      try {
+        transcripts.endHistoryInsertBatch(target);
+      } catch (Exception ignored) {
+      }
+    }
+  }
+
+  private void finishInitialPrefill(
+      TargetRef target,
+      int pos,
+      int inserted,
+      long newestHistoryTs,
+      boolean hasMore,
+      LogCursor cursorCandidate,
+      String mode,
+      int chunks,
+      long startedNs) {
+    if (inserted > 0) {
+      try {
+        String label = historyDividerLabel(newestHistoryTs);
+        boolean hasAfter = transcripts.hasContentAfterOffset(target, pos);
+        log.debug(
+            "[history] {} insertedHistoryLines={} posAfter={} hasAfter={} divider={}",
+            target,
+            inserted,
+            pos,
+            hasAfter,
+            hasAfter ? "insert" : "pending");
+        if (hasAfter) {
+          transcripts.ensureHistoryDivider(target, pos, label);
+        } else {
+          // If there's nothing below the history we just inserted (e.g., transcript rebuild),
+          // defer the divider until the next live append.
+          transcripts.markHistoryDividerPending(target, label);
+        }
+      } catch (Exception ignored) {
+      }
+    }
+
+    oldestCursor.put(target, cursorCandidate);
+    if (!hasMore) {
+      noMoreOlder.put(target, Boolean.TRUE);
+    } else {
+      noMoreOlder.remove(target);
+    }
+
+    long elapsedMs =
+        Math.max(0L, TimeUnit.NANOSECONDS.toMillis(Math.max(0L, System.nanoTime() - startedNs)));
+    log.debug(
+        "[history] initial-prefill done target={} mode={} lines={} chunks={} elapsedMs={} hasMore={}",
+        target,
+        mode,
+        inserted,
+        Math.max(1, chunks),
+        elapsedMs,
+        hasMore);
   }
 
   /**
@@ -716,10 +933,11 @@ public final class DbChatHistoryService implements ChatHistoryService {
     boolean finished = false;
     try {
       int maxLines = Math.max(1, chunkSize);
-      long budgetNs = TimeUnit.MILLISECONDS.toNanos(Math.max(1, Math.min(33, chunkEdtBudgetMs)));
-      int minLinesBeforeBudget = Math.min(maxLines, Math.max(1, MIN_LOAD_OLDER_LINES_PER_CHUNK));
+      long budgetNs = HistoryChunking.chunkBudgetNs(chunkEdtBudgetMs);
+      int minLinesBeforeBudget =
+          HistoryChunking.minLinesBeforeBudget(maxLines, MIN_LOAD_OLDER_LINES_PER_CHUNK);
       long chunkStartNs = System.nanoTime();
-      long deadlineNs = System.nanoTime() + budgetNs;
+      long deadlineNs = chunkStartNs + budgetNs;
       int safeInsertAt = Math.max(0, insertAt);
       int nextIndex = nextIndexInclusive;
       int insertedThisChunk = 0;
@@ -736,7 +954,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
         if (insertedThisChunk >= minLinesBeforeBudget && System.nanoTime() >= deadlineNs) break;
       }
       long elapsedNs = Math.max(0L, System.nanoTime() - chunkStartNs);
-      int nextDelayMs = effectiveInterChunkDelayMs(chunkDelayMs, elapsedNs);
+      int nextDelayMs = HistoryChunking.effectiveInterChunkDelayMs(chunkDelayMs, elapsedNs);
 
       ScrollAnchor effectiveAnchor =
           lockViewportDuringLoad ? fixedAnchor : ScrollAnchor.capture(anchorControl);
@@ -747,7 +965,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
       if (nextIndex >= 0) {
         final int nextIndexFinal = nextIndex;
         final int nextInsertAt = safeInsertAt;
-        scheduleNextChunk(
+        HistoryChunking.scheduleNextChunk(
             nextDelayMs,
             () ->
                 prependOlderLinesInChunks(
@@ -783,31 +1001,6 @@ public final class DbChatHistoryService implements ChatHistoryService {
         SwingUtilities.invokeLater(fixedAnchor::restoreAfterFinalInsertIfNeeded);
       }
     }
-  }
-
-  private static void scheduleNextChunk(int delayMs, Runnable task) {
-    if (task == null) return;
-    int safeDelayMs = Math.max(0, Math.min(1_000, delayMs));
-    if (safeDelayMs == 0) {
-      SwingUtilities.invokeLater(task);
-      return;
-    }
-    javax.swing.Timer timer =
-        new javax.swing.Timer(
-            safeDelayMs,
-            e -> {
-              ((javax.swing.Timer) e.getSource()).stop();
-              task.run();
-            });
-    timer.setRepeats(false);
-    timer.start();
-  }
-
-  private static int effectiveInterChunkDelayMs(int configuredDelayMs, long elapsedNs) {
-    int safeDelayMs = Math.max(0, Math.min(1_000, configuredDelayMs));
-    long elapsedMs = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(Math.max(0L, elapsedNs)));
-    if (elapsedMs >= safeDelayMs) return 0;
-    return (int) (safeDelayMs - elapsedMs);
   }
 
   private boolean configuredLockViewportDuringLoadOlder() {
