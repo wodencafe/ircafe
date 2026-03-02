@@ -220,9 +220,14 @@ public class RuntimeConfigStore {
     }
   }
 
-  public record ServerTreeChannelPreference(String channel, boolean autoReattach, boolean pinned) {
+  public record ServerTreeChannelPreference(
+      String channel, boolean autoReattach, boolean pinned, boolean muted) {
     public ServerTreeChannelPreference(String channel, boolean autoReattach) {
-      this(channel, autoReattach, false);
+      this(channel, autoReattach, false, false);
+    }
+
+    public ServerTreeChannelPreference(String channel, boolean autoReattach, boolean pinned) {
+      this(channel, autoReattach, pinned, false);
     }
   }
 
@@ -731,7 +736,11 @@ public class RuntimeConfigStore {
     ServerTreeChannelPreference current = byKey.get(key);
     byKey.put(
         key,
-        new ServerTreeChannelPreference(chan, autoReattach, current != null && current.pinned()));
+        new ServerTreeChannelPreference(
+            chan,
+            autoReattach,
+            current != null && current.pinned(),
+            current != null && current.muted()));
 
     ArrayList<String> customOrder = sanitizeCustomOrder(state, byKey);
     if (!containsIgnoreCase(customOrder, chan)) {
@@ -775,7 +784,55 @@ public class RuntimeConfigStore {
     String key = foldChannelKey(chan);
     ServerTreeChannelPreference current = byKey.get(key);
     boolean autoReattach = current == null || current.autoReattach();
-    byKey.put(key, new ServerTreeChannelPreference(chan, autoReattach, pinned));
+    byKey.put(
+        key,
+        new ServerTreeChannelPreference(
+            chan, autoReattach, pinned, current != null && current.muted()));
+
+    ArrayList<String> customOrder = sanitizeCustomOrder(state, byKey);
+    if (!containsIgnoreCase(customOrder, chan)) {
+      customOrder.add(chan);
+    }
+
+    writeServerTreeChannelState(
+        sid,
+        new ServerTreeChannelState(
+            state.sortMode(), List.copyOf(customOrder), List.copyOf(byKey.values())));
+  }
+
+  public synchronized boolean readServerTreeChannelMuted(
+      String serverId, String channel, boolean defaultValue) {
+    String sid = Objects.toString(serverId, "").trim();
+    String chan = normalizeChannelName(channel);
+    if (sid.isEmpty() || chan.isEmpty()) return defaultValue;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    if (state == null || state.channels() == null) return defaultValue;
+
+    for (ServerTreeChannelPreference pref : state.channels()) {
+      if (pref == null) continue;
+      String existing = normalizeChannelName(pref.channel());
+      if (existing.isEmpty()) continue;
+      if (existing.equalsIgnoreCase(chan)) {
+        return pref.muted();
+      }
+    }
+    return defaultValue;
+  }
+
+  public synchronized void rememberServerTreeChannelMuted(
+      String serverId, String channel, boolean muted) {
+    String sid = Objects.toString(serverId, "").trim();
+    String chan = normalizeChannelName(channel);
+    if (sid.isEmpty() || chan.isEmpty()) return;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
+    String key = foldChannelKey(chan);
+    ServerTreeChannelPreference current = byKey.get(key);
+    boolean autoReattach = current == null || current.autoReattach();
+    boolean pinned = current != null && current.pinned();
+    byKey.put(key, new ServerTreeChannelPreference(chan, autoReattach, pinned, muted));
 
     ArrayList<String> customOrder = sanitizeCustomOrder(state, byKey);
     if (!containsIgnoreCase(customOrder, chan)) {
@@ -864,7 +921,8 @@ public class RuntimeConfigStore {
           if (byKey.containsKey(key)) continue;
           boolean auto = asBoolean(item.get("autoReattach")).orElse(Boolean.TRUE);
           boolean pinned = asBoolean(item.get("pinned")).orElse(Boolean.FALSE);
-          byKey.put(key, new ServerTreeChannelPreference(channel, auto, pinned));
+          boolean muted = asBoolean(item.get("muted")).orElse(Boolean.FALSE);
+          byKey.put(key, new ServerTreeChannelPreference(channel, auto, pinned, muted));
         }
       }
 
@@ -1005,6 +1063,9 @@ public class RuntimeConfigStore {
             if (pref.pinned()) {
               item.put("pinned", true);
             }
+            if (pref.muted()) {
+              item.put("muted", true);
+            }
             channelsOut.add(item);
           }
           if (!channelsOut.isEmpty()) {
@@ -1061,7 +1122,10 @@ public class RuntimeConfigStore {
       String channel = normalizeChannelName(pref.channel());
       if (channel.isEmpty()) continue;
       String key = foldChannelKey(channel);
-      byKey.put(key, new ServerTreeChannelPreference(channel, pref.autoReattach(), pref.pinned()));
+      byKey.put(
+          key,
+          new ServerTreeChannelPreference(
+              channel, pref.autoReattach(), pref.pinned(), pref.muted()));
     }
     return byKey;
   }
@@ -1982,6 +2046,23 @@ public class RuntimeConfigStore {
     rememberDockLayoutWidths(null, userDockWidthPx);
   }
 
+  public synchronized void rememberPreserveDockLayout(boolean preserveDockLayout) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> layout = getOrCreateMap(ui, "layout");
+
+      layout.put("preserveDockLayout", preserveDockLayout);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.layout.preserveDockLayout to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberUiDensity(String density) {
     try {
       if (file.toString().isBlank()) return;
@@ -2130,6 +2211,16 @@ public class RuntimeConfigStore {
 
   public synchronized void rememberChatMentionBgColor(String hex) {
     rememberOptionalUiHex("chatMentionBgColor", hex, "chatMentionBgColor");
+  }
+
+  public synchronized void rememberServerTreeUnreadChannelColor(String hex) {
+    rememberOptionalUiHex(
+        "serverTreeUnreadChannelColor", hex, "serverTreeUnreadChannelColor");
+  }
+
+  public synchronized void rememberServerTreeHighlightChannelColor(String hex) {
+    rememberOptionalUiHex(
+        "serverTreeHighlightChannelColor", hex, "serverTreeHighlightChannelColor");
   }
 
   public synchronized void rememberChatMentionStrength(int strength) {

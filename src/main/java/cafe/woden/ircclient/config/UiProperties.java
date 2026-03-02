@@ -62,6 +62,12 @@ public record UiProperties(
     Boolean outgoingDeliveryIndicatorsEnabled,
     /** Show unread/highlight notification badges in the server tree. */
     Boolean serverTreeNotificationBadgesEnabled,
+    /** Optional channel label color used for unread (non-highlight) channel nodes in server tree. */
+    String serverTreeUnreadChannelColor,
+    /**
+     * Optional channel label color used for highlight/mention channel nodes in server tree.
+     */
+    String serverTreeHighlightChannelColor,
     Boolean imageEmbedsEnabled,
     Boolean imageEmbedsCollapsedByDefault,
     Integer imageEmbedsMaxWidthPx,
@@ -369,10 +375,12 @@ public record UiProperties(
    * <p>These sizes are used as a best-effort "first open" hint. After the user drags split
    * dividers, those new sizes are preserved by the split-pane lock logic.
    */
-  public record Layout(Integer serverDockWidthPx, Integer userDockWidthPx) {
+  public record Layout(
+      Integer serverDockWidthPx, Integer userDockWidthPx, Boolean preserveDockLayout) {
     public Layout {
       if (serverDockWidthPx == null || serverDockWidthPx <= 0) serverDockWidthPx = 280;
       if (userDockWidthPx == null || userDockWidthPx <= 0) userDockWidthPx = 240;
+      if (preserveDockLayout == null) preserveDockLayout = false;
     }
   }
 
@@ -752,9 +760,11 @@ public record UiProperties(
     if (serverTreeNotificationBadgesEnabled == null) {
       serverTreeNotificationBadgesEnabled = true;
     }
+    serverTreeUnreadChannelColor = normalizeHexOrNull(serverTreeUnreadChannelColor);
+    serverTreeHighlightChannelColor = normalizeHexOrNull(serverTreeHighlightChannelColor);
 
     if (layout == null) {
-      layout = new Layout(null, null);
+      layout = new Layout(null, null, null);
     }
 
     if (appDiagnostics == null) {

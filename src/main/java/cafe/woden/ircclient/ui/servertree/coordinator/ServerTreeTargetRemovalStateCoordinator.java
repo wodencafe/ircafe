@@ -27,6 +27,7 @@ public final class ServerTreeTargetRemovalStateCoordinator {
   private final Map<String, Map<String, Long>> channelActivityRankByServer;
   private final Map<String, ArrayList<String>> channelCustomOrderByServer;
   private final Map<String, Map<String, Boolean>> channelPinnedByServer;
+  private final Map<String, Map<String, Boolean>> channelMutedByServer;
   private final Context context;
 
   public ServerTreeTargetRemovalStateCoordinator(
@@ -43,6 +44,7 @@ public final class ServerTreeTargetRemovalStateCoordinator {
     this.channelActivityRankByServer = stateStore.channelActivityRankByServer();
     this.channelCustomOrderByServer = stateStore.channelCustomOrderByServer();
     this.channelPinnedByServer = stateStore.channelPinnedByServer();
+    this.channelMutedByServer = stateStore.channelMutedByServer();
     this.context = Objects.requireNonNull(context, "context");
   }
 
@@ -72,6 +74,10 @@ public final class ServerTreeTargetRemovalStateCoordinator {
     Map<String, Boolean> pinnedByChannel = channelPinnedByServer.get(sid);
     if (pinnedByChannel != null) {
       pinnedByChannel.remove(key);
+    }
+    Map<String, Boolean> mutedByChannel = channelMutedByServer.get(sid);
+    if (mutedByChannel != null) {
+      mutedByChannel.remove(key);
     }
     ArrayList<String> customOrder = channelCustomOrderByServer.get(sid);
     if (customOrder != null) {

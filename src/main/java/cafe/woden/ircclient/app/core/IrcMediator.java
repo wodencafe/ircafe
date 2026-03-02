@@ -543,7 +543,9 @@ public class IrcMediator implements MediatorControlPort {
         } else {
           ui.appendStatusAt(dest, at, "(ctcp)", rendered);
         }
-        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+        if (!dest.equals(targetCoordinator.getActiveTarget()) && !isMutedChannel(dest)) {
+          ui.markUnread(dest);
+        }
         return;
       }
     }
@@ -725,9 +727,11 @@ public class IrcMediator implements MediatorControlPort {
               InterceptorEventType.HIGHLIGHT);
           recordMentionHighlight(chan, active, ev.from(), ev.text());
 
-          try {
-            trayNotificationService.notifyHighlight(sid, ev.channel(), ev.from(), ev.text());
-          } catch (Exception ignored) {
+          if (!isMutedChannel(chan)) {
+            try {
+              trayNotificationService.notifyHighlight(sid, ev.channel(), ev.from(), ev.text());
+            } catch (Exception ignored) {
+            }
           }
         }
       }
@@ -792,10 +796,12 @@ public class IrcMediator implements MediatorControlPort {
               InterceptorEventType.HIGHLIGHT);
           recordMentionHighlight(chan, active, ev.from(), "* " + ev.action());
 
-          try {
-            trayNotificationService.notifyHighlight(
-                sid, ev.channel(), ev.from(), "* " + ev.action());
-          } catch (Exception ignored) {
+          if (!isMutedChannel(chan)) {
+            try {
+              trayNotificationService.notifyHighlight(
+                  sid, ev.channel(), ev.from(), "* " + ev.action());
+            } catch (Exception ignored) {
+            }
           }
         }
       }
@@ -1419,7 +1425,7 @@ public class IrcMediator implements MediatorControlPort {
                   ircEventNotifierPort != null
                       && ircEventNotifierPort.hasEnabledRuleFor(
                           IrcEventNotificationRule.EventType.INVITE_RECEIVED);
-              if (!customInviteNotified && !inviteRulesEnabled) {
+              if (!customInviteNotified && !inviteRulesEnabled && !isMutedChannel(sid, channel)) {
                 try {
                   trayNotificationService.notifyInvite(sid, channel, inviter, reason);
                 } catch (Exception ignored) {
@@ -1982,6 +1988,7 @@ public class IrcMediator implements MediatorControlPort {
     if (eventType == null || ircEventNotifierPort == null) return false;
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
+    if (isMutedChannel(sid, channel)) return false;
 
     String src = Objects.toString(sourceNick, "").trim();
     Boolean sourceIsSelf = src.isEmpty() ? null : isFromSelf(sid, src);
@@ -2331,6 +2338,7 @@ public class IrcMediator implements MediatorControlPort {
   private void recordRuleMatchIfPresent(
       TargetRef chan, TargetRef active, String from, String text, NotificationRuleMatch match) {
     if (chan == null || match == null) return;
+    if (isMutedChannel(chan)) return;
     if (active == null || !chan.equals(active)) {
       ui.markHighlight(chan);
     }
@@ -2341,6 +2349,7 @@ public class IrcMediator implements MediatorControlPort {
   private void recordMentionHighlight(
       TargetRef chan, TargetRef active, String fromNick, String snippet) {
     if (chan == null) return;
+    if (isMutedChannel(chan)) return;
     if (active == null || !chan.equals(active)) {
       ui.markHighlight(chan);
     }
@@ -3223,8 +3232,28 @@ public class IrcMediator implements MediatorControlPort {
       write.accept(dest);
     }
 
-    if (markUnreadIfNotActive && active != null && !dest.equals(active)) {
+    if (markUnreadIfNotActive && active != null && !dest.equals(active) && !isMutedChannel(dest)) {
       ui.markUnread(dest);
+    }
+  }
+
+  private boolean isMutedChannel(TargetRef target) {
+    if (target == null || !target.isChannel()) return false;
+    try {
+      return ui.isChannelMuted(target);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isMutedChannel(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) return false;
+    try {
+      return isMutedChannel(new TargetRef(sid, ch));
+    } catch (Exception ignored) {
+      return false;
     }
   }
 

@@ -933,7 +933,10 @@ public class PreferencesDialog {
                 : runtimeConfig.readUnknownCommandAsRawEnabled(false));
     DiagnosticsControls diagnostics = buildDiagnosticsControls();
 
-    JPanel appearancePanel = buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks);
+    AppearanceServerTreeControls appearanceServerTree =
+        buildAppearanceServerTreeControls(current);
+    JPanel appearancePanel =
+        buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks, appearanceServerTree);
     JPanel memoryPanel = buildMemoryPanel(memoryUsageDisplayMode, memoryWarnings);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart, launchJvm);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
@@ -1425,6 +1428,27 @@ public class PreferencesDialog {
               UiSettings.normalizeHexOrDefault(outgoing.hex.getText(), prev.clientLineColor());
           outgoing.hex.setText(outgoingHexV);
           boolean outgoingDeliveryIndicatorsEnabledV = outgoingDeliveryIndicators.isSelected();
+          String serverTreeUnreadChannelColorV;
+          String serverTreeHighlightChannelColorV;
+          try {
+            serverTreeUnreadChannelColorV =
+                normalizeOptionalHexForApply(
+                    appearanceServerTree.unreadChannelColor.hex().getText(),
+                    "Unread channel color must be blank or a hex value like #RRGGBB.");
+            serverTreeHighlightChannelColorV =
+                normalizeOptionalHexForApply(
+                    appearanceServerTree.highlightChannelColor.hex().getText(),
+                    "Highlight channel color must be blank or a hex value like #RRGGBB.");
+          } catch (IllegalArgumentException ex) {
+            JOptionPane.showMessageDialog(
+                dialog,
+                ex.getMessage(),
+                "Invalid server tree color",
+                JOptionPane.ERROR_MESSAGE);
+            return;
+          }
+          boolean preserveDockLayoutBetweenSessionsV =
+              appearanceServerTree.preserveDockLayoutBetweenSessions.isSelected();
 
           if (notifications.table.isEditing()) {
             try {
@@ -1619,7 +1643,10 @@ public class PreferencesDialog {
                   memoryWarningToastEnabledV,
                   memoryWarningPushyEnabledV,
                   memoryWarningSoundEnabledV,
-                  notificationRulesV);
+                  notificationRulesV,
+                  serverTreeUnreadChannelColorV,
+                  serverTreeHighlightChannelColorV,
+                  preserveDockLayoutBetweenSessionsV);
           SpellcheckSettings nextSpellcheck =
               new SpellcheckSettings(
                   spellcheckEnabledV,
@@ -1641,6 +1668,9 @@ public class PreferencesDialog {
               serverTreeUnreadBadgeScalePercentV);
           runtimeConfig.rememberServerTreeNotificationBadgesEnabled(
               serverTreeNotificationBadgesEnabledV);
+          runtimeConfig.rememberServerTreeUnreadChannelColor(serverTreeUnreadChannelColorV);
+          runtimeConfig.rememberServerTreeHighlightChannelColor(serverTreeHighlightChannelColorV);
+          runtimeConfig.rememberPreserveDockLayout(preserveDockLayoutBetweenSessionsV);
           settingsBus.set(next);
           if (spellcheckSettingsBus != null) {
             spellcheckSettingsBus.set(nextSpellcheck);
@@ -5827,7 +5857,8 @@ public class PreferencesDialog {
       AccentControls accent,
       ChatThemeControls chatTheme,
       FontControls fonts,
-      TweakControls tweaks) {
+      TweakControls tweaks,
+      AppearanceServerTreeControls serverTree) {
     JPanel form =
         new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[grow,push]8[]"));
 
@@ -5839,6 +5870,7 @@ public class PreferencesDialog {
     appearanceTabs.addTab("UI font", padSubTab(buildAppearanceUiFontSubTab(tweaks)));
     appearanceTabs.addTab("Chat colors", padSubTab(buildAppearanceChatColorsSubTab(chatTheme)));
     appearanceTabs.addTab("Chat text", padSubTab(buildAppearanceChatTextSubTab(fonts)));
+    appearanceTabs.addTab("Server tree", padSubTab(buildAppearanceServerTreeSubTab(serverTree)));
     form.add(appearanceTabs, "grow, push, wmin 0");
 
     JButton reset = new JButton("Reset to defaults");
@@ -5885,6 +5917,11 @@ public class PreferencesDialog {
           chatTheme.action.updateIcon.run();
           chatTheme.error.updateIcon.run();
           chatTheme.presence.updateIcon.run();
+          serverTree.unreadChannelColor.hex().setText("");
+          serverTree.highlightChannelColor.hex().setText("");
+          serverTree.unreadChannelColor.updateIcon().run();
+          serverTree.highlightChannelColor.updateIcon().run();
+          serverTree.preserveDockLayoutBetweenSessions.setSelected(false);
 
           accent.applyEnabledState.run();
           accent.syncPresetFromHex.run();
@@ -5979,6 +6016,47 @@ public class PreferencesDialog {
     panel.add(fonts.fontFamily, "growx");
     panel.add(new JLabel("Font size"));
     panel.add(fonts.fontSize, "w 110!");
+
+    return panel;
+  }
+
+  private AppearanceServerTreeControls buildAppearanceServerTreeControls(UiSettings current) {
+    ColorField unreadChannelColor =
+        buildOptionalColorField(
+            current != null ? current.serverTreeUnreadChannelColor() : null,
+            "Pick a channel color for unread messages");
+    ColorField highlightChannelColor =
+        buildOptionalColorField(
+            current != null ? current.serverTreeHighlightChannelColor() : null,
+            "Pick a channel color for unread highlights/mentions");
+    JCheckBox preserveDockLayoutBetweenSessions =
+        new JCheckBox("Preserve dock layout between restarts");
+    preserveDockLayoutBetweenSessions.setToolTipText(
+        "When enabled, dock positions/splits are restored on next app launch.");
+    preserveDockLayoutBetweenSessions.setSelected(
+        current != null && current.preserveDockLayoutBetweenSessions());
+    return new AppearanceServerTreeControls(
+        unreadChannelColor, highlightChannelColor, preserveDockLayoutBetweenSessions);
+  }
+
+  private JPanel buildAppearanceServerTreeSubTab(AppearanceServerTreeControls serverTree) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]"));
+    panel.setOpaque(false);
+
+    panel.add(sectionTitle("Server tree"), "span 2, growx, wmin 0, wrap");
+    panel.add(new JLabel("Unread channel color"));
+    panel.add(serverTree.unreadChannelColor.panel(), "growx");
+    panel.add(new JLabel("Highlight channel color"));
+    panel.add(serverTree.highlightChannelColor.panel(), "growx");
+    panel.add(new JLabel("Dock layout"));
+    panel.add(serverTree.preserveDockLayoutBetweenSessions, "growx");
+
+    JTextArea hint = subtleInfoText();
+    hint.setText(
+        "Leave colors blank to use theme defaults. Dock layout restore applies on next launch.");
+    panel.add(new JLabel(""));
+    panel.add(hint, "growx, wmin 0");
 
     return panel;
   }
@@ -10814,6 +10892,11 @@ public class PreferencesDialog {
   private record ThemeControls(JComboBox<String> combo) {}
 
   private record FontControls(JComboBox<String> fontFamily, JSpinner fontSize) {}
+
+  private record AppearanceServerTreeControls(
+      ColorField unreadChannelColor,
+      ColorField highlightChannelColor,
+      JCheckBox preserveDockLayoutBetweenSessions) {}
 
   private record DensityOption(String id, String label) {
     @Override

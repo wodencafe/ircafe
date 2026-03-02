@@ -112,6 +112,7 @@ import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
@@ -397,6 +398,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private volatile boolean typingIndicatorsTreeEnabled = true;
   private volatile int unreadBadgeScalePercent = TREE_BADGE_SCALE_PERCENT_DEFAULT;
   private volatile boolean serverTreeNotificationBadgesEnabled = true;
+  private volatile Color unreadChannelTextColor = null;
+  private volatile Color highlightChannelTextColor = null;
   private volatile boolean showChannelListNodes = true;
   private volatile boolean showDccTransfersNodes = false;
   private boolean startupSelectionCompleted = false;
@@ -836,6 +839,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                     this::setChannelAutoReattach,
                     this::isChannelPinned,
                     this::setChannelPinned,
+                    this::isChannelMuted,
+                    this::setChannelMuted,
                     uiHooks::closeTarget,
                     interceptorActions::setInterceptorEnabled,
                     interceptorActions::promptRenameInterceptor,
@@ -891,6 +896,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                         style == null ? ServerTreeTypingIndicatorStyle.DOTS : style,
                 enabled -> serverTreeNotificationBadgesEnabled = enabled,
                 percent -> unreadBadgeScalePercent = percent,
+                color -> unreadChannelTextColor = color,
+                color -> highlightChannelTextColor = color,
                 this::refreshTreeLayoutAfterUiChange,
                 this::refreshApplicationJfrNode),
             TREE_BADGE_SCALE_PERCENT_DEFAULT);
@@ -948,6 +955,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::isPrivateMessageTarget,
                 privateMessageOnlineStateStore::isOnline,
                 this::isChannelPinned,
+                this::isChannelMuted,
+                () -> unreadChannelTextColor,
+                () -> highlightChannelTextColor,
                 this::isApplicationJfrActive,
                 this::isInterceptorEnabled,
                 nodeClassifier::isMonitorGroupNode,
@@ -2024,6 +2034,26 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     writeChannelState(ref, () -> channelStateCoordinator.setChannelPinned(ref, pinned));
   }
 
+  public boolean isChannelMuted(TargetRef ref) {
+    return readChannelState(ref, false, channelStateCoordinator::isChannelMuted);
+  }
+
+  public void setChannelMuted(TargetRef ref, boolean muted) {
+    writeChannelState(
+        ref,
+        () -> {
+          channelStateCoordinator.setChannelMuted(ref, muted);
+          if (muted) {
+            clearUnreadCountsForMutedChannel(ref);
+          } else {
+            DefaultMutableTreeNode node = leaves.get(ref);
+            if (node != null) {
+              model.nodeChanged(node);
+            }
+          }
+        });
+  }
+
   private void emitManagedChannelsChanged(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
@@ -2043,6 +2073,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void bumpUnreadCounter(TargetRef ref, boolean highlight) {
+    if (isChannelTarget(ref) && isChannelMuted(ref)) return;
     DefaultMutableTreeNode node = leaves.get(ref);
     if (node == null) return;
     if (!(node.getUserObject() instanceof ServerTreeNodeData nd)) return;
@@ -2057,6 +2088,22 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (ref != null && ref.isChannel()) {
       emitManagedChannelsChanged(ref.serverId());
     }
+  }
+
+  private void clearUnreadCountsForMutedChannel(TargetRef ref) {
+    if (!isChannelTarget(ref)) return;
+    DefaultMutableTreeNode node = leaves.get(ref);
+    if (node == null) return;
+    if (!(node.getUserObject() instanceof ServerTreeNodeData nd)) return;
+    if (nd.unread == 0 && nd.highlightUnread == 0) {
+      model.nodeChanged(node);
+      return;
+    }
+    nd.unread = 0;
+    nd.highlightUnread = 0;
+    model.nodeChanged(node);
+    channelStateCoordinator.onChannelUnreadCountsChanged(ref);
+    emitManagedChannelsChanged(ref.serverId());
   }
 
   public void clearUnread(TargetRef ref) {

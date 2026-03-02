@@ -278,7 +278,10 @@ public class UiSettingsBus {
             memoryUsageWarningToastEnabled,
             memoryUsageWarningPushyEnabled,
             memoryUsageWarningSoundEnabled,
-            notificationRules);
+            notificationRules,
+            props.serverTreeUnreadChannelColor(),
+            props.serverTreeHighlightChannelColor(),
+            props.layout() != null && Boolean.TRUE.equals(props.layout().preserveDockLayout()));
   }
 
   public UiSettings get() {

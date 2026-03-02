@@ -5,6 +5,7 @@ import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeSettingsSynchronizer;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTypingIndicatorStyle;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import java.awt.Color;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
@@ -23,6 +24,8 @@ public final class ServerTreeSettingsSynchronizerContextAdapter
   private final Consumer<ServerTreeTypingIndicatorStyle> setTypingIndicatorStyle;
   private final Consumer<Boolean> setServerTreeNotificationBadgesEnabled;
   private final IntConsumer setUnreadBadgeScalePercent;
+  private final Consumer<Color> setUnreadChannelTextColor;
+  private final Consumer<Color> setHighlightChannelTextColor;
   private final Runnable refreshTreeLayoutAfterUiChange;
   private final Runnable refreshApplicationJfrNode;
 
@@ -36,6 +39,8 @@ public final class ServerTreeSettingsSynchronizerContextAdapter
       Consumer<ServerTreeTypingIndicatorStyle> setTypingIndicatorStyle,
       Consumer<Boolean> setServerTreeNotificationBadgesEnabled,
       IntConsumer setUnreadBadgeScalePercent,
+      Consumer<Color> setUnreadChannelTextColor,
+      Consumer<Color> setHighlightChannelTextColor,
       Runnable refreshTreeLayoutAfterUiChange,
       Runnable refreshApplicationJfrNode) {
     this.settingsBus = settingsBus;
@@ -54,6 +59,10 @@ public final class ServerTreeSettingsSynchronizerContextAdapter
             setServerTreeNotificationBadgesEnabled, "setServerTreeNotificationBadgesEnabled");
     this.setUnreadBadgeScalePercent =
         Objects.requireNonNull(setUnreadBadgeScalePercent, "setUnreadBadgeScalePercent");
+    this.setUnreadChannelTextColor =
+        Objects.requireNonNull(setUnreadChannelTextColor, "setUnreadChannelTextColor");
+    this.setHighlightChannelTextColor =
+        Objects.requireNonNull(setHighlightChannelTextColor, "setHighlightChannelTextColor");
     this.refreshTreeLayoutAfterUiChange =
         Objects.requireNonNull(refreshTreeLayoutAfterUiChange, "refreshTreeLayoutAfterUiChange");
     this.refreshApplicationJfrNode =
@@ -103,6 +112,16 @@ public final class ServerTreeSettingsSynchronizerContextAdapter
   @Override
   public void setUnreadBadgeScalePercent(int percent) {
     setUnreadBadgeScalePercent.accept(percent);
+  }
+
+  @Override
+  public void setUnreadChannelTextColor(Color color) {
+    setUnreadChannelTextColor.accept(color);
+  }
+
+  @Override
+  public void setHighlightChannelTextColor(Color color) {
+    setHighlightChannelTextColor.accept(color);
   }
 
   @Override

@@ -178,6 +178,9 @@ class TrayNotificationServiceTest {
         false,
         false,
         false,
-        List.of());
+        List.of(),
+        null,
+        null,
+        false);
   }
 }

@@ -64,6 +64,8 @@ public final class ServerTreeContextMenuBuilderContextAdapter
   private final BiConsumer<TargetRef, Boolean> setChannelAutoReattach;
   private final Predicate<TargetRef> isChannelPinned;
   private final BiConsumer<TargetRef, Boolean> setChannelPinned;
+  private final Predicate<TargetRef> isChannelMuted;
+  private final BiConsumer<TargetRef, Boolean> setChannelMuted;
   private final Consumer<TargetRef> requestCloseTarget;
   private final Function<TargetRef, InterceptorDefinition> interceptorDefinition;
   private final BiConsumer<TargetRef, Boolean> setInterceptorEnabled;
@@ -119,6 +121,8 @@ public final class ServerTreeContextMenuBuilderContextAdapter
       BiConsumer<TargetRef, Boolean> setChannelAutoReattach,
       Predicate<TargetRef> isChannelPinned,
       BiConsumer<TargetRef, Boolean> setChannelPinned,
+      Predicate<TargetRef> isChannelMuted,
+      BiConsumer<TargetRef, Boolean> setChannelMuted,
       Consumer<TargetRef> requestCloseTarget,
       Function<TargetRef, InterceptorDefinition> interceptorDefinition,
       BiConsumer<TargetRef, Boolean> setInterceptorEnabled,
@@ -197,6 +201,8 @@ public final class ServerTreeContextMenuBuilderContextAdapter
         Objects.requireNonNull(setChannelAutoReattach, "setChannelAutoReattach");
     this.isChannelPinned = Objects.requireNonNull(isChannelPinned, "isChannelPinned");
     this.setChannelPinned = Objects.requireNonNull(setChannelPinned, "setChannelPinned");
+    this.isChannelMuted = Objects.requireNonNull(isChannelMuted, "isChannelMuted");
+    this.setChannelMuted = Objects.requireNonNull(setChannelMuted, "setChannelMuted");
     this.requestCloseTarget = Objects.requireNonNull(requestCloseTarget, "requestCloseTarget");
     this.interceptorDefinition =
         Objects.requireNonNull(interceptorDefinition, "interceptorDefinition");
@@ -421,6 +427,16 @@ public final class ServerTreeContextMenuBuilderContextAdapter
   @Override
   public void setChannelPinned(TargetRef target, boolean pinned) {
     setChannelPinned.accept(target, pinned);
+  }
+
+  @Override
+  public boolean isChannelMuted(TargetRef target) {
+    return isChannelMuted.test(target);
+  }
+
+  @Override
+  public void setChannelMuted(TargetRef target, boolean muted) {
+    setChannelMuted.accept(target, muted);
   }
 
   @Override

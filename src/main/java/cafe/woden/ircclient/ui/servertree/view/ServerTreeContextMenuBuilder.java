@@ -106,6 +106,10 @@ public final class ServerTreeContextMenuBuilder {
 
     void setChannelPinned(TargetRef target, boolean pinned);
 
+    boolean isChannelMuted(TargetRef target);
+
+    void setChannelMuted(TargetRef target, boolean muted);
+
     void requestCloseTarget(TargetRef target);
 
     InterceptorDefinition interceptorDefinition(TargetRef target);
@@ -352,6 +356,11 @@ public final class ServerTreeContextMenuBuilder {
     JMenuItem pinToggle = new JMenuItem(pinned ? "Unpin Channel" : "Pin Channel");
     pinToggle.addActionListener(ev -> context.setChannelPinned(ref, !pinned));
     menu.add(pinToggle);
+
+    JCheckBoxMenuItem muted = new JCheckBoxMenuItem("Mute notifications in this channel");
+    muted.setSelected(context.isChannelMuted(ref));
+    muted.addActionListener(ev -> context.setChannelMuted(ref, muted.isSelected()));
+    menu.add(muted);
 
     if (detached) {
       JMenuItem closeChannel = new JMenuItem("Close Channel \"" + nodeData.label + "\"");

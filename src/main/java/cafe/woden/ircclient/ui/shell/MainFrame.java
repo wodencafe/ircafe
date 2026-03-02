@@ -17,6 +17,7 @@ import io.github.andrewauclair.moderndocking.app.Docking;
 import io.github.andrewauclair.moderndocking.app.RootDockingPanel;
 import jakarta.annotation.PreDestroy;
 import java.awt.*;
+import java.io.File;
 import java.awt.event.ActionEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -24,6 +25,8 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import javax.swing.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,16 +96,47 @@ public class MainFrame extends JFrame {
     registerDockableIfNeeded(chat);
     registerDockableIfNeeded(serverTree);
     registerDockableIfNeeded(users);
+    Docking.setUserDynamicDockableCreationListener(
+        (persistentId, className, displayText, tabText, properties) ->
+            chatDockManager.dynamicDockableForPersistentId(persistentId));
 
-    // First dock must be to an empty root container.
-    Docking.dock(chat, this);
+    boolean preserveDockLayout =
+        uiProps != null
+            && uiProps.layout() != null
+            && Boolean.TRUE.equals(uiProps.layout().preserveDockLayout());
+    boolean restoredDockLayout = false;
+    try {
+      var dockingApi = Docking.getSingleInstance();
+      if (dockingApi != null) {
+        var appState = dockingApi.getAppState();
+        if (appState != null) {
+          File persistFile = resolveDockLayoutPersistFile(runtimeConfigStore);
+          appState.setPersistFile(persistFile);
+          appState.setAutoPersist(preserveDockLayout);
+          if (preserveDockLayout && persistFile.isFile()) {
+            restoredDockLayout = appState.restore();
+          }
+        }
+      }
+    } catch (Exception e) {
+      log.warn("docking: failed to restore persisted layout; falling back to startup layout", e);
+      restoredDockLayout = false;
+    }
+    if (restoredDockLayout && !Docking.isDocked(chat)) {
+      restoredDockLayout = false;
+    }
 
-    Docking.dock(serverTree, chat, DockingRegion.WEST, 0.22);
-    // ModernDocking's "size" parameter maps to the JSplitPane divider *location* proportion.
-    // For EAST docking, that proportion is measured from the LEFT edge, so 0.18 means:
-    //   left=18% (chat) / right=82% (users)  -> comically huge user list.
-    // We want the *users* panel to be ~18% of the width, so the divider should be at ~82%.
-    Docking.dock(users, chat, DockingRegion.EAST, 0.82);
+    if (!restoredDockLayout) {
+      // First dock must be to an empty root container.
+      Docking.dock(chat, this);
+
+      Docking.dock(serverTree, chat, DockingRegion.WEST, 0.22);
+      // ModernDocking's "size" parameter maps to the JSplitPane divider *location* proportion.
+      // For EAST docking, that proportion is measured from the LEFT edge, so 0.18 means:
+      //   left=18% (chat) / right=82% (users)  -> comically huge user list.
+      // We want the *users* panel to be ~18% of the width, so the divider should be at ~82%.
+      Docking.dock(users, chat, DockingRegion.EAST, 0.82);
+    }
     final java.util.concurrent.atomic.AtomicBoolean initialSideSizesApplied =
         new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -189,8 +223,10 @@ public class MainFrame extends JFrame {
           }
         };
 
+    final boolean manageSideDockWidths = !preserveDockLayout || !restoredDockLayout;
     Runnable applyDockLocks =
         () -> {
+          if (!manageSideDockWidths) return;
           int serverPx = DEFAULT_SERVER_DOCK_WIDTH_PX;
           int usersPx = DEFAULT_USERS_DOCK_WIDTH_PX;
           if (uiProps != null && uiProps.layout() != null) {
@@ -302,6 +338,15 @@ public class MainFrame extends JFrame {
           @Override
           public void windowClosing(WindowEvent e) {
             flushPendingDockWidths.run();
+            if (preserveDockLayout) {
+              try {
+                var dockingApi = Docking.getSingleInstance();
+                if (dockingApi != null && dockingApi.getAppState() != null) {
+                  dockingApi.getAppState().persist();
+                }
+              } catch (Exception ignored) {
+              }
+            }
             // Optional "close-to-tray": close button hides to tray (when supported/enabled).
             if (trayService != null
                 && trayService.shouldCloseToTray()
@@ -355,6 +400,16 @@ public class MainFrame extends JFrame {
       }
       throw e;
     }
+  }
+
+  private static File resolveDockLayoutPersistFile(RuntimeConfigStore runtimeConfigStore) {
+    Path configPath = runtimeConfigStore != null ? runtimeConfigStore.runtimeConfigPath() : null;
+    Path configDir = configPath != null ? configPath.getParent() : null;
+    if (configDir == null) {
+      String home = System.getProperty("user.home", ".");
+      configDir = Paths.get(home);
+    }
+    return configDir.resolve("docking-layout.xml").toFile();
   }
 
   private void resetDockingRuntime(String phase) {
