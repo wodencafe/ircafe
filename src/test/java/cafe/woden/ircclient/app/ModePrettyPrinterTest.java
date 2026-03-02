@@ -32,4 +32,20 @@ class ModePrettyPrinterTest {
     assertTrue(lines.contains("alice gives channel operator privileges to bob."));
     assertTrue(lines.contains("alice gives voice privileges to carol."));
   }
+
+  @Test
+  void formatsQModeAsQuietWhenTargetLooksLikeMask() {
+    List<String> lines =
+        ModePrettyPrinter.pretty("chat", "#ircafe", "-q *!*@brady@63-230-166-5.ptld.qwest.net");
+
+    assertEquals(
+        List.of("chat removes a quiet rule for *!*@brady@63-230-166-5.ptld.qwest.net."), lines);
+  }
+
+  @Test
+  void keepsQModeAsOwnerWhenTargetLooksLikeNick() {
+    List<String> lines = ModePrettyPrinter.pretty("ChanServ", "#ircafe", "+q alice");
+
+    assertEquals(List.of("ChanServ gives owner privileges to alice."), lines);
+  }
 }

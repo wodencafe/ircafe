@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
@@ -59,6 +60,11 @@ import net.miginfocom.swing.MigLayout;
 
 /** Swing panel for server /LIST results and managed channel state/actions. */
 public final class ChannelListPanel extends JPanel {
+  @FunctionalInterface
+  public interface ChannelModeCommandHandler {
+    void accept(String serverId, String channel, String modeSpec);
+  }
+
   private enum ListRequestType {
     UNKNOWN,
     FULL_LIST,
@@ -111,6 +117,7 @@ public final class ChannelListPanel extends JPanel {
       String state,
       String topic,
       String modes,
+      String modeSummary,
       int users,
       int notifications,
       boolean autoReattach) {}
@@ -184,6 +191,8 @@ public final class ChannelListPanel extends JPanel {
   private final Map<String, ListRequestType> requestTypeByServer = new HashMap<>();
   private final Map<String, ArrayList<ManagedChannelRow>> managedRowsByServer = new HashMap<>();
   private final Map<String, ManagedSortMode> managedSortModeByServer = new HashMap<>();
+  private final Map<String, Map<String, ChannelModeSnapshot>> channelModeSnapshotsByServer =
+      new HashMap<>();
   private final Icon runAlisDefaultIcon = SvgIcons.action("help", ACTION_ICON_SIZE);
   private final Icon runAlisDefaultDisabledIcon = SvgIcons.actionDisabled("help", ACTION_ICON_SIZE);
   private final Icon runAlisActivityIcon = new AlisActivityIcon();
@@ -208,6 +217,9 @@ public final class ChannelListPanel extends JPanel {
   private volatile BiFunction<String, String, String> onChannelTopicRequest;
   private volatile BiFunction<String, String, List<String>> onChannelBanListSnapshotRequest;
   private volatile BiConsumer<String, String> onChannelBanListRefreshRequest;
+  private volatile BiConsumer<String, String> onChannelModeRefreshRequest;
+  private volatile ChannelModeCommandHandler onChannelModeSetRequest;
+  private volatile BiPredicate<String, String> canEditChannelModes = (server, channel) -> false;
   private boolean syncingSortModeCombo;
   private ChannelDetailsDialogState channelDetailsDialog;
 
@@ -603,6 +615,59 @@ public final class ChannelListPanel extends JPanel {
     this.onChannelBanListRefreshRequest = onChannelBanListRefreshRequest;
   }
 
+  public void setOnChannelModeRefreshRequest(
+      BiConsumer<String, String> onChannelModeRefreshRequest) {
+    this.onChannelModeRefreshRequest = onChannelModeRefreshRequest;
+  }
+
+  public void setOnChannelModeSetRequest(ChannelModeCommandHandler onChannelModeSetRequest) {
+    this.onChannelModeSetRequest = onChannelModeSetRequest;
+  }
+
+  public void setCanEditChannelModes(BiPredicate<String, String> canEditChannelModes) {
+    this.canEditChannelModes =
+        (canEditChannelModes == null) ? (server, channel) -> false : canEditChannelModes;
+  }
+
+  public void setChannelModeSnapshot(
+      String serverId, String channel, String rawModes, String friendlySummary) {
+    String sid = normalizeServerId(serverId);
+    String ch = normalizeChannel(channel);
+    if (sid.isEmpty() || ch.isEmpty()) return;
+
+    String raw = Objects.toString(rawModes, "").trim();
+    String summary = Objects.toString(friendlySummary, "").trim();
+    String key = ch.toLowerCase(Locale.ROOT);
+
+    if (raw.isEmpty() && summary.isEmpty()) {
+      Map<String, ChannelModeSnapshot> byChannel = channelModeSnapshotsByServer.get(sid);
+      if (byChannel != null) {
+        byChannel.remove(key);
+        if (byChannel.isEmpty()) {
+          channelModeSnapshotsByServer.remove(sid);
+        }
+      }
+    } else {
+      channelModeSnapshotsByServer
+          .computeIfAbsent(sid, __ -> new HashMap<>())
+          .put(key, new ChannelModeSnapshot(raw, summary));
+    }
+
+    // Recompute row modes so managed table reflects snapshots even when the source row had unknown.
+    if (sid.equals(this.serverId)) {
+      refreshManagedRows();
+    }
+    refreshOpenChannelDetails(sid, ch);
+  }
+
+  public String rawChannelModeSnapshot(String serverId, String channel) {
+    String sid = normalizeServerId(serverId);
+    String ch = normalizeChannel(channel);
+    if (sid.isEmpty() || ch.isEmpty()) return "";
+    ChannelModeSnapshot snapshot = channelModeSnapshot(sid, ch);
+    return snapshot == null ? "" : Objects.toString(snapshot.rawModes(), "").trim();
+  }
+
   public void beginList(String serverId, String banner) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
@@ -678,6 +743,11 @@ public final class ChannelListPanel extends JPanel {
         if (channel.isEmpty()) continue;
         String key = channel.toLowerCase(Locale.ROOT);
         if (!seen.add(key)) continue;
+        String modes = Objects.toString(row.modes(), "").trim();
+        if (modes.isEmpty()) {
+          ChannelModeSnapshot snapshot = channelModeSnapshot(sid, channel);
+          modes = snapshot == null ? "" : Objects.toString(snapshot.rawModes(), "").trim();
+        }
         normalized.add(
             new ManagedChannelRow(
                 channel,
@@ -685,7 +755,7 @@ public final class ChannelListPanel extends JPanel {
                 row.autoReattach(),
                 row.users(),
                 row.notifications(),
-                row.modes()));
+                modes));
       }
     }
 
@@ -729,6 +799,7 @@ public final class ChannelListPanel extends JPanel {
     ManagedSortMode mode = managedSortModeByServer.getOrDefault(sid, ManagedSortMode.CUSTOM);
     List<ManagedChannelRow> rows =
         List.copyOf(managedRowsByServer.getOrDefault(sid, new ArrayList<>()));
+    rows = mergeModeSnapshots(sid, rows);
 
     syncingSortModeCombo = true;
     try {
@@ -747,6 +818,31 @@ public final class ChannelListPanel extends JPanel {
     updateManagedHeader();
     updateManagedButtons();
     notifyManagedChannelSelectionChanged();
+  }
+
+  private List<ManagedChannelRow> mergeModeSnapshots(String sid, List<ManagedChannelRow> rows) {
+    if (rows == null || rows.isEmpty()) return List.of();
+    if (sid == null || sid.isBlank()) return List.copyOf(rows);
+
+    ArrayList<ManagedChannelRow> merged = new ArrayList<>(rows.size());
+    for (ManagedChannelRow row : rows) {
+      if (row == null) continue;
+      String channel = normalizeChannel(row.channel());
+      String modes = Objects.toString(row.modes(), "").trim();
+      if (modes.isEmpty()) {
+        ChannelModeSnapshot snapshot = channelModeSnapshot(sid, channel);
+        modes = snapshot == null ? "" : Objects.toString(snapshot.rawModes(), "").trim();
+      }
+      merged.add(
+          new ManagedChannelRow(
+              row.channel(),
+              row.detached(),
+              row.autoReattach(),
+              row.users(),
+              row.notifications(),
+              modes));
+    }
+    return List.copyOf(merged);
   }
 
   private void updateListHeader() {
@@ -1187,6 +1283,8 @@ public final class ChannelListPanel extends JPanel {
     Row listRow = findListRowByChannel(sid, selected.channel());
     String listTopic = listRow == null ? "" : listRow.topic();
     String topic = topicSnapshotForChannel(sid, selected.channel(), listTopic);
+    String modes = modeRawSnapshotForChannel(sid, selected.channel(), selected.modes());
+    String modeSummary = modeSummarySnapshotForChannel(sid, selected.channel(), modes);
 
     ChannelDetails details =
         new ChannelDetails(
@@ -1195,7 +1293,8 @@ public final class ChannelListPanel extends JPanel {
             selected.channel(),
             selected.detached() ? "Disconnected" : "Connected",
             topic,
-            selected.modes(),
+            modes,
+            modeSummary,
             selected.detached() ? -1 : selected.users(),
             selected.notifications(),
             selected.autoReattach());
@@ -1215,7 +1314,9 @@ public final class ChannelListPanel extends JPanel {
     ManagedChannelRow managed = findManagedRowByChannel(sid, selected.channel());
     String state =
         managed == null ? "Not managed" : (managed.detached() ? "Disconnected" : "Connected");
-    String modes = managed == null ? "(Unknown)" : managed.modes();
+    String modes =
+        modeRawSnapshotForChannel(sid, selected.channel(), managed == null ? "" : managed.modes());
+    String modeSummary = modeSummarySnapshotForChannel(sid, selected.channel(), modes);
     int notifications = managed == null ? 0 : managed.notifications();
     boolean autoReattach = managed != null && managed.autoReattach();
 
@@ -1227,6 +1328,7 @@ public final class ChannelListPanel extends JPanel {
             state,
             topicSnapshotForChannel(sid, selected.channel(), selected.topic()),
             modes,
+            modeSummary,
             selected.visibleUsers(),
             notifications,
             autoReattach);
@@ -1271,6 +1373,64 @@ public final class ChannelListPanel extends JPanel {
       cb.accept(sid, channel);
     } catch (Exception ignored) {
     }
+  }
+
+  private void requestModeSnapshotRefresh(String sid, String channel) {
+    BiConsumer<String, String> cb = onChannelModeRefreshRequest;
+    if (cb == null) return;
+    try {
+      cb.accept(sid, channel);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void requestModeSet(String sid, String channel, String modeSpec) {
+    ChannelModeCommandHandler cb = onChannelModeSetRequest;
+    if (cb == null) return;
+    try {
+      cb.accept(sid, channel, modeSpec);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private boolean canEditChannelModes(String sid, String channel) {
+    BiPredicate<String, String> cb = canEditChannelModes;
+    if (cb == null) return false;
+    try {
+      return cb.test(sid, channel);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private ChannelModeSnapshot channelModeSnapshot(String sid, String channel) {
+    String serverId = normalizeServerId(sid);
+    String ch = normalizeChannel(channel);
+    if (serverId.isEmpty() || ch.isEmpty()) return null;
+    Map<String, ChannelModeSnapshot> byChannel = channelModeSnapshotsByServer.get(serverId);
+    if (byChannel == null || byChannel.isEmpty()) return null;
+    return byChannel.get(ch.toLowerCase(Locale.ROOT));
+  }
+
+  private String modeRawSnapshotForChannel(String sid, String channel, String fallbackModes) {
+    ChannelModeSnapshot snapshot = channelModeSnapshot(sid, channel);
+    if (snapshot != null) {
+      String raw = Objects.toString(snapshot.rawModes(), "").trim();
+      if (!raw.isEmpty()) return raw;
+    }
+    String fallback = Objects.toString(fallbackModes, "").trim();
+    if (fallback.isEmpty() || "(unknown)".equalsIgnoreCase(fallback)) return "(Unknown)";
+    return fallback;
+  }
+
+  private String modeSummarySnapshotForChannel(
+      String sid, String channel, String fallbackRawModes) {
+    ChannelModeSnapshot snapshot = channelModeSnapshot(sid, channel);
+    if (snapshot != null) {
+      String summary = Objects.toString(snapshot.friendlySummary(), "").trim();
+      if (!summary.isEmpty()) return summary;
+    }
+    return friendlyModeSummaryFromRaw(fallbackRawModes);
   }
 
   private ManagedChannelRow findManagedRowByChannel(String sid, String channel) {
@@ -1326,7 +1486,10 @@ public final class ChannelListPanel extends JPanel {
 
     String statusText =
         managed == null ? "Not managed" : (managed.detached() ? "Disconnected" : "Connected");
-    String modesText = managed == null ? "(Unknown)" : displayManagedModes(managed);
+    String modesText =
+        modeRawSnapshotForChannel(
+            sid, channel, managed == null ? "" : displayManagedModes(managed));
+    String modeSummaryText = modeSummarySnapshotForChannel(sid, channel, modesText);
     String notificationsText =
         managed == null ? "0" : String.valueOf(Math.max(0, managed.notifications()));
     String autoReattachText =
@@ -1353,9 +1516,19 @@ public final class ChannelListPanel extends JPanel {
     setFieldText(state.usersField(), usersText);
     setFieldText(state.notificationsField(), notificationsText);
     setFieldText(state.modesField(), modesText);
+    setAreaText(state.modeSummaryArea(), modeSummaryText);
     setFieldText(state.autoReattachField(), autoReattachText);
     setAreaText(state.topicArea(), fallback(topicText, "(none)"));
     setAreaText(state.banListArea(), banListText);
+
+    boolean canEditModes = canEditChannelModes(sid, channel);
+    state.setModesButton().setEnabled(canEditModes);
+    state
+        .setModesButton()
+        .setToolTipText(
+            canEditModes
+                ? "Set channel modes (sends /mode command)"
+                : "Requires owner/admin/op privileges for this channel");
   }
 
   private void showChannelDetailsDialog(ChannelDetails details) {
@@ -1379,13 +1552,56 @@ public final class ChannelListPanel extends JPanel {
         readOnlyField(String.valueOf(Math.max(0, details.notifications())));
     JTextField modesField = readOnlyField(fallback(details.modes(), "(Unknown)"));
     JTextField autoReattachField = readOnlyField(details.autoReattach() ? "Enabled" : "Disabled");
+    JTextArea modeSummaryArea =
+        readOnlyArea(
+            fallback(details.modeSummary(), friendlyModeSummaryFromRaw(details.modes())), 4);
     JTextArea topicArea = readOnlyArea(fallback(details.topic(), "(none)"), 4);
     JTextArea banListArea = readOnlyArea(banListDisplayTextForChannel(sid, channel), 6);
 
+    JScrollPane modeSummaryScroll = new JScrollPane(modeSummaryArea);
     JScrollPane topicScroll = new JScrollPane(topicArea);
     JScrollPane banListScroll = new JScrollPane(banListArea);
+    modeSummaryScroll.setMinimumSize(new Dimension(180, 110));
     topicScroll.setMinimumSize(new Dimension(180, 120));
     banListScroll.setMinimumSize(new Dimension(180, 120));
+
+    JButton refreshModesButton = new JButton("Refresh Modes");
+    refreshModesButton.setFocusable(false);
+    refreshModesButton.addActionListener(
+        e -> {
+          requestModeSnapshotRefresh(sid, channel);
+          setAreaText(
+              modeSummaryArea, "Requested MODE " + channel + " ...\nWaiting for server response.");
+        });
+
+    JButton setModesButton = new JButton("Set Modes...");
+    setModesButton.setFocusable(false);
+    setModesButton.addActionListener(
+        e -> {
+          String existingModes = Objects.toString(modesField.getText(), "").trim();
+          String initial = "(Unknown)".equalsIgnoreCase(existingModes) ? "" : existingModes;
+          Window owner = SwingUtilities.getWindowAncestor(this);
+          String modeSpec =
+              Objects.toString(
+                      JOptionPane.showInputDialog(
+                          owner,
+                          "Enter channel mode changes (examples: +m, -m, +o nick):",
+                          initial),
+                      "")
+                  .trim();
+          if (modeSpec.isEmpty()) return;
+          requestModeSet(sid, channel, modeSpec);
+          setAreaText(
+              modeSummaryArea,
+              "Sent MODE " + channel + " " + modeSpec + ".\nWaiting for server response.");
+        });
+
+    boolean canEditModes = canEditChannelModes(sid, channel);
+    setModesButton.setEnabled(canEditModes);
+    setModesButton.setToolTipText(
+        canEditModes
+            ? "Set channel modes (sends /mode command)"
+            : "Requires owner/admin/op privileges for this channel");
 
     JButton refreshBanListButton = new JButton("Refresh Ban List");
     refreshBanListButton.setFocusable(false);
@@ -1422,6 +1638,15 @@ public final class ChannelListPanel extends JPanel {
     content.add(notificationsField, "growx");
     content.add(new JLabel("Modes"));
     content.add(modesField, "growx");
+
+    content.add(new JLabel("Mode Summary"), "top");
+    JPanel modeSummaryPanel = new JPanel(new BorderLayout(0, 6));
+    JPanel modeActions = new JPanel(new MigLayout("insets 0, fillx", "[][]push", "[]"));
+    modeActions.add(refreshModesButton);
+    modeActions.add(setModesButton);
+    modeSummaryPanel.add(modeActions, BorderLayout.NORTH);
+    modeSummaryPanel.add(modeSummaryScroll, BorderLayout.CENTER);
+    content.add(modeSummaryPanel, "span 5,growx,hmin 120");
 
     content.add(new JLabel("Topic"), "top");
     content.add(topicScroll, "span 5,grow,pushy");
@@ -1462,6 +1687,8 @@ public final class ChannelListPanel extends JPanel {
             usersField,
             notificationsField,
             modesField,
+            modeSummaryArea,
+            setModesButton,
             autoReattachField,
             topicArea,
             banListArea);
@@ -1693,6 +1920,117 @@ public final class ChannelListPanel extends JPanel {
     String modes = Objects.toString(row.modes(), "").trim();
     if (!modes.isEmpty()) return modes;
     return "(Unknown)";
+  }
+
+  private static String friendlyModeSummaryFromRaw(String rawModes) {
+    String raw = Objects.toString(rawModes, "").trim();
+    if (raw.isEmpty() || "(unknown)".equalsIgnoreCase(raw)) {
+      return "No channel mode snapshot available yet. Use Refresh Modes to request /mode.";
+    }
+
+    String[] toks = raw.split("\\s+");
+    if (toks.length == 0) {
+      return "No channel mode snapshot available yet. Use Refresh Modes to request /mode.";
+    }
+    String modeSeq = toks[0];
+    java.util.ArrayList<String> args = new java.util.ArrayList<>();
+    for (int i = 1; i < toks.length; i++) {
+      args.add(toks[i]);
+    }
+
+    java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+    int argIdx = 0;
+    boolean adding = true;
+    for (int i = 0; i < modeSeq.length(); i++) {
+      char mode = modeSeq.charAt(i);
+      if (mode == '+') {
+        adding = true;
+        continue;
+      }
+      if (mode == '-') {
+        adding = false;
+        continue;
+      }
+      String arg = null;
+      if (modeTakesArg(mode, adding) && argIdx < args.size()) {
+        arg = args.get(argIdx++);
+      }
+      lines.add(describeOneMode(mode, adding, arg));
+    }
+    if (lines.isEmpty()) {
+      return "No channel mode snapshot available yet. Use Refresh Modes to request /mode.";
+    }
+    return String.join("\n", lines);
+  }
+
+  private static boolean modeTakesArg(char mode, boolean adding) {
+    return switch (mode) {
+      case 'o', 'v', 'h', 'a', 'q', 'y', 'b', 'e', 'I', 'k', 'f', 'j' -> true;
+      case 'l' -> adding;
+      default -> false;
+    };
+  }
+
+  private static String describeOneMode(char mode, boolean adding, String arg) {
+    String sign = adding ? "+" : "-";
+    return switch (mode) {
+      case 't' -> adding ? "+t topic changes limited to operators" : "-t topic open to everyone";
+      case 'n' -> adding ? "+n blocks outside messages" : "-n allows outside messages";
+      case 'm' -> adding ? "+m channel is moderated" : "-m channel is unmoderated";
+      case 'i' -> adding ? "+i invite-only channel" : "-i invite-only disabled";
+      case 's' -> adding ? "+s secret channel" : "-s secret mode removed";
+      case 'p' -> adding ? "+p private channel" : "-p private mode removed";
+      case 'r' -> adding ? "+r registered-only channel" : "-r registered-only disabled";
+      case 'k' -> adding ? "+k channel key set" : "-k channel key removed";
+      case 'l' -> adding ? ("+l user limit " + fallback(arg, "set")) : "-l user limit removed";
+      case 'b' ->
+          adding
+              ? ("+b ban list entry " + fallback(arg, "(mask)"))
+              : ("-b ban list entry removed " + fallback(arg, "(mask)"));
+      case 'e' ->
+          adding
+              ? ("+e ban exception " + fallback(arg, "(mask)"))
+              : ("-e ban exception removed " + fallback(arg, "(mask)"));
+      case 'I' ->
+          adding
+              ? ("+I invite exception " + fallback(arg, "(mask)"))
+              : ("-I invite exception removed " + fallback(arg, "(mask)"));
+      case 'q' ->
+          looksLikeQuietMaskTarget(arg)
+              ? (adding
+                  ? "+q quiet rule " + fallback(arg, "(mask)")
+                  : "-q quiet rule removed " + fallback(arg, "(mask)"))
+              : (adding
+                  ? "+q channel owner status for " + fallback(arg, "(nick)")
+                  : "-q channel owner status removed for " + fallback(arg, "(nick)"));
+      case 'o' ->
+          adding
+              ? "+o channel operator status for " + fallback(arg, "(nick)")
+              : "-o channel operator status removed for " + fallback(arg, "(nick)");
+      case 'h' ->
+          adding
+              ? "+h half-operator status for " + fallback(arg, "(nick)")
+              : "-h half-operator status removed for " + fallback(arg, "(nick)");
+      case 'a' ->
+          adding
+              ? "+a admin status for " + fallback(arg, "(nick)")
+              : "-a admin status removed for " + fallback(arg, "(nick)");
+      case 'v' ->
+          adding
+              ? "+v voice status for " + fallback(arg, "(nick)")
+              : "-v voice status removed for " + fallback(arg, "(nick)");
+      default -> sign + mode + " network-specific mode";
+    };
+  }
+
+  private static boolean looksLikeQuietMaskTarget(String arg) {
+    String a = Objects.toString(arg, "").trim();
+    if (a.isEmpty()) return false;
+    return a.indexOf('!') >= 0
+        || a.indexOf('@') >= 0
+        || a.indexOf('*') >= 0
+        || a.indexOf('$') >= 0
+        || a.indexOf(':') >= 0;
   }
 
   private final class AlisActivityIcon implements Icon {
@@ -1944,9 +2282,13 @@ public final class ChannelListPanel extends JPanel {
       JTextField usersField,
       JTextField notificationsField,
       JTextField modesField,
+      JTextArea modeSummaryArea,
+      JButton setModesButton,
       JTextField autoReattachField,
       JTextArea topicArea,
       JTextArea banListArea) {}
+
+  private record ChannelModeSnapshot(String rawModes, String friendlySummary) {}
 
   private record Row(String channel, int visibleUsers, String topic) {}
 }

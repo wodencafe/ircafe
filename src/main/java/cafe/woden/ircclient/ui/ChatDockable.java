@@ -248,6 +248,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             notificationStore,
             serverTree,
             outboundBus,
+            irc,
             userListStore,
             usersDock,
             ignoreListDialog,
@@ -444,6 +445,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       NotificationStore notificationStore,
       ServerTreeDockable serverTree,
       OutboundLineBus outboundBus,
+      IrcClientService irc,
       UserListStore userListStore,
       UserListDockable usersDock,
       IgnoreListDialog ignoreListDialog,
@@ -455,7 +457,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       ExecutorService interceptorRefreshExecutor) {
     NotificationsPanel notificationsPanel = createNotificationsPanel(notificationStore);
     ChatChannelListCoordinator channelListCoordinator =
-        createChannelListCoordinator(serverTree, outboundBus, userListStore, usersDock);
+        createChannelListCoordinator(serverTree, outboundBus, userListStore, usersDock, irc);
     channelListCoordinator.bind(disposables);
     ChatMonitorCoordinator monitorCoordinator =
         new ChatMonitorCoordinator(monitorPanel, monitorListService, () -> activeTarget);
@@ -493,7 +495,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       ServerTreeDockable serverTree,
       OutboundLineBus outboundBus,
       UserListStore userListStore,
-      UserListDockable usersDock) {
+      UserListDockable usersDock,
+      IrcClientService irc) {
     return new ChatChannelListCoordinator(
         channelListPanel,
         serverTree,
@@ -501,6 +504,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         userListStore,
         usersDock,
         () -> activeTarget,
+        sid -> irc.currentNick(sid).orElse(""),
         (serverId, channel) -> topicFor(new TargetRef(serverId, channel)),
         banListCoordinator::snapshot);
   }
@@ -986,6 +990,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public void endChannelBanList(String serverId, String channel, String summary) {
     banListCoordinator.endBanList(serverId, channel, summary);
+  }
+
+  public void setChannelModeSnapshot(
+      String serverId, String channel, String rawModes, String friendlySummary) {
+    channelListPanel.setChannelModeSnapshot(serverId, channel, rawModes, friendlySummary);
   }
 
   public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {

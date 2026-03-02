@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.coordinator;
 
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.UserListDockable;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +31,7 @@ public final class ChatChannelListCoordinator {
   private final UserListStore userListStore;
   private final UserListDockable usersDock;
   private final Supplier<TargetRef> activeTargetSupplier;
+  private final Function<String, String> currentNickLookup;
   private final BiFunction<String, String, String> topicLookup;
   private final BiFunction<String, String, List<String>> banListSnapshotLookup;
 
@@ -42,6 +45,7 @@ public final class ChatChannelListCoordinator {
       UserListStore userListStore,
       UserListDockable usersDock,
       Supplier<TargetRef> activeTargetSupplier,
+      Function<String, String> currentNickLookup,
       BiFunction<String, String, String> topicLookup,
       BiFunction<String, String, List<String>> banListSnapshotLookup) {
     this.channelListPanel = Objects.requireNonNull(channelListPanel, "channelListPanel");
@@ -51,6 +55,7 @@ public final class ChatChannelListCoordinator {
     this.usersDock = Objects.requireNonNull(usersDock, "usersDock");
     this.activeTargetSupplier =
         Objects.requireNonNull(activeTargetSupplier, "activeTargetSupplier");
+    this.currentNickLookup = Objects.requireNonNull(currentNickLookup, "currentNickLookup");
     this.topicLookup = Objects.requireNonNull(topicLookup, "topicLookup");
     this.banListSnapshotLookup =
         Objects.requireNonNull(banListSnapshotLookup, "banListSnapshotLookup");
@@ -166,6 +171,24 @@ public final class ChatChannelListCoordinator {
           serverTree.selectTarget(TargetRef.channelList(sid));
           outboundBus.emit("/mode " + ch + " +b");
         });
+    channelListPanel.setOnChannelModeRefreshRequest(
+        (serverId, channel) -> {
+          String sid = Objects.toString(serverId, "").trim();
+          if (sid.isBlank()) sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          if (sid.isBlank() || ch.isEmpty()) return;
+          outboundBus.emit("/mode " + ch);
+        });
+    channelListPanel.setOnChannelModeSetRequest(
+        (serverId, channel, modeSpec) -> {
+          String sid = Objects.toString(serverId, "").trim();
+          if (sid.isBlank()) sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          String spec = Objects.toString(modeSpec, "").trim();
+          if (sid.isBlank() || ch.isEmpty() || spec.isEmpty()) return;
+          outboundBus.emit("/mode " + ch + " " + spec);
+        });
+    channelListPanel.setCanEditChannelModes(this::canEditChannelModes);
 
     disposables.add(
         channelListCommandRequests
@@ -205,7 +228,7 @@ public final class ChatChannelListCoordinator {
                       entry.autoReattach(),
                       users,
                       entry.notifications(),
-                      modeSummaryForChannel());
+                      modeSummaryForChannel(sid, entry.channel()));
                 })
             .toList();
     ChannelListPanel.ManagedSortMode sortMode =
@@ -256,8 +279,34 @@ public final class ChatChannelListCoordinator {
     return Objects.toString(target.serverId(), "").trim();
   }
 
-  private static String modeSummaryForChannel() {
+  private String modeSummaryForChannel(String serverId, String channel) {
+    String modes = Objects.toString(channelListPanel.rawChannelModeSnapshot(serverId, channel), "");
+    modes = modes.trim();
+    if (!modes.isBlank()) return modes;
     return "(Unknown)";
+  }
+
+  private boolean canEditChannelModes(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isBlank()) sid = channelListServerIdForActions();
+    String ch = normalizeChannelName(channel);
+    if (sid.isBlank() || ch.isEmpty()) return false;
+
+    String me = Objects.toString(currentNickLookup.apply(sid), "").trim();
+    if (me.isEmpty()) return false;
+
+    List<NickInfo> nicks = userListStore.get(sid, ch);
+    for (NickInfo ni : nicks) {
+      if (ni == null) continue;
+      String nick = Objects.toString(ni.nick(), "").trim();
+      if (!nick.equalsIgnoreCase(me)) continue;
+      String prefix = Objects.toString(ni.prefix(), "");
+      return prefix.contains("~")
+          || prefix.contains("&")
+          || prefix.contains("@")
+          || prefix.contains("%");
+    }
+    return false;
   }
 
   private static String normalizeChannelName(String channel) {
