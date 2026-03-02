@@ -108,7 +108,17 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
       }
 
       @Override
+      public boolean isChannelNode(DefaultMutableTreeNode node) {
+        return false;
+      }
+
+      @Override
       public javax.swing.tree.TreePath serverPathForId(String serverId) {
+        return null;
+      }
+
+      @Override
+      public javax.swing.tree.TreePath channelPathForRef(TargetRef channelRef) {
         return null;
       }
 
@@ -122,6 +132,25 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
 
       @Override
       public void disconnectServer(String serverId) {}
+
+      @Override
+      public boolean isChannelDisconnected(TargetRef channelRef) {
+        return false;
+      }
+
+      @Override
+      public void joinChannel(TargetRef channelRef) {}
+
+      @Override
+      public void disconnectChannel(TargetRef channelRef) {}
+
+      @Override
+      public boolean confirmCloseChannel(TargetRef channelRef, String channelLabel) {
+        return false;
+      }
+
+      @Override
+      public void closeChannel(TargetRef channelRef) {}
     };
   }
 

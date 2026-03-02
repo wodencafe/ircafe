@@ -4,6 +4,7 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTypingIndicatorStyle;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import java.awt.Color;
 import java.beans.PropertyChangeListener;
 import java.util.Objects;
 import javax.swing.SwingUtilities;
@@ -30,6 +31,10 @@ public final class ServerTreeSettingsSynchronizer {
 
     void setUnreadBadgeScalePercent(int percent);
 
+    void setUnreadChannelTextColor(Color color);
+
+    void setHighlightChannelTextColor(Color color);
+
     void refreshTreeLayoutAfterUiChange();
 
     void refreshApplicationJfrNode();
@@ -54,6 +59,7 @@ public final class ServerTreeSettingsSynchronizer {
     syncTypingIndicatorStyleFromSettings();
     syncUnreadBadgeScaleFromRuntimeConfig();
     syncServerTreeNotificationBadgesFromSettings();
+    syncChannelTextColorsFromSettings();
   }
 
   public void bindListeners() {
@@ -66,6 +72,7 @@ public final class ServerTreeSettingsSynchronizer {
             syncTypingIndicatorStyleFromSettings();
             syncUnreadBadgeScaleFromRuntimeConfig();
             syncServerTreeNotificationBadgesFromSettings();
+            syncChannelTextColorsFromSettings();
             SwingUtilities.invokeLater(context::refreshTreeLayoutAfterUiChange);
           };
       settingsBus.addListener(settingsListener);
@@ -154,5 +161,33 @@ public final class ServerTreeSettingsSynchronizer {
     if (next < MIN_BADGE_SCALE_PERCENT) next = MIN_BADGE_SCALE_PERCENT;
     if (next > MAX_BADGE_SCALE_PERCENT) next = MAX_BADGE_SCALE_PERCENT;
     context.setUnreadBadgeScalePercent(next);
+  }
+
+  private void syncChannelTextColorsFromSettings() {
+    String unreadHex = null;
+    String highlightHex = null;
+    try {
+      UiSettingsBus settingsBus = context.settingsBus();
+      if (settingsBus != null && settingsBus.get() != null) {
+        unreadHex = settingsBus.get().serverTreeUnreadChannelColor();
+        highlightHex = settingsBus.get().serverTreeHighlightChannelColor();
+      }
+    } catch (Exception ignored) {
+    }
+    context.setUnreadChannelTextColor(parseOptionalHex(unreadHex));
+    context.setHighlightChannelTextColor(parseOptionalHex(highlightHex));
+  }
+
+  private static Color parseOptionalHex(String raw) {
+    String s = Objects.toString(raw, "").trim();
+    if (s.isEmpty()) return null;
+    if (!s.startsWith("#")) {
+      s = "#" + s;
+    }
+    try {
+      return Color.decode(s);
+    } catch (Exception ignored) {
+      return null;
+    }
   }
 }

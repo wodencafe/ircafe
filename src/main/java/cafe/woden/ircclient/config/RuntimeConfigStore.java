@@ -220,9 +220,14 @@ public class RuntimeConfigStore {
     }
   }
 
-  public record ServerTreeChannelPreference(String channel, boolean autoReattach, boolean pinned) {
+  public record ServerTreeChannelPreference(
+      String channel, boolean autoReattach, boolean pinned, boolean muted) {
     public ServerTreeChannelPreference(String channel, boolean autoReattach) {
-      this(channel, autoReattach, false);
+      this(channel, autoReattach, false, false);
+    }
+
+    public ServerTreeChannelPreference(String channel, boolean autoReattach, boolean pinned) {
+      this(channel, autoReattach, pinned, false);
     }
   }
 
@@ -454,6 +459,34 @@ public class RuntimeConfigStore {
       return asBoolean(invites.get("autoJoinOnInvite")).orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read invites.autoJoinOnInvite from '{}'", file, e);
+      return defaultValue;
+    }
+  }
+
+  /**
+   * Reads {@code ircafe.ui.updateNotifier.enabled} from runtime config.
+   *
+   * <p>Returns {@code defaultValue} when the key is missing or invalid.
+   */
+  public synchronized boolean readUpdateNotifierEnabled(boolean defaultValue) {
+    try {
+      if (file.toString().isBlank()) return defaultValue;
+      if (!Files.exists(file)) return defaultValue;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
+
+      Object updateNotifierObj = ui.get("updateNotifier");
+      if (!(updateNotifierObj instanceof Map<?, ?> updateNotifier)) return defaultValue;
+
+      if (!updateNotifier.containsKey("enabled")) return defaultValue;
+      return asBoolean(updateNotifier.get("enabled")).orElse(defaultValue);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.updateNotifier.enabled from '{}'", file, e);
       return defaultValue;
     }
   }
@@ -731,7 +764,11 @@ public class RuntimeConfigStore {
     ServerTreeChannelPreference current = byKey.get(key);
     byKey.put(
         key,
-        new ServerTreeChannelPreference(chan, autoReattach, current != null && current.pinned()));
+        new ServerTreeChannelPreference(
+            chan,
+            autoReattach,
+            current != null && current.pinned(),
+            current != null && current.muted()));
 
     ArrayList<String> customOrder = sanitizeCustomOrder(state, byKey);
     if (!containsIgnoreCase(customOrder, chan)) {
@@ -775,7 +812,55 @@ public class RuntimeConfigStore {
     String key = foldChannelKey(chan);
     ServerTreeChannelPreference current = byKey.get(key);
     boolean autoReattach = current == null || current.autoReattach();
-    byKey.put(key, new ServerTreeChannelPreference(chan, autoReattach, pinned));
+    byKey.put(
+        key,
+        new ServerTreeChannelPreference(
+            chan, autoReattach, pinned, current != null && current.muted()));
+
+    ArrayList<String> customOrder = sanitizeCustomOrder(state, byKey);
+    if (!containsIgnoreCase(customOrder, chan)) {
+      customOrder.add(chan);
+    }
+
+    writeServerTreeChannelState(
+        sid,
+        new ServerTreeChannelState(
+            state.sortMode(), List.copyOf(customOrder), List.copyOf(byKey.values())));
+  }
+
+  public synchronized boolean readServerTreeChannelMuted(
+      String serverId, String channel, boolean defaultValue) {
+    String sid = Objects.toString(serverId, "").trim();
+    String chan = normalizeChannelName(channel);
+    if (sid.isEmpty() || chan.isEmpty()) return defaultValue;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    if (state == null || state.channels() == null) return defaultValue;
+
+    for (ServerTreeChannelPreference pref : state.channels()) {
+      if (pref == null) continue;
+      String existing = normalizeChannelName(pref.channel());
+      if (existing.isEmpty()) continue;
+      if (existing.equalsIgnoreCase(chan)) {
+        return pref.muted();
+      }
+    }
+    return defaultValue;
+  }
+
+  public synchronized void rememberServerTreeChannelMuted(
+      String serverId, String channel, boolean muted) {
+    String sid = Objects.toString(serverId, "").trim();
+    String chan = normalizeChannelName(channel);
+    if (sid.isEmpty() || chan.isEmpty()) return;
+
+    ServerTreeChannelState state = readServerTreeChannelState(sid);
+    LinkedHashMap<String, ServerTreeChannelPreference> byKey = channelPreferencesByKey(state);
+    String key = foldChannelKey(chan);
+    ServerTreeChannelPreference current = byKey.get(key);
+    boolean autoReattach = current == null || current.autoReattach();
+    boolean pinned = current != null && current.pinned();
+    byKey.put(key, new ServerTreeChannelPreference(chan, autoReattach, pinned, muted));
 
     ArrayList<String> customOrder = sanitizeCustomOrder(state, byKey);
     if (!containsIgnoreCase(customOrder, chan)) {
@@ -864,7 +949,8 @@ public class RuntimeConfigStore {
           if (byKey.containsKey(key)) continue;
           boolean auto = asBoolean(item.get("autoReattach")).orElse(Boolean.TRUE);
           boolean pinned = asBoolean(item.get("pinned")).orElse(Boolean.FALSE);
-          byKey.put(key, new ServerTreeChannelPreference(channel, auto, pinned));
+          boolean muted = asBoolean(item.get("muted")).orElse(Boolean.FALSE);
+          byKey.put(key, new ServerTreeChannelPreference(channel, auto, pinned, muted));
         }
       }
 
@@ -1005,6 +1091,9 @@ public class RuntimeConfigStore {
             if (pref.pinned()) {
               item.put("pinned", true);
             }
+            if (pref.muted()) {
+              item.put("muted", true);
+            }
             channelsOut.add(item);
           }
           if (!channelsOut.isEmpty()) {
@@ -1061,7 +1150,10 @@ public class RuntimeConfigStore {
       String channel = normalizeChannelName(pref.channel());
       if (channel.isEmpty()) continue;
       String key = foldChannelKey(channel);
-      byKey.put(key, new ServerTreeChannelPreference(channel, pref.autoReattach(), pref.pinned()));
+      byKey.put(
+          key,
+          new ServerTreeChannelPreference(
+              channel, pref.autoReattach(), pref.pinned(), pref.muted()));
     }
     return byKey;
   }
@@ -1982,6 +2074,23 @@ public class RuntimeConfigStore {
     rememberDockLayoutWidths(null, userDockWidthPx);
   }
 
+  public synchronized void rememberPreserveDockLayout(boolean preserveDockLayout) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> layout = getOrCreateMap(ui, "layout");
+
+      layout.put("preserveDockLayout", preserveDockLayout);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.layout.preserveDockLayout to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberUiDensity(String density) {
     try {
       if (file.toString().isBlank()) return;
@@ -2130,6 +2239,15 @@ public class RuntimeConfigStore {
 
   public synchronized void rememberChatMentionBgColor(String hex) {
     rememberOptionalUiHex("chatMentionBgColor", hex, "chatMentionBgColor");
+  }
+
+  public synchronized void rememberServerTreeUnreadChannelColor(String hex) {
+    rememberOptionalUiHex("serverTreeUnreadChannelColor", hex, "serverTreeUnreadChannelColor");
+  }
+
+  public synchronized void rememberServerTreeHighlightChannelColor(String hex) {
+    rememberOptionalUiHex(
+        "serverTreeHighlightChannelColor", hex, "serverTreeHighlightChannelColor");
   }
 
   public synchronized void rememberChatMentionStrength(int strength) {
@@ -2290,6 +2408,23 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist invites.autoJoinOnInvite setting to '{}'", file, e);
+    }
+  }
+
+  public synchronized void rememberUpdateNotifierEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      Map<String, Object> updateNotifier = getOrCreateMap(ui, "updateNotifier");
+
+      updateNotifier.put("enabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.updateNotifier.enabled setting to '{}'", file, e);
     }
   }
 
@@ -3680,6 +3815,24 @@ public class RuntimeConfigStore {
           String scriptWorkingDirectory = Objects.toString(r.scriptWorkingDirectory(), "").trim();
           if (!scriptWorkingDirectory.isEmpty())
             m.put("scriptWorkingDirectory", scriptWorkingDirectory);
+
+          if (r.eventType() == IrcEventNotificationRule.EventType.CTCP_RECEIVED) {
+            IrcEventNotificationRule.CtcpMatchMode ctcpCommandMode =
+                r.ctcpCommandMode() != null
+                    ? r.ctcpCommandMode()
+                    : IrcEventNotificationRule.CtcpMatchMode.ANY;
+            IrcEventNotificationRule.CtcpMatchMode ctcpValueMode =
+                r.ctcpValueMode() != null
+                    ? r.ctcpValueMode()
+                    : IrcEventNotificationRule.CtcpMatchMode.ANY;
+            m.put("ctcpCommandMode", ctcpCommandMode.name());
+            m.put("ctcpValueMode", ctcpValueMode.name());
+
+            String ctcpCommandPattern = Objects.toString(r.ctcpCommandPattern(), "").trim();
+            if (!ctcpCommandPattern.isEmpty()) m.put("ctcpCommandPattern", ctcpCommandPattern);
+            String ctcpValuePattern = Objects.toString(r.ctcpValuePattern(), "").trim();
+            if (!ctcpValuePattern.isEmpty()) m.put("ctcpValuePattern", ctcpValuePattern);
+          }
 
           out.add(m);
         }
@@ -6491,56 +6644,18 @@ public class RuntimeConfigStore {
 
   public synchronized void rememberSojuAutoConnectNetwork(
       String bouncerServerId, String networkName, boolean enabled) {
-    try {
-      if (file.toString().isBlank()) return;
-
-      String sid = Objects.toString(bouncerServerId, "").trim();
-      String net = Objects.toString(networkName, "").trim();
-      if (sid.isEmpty() || net.isEmpty()) return;
-
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> soju = getOrCreateMap(ircafe, "soju");
-      Map<String, Object> autoConnect = getOrCreateMap(soju, "autoConnect");
-
-      @SuppressWarnings("unchecked")
-      Map<String, Object> nets =
-          (autoConnect.get(sid) instanceof Map<?, ?> mm)
-              ? (Map<String, Object>) mm
-              : new LinkedHashMap<>();
-
-      if (enabled) {
-        nets.put(net, true);
-        autoConnect.put(sid, nets);
-      } else {
-        // Remove case-insensitively so users can toggle based on what the bouncer returns.
-        nets.keySet().removeIf(k -> k != null && k.equalsIgnoreCase(net));
-        if (nets.isEmpty()) {
-          autoConnect.remove(sid);
-        } else {
-          autoConnect.put(sid, nets);
-        }
-
-        // Clean up empty structures to keep the YAML tidy.
-        if (autoConnect.isEmpty()) {
-          soju.remove("autoConnect");
-        }
-        if (soju.isEmpty()) {
-          ircafe.remove("soju");
-        }
-        if (ircafe.isEmpty()) {
-          doc.remove("ircafe");
-        }
-      }
-
-      writeFile(doc);
-    } catch (Exception e) {
-      log.warn("[ircafe] Could not persist soju auto-connect setting to '{}'", file, e);
-    }
+    rememberBouncerAutoConnectNetwork("soju", bouncerServerId, networkName, enabled);
   }
 
   public synchronized void rememberZncAutoConnectNetwork(
       String bouncerServerId, String networkName, boolean enabled) {
+    rememberBouncerAutoConnectNetwork("znc", bouncerServerId, networkName, enabled);
+  }
+
+  private void rememberBouncerAutoConnectNetwork(
+      String backendKey, String bouncerServerId, String networkName, boolean enabled) {
+    String backend = Objects.toString(backendKey, "").trim().toLowerCase(Locale.ROOT);
+    if (backend.isEmpty()) return;
     try {
       if (file.toString().isBlank()) return;
 
@@ -6550,8 +6665,8 @@ public class RuntimeConfigStore {
 
       Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> znc = getOrCreateMap(ircafe, "znc");
-      Map<String, Object> autoConnect = getOrCreateMap(znc, "autoConnect");
+      Map<String, Object> bouncerSection = getOrCreateMap(ircafe, backend);
+      Map<String, Object> autoConnect = getOrCreateMap(bouncerSection, "autoConnect");
 
       @SuppressWarnings("unchecked")
       Map<String, Object> nets =
@@ -6573,10 +6688,10 @@ public class RuntimeConfigStore {
 
         // Clean up empty structures to keep the YAML tidy.
         if (autoConnect.isEmpty()) {
-          znc.remove("autoConnect");
+          bouncerSection.remove("autoConnect");
         }
-        if (znc.isEmpty()) {
-          ircafe.remove("znc");
+        if (bouncerSection.isEmpty()) {
+          ircafe.remove(backend);
         }
         if (ircafe.isEmpty()) {
           doc.remove("ircafe");
@@ -6585,7 +6700,11 @@ public class RuntimeConfigStore {
 
       writeFile(doc);
     } catch (Exception e) {
-      log.warn("[ircafe] Could not persist znc auto-connect setting to '{}'", file, e);
+      log.warn(
+          "[ircafe] Could not persist {} auto-connect setting to '{}'",
+          Objects.toString(backendKey, "").trim().toLowerCase(Locale.ROOT),
+          file,
+          e);
     }
   }
 
@@ -6745,6 +6864,21 @@ public class RuntimeConfigStore {
         sasl.put("disconnectOnFailure", false);
       }
       m.put("sasl", sasl);
+    }
+    if (s.nickserv() != null && s.nickserv().enabled()) {
+      Map<String, Object> nickserv = new LinkedHashMap<>();
+      nickserv.put("enabled", true);
+      nickserv.put("password", s.nickserv().password());
+      if (s.nickserv().service() != null
+          && !s.nickserv().service().isBlank()
+          && !"NickServ".equalsIgnoreCase(s.nickserv().service().trim())) {
+        nickserv.put("service", s.nickserv().service());
+      }
+      if (s.nickserv().delayJoinUntilIdentified() != null
+          && !s.nickserv().delayJoinUntilIdentified()) {
+        nickserv.put("delayJoinUntilIdentified", false);
+      }
+      m.put("nickserv", nickserv);
     }
 
     // Optional per-server SOCKS5 proxy override.

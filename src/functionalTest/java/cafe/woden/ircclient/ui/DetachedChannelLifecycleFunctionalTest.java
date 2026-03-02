@@ -397,10 +397,13 @@ class DetachedChannelLifecycleFunctionalTest {
       throws Exception {
     DefaultMutableTreeNode node = findLeafNode(dockable, ref);
     if (node == null) return null;
+    Field contextMenuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
+    contextMenuBuilderField.setAccessible(true);
+    Object contextMenuBuilder = contextMenuBuilderField.get(dockable);
     Method buildPopupMenu =
-        ServerTreeDockable.class.getDeclaredMethod("buildPopupMenu", TreePath.class);
+        contextMenuBuilder.getClass().getDeclaredMethod("build", TreePath.class);
     buildPopupMenu.setAccessible(true);
-    return (JPopupMenu) buildPopupMenu.invoke(dockable, new TreePath(node.getPath()));
+    return (JPopupMenu) buildPopupMenu.invoke(contextMenuBuilder, new TreePath(node.getPath()));
   }
 
   private static void onEdt(ThrowingRunnable runnable)

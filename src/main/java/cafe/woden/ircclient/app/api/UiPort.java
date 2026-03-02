@@ -100,6 +100,13 @@ public interface UiPort {
     return false;
   }
 
+  /**
+   * @return true when the channel target is muted for unread/highlight notifications.
+   */
+  default boolean isChannelMuted(TargetRef target) {
+    return false;
+  }
+
   void markUnread(TargetRef target);
 
   void markHighlight(TargetRef target);

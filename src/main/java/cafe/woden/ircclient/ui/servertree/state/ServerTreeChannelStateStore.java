@@ -15,6 +15,7 @@ public final class ServerTreeChannelStateStore {
   private final Map<String, Map<String, Boolean>> channelAutoReattachByServer = new HashMap<>();
   private final Map<String, Map<String, Long>> channelActivityRankByServer = new HashMap<>();
   private final Map<String, Map<String, Boolean>> channelPinnedByServer = new HashMap<>();
+  private final Map<String, Map<String, Boolean>> channelMutedByServer = new HashMap<>();
 
   public Map<String, ServerTreeDockable.ChannelSortMode> channelSortModeByServer() {
     return channelSortModeByServer;
@@ -36,6 +37,10 @@ public final class ServerTreeChannelStateStore {
     return channelPinnedByServer;
   }
 
+  public Map<String, Map<String, Boolean>> channelMutedByServer() {
+    return channelMutedByServer;
+  }
+
   public void clearServer(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
@@ -44,5 +49,6 @@ public final class ServerTreeChannelStateStore {
     channelAutoReattachByServer.remove(sid);
     channelActivityRankByServer.remove(sid);
     channelPinnedByServer.remove(sid);
+    channelMutedByServer.remove(sid);
   }
 }

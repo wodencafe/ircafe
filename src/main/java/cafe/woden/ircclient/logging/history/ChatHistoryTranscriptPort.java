@@ -25,6 +25,14 @@ public interface ChatHistoryTranscriptPort {
 
   void beginHistoryInsertBatch(TargetRef ref);
 
+  /**
+   * Optional batch hint for callers that want to force lightweight text insertion for the current
+   * history batch (for example, during experimental smoothness modes).
+   */
+  default void beginHistoryInsertBatch(TargetRef ref, boolean forceDeferRichText) {
+    beginHistoryInsertBatch(ref);
+  }
+
   void endHistoryInsertBatch(TargetRef ref);
 
   int loadOlderInsertOffset(TargetRef ref);

@@ -36,6 +36,7 @@ public final class ServerTreeChannelStateCoordinator {
   private final Map<String, Map<String, Boolean>> channelAutoReattachByServer;
   private final Map<String, Map<String, Long>> channelActivityRankByServer;
   private final Map<String, Map<String, Boolean>> channelPinnedByServer;
+  private final Map<String, Map<String, Boolean>> channelMutedByServer;
   private final DefaultTreeModel model;
   private final Context context;
   private long channelActivityRankCounter = 0L;
@@ -53,6 +54,7 @@ public final class ServerTreeChannelStateCoordinator {
     this.channelAutoReattachByServer = stateStore.channelAutoReattachByServer();
     this.channelActivityRankByServer = stateStore.channelActivityRankByServer();
     this.channelPinnedByServer = stateStore.channelPinnedByServer();
+    this.channelMutedByServer = stateStore.channelMutedByServer();
     this.model = Objects.requireNonNull(model, "model");
     this.context = Objects.requireNonNull(context, "context");
   }
@@ -149,6 +151,38 @@ public final class ServerTreeChannelStateCoordinator {
     context.emitManagedChannelsChanged(sid);
   }
 
+  public boolean isChannelMuted(TargetRef ref) {
+    if (ref == null || !ref.isChannel()) return false;
+    String sid = context.normalizeServerId(ref.serverId());
+    String key = foldChannelKey(ref.target());
+    if (sid.isEmpty() || key.isEmpty()) return false;
+    return channelMutedByServer.getOrDefault(sid, Map.of()).getOrDefault(key, Boolean.FALSE);
+  }
+
+  public void setChannelMuted(TargetRef ref, boolean muted) {
+    if (ref == null || !ref.isChannel()) return;
+    String sid = context.normalizeServerId(ref.serverId());
+    String channel = Objects.toString(ref.target(), "").trim();
+    String key = foldChannelKey(channel);
+    if (sid.isEmpty() || key.isEmpty()) return;
+
+    ensureChannelKnownInConfig(ref);
+
+    Map<String, Boolean> mutedByChannel =
+        channelMutedByServer.computeIfAbsent(sid, __ -> new HashMap<>());
+    if (muted) {
+      mutedByChannel.put(key, true);
+    } else {
+      mutedByChannel.remove(key);
+    }
+
+    if (runtimeConfig != null) {
+      runtimeConfig.rememberServerTreeChannelMuted(sid, channel, muted);
+    }
+
+    context.emitManagedChannelsChanged(sid);
+  }
+
   public void ensureChannelKnownInConfig(TargetRef ref) {
     if (ref == null || !ref.isChannel()) return;
     String sid = context.normalizeServerId(ref.serverId());
@@ -177,6 +211,16 @@ public final class ServerTreeChannelStateCoordinator {
           runtimeConfig != null && runtimeConfig.readServerTreeChannelPinned(sid, channel, false);
       if (pinned) {
         pinnedByChannel.put(key, true);
+      }
+    }
+
+    Map<String, Boolean> mutedByChannel =
+        channelMutedByServer.computeIfAbsent(sid, __ -> new HashMap<>());
+    if (!mutedByChannel.containsKey(key)) {
+      boolean muted =
+          runtimeConfig != null && runtimeConfig.readServerTreeChannelMuted(sid, channel, false);
+      if (muted) {
+        mutedByChannel.put(key, true);
       }
     }
 
@@ -378,6 +422,7 @@ public final class ServerTreeChannelStateCoordinator {
     ArrayList<String> customOrder = new ArrayList<>();
     Map<String, Boolean> autoByChannel = new HashMap<>();
     Map<String, Boolean> pinnedByChannel = new HashMap<>();
+    Map<String, Boolean> mutedByChannel = new HashMap<>();
 
     if (runtimeConfig != null) {
       RuntimeConfigStore.ServerTreeChannelState state =
@@ -398,6 +443,9 @@ public final class ServerTreeChannelStateCoordinator {
           if (pref.pinned()) {
             pinnedByChannel.put(key, true);
           }
+          if (pref.muted()) {
+            mutedByChannel.put(key, true);
+          }
         }
       }
     }
@@ -406,6 +454,7 @@ public final class ServerTreeChannelStateCoordinator {
     channelCustomOrderByServer.put(sid, customOrder);
     channelAutoReattachByServer.put(sid, autoByChannel);
     channelPinnedByServer.put(sid, pinnedByChannel);
+    channelMutedByServer.put(sid, mutedByChannel);
     channelActivityRankByServer.put(sid, new HashMap<>());
   }
 

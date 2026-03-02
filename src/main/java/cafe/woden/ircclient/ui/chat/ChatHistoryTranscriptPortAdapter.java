@@ -62,6 +62,11 @@ public class ChatHistoryTranscriptPortAdapter implements ChatHistoryTranscriptPo
   }
 
   @Override
+  public void beginHistoryInsertBatch(TargetRef ref, boolean forceDeferRichText) {
+    transcripts.beginHistoryInsertBatch(ref, forceDeferRichText);
+  }
+
+  @Override
   public void endHistoryInsertBatch(TargetRef ref) {
     transcripts.endHistoryInsertBatch(ref);
   }

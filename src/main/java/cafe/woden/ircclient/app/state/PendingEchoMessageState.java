@@ -63,6 +63,17 @@ public class PendingEchoMessageState {
     return Optional.empty();
   }
 
+  public synchronized Optional<PendingOutboundChat> consumeOldestByTarget(TargetRef target) {
+    if (target == null) return Optional.empty();
+    for (int i = 0; i < pending.size(); i++) {
+      PendingOutboundChat entry = pending.get(i);
+      if (!targetMatches(entry.target(), target)) continue;
+      pending.remove(i);
+      return Optional.of(entry);
+    }
+    return Optional.empty();
+  }
+
   public synchronized Optional<PendingOutboundChat> consumePrivateFallback(
       String serverId, String fromNick, String text) {
     String sid = Objects.toString(serverId, "").trim();

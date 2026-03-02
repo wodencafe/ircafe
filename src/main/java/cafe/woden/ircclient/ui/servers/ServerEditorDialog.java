@@ -9,6 +9,7 @@ import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -39,6 +40,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
+import net.miginfocom.swing.MigLayout;
 
 /** Add/edit a single IRC server configuration. */
 public class ServerEditorDialog extends JDialog {
@@ -57,7 +59,38 @@ public class ServerEditorDialog extends JDialog {
   private final JTextField loginField = new JTextField();
   private final JTextField realNameField = new JTextField();
 
-  private final JCheckBox saslEnabledBox = new JCheckBox("Enable SASL");
+  private enum AuthMode {
+    DISABLED("Disabled"),
+    SASL("SASL"),
+    NICKSERV("NickServ");
+
+    private final String label;
+
+    AuthMode(String label) {
+      this.label = label;
+    }
+
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
+
+  private static final String AUTH_CARD_DISABLED = "auth-disabled";
+  private static final String AUTH_CARD_SASL = "auth-sasl";
+  private static final String AUTH_CARD_NICKSERV = "auth-nickserv";
+  private static final String AUTH_DISABLED_HINT_TEXT =
+      "No authentication on connect. Use this for networks that don't require account auth.";
+  private static final String SASL_CONTINUE_ON_FAILURE_TEXT =
+      "Stay connected if SASL authentication fails";
+  private static final String NICKSERV_DELAY_JOIN_TEXT =
+      "Delay channel auto-join until identification succeeds";
+
+  private final JComboBox<AuthMode> authModeCombo =
+      new JComboBox<>(new AuthMode[] {AuthMode.DISABLED, AuthMode.SASL, AuthMode.NICKSERV});
+  private final JPanel authModeCardPanel = new JPanel(new CardLayout());
+  private final JLabel authDisabledHintLabel = new JLabel();
+
   private final JTextField saslUserField = new JTextField();
 
   /**
@@ -71,8 +104,13 @@ public class ServerEditorDialog extends JDialog {
           new String[] {
             "AUTO", "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-1", "EXTERNAL", "ECDSA-NIST256P-CHALLENGE"
           });
+  private final JCheckBox saslContinueOnFailureBox = new JCheckBox(SASL_CONTINUE_ON_FAILURE_TEXT);
 
   private final JLabel saslHintLabel = new JLabel();
+  private final JTextField nickservServiceField = new JTextField();
+  private final JPasswordField nickservPassField = new JPasswordField();
+  private final JCheckBox nickservDelayJoinBox = new JCheckBox(NICKSERV_DELAY_JOIN_TEXT);
+  private final JLabel nickservHintLabel = new JLabel();
 
   private final JTextArea autoJoinArea = new JTextArea(8, 30);
   private final JTextArea autoJoinPmArea = new JTextArea(6, 30);
@@ -133,6 +171,7 @@ public class ServerEditorDialog extends JDialog {
   public ServerEditorDialog(
       Window parent, String title, IrcProperties.Server seed, boolean autoConnectOnStart) {
     super(parent, title, ModalityType.APPLICATION_MODAL);
+    nickservDelayJoinBox.setSelected(true);
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
     setLayout(new BorderLayout(10, 10));
     ((JPanel) getContentPane()).setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
@@ -140,7 +179,7 @@ public class ServerEditorDialog extends JDialog {
     JTabbedPane tabs = new JTabbedPane();
     tabs.addTab("Connection", buildConnectionPanel());
     tabs.addTab("Identity", buildIdentityPanel());
-    tabs.addTab("SASL", buildSaslPanel());
+    tabs.addTab("Auth", buildSaslPanel());
     tabs.addTab("Auto-Join", buildAutoJoinPanel());
     tabs.addTab("Perform", buildPerformPanel());
     tabs.addTab("Proxy", buildProxyPanel());
@@ -180,11 +219,20 @@ public class ServerEditorDialog extends JDialog {
       realNameField.setText(Objects.toString(seed.realName(), ""));
 
       if (seed.sasl() != null) {
-        saslEnabledBox.setSelected(seed.sasl().enabled());
         saslUserField.setText(Objects.toString(seed.sasl().username(), ""));
         saslPassField.setText(Objects.toString(seed.sasl().password(), ""));
         saslMechanism.setSelectedItem(Objects.toString(seed.sasl().mechanism(), "PLAIN"));
+        saslContinueOnFailureBox.setSelected(
+            !Boolean.TRUE.equals(seed.sasl().disconnectOnFailure()));
       }
+      if (seed.nickserv() != null) {
+        nickservServiceField.setText(Objects.toString(seed.nickserv().service(), "NickServ"));
+        nickservPassField.setText(Objects.toString(seed.nickserv().password(), ""));
+        nickservDelayJoinBox.setSelected(
+            seed.nickserv().delayJoinUntilIdentified() == null
+                || seed.nickserv().delayJoinUntilIdentified());
+      }
+      setAuthMode(seedAuthMode(seed));
 
       List<String> autoJoinSeed = seed.autoJoin() == null ? List.of() : seed.autoJoin();
       autoJoinArea.setText(String.join("\n", AutoJoinEntryCodec.channelEntries(autoJoinSeed)));
@@ -199,6 +247,7 @@ public class ServerEditorDialog extends JDialog {
       tlsBox.setSelected(true);
       portField.setText("6697");
       portAuto = true;
+      setAuthMode(AuthMode.DISABLED);
 
       seedProxy(null);
     }
@@ -214,11 +263,15 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(realNameField, "IRCafe User");
     applyFieldStyle(saslUserField, "account");
     applyFieldStyle(saslPassField, "password / key");
+    applyFieldStyle(nickservServiceField, "NickServ");
+    applyFieldStyle(nickservPassField, "password");
     // FlatLaf: show the standard "reveal" (eye) button inside password fields.
     // Using the string key avoids any compile-time dependency on FlatLaf constants.
     saslPassField.putClientProperty("JPasswordField.showRevealButton", true);
     // FlatLaf also supports a STYLE flag; keep both for compatibility.
     appendStyle(saslPassField, "showRevealButton:true");
+    nickservPassField.putClientProperty("JPasswordField.showRevealButton", true);
+    appendStyle(nickservPassField, "showRevealButton:true");
     applyFieldStyle(proxyHostField, "127.0.0.1");
     applyFieldStyle(proxyPortField, "1080");
     applyFieldStyle(proxyUserField, "(optional)");
@@ -264,9 +317,10 @@ public class ServerEditorDialog extends JDialog {
               }
             });
 
-    saslEnabledBox.addActionListener(e -> updateSaslEnabled());
-    saslMechanism.addActionListener(e -> updateSaslEnabled());
-    updateSaslEnabled();
+    authModeCombo.addActionListener(e -> updateAuthModeUi());
+    saslMechanism.addActionListener(e -> updateAuthModeUi());
+    nickservDelayJoinBox.addActionListener(e -> updateValidation());
+    updateAuthModeUi();
 
     proxyOverrideBox.addActionListener(e -> updateProxyEnabled());
     proxyEnabledBox.addActionListener(e -> updateProxyEnabled());
@@ -282,6 +336,8 @@ public class ServerEditorDialog extends JDialog {
 
     saslUserField.getDocument().addDocumentListener(vdl);
     saslPassField.getDocument().addDocumentListener(vdl);
+    nickservServiceField.getDocument().addDocumentListener(vdl);
+    nickservPassField.getDocument().addDocumentListener(vdl);
 
     proxyHostField.getDocument().addDocumentListener(vdl);
     proxyPortField.getDocument().addDocumentListener(vdl);
@@ -693,37 +749,67 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private JPanel buildSaslPanel() {
-    JPanel p = new JPanel(new GridBagLayout());
-    p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+    JPanel p =
+        new JPanel(
+            new MigLayout(
+                "insets 8, fill, wrap 2", "[right]12[grow,fill,min:0]", "[]8[grow,fill,min:0]"));
 
-    GridBagConstraints g = baseGbc();
-    g.gridx = 0;
-    g.gridy = 0;
-    g.gridwidth = 2;
-    g.weightx = 1.0;
-    g.fill = GridBagConstraints.HORIZONTAL;
-    p.add(saslEnabledBox, g);
+    p.add(new JLabel("Method"));
+    p.add(authModeCombo, "growx, wmin 0, wrap");
 
-    g.gridwidth = 1;
-    addRow(p, g, 1, "Username", saslUserField);
-    addRow(p, g, 2, "Secret", saslPassField);
-    addRow(p, g, 3, "Mechanism", saslMechanism);
+    authModeCardPanel.add(buildAuthDisabledCard(), AUTH_CARD_DISABLED);
+    authModeCardPanel.add(buildAuthSaslCard(), AUTH_CARD_SASL);
+    authModeCardPanel.add(buildAuthNickservCard(), AUTH_CARD_NICKSERV);
+    p.add(authModeCardPanel, "span 2, grow, push, wmin 0");
+    return p;
+  }
+
+  private JPanel buildAuthDisabledCard() {
+    JPanel p = new JPanel(new MigLayout("insets 6 0 0 0, fillx", "[grow,fill,min:0]", "[]"));
+    authDisabledHintLabel.putClientProperty(
+        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+    authDisabledHintLabel.setText(asHtml(AUTH_DISABLED_HINT_TEXT));
+    p.add(authDisabledHintLabel, "growx, wmin 0");
+    return p;
+  }
+
+  private JPanel buildAuthSaslCard() {
+    JPanel p =
+        new JPanel(
+            new MigLayout(
+                "insets 0, fillx, wrap 2", "[right]12[grow,fill,min:0]", "[]6[]6[]6[]8[]push"));
+    p.add(new JLabel("Username"));
+    p.add(saslUserField, "growx, wmin 0, wrap");
+    p.add(new JLabel("Secret"));
+    p.add(saslPassField, "growx, wmin 0, wrap");
+    p.add(new JLabel("Mechanism"));
+    p.add(saslMechanism, "growx, wmin 0, wrap");
+    p.add(new JLabel("On failure"), "top");
+    p.add(saslContinueOnFailureBox, "growx, wmin 0, wrap");
 
     saslHintLabel.putClientProperty(
         FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
     saslHintLabel.setText(" ");
-    g.gridy = 4;
-    g.gridx = 0;
-    g.gridwidth = 2;
-    g.weightx = 1.0;
-    g.fill = GridBagConstraints.HORIZONTAL;
-    p.add(saslHintLabel, g);
+    p.add(saslHintLabel, "span 2, growx, wmin 0, pushy");
+    return p;
+  }
 
-    g.gridy = 5;
-    g.gridx = 0;
-    g.gridwidth = 2;
-    g.weighty = 1.0;
-    p.add(new JLabel(""), g);
+  private JPanel buildAuthNickservCard() {
+    JPanel p =
+        new JPanel(
+            new MigLayout(
+                "insets 0, fillx, wrap 2", "[right]12[grow,fill,min:0]", "[]6[]6[]8[]push"));
+    p.add(new JLabel("Service"));
+    p.add(nickservServiceField, "growx, wmin 0, wrap");
+    p.add(new JLabel("Password"));
+    p.add(nickservPassField, "growx, wmin 0, wrap");
+    p.add(new JLabel("Delay auto-join"), "top");
+    p.add(nickservDelayJoinBox, "growx, wmin 0, wrap");
+
+    nickservHintLabel.putClientProperty(
+        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+    nickservHintLabel.setText(" ");
+    p.add(nickservHintLabel, "span 2, growx, wmin 0, pushy");
     return p;
   }
 
@@ -788,9 +874,46 @@ public class ServerEditorDialog extends JDialog {
     return p;
   }
 
+  private AuthMode selectedAuthMode() {
+    Object selected = authModeCombo.getSelectedItem();
+    if (selected instanceof AuthMode mode) return mode;
+    return AuthMode.DISABLED;
+  }
+
+  private void setAuthMode(AuthMode mode) {
+    authModeCombo.setSelectedItem(mode == null ? AuthMode.DISABLED : mode);
+  }
+
+  private static AuthMode seedAuthMode(IrcProperties.Server seed) {
+    if (seed == null) return AuthMode.DISABLED;
+    boolean saslEnabled = seed.sasl() != null && seed.sasl().enabled();
+    boolean nickservEnabled = seed.nickserv() != null && seed.nickserv().enabled();
+    if (saslEnabled) return AuthMode.SASL;
+    if (nickservEnabled) return AuthMode.NICKSERV;
+    return AuthMode.DISABLED;
+  }
+
+  private void showAuthCard(AuthMode mode) {
+    CardLayout card = (CardLayout) authModeCardPanel.getLayout();
+    switch (mode) {
+      case SASL -> card.show(authModeCardPanel, AUTH_CARD_SASL);
+      case NICKSERV -> card.show(authModeCardPanel, AUTH_CARD_NICKSERV);
+      default -> card.show(authModeCardPanel, AUTH_CARD_DISABLED);
+    }
+  }
+
+  private void updateAuthModeUi() {
+    AuthMode mode = selectedAuthMode();
+    showAuthCard(mode);
+    updateSaslEnabled();
+    updateNickservEnabled();
+    updateValidation();
+  }
+
   private void updateSaslEnabled() {
-    boolean en = saslEnabledBox.isSelected();
+    boolean en = selectedAuthMode() == AuthMode.SASL;
     saslMechanism.setEnabled(en);
+    saslContinueOnFailureBox.setEnabled(en);
 
     String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
     String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
@@ -837,15 +960,26 @@ public class ServerEditorDialog extends JDialog {
     saslUserField.setEnabled(userEnabled);
     saslPassField.setEnabled(secretEnabled);
 
-    // Make the hint wrap nicely.
-    String html = "<html><body style='width: 520px'>" + hint + "</body></html>";
+    String html = asHtml(hint);
     saslHintLabel.setText(en ? html : " ");
     saslHintLabel.setToolTipText(hint);
 
     // Update placeholder dynamically.
     saslPassField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, secretPlaceholder);
+  }
 
-    updateValidation();
+  private void updateNickservEnabled() {
+    boolean en = selectedAuthMode() == AuthMode.NICKSERV;
+    nickservServiceField.setEnabled(en);
+    nickservPassField.setEnabled(en);
+    nickservDelayJoinBox.setEnabled(en);
+
+    String hint =
+        "NickServ identify runs after connect. Use this when the server doesn't offer SASL."
+            + " This is an alternative auth path; don't enable it together with SASL.";
+    String html = asHtml(hint);
+    nickservHintLabel.setText(en ? html : " ");
+    nickservHintLabel.setToolTipText(hint);
   }
 
   // FlatLaf validation outlines.
@@ -917,8 +1051,10 @@ public class ServerEditorDialog extends JDialog {
     setError(nickField, nickBad);
     ok &= !nickBad;
 
+    AuthMode authMode = selectedAuthMode();
+
     // SASL validation
-    if (!saslEnabledBox.isSelected()) {
+    if (authMode != AuthMode.SASL) {
       clearOutline(saslUserField);
       clearOutline(saslPassField);
     } else {
@@ -954,6 +1090,19 @@ public class ServerEditorDialog extends JDialog {
 
       ok &= !userBad;
       ok &= !secretBad;
+    }
+
+    // NickServ validation
+    if (authMode != AuthMode.NICKSERV) {
+      clearOutline(nickservServiceField);
+      clearOutline(nickservPassField);
+    } else {
+      String pass = new String(nickservPassField.getPassword());
+      boolean passBad = pass.isBlank();
+
+      setError(nickservServiceField, false);
+      setError(nickservPassField, passBad);
+      ok &= !passBad;
     }
 
     // Proxy override validation
@@ -1109,8 +1258,10 @@ public class ServerEditorDialog extends JDialog {
     String realName = trim(realNameField.getText());
     if (realName.isEmpty()) realName = nick;
 
+    AuthMode authMode = selectedAuthMode();
+
     IrcProperties.Server.Sasl sasl;
-    if (saslEnabledBox.isSelected()) {
+    if (authMode == AuthMode.SASL) {
       String u = trim(saslUserField.getText());
       // JPasswordField stores secret as a char[]. Convert only when building the immutable config
       // object.
@@ -1138,9 +1289,25 @@ public class ServerEditorDialog extends JDialog {
       if (needsSecret && p.isBlank()) {
         throw new IllegalArgumentException("SASL secret is required for mechanism " + mechUpper);
       }
-      sasl = new IrcProperties.Server.Sasl(true, u, p, mech, null);
+      sasl =
+          new IrcProperties.Server.Sasl(true, u, p, mech, !saslContinueOnFailureBox.isSelected());
     } else {
       sasl = new IrcProperties.Server.Sasl(false, "", "", "PLAIN", null);
+    }
+
+    IrcProperties.Server.Nickserv nickserv;
+    if (authMode == AuthMode.NICKSERV) {
+      String service = trim(nickservServiceField.getText());
+      if (service.isEmpty()) service = "NickServ";
+      String pass = new String(nickservPassField.getPassword());
+      if (pass.isBlank()) {
+        throw new IllegalArgumentException(
+            "NickServ password is required when NickServ is enabled");
+      }
+      nickserv =
+          new IrcProperties.Server.Nickserv(true, pass, service, nickservDelayJoinBox.isSelected());
+    } else {
+      nickserv = new IrcProperties.Server.Nickserv(false, "", "NickServ", true);
     }
 
     List<String> autoJoin = new ArrayList<>();
@@ -1198,6 +1365,7 @@ public class ServerEditorDialog extends JDialog {
         login,
         realName,
         sasl,
+        nickserv,
         autoJoin,
         perform,
         proxyOverride);
@@ -1243,6 +1411,15 @@ public class ServerEditorDialog extends JDialog {
     g.gridx = 1;
     g.weightx = 1.0;
     panel.add(field, g);
+  }
+
+  private static String asHtml(String text) {
+    return "<html>" + escapeHtml(text) + "</html>";
+  }
+
+  private static String escapeHtml(String text) {
+    if (text == null || text.isEmpty()) return "";
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
   }
 
   private static String trim(String s) {

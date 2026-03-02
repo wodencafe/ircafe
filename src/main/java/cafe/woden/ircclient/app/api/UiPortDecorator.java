@@ -133,6 +133,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public boolean isChannelMuted(TargetRef target) {
+    return delegate.isChannelMuted(target);
+  }
+
+  @Override
   public void markUnread(TargetRef target) {
     delegate.markUnread(target);
   }

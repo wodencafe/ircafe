@@ -796,6 +796,26 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     JTextField messagePattern = new JTextField(base.messagePattern());
     messagePattern.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Message pattern");
 
+    String seedMessagePattern = Objects.toString(base.messagePattern(), "").trim();
+    String seedCtcpCommand = "";
+    String seedCtcpValue = "";
+    if (base.messageMode() == InterceptorRuleMode.LIKE && !seedMessagePattern.isEmpty()) {
+      int split = seedMessagePattern.indexOf(' ');
+      if (split < 0) {
+        seedCtcpCommand = seedMessagePattern;
+      } else {
+        seedCtcpCommand = seedMessagePattern.substring(0, split).trim();
+        seedCtcpValue = seedMessagePattern.substring(split + 1).trim();
+      }
+    }
+    JTextField ctcpCommand = new JTextField(seedCtcpCommand);
+    ctcpCommand.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "CTCP command");
+    JTextField ctcpValue = new JTextField(seedCtcpValue);
+    ctcpValue.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Optional CTCP value");
+    JButton applyCtcpHelper = new JButton("Apply");
+    configureIconButton(
+        applyCtcpHelper, "check", "Apply CTCP command/value helper to the rule message matcher");
+
     JComboBox<InterceptorRuleMode> nickMode =
         new JComboBox<>(RULE_DIMENSION_MODES_WITH_ANY.clone());
     nickMode.setRenderer(ruleDimensionModeComboRenderer(nickMode));
@@ -815,7 +835,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
             new MigLayout(
                 "insets 10,fillx,wrap 3,hidemode 3",
                 "[right][pref!][grow,fill]",
-                "[]6[]6[]6[]6[]6[]"));
+                "[]6[]6[]6[]6[]6[]6[]"));
 
     panel.add(ruleEnabled, "span 3,wrap");
 
@@ -848,6 +868,9 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
           }
         };
     anyEventType.addActionListener(e -> refreshEventSelectorState.run());
+    for (JCheckBox selector : eventSelectors.values()) {
+      selector.addActionListener(e -> refreshEventSelectorState.run());
+    }
     refreshEventSelectorState.run();
 
     panel.add(new JLabel("Events:"));
@@ -856,6 +879,14 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     panel.add(new JLabel("Message:"));
     panel.add(messageMode, "w 78!");
     panel.add(messagePattern, "growx,pushx,wmin 0,wrap");
+
+    JPanel ctcpHelperRow =
+        new JPanel(new MigLayout("insets 0,fillx", "[grow,fill]8[grow,fill]8[]", "[]"));
+    ctcpHelperRow.add(ctcpCommand, "growx,pushx,wmin 0");
+    ctcpHelperRow.add(ctcpValue, "growx,pushx,wmin 0");
+    ctcpHelperRow.add(applyCtcpHelper, "w 36!,h 28!");
+    panel.add(new JLabel("CTCP helper:"));
+    panel.add(ctcpHelperRow, "span 2,growx,pushx,wmin 0,wrap");
 
     panel.add(new JLabel("Nick:"));
     panel.add(nickMode, "w 78!");
@@ -869,6 +900,56 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         bindRuleDimensionModeFieldEnabled(
             messageMode, messagePattern, nickMode, nickPattern, hostmaskMode, hostmaskPattern);
     refreshDimensionFieldState.run();
+
+    JCheckBox ctcpEventSelector = eventSelectors.get(InterceptorEventType.CTCP);
+    Runnable refreshCtcpHelperState =
+        () -> {
+          boolean ctcpSelected =
+              !anyEventType.isSelected()
+                  && ctcpEventSelector != null
+                  && ctcpEventSelector.isSelected();
+          ctcpCommand.setEnabled(ctcpSelected);
+          ctcpCommand.setEditable(ctcpSelected);
+          ctcpValue.setEnabled(ctcpSelected);
+          ctcpValue.setEditable(ctcpSelected);
+          applyCtcpHelper.setEnabled(ctcpSelected);
+        };
+    anyEventType.addActionListener(e -> refreshCtcpHelperState.run());
+    if (ctcpEventSelector != null) {
+      ctcpEventSelector.addActionListener(e -> refreshCtcpHelperState.run());
+    }
+    refreshCtcpHelperState.run();
+
+    applyCtcpHelper.addActionListener(
+        e -> {
+          String command = Objects.toString(ctcpCommand.getText(), "").trim();
+          String value = Objects.toString(ctcpValue.getText(), "").trim();
+          if (command.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                SwingUtilities.getWindowAncestor(this),
+                "CTCP command is required for the CTCP helper.",
+                "CTCP Helper",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+          }
+
+          if (ctcpEventSelector != null) {
+            anyEventType.setSelected(false);
+            for (var entry : eventSelectors.entrySet()) {
+              JCheckBox selector = entry.getValue();
+              if (selector == null) continue;
+              selector.setSelected(entry.getKey() == InterceptorEventType.CTCP);
+            }
+            refreshEventSelectorState.run();
+            refreshCtcpHelperState.run();
+          }
+
+          messageMode.setSelectedItem(InterceptorRuleMode.LIKE);
+          String normalizedCommand = command.toUpperCase(Locale.ROOT);
+          messagePattern.setText(
+              value.isBlank() ? normalizedCommand : (normalizedCommand + " " + value));
+          refreshDimensionFieldState.run();
+        });
 
     Window owner = SwingUtilities.getWindowAncestor(this);
     int choice =

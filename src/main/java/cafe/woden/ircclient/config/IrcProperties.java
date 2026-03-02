@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 /**
  * IRC client configuration.
@@ -126,6 +127,7 @@ public record IrcProperties(Client client, List<Server> servers) {
       String login,
       String realName,
       Sasl sasl,
+      Nickserv nickserv,
       List<String> autoJoin,
       /**
        * Optional list of commands to run after connecting, similar to HexChat's "Perform" list.
@@ -164,6 +166,28 @@ public record IrcProperties(Client client, List<Server> servers) {
       }
     }
 
+    public record Nickserv(
+        boolean enabled,
+        String password,
+        String service,
+        /**
+         * If true, delay auto-join channels until NickServ identification is confirmed by a notice.
+         *
+         * <p>If omitted, defaults to {@code true}.
+         */
+        Boolean delayJoinUntilIdentified) {
+      public Nickserv {
+        if (password == null) password = "";
+        if (service == null || service.isBlank()) {
+          service = "NickServ";
+        }
+        if (delayJoinUntilIdentified == null) {
+          delayJoinUntilIdentified = true;
+        }
+      }
+    }
+
+    @ConstructorBinding
     public Server {
       if (id == null || id.isBlank()) {
         throw new IllegalArgumentException("irc.servers[].id is required");
@@ -174,12 +198,44 @@ public record IrcProperties(Client client, List<Server> servers) {
       if (sasl == null) {
         sasl = new Sasl(false, "", "", "PLAIN", null);
       }
+      if (nickserv == null) {
+        nickserv = new Nickserv(false, "", "NickServ", null);
+      }
       if (autoJoin == null) {
         autoJoin = List.of();
       }
       if (perform == null) {
         perform = List.of();
       }
+    }
+
+    public Server(
+        String id,
+        String host,
+        int port,
+        boolean tls,
+        String serverPassword,
+        String nick,
+        String login,
+        String realName,
+        Sasl sasl,
+        List<String> autoJoin,
+        List<String> perform,
+        Proxy proxy) {
+      this(
+          id,
+          host,
+          port,
+          tls,
+          serverPassword,
+          nick,
+          login,
+          realName,
+          sasl,
+          null,
+          autoJoin,
+          perform,
+          proxy);
     }
   }
 

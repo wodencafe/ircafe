@@ -556,6 +556,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
    * <p>Call this once before a batch of {@code insert*FromHistoryAt(...)} calls.
    */
   public synchronized void beginHistoryInsertBatch(TargetRef ref) {
+    beginHistoryInsertBatch(ref, false);
+  }
+
+  public synchronized void beginHistoryInsertBatch(TargetRef ref, boolean forceDeferRichText) {
     if (ref == null) return;
     ensureTargetExists(ref);
     endFilteredInsertRun(ref);
@@ -566,6 +570,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       st.historyInsertPlaceholderRunsCreated = 0;
       st.historyInsertHintRunsCreated = 0;
       st.historyInsertOverflowRun = null;
+      st.forceDeferRichTextDuringHistoryBatch = forceDeferRichText;
     }
   }
 
@@ -585,6 +590,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       st.historyInsertPlaceholderRunsCreated = 0;
       st.historyInsertHintRunsCreated = 0;
       st.historyInsertOverflowRun = null;
+      st.forceDeferRichTextDuringHistoryBatch = false;
     }
   }
 
@@ -592,6 +598,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     if (ref == null) return false;
     TranscriptState st = stateByTarget.get(ref);
     if (st == null || !st.historyInsertBatchActive) return false;
+    if (st.forceDeferRichTextDuringHistoryBatch) return true;
     try {
       UiSettings s = uiSettings != null ? uiSettings.get() : null;
       return s != null && s.chatHistoryDeferRichTextDuringBatch();
@@ -4816,6 +4823,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     st.historyInsertPlaceholderRunsCreated = 0;
     st.historyInsertHintRunsCreated = 0;
     st.historyInsertOverflowRun = null;
+    st.forceDeferRichTextDuringHistoryBatch = false;
     st.loadOlderControl = null;
     st.historyDivider = null;
     st.pendingHistoryDividerLabel = null;
@@ -4890,6 +4898,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     int historyInsertPlaceholderRunsCreated;
     int historyInsertHintRunsCreated;
     FilteredOverflowRun historyInsertOverflowRun;
+    boolean forceDeferRichTextDuringHistoryBatch;
 
     LoadOlderControl loadOlderControl;
     HistoryDividerControl historyDivider;

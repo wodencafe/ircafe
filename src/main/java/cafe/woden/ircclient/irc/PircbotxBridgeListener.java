@@ -113,6 +113,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private record ParsedIrcLine(
       String prefix, String command, List<String> params, String trailing) {}
 
+  private record ParsedCtcp(String commandUpper, String argument) {}
+
   private static ParsedIrcLine parseIrcLine(String normalizedLine) {
     if (normalizedLine == null) return null;
     String s = normalizedLine.trim();
@@ -145,6 +147,38 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     }
 
     return new ParsedIrcLine(prefix, cmd, params, trailing);
+  }
+
+  private static String rawTrailingFromIrcLine(String rawLine) {
+    String s = Objects.toString(rawLine, "");
+    if (s.isEmpty()) return "";
+
+    if (s.startsWith("@")) {
+      int sp = s.indexOf(' ');
+      if (sp <= 0 || sp + 1 >= s.length()) return "";
+      s = s.substring(sp + 1);
+    }
+    if (s.isEmpty()) return "";
+
+    int pos = 0;
+    if (s.charAt(0) == ':') {
+      int sp = s.indexOf(' ');
+      if (sp <= 0 || sp + 1 >= s.length()) return "";
+      pos = sp + 1;
+    }
+
+    while (pos < s.length() && s.charAt(pos) == ' ') {
+      pos++;
+    }
+    if (pos >= s.length()) return "";
+
+    int cmdEnd = s.indexOf(' ', pos);
+    if (cmdEnd < 0 || cmdEnd + 1 >= s.length()) return "";
+    pos = cmdEnd + 1;
+
+    int trailingIdx = s.indexOf(" :", pos);
+    if (trailingIdx < 0 || trailingIdx + 2 > s.length()) return "";
+    return s.substring(trailingIdx + 2);
   }
 
   private static ParsedInviteLine parseInviteLine(ParsedIrcLine parsed) {
@@ -337,6 +371,19 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private static boolean isCtcpWrapped(String msg) {
     if (msg == null || msg.length() < 2) return false;
     return msg.charAt(0) == 0x01 && msg.charAt(msg.length() - 1) == 0x01;
+  }
+
+  private static ParsedCtcp parseCtcpPayload(String message) {
+    if (!isCtcpWrapped(message)) return null;
+    String inner = message.substring(1, message.length() - 1).trim();
+    if (inner.isEmpty()) return null;
+
+    int sp = inner.indexOf(' ');
+    String cmd = (sp >= 0) ? inner.substring(0, sp) : inner;
+    String arg = (sp >= 0) ? inner.substring(sp + 1).trim() : "";
+    String commandUpper = Objects.toString(cmd, "").trim().toUpperCase(Locale.ROOT);
+    if (commandUpper.isEmpty()) return null;
+    return new ParsedCtcp(commandUpper, arg.isBlank() ? null : arg);
   }
 
   private static String rawLineFromEvent(Object event) {
@@ -1698,6 +1745,10 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       return;
     }
 
+    if (maybeEmitUnknownCtcpEvent(event, line, rawLine, parsedRawLine)) {
+      return;
+    }
+
     // R5.2c: As a fallback, try to capture playback PRIVMSG/NOTICE lines that PircBotX surfaced
     // as UnknownEvent (rare, but can happen for echoed/outbound playback lines).
     try {
@@ -2243,6 +2294,59 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       return true;
     }
     return false;
+  }
+
+  private boolean maybeEmitUnknownCtcpEvent(
+      UnknownEvent event,
+      String lineWithTags,
+      String normalizedRawLine,
+      ParsedIrcLine parsedRawLine) {
+    ParsedIrcLine parsed = parsedRawLine;
+    if (parsed == null) {
+      parsed = parseIrcLine(normalizedRawLine);
+    }
+    if (parsed == null) return false;
+
+    String rawCmd = Objects.toString(parsed.command(), "").trim().toUpperCase(Locale.ROOT);
+    if (!"PRIVMSG".equals(rawCmd) && !"NOTICE".equals(rawCmd)) return false;
+
+    String rawTrailing = rawTrailingFromIrcLine(lineWithTags);
+    ParsedCtcp ctcp = parseCtcpPayload(rawTrailing);
+    if (ctcp == null) {
+      ctcp = parseCtcpPayload(parsed.trailing());
+    }
+    if (ctcp == null) return false;
+
+    String from = Objects.toString(nickFromPrefix(parsed.prefix()), "").trim();
+    if (from.isEmpty()) {
+      from = Objects.toString(event != null ? event.getNick() : "", "").trim();
+    }
+    if (from.isEmpty()) from = "server";
+
+    PircBotX bot = event != null ? event.getBot() : null;
+    if (nickMatchesSelf(bot, from)) return true;
+    if (isSelfEchoed(bot, from)) return true;
+
+    String botNick = resolveSelfNick(bot);
+    List<String> params = parsed.params();
+    String destination =
+        (params == null || params.isEmpty()) ? "" : Objects.toString(params.get(0), "").trim();
+    String channel = PircbotxLineParseUtil.looksLikeChannel(destination) ? destination : null;
+    if (channel == null
+        && !destination.isBlank()
+        && !botNick.isBlank()
+        && !destination.equalsIgnoreCase(botNick)) {
+      return true;
+    }
+
+    Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(lineWithTags);
+    if (at == null) at = Instant.now();
+    bus.onNext(
+        new ServerIrcEvent(
+            serverId,
+            new IrcEvent.CtcpRequestReceived(
+                at, from, ctcp.commandUpper(), ctcp.argument(), channel)));
+    return true;
   }
 
   private List<String> monitorNickList(

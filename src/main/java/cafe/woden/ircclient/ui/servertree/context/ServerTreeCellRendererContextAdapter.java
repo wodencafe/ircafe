@@ -21,6 +21,9 @@ public final class ServerTreeCellRendererContextAdapter implements ServerTreeCel
   private final Predicate<TargetRef> isPrivateMessageTarget;
   private final Predicate<TargetRef> isPrivateMessageOnline;
   private final Predicate<TargetRef> isChannelPinned;
+  private final Predicate<TargetRef> isChannelMuted;
+  private final Supplier<java.awt.Color> unreadChannelTextColor;
+  private final Supplier<java.awt.Color> highlightChannelTextColor;
   private final Supplier<Boolean> isApplicationJfrActive;
   private final Predicate<TargetRef> isInterceptorEnabled;
   private final Predicate<DefaultMutableTreeNode> isMonitorGroupNode;
@@ -44,6 +47,9 @@ public final class ServerTreeCellRendererContextAdapter implements ServerTreeCel
       Predicate<TargetRef> isPrivateMessageTarget,
       Predicate<TargetRef> isPrivateMessageOnline,
       Predicate<TargetRef> isChannelPinned,
+      Predicate<TargetRef> isChannelMuted,
+      Supplier<java.awt.Color> unreadChannelTextColor,
+      Supplier<java.awt.Color> highlightChannelTextColor,
       Supplier<Boolean> isApplicationJfrActive,
       Predicate<TargetRef> isInterceptorEnabled,
       Predicate<DefaultMutableTreeNode> isMonitorGroupNode,
@@ -72,6 +78,11 @@ public final class ServerTreeCellRendererContextAdapter implements ServerTreeCel
     this.isPrivateMessageOnline =
         Objects.requireNonNull(isPrivateMessageOnline, "isPrivateMessageOnline");
     this.isChannelPinned = Objects.requireNonNull(isChannelPinned, "isChannelPinned");
+    this.isChannelMuted = Objects.requireNonNull(isChannelMuted, "isChannelMuted");
+    this.unreadChannelTextColor =
+        Objects.requireNonNull(unreadChannelTextColor, "unreadChannelTextColor");
+    this.highlightChannelTextColor =
+        Objects.requireNonNull(highlightChannelTextColor, "highlightChannelTextColor");
     this.isApplicationJfrActive =
         Objects.requireNonNull(isApplicationJfrActive, "isApplicationJfrActive");
     this.isInterceptorEnabled =
@@ -130,6 +141,21 @@ public final class ServerTreeCellRendererContextAdapter implements ServerTreeCel
   @Override
   public boolean isChannelPinned(TargetRef ref) {
     return isChannelPinned.test(ref);
+  }
+
+  @Override
+  public boolean isChannelMuted(TargetRef ref) {
+    return isChannelMuted.test(ref);
+  }
+
+  @Override
+  public java.awt.Color unreadChannelTextColor() {
+    return unreadChannelTextColor.get();
+  }
+
+  @Override
+  public java.awt.Color highlightChannelTextColor() {
+    return highlightChannelTextColor.get();
   }
 
   @Override

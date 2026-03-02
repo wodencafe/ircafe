@@ -21,6 +21,7 @@ public final class ChatDockTitleCoordinator {
   private final Supplier<String> dockNameSupplier;
   private final Consumer<String> dockNameSetter;
   private final Consumer<Runnable> laterInvoker;
+  private final Runnable dockingTabInfoUpdater;
 
   public ChatDockTitleCoordinator(
       Component dockComponent,
@@ -29,6 +30,24 @@ public final class ChatDockTitleCoordinator {
       Supplier<String> dockNameSupplier,
       Consumer<String> dockNameSetter,
       Consumer<Runnable> laterInvoker) {
+    this(
+        dockComponent,
+        activeTargetSupplier,
+        interceptorStore,
+        dockNameSupplier,
+        dockNameSetter,
+        laterInvoker,
+        () -> {});
+  }
+
+  public ChatDockTitleCoordinator(
+      Component dockComponent,
+      Supplier<TargetRef> activeTargetSupplier,
+      InterceptorStore interceptorStore,
+      Supplier<String> dockNameSupplier,
+      Consumer<String> dockNameSetter,
+      Consumer<Runnable> laterInvoker,
+      Runnable dockingTabInfoUpdater) {
     this.dockComponent = Objects.requireNonNull(dockComponent, "dockComponent");
     this.activeTargetSupplier =
         Objects.requireNonNull(activeTargetSupplier, "activeTargetSupplier");
@@ -36,6 +55,8 @@ public final class ChatDockTitleCoordinator {
     this.dockNameSupplier = Objects.requireNonNull(dockNameSupplier, "dockNameSupplier");
     this.dockNameSetter = Objects.requireNonNull(dockNameSetter, "dockNameSetter");
     this.laterInvoker = Objects.requireNonNull(laterInvoker, "laterInvoker");
+    this.dockingTabInfoUpdater =
+        Objects.requireNonNull(dockingTabInfoUpdater, "dockingTabInfoUpdater");
   }
 
   public String tabText() {
@@ -73,10 +94,13 @@ public final class ChatDockTitleCoordinator {
         dockNameSetter.accept(title);
       }
 
-      // ModernDocking caches Dockable#getTabText when rendering tab groups.
-      // Some versions expose Docking.updateTabText(...) for this, but the single-app
-      // facade doesn't always include it. So we defensively update the tab title
-      // ourselves when we're inside a JTabbedPane.
+      // Let the docking framework refresh header and tab labels when possible.
+      try {
+        dockingTabInfoUpdater.run();
+      } catch (Exception ignored) {
+      }
+
+      // Fallback for plain Swing tab containers and wrapper panels.
       laterInvoker.accept(this::updateTabTitleIfTabbed);
     } catch (Exception ignored) {
     }

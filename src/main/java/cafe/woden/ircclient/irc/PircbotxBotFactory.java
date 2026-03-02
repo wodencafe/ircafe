@@ -132,7 +132,31 @@ public class PircbotxBotFactory {
       if (AutoJoinEntryCodec.isPrivateMessageEntry(ch)) continue;
       if (!ch.isEmpty()) builder.addAutoJoinChannel(ch);
     }
-    if (s.sasl() != null && s.sasl().enabled()) {
+    boolean saslEnabled = s.sasl() != null && s.sasl().enabled();
+    boolean nickservEnabled = s.nickserv() != null && s.nickserv().enabled();
+    if (saslEnabled && nickservEnabled) {
+      throw new IllegalStateException("SASL and NickServ auth cannot both be enabled");
+    }
+
+    if (nickservEnabled) {
+      String password = (s.nickserv().password() == null) ? "" : s.nickserv().password();
+      if (password.isBlank()) {
+        throw new IllegalStateException("NickServ enabled but password not set");
+      }
+
+      String service =
+          (s.nickserv().service() == null) ? "NickServ" : s.nickserv().service().trim();
+      if (service.isBlank()) service = "NickServ";
+
+      builder.setNickservPassword(password);
+      builder.setNickservNick(service);
+      builder.setNickservDelayJoin(
+          s.nickserv().delayJoinUntilIdentified() == null
+              ? true
+              : s.nickserv().delayJoinUntilIdentified());
+    }
+
+    if (saslEnabled) {
       String mech = (s.sasl().mechanism() == null) ? "PLAIN" : s.sasl().mechanism().trim();
       String user = (s.sasl().username() == null) ? "" : s.sasl().username();
       String secret = (s.sasl().password() == null) ? "" : s.sasl().password();

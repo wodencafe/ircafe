@@ -467,10 +467,11 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     boolean finished = false;
     try {
       int maxLines = Math.max(1, chunkSize);
-      long budgetNs = TimeUnit.MILLISECONDS.toNanos(Math.max(1, Math.min(33, chunkEdtBudgetMs)));
-      int minLinesBeforeBudget = Math.min(maxLines, Math.max(1, MIN_LOAD_OLDER_LINES_PER_CHUNK));
+      long budgetNs = HistoryChunking.chunkBudgetNs(chunkEdtBudgetMs);
+      int minLinesBeforeBudget =
+          HistoryChunking.minLinesBeforeBudget(maxLines, MIN_LOAD_OLDER_LINES_PER_CHUNK);
       long chunkStartNs = System.nanoTime();
-      long deadlineNs = System.nanoTime() + budgetNs;
+      long deadlineNs = chunkStartNs + budgetNs;
       int safeInsertAt = Math.max(0, insertAt);
       int inserted = insertedSoFar;
       int dividerPos = Math.max(0, dividerInsertAt);
@@ -492,7 +493,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
         if (insertedThisChunk >= minLinesBeforeBudget && System.nanoTime() >= deadlineNs) break;
       }
       long elapsedNs = Math.max(0L, System.nanoTime() - chunkStartNs);
-      int nextDelayMs = effectiveInterChunkDelayMs(chunkDelayMs, elapsedNs);
+      int nextDelayMs = HistoryChunking.effectiveInterChunkDelayMs(chunkDelayMs, elapsedNs);
 
       ScrollAnchor effectiveAnchor =
           lockViewportDuringLoad ? fixedAnchor : ScrollAnchor.capture(anchorControl);
@@ -505,7 +506,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
         final int nextInsertAt = safeInsertAt;
         final int nextInserted = inserted;
         final int nextDividerPos = dividerPos;
-        scheduleNextChunk(
+        HistoryChunking.scheduleNextChunk(
             nextDelayMs,
             () ->
                 prependOlderLinesInChunks(
@@ -621,31 +622,6 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     if (minutes <= 0) minutes = DEFAULT_REMOTE_ZNC_PLAYBACK_WINDOW_MINUTES;
     if (minutes > 1440) minutes = 1440;
     return Duration.ofMinutes(minutes);
-  }
-
-  private static void scheduleNextChunk(int delayMs, Runnable task) {
-    if (task == null) return;
-    int safeDelayMs = Math.max(0, Math.min(1_000, delayMs));
-    if (safeDelayMs == 0) {
-      SwingUtilities.invokeLater(task);
-      return;
-    }
-    javax.swing.Timer timer =
-        new javax.swing.Timer(
-            safeDelayMs,
-            e -> {
-              ((javax.swing.Timer) e.getSource()).stop();
-              task.run();
-            });
-    timer.setRepeats(false);
-    timer.start();
-  }
-
-  private static int effectiveInterChunkDelayMs(int configuredDelayMs, long elapsedNs) {
-    int safeDelayMs = Math.max(0, Math.min(1_000, configuredDelayMs));
-    long elapsedMs = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(Math.max(0L, elapsedNs)));
-    if (elapsedMs >= safeDelayMs) return 0;
-    return (int) (safeDelayMs - elapsedMs);
   }
 
   private boolean configuredLockViewportDuringLoadOlder() {

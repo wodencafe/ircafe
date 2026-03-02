@@ -86,7 +86,10 @@ public record UiSettings(
     boolean memoryUsageWarningToastEnabled,
     boolean memoryUsageWarningPushyEnabled,
     boolean memoryUsageWarningSoundEnabled,
-    List<NotificationRule> notificationRules) {
+    List<NotificationRule> notificationRules,
+    String serverTreeUnreadChannelColor,
+    String serverTreeHighlightChannelColor,
+    boolean preserveDockLayoutBetweenSessions) {
 
   public UiSettings {
     // Preferred default theme (A): Darcula.
@@ -198,6 +201,8 @@ public record UiSettings(
     if (memoryUsageWarningNearMaxPercent > 50) memoryUsageWarningNearMaxPercent = 50;
 
     if (notificationRules == null) notificationRules = List.of();
+    serverTreeUnreadChannelColor = normalizeHexOrNull(serverTreeUnreadChannelColor);
+    serverTreeHighlightChannelColor = normalizeHexOrNull(serverTreeHighlightChannelColor);
   }
 
   /**
@@ -312,7 +317,10 @@ public record UiSettings(
         false,
         false,
         false,
-        List.of());
+        List.of(),
+        null,
+        null,
+        false);
   }
 
   static String normalizeHexOrDefault(String raw, String fallback) {
@@ -331,6 +339,24 @@ public record UiSettings(
       return String.format("#%02X%02X%02X", r, g, b);
     } catch (Exception ignored) {
       return fb;
+    }
+  }
+
+  static String normalizeHexOrNull(String raw) {
+    if (raw == null) return null;
+    String s = raw.trim();
+    if (s.isEmpty()) return null;
+    if (s.startsWith("#")) s = s.substring(1);
+    if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2);
+    if (s.length() != 6) return null;
+    try {
+      int rgb = Integer.parseInt(s, 16);
+      int r = (rgb >> 16) & 0xFF;
+      int g = (rgb >> 8) & 0xFF;
+      int b = rgb & 0xFF;
+      return String.format("#%02X%02X%02X", r, g, b);
+    } catch (Exception ignored) {
+      return null;
     }
   }
 
@@ -423,7 +449,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withChatFontFamily(String family) {
@@ -504,7 +533,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withChatFontSize(int size) {
@@ -585,7 +617,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withImageEmbedsEnabled(boolean enabled) {
@@ -666,7 +701,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withImageEmbedsCollapsedByDefault(boolean collapsed) {
@@ -747,7 +785,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withImageEmbedsMaxWidthPx(int maxWidthPx) {
@@ -828,7 +869,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withImageEmbedsMaxHeightPx(int maxHeightPx) {
@@ -909,7 +953,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withLinkPreviewsEnabled(boolean enabled) {
@@ -990,7 +1037,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withLinkPreviewsCollapsedByDefault(boolean collapsed) {
@@ -1071,7 +1121,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withPresenceFoldsEnabled(boolean enabled) {
@@ -1152,7 +1205,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withTypingIndicatorsEnabled(boolean enabled) {
@@ -1233,7 +1289,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withTypingIndicatorsReceiveEnabled(boolean enabled) {
@@ -1314,7 +1373,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withTypingIndicatorsTreeEnabled(boolean enabled) {
@@ -1395,7 +1457,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withTypingIndicatorsUsersListEnabled(boolean enabled) {
@@ -1476,7 +1541,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withTypingIndicatorsTranscriptEnabled(boolean enabled) {
@@ -1557,7 +1625,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withTypingIndicatorsSendSignalEnabled(boolean enabled) {
@@ -1638,7 +1709,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withTimestampsEnabled(boolean enabled) {
@@ -1719,7 +1793,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withTimestampFormat(String format) {
@@ -1800,7 +1877,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withTimestampsIncludeChatMessages(boolean enabled) {
@@ -1881,7 +1961,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withTimestampsIncludePresenceMessages(boolean enabled) {
@@ -1962,7 +2045,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   @Deprecated
@@ -2048,7 +2134,10 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 
   public UiSettings withAutoConnectOnStart(boolean enabled) {
@@ -2129,6 +2218,9 @@ public record UiSettings(
         memoryUsageWarningToastEnabled,
         memoryUsageWarningPushyEnabled,
         memoryUsageWarningSoundEnabled,
-        notificationRules);
+        notificationRules,
+        serverTreeUnreadChannelColor,
+        serverTreeHighlightChannelColor,
+        preserveDockLayoutBetweenSessions);
   }
 }

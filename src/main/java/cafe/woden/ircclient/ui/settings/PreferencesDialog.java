@@ -39,6 +39,7 @@ import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.shell.UpdateNotifierService;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.TrayService;
 import cafe.woden.ircclient.ui.tray.dbus.GnomeDbusNotificationBackend;
@@ -168,6 +169,7 @@ public class PreferencesDialog {
   private final ActiveTargetPort targetCoordinator;
   private final TrayService trayService;
   private final TrayNotificationService trayNotificationService;
+  private final UpdateNotifierService updateNotifierService;
   private final GnomeDbusNotificationBackend gnomeDbusBackend;
   private final NotificationSoundSettingsBus notificationSoundSettingsBus;
   private final PushySettingsBus pushySettingsBus;
@@ -202,6 +204,7 @@ public class PreferencesDialog {
       ActiveTargetPort targetCoordinator,
       TrayService trayService,
       TrayNotificationService trayNotificationService,
+      UpdateNotifierService updateNotifierService,
       GnomeDbusNotificationBackend gnomeDbusBackend,
       NotificationSoundSettingsBus notificationSoundSettingsBus,
       PushySettingsBus pushySettingsBus,
@@ -233,6 +236,7 @@ public class PreferencesDialog {
     this.targetCoordinator = targetCoordinator;
     this.trayService = trayService;
     this.trayNotificationService = trayNotificationService;
+    this.updateNotifierService = updateNotifierService;
     this.gnomeDbusBackend = gnomeDbusBackend;
     this.notificationSoundSettingsBus = notificationSoundSettingsBus;
     this.pushySettingsBus = pushySettingsBus;
@@ -933,7 +937,9 @@ public class PreferencesDialog {
                 : runtimeConfig.readUnknownCommandAsRawEnabled(false));
     DiagnosticsControls diagnostics = buildDiagnosticsControls();
 
-    JPanel appearancePanel = buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks);
+    AppearanceServerTreeControls appearanceServerTree = buildAppearanceServerTreeControls(current);
+    JPanel appearancePanel =
+        buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks, appearanceServerTree);
     JPanel memoryPanel = buildMemoryPanel(memoryUsageDisplayMode, memoryWarnings);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart, launchJvm);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
@@ -1129,6 +1135,7 @@ public class PreferencesDialog {
 
           boolean trayNotificationSoundsEnabledV =
               trayEnabledV && trayControls.notificationSoundsEnabled.isSelected();
+          boolean updateNotifierEnabledV = trayControls.updateNotifierEnabled.isSelected();
           BuiltInSound selectedSoundV =
               (BuiltInSound) trayControls.notificationSound.getSelectedItem();
           String trayNotificationSoundIdV =
@@ -1425,6 +1432,24 @@ public class PreferencesDialog {
               UiSettings.normalizeHexOrDefault(outgoing.hex.getText(), prev.clientLineColor());
           outgoing.hex.setText(outgoingHexV);
           boolean outgoingDeliveryIndicatorsEnabledV = outgoingDeliveryIndicators.isSelected();
+          String serverTreeUnreadChannelColorV;
+          String serverTreeHighlightChannelColorV;
+          try {
+            serverTreeUnreadChannelColorV =
+                normalizeOptionalHexForApply(
+                    appearanceServerTree.unreadChannelColor.hex().getText(),
+                    "Unread channel color must be blank or a hex value like #RRGGBB.");
+            serverTreeHighlightChannelColorV =
+                normalizeOptionalHexForApply(
+                    appearanceServerTree.highlightChannelColor.hex().getText(),
+                    "Highlight channel color must be blank or a hex value like #RRGGBB.");
+          } catch (IllegalArgumentException ex) {
+            JOptionPane.showMessageDialog(
+                dialog, ex.getMessage(), "Invalid server tree color", JOptionPane.ERROR_MESSAGE);
+            return;
+          }
+          boolean preserveDockLayoutBetweenSessionsV =
+              appearanceServerTree.preserveDockLayoutBetweenSessions.isSelected();
 
           if (notifications.table.isEditing()) {
             try {
@@ -1619,7 +1644,10 @@ public class PreferencesDialog {
                   memoryWarningToastEnabledV,
                   memoryWarningPushyEnabledV,
                   memoryWarningSoundEnabledV,
-                  notificationRulesV);
+                  notificationRulesV,
+                  serverTreeUnreadChannelColorV,
+                  serverTreeHighlightChannelColorV,
+                  preserveDockLayoutBetweenSessionsV);
           SpellcheckSettings nextSpellcheck =
               new SpellcheckSettings(
                   spellcheckEnabledV,
@@ -1641,6 +1669,9 @@ public class PreferencesDialog {
               serverTreeUnreadBadgeScalePercentV);
           runtimeConfig.rememberServerTreeNotificationBadgesEnabled(
               serverTreeNotificationBadgesEnabledV);
+          runtimeConfig.rememberServerTreeUnreadChannelColor(serverTreeUnreadChannelColorV);
+          runtimeConfig.rememberServerTreeHighlightChannelColor(serverTreeHighlightChannelColorV);
+          runtimeConfig.rememberPreserveDockLayout(preserveDockLayoutBetweenSessionsV);
           settingsBus.set(next);
           if (spellcheckSettingsBus != null) {
             spellcheckSettingsBus.set(nextSpellcheck);
@@ -1725,6 +1756,10 @@ public class PreferencesDialog {
             runtimeConfig.rememberTrayNotificationSound(trayNotificationSoundIdV);
             runtimeConfig.rememberTrayNotificationSoundUseCustom(trayNotificationSoundUseCustomV);
             runtimeConfig.rememberTrayNotificationSoundCustomPath(trayNotificationSoundCustomPathV);
+            runtimeConfig.rememberUpdateNotifierEnabled(updateNotifierEnabledV);
+            if (updateNotifierService != null) {
+              updateNotifierService.setEnabled(updateNotifierEnabledV);
+            }
             if (pushySettingsBus != null) {
               pushySettingsBus.set(pushyNext);
             }
@@ -2088,9 +2123,25 @@ public class PreferencesDialog {
   }
 
   private static void installDynamicTabSizing(JDialog d, JTabbedPane tabs, Window owner) {
-    ChangeListener listener = e -> packClampAndKeepCenter(d, owner);
+    ChangeListener listener =
+        e -> {
+          packClampAndKeepCenter(d, owner);
+          // Some tabs with nested panels/subtabs report final preferred sizes only after
+          // the first layout pass on selection.
+          SwingUtilities.invokeLater(
+              () -> {
+                if (!d.isDisplayable()) return;
+                packClampAndKeepCenter(d, owner);
+              });
+        };
     tabs.addChangeListener(listener);
     packClampAndKeepCenter(d, owner);
+    // Run one more pass after the dialog is realized so viewport measurements are final.
+    SwingUtilities.invokeLater(
+        () -> {
+          if (!d.isDisplayable()) return;
+          packClampAndKeepCenter(d, owner);
+        });
   }
 
   private static void packClampAndKeepCenter(JDialog d, Window owner) {
@@ -2140,7 +2191,7 @@ public class PreferencesDialog {
   }
 
   private static void nudgeToAvoidUnnecessaryVerticalScroll(JDialog d, int maxDialogHeight) {
-    if (d == null) return;
+    if (d == null || !d.isShowing()) return;
     java.awt.Container root = d.getContentPane();
     if (root == null) return;
 
@@ -3302,6 +3353,11 @@ public class PreferencesDialog {
     JCheckBox notifySuppressWhenTargetActive =
         new JCheckBox(
             "Don't notify for the active buffer", current.trayNotifySuppressWhenTargetActive());
+    JCheckBox updateNotifierEnabled =
+        new JCheckBox(
+            "Show update notifier in status bar", runtimeConfig.readUpdateNotifierEnabled(true));
+    updateNotifierEnabled.setToolTipText(
+        "Checks GitHub releases in the background and alerts when a newer IRCafe version exists.");
 
     boolean linuxTmp = false;
     boolean linuxActionsSupportedTmp = false;
@@ -3714,6 +3770,7 @@ public class PreferencesDialog {
     notificationsTab.add(notificationBackendGroup, "growx, wmin 0, wrap");
     JPanel notificationVisibility =
         captionPanel("Suppression and focus rules", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    notificationVisibility.add(updateNotifierEnabled, "growx");
     notificationVisibility.add(notifyOnlyWhenUnfocused, "growx");
     notificationVisibility.add(notifyOnlyWhenMinimizedOrHidden, "growx");
     notificationVisibility.add(notifySuppressWhenTargetActive, "growx, wrap");
@@ -3822,7 +3879,8 @@ public class PreferencesDialog {
     }
     linuxTab.add(linuxGroup, "growx, wmin 0");
 
-    JTabbedPane subTabs = new JTabbedPane();
+    JTabbedPane subTabs = new DynamicTabbedPane();
+    subTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
     subTabs.addTab("Tray", padSubTab(trayTab));
     subTabs.addTab("Desktop notifications", padSubTab(notificationsTab));
     subTabs.addTab("Sounds", padSubTab(soundsTab));
@@ -3843,6 +3901,7 @@ public class PreferencesDialog {
         notifyOnlyWhenUnfocused,
         notifyOnlyWhenMinimizedOrHidden,
         notifySuppressWhenTargetActive,
+        updateNotifierEnabled,
         linuxDbusActions,
         notificationBackend,
         testNotification,
@@ -5810,57 +5869,21 @@ public class PreferencesDialog {
       AccentControls accent,
       ChatThemeControls chatTheme,
       FontControls fonts,
-      TweakControls tweaks) {
+      TweakControls tweaks,
+      AppearanceServerTreeControls serverTree) {
     JPanel form =
-        new JPanel(
-            new MigLayout(
-                "insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]10[]6[]10[]6[]"));
+        new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[grow,push]8[]"));
 
-    form.add(tabTitle("Appearance"), "span 2, growx, wmin 0, wrap");
-    form.add(sectionTitle("Look & feel"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Theme"));
-    form.add(theme.combo, "growx");
+    form.add(tabTitle("Appearance"), "growx, wmin 0, wrap");
 
-    JPanel accentLabel = new JPanel(new MigLayout("insets 0", "[]6[]", "[]"));
-    accentLabel.setOpaque(false);
-    accentLabel.add(new JLabel("Accent"));
-    accentLabel.add(accent.chip);
-    form.add(accentLabel);
-    form.add(accent.panel, "growx");
-
-    form.add(new JLabel("Accent strength"));
-    form.add(accent.strength, "growx");
-
-    form.add(new JLabel("Density"));
-    form.add(tweaks.density, "growx");
-
-    form.add(new JLabel("Corner radius"));
-    form.add(tweaks.cornerRadius, "growx");
-
-    JTextArea tweakHint = subtleInfoText();
-    tweakHint.setText("Density and corner radius are available for FlatLaf-based themes.");
-    form.add(new JLabel(""));
-    form.add(tweakHint, "growx, wmin 0");
-
-    form.add(sectionTitle("UI text"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Font override"));
-    form.add(tweaks.uiFontOverrideEnabled, "growx");
-    form.add(new JLabel("Font family"));
-    form.add(tweaks.uiFontFamily, "growx");
-    form.add(new JLabel("Font size"));
-    form.add(tweaks.uiFontSize, "w 110!");
-
-    JTextArea uiFontHint = subtleInfoText();
-    uiFontHint.setText(
-        "Applies globally to menus, dialogs, tabs, forms, and controls for all themes.");
-    form.add(new JLabel(""));
-    form.add(uiFontHint, "growx, wmin 0");
-
-    form.add(sectionTitle("Chat transcript"), "span 2, growx, wmin 0, wrap");
-    JTabbedPane chatTabs = new JTabbedPane();
-    chatTabs.addTab("Palette", padSubTab(buildChatThemePaletteSubTab(chatTheme)));
-    chatTabs.addTab("Message colors", padSubTab(buildChatMessageColorsSubTab(chatTheme)));
-    form.add(chatTabs, "span 2, growx, wmin 0");
+    JTabbedPane appearanceTabs = new JTabbedPane();
+    appearanceTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+    appearanceTabs.addTab("Theme", padSubTab(buildAppearanceThemeSubTab(theme, accent, tweaks)));
+    appearanceTabs.addTab("UI font", padSubTab(buildAppearanceUiFontSubTab(tweaks)));
+    appearanceTabs.addTab("Chat colors", padSubTab(buildAppearanceChatColorsSubTab(chatTheme)));
+    appearanceTabs.addTab("Chat text", padSubTab(buildAppearanceChatTextSubTab(fonts)));
+    appearanceTabs.addTab("Server tree", padSubTab(buildAppearanceServerTreeSubTab(serverTree)));
+    form.add(appearanceTabs, "grow, push, wmin 0");
 
     JButton reset = new JButton("Reset to defaults");
     reset.setToolTipText(
@@ -5906,21 +5929,148 @@ public class PreferencesDialog {
           chatTheme.action.updateIcon.run();
           chatTheme.error.updateIcon.run();
           chatTheme.presence.updateIcon.run();
+          serverTree.unreadChannelColor.hex().setText("");
+          serverTree.highlightChannelColor.hex().setText("");
+          serverTree.unreadChannelColor.updateIcon().run();
+          serverTree.highlightChannelColor.updateIcon().run();
+          serverTree.preserveDockLayoutBetweenSessions.setSelected(false);
 
           accent.applyEnabledState.run();
           accent.syncPresetFromHex.run();
           tweaks.applyUiFontEnabledState.run();
         });
-    form.add(new JLabel(""));
-    form.add(reset, "alignx left");
-
-    form.add(sectionTitle("Chat text"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Font family"));
-    form.add(fonts.fontFamily, "growx");
-    form.add(new JLabel("Font size"));
-    form.add(fonts.fontSize, "w 110!");
+    form.add(reset, "split 2, alignx left");
+    form.add(
+        helpText("Changes preview live. Use Apply or OK to save."),
+        "alignx left, gapleft 12, growx, wmin 0");
 
     return form;
+  }
+
+  private JPanel buildAppearanceThemeSubTab(
+      ThemeControls theme, AccentControls accent, TweakControls tweaks) {
+    JPanel panel =
+        new JPanel(
+            new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]6[]6[]6[]"));
+    panel.setOpaque(false);
+
+    panel.add(sectionTitle("Look & feel"), "span 2, growx, wmin 0, wrap");
+    panel.add(new JLabel("Theme"));
+    panel.add(theme.combo, "growx");
+
+    JPanel accentLabel = new JPanel(new MigLayout("insets 0", "[]6[]", "[]"));
+    accentLabel.setOpaque(false);
+    accentLabel.add(new JLabel("Accent"));
+    accentLabel.add(accent.chip);
+    panel.add(accentLabel);
+    panel.add(accent.panel, "growx");
+
+    panel.add(new JLabel("Accent strength"));
+    panel.add(accent.strength, "growx");
+
+    panel.add(new JLabel("Density"));
+    panel.add(tweaks.density, "growx");
+
+    panel.add(new JLabel("Corner radius"));
+    panel.add(tweaks.cornerRadius, "growx");
+
+    JTextArea tweakHint = subtleInfoText();
+    tweakHint.setText("Density and corner radius are available for FlatLaf-based themes.");
+    panel.add(new JLabel(""));
+    panel.add(tweakHint, "growx, wmin 0");
+
+    return panel;
+  }
+
+  private JPanel buildAppearanceUiFontSubTab(TweakControls tweaks) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]6[]"));
+    panel.setOpaque(false);
+
+    panel.add(sectionTitle("UI text"), "span 2, growx, wmin 0, wrap");
+    panel.add(new JLabel("Font override"));
+    panel.add(tweaks.uiFontOverrideEnabled, "growx");
+    panel.add(new JLabel("Font family"));
+    panel.add(tweaks.uiFontFamily, "growx");
+    panel.add(new JLabel("Font size"));
+    panel.add(tweaks.uiFontSize, "w 110!");
+
+    JTextArea uiFontHint = subtleInfoText();
+    uiFontHint.setText(
+        "Applies globally to menus, dialogs, tabs, forms, and controls for all themes.");
+    panel.add(new JLabel(""));
+    panel.add(uiFontHint, "growx, wmin 0");
+
+    return panel;
+  }
+
+  private JPanel buildAppearanceChatColorsSubTab(ChatThemeControls chatTheme) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]8[]12[]8[]"));
+    panel.setOpaque(false);
+
+    panel.add(sectionTitle("Palette"), "growx, wmin 0, wrap");
+    panel.add(buildChatThemePaletteSubTab(chatTheme), "growx, wmin 0, wrap");
+
+    panel.add(sectionTitle("Message colors"), "growx, wmin 0, wrap");
+    panel.add(buildChatMessageColorsSubTab(chatTheme), "growx, wmin 0");
+
+    return panel;
+  }
+
+  private JPanel buildAppearanceChatTextSubTab(FontControls fonts) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]"));
+    panel.setOpaque(false);
+
+    panel.add(sectionTitle("Chat text"), "span 2, growx, wmin 0, wrap");
+    panel.add(new JLabel("Font family"));
+    panel.add(fonts.fontFamily, "growx");
+    panel.add(new JLabel("Font size"));
+    panel.add(fonts.fontSize, "w 110!");
+
+    return panel;
+  }
+
+  private AppearanceServerTreeControls buildAppearanceServerTreeControls(UiSettings current) {
+    ColorField unreadChannelColor =
+        buildOptionalColorField(
+            current != null ? current.serverTreeUnreadChannelColor() : null,
+            "Pick a channel color for unread messages");
+    ColorField highlightChannelColor =
+        buildOptionalColorField(
+            current != null ? current.serverTreeHighlightChannelColor() : null,
+            "Pick a channel color for unread highlights/mentions");
+    JCheckBox preserveDockLayoutBetweenSessions =
+        new JCheckBox("Preserve dock layout between restarts");
+    preserveDockLayoutBetweenSessions.setToolTipText(
+        "When enabled, dock positions/splits are restored on next app launch.");
+    preserveDockLayoutBetweenSessions.setSelected(
+        current != null && current.preserveDockLayoutBetweenSessions());
+    return new AppearanceServerTreeControls(
+        unreadChannelColor, highlightChannelColor, preserveDockLayoutBetweenSessions);
+  }
+
+  private JPanel buildAppearanceServerTreeSubTab(AppearanceServerTreeControls serverTree) {
+    JPanel panel =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]"));
+    panel.setOpaque(false);
+
+    panel.add(sectionTitle("Server tree"), "span 2, growx, wmin 0, wrap");
+    panel.add(new JLabel("Unread channel color"));
+    panel.add(serverTree.unreadChannelColor.panel(), "growx");
+    panel.add(new JLabel("Highlight channel color"));
+    panel.add(serverTree.highlightChannelColor.panel(), "growx");
+    panel.add(new JLabel("Dock layout"));
+    panel.add(serverTree.preserveDockLayoutBetweenSessions, "growx");
+
+    JTextArea hint = subtleInfoText();
+    hint.setText(
+        "Leave colors blank to use theme defaults. Dock layout restore applies on next launch.");
+    panel.add(new JLabel(""));
+    panel.add(hint, "growx, wmin 0");
+
+    return panel;
   }
 
   private JPanel buildChatThemePaletteSubTab(ChatThemeControls chatTheme) {
@@ -7132,6 +7282,7 @@ public class PreferencesDialog {
         helpText(
             "Configure event actions for kicks, bans, invites, joins, and mode changes.\n"
                 + "Source supports self/others/specific nicks/glob/regex. Channel scope supports Active channel only.\n"
+                + "CTCP rules can filter command/value and include quick templates in the Filters tab.\n"
                 + "Apply defaults merges by event type. Reset to IRCafe defaults replaces the full rule list."),
         "growx, wmin 0, wrap");
     tab.add(presetsPanel, "growx, wmin 0, wrap");
@@ -7206,6 +7357,30 @@ public class PreferencesDialog {
 
     JTextField channelPatterns = new JTextField(Objects.toString(base.channelPatterns(), ""));
     channelPatterns.setToolTipText("Comma-separated channel masks (for example: #staff*, #ops).");
+
+    JComboBox<IrcEventNotificationRule.CtcpMatchMode> ctcpCommandMode =
+        new JComboBox<>(IrcEventNotificationRule.CtcpMatchMode.values());
+    ctcpCommandMode.setSelectedItem(
+        base.ctcpCommandMode() != null
+            ? base.ctcpCommandMode()
+            : IrcEventNotificationRule.CtcpMatchMode.ANY);
+    JTextField ctcpCommandPattern = new JTextField(Objects.toString(base.ctcpCommandPattern(), ""));
+    ctcpCommandPattern.setToolTipText(
+        "Filter CTCP command by mode (for example: VERSION, PING, TIME, CLIENTINFO).");
+
+    JComboBox<IrcEventNotificationRule.CtcpMatchMode> ctcpValueMode =
+        new JComboBox<>(IrcEventNotificationRule.CtcpMatchMode.values());
+    ctcpValueMode.setSelectedItem(
+        base.ctcpValueMode() != null
+            ? base.ctcpValueMode()
+            : IrcEventNotificationRule.CtcpMatchMode.ANY);
+    JTextField ctcpValuePattern = new JTextField(Objects.toString(base.ctcpValuePattern(), ""));
+    ctcpValuePattern.setToolTipText("Filter CTCP value/argument by mode.");
+
+    JComboBox<CtcpNotificationRuleTemplate> ctcpTemplate =
+        new JComboBox<>(CtcpNotificationRuleTemplate.values());
+    JButton applyCtcpTemplate = new JButton("Apply");
+    configureIconOnlyButton(applyCtcpTemplate, "check", "Apply selected CTCP template");
 
     JCheckBox toastEnabled = new JCheckBox("Desktop toast", base.toastEnabled());
 
@@ -7287,6 +7462,43 @@ public class PreferencesDialog {
               FlatClientProperties.PLACEHOLDER_TEXT, needsPattern ? "#staff*, #ops" : "");
         };
 
+    Runnable refreshCtcpFieldState =
+        () -> {
+          IrcEventNotificationRule.EventType selectedEvent =
+              eventType.getSelectedItem() instanceof IrcEventNotificationRule.EventType et
+                  ? et
+                  : IrcEventNotificationRule.EventType.INVITE_RECEIVED;
+          boolean ctcp = selectedEvent == IrcEventNotificationRule.EventType.CTCP_RECEIVED;
+
+          IrcEventNotificationRule.CtcpMatchMode selectedCommandMode =
+              ctcpCommandMode.getSelectedItem() instanceof IrcEventNotificationRule.CtcpMatchMode m
+                  ? m
+                  : IrcEventNotificationRule.CtcpMatchMode.ANY;
+          boolean commandNeedsPattern =
+              ctcp && selectedCommandMode != IrcEventNotificationRule.CtcpMatchMode.ANY;
+          ctcpCommandMode.setEnabled(ctcp);
+          ctcpCommandPattern.setEnabled(commandNeedsPattern);
+          ctcpCommandPattern.setEditable(commandNeedsPattern);
+          ctcpCommandPattern.putClientProperty(
+              FlatClientProperties.PLACEHOLDER_TEXT,
+              commandNeedsPattern ? "VERSION / PING / TIME / CLIENTINFO" : "");
+
+          IrcEventNotificationRule.CtcpMatchMode selectedValueMode =
+              ctcpValueMode.getSelectedItem() instanceof IrcEventNotificationRule.CtcpMatchMode m
+                  ? m
+                  : IrcEventNotificationRule.CtcpMatchMode.ANY;
+          boolean valueNeedsPattern =
+              ctcp && selectedValueMode != IrcEventNotificationRule.CtcpMatchMode.ANY;
+          ctcpValueMode.setEnabled(ctcp);
+          ctcpValuePattern.setEnabled(valueNeedsPattern);
+          ctcpValuePattern.setEditable(valueNeedsPattern);
+          ctcpValuePattern.putClientProperty(
+              FlatClientProperties.PLACEHOLDER_TEXT, valueNeedsPattern ? "argument pattern" : "");
+
+          ctcpTemplate.setEnabled(ctcp);
+          applyCtcpTemplate.setEnabled(ctcp);
+        };
+
     Runnable refreshSoundState =
         () -> {
           boolean soundOn = soundEnabled.isSelected();
@@ -7343,10 +7555,13 @@ public class PreferencesDialog {
             }
           }
           priorEvent[0] = selectedEvent;
+          refreshCtcpFieldState.run();
         });
 
     sourceMode.addActionListener(e -> refreshSourceFieldState.run());
     channelScope.addActionListener(e -> refreshChannelFieldState.run());
+    ctcpCommandMode.addActionListener(e -> refreshCtcpFieldState.run());
+    ctcpValueMode.addActionListener(e -> refreshCtcpFieldState.run());
     soundEnabled.addActionListener(e -> refreshSoundState.run());
     soundUseCustom.addActionListener(e -> refreshSoundState.run());
     soundCustomPath.getDocument().addDocumentListener(new SimpleDocListener(refreshSoundState));
@@ -7447,15 +7662,40 @@ public class PreferencesDialog {
           refreshScriptState.run();
         });
 
+    applyCtcpTemplate.addActionListener(
+        e -> {
+          CtcpNotificationRuleTemplate template =
+              ctcpTemplate.getSelectedItem() instanceof CtcpNotificationRuleTemplate t
+                  ? t
+                  : CtcpNotificationRuleTemplate.CUSTOM;
+          eventType.setSelectedItem(IrcEventNotificationRule.EventType.CTCP_RECEIVED);
+          if (template == CtcpNotificationRuleTemplate.CUSTOM) {
+            ctcpCommandMode.setSelectedItem(IrcEventNotificationRule.CtcpMatchMode.ANY);
+            ctcpCommandPattern.setText("");
+            ctcpValueMode.setSelectedItem(IrcEventNotificationRule.CtcpMatchMode.ANY);
+            ctcpValuePattern.setText("");
+            refreshCtcpFieldState.run();
+            return;
+          }
+          ctcpCommandMode.setSelectedItem(IrcEventNotificationRule.CtcpMatchMode.LIKE);
+          ctcpCommandPattern.setText(template.command());
+          ctcpValueMode.setSelectedItem(IrcEventNotificationRule.CtcpMatchMode.ANY);
+          ctcpValuePattern.setText("");
+          refreshCtcpFieldState.run();
+        });
+
     refreshSourceFieldState.run();
     refreshChannelFieldState.run();
+    refreshCtcpFieldState.run();
     refreshSoundState.run();
     refreshScriptState.run();
 
     JPanel filtersPanel =
         new JPanel(
             new MigLayout(
-                "insets 10,fillx,wrap 2,hidemode 3", "[right]8[grow,fill]", "[]6[]6[]6[]6[]6[]"));
+                "insets 10,fillx,wrap 2,hidemode 3",
+                "[right]8[grow,fill]",
+                "[]6[]6[]6[]6[]6[]6[]6[]6[]"));
     filtersPanel.add(enabled, "span 2,wrap");
     filtersPanel.add(new JLabel("Event"));
     filtersPanel.add(eventType, "growx, wmin 220, wrap");
@@ -7467,10 +7707,29 @@ public class PreferencesDialog {
     filtersPanel.add(channelScope, "growx, wrap");
     filtersPanel.add(new JLabel("Channels"));
     filtersPanel.add(channelPatterns, "growx, wrap");
+    JPanel ctcpCommandRow =
+        new JPanel(new MigLayout("insets 0,fillx", "[pref!]8[grow,fill]", "[]"));
+    ctcpCommandRow.add(ctcpCommandMode, "w 110!");
+    ctcpCommandRow.add(ctcpCommandPattern, "growx, pushx, wmin 0");
+    filtersPanel.add(new JLabel("CTCP command"));
+    filtersPanel.add(ctcpCommandRow, "growx, wmin 0, wrap");
+
+    JPanel ctcpValueRow = new JPanel(new MigLayout("insets 0,fillx", "[pref!]8[grow,fill]", "[]"));
+    ctcpValueRow.add(ctcpValueMode, "w 110!");
+    ctcpValueRow.add(ctcpValuePattern, "growx, pushx, wmin 0");
+    filtersPanel.add(new JLabel("CTCP value"));
+    filtersPanel.add(ctcpValueRow, "growx, wmin 0, wrap");
+
+    JPanel ctcpTemplateRow = new JPanel(new MigLayout("insets 0,fillx", "[grow,fill]8[]", "[]"));
+    ctcpTemplateRow.add(ctcpTemplate, "growx, pushx, wmin 0");
+    ctcpTemplateRow.add(applyCtcpTemplate, "w 36!, h 28!");
+    filtersPanel.add(new JLabel("CTCP template"));
+    filtersPanel.add(ctcpTemplateRow, "growx, wmin 0, wrap");
     filtersPanel.add(new JLabel(""));
     filtersPanel.add(
         helpText(
-            "Active channel only means the event target must match the currently selected channel on the same server."),
+            "Active channel only means the event target must match the currently selected channel on the same server.\n"
+                + "CTCP command/value filters only apply when Event is CTCP Request Received."),
         "growx, wmin 0, wrap");
 
     JPanel actionsPanel =
@@ -7525,7 +7784,8 @@ public class PreferencesDialog {
         helpText(
             "If enabled, IRCafe executes the script and sets env vars:\n"
                 + "IRCAFE_EVENT_TYPE, IRCAFE_SERVER_ID, IRCAFE_CHANNEL, IRCAFE_SOURCE_NICK,\n"
-                + "IRCAFE_SOURCE_IS_SELF, IRCAFE_TITLE, IRCAFE_BODY, IRCAFE_TIMESTAMP_MS.\n"
+                + "IRCAFE_SOURCE_IS_SELF, IRCAFE_TITLE, IRCAFE_BODY,\n"
+                + "IRCAFE_CTCP_COMMAND, IRCAFE_CTCP_VALUE, IRCAFE_TIMESTAMP_MS.\n"
                 + "Arguments support quotes/escapes and are passed directly (no shell expansion)."),
         "span 3, growx, wmin 0, wrap");
 
@@ -7612,6 +7872,77 @@ public class PreferencesDialog {
       }
       if (!channelNeedsPattern) channelPatternsValue = null;
 
+      IrcEventNotificationRule.CtcpMatchMode selectedCtcpCommandMode =
+          ctcpCommandMode.getSelectedItem() instanceof IrcEventNotificationRule.CtcpMatchMode mode
+              ? mode
+              : IrcEventNotificationRule.CtcpMatchMode.ANY;
+      IrcEventNotificationRule.CtcpMatchMode selectedCtcpValueMode =
+          ctcpValueMode.getSelectedItem() instanceof IrcEventNotificationRule.CtcpMatchMode mode
+              ? mode
+              : IrcEventNotificationRule.CtcpMatchMode.ANY;
+      String ctcpCommandPatternValue = Objects.toString(ctcpCommandPattern.getText(), "").trim();
+      if (ctcpCommandPatternValue.isEmpty()) ctcpCommandPatternValue = null;
+      String ctcpValuePatternValue = Objects.toString(ctcpValuePattern.getText(), "").trim();
+      if (ctcpValuePatternValue.isEmpty()) ctcpValuePatternValue = null;
+
+      boolean ctcpEvent = selectedEvent == IrcEventNotificationRule.EventType.CTCP_RECEIVED;
+      if (ctcpEvent && selectedCtcpCommandMode != IrcEventNotificationRule.CtcpMatchMode.ANY) {
+        if (ctcpCommandPatternValue == null) {
+          JOptionPane.showMessageDialog(
+              owner,
+              "CTCP command mode \"" + selectedCtcpCommandMode + "\" requires a pattern.",
+              "Invalid IRC Event Rule",
+              JOptionPane.ERROR_MESSAGE);
+          tabs.setSelectedIndex(0);
+          continue;
+        }
+        if (selectedCtcpCommandMode == IrcEventNotificationRule.CtcpMatchMode.REGEX) {
+          try {
+            Pattern.compile(ctcpCommandPatternValue);
+          } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                owner,
+                "Invalid CTCP command regex pattern:\n"
+                    + Objects.toString(ex.getMessage(), "Invalid regex"),
+                "Invalid IRC Event Rule",
+                JOptionPane.ERROR_MESSAGE);
+            tabs.setSelectedIndex(0);
+            continue;
+          }
+        }
+      }
+      if (ctcpEvent && selectedCtcpValueMode != IrcEventNotificationRule.CtcpMatchMode.ANY) {
+        if (ctcpValuePatternValue == null) {
+          JOptionPane.showMessageDialog(
+              owner,
+              "CTCP value mode \"" + selectedCtcpValueMode + "\" requires a pattern.",
+              "Invalid IRC Event Rule",
+              JOptionPane.ERROR_MESSAGE);
+          tabs.setSelectedIndex(0);
+          continue;
+        }
+        if (selectedCtcpValueMode == IrcEventNotificationRule.CtcpMatchMode.REGEX) {
+          try {
+            Pattern.compile(ctcpValuePatternValue);
+          } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                owner,
+                "Invalid CTCP value regex pattern:\n"
+                    + Objects.toString(ex.getMessage(), "Invalid regex"),
+                "Invalid IRC Event Rule",
+                JOptionPane.ERROR_MESSAGE);
+            tabs.setSelectedIndex(0);
+            continue;
+          }
+        }
+      }
+      if (!ctcpEvent) {
+        selectedCtcpCommandMode = IrcEventNotificationRule.CtcpMatchMode.ANY;
+        ctcpCommandPatternValue = null;
+        selectedCtcpValueMode = IrcEventNotificationRule.CtcpMatchMode.ANY;
+        ctcpValuePatternValue = null;
+      }
+
       BuiltInSound selectedSound =
           builtInSound.getSelectedItem() instanceof BuiltInSound sound
               ? sound
@@ -7656,7 +7987,11 @@ public class PreferencesDialog {
           runScript,
           scriptPathValue,
           scriptArgsValue,
-          scriptWorkingDirectoryValue);
+          scriptWorkingDirectoryValue,
+          selectedCtcpCommandMode,
+          ctcpCommandPatternValue,
+          selectedCtcpValueMode,
+          ctcpValuePatternValue);
     }
   }
 
@@ -9458,6 +9793,33 @@ public class PreferencesDialog {
     }
   }
 
+  private enum CtcpNotificationRuleTemplate {
+    CUSTOM("Custom", null),
+    VERSION("VERSION request", "VERSION"),
+    PING("PING request", "PING"),
+    TIME("TIME request", "TIME"),
+    CLIENTINFO("CLIENTINFO request", "CLIENTINFO"),
+    SOURCE("SOURCE request", "SOURCE"),
+    USERINFO("USERINFO request", "USERINFO");
+
+    private final String label;
+    private final String command;
+
+    CtcpNotificationRuleTemplate(String label, String command) {
+      this.label = label;
+      this.command = command;
+    }
+
+    String command() {
+      return command;
+    }
+
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
+
   private static LookupRatePreset detectLookupRatePreset(UiSettings s) {
     if (matchesLookupRatePreset(s, LookupRatePreset.BALANCED)) return LookupRatePreset.BALANCED;
     if (matchesLookupRatePreset(s, LookupRatePreset.CONSERVATIVE))
@@ -9723,9 +10085,44 @@ public class PreferencesDialog {
       IrcEventNotificationRule.SourceMode mode =
           r.sourceMode != null ? r.sourceMode : IrcEventNotificationRule.SourceMode.ANY;
       String label = Objects.toString(mode, "");
-      if (!sourcePatternAllowed(mode)) return label;
-      String pattern = trimToNull(r.sourcePattern);
-      return pattern == null ? label + ": (empty)" : label + ": " + truncate(pattern, 56);
+      String base;
+      if (!sourcePatternAllowed(mode)) {
+        base = label;
+      } else {
+        String pattern = trimToNull(r.sourcePattern);
+        base = pattern == null ? label + ": (empty)" : label + ": " + truncate(pattern, 56);
+      }
+
+      String ctcp = summarizeCtcp(r);
+      if (ctcp.isEmpty()) return base;
+      if (base.isEmpty()) return ctcp;
+      return base + " | " + ctcp;
+    }
+
+    private static String summarizeCtcp(MutableRule r) {
+      if (r == null) return "";
+      if (r.eventType != IrcEventNotificationRule.EventType.CTCP_RECEIVED) return "";
+      IrcEventNotificationRule.CtcpMatchMode commandMode =
+          r.ctcpCommandMode != null
+              ? r.ctcpCommandMode
+              : IrcEventNotificationRule.CtcpMatchMode.ANY;
+      IrcEventNotificationRule.CtcpMatchMode valueMode =
+          r.ctcpValueMode != null ? r.ctcpValueMode : IrcEventNotificationRule.CtcpMatchMode.ANY;
+      String commandPattern = trimToNull(r.ctcpCommandPattern);
+      String valuePattern = trimToNull(r.ctcpValuePattern);
+
+      String commandSummary =
+          commandMode == IrcEventNotificationRule.CtcpMatchMode.ANY
+              ? "cmd:any"
+              : "cmd:"
+                  + commandMode
+                  + "="
+                  + truncate(Objects.toString(commandPattern, "(empty)"), 24);
+      String valueSummary =
+          valueMode == IrcEventNotificationRule.CtcpMatchMode.ANY
+              ? "val:any"
+              : "val:" + valueMode + "=" + truncate(Objects.toString(valuePattern, "(empty)"), 24);
+      return commandSummary + ", " + valueSummary;
     }
 
     private static boolean sourcePatternAllowed(IrcEventNotificationRule.SourceMode mode) {
@@ -9815,6 +10212,10 @@ public class PreferencesDialog {
       String scriptPath;
       String scriptArgs;
       String scriptWorkingDirectory;
+      IrcEventNotificationRule.CtcpMatchMode ctcpCommandMode;
+      String ctcpCommandPattern;
+      IrcEventNotificationRule.CtcpMatchMode ctcpValueMode;
+      String ctcpValuePattern;
 
       IrcEventNotificationRule toRule() {
         return new IrcEventNotificationRule(
@@ -9835,7 +10236,11 @@ public class PreferencesDialog {
             scriptEnabled,
             scriptPath,
             scriptArgs,
-            scriptWorkingDirectory);
+            scriptWorkingDirectory,
+            ctcpCommandMode,
+            ctcpCommandPattern,
+            ctcpValueMode,
+            ctcpValuePattern);
       }
 
       MutableRule copy() {
@@ -9858,6 +10263,10 @@ public class PreferencesDialog {
         m.scriptPath = scriptPath;
         m.scriptArgs = scriptArgs;
         m.scriptWorkingDirectory = scriptWorkingDirectory;
+        m.ctcpCommandMode = ctcpCommandMode;
+        m.ctcpCommandPattern = ctcpCommandPattern;
+        m.ctcpValueMode = ctcpValueMode;
+        m.ctcpValuePattern = ctcpValuePattern;
         return m;
       }
 
@@ -9882,6 +10291,10 @@ public class PreferencesDialog {
           m.scriptPath = null;
           m.scriptArgs = null;
           m.scriptWorkingDirectory = null;
+          m.ctcpCommandMode = IrcEventNotificationRule.CtcpMatchMode.ANY;
+          m.ctcpCommandPattern = null;
+          m.ctcpValueMode = IrcEventNotificationRule.CtcpMatchMode.ANY;
+          m.ctcpValuePattern = null;
           return m;
         }
 
@@ -9903,6 +10316,10 @@ public class PreferencesDialog {
         m.scriptPath = r.scriptPath();
         m.scriptArgs = r.scriptArgs();
         m.scriptWorkingDirectory = r.scriptWorkingDirectory();
+        m.ctcpCommandMode = r.ctcpCommandMode();
+        m.ctcpCommandPattern = r.ctcpCommandPattern();
+        m.ctcpValueMode = r.ctcpValueMode();
+        m.ctcpValuePattern = r.ctcpValuePattern();
         return m;
       }
     }
@@ -10488,6 +10905,11 @@ public class PreferencesDialog {
 
   private record FontControls(JComboBox<String> fontFamily, JSpinner fontSize) {}
 
+  private record AppearanceServerTreeControls(
+      ColorField unreadChannelColor,
+      ColorField highlightChannelColor,
+      JCheckBox preserveDockLayoutBetweenSessions) {}
+
   private record DensityOption(String id, String label) {
     @Override
     public String toString() {
@@ -10530,6 +10952,7 @@ public class PreferencesDialog {
       JCheckBox notifyOnlyWhenUnfocused,
       JCheckBox notifyOnlyWhenMinimizedOrHidden,
       JCheckBox notifySuppressWhenTargetActive,
+      JCheckBox updateNotifierEnabled,
       JCheckBox linuxDbusActions,
       JComboBox<NotificationBackendMode> notificationBackend,
       JButton testNotification,

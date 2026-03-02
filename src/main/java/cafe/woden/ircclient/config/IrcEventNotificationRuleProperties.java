@@ -27,6 +27,10 @@ public record IrcEventNotificationRuleProperties(
     String scriptPath,
     String scriptArgs,
     String scriptWorkingDirectory,
+    CtcpMatchMode ctcpCommandMode,
+    String ctcpCommandPattern,
+    CtcpMatchMode ctcpValueMode,
+    String ctcpValuePattern,
     SourceFilter sourceFilter,
     String channelWhitelist,
     String channelBlacklist) {
@@ -83,6 +87,13 @@ public record IrcEventNotificationRuleProperties(
     ANY,
     FOREGROUND_ONLY,
     BACKGROUND_ONLY
+  }
+
+  public enum CtcpMatchMode {
+    ANY,
+    LIKE,
+    GLOB,
+    REGEX
   }
 
   /** Legacy source mode field kept for runtime-config backward compatibility. */
@@ -171,6 +182,19 @@ public record IrcEventNotificationRuleProperties(
       scriptEnabled = false;
     }
 
+    if (ctcpCommandMode == null) ctcpCommandMode = CtcpMatchMode.ANY;
+    if (ctcpValueMode == null) ctcpValueMode = CtcpMatchMode.ANY;
+    ctcpCommandPattern = trimToNull(ctcpCommandPattern);
+    ctcpValuePattern = trimToNull(ctcpValuePattern);
+    if (ctcpCommandMode == CtcpMatchMode.ANY) ctcpCommandPattern = null;
+    if (ctcpValueMode == CtcpMatchMode.ANY) ctcpValuePattern = null;
+    if (eventType != EventType.CTCP_RECEIVED) {
+      ctcpCommandMode = CtcpMatchMode.ANY;
+      ctcpCommandPattern = null;
+      ctcpValueMode = CtcpMatchMode.ANY;
+      ctcpValuePattern = null;
+    }
+
     sourceFilter = sourceFilter != null ? sourceFilter : SourceFilter.ANY;
     channelWhitelist = includeLegacy;
     channelBlacklist = excludeLegacy;
@@ -200,6 +224,10 @@ public record IrcEventNotificationRuleProperties(
               null,
               null,
               null,
+              CtcpMatchMode.ANY,
+              null,
+              CtcpMatchMode.ANY,
+              null,
               SourceFilter.ANY,
               null,
               null));
@@ -225,6 +253,10 @@ public record IrcEventNotificationRuleProperties(
               false,
               null,
               null,
+              null,
+              CtcpMatchMode.ANY,
+              null,
+              CtcpMatchMode.ANY,
               null,
               SourceFilter.ANY,
               null,

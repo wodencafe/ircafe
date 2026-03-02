@@ -543,7 +543,9 @@ public class IrcMediator implements MediatorControlPort {
         } else {
           ui.appendStatusAt(dest, at, "(ctcp)", rendered);
         }
-        if (!dest.equals(targetCoordinator.getActiveTarget())) ui.markUnread(dest);
+        if (!dest.equals(targetCoordinator.getActiveTarget()) && !isMutedChannel(dest)) {
+          ui.markUnread(dest);
+        }
         return;
       }
     }
@@ -725,9 +727,11 @@ public class IrcMediator implements MediatorControlPort {
               InterceptorEventType.HIGHLIGHT);
           recordMentionHighlight(chan, active, ev.from(), ev.text());
 
-          try {
-            trayNotificationService.notifyHighlight(sid, ev.channel(), ev.from(), ev.text());
-          } catch (Exception ignored) {
+          if (!isMutedChannel(chan)) {
+            try {
+              trayNotificationService.notifyHighlight(sid, ev.channel(), ev.from(), ev.text());
+            } catch (Exception ignored) {
+            }
           }
         }
       }
@@ -792,10 +796,12 @@ public class IrcMediator implements MediatorControlPort {
               InterceptorEventType.HIGHLIGHT);
           recordMentionHighlight(chan, active, ev.from(), "* " + ev.action());
 
-          try {
-            trayNotificationService.notifyHighlight(
-                sid, ev.channel(), ev.from(), "* " + ev.action());
-          } catch (Exception ignored) {
+          if (!isMutedChannel(chan)) {
+            try {
+              trayNotificationService.notifyHighlight(
+                  sid, ev.channel(), ev.from(), "* " + ev.action());
+            } catch (Exception ignored) {
+            }
           }
         }
       }
@@ -1225,11 +1231,9 @@ public class IrcMediator implements MediatorControlPort {
       }
       case IrcEvent.CtcpRequestReceived ev -> {
         markPrivateMessagePeerOnline(sid, ev.from());
-        String ctcpText =
-            Objects.toString(ev.command(), "").trim()
-                + (Objects.toString(ev.argument(), "").isBlank()
-                    ? ""
-                    : (" " + Objects.toString(ev.argument(), "").trim()));
+        String command = Objects.toString(ev.command(), "").trim();
+        String argument = Objects.toString(ev.argument(), "").trim();
+        String ctcpText = command + (argument.isBlank() ? "" : (" " + argument));
         InboundIgnorePolicyPort.Decision decision =
             decideInbound(sid, ev.from(), true, ev.channel(), ctcpText, "CTCPS");
         if (decision == InboundIgnorePolicyPort.Decision.HARD_DROP) return;
@@ -1267,14 +1271,12 @@ public class IrcMediator implements MediatorControlPort {
             Objects.toString(ev.channel(), "").trim().isEmpty() ? "status" : ev.channel(),
             ev.from(),
             learnedHostmaskForNick(sid, ev.from()),
-            rendered,
+            ctcpText.isBlank() ? "CTCP" : ctcpText,
             InterceptorEventType.CTCP);
 
         String fromNick = Objects.toString(ev.from(), "").trim();
         String channel = Objects.toString(ev.channel(), "").trim();
         if (channel.isBlank()) channel = null;
-        String command = Objects.toString(ev.command(), "").trim();
-        String argument = Objects.toString(ev.argument(), "").trim();
         String title =
             fromNick.isEmpty()
                 ? "CTCP request received"
@@ -1283,7 +1285,14 @@ public class IrcMediator implements MediatorControlPort {
         if (!argument.isEmpty()) body = body + " " + argument;
 
         notifyIrcEvent(
-            IrcEventNotificationRule.EventType.CTCP_RECEIVED, sid, channel, fromNick, title, body);
+            IrcEventNotificationRule.EventType.CTCP_RECEIVED,
+            sid,
+            channel,
+            fromNick,
+            title,
+            body,
+            command,
+            argument);
       }
       case IrcEvent.AwayStatusChanged ev -> {
         awayRoutingState.setAway(sid, ev.away());
@@ -1416,7 +1425,7 @@ public class IrcMediator implements MediatorControlPort {
                   ircEventNotifierPort != null
                       && ircEventNotifierPort.hasEnabledRuleFor(
                           IrcEventNotificationRule.EventType.INVITE_RECEIVED);
-              if (!customInviteNotified && !inviteRulesEnabled) {
+              if (!customInviteNotified && !inviteRulesEnabled && !isMutedChannel(sid, channel)) {
                 try {
                   trayNotificationService.notifyInvite(sid, channel, inviter, reason);
                 } catch (Exception ignored) {
@@ -1964,9 +1973,22 @@ public class IrcMediator implements MediatorControlPort {
       String sourceNick,
       String title,
       String body) {
+    return notifyIrcEvent(eventType, serverId, channel, sourceNick, title, body, null, null);
+  }
+
+  private boolean notifyIrcEvent(
+      IrcEventNotificationRule.EventType eventType,
+      String serverId,
+      String channel,
+      String sourceNick,
+      String title,
+      String body,
+      String ctcpCommand,
+      String ctcpValue) {
     if (eventType == null || ircEventNotifierPort == null) return false;
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
+    if (isMutedChannel(sid, channel)) return false;
 
     String src = Objects.toString(sourceNick, "").trim();
     Boolean sourceIsSelf = src.isEmpty() ? null : isFromSelf(sid, src);
@@ -1975,7 +1997,17 @@ public class IrcMediator implements MediatorControlPort {
     String activeTgt = active != null ? active.target() : null;
     try {
       return ircEventNotifierPort.notifyConfigured(
-          eventType, sid, channel, src, sourceIsSelf, title, body, activeSid, activeTgt);
+          eventType,
+          sid,
+          channel,
+          src,
+          sourceIsSelf,
+          title,
+          body,
+          activeSid,
+          activeTgt,
+          ctcpCommand,
+          ctcpValue);
     } catch (Exception ignored) {
       return false;
     }
@@ -2306,6 +2338,7 @@ public class IrcMediator implements MediatorControlPort {
   private void recordRuleMatchIfPresent(
       TargetRef chan, TargetRef active, String from, String text, NotificationRuleMatch match) {
     if (chan == null || match == null) return;
+    if (isMutedChannel(chan)) return;
     if (active == null || !chan.equals(active)) {
       ui.markHighlight(chan);
     }
@@ -2316,6 +2349,7 @@ public class IrcMediator implements MediatorControlPort {
   private void recordMentionHighlight(
       TargetRef chan, TargetRef active, String fromNick, String snippet) {
     if (chan == null) return;
+    if (isMutedChannel(chan)) return;
     if (active == null || !chan.equals(active)) {
       ui.markHighlight(chan);
     }
@@ -2465,6 +2499,50 @@ public class IrcMediator implements MediatorControlPort {
     }
   }
 
+  private void maybeHandlePendingPrivateMessageDeliveryError(
+      String sid, IrcEvent.ServerResponseLine ev) {
+    if (sid == null || sid.isBlank() || ev == null) return;
+    if (ev.code() != 401) return; // ERR_NOSUCHNICK
+
+    ParsedIrcLine pl = parseIrcLineForMetadata(ev.rawLine());
+    if (pl == null) return;
+    if (pl.params() == null || pl.params().size() < 2) return;
+
+    String targetToken = Objects.toString(pl.params().get(1), "").trim();
+    if (targetToken.isEmpty()) return;
+
+    final TargetRef pmTarget;
+    try {
+      pmTarget = new TargetRef(sid, targetToken);
+    } catch (IllegalArgumentException ignored) {
+      return;
+    }
+    if (pmTarget.isChannel() || pmTarget.isUiOnly() || pmTarget.isStatus()) return;
+
+    PendingEchoMessageState.PendingOutboundChat pending =
+        pendingEchoMessageState.consumeOldestByTarget(pmTarget).orElse(null);
+    if (pending == null) return;
+
+    String reason = Objects.toString(pl.trailing(), "").trim();
+    if (reason.isEmpty()) {
+      reason = Objects.toString(ev.message(), "").trim();
+    }
+    if (reason.isEmpty()) {
+      reason = "No such nick/channel";
+    }
+
+    String pendingReason = "[" + ev.code() + "] " + reason;
+    ui.failPendingOutgoingChat(
+        pmTarget, pending.pendingId(), ev.at(), pending.fromNick(), pending.text(), pendingReason);
+
+    ensureTargetExists(pmTarget);
+    ui.appendErrorAt(
+        pmTarget,
+        ev.at(),
+        "(send)",
+        "Cannot deliver to " + pmTarget.target() + " [" + ev.code() + "]: " + reason);
+  }
+
   private void updateServerMetadataFromServerResponseLine(
       String serverId, IrcEvent.ServerResponseLine ev) {
     if (ev == null) return;
@@ -2574,6 +2652,7 @@ public class IrcMediator implements MediatorControlPort {
     String msg = Objects.toString(ev.message(), "");
     String rendered = "[" + ev.code() + "] " + msg;
     updateServerMetadataFromServerResponseLine(sid, ev);
+    maybeHandlePendingPrivateMessageDeliveryError(sid, ev);
     boolean suppressStatusLine =
         (ev.code() == 322); // /LIST entry rows are shown in the dedicated channel-list panel.
     if (ev.code() == 303 && monitorFallbackPort.shouldSuppressIsonServerResponse(sid)) {
@@ -3153,8 +3232,28 @@ public class IrcMediator implements MediatorControlPort {
       write.accept(dest);
     }
 
-    if (markUnreadIfNotActive && active != null && !dest.equals(active)) {
+    if (markUnreadIfNotActive && active != null && !dest.equals(active) && !isMutedChannel(dest)) {
       ui.markUnread(dest);
+    }
+  }
+
+  private boolean isMutedChannel(TargetRef target) {
+    if (target == null || !target.isChannel()) return false;
+    try {
+      return ui.isChannelMuted(target);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private boolean isMutedChannel(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) return false;
+    try {
+      return isMutedChannel(new TargetRef(sid, ch));
+    } catch (Exception ignored) {
+      return false;
     }
   }
 

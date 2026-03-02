@@ -60,6 +60,33 @@ public class IrcEventNotificationService implements IrcEventNotifierPort {
       String body,
       String activeServerId,
       String activeTarget) {
+    return notifyConfigured(
+        eventType,
+        serverId,
+        channel,
+        sourceNick,
+        sourceIsSelf,
+        title,
+        body,
+        activeServerId,
+        activeTarget,
+        null,
+        null);
+  }
+
+  @Override
+  public boolean notifyConfigured(
+      IrcEventNotificationRule.EventType eventType,
+      String serverId,
+      String channel,
+      String sourceNick,
+      Boolean sourceIsSelf,
+      String title,
+      String body,
+      String activeServerId,
+      String activeTarget,
+      String ctcpCommand,
+      String ctcpValue) {
     if (eventType == null) return false;
 
     List<IrcEventNotificationRule> rules = rulesBus != null ? rulesBus.get() : List.of();
@@ -86,9 +113,17 @@ public class IrcEventNotificationService implements IrcEventNotifierPort {
     for (IrcEventNotificationRule matched : rules) {
       if (matched == null) continue;
       if (!matched.matches(
-          eventType, sourceNick, sourceIsSelf, channel, activeSameServer, activeTgt)) continue;
+          eventType,
+          sourceNick,
+          sourceIsSelf,
+          channel,
+          activeSameServer,
+          activeTgt,
+          ctcpCommand,
+          ctcpValue)) continue;
       anyMatched = true;
-      dispatchMatchedRule(matched, eventType, sid, target, source, sourceIsSelf, t, b);
+      dispatchMatchedRule(
+          matched, eventType, sid, target, source, sourceIsSelf, t, b, ctcpCommand, ctcpValue);
     }
 
     return anyMatched;
@@ -102,7 +137,9 @@ public class IrcEventNotificationService implements IrcEventNotifierPort {
       String source,
       Boolean sourceIsSelf,
       String title,
-      String body) {
+      String body,
+      String ctcpCommand,
+      String ctcpValue) {
     if (matched == null) return;
 
     if (matched.notificationsNodeEnabled() && notificationStore != null) {
@@ -128,7 +165,17 @@ public class IrcEventNotificationService implements IrcEventNotifierPort {
     }
 
     if (matched.scriptEnabled()) {
-      dispatchScript(matched, eventType, sid, target, source, sourceIsSelf, title, body);
+      dispatchScript(
+          matched,
+          eventType,
+          sid,
+          target,
+          source,
+          sourceIsSelf,
+          title,
+          body,
+          ctcpCommand,
+          ctcpValue);
     }
 
     if (pushyNotificationService != null) {
@@ -161,7 +208,9 @@ public class IrcEventNotificationService implements IrcEventNotifierPort {
       String sourceNick,
       Boolean sourceIsSelf,
       String title,
-      String body) {
+      String body,
+      String ctcpCommand,
+      String ctcpValue) {
     String script = Objects.toString(rule != null ? rule.scriptPath() : "", "").trim();
     if (script.isEmpty()) return;
 
@@ -185,7 +234,9 @@ public class IrcEventNotificationService implements IrcEventNotifierPort {
                 sourceNick,
                 sourceIsSelf,
                 title,
-                body));
+                body,
+                ctcpCommand,
+                ctcpValue));
   }
 
   private void runScript(
@@ -198,7 +249,9 @@ public class IrcEventNotificationService implements IrcEventNotifierPort {
       String sourceNick,
       Boolean sourceIsSelf,
       String title,
-      String body) {
+      String body,
+      String ctcpCommand,
+      String ctcpValue) {
     try {
       List<String> command = new ArrayList<>();
       command.add(scriptPath);
@@ -231,6 +284,8 @@ public class IrcEventNotificationService implements IrcEventNotifierPort {
           sourceIsSelf == null ? "unknown" : Boolean.toString(sourceIsSelf));
       putEnv(env, "IRCAFE_TITLE", title);
       putEnv(env, "IRCAFE_BODY", body);
+      putEnv(env, "IRCAFE_CTCP_COMMAND", ctcpCommand);
+      putEnv(env, "IRCAFE_CTCP_VALUE", ctcpValue);
       putEnv(env, "IRCAFE_TIMESTAMP_MS", Long.toString(System.currentTimeMillis()));
 
       Process p = pb.start();

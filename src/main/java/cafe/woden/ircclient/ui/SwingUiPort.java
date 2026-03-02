@@ -338,6 +338,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public boolean isChannelMuted(TargetRef target) {
+    return onEdtCall(() -> serverTree.isChannelMuted(target), false);
+  }
+
+  @Override
   public void markUnread(TargetRef target) {
     onEdt(() -> serverTree.markUnread(target));
   }

@@ -22,6 +22,7 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
+import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
@@ -50,6 +51,7 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
+import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.lang.reflect.Method;
@@ -57,6 +59,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -327,6 +330,57 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void ctcpReceiveIngestsNormalizedCommandPayloadForInterceptors() throws Exception {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(uiSettingsPort.get()).thenReturn(UiSettingsSnapshot.defaults());
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.CtcpRequestReceived(
+                Instant.now(), "alice", "WODEN", "hello world", null)));
+
+    verify(interceptorIngestPort)
+        .ingestEvent(
+            eq("libera"),
+            eq("status"),
+            eq("alice"),
+            anyString(),
+            eq("WODEN hello world"),
+            eq(InterceptorEventType.CTCP));
+  }
+
+  @Test
+  void ctcpReceivePassesCommandAndValueToIrcEventNotifier() throws Exception {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(uiSettingsPort.get()).thenReturn(UiSettingsSnapshot.defaults());
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.CtcpRequestReceived(
+                Instant.now(), "alice", "VERSION", "HexChat 2.16.2", null)));
+
+    verify(ircEventNotifierPort)
+        .notifyConfigured(
+            eq(IrcEventNotificationRule.EventType.CTCP_RECEIVED),
+            eq("libera"),
+            eq((String) null),
+            eq("alice"),
+            eq(Boolean.FALSE),
+            anyString(),
+            eq("VERSION HexChat 2.16.2"),
+            eq("libera"),
+            eq("status"),
+            eq("VERSION"),
+            eq("HexChat 2.16.2"));
+  }
+
+  @Test
   void ruleMatchInActiveChannelStillRecordsNotificationWithoutUnreadHighlight() throws Exception {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
@@ -440,6 +494,59 @@ class IrcMediatorMockVerifyTest {
     verify(joinRoutingState).clear("libera", "#old");
     verify(runtimeConfig).rememberJoinedChannel("libera", "#new");
     verify(targetCoordinator).joinChannel(new TargetRef("libera", "#new"));
+  }
+
+  @Test
+  void noSuchNickServerResponseFailsMatchingPendingPmAndAppendsPmError() throws Exception {
+    TargetRef pm = new TargetRef("libera", "ghost");
+    Instant at = Instant.parse("2026-03-02T18:53:57Z");
+    PendingEchoMessageState.PendingOutboundChat pending =
+        new PendingEchoMessageState.PendingOutboundChat("pending-1", pm, "Birbasaurus", "pie", at);
+    when(pendingEchoMessageState.consumeOldestByTarget(eq(pm))).thenReturn(Optional.of(pending));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ServerResponseLine(
+                at,
+                401,
+                "No such nick/channel",
+                ":osmium.libera.chat 401 me ghost :No such nick/channel")));
+
+    verify(ui)
+        .failPendingOutgoingChat(
+            eq(pm),
+            eq("pending-1"),
+            eq(at),
+            eq("Birbasaurus"),
+            eq("pie"),
+            eq("[401] No such nick/channel"));
+    verify(ui)
+        .appendErrorAt(
+            eq(pm),
+            eq(at),
+            eq("(send)"),
+            eq("Cannot deliver to ghost [401]: No such nick/channel"));
+  }
+
+  @Test
+  void noSuchNickWithoutMatchingPendingDoesNotAppendPmError() throws Exception {
+    TargetRef pm = new TargetRef("libera", "ghost");
+    Instant at = Instant.parse("2026-03-02T18:53:57Z");
+    when(pendingEchoMessageState.consumeOldestByTarget(eq(pm))).thenReturn(Optional.empty());
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.ServerResponseLine(
+                at,
+                401,
+                "No such nick/channel",
+                ":osmium.libera.chat 401 me ghost :No such nick/channel")));
+
+    verify(ui, never())
+        .failPendingOutgoingChat(eq(pm), anyString(), any(), anyString(), anyString(), anyString());
+    verify(ui, never()).appendErrorAt(eq(pm), any(), eq("(send)"), anyString());
   }
 
   private void invokeHandleOutgoingLine(String raw) throws Exception {

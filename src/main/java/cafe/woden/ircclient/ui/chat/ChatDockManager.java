@@ -12,12 +12,15 @@ import cafe.woden.ircclient.ui.bus.TargetActivationBus;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.DockingRegion;
 import io.github.andrewauclair.moderndocking.app.Docking;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -30,6 +33,7 @@ import org.springframework.stereotype.Component;
 public class ChatDockManager {
 
   private static final Logger log = LoggerFactory.getLogger(ChatDockManager.class);
+  private static final String PINNED_DOCK_PERSISTENT_ID_PREFIX = "chat-pinned:";
 
   private final ServerTreeDockable serverTree;
   private final ChatDockable mainChat;
@@ -233,44 +237,8 @@ public class ChatDockManager {
   public void openPinned(TargetRef target) {
     if (target == null) return;
 
-    PinnedChatDockable dock = openPinned.get(target);
-    if (dock == null) {
-      transcripts.ensureTargetExists(target);
-
-      // Restore any existing draft for this pinned target.
-      String initialDraft = pinnedDrafts.getOrDefault(target, "");
-
-      // Clicking inside a pinned dock should switch the *input*/status/users context,
-      // but should NOT force the main Chat dock to change its displayed transcript.
-      dock =
-          new PinnedChatDockable(
-              target,
-              transcripts,
-              settingsBus,
-              spellcheckSettingsBus,
-              chatHistoryService,
-              commandHistoryStore,
-              activationBus::activate,
-              outboundBus,
-              irc,
-              activeInputRouter,
-              (t, draft) -> {
-                if (t == null) return;
-                pinnedDrafts.put(t, draft == null ? "" : draft);
-              },
-              (t, draft) -> {
-                // Only used for explicit cleanup (e.g., app shutdown). Closing a dock via the UI
-                // should
-                // not destroy it because ModernDocking does not support re-registering the same ID.
-                if (t == null) return;
-                pinnedDrafts.put(t, draft == null ? "" : draft);
-              });
-      dock.setDraftText(initialDraft);
-      dock.setInputEnabled(pinnedInputsEnabled);
-      openPinned.put(target, dock);
-
-      Docking.registerDockable(dock);
-    }
+    PinnedChatDockable dock = ensurePinnedDockable(target);
+    if (dock == null) return;
 
     // Keep in sync with current settings/draft even for already-registered dockables.
     dock.setInputEnabled(pinnedInputsEnabled);
@@ -302,6 +270,85 @@ public class ChatDockManager {
     try {
       dock.onShown();
     } catch (Exception ignored) {
+    }
+  }
+
+  public Dockable dynamicDockableForPersistentId(String persistentId) {
+    TargetRef target = targetFromPinnedPersistentId(persistentId);
+    if (target == null) return null;
+    return ensurePinnedDockable(target);
+  }
+
+  private PinnedChatDockable ensurePinnedDockable(TargetRef target) {
+    if (target == null) return null;
+    PinnedChatDockable existing = openPinned.get(target);
+    if (existing != null) {
+      return existing;
+    }
+
+    transcripts.ensureTargetExists(target);
+
+    // Restore any existing draft for this pinned target.
+    String initialDraft = pinnedDrafts.getOrDefault(target, "");
+
+    // Clicking inside a pinned dock should switch the *input*/status/users context,
+    // but should NOT force the main Chat dock to change its displayed transcript.
+    PinnedChatDockable created =
+        new PinnedChatDockable(
+            target,
+            transcripts,
+            settingsBus,
+            spellcheckSettingsBus,
+            chatHistoryService,
+            commandHistoryStore,
+            activationBus::activate,
+            outboundBus,
+            irc,
+            activeInputRouter,
+            (t, draft) -> {
+              if (t == null) return;
+              pinnedDrafts.put(t, draft == null ? "" : draft);
+            },
+            (t, draft) -> {
+              // Only used for explicit cleanup (e.g., app shutdown). Closing a dock via the UI
+              // should
+              // not destroy it because ModernDocking does not support re-registering the same ID.
+              if (t == null) return;
+              pinnedDrafts.put(t, draft == null ? "" : draft);
+            });
+    created.setDraftText(initialDraft);
+    created.setInputEnabled(pinnedInputsEnabled);
+    openPinned.put(target, created);
+
+    Docking.registerDockable(created);
+    return created;
+  }
+
+  private static TargetRef targetFromPinnedPersistentId(String persistentId) {
+    String id = java.util.Objects.toString(persistentId, "").trim();
+    if (!id.startsWith(PINNED_DOCK_PERSISTENT_ID_PREFIX)) return null;
+
+    String encoded = id.substring(PINNED_DOCK_PERSISTENT_ID_PREFIX.length());
+    int sep = encoded.indexOf(':');
+    if (sep <= 0 || sep >= encoded.length() - 1) return null;
+
+    String serverId = decodePinnedIdPart(encoded.substring(0, sep));
+    String targetKey = decodePinnedIdPart(encoded.substring(sep + 1));
+    if (serverId.isBlank() || targetKey.isBlank()) return null;
+    try {
+      return new TargetRef(serverId, targetKey);
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private static String decodePinnedIdPart(String raw) {
+    String value = java.util.Objects.toString(raw, "").trim();
+    if (value.isEmpty()) return "";
+    try {
+      return new String(Base64.getUrlDecoder().decode(value), StandardCharsets.UTF_8).trim();
+    } catch (Exception ignored) {
+      return "";
     }
   }
 

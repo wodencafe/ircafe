@@ -150,6 +150,7 @@ public class ServerRegistry {
         server.login(),
         server.realName(),
         server.sasl(),
+        server.nickserv(),
         autoJoin == null ? List.of() : List.copyOf(autoJoin),
         server.perform(),
         server.proxy());

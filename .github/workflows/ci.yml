@@ -29,8 +29,10 @@ jobs:
           chmod +x scripts/validate-conventional-commit-msg.sh
 
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-            commit_list="$(git rev-list --no-merges "origin/${{ github.base_ref }}..HEAD")"
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+            git fetch --no-tags origin "$base_sha" "$head_sha"
+            commit_list="$(git rev-list --no-merges "$base_sha..$head_sha")"
           else
             before="${{ github.event.before }}"
             after="${{ github.sha }}"

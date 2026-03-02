@@ -41,6 +41,12 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
 
     boolean isChannelPinned(TargetRef ref);
 
+    boolean isChannelMuted(TargetRef ref);
+
+    Color unreadChannelTextColor();
+
+    Color highlightChannelTextColor();
+
     boolean isApplicationJfrActive();
 
     boolean isInterceptorEnabled(TargetRef ref);
@@ -161,13 +167,22 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           style |= Font.ITALIC;
         }
         setFont(base.deriveFont(style));
-        if (!sel && detachedChannel) {
-          Color muted = UIManager.getColor("Label.disabledForeground");
-          if (muted == null) muted = UIManager.getColor("Component.disabledForeground");
-          if (muted != null) setForeground(muted);
-        }
         if (nodeData.ref != null && nodeData.ref.isChannel()) {
-          setTreeIcon(context.isChannelPinned(nodeData.ref) ? "star" : "channel");
+          boolean mutedChannel = context.isChannelMuted(nodeData.ref);
+          if (mutedChannel) {
+            setTreeIcon("pause");
+          } else {
+            setTreeIcon(context.isChannelPinned(nodeData.ref) ? "star" : "channel");
+          }
+          if (!sel) {
+            Color textColor =
+                nodeData.highlightUnread > 0
+                    ? context.highlightChannelTextColor()
+                    : (nodeData.unread > 0 ? context.unreadChannelTextColor() : null);
+            if (textColor != null) {
+              setForeground(textColor);
+            }
+          }
         } else if (context.isPrivateMessageTarget(nodeData.ref)) {
           boolean online = context.isPrivateMessageOnline(nodeData.ref);
           String name = online ? "pm-online" : "pm-offline";
@@ -216,6 +231,11 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           setTreeIcon("yin-yang");
         } else if (nodeData.ref == null && context.isOtherGroupNode(node)) {
           setTreeIcon("settings");
+        }
+        if (!sel && detachedChannel) {
+          Color muted = UIManager.getColor("Label.disabledForeground");
+          if (muted == null) muted = UIManager.getColor("Component.disabledForeground");
+          if (muted != null) setForeground(muted);
         }
         if (ServerTreeTypingTargetPolicy.supportsTypingActivity(nodeData.ref)) {
           detachedWarningIndicatorVisible = nodeData.hasDetachedWarning();

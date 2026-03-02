@@ -119,6 +119,20 @@ public class IrcEventNotificationRulesBus {
               : IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
     }
 
+    IrcEventNotificationRule.CtcpMatchMode ctcpCommandMode;
+    try {
+      ctcpCommandMode = IrcEventNotificationRule.CtcpMatchMode.valueOf(p.ctcpCommandMode().name());
+    } catch (Exception ignored) {
+      ctcpCommandMode = IrcEventNotificationRule.CtcpMatchMode.ANY;
+    }
+
+    IrcEventNotificationRule.CtcpMatchMode ctcpValueMode;
+    try {
+      ctcpValueMode = IrcEventNotificationRule.CtcpMatchMode.valueOf(p.ctcpValueMode().name());
+    } catch (Exception ignored) {
+      ctcpValueMode = IrcEventNotificationRule.CtcpMatchMode.ANY;
+    }
+
     return new IrcEventNotificationRule(
         Boolean.TRUE.equals(p.enabled()),
         eventType,
@@ -137,7 +151,11 @@ public class IrcEventNotificationRulesBus {
         Boolean.TRUE.equals(p.scriptEnabled()),
         p.scriptPath(),
         p.scriptArgs(),
-        p.scriptWorkingDirectory());
+        p.scriptWorkingDirectory(),
+        ctcpCommandMode,
+        p.ctcpCommandPattern(),
+        ctcpValueMode,
+        p.ctcpValuePattern());
   }
 
   private static List<IrcEventNotificationRule> sanitize(List<IrcEventNotificationRule> rules) {

@@ -490,7 +490,10 @@ class ChatTranscriptStoreTest {
         false,
         false,
         false,
-        List.of());
+        List.of(),
+        null,
+        null,
+        false);
   }
 
   private static String transcriptText(StyledDocument doc) throws Exception {

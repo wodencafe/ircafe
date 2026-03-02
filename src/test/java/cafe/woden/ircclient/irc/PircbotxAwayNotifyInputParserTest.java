@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -803,6 +804,20 @@ class PircbotxAwayNotifyInputParserTest {
     assertEquals("Invalid selector", ev.description());
     assertEquals("srv-1", ev.messageId());
     assertEquals("req-42", ev.ircv3Tags().get("label"));
+  }
+
+  @Test
+  void rpl324WithMissingModeParamDoesNotThrow() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    String line = "@time=2026-03-01T22:13:38.124Z :osmium.libera.chat 324 me ##politics +CLTcnrt";
+    List<String> parsed = List.of("me", "##politics", "+CLTcnrt");
+
+    assertDoesNotThrow(() -> parser.processServerResponse(324, line, parsed));
   }
 
   private static UserHostmask source(String nick) {
