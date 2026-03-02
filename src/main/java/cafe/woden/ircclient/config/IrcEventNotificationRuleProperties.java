@@ -200,58 +200,6 @@ public record IrcEventNotificationRuleProperties(
     channelBlacklist = excludeLegacy;
   }
 
-  public IrcEventNotificationRuleProperties(
-      Boolean enabled,
-      EventType eventType,
-      SourceMode sourceMode,
-      String sourcePattern,
-      ChannelScope channelScope,
-      String channelPatterns,
-      Boolean toastEnabled,
-      Boolean toastWhenFocused,
-      FocusScope focusScope,
-      Boolean statusBarEnabled,
-      Boolean notificationsNodeEnabled,
-      Boolean soundEnabled,
-      String soundId,
-      Boolean soundUseCustom,
-      String soundCustomPath,
-      Boolean scriptEnabled,
-      String scriptPath,
-      String scriptArgs,
-      String scriptWorkingDirectory,
-      SourceFilter sourceFilter,
-      String channelWhitelist,
-      String channelBlacklist) {
-    this(
-        enabled,
-        eventType,
-        sourceMode,
-        sourcePattern,
-        channelScope,
-        channelPatterns,
-        toastEnabled,
-        toastWhenFocused,
-        focusScope,
-        statusBarEnabled,
-        notificationsNodeEnabled,
-        soundEnabled,
-        soundId,
-        soundUseCustom,
-        soundCustomPath,
-        scriptEnabled,
-        scriptPath,
-        scriptArgs,
-        scriptWorkingDirectory,
-        CtcpMatchMode.ANY,
-        null,
-        CtcpMatchMode.ANY,
-        null,
-        sourceFilter,
-        channelWhitelist,
-        channelBlacklist);
-  }
-
   public static List<IrcEventNotificationRuleProperties> defaultRules() {
     List<IrcEventNotificationRuleProperties> out = new ArrayList<>();
     for (EventType t : EventType.values()) {
