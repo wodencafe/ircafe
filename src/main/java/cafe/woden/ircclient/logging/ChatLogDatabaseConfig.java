@@ -13,9 +13,13 @@ import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.logging.viewer.DbChatLogViewerService;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.sql.DataSource;
@@ -47,27 +51,28 @@ public class ChatLogDatabaseConfig {
   public DataSource chatLogDataSource(
       LogProperties logProps, RuntimeConfigStore runtimeConfigStore) {
     Path basePath = resolveDbBasePath(logProps, runtimeConfigStore);
+    Path lockPath = lockFilePath(basePath);
 
     // Keep the DB open for the life of the app by reusing pooled connections.
     // (Do NOT use ;shutdown=true here; it can race when connections close.)
     String url = "jdbc:hsqldb:file:" + basePath.toAbsolutePath() + ";hsqldb.tx=mvcc";
 
-    HikariConfig cfg = new HikariConfig();
-    cfg.setPoolName("ircafe-chatlog");
-    cfg.setDriverClassName("org.hsqldb.jdbc.JDBCDriver");
-    cfg.setJdbcUrl(url);
-    cfg.setUsername("SA");
-    cfg.setPassword("");
-
-    // Tiny pool is enough (writer + history reads), but prevents open/close thrash.
-    cfg.setMaximumPoolSize(4);
-    cfg.setMinimumIdle(1);
-    cfg.setConnectionTimeout(5_000);
-    cfg.setValidationTimeout(5_000);
-    cfg.setIdleTimeout(60_000);
-
     log.info("[ircafe] Chat logging DB enabled (HSQLDB file: {})", basePath.toAbsolutePath());
-    return new HikariDataSource(cfg);
+    try {
+      return new HikariDataSource(buildDataSourceConfig(url));
+    } catch (RuntimeException e) {
+      if (!isRecoverableLockFailure(e) || !tryRecoverStaleLockFile(lockPath)) {
+        log.error(
+            "[ircafe] Chat logging DB lock could not be recovered at '{}'. "
+                + "If no IRCafe process is running, delete this file and restart.",
+            lockPath,
+            e);
+        throw e;
+      }
+      log.warn(
+          "[ircafe] Removed stale chat log DB lock file '{}' and retrying startup once", lockPath);
+      return new HikariDataSource(buildDataSourceConfig(url));
+    }
   }
 
   @Bean(initMethod = "migrate", name = "chatLogFlyway")
@@ -168,6 +173,70 @@ public class ChatLogDatabaseConfig {
 
   private static Path defaultIrcafeDir() {
     return Paths.get(System.getProperty("user.home"), ".config", "ircafe");
+  }
+
+  private static HikariConfig buildDataSourceConfig(String url) {
+    HikariConfig cfg = new HikariConfig();
+    cfg.setPoolName("ircafe-chatlog");
+    cfg.setDriverClassName("org.hsqldb.jdbc.JDBCDriver");
+    cfg.setJdbcUrl(url);
+    cfg.setUsername("SA");
+    cfg.setPassword("");
+
+    // Tiny pool is enough (writer + history reads), but prevents open/close thrash.
+    cfg.setMaximumPoolSize(4);
+    cfg.setMinimumIdle(1);
+    cfg.setConnectionTimeout(5_000);
+    cfg.setValidationTimeout(5_000);
+    cfg.setIdleTimeout(60_000);
+    return cfg;
+  }
+
+  static boolean isRecoverableLockFailure(Throwable throwable) {
+    boolean sawLockFailure = false;
+    boolean sawLockHeld = false;
+    Throwable current = throwable;
+    while (current != null) {
+      String message = current.getMessage();
+      if (message != null) {
+        sawLockFailure |= message.contains("Database lock acquisition failure");
+        sawLockHeld |= message.contains("LockHeldExternallyException");
+      }
+      sawLockHeld |= current.getClass().getName().contains("LockHeldExternallyException");
+      current = current.getCause();
+    }
+    return sawLockFailure && sawLockHeld;
+  }
+
+  static boolean tryRecoverStaleLockFile(Path lockPath) {
+    if (lockPath == null || !Files.exists(lockPath)) {
+      return false;
+    }
+
+    try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.WRITE)) {
+      FileLock lock;
+      try {
+        lock = channel.tryLock();
+      } catch (OverlappingFileLockException ignored) {
+        return false;
+      }
+      if (lock == null) {
+        return false;
+      }
+      lock.close();
+    } catch (Exception e) {
+      return false;
+    }
+
+    try {
+      return Files.deleteIfExists(lockPath);
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  private static Path lockFilePath(Path basePath) {
+    return Paths.get(basePath.toAbsolutePath() + ".lck");
   }
 
   @Bean
