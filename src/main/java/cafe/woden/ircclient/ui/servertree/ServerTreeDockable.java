@@ -22,24 +22,19 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaborat
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeApplicationRootVisibilityContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeBouncerDetachPolicyContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInLayoutOrchestratorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInVisibilityContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeChannelStateCoordinatorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeContextMenuContextFactory;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeInterceptorActionsContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeNetworkInfoDialogContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionFallbackContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerActionOverlayContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerParentResolverContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerRootLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSettingsSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetRemovalStateCoordinatorContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetSelectionCoordinatorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTooltipContextFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTypingActivityManagerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeUiLeafVisibilitySynchronizerContextAdapter;
@@ -554,7 +549,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.networkInfoDialogBuilder =
         new ServerTreeNetworkInfoDialogBuilder(
             runtimeConfig,
-            new ServerTreeNetworkInfoDialogContextAdapter(
+            ServerTreeNetworkInfoDialogBuilder.context(
                 uiHooks::connectionStateForServer,
                 runtimeState::desiredOnlineForServer,
                 serverLabelPolicy::prettyServerLabel,
@@ -567,7 +562,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             this,
             interceptorStore,
             INTERCEPTORS_GROUP_LABEL,
-            new ServerTreeInterceptorActionsContextAdapter(
+            ServerTreeInterceptorActions.context(
                 this::ensureNode,
                 this::selectTarget,
                 this::removeTarget,
@@ -669,7 +664,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeServerParentResolver(
             sojuOriginByServerId,
             zncOriginByServerId,
-            new ServerTreeServerParentResolverContextAdapter(
+            ServerTreeServerParentResolver.context(
                 this::hasServer,
                 this::addServerRoot,
                 () -> ircRoot,
@@ -679,7 +674,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeBouncerDetachPolicy(
             sojuBouncerControlServerIds,
             zncBouncerControlServerIds,
-            new ServerTreeBouncerDetachPolicyContextAdapter(
+            ServerTreeBouncerDetachPolicy.context(
                 uiHooks::connectionStateForServer,
                 serverLabelPolicy::isSojuEphemeralServer,
                 serverLabelPolicy::isZncEphemeralServer,
@@ -1042,7 +1037,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::emitManagedChannelsChanged));
     this.targetSelectionCoordinator =
         new ServerTreeTargetSelectionCoordinator(
-            new ServerTreeTargetSelectionCoordinatorContextAdapter(
+            ServerTreeTargetSelectionCoordinator.context(
                 this::ensureNode,
                 this::monitorNodeForServer,
                 this::interceptorsNodeForServer,

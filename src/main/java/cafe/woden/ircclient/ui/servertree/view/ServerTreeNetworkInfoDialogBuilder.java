@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.servertree.view;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.irc.PircbotxBotFactory;
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.state.ServerRuntimeMetadata;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import java.awt.Color;
@@ -20,6 +21,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -51,6 +54,50 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     void requestCapabilityToggle(String serverId, String capability, boolean enable);
   }
 
+  @FunctionalInterface
+  public interface CapabilityToggleRequester {
+    void request(String serverId, String capability, boolean enable);
+  }
+
+  public static Context context(
+      Function<String, ConnectionState> connectionStateForServer,
+      Predicate<String> desiredOnlineForServer,
+      Function<String, String> prettyServerLabel,
+      Function<String, String> connectionDiagnosticsTipForServer,
+      CapabilityToggleRequester capabilityToggleRequester) {
+    Objects.requireNonNull(connectionStateForServer, "connectionStateForServer");
+    Objects.requireNonNull(desiredOnlineForServer, "desiredOnlineForServer");
+    Objects.requireNonNull(prettyServerLabel, "prettyServerLabel");
+    Objects.requireNonNull(connectionDiagnosticsTipForServer, "connectionDiagnosticsTipForServer");
+    Objects.requireNonNull(capabilityToggleRequester, "capabilityToggleRequester");
+    return new Context() {
+      @Override
+      public ConnectionState connectionStateForServer(String serverId) {
+        return connectionStateForServer.apply(serverId);
+      }
+
+      @Override
+      public boolean desiredOnlineForServer(String serverId) {
+        return desiredOnlineForServer.test(serverId);
+      }
+
+      @Override
+      public String prettyServerLabel(String serverId) {
+        return prettyServerLabel.apply(serverId);
+      }
+
+      @Override
+      public String connectionDiagnosticsTipForServer(String serverId) {
+        return connectionDiagnosticsTipForServer.apply(serverId);
+      }
+
+      @Override
+      public void requestCapabilityToggle(String serverId, String capability, boolean enable) {
+        capabilityToggleRequester.request(serverId, capability, enable);
+      }
+    };
+  }
+
   private static final DateTimeFormatter SERVER_META_TIME_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z").withZone(ZoneId.systemDefault());
   private static final DateTimeFormatter CAP_TRANSITION_TIME_FMT =
@@ -79,7 +126,7 @@ public final class ServerTreeNetworkInfoDialogBuilder {
   }
 
   public void open(Component ownerComponent, String serverId, ServerRuntimeMetadata metadata) {
-    String sid = Objects.toString(serverId, "").trim();
+    String sid = ServerTreeConventions.normalize(serverId);
     if (sid.isEmpty() || metadata == null) return;
 
     Window owner = ownerComponent == null ? null : SwingUtilities.getWindowAncestor(ownerComponent);

@@ -1,8 +1,13 @@
 package cafe.woden.ircclient.ui.servertree.resolver;
 
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 /** Resolves where a server root should be attached in the tree hierarchy. */
@@ -18,6 +23,45 @@ public final class ServerTreeServerParentResolver {
     DefaultMutableTreeNode sojuGroupNode(String originServerId);
 
     DefaultMutableTreeNode zncGroupNode(String originServerId);
+  }
+
+  public static Context context(
+      Predicate<String> hasServer,
+      Consumer<String> ensureServerRoot,
+      Supplier<DefaultMutableTreeNode> ircRoot,
+      Function<String, DefaultMutableTreeNode> sojuGroupNode,
+      Function<String, DefaultMutableTreeNode> zncGroupNode) {
+    Objects.requireNonNull(hasServer, "hasServer");
+    Objects.requireNonNull(ensureServerRoot, "ensureServerRoot");
+    Objects.requireNonNull(ircRoot, "ircRoot");
+    Objects.requireNonNull(sojuGroupNode, "sojuGroupNode");
+    Objects.requireNonNull(zncGroupNode, "zncGroupNode");
+    return new Context() {
+      @Override
+      public boolean hasServer(String serverId) {
+        return hasServer.test(serverId);
+      }
+
+      @Override
+      public void ensureServerRoot(String serverId) {
+        ensureServerRoot.accept(serverId);
+      }
+
+      @Override
+      public DefaultMutableTreeNode ircRoot() {
+        return ircRoot.get();
+      }
+
+      @Override
+      public DefaultMutableTreeNode sojuGroupNode(String originServerId) {
+        return sojuGroupNode.apply(originServerId);
+      }
+
+      @Override
+      public DefaultMutableTreeNode zncGroupNode(String originServerId) {
+        return zncGroupNode.apply(originServerId);
+      }
+    };
   }
 
   private final Map<String, String> sojuOriginByServerId;
@@ -75,6 +119,6 @@ public final class ServerTreeServerParentResolver {
   }
 
   private static String normalize(String value) {
-    return Objects.toString(value, "").trim();
+    return ServerTreeConventions.normalize(value);
   }
 }
