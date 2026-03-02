@@ -184,14 +184,6 @@ public final class ServerTreeContextMenuBuilder {
     networkInfo.addActionListener(ev -> context.openServerInfoDialog(serverId));
     menu.add(networkInfo);
 
-    menu.addSeparator();
-    JMenuItem addInterceptor = new JMenuItem("Add Interceptor...");
-    addInterceptor.setIcon(SvgIcons.action("plus", 16));
-    addInterceptor.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
-    addInterceptor.setEnabled(context.interceptorStoreAvailable());
-    addInterceptor.addActionListener(ev -> context.promptAndAddInterceptor(serverId));
-    menu.add(addInterceptor);
-
     boolean ephemeral = serverEntry.map(ServerEntry::ephemeral).orElse(false);
     if (ephemeral) {
       menu.addSeparator();
