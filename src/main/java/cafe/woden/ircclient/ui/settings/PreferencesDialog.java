@@ -5829,8 +5829,7 @@ public class PreferencesDialog {
       FontControls fonts,
       TweakControls tweaks) {
     JPanel form =
-        new JPanel(
-            new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[grow,push]8[]"));
+        new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[grow,push]8[]"));
 
     form.add(tabTitle("Appearance"), "growx, wmin 0, wrap");
 
@@ -5903,8 +5902,7 @@ public class PreferencesDialog {
       ThemeControls theme, AccentControls accent, TweakControls tweaks) {
     JPanel panel =
         new JPanel(
-            new MigLayout(
-                "insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]6[]6[]6[]"));
+            new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]6[]6[]6[]"));
     panel.setOpaque(false);
 
     panel.add(sectionTitle("Look & feel"), "span 2, growx, wmin 0, wrap");

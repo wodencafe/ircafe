@@ -886,6 +886,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return new TreePath(sn.serverNode.getPath());
   }
 
+  private TreePath channelPathForRef(TargetRef channelRef) {
+    if (channelRef == null || !channelRef.isChannel()) return null;
+    DefaultMutableTreeNode node = leaves.get(channelRef);
+    if (node == null || node.getPath() == null) return null;
+    return new TreePath(node.getPath());
+  }
+
   private void confirmAndRequestClearLog(TargetRef target, String label) {
     if (target == null) return;
     if (!(target.isChannel() || target.isStatus())) return;
@@ -909,6 +916,24 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (choice == JOptionPane.YES_OPTION) {
       requestEmitter.emitClearLog(target);
     }
+  }
+
+  private boolean confirmCloseChannel(TargetRef target, String label) {
+    if (target == null || !target.isChannel()) return false;
+    if (java.awt.GraphicsEnvironment.isHeadless()) return true;
+
+    Window w = SwingUtilities.getWindowAncestor(this);
+    String pretty = (label == null || label.isBlank()) ? target.target() : label;
+    String msg =
+        "Close and PART channel \""
+            + pretty
+            + "\"?\n\n"
+            + "This will send PART if connected, then remove the channel from the server tree.";
+
+    int choice =
+        JOptionPane.showConfirmDialog(
+            w, msg, "Close Channel", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+    return choice == JOptionPane.YES_OPTION;
   }
 
   private void promptAndAddInterceptor(String serverId) {
@@ -949,6 +974,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (!(uo instanceof String id)) return false;
     ServerNodes sn = servers.get(id);
     return sn != null && sn.serverNode == node;
+  }
+
+  private boolean isChannelNode(DefaultMutableTreeNode node) {
+    TargetRef ref = targetRefForNode(node);
+    return ref != null && ref.isChannel();
   }
 
   private boolean isRootServerNode(DefaultMutableTreeNode node) {
@@ -1069,8 +1099,18 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       }
 
       @Override
+      public boolean isChannelNode(DefaultMutableTreeNode node) {
+        return ServerTreeDockable.this.isChannelNode(node);
+      }
+
+      @Override
       public TreePath serverPathForId(String serverId) {
         return ServerTreeDockable.this.serverPathForId(serverId);
+      }
+
+      @Override
+      public TreePath channelPathForRef(TargetRef channelRef) {
+        return ServerTreeDockable.this.channelPathForRef(channelRef);
       }
 
       @Override
@@ -1086,6 +1126,31 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       @Override
       public void disconnectServer(String serverId) {
         requestEmitter.emitDisconnectServer(serverId);
+      }
+
+      @Override
+      public boolean isChannelDisconnected(TargetRef channelRef) {
+        return ServerTreeDockable.this.isChannelDisconnected(channelRef);
+      }
+
+      @Override
+      public void joinChannel(TargetRef channelRef) {
+        requestEmitter.emitJoinChannel(channelRef);
+      }
+
+      @Override
+      public void disconnectChannel(TargetRef channelRef) {
+        requestEmitter.emitDisconnectChannel(channelRef);
+      }
+
+      @Override
+      public boolean confirmCloseChannel(TargetRef channelRef, String channelLabel) {
+        return ServerTreeDockable.this.confirmCloseChannel(channelRef, channelLabel);
+      }
+
+      @Override
+      public void closeChannel(TargetRef channelRef) {
+        requestEmitter.emitCloseChannel(channelRef);
       }
     };
   }
@@ -3000,6 +3065,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private String toolTipForEvent(MouseEvent event) {
+    String overlayTip =
+        serverActionOverlay == null ? null : serverActionOverlay.toolTipForEvent(event);
+    if (overlayTip != null && !overlayTip.isBlank()) {
+      return overlayTip;
+    }
     return tooltipProvider.toolTipForEvent(event);
   }
 
