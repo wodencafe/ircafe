@@ -408,7 +408,7 @@ public record UiProperties(
       if (edtFreezeWatchdogEnabled == null) edtFreezeWatchdogEnabled = true;
       if (edtFreezeThresholdMs == null || edtFreezeThresholdMs < 500) edtFreezeThresholdMs = 2500;
       if (edtFreezeThresholdMs > 120_000) edtFreezeThresholdMs = 120_000;
-      if (edtWatchdogPollMs == null || edtWatchdogPollMs < 100) edtWatchdogPollMs = 500;
+      if (edtWatchdogPollMs == null || edtWatchdogPollMs < 100) edtWatchdogPollMs = 1000;
       if (edtWatchdogPollMs > 10_000) edtWatchdogPollMs = 10_000;
       if (edtFallbackViolationReportMs == null || edtFallbackViolationReportMs < 250) {
         edtFallbackViolationReportMs = 5000;

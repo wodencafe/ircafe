@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,6 +31,7 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JProgressBar;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -92,6 +94,16 @@ class AppMenuBarMemoryWidgetTest {
           invokeNoArgs(menuBar, "createMemoryDialog");
           JComponent dial = (JComponent) getField(menuBar, "memoryDialogDialGauge");
           assertNotNull(dial, "memory dialog should include a dial-style gauge");
+        });
+  }
+
+  @Test
+  void memoryTimerDoesNotRunWhileMenuBarIsNotShowing() throws Exception {
+    onEdt(
+        () -> {
+          AppMenuBar menuBar = newMenuBar();
+          Timer timer = (Timer) getField(menuBar, "memoryTimer");
+          assertFalse(timer.isRunning());
         });
   }
 

@@ -10,6 +10,7 @@ import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.awt.Window;
 import java.lang.management.LockInfo;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MonitorInfo;
@@ -106,7 +107,7 @@ public class AssertjSwingDiagnosticsService {
     enabled.set(true);
 
     freezeThresholdMs = cfg.edtFreezeThresholdMs() == null ? 2500 : cfg.edtFreezeThresholdMs();
-    watchdogPollMs = cfg.edtWatchdogPollMs() == null ? 500 : cfg.edtWatchdogPollMs();
+    watchdogPollMs = cfg.edtWatchdogPollMs() == null ? 1000 : cfg.edtWatchdogPollMs();
     fallbackViolationReportMs =
         cfg.edtFallbackViolationReportMs() == null ? 5000 : cfg.edtFallbackViolationReportMs();
     onIssuePlaySound = cfg.onIssuePlaySound() != null && cfg.onIssuePlaySound();
@@ -206,6 +207,10 @@ public class AssertjSwingDiagnosticsService {
     if (!enabled.get() || !freezeWatchdogEnabled.get()) return;
 
     long now = System.currentTimeMillis();
+    if (!hasShowingWindow()) {
+      resetWatchdogWhenUiHidden(now);
+      return;
+    }
     if (pingPending.compareAndSet(false, true)) {
       final long postedAt = now;
       SwingUtilities.invokeLater(() -> onEdtHeartbeat(postedAt));
@@ -213,6 +218,26 @@ public class AssertjSwingDiagnosticsService {
       long lag = now - lastEdtBeatAtMs.get();
       maybeReportFreezeProgress(lag);
     }
+  }
+
+  private void resetWatchdogWhenUiHidden(long nowMs) {
+    pingPending.set(false);
+    lastEdtBeatAtMs.set(nowMs);
+    if (freezeActive.getAndSet(false)) {
+      freezeSinceAtMs.set(0L);
+      nextFreezeProgressAtMs.set(0L);
+    }
+  }
+
+  private static boolean hasShowingWindow() {
+    try {
+      for (Window window : Window.getWindows()) {
+        if (window != null && window.isShowing()) return true;
+      }
+    } catch (Exception ignored) {
+      return true;
+    }
+    return false;
   }
 
   private void onEdtHeartbeat(long postedAtMs) {

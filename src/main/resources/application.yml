@@ -182,7 +182,7 @@ ircafe:
         # If EDT stalls longer than this, write freeze events to Application -> AssertJ Swing.
         edtFreezeThresholdMs: 2500
         # Watchdog poll cadence.
-        edtWatchdogPollMs: 500
+        edtWatchdogPollMs: 1000
         # Fallback detector throttling: minimum interval between repeated off-EDT violation reports.
         edtFallbackViolationReportMs: 5000
         # Optional issue actions when EDT freeze/violation problems are detected.

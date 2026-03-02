@@ -49,6 +49,7 @@ import java.awt.RenderingHints;
 import java.awt.Stroke;
 import java.awt.Toolkit;
 import java.awt.Window;
+import java.awt.event.HierarchyEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -254,6 +255,7 @@ public class AppMenuBar extends JMenuBar {
     memoryWidget.add(memoryMoonButton);
     memoryTimer.setRepeats(true);
     buildMemoryModePopup();
+    addHierarchyListener(this::onHierarchyChanged);
 
     MemoryUsageDisplayMode initialMemoryMode =
         settingsBus.get() != null
@@ -974,9 +976,7 @@ public class AppMenuBar extends JMenuBar {
     updateMemoryButtonStyleForCurrentMode();
     updateMemoryButtonHeightForCurrentMode();
     updateMemoryIndicatorSizeForCurrentMode();
-    if (memoryUsageDisplayMode != MemoryUsageDisplayMode.HIDDEN && !memoryTimer.isRunning()) {
-      memoryTimer.start();
-    }
+    updateMemoryTimerState();
   }
 
   @Override
@@ -1026,16 +1026,35 @@ public class AppMenuBar extends JMenuBar {
     updateMemoryButtonStyleForCurrentMode();
     syncMemoryModePopupSelection();
     if (memoryUsageDisplayMode == MemoryUsageDisplayMode.HIDDEN) {
-      memoryTimer.stop();
       if (memoryDialog != null) memoryDialog.setVisible(false);
       hideWarningTooltip();
-    } else if (isDisplayable() && !memoryTimer.isRunning()) {
-      memoryTimer.start();
     }
+    updateMemoryTimerState();
     updateMemoryButtonHeightForCurrentMode();
     updateMemoryIndicatorSizeForCurrentMode();
     revalidate();
     repaint();
+  }
+
+  private void onHierarchyChanged(HierarchyEvent event) {
+    if (event == null) return;
+    long flags = event.getChangeFlags();
+    if ((flags & (HierarchyEvent.DISPLAYABILITY_CHANGED | HierarchyEvent.SHOWING_CHANGED)) == 0L) {
+      return;
+    }
+    updateMemoryTimerState();
+  }
+
+  private void updateMemoryTimerState() {
+    if (memoryUsageDisplayMode == MemoryUsageDisplayMode.HIDDEN
+        || !isDisplayable()
+        || !isShowing()) {
+      memoryTimer.stop();
+      return;
+    }
+    if (!memoryTimer.isRunning()) {
+      memoryTimer.start();
+    }
   }
 
   private void refreshMemoryUsage() {

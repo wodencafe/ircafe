@@ -76,7 +76,7 @@ class RuntimeEventsPanelTest {
   }
 
   @Test
-  void reactiveRefreshTriggerUpdatesRowsWithoutPollingTimer() throws Exception {
+  void reactiveRefreshTriggerSkipsUpdatesWhilePanelIsNotShowing() throws Exception {
     PublishProcessor<Object> trigger = PublishProcessor.create();
     AtomicReference<List<RuntimeDiagnosticEvent>> rowsRef =
         new AtomicReference<>(List.of(event("INFO", "one")));
@@ -100,6 +100,8 @@ class RuntimeEventsPanelTest {
           rowsRef.set(List.of(event("INFO", "one"), event("WARN", "two")));
           trigger.onNext(new Object());
 
+          assertEquals(1, table.getRowCount());
+          panel.refreshNow();
           assertEquals(2, table.getRowCount());
         });
   }
