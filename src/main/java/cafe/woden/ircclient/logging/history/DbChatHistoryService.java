@@ -690,8 +690,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
       long elapsedNs = Math.max(0L, chunkEndNs - chunkStartNs);
       int nextDelayMs = HistoryChunking.effectiveInterChunkDelayMs(chunkDelayMs, elapsedNs);
       int remaining = Math.max(0, lines.size() - nextIndex);
-      long chunkElapsedMs =
-          Math.max(0L, TimeUnit.NANOSECONDS.toMillis(Math.max(0L, elapsedNs)));
+      long chunkElapsedMs = Math.max(0L, TimeUnit.NANOSECONDS.toMillis(Math.max(0L, elapsedNs)));
       if (log.isTraceEnabled()) {
         log.trace(
             "[history] initial-prefill chunk target={} chunk={} insertedThisChunk={} insertedTotal={} "
