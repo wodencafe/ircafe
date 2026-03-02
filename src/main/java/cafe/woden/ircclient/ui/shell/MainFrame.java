@@ -54,6 +54,7 @@ public class MainFrame extends JFrame {
       UserListDockable users,
       ChatDockManager chatDockManager,
       UpdateNotifierService updateNotifierService,
+      LagIndicatorService lagIndicatorService,
       StatusBar statusBar,
       ApplicationShutdownCoordinator shutdownCoordinator) {
     super(AppVersion.windowTitle());

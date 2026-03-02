@@ -44,6 +44,7 @@ public class StatusBar extends JPanel {
   private final JLabel usersLabel = new JLabel("Users: 0");
   private final JLabel opsLabel = new JLabel("Ops: 0");
   private final JLabel serverLabel = new JLabel("Server: (disconnected)");
+  private final JLabel lagLabel = new JLabel("Lag: --");
   private final JLabel noticeLabel = new JLabel();
   private final JButton historyButton = new JButton("Notices");
   private final JButton updateNotifierButton = new JButton();
@@ -80,6 +81,7 @@ public class StatusBar extends JPanel {
   private Runnable updateNotifierDisableAction;
   private Popup updateNotifierTooltipPopup;
   private Timer updateNotifierTooltipHideTimer;
+  private Color lagBaseForeground;
 
   private record StatusNotice(
       String displayText, String fullText, Runnable onClick, long atEpochMs) {}
@@ -95,6 +97,7 @@ public class StatusBar extends JPanel {
 
     JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 3));
     right.add(serverLabel);
+    right.add(lagLabel);
     right.add(updateNotifierButton);
 
     JPanel center = new JPanel(new BorderLayout(10, 0));
@@ -142,6 +145,9 @@ public class StatusBar extends JPanel {
     center.add(noticeLabel, BorderLayout.CENTER);
     center.add(historyButton, BorderLayout.EAST);
     noticeBaseForeground = noticeLabel.getForeground();
+    lagLabel.setToolTipText("Current measured server lag for the active server.");
+    lagLabel.setVisible(false);
+    lagBaseForeground = lagLabel.getForeground();
 
     noticeLabel.addMouseListener(
         new MouseAdapter() {
@@ -220,6 +226,22 @@ public class StatusBar extends JPanel {
       setUpdateNotifierCheckingOnEdt();
     } else {
       SwingUtilities.invokeLater(this::setUpdateNotifierCheckingOnEdt);
+    }
+  }
+
+  public void setLagIndicatorEnabled(boolean enabled) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      setLagIndicatorEnabledOnEdt(enabled);
+    } else {
+      SwingUtilities.invokeLater(() -> setLagIndicatorEnabledOnEdt(enabled));
+    }
+  }
+
+  public void setLagIndicatorReading(Long lagMs, String tooltip) {
+    if (SwingUtilities.isEventDispatchThread()) {
+      setLagIndicatorReadingOnEdt(lagMs, tooltip);
+    } else {
+      SwingUtilities.invokeLater(() -> setLagIndicatorReadingOnEdt(lagMs, tooltip));
     }
   }
 
@@ -669,6 +691,7 @@ public class StatusBar extends JPanel {
     usersLabel.setFont(base);
     opsLabel.setFont(base);
     serverLabel.setFont(base);
+    lagLabel.setFont(base);
     noticeLabel.setFont(base);
     historyButton.setFont(buttonFont);
     updateNotifierButton.setFont(buttonFont);
@@ -696,6 +719,66 @@ public class StatusBar extends JPanel {
     this.updateNotifierVisitAction = visitAction;
     this.updateNotifierDisableAction = disableAction;
     ensureUpdateNotifierPopupMenu();
+  }
+
+  private void setLagIndicatorEnabledOnEdt(boolean enabled) {
+    if (lagBaseForeground == null) {
+      lagBaseForeground = lagLabel.getForeground();
+    }
+    if (!enabled) {
+      lagLabel.setVisible(false);
+      lagLabel.setText("Lag: --");
+      lagLabel.setToolTipText(null);
+      lagLabel.setForeground(lagBaseForeground);
+      return;
+    }
+    lagLabel.setVisible(true);
+    if (lagLabel.getToolTipText() == null || lagLabel.getToolTipText().isBlank()) {
+      lagLabel.setToolTipText("Current measured server lag for the active server.");
+    }
+  }
+
+  private void setLagIndicatorReadingOnEdt(Long lagMs, String tooltip) {
+    setLagIndicatorEnabledOnEdt(true);
+    if (lagBaseForeground == null) {
+      lagBaseForeground = lagLabel.getForeground();
+    }
+
+    if (lagMs == null || lagMs < 0L) {
+      lagLabel.setText("Lag: --");
+      Color muted = UIManager.getColor("Label.disabledForeground");
+      lagLabel.setForeground(muted != null ? muted : lagBaseForeground);
+    } else {
+      long value = Math.max(0L, lagMs);
+      lagLabel.setText("Lag: " + formatLag(value));
+      lagLabel.setForeground(colorForLag(value));
+    }
+
+    String tip = Objects.toString(tooltip, "").trim();
+    if (!tip.isEmpty()) {
+      lagLabel.setToolTipText(tip);
+    }
+  }
+
+  private Color colorForLag(long lagMs) {
+    if (lagBaseForeground == null) {
+      lagBaseForeground = lagLabel.getForeground();
+    }
+    if (lagMs >= 900L) {
+      return new Color(178, 50, 40);
+    }
+    if (lagMs >= 350L) {
+      return new Color(184, 120, 0);
+    }
+    return lagBaseForeground;
+  }
+
+  private static String formatLag(long lagMs) {
+    if (lagMs < 1000L) {
+      return lagMs + " ms";
+    }
+    double seconds = lagMs / 1000.0d;
+    return String.format(java.util.Locale.ROOT, "%.1f s", seconds);
   }
 
   private void setUpdateNotifierEnabledOnEdt(boolean enabled) {

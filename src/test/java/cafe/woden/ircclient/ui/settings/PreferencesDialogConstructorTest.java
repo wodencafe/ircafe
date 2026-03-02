@@ -23,6 +23,7 @@ import cafe.woden.ircclient.ui.chat.embed.EmbedLoadPolicyBus;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.shell.LagIndicatorService;
 import cafe.woden.ircclient.ui.shell.UpdateNotifierService;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.TrayService;
@@ -91,6 +92,7 @@ class PreferencesDialogConstructorTest {
         mock(TrayService.class),
         mock(TrayNotificationService.class),
         mock(UpdateNotifierService.class),
+        mock(LagIndicatorService.class),
         mock(GnomeDbusNotificationBackend.class),
         mock(NotificationSoundSettingsBus.class),
         mock(PushySettingsBus.class),

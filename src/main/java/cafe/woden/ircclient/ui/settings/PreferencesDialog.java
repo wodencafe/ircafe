@@ -39,6 +39,7 @@ import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.shell.LagIndicatorService;
 import cafe.woden.ircclient.ui.shell.UpdateNotifierService;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.TrayService;
@@ -170,6 +171,7 @@ public class PreferencesDialog {
   private final TrayService trayService;
   private final TrayNotificationService trayNotificationService;
   private final UpdateNotifierService updateNotifierService;
+  private final LagIndicatorService lagIndicatorService;
   private final GnomeDbusNotificationBackend gnomeDbusBackend;
   private final NotificationSoundSettingsBus notificationSoundSettingsBus;
   private final PushySettingsBus pushySettingsBus;
@@ -205,6 +207,7 @@ public class PreferencesDialog {
       TrayService trayService,
       TrayNotificationService trayNotificationService,
       UpdateNotifierService updateNotifierService,
+      LagIndicatorService lagIndicatorService,
       GnomeDbusNotificationBackend gnomeDbusBackend,
       NotificationSoundSettingsBus notificationSoundSettingsBus,
       PushySettingsBus pushySettingsBus,
@@ -237,6 +240,7 @@ public class PreferencesDialog {
     this.trayService = trayService;
     this.trayNotificationService = trayNotificationService;
     this.updateNotifierService = updateNotifierService;
+    this.lagIndicatorService = lagIndicatorService;
     this.gnomeDbusBackend = gnomeDbusBackend;
     this.notificationSoundSettingsBus = notificationSoundSettingsBus;
     this.pushySettingsBus = pushySettingsBus;
@@ -1136,6 +1140,7 @@ public class PreferencesDialog {
           boolean trayNotificationSoundsEnabledV =
               trayEnabledV && trayControls.notificationSoundsEnabled.isSelected();
           boolean updateNotifierEnabledV = trayControls.updateNotifierEnabled.isSelected();
+          boolean lagIndicatorEnabledV = trayControls.lagIndicatorEnabled.isSelected();
           BuiltInSound selectedSoundV =
               (BuiltInSound) trayControls.notificationSound.getSelectedItem();
           String trayNotificationSoundIdV =
@@ -1285,6 +1290,8 @@ public class PreferencesDialog {
           int historyPageSizeV = ((Number) history.pageSize.getValue()).intValue();
           int historyAutoLoadWheelDebounceMsV =
               ((Number) history.autoLoadWheelDebounceMs.getValue()).intValue();
+          boolean historySmoothWheelScrollingEnabledV =
+              history.smoothWheelScrollingEnabled.isSelected();
           int historyLoadOlderChunkSizeV =
               ((Number) history.loadOlderChunkSize.getValue()).intValue();
           int historyLoadOlderChunkDelayMsV =
@@ -1673,6 +1680,7 @@ public class PreferencesDialog {
           runtimeConfig.rememberServerTreeHighlightChannelColor(serverTreeHighlightChannelColorV);
           runtimeConfig.rememberPreserveDockLayout(preserveDockLayoutBetweenSessionsV);
           settingsBus.set(next);
+          settingsBus.setChatSmoothWheelScrollingEnabled(historySmoothWheelScrollingEnabledV);
           if (spellcheckSettingsBus != null) {
             spellcheckSettingsBus.set(nextSpellcheck);
           }
@@ -1757,8 +1765,12 @@ public class PreferencesDialog {
             runtimeConfig.rememberTrayNotificationSoundUseCustom(trayNotificationSoundUseCustomV);
             runtimeConfig.rememberTrayNotificationSoundCustomPath(trayNotificationSoundCustomPathV);
             runtimeConfig.rememberUpdateNotifierEnabled(updateNotifierEnabledV);
+            runtimeConfig.rememberLagIndicatorEnabled(lagIndicatorEnabledV);
             if (updateNotifierService != null) {
               updateNotifierService.setEnabled(updateNotifierEnabledV);
+            }
+            if (lagIndicatorService != null) {
+              lagIndicatorService.setEnabled(lagIndicatorEnabledV);
             }
             if (pushySettingsBus != null) {
               pushySettingsBus.set(pushyNext);
@@ -1845,6 +1857,8 @@ public class PreferencesDialog {
             runtimeConfig.rememberChatHistoryPageSize(next.chatHistoryPageSize());
             runtimeConfig.rememberChatHistoryAutoLoadWheelDebounceMs(
                 next.chatHistoryAutoLoadWheelDebounceMs());
+            runtimeConfig.rememberChatSmoothWheelScrollingEnabled(
+                historySmoothWheelScrollingEnabledV);
             runtimeConfig.rememberChatHistoryLoadOlderChunkSize(
                 next.chatHistoryLoadOlderChunkSize());
             runtimeConfig.rememberChatHistoryLoadOlderChunkDelayMs(
@@ -3358,6 +3372,10 @@ public class PreferencesDialog {
             "Show update notifier in status bar", runtimeConfig.readUpdateNotifierEnabled(true));
     updateNotifierEnabled.setToolTipText(
         "Checks GitHub releases in the background and alerts when a newer IRCafe version exists.");
+    JCheckBox lagIndicatorEnabled =
+        new JCheckBox("Show lag indicator in status bar", runtimeConfig.readLagIndicatorEnabled(true));
+    lagIndicatorEnabled.setToolTipText(
+        "Shows measured round-trip server lag for the active server in the status bar.");
 
     boolean linuxTmp = false;
     boolean linuxActionsSupportedTmp = false;
@@ -3771,6 +3789,7 @@ public class PreferencesDialog {
     JPanel notificationVisibility =
         captionPanel("Suppression and focus rules", "insets 0, fillx, wrap 1", "[grow,fill]", "");
     notificationVisibility.add(updateNotifierEnabled, "growx");
+    notificationVisibility.add(lagIndicatorEnabled, "growx");
     notificationVisibility.add(notifyOnlyWhenUnfocused, "growx");
     notificationVisibility.add(notifyOnlyWhenMinimizedOrHidden, "growx");
     notificationVisibility.add(notifySuppressWhenTargetActive, "growx, wrap");
@@ -3902,6 +3921,7 @@ public class PreferencesDialog {
         notifyOnlyWhenMinimizedOrHidden,
         notifySuppressWhenTargetActive,
         updateNotifierEnabled,
+        lagIndicatorEnabled,
         linuxDbusActions,
         notificationBackend,
         testNotification,
@@ -4725,6 +4745,14 @@ public class PreferencesDialog {
         "Debounce for wheel-up auto 'Load older' trigger at top of transcript.\n"
             + "Higher = fewer accidental/rapid requests.");
 
+    JCheckBox historySmoothWheelScrollingEnabled =
+        new JCheckBox("Smooth mousewheel scrolling in chat transcripts");
+    historySmoothWheelScrollingEnabled.setSelected(
+        settingsBus == null || settingsBus.chatSmoothWheelScrollingEnabled());
+    historySmoothWheelScrollingEnabled.setToolTipText(
+        "When enabled, noisy wheel bursts are collapsed to smoother single-step scrolling.\n"
+            + "Disable this if you prefer native/raw wheel behavior.");
+
     JSpinner historyLoadOlderChunkSize =
         numberSpinner(current.chatHistoryLoadOlderChunkSize(), 1, 500, 1, closeables);
     historyLoadOlderChunkSize.setToolTipText(
@@ -4811,6 +4839,8 @@ public class PreferencesDialog {
     historyPanel.add(historyPageSize, "w 110!");
     historyPanel.add(new JLabel("Auto-load wheel debounce (ms):"));
     historyPanel.add(historyAutoLoadWheelDebounceMs, "w 110!");
+    historyPanel.add(new JLabel("Chat wheel smoothing:"));
+    historyPanel.add(historySmoothWheelScrollingEnabled, "growx");
     historyPanel.add(new JLabel("Load older chunk size (lines):"));
     historyPanel.add(historyLoadOlderChunkSize, "w 110!");
     historyPanel.add(new JLabel("Load older chunk delay (ms):"));
@@ -4836,6 +4866,7 @@ public class PreferencesDialog {
         historyInitialLoadLines,
         historyPageSize,
         historyAutoLoadWheelDebounceMs,
+        historySmoothWheelScrollingEnabled,
         historyLoadOlderChunkSize,
         historyLoadOlderChunkDelayMs,
         historyLoadOlderChunkEdtBudgetMs,
@@ -6868,36 +6899,132 @@ public class PreferencesDialog {
 
   private JPanel buildHistoryAndStoragePanel(LoggingControls logging, HistoryControls history) {
     JPanel panel =
-        new JPanel(
-            new MigLayout(
-                "insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]6[]6[]6[]10[]6[]"));
+        new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[]8[grow,fill]"));
+    panel.add(tabTitle("History & Storage"), "growx, wmin 0, wrap");
+    panel.add(
+        helpText(
+            "Use the sub-tabs below to configure local chat logging, transcript scrolling/loading behavior, and remote history limits."),
+        "growx, wmin 0, wrap");
 
-    panel.add(tabTitle("History & Storage"), "span 2, growx, wmin 0, wrap");
+    JTabbedPane subTabs = new DynamicTabbedPane();
+    subTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+    subTabs.addTab("Logging", padSubTab(buildHistoryStorageLoggingSubTab(logging)));
+    subTabs.addTab(
+        "Scrolling & Loading", padSubTab(buildHistoryStorageScrollingSubTab(history)));
+    subTabs.addTab("Remote & Limits", padSubTab(buildHistoryStorageRemoteLimitsSubTab(history)));
 
-    panel.add(sectionTitle("Logging"), "span 2, growx, wmin 0, wrap");
-    panel.add(logging.info, "span 2, growx, wmin 0, wrap");
-    panel.add(logging.enabled, "span 2, alignx left, wrap");
-    panel.add(logging.logSoftIgnored, "span 2, alignx left, wrap");
-    panel.add(logging.logPrivateMessages, "span 2, alignx left, wrap");
-    panel.add(logging.savePrivateMessageList, "span 2, alignx left, wrap");
-    panel.add(new JLabel("PM list settings"));
-    panel.add(logging.managePrivateMessageList, "alignx left, wrap");
-    panel.add(logging.keepForever, "span 2, alignx left, wrap");
-    panel.add(new JLabel("Retention (days)"));
-    panel.add(logging.retentionDays, "w 110!, wrap");
-    panel.add(new JLabel("Writer queue max"));
-    panel.add(logging.writerQueueMax, "w 130!, wrap");
-    panel.add(new JLabel("Writer batch size"));
-    panel.add(logging.writerBatchSize, "w 130!, wrap");
-    panel.add(new JLabel("DB file base name"));
-    panel.add(logging.dbBaseName, "w 260!");
-    panel.add(new JLabel("DB location"));
-    panel.add(logging.dbNextToConfig, "alignx left, wrap");
-
-    panel.add(sectionTitle("History paging"), "span 2, growx, wmin 0, wrap");
-    panel.add(history.panel, "span 2, growx");
-
+    panel.add(subTabs, "grow, push, wmin 0");
     return panel;
+  }
+
+  private JPanel buildHistoryStorageLoggingSubTab(LoggingControls logging) {
+    JPanel tab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]8[]8[]"));
+    tab.setOpaque(false);
+    tab.add(logging.info, "growx, wmin 0, wrap");
+
+    JPanel behavior = captionPanel("Logging behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
+    behavior.add(logging.enabled, "growx");
+    behavior.add(logging.logSoftIgnored, "growx");
+    behavior.add(logging.logPrivateMessages, "growx");
+    behavior.add(logging.savePrivateMessageList, "growx, wrap");
+
+    JPanel pmRow = new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]8[grow,fill]", ""));
+    pmRow.setOpaque(false);
+    pmRow.add(new JLabel("PM list settings"));
+    pmRow.add(logging.managePrivateMessageList, "alignx left");
+    behavior.add(pmRow, "growx, wmin 0");
+    tab.add(behavior, "growx, wmin 0, wrap");
+
+    JPanel retention =
+        captionPanel("Retention", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "");
+    retention.add(logging.keepForever, "span 2, growx, wrap");
+    retention.add(new JLabel("Retention (days)"));
+    retention.add(logging.retentionDays, "w 110!");
+    tab.add(retention, "growx, wmin 0, wrap");
+
+    JPanel storage =
+        captionPanel("Storage & writer", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "");
+    storage.add(new JLabel("Writer queue max"));
+    storage.add(logging.writerQueueMax, "w 130!, wrap");
+    storage.add(new JLabel("Writer batch size"));
+    storage.add(logging.writerBatchSize, "w 130!, wrap");
+    storage.add(new JLabel("DB file base name"));
+    storage.add(logging.dbBaseName, "w 260!, wrap");
+    storage.add(new JLabel("DB location"));
+    storage.add(logging.dbNextToConfig, "growx");
+    tab.add(storage, "growx, wmin 0");
+
+    return tab;
+  }
+
+  private JPanel buildHistoryStorageScrollingSubTab(HistoryControls history) {
+    JPanel tab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]8[]8[]"));
+    tab.setOpaque(false);
+    tab.add(
+        helpText(
+            "These controls tune transcript feel when opening targets and loading older lines."),
+        "growx, wmin 0, wrap");
+
+    JPanel opening =
+        captionPanel("Open + page behavior", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "");
+    opening.add(new JLabel("Initial load (lines)"));
+    opening.add(history.initialLoadLines, "w 110!, wrap");
+    opening.add(new JLabel("Page size (Load older)"));
+    opening.add(history.pageSize, "w 110!, wrap");
+    opening.add(new JLabel("Auto-load wheel debounce (ms)"));
+    opening.add(history.autoLoadWheelDebounceMs, "w 110!, wrap");
+    opening.add(new JLabel("Chat wheel smoothing"));
+    opening.add(history.smoothWheelScrollingEnabled, "growx");
+    tab.add(opening, "growx, wmin 0, wrap");
+
+    JPanel loadOlder =
+        captionPanel(
+            "Load older smoothing", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "");
+    loadOlder.add(new JLabel("Chunk size (lines)"));
+    loadOlder.add(history.loadOlderChunkSize, "w 110!, wrap");
+    loadOlder.add(new JLabel("Chunk delay (ms)"));
+    loadOlder.add(history.loadOlderChunkDelayMs, "w 110!, wrap");
+    loadOlder.add(new JLabel("EDT budget (ms)"));
+    loadOlder.add(history.loadOlderChunkEdtBudgetMs, "w 110!, wrap");
+    loadOlder.add(new JLabel("Batch rendering"));
+    loadOlder.add(history.deferRichTextDuringBatch, "growx, wrap");
+    loadOlder.add(new JLabel("Scrolling behavior"));
+    loadOlder.add(history.lockViewportDuringLoadOlder, "growx");
+    tab.add(loadOlder, "growx, wmin 0, wrap");
+
+    tab.add(
+        helpText(
+            "Tip: if loading feels choppy, reduce chunk size and/or EDT budget, then increase chunk delay slightly."),
+        "growx, wmin 0");
+    return tab;
+  }
+
+  private JPanel buildHistoryStorageRemoteLimitsSubTab(HistoryControls history) {
+    JPanel tab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]8[]8[]"));
+    tab.setOpaque(false);
+    tab.add(
+        helpText(
+            "Configure remote history waits plus local in-memory caps for commands/transcripts."),
+        "growx, wmin 0, wrap");
+
+    JPanel remote =
+        captionPanel("Remote history", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "");
+    remote.add(new JLabel("Request timeout (sec)"));
+    remote.add(history.remoteRequestTimeoutSeconds, "w 110!, wrap");
+    remote.add(new JLabel("ZNC playback timeout (sec)"));
+    remote.add(history.remoteZncPlaybackTimeoutSeconds, "w 110!, wrap");
+    remote.add(new JLabel("ZNC playback window (min)"));
+    remote.add(history.remoteZncPlaybackWindowMinutes, "w 110!");
+    tab.add(remote, "growx, wmin 0, wrap");
+
+    JPanel limits =
+        captionPanel("Local limits", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "");
+    limits.add(new JLabel("Input command history (max)"));
+    limits.add(history.commandHistoryMaxSize, "w 110!, wrap");
+    limits.add(new JLabel("Live transcript max lines/target"));
+    limits.add(history.chatTranscriptMaxLinesPerTarget, "w 110!");
+    tab.add(limits, "growx, wmin 0");
+    return tab;
   }
 
   private NotificationRulesControls buildNotificationRulesControls(
@@ -10953,6 +11080,7 @@ public class PreferencesDialog {
       JCheckBox notifyOnlyWhenMinimizedOrHidden,
       JCheckBox notifySuppressWhenTargetActive,
       JCheckBox updateNotifierEnabled,
+      JCheckBox lagIndicatorEnabled,
       JCheckBox linuxDbusActions,
       JComboBox<NotificationBackendMode> notificationBackend,
       JButton testNotification,
@@ -11055,6 +11183,7 @@ public class PreferencesDialog {
       JSpinner initialLoadLines,
       JSpinner pageSize,
       JSpinner autoLoadWheelDebounceMs,
+      JCheckBox smoothWheelScrollingEnabled,
       JSpinner loadOlderChunkSize,
       JSpinner loadOlderChunkDelayMs,
       JSpinner loadOlderChunkEdtBudgetMs,

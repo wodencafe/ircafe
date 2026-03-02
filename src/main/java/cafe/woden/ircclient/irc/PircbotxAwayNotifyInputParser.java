@@ -31,6 +31,7 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxAwayNotifyInputParser.class);
   private static final int MAX_ACCOUNT_TAG_KEYS = 8_192;
+  private static final String LAG_PING_TOKEN_PREFIX = "ircafe-lag-";
 
   private final String serverId;
   private final Consumer<ServerIrcEvent> sink;
@@ -80,6 +81,14 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     // Preserve default behavior first (this keeps User.isAway()/getAwayMessage() accurate).
     super.processCommand(target, source, command, line, parsedLine, tags);
     if (command == null) return;
+
+    if ("PONG".equalsIgnoreCase(command)) {
+      String lagToken = extractLagProbeToken(parsedLine, line);
+      if (!lagToken.isBlank()) {
+        conn.observeLagProbePong(lagToken, System.currentTimeMillis());
+      }
+      return;
+    }
 
     // Detect CAP state changes for capabilities we care about.
     if ("CAP".equalsIgnoreCase(command) && parsedLine != null && parsedLine.size() >= 2) {
@@ -409,6 +418,33 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     }
     if (details.length() == 0) return null;
     return new PircbotxChannelModeParsers.ParsedRpl324(channel, details.toString());
+  }
+
+  private static String extractLagProbeToken(List<String> parsedLine, String rawLine) {
+    if (parsedLine != null) {
+      for (int i = parsedLine.size() - 1; i >= 0; i--) {
+        String token = stripLeadingColon(parsedLine.get(i));
+        if (looksLikeLagToken(token)) return token;
+      }
+    }
+
+    String raw = Objects.toString(rawLine, "").trim();
+    if (raw.isEmpty()) return "";
+    String lower = raw.toLowerCase(Locale.ROOT);
+    int idx = lower.lastIndexOf(LAG_PING_TOKEN_PREFIX);
+    if (idx < 0 || idx >= raw.length()) return "";
+    String tail = raw.substring(idx).trim();
+    int space = tail.indexOf(' ');
+    if (space > 0) {
+      tail = tail.substring(0, space);
+    }
+    return stripLeadingColon(tail);
+  }
+
+  private static boolean looksLikeLagToken(String token) {
+    String normalized = Objects.toString(token, "").trim();
+    if (normalized.isEmpty()) return false;
+    return normalized.toLowerCase(Locale.ROOT).startsWith(LAG_PING_TOKEN_PREFIX);
   }
 
   private void observeMultilineCapValuesFromCapLine(String sub, String capList) {

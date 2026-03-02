@@ -18,6 +18,7 @@ public class UiSettingsBus {
 
   private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
   private volatile UiSettings current;
+  private volatile boolean chatSmoothWheelScrollingEnabled;
 
   public UiSettingsBus(UiProperties props, RuntimeConfigStore runtimeConfig) {
     UiProperties.HostmaskDiscovery hm = props.hostmaskDiscovery();
@@ -150,6 +151,8 @@ public class UiSettingsBus {
                           r.highlightFg());
                     })
                 .toList();
+
+    this.chatSmoothWheelScrollingEnabled = runtimeConfig.readChatSmoothWheelScrollingEnabled(true);
 
     this.current =
         new UiSettings(
@@ -305,5 +308,13 @@ public class UiSettingsBus {
 
   public void removeListener(PropertyChangeListener l) {
     pcs.removePropertyChangeListener(l);
+  }
+
+  public boolean chatSmoothWheelScrollingEnabled() {
+    return chatSmoothWheelScrollingEnabled;
+  }
+
+  public void setChatSmoothWheelScrollingEnabled(boolean enabled) {
+    this.chatSmoothWheelScrollingEnabled = enabled;
   }
 }

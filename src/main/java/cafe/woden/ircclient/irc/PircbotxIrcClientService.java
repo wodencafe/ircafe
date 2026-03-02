@@ -240,6 +240,7 @@ public class PircbotxIrcClientService implements IrcClientService {
               c.manualDisconnect.set(true);
               cancelReconnect(c);
               timers.stopHeartbeat(c);
+              c.resetLagProbeState();
 
               // If this server was acting as a bouncer origin, drop any discovered ephemeral
               // networks.
@@ -878,6 +879,44 @@ public class PircbotxIrcClientService implements IrcClientService {
   }
 
   @Override
+  public Completable requestLagProbe(String serverId) {
+    return Completable.fromAction(
+            () -> {
+              String sid = Objects.toString(serverId, "").trim();
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("serverId is blank");
+              }
+
+              PircbotxConnectionState c = conn(sid);
+              PircBotX bot = c.botRef.get();
+              if (bot == null) {
+                throw new IllegalStateException("Not connected: " + sid);
+              }
+
+              String token =
+                  "ircafe-lag-"
+                      + Long.toUnsignedString(ThreadLocalRandom.current().nextLong(), 36);
+              c.beginLagProbe(token, System.currentTimeMillis());
+              bot.sendRaw().rawLine("PING :" + token);
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  @Override
+  public OptionalLong lastMeasuredLagMs(String serverId) {
+    try {
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return OptionalLong.empty();
+      PircbotxConnectionState c = conn(sid);
+      if (c == null) return OptionalLong.empty();
+      long lagMs = c.lagMsIfFresh(System.currentTimeMillis());
+      return lagMs >= 0L ? OptionalLong.of(lagMs) : OptionalLong.empty();
+    } catch (Exception ignored) {
+      return OptionalLong.empty();
+    }
+  }
+
+  @Override
   public boolean isZncPlaybackAvailable(String serverId) {
     try {
       PircbotxConnectionState c = conn(serverId);
@@ -1192,6 +1231,7 @@ public class PircbotxIrcClientService implements IrcClientService {
         c.manualDisconnect.set(true);
         cancelReconnect(c);
         timers.stopHeartbeat(c);
+        c.resetLagProbeState();
 
         PircBotX bot = c.botRef.getAndSet(null);
         if (bot != null) {

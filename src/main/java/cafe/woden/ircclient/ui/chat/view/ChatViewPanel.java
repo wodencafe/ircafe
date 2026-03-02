@@ -8,6 +8,7 @@ import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.util.ChatAutoLoadOlderScrollDecorator;
 import cafe.woden.ircclient.ui.util.ChatFindBarDecorator;
+import cafe.woden.ircclient.ui.util.ChatSmoothWheelScrollDecorator;
 import cafe.woden.ircclient.ui.util.ChatTranscriptContextMenuDecorator;
 import cafe.woden.ircclient.ui.util.CloseableScope;
 import cafe.woden.ircclient.ui.util.FollowTailScrollDecorator;
@@ -141,6 +142,10 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
               UiSettings s = this.settingsBus != null ? this.settingsBus.get() : null;
               return s != null ? s.chatHistoryAutoLoadWheelDebounceMs() : 2000;
             }));
+    decorators.add(
+        ChatSmoothWheelScrollDecorator.decorate(
+            scroll,
+            () -> this.settingsBus == null || this.settingsBus.chatSmoothWheelScrollingEnabled()));
 
     add(scroll, BorderLayout.CENTER);
   }
