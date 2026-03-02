@@ -35,6 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JTree;
@@ -149,6 +150,102 @@ class ServerTreeDockableDetachedChannelTest {
 
             JPopupMenu pinnedMenu = buildPopupMenuForTarget(dockable, chan);
             assertNotNull(findMenuItem(pinnedMenu, "Unpin Channel"));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void channelContextMenuIncludesChannelModesSubmenu() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+
+            TargetRef chan = new TargetRef("libera", "#ircafe");
+            dockable.ensureNode(chan);
+
+            JPopupMenu menu = buildPopupMenuForTarget(dockable, chan);
+            assertNotNull(menu);
+            JMenu channelModes = findSubMenu(menu, "Channel Modes");
+            assertNotNull(channelModes);
+            assertNotNull(findMenuItem(channelModes, "View Details..."));
+            assertNotNull(findMenuItem(channelModes, "Refresh Modes"));
+            JMenuItem setModes = findMenuItem(channelModes, "Set Modes...");
+            assertNotNull(setModes);
+            assertFalse(setModes.isEnabled());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void channelModesSubmenuEmitsDetailsAndRefreshRequests() throws Exception {
+    onEdt(
+        () -> {
+          Disposable detailsSub = null;
+          Disposable refreshSub = null;
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+
+            TargetRef chan = new TargetRef("libera", "#ircafe");
+            dockable.ensureNode(chan);
+
+            AtomicReference<TargetRef> detailsTarget = new AtomicReference<>();
+            AtomicReference<TargetRef> refreshedTarget = new AtomicReference<>();
+            detailsSub = dockable.channelModeDetailsRequests().subscribe(detailsTarget::set);
+            refreshSub = dockable.channelModeRefreshRequests().subscribe(refreshedTarget::set);
+
+            JMenu channelModes =
+                findSubMenu(
+                    Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
+                    "Channel Modes");
+            assertNotNull(channelModes);
+
+            JMenuItem detailsItem = findMenuItem(channelModes, "View Details...");
+            assertNotNull(detailsItem);
+            detailsItem.doClick();
+            assertEquals(chan, detailsTarget.get());
+
+            JMenuItem refreshItem = findMenuItem(channelModes, "Refresh Modes");
+            assertNotNull(refreshItem);
+            refreshItem.doClick();
+            assertEquals(chan, refreshedTarget.get());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          } finally {
+            if (detailsSub != null) detailsSub.dispose();
+            if (refreshSub != null) refreshSub.dispose();
+          }
+        });
+  }
+
+  @Test
+  void channelModesSetActionEnablesWhenPermissionIsGranted() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable();
+            invokeAddServerRoot(dockable, "libera");
+
+            TargetRef chan = new TargetRef("libera", "#ircafe");
+            dockable.ensureNode(chan);
+            dockable.setCanEditChannelModes(
+                (serverId, channel) ->
+                    "libera".equalsIgnoreCase(serverId) && "#ircafe".equalsIgnoreCase(channel));
+
+            JMenu channelModes =
+                findSubMenu(
+                    Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
+                    "Channel Modes");
+            assertNotNull(channelModes);
+            JMenuItem setModes = findMenuItem(channelModes, "Set Modes...");
+            assertNotNull(setModes);
+            assertTrue(setModes.isEnabled());
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -839,6 +936,24 @@ class ServerTreeDockableDetachedChannelTest {
     for (java.awt.Component c : menu.getComponents()) {
       if (!(c instanceof JMenuItem item)) continue;
       if (text.equals(item.getText())) return item;
+    }
+    return null;
+  }
+
+  private static JMenu findSubMenu(JPopupMenu menu, String text) {
+    if (menu == null || text == null) return null;
+    for (java.awt.Component c : menu.getComponents()) {
+      if (!(c instanceof JMenu subMenu)) continue;
+      if (text.equals(subMenu.getText())) return subMenu;
+    }
+    return null;
+  }
+
+  private static JMenuItem findMenuItem(JMenu menu, String text) {
+    if (menu == null || text == null) return null;
+    for (int i = 0; i < menu.getItemCount(); i++) {
+      JMenuItem item = menu.getItem(i);
+      if (item != null && text.equals(item.getText())) return item;
     }
     return null;
   }

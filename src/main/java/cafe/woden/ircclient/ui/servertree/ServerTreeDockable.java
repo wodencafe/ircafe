@@ -127,6 +127,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.swing.Action;
@@ -207,6 +208,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   public record ManagedChannelEntry(
       String channel, boolean detached, boolean autoReattach, int notifications) {}
 
+  public record ChannelModeSetRequest(TargetRef target, String modeSpec) {
+    public ChannelModeSetRequest {
+      modeSpec = Objects.toString(modeSpec, "").trim();
+    }
+  }
+
   private final CompositeDisposable disposables = new CompositeDisposable();
   public static final String ID = "server-tree";
 
@@ -252,6 +259,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final FlowableProcessor<TargetRef> openPinnedChatRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
+
+  private final FlowableProcessor<TargetRef> channelModeDetailsRequests =
+      PublishProcessor.<TargetRef>create().toSerialized();
+
+  private final FlowableProcessor<TargetRef> channelModeRefreshRequests =
+      PublishProcessor.<TargetRef>create().toSerialized();
+
+  private final FlowableProcessor<ChannelModeSetRequest> channelModeSetRequests =
+      PublishProcessor.<ChannelModeSetRequest>create().toSerialized();
 
   private final FlowableProcessor<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests =
       PublishProcessor.<Ircv3CapabilityToggleRequest>create().toSerialized();
@@ -405,6 +421,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private volatile boolean showDccTransfersNodes = false;
   private boolean startupSelectionCompleted = false;
   private volatile boolean showApplicationRoot = true;
+  private volatile BiPredicate<String, String> canEditChannelModes = (serverId, channel) -> false;
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
@@ -842,6 +859,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                     this::setChannelPinned,
                     this::isChannelMuted,
                     this::setChannelMuted,
+                    this::emitChannelModeDetailsRequest,
+                    this::emitChannelModeRefreshRequest,
+                    this::canEditChannelModesForTarget,
+                    this::emitChannelModeSetRequest,
                     uiHooks::closeTarget,
                     interceptorActions::setInterceptorEnabled,
                     interceptorActions::promptRenameInterceptor,
@@ -1226,6 +1247,34 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     emitter.accept(target);
   }
 
+  private void emitChannelModeDetailsRequest(TargetRef target) {
+    if (!isChannelTarget(target)) return;
+    channelModeDetailsRequests.onNext(target);
+  }
+
+  private void emitChannelModeRefreshRequest(TargetRef target) {
+    if (!isChannelTarget(target)) return;
+    channelModeRefreshRequests.onNext(target);
+  }
+
+  private void emitChannelModeSetRequest(TargetRef target, String modeSpec) {
+    if (!isChannelTarget(target)) return;
+    String spec = Objects.toString(modeSpec, "").trim();
+    if (spec.isEmpty()) return;
+    channelModeSetRequests.onNext(new ChannelModeSetRequest(target, spec));
+  }
+
+  private boolean canEditChannelModesForTarget(TargetRef target) {
+    if (!isChannelTarget(target)) return false;
+    BiPredicate<String, String> predicate = canEditChannelModes;
+    if (predicate == null) return false;
+    try {
+      return predicate.test(target.serverId(), target.target());
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
   private boolean defaultBuiltInVisibility(Function<ServerBuiltInNodesVisibility, Boolean> getter) {
     return getter.apply(builtInLayoutVisibilityFacade.defaultVisibility());
   }
@@ -1459,6 +1508,18 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return openPinnedChatRequests.onBackpressureLatest();
   }
 
+  public Flowable<TargetRef> channelModeDetailsRequests() {
+    return channelModeDetailsRequests.onBackpressureLatest();
+  }
+
+  public Flowable<TargetRef> channelModeRefreshRequests() {
+    return channelModeRefreshRequests.onBackpressureLatest();
+  }
+
+  public Flowable<ChannelModeSetRequest> channelModeSetRequests() {
+    return channelModeSetRequests.onBackpressureLatest();
+  }
+
   public Flowable<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests() {
     return ircv3CapabilityToggleRequests.onBackpressureLatest();
   }
@@ -1507,6 +1568,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (sid.isEmpty()) return;
     List<String> requested = channels == null ? List.of() : List.copyOf(channels);
     edtExecutor.write(() -> channelStateCoordinator.setChannelCustomOrderForServer(sid, requested));
+  }
+
+  public void setCanEditChannelModes(BiPredicate<String, String> canEditChannelModes) {
+    this.canEditChannelModes =
+        canEditChannelModes == null ? (serverId, channel) -> false : canEditChannelModes;
   }
 
   public void requestJoinChannel(TargetRef target) {

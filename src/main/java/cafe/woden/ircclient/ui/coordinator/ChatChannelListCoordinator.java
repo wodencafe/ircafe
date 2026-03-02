@@ -8,6 +8,7 @@ import cafe.woden.ircclient.ui.UserListDockable;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
+import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -189,6 +190,7 @@ public final class ChatChannelListCoordinator {
           outboundBus.emit("/mode " + ch + " " + spec);
         });
     channelListPanel.setCanEditChannelModes(this::canEditChannelModes);
+    serverTree.setCanEditChannelModes(this::canEditChannelModes);
 
     disposables.add(
         channelListCommandRequests
@@ -208,6 +210,28 @@ public final class ChatChannelListCoordinator {
                   refreshManagedChannelsCard(changed);
                 },
                 err -> log.debug("[ircafe] managed-channel refresh stream failed", err)));
+    Flowable<TargetRef> modeDetailsRequests = serverTree.channelModeDetailsRequests();
+    if (modeDetailsRequests != null) {
+      disposables.add(
+          modeDetailsRequests.subscribe(
+              this::openChannelModeDetailsFromTree,
+              err -> log.debug("[ircafe] channel-mode details flow failed", err)));
+    }
+    Flowable<TargetRef> modeRefreshRequests = serverTree.channelModeRefreshRequests();
+    if (modeRefreshRequests != null) {
+      disposables.add(
+          modeRefreshRequests.subscribe(
+              this::refreshChannelModesFromTree,
+              err -> log.debug("[ircafe] channel-mode refresh flow failed", err)));
+    }
+    Flowable<ServerTreeDockable.ChannelModeSetRequest> modeSetRequests =
+        serverTree.channelModeSetRequests();
+    if (modeSetRequests != null) {
+      disposables.add(
+          modeSetRequests.subscribe(
+              this::setChannelModesFromTree,
+              err -> log.debug("[ircafe] channel-mode set flow failed", err)));
+    }
   }
 
   public void refreshManagedChannelsCard(String serverId) {
@@ -307,6 +331,38 @@ public final class ChatChannelListCoordinator {
           || prefix.contains("%");
     }
     return false;
+  }
+
+  private void openChannelModeDetailsFromTree(TargetRef target) {
+    if (target == null || !target.isChannel()) return;
+    String sid = Objects.toString(target.serverId(), "").trim();
+    String channel = normalizeChannelName(target.target());
+    if (sid.isBlank() || channel.isEmpty()) return;
+    serverTree.selectTarget(TargetRef.channelList(sid));
+    refreshManagedChannelsCard(sid);
+    channelListPanel.showChannelDetails(sid, channel);
+  }
+
+  private void refreshChannelModesFromTree(TargetRef target) {
+    if (target == null || !target.isChannel()) return;
+    String sid = Objects.toString(target.serverId(), "").trim();
+    String channel = normalizeChannelName(target.target());
+    if (sid.isBlank() || channel.isEmpty()) return;
+    serverTree.selectTarget(TargetRef.channelList(sid));
+    outboundBus.emit("/mode " + channel);
+  }
+
+  private void setChannelModesFromTree(ServerTreeDockable.ChannelModeSetRequest request) {
+    if (request == null) return;
+    TargetRef target = request.target();
+    if (target == null || !target.isChannel()) return;
+    String sid = Objects.toString(target.serverId(), "").trim();
+    String channel = normalizeChannelName(target.target());
+    String modeSpec = Objects.toString(request.modeSpec(), "").trim();
+    if (sid.isBlank() || channel.isEmpty() || modeSpec.isEmpty()) return;
+    if (!canEditChannelModes(sid, channel)) return;
+    serverTree.selectTarget(TargetRef.channelList(sid));
+    outboundBus.emit("/mode " + channel + " " + modeSpec);
   }
 
   private static String normalizeChannelName(String channel) {

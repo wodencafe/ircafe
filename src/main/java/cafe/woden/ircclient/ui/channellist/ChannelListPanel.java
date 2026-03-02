@@ -668,6 +668,38 @@ public final class ChannelListPanel extends JPanel {
     return snapshot == null ? "" : Objects.toString(snapshot.rawModes(), "").trim();
   }
 
+  public void showChannelDetails(String serverId, String channel) {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      SwingUtilities.invokeLater(() -> showChannelDetails(serverId, channel));
+      return;
+    }
+
+    String sid = normalizeServerId(serverId);
+    String ch = normalizeChannel(channel);
+    if (sid.isEmpty() || ch.isEmpty()) return;
+
+    ManagedChannelRow managed = findManagedRowByChannel(sid, ch);
+    Row list = findListRowByChannel(sid, ch);
+
+    String state =
+        managed == null ? "Not managed" : (managed.detached() ? "Disconnected" : "Connected");
+    String modes = modeRawSnapshotForChannel(sid, ch, managed == null ? "" : managed.modes());
+    String modeSummary = modeSummarySnapshotForChannel(sid, ch, modes);
+    String topic = topicSnapshotForChannel(sid, ch, list == null ? "" : list.topic());
+    int users =
+        managed != null
+            ? (managed.detached() ? -1 : managed.users())
+            : (list == null ? 0 : Math.max(0, list.visibleUsers()));
+    int notifications = managed == null ? 0 : Math.max(0, managed.notifications());
+    boolean autoReattach = managed != null && managed.autoReattach();
+    ChannelDetailsSource source =
+        managed != null ? ChannelDetailsSource.MANAGED : ChannelDetailsSource.SERVER_LIST;
+
+    showChannelDetailsDialog(
+        new ChannelDetails(
+            sid, source, ch, state, topic, modes, modeSummary, users, notifications, autoReattach));
+  }
+
   public void beginList(String serverId, String banner) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
