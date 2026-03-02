@@ -180,6 +180,7 @@ final class PircbotxConnectionState {
   // Current connection metadata (used by transport/capability policy helpers).
   final AtomicReference<String> connectedHost = new AtomicReference<>("");
   final AtomicBoolean connectedWithTls = new AtomicBoolean(false);
+  final AtomicBoolean registrationComplete = new AtomicBoolean(false);
 
   // Best-effort bridge between InputParser command metadata and PrivateMessageEvent objects.
   private final Map<String, PrivateTargetHint> privateTargetHintByMessageId =
@@ -236,6 +237,7 @@ final class PircbotxConnectionState {
     typingMissingWarned.set(false);
     connectedHost.set("");
     connectedWithTls.set(false);
+    registrationComplete.set(false);
     resetLagProbeState();
     clearPrivateTargetHints();
   }

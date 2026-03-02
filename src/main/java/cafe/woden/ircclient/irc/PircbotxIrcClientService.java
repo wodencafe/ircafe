@@ -892,6 +892,9 @@ public class PircbotxIrcClientService implements IrcClientService {
               if (bot == null) {
                 throw new IllegalStateException("Not connected: " + sid);
               }
+              if (!c.registrationComplete.get()) {
+                return;
+              }
 
               String token =
                   "ircafe-lag-"

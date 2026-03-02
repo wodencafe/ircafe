@@ -6,18 +6,23 @@ import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.MouseEvent;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import javax.swing.Icon;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
@@ -98,13 +103,25 @@ public final class ServerTreeServerActionOverlay {
       Rectangle clusterBounds,
       String label) {}
 
+  private static final class HoverFadeState {
+    float alpha = 0f;
+    float fromAlpha = 0f;
+    float toAlpha = 0f;
+    long startedAtMs = 0L;
+  }
+
   private static final int CHANNEL_ACTION_BUTTON_GAP = 4;
+  private static final int HOVER_FADE_DURATION_MS = 150;
+  private static final int HOVER_FADE_TICK_MS = 16;
+  private static final float MIN_VISIBLE_ALPHA = 0.01f;
 
   private final JTree tree;
   private final int buttonSize;
   private final int iconSize;
   private final int buttonMargin;
   private final Context context;
+  private final Map<RowTarget, HoverFadeState> hoverFadeByTarget = new LinkedHashMap<>();
+  private final Timer hoverFadeTimer;
   private RowTarget hoveredRowTarget = RowTarget.none();
 
   public ServerTreeServerActionOverlay(
@@ -114,19 +131,29 @@ public final class ServerTreeServerActionOverlay {
     this.iconSize = Math.max(1, iconSize);
     this.buttonMargin = Math.max(0, buttonMargin);
     this.context = Objects.requireNonNull(context, "context");
+    this.hoverFadeTimer = new Timer(HOVER_FADE_TICK_MS, e -> onHoverFadeTick());
+    this.hoverFadeTimer.setRepeats(true);
   }
 
   public void paint(Graphics graphics) {
     if (graphics == null) return;
 
     RowTarget selected = selectedRowTarget();
-    if (!selected.isNone()) {
-      paintRowActions(graphics, selected);
+    // Keep server action visible on selection for back-compat behavior.
+    if (selected.isServer()) {
+      paintRowActions(graphics, selected, 1f);
     }
 
-    RowTarget hovered = hoveredRowTarget;
-    if (!hovered.isNone() && !Objects.equals(hovered, selected)) {
-      paintRowActions(graphics, hovered);
+    if (!hoverFadeByTarget.isEmpty()) {
+      long now = System.currentTimeMillis();
+      for (Map.Entry<RowTarget, HoverFadeState> entry : hoverFadeByTarget.entrySet()) {
+        RowTarget target = entry.getKey();
+        if (target == null || target.isNone()) continue;
+        if (target.isServer() && Objects.equals(target, selected)) continue;
+        float alpha = resolveHoverAlpha(entry.getValue(), now);
+        if (alpha <= MIN_VISIBLE_ALPHA) continue;
+        paintRowActions(graphics, target, alpha);
+      }
     }
   }
 
@@ -146,12 +173,17 @@ public final class ServerTreeServerActionOverlay {
     }
 
     if (Objects.equals(next, hoveredRowTarget)) {
+      if (!next.isNone()) {
+        updateHoverFadeTarget(next, 1f);
+      }
       repaintButtonsForTarget(next);
       return;
     }
 
     RowTarget previous = hoveredRowTarget;
     hoveredRowTarget = next;
+    updateHoverFadeTarget(previous, 0f);
+    updateHoverFadeTarget(next, 1f);
     repaintButtonsForTarget(previous);
     repaintButtonsForTarget(next);
   }
@@ -234,7 +266,10 @@ public final class ServerTreeServerActionOverlay {
     if (!sid.isEmpty()
         && hoveredRowTarget.isServer()
         && Objects.equals(hoveredRowTarget.serverId(), sid)) {
+      RowTarget previous = hoveredRowTarget;
       hoveredRowTarget = RowTarget.none();
+      updateHoverFadeTarget(previous, 0f);
+      repaintButtonsForTarget(previous);
     }
   }
 
@@ -348,7 +383,11 @@ public final class ServerTreeServerActionOverlay {
     if (!includeSelectedFallback) return null;
     TreePath selectedPath = tree.getSelectionPath();
     if (selectedPath == null || Objects.equals(selectedPath, hoveredPath)) return null;
-    return buttonHitForPath(selectedPath, event.getPoint());
+    ButtonHit selectedHit = buttonHitForPath(selectedPath, event.getPoint());
+    if (selectedHit == null) return null;
+    // Channel actions should only be available while hovering that row.
+    if (selectedHit.target().isChannel()) return null;
+    return selectedHit;
   }
 
   private ButtonHit buttonHitForPath(TreePath path, Point point) {
@@ -364,6 +403,9 @@ public final class ServerTreeServerActionOverlay {
     }
 
     if (rowTarget.isChannel()) {
+      if (!Objects.equals(rowTarget, hoveredRowTarget)) return null;
+      HoverFadeState state = hoverFadeByTarget.get(rowTarget);
+      if (state == null) return null;
       Rectangle toggle = channelToggleButtonBoundsForPath(path);
       Rectangle close = channelCloseButtonBoundsForPath(path);
       Rectangle cluster = channelButtonClusterBoundsForPath(path);
@@ -405,20 +447,22 @@ public final class ServerTreeServerActionOverlay {
     }
   }
 
-  private void paintRowActions(Graphics graphics, RowTarget target) {
+  private void paintRowActions(Graphics graphics, RowTarget target, float alpha) {
     if (graphics == null || target == null || target.isNone()) return;
+    float resolvedAlpha = clampAlpha(alpha);
+    if (resolvedAlpha <= MIN_VISIBLE_ALPHA) return;
 
     if (target.isServer()) {
-      paintServerAction(graphics, target.serverId());
+      paintServerAction(graphics, target.serverId(), resolvedAlpha);
       return;
     }
 
     if (target.isChannel()) {
-      paintChannelActions(graphics, target.channelRef());
+      paintChannelActions(graphics, target.channelRef(), resolvedAlpha);
     }
   }
 
-  private void paintServerAction(Graphics graphics, String serverId) {
+  private void paintServerAction(Graphics graphics, String serverId, float alpha) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
 
@@ -434,13 +478,14 @@ public final class ServerTreeServerActionOverlay {
     Graphics2D g2 = (Graphics2D) graphics.create();
     try {
       g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      applyOverlayAlpha(g2, alpha);
       paintStandardActionButton(g2, button, iconName, enabled, isHot(button));
     } finally {
       g2.dispose();
     }
   }
 
-  private void paintChannelActions(Graphics graphics, TargetRef channelRef) {
+  private void paintChannelActions(Graphics graphics, TargetRef channelRef, float alpha) {
     if (graphics == null || channelRef == null) return;
 
     TreePath path = context.channelPathForRef(channelRef);
@@ -456,6 +501,7 @@ public final class ServerTreeServerActionOverlay {
     Graphics2D g2 = (Graphics2D) graphics.create();
     try {
       g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      applyOverlayAlpha(g2, alpha);
       paintStandardActionButton(g2, toggle, iconName, true, isHot(toggle));
       paintDangerCloseButton(g2, close, isHot(close));
     } finally {
@@ -582,5 +628,93 @@ public final class ServerTreeServerActionOverlay {
     Color base = color == null ? Color.GRAY : color;
     int a = Math.max(0, Math.min(255, alpha));
     return new Color(base.getRed(), base.getGreen(), base.getBlue(), a);
+  }
+
+  private void updateHoverFadeTarget(RowTarget target, float desiredAlpha) {
+    if (target == null || target.isNone()) return;
+    float targetAlpha = clampAlpha(desiredAlpha);
+    long now = System.currentTimeMillis();
+    HoverFadeState state = hoverFadeByTarget.computeIfAbsent(target, ignored -> new HoverFadeState());
+    float current = resolveHoverAlpha(state, now);
+    state.alpha = current;
+    if (Math.abs(current - targetAlpha) <= MIN_VISIBLE_ALPHA) {
+      state.alpha = targetAlpha;
+      state.fromAlpha = targetAlpha;
+      state.toAlpha = targetAlpha;
+      state.startedAtMs = now;
+      if (targetAlpha <= MIN_VISIBLE_ALPHA) {
+        hoverFadeByTarget.remove(target);
+      }
+      return;
+    }
+    state.fromAlpha = current;
+    state.toAlpha = targetAlpha;
+    state.startedAtMs = now;
+    if (!hoverFadeTimer.isRunning()) {
+      hoverFadeTimer.start();
+    }
+  }
+
+  private void onHoverFadeTick() {
+    if (hoverFadeByTarget.isEmpty()) {
+      hoverFadeTimer.stop();
+      return;
+    }
+    long now = System.currentTimeMillis();
+    boolean active = false;
+    var iterator = hoverFadeByTarget.entrySet().iterator();
+    while (iterator.hasNext()) {
+      Map.Entry<RowTarget, HoverFadeState> entry = iterator.next();
+      HoverFadeState state = entry.getValue();
+      if (state == null) {
+        iterator.remove();
+        continue;
+      }
+      float alpha = resolveHoverAlpha(state, now);
+      state.alpha = alpha;
+      if (Math.abs(alpha - state.toAlpha) <= MIN_VISIBLE_ALPHA) {
+        state.alpha = clampAlpha(state.toAlpha);
+        state.fromAlpha = state.alpha;
+        if (state.toAlpha <= MIN_VISIBLE_ALPHA) {
+          iterator.remove();
+          continue;
+        }
+      } else {
+        active = true;
+      }
+    }
+    if (!active) {
+      hoverFadeTimer.stop();
+    }
+    tree.repaint();
+  }
+
+  private static float resolveHoverAlpha(HoverFadeState state, long now) {
+    if (state == null) return 0f;
+    long start = state.startedAtMs;
+    if (start <= 0L) return clampAlpha(state.toAlpha);
+    float from = clampAlpha(state.fromAlpha);
+    float to = clampAlpha(state.toAlpha);
+    if (Math.abs(from - to) <= MIN_VISIBLE_ALPHA) return to;
+    long elapsed = Math.max(0L, now - start);
+    if (elapsed >= HOVER_FADE_DURATION_MS) return to;
+    float progress = elapsed / (float) HOVER_FADE_DURATION_MS;
+    return clampAlpha(from + ((to - from) * progress));
+  }
+
+  private static float clampAlpha(float alpha) {
+    if (Float.isNaN(alpha)) return 0f;
+    return Math.max(0f, Math.min(1f, alpha));
+  }
+
+  private static void applyOverlayAlpha(Graphics2D g2, float alpha) {
+    if (g2 == null) return;
+    float a = clampAlpha(alpha);
+    if (a >= 0.999f) return;
+    Composite baseComposite = g2.getComposite();
+    if (baseComposite instanceof AlphaComposite currentAlphaComposite) {
+      a = Math.max(0f, Math.min(1f, currentAlphaComposite.getAlpha() * a));
+    }
+    g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, a));
   }
 }

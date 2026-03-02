@@ -367,6 +367,9 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
 
   @Override
   public void processServerResponse(int code, String line, List<String> parsedLine) {
+    if (code == 1) {
+      conn.registrationComplete.set(true);
+    }
     if (code != 324) {
       super.processServerResponse(code, line, parsedLine);
       return;
