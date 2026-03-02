@@ -14,7 +14,6 @@ import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
-import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions;
 import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
@@ -97,6 +96,7 @@ import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerStateCleaner;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeSettingsSynchronizer;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeCellRenderer;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeHeaderControls;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeNetworkInfoDialogBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipProvider;
@@ -118,7 +118,6 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Rectangle;
-import java.awt.Window;
 import java.awt.event.MouseEvent;
 import java.time.Instant;
 import java.util.HashMap;
@@ -132,11 +131,6 @@ import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.swing.Action;
-import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
-import javax.swing.JButton;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
@@ -336,11 +330,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeRowInteractionHandler rowInteractionHandler;
   private final ServerTreeDragReorderSupport dragReorderSupport;
 
-  private final JLabel statusLabel = new JLabel("Disconnected");
-
-  private final JButton addServerBtn = new JButton();
-  private final ConnectButton connectBtn;
-  private final DisconnectButton disconnectBtn;
+  private final ServerTreeHeaderControls headerControls;
 
   private final Map<String, ServerNodes> servers = new HashMap<>();
   private final Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
@@ -997,10 +987,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 networkGroupManager::isSojuNetworksGroupNode,
                 networkGroupManager::isZncNetworksGroupNode));
 
-    this.connectBtn = connectBtn;
-    this.disconnectBtn = disconnectBtn;
-    configureHeaderButtons(serverDialogs);
-    JPanel header = buildHeaderPanel();
+    this.headerControls = new ServerTreeHeaderControls(this, connectBtn, disconnectBtn, serverDialogs);
+    JPanel header = headerControls.panel();
 
     root.add(ircRoot);
     initializeApplicationTreeNodes();
@@ -1393,47 +1381,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return "";
   }
 
-  private void configureHeaderButtons(ServerDialogs serverDialogs) {
-    addServerBtn.setText("");
-    addServerBtn.setIcon(SvgIcons.action("plus", 16));
-    addServerBtn.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
-    addServerBtn.setToolTipText("Add server");
-    addServerBtn.setFocusable(false);
-    addServerBtn.setPreferredSize(new Dimension(26, 26));
-    addServerBtn.setEnabled(serverDialogs != null);
-    addServerBtn.addActionListener(
-        ev -> {
-          if (serverDialogs == null) return;
-          Window w = SwingUtilities.getWindowAncestor(ServerTreeDockable.this);
-          serverDialogs.openAddServer(w);
-        });
-    connectBtn.setText("");
-    connectBtn.setIcon(SvgIcons.action("check", 16));
-    connectBtn.setDisabledIcon(SvgIcons.actionDisabled("check", 16));
-    connectBtn.setToolTipText("Connect all disconnected servers");
-    connectBtn.setFocusable(false);
-    connectBtn.setPreferredSize(new Dimension(26, 26));
-    disconnectBtn.setText("");
-    disconnectBtn.setIcon(SvgIcons.action("exit", 16));
-    disconnectBtn.setDisabledIcon(SvgIcons.actionDisabled("exit", 16));
-    disconnectBtn.setToolTipText("Disconnect connected/connecting servers");
-    disconnectBtn.setFocusable(false);
-    disconnectBtn.setPreferredSize(new Dimension(26, 26));
-  }
-
-  private JPanel buildHeaderPanel() {
-    JPanel header = new JPanel();
-    header.setLayout(new BoxLayout(header, BoxLayout.X_AXIS));
-    header.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
-    header.add(addServerBtn);
-    header.add(Box.createHorizontalStrut(6));
-    header.add(connectBtn);
-    header.add(Box.createHorizontalStrut(6));
-    header.add(disconnectBtn);
-    header.add(Box.createHorizontalGlue());
-    return header;
-  }
-
   @Override
   public String getPersistentID() {
     return ID;
@@ -1654,16 +1601,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setStatusText(String text) {
-    String t = Objects.toString(text, "").trim();
-    statusLabel.setText(t);
-    String suffix = t.isEmpty() ? "" : (" Current: " + t);
-    connectBtn.setToolTipText("Connect all disconnected servers." + suffix);
-    disconnectBtn.setToolTipText("Disconnect connected/connecting servers." + suffix);
+    headerControls.setStatusText(text);
   }
 
   public void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled) {
-    connectBtn.setEnabled(connectEnabled);
-    disconnectBtn.setEnabled(disconnectEnabled);
+    headerControls.setConnectionControlsEnabled(connectEnabled, disconnectEnabled);
   }
 
   /**
