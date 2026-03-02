@@ -23,7 +23,6 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteraction
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeApplicationRootVisibilityContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInLayoutOrchestratorContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInVisibilityContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeChannelStateCoordinatorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeContextMenuContextFactory;
@@ -34,9 +33,7 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchro
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerRootLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSettingsSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetLifecycleContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetRemovalStateCoordinatorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTooltipContextFactory;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeTypingActivityManagerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeUiLeafVisibilitySynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelDisconnectStateManager;
@@ -80,6 +77,7 @@ import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestLoggingDecora
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeServerParentResolver;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeApplicationNodes;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeBuiltInVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeBuiltInVisibilitySettings;
 import cafe.woden.ircclient.ui.servertree.state.ServerRuntimeMetadata;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeChannelStateStore;
@@ -465,7 +463,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     ServerTreeLayoutCollaborators layoutCollaborators =
         ServerTreeLayoutCollaboratorsFactory.create(
             runtimeConfig,
-            new ServerTreeBuiltInVisibilityContextAdapter(
+            ServerTreeBuiltInVisibilityCoordinator.context(
                 ServerTreeDockable::normalizeServerId, servers::keySet, this::syncUiLeafVisibility),
             new ServerTreeLayoutPersistenceContextAdapter(
                 this::rootSiblingNodeKindForNode,
@@ -648,7 +646,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                     this::snapshotExpandedTreePaths,
                     this::restoreExpandedTreePaths,
                     this::emitManagedChannelsChanged),
-                new ServerTreeTargetRemovalStateCoordinatorContextAdapter(
+                ServerTreeTargetRemovalStateCoordinator.context(
                     this::isPrivateMessageTarget,
                     this::shouldPersistPrivateMessageList,
                     ServerTreeDockable::foldChannelKey,
@@ -1021,7 +1019,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             typingActivityTimer,
             TYPING_ACTIVITY_HOLD_MS,
             TYPING_ACTIVITY_FADE_MS,
-            new ServerTreeTypingActivityManagerContextAdapter(
+            ServerTreeTypingActivityManager.context(
                 ServerTreeTypingTargetPolicy::supportsTypingActivity,
                 () -> typingIndicatorsTreeEnabled,
                 () -> ServerTreeDockable.this.isShowing() && tree.isShowing(),
