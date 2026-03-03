@@ -73,6 +73,39 @@ class QuasselCoreProtocolWireTest {
   }
 
   @Test
+  void decodesBufferSyncerMarkerSyncFromWireFixture() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        codec.readSignalProxyMessage(
+            new ByteArrayInputStream(bufferSyncerMarkerSyncFrameFixture()));
+
+    assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC, decoded.requestType());
+    assertEquals("BufferSyncer", decoded.className());
+    assertEquals("global", decoded.objectName());
+    assertEquals("setMarkerLine(BufferId,MsgId)", decoded.slotName());
+    assertEquals(11, ((Number) decoded.params().get(0)).intValue());
+    assertEquals(4242, ((Number) decoded.params().get(1)).intValue());
+  }
+
+  @Test
+  void encodesBufferSyncerMarkerSyncToWireFixture() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+    codec.writeSignalProxySync(
+        out,
+        "BufferSyncer",
+        "global",
+        "setMarkerLine(BufferId,MsgId)",
+        List.of(
+            new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
+            new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 4242)));
+
+    assertArrayEquals(bufferSyncerMarkerSyncFrameFixture(), out.toByteArray());
+  }
+
+  @Test
   void encodesBacklogRequestSyncToWireFixture() throws Exception {
     QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
     ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -153,6 +186,18 @@ class QuasselCoreProtocolWireTest {
     writeVariantUserTypeId(payload, "MsgId", 42);
     writeVariantInt(payload, 50);
     writeVariantInt(payload, 0);
+    return frame(payload.toByteArray());
+  }
+
+  private static byte[] bufferSyncerMarkerSyncFrameFixture() throws IOException {
+    ByteArrayOutputStream payload = new ByteArrayOutputStream();
+    writeInt32(payload, 6);
+    writeVariantInt(payload, QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC);
+    writeVariantQByteArray(payload, "BufferSyncer");
+    writeVariantQByteArray(payload, "global");
+    writeVariantQByteArray(payload, "setMarkerLine(BufferId,MsgId)");
+    writeVariantUserTypeId(payload, "BufferId", 11);
+    writeVariantUserTypeId(payload, "MsgId", 4242);
     return frame(payload.toByteArray());
   }
 

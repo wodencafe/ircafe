@@ -1,0 +1,6 @@
+# typeBits<TAB>sender<TAB>content
+1	alice!u@h	@+draft/reply=msg-1;+draft/react=wave :alice!u@h PRIVMSG #ircafe :hello from replay
+1	alice!u@h	@+typing=active;+draft/read-marker=timestamp=2026-03-03T10:00:00.000Z :alice!u@h TAGMSG #ircafe
+1	alice!u@h	:alice!u@h MARKREAD #ircafe timestamp=2026-03-03T10:01:00.000Z
+1	alice!u@h	:alice!u@h REDACT #ircafe msg-22 :cleanup
+2	alice!u@h	@+draft/reply=msg-2 :alice!u@h NOTICE #ircafe :notice from replay

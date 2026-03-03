@@ -15,15 +15,21 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -67,6 +73,11 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private static final String BACKLOG_MANAGER_CLASS = "BacklogManager";
   private static final String BACKLOG_MANAGER_OBJECT = "global";
   private static final String BACKLOG_REQUEST_SLOT = "requestBacklog(BufferId,MsgId,MsgId,int,int)";
+  private static final String BUFFER_SYNCER_CLASS = "BufferSyncer";
+  private static final String BUFFER_SYNCER_OBJECT = "global";
+  private static final String BUFFER_SYNCER_MARKER_SLOT = "requestSetMarkerLine(BufferId,MsgId)";
+  private static final String BUFFER_SYNCER_LAST_SEEN_SLOT =
+      "requestSetLastSeenMsg(BufferId,MsgId)";
   private static final long MIN_RECONNECT_DELAY_MS = 250L;
   private static final long LAG_SAMPLE_STALE_AFTER_MS = TimeUnit.MINUTES.toMillis(2);
   private static final int MAX_BUFFER_INFOS_PER_SESSION = 8_192;
@@ -74,8 +85,13 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private static final int MAX_TARGET_NETWORK_HINTS_PER_SESSION = 4_096;
   private static final int MAX_NETWORK_NICKS_PER_SESSION = 256;
   private static final int MAX_NETWORK_IDENTITIES_PER_SESSION = 512;
+  private static final int MAX_HISTORY_MSGID_SAMPLES_PER_TARGET = 512;
   private static final String NETWORK_QUALIFIER_PREFIX = "{net:";
   private static final String NETWORK_QUALIFIER_SUFFIX = "}";
+  private static final Set<String> TARGET_ROUTED_RAW_COMMANDS =
+      Set.of("PRIVMSG", "NOTICE", "TAGMSG", "MARKREAD", "REDACT");
+  private static final DateTimeFormatter MARKREAD_TS_FMT =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX").withZone(ZoneOffset.UTC);
 
   private static final String BACKEND_UNAVAILABLE_REASON = "Quassel Core backend is not connected";
   private static final String HANDSHAKE_INCOMPLETE_REASON =
@@ -409,18 +425,82 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               if (containsCrlf(raw)) throw new IllegalArgumentException("raw line contains CR/LF");
 
               QuasselSession session = requireEstablishedSession(sid, "send raw");
-              if (firstKnownNetworkId(session) < 0) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.QUASSEL_CORE,
-                    "send raw",
-                    sid,
-                    "no active Quassel network is available yet");
+              sendRawInternal(session, sid, "send raw", raw);
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  @Override
+  public Completable sendTyping(String serverId, String target, String state) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+              QuasselSession session = requireEstablishedSession(sid, "send typing");
+              if (!isTypingAvailable(sid)) {
+                String reason = Objects.toString(typingAvailabilityReason(sid), "").trim();
+                String suffix = reason.isEmpty() ? "" : (" (" + reason + ")");
+                throw new IllegalStateException(
+                    "Typing indicators not available (requires message-tags and typing capability)"
+                        + suffix
+                        + ": "
+                        + sid);
               }
 
-              QuasselCoreDatastreamCodec.BufferInfoValue statusBuffer =
-                  resolveOutboundBufferInfo(session, BUFFER_STATUS, parseQualifiedTarget(""));
-              String userInput = "/QUOTE " + raw;
-              sendInput(session, statusBuffer, userInput);
+              String normalizedState = normalizeTypingState(state);
+              if (normalizedState.isEmpty()) return;
+              QualifiedTarget dest = sanitizeHistoryTarget(target);
+              sendRawInternal(
+                  session,
+                  sid,
+                  "send typing",
+                  "@+typing=" + normalizedState + " TAGMSG " + dest.rawTarget());
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  @Override
+  public Completable sendReadMarker(String serverId, String target, Instant markerAt) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+              QuasselSession session = requireEstablishedSession(sid, "send read marker");
+              if (!isReadMarkerAvailable(sid)) {
+                throw new IllegalStateException(
+                    "read-marker capability not negotiated (requires read-marker or draft/read-marker): "
+                        + sid);
+              }
+
+              QualifiedTarget requested = sanitizeHistoryTarget(target);
+              int typeBitsHint =
+                  looksLikeChannel(requested.baseTarget()) ? BUFFER_CHANNEL : BUFFER_QUERY;
+              QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo =
+                  resolveOutboundBufferInfo(session, typeBitsHint, requested);
+              noteTargetNetworkHint(session, requested.baseTarget(), bufferInfo.networkId(), true);
+
+              Instant at = markerAt == null ? Instant.now() : markerAt;
+              String markerTarget =
+                  historyTargetForBuffer(session, bufferInfo, requested.baseTarget());
+              if (markerTarget.isEmpty()) {
+                markerTarget = requested.rawTarget();
+              }
+              long markerMsgId = resolveHistoryMsgIdByTimestamp(session, markerTarget, at);
+              if (markerMsgId > 0L && bufferInfo.bufferId() >= 0) {
+                sendBufferSyncerReadMarkerUpdate(session, bufferInfo.bufferId(), markerMsgId);
+                return;
+              }
+
+              String markerTimestamp = MARKREAD_TS_FMT.format(at);
+              sendRawInternal(
+                  session,
+                  sid,
+                  "send read marker",
+                  "MARKREAD " + requested.rawTarget() + " timestamp=" + markerTimestamp);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -545,22 +625,26 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
 
   @Override
   public boolean isDraftReplyAvailable(String serverId) {
-    return false;
+    QuasselSession session = findEstablishedSession(serverId);
+    return capabilityEnabledOrUnknown(session, "draft/reply");
   }
 
   @Override
   public boolean isDraftReactAvailable(String serverId) {
-    return false;
+    QuasselSession session = findEstablishedSession(serverId);
+    return capabilityEnabledOrUnknown(session, "draft/react");
   }
 
   @Override
   public boolean isDraftUnreactAvailable(String serverId) {
-    return false;
+    QuasselSession session = findEstablishedSession(serverId);
+    return capabilityEnabledOrUnknown(session, "draft/unreact", "draft/react");
   }
 
   @Override
   public boolean isMultilineAvailable(String serverId) {
-    return false;
+    QuasselSession session = findEstablishedSession(serverId);
+    return capabilityEnabledOrUnknown(session, "multiline", "draft/multiline");
   }
 
   @Override
@@ -575,40 +659,57 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
 
   @Override
   public boolean isMessageEditAvailable(String serverId) {
-    return false;
+    QuasselSession session = findEstablishedSession(serverId);
+    return capabilityEnabledOrUnknown(session, "draft/message-edit");
   }
 
   @Override
   public boolean isMessageRedactionAvailable(String serverId) {
-    return false;
+    QuasselSession session = findEstablishedSession(serverId);
+    return capabilityEnabledOrUnknown(session, "draft/message-redaction");
   }
 
   @Override
   public boolean isTypingAvailable(String serverId) {
-    return false;
+    QuasselSession session = findEstablishedSession(serverId);
+    if (session == null) return false;
+    return typingCapabilityEnabledOrUnknown(session);
   }
 
   @Override
   public String typingAvailabilityReason(String serverId) {
-    if (!isSessionEstablished(serverId)) {
+    QuasselSession session = findEstablishedSession(serverId);
+    if (session == null) {
       return backendAvailabilityReason(serverId);
     }
-    return "typing indicators are not implemented for Quassel backend yet";
+    if (typingCapabilityEnabledOrUnknown(session)) {
+      return "";
+    }
+    if (!session.capabilitySnapshotObserved.get()) {
+      return "typing capability status is not yet available from Quassel backend state";
+    }
+    if (!hasCapabilityAny(session, "message-tags")) {
+      return "message-tags not negotiated in Quassel backend network state";
+    }
+    return "typing capability not negotiated in Quassel backend network state";
   }
 
   @Override
   public boolean isReadMarkerAvailable(String serverId) {
-    return false;
+    QuasselSession session = findEstablishedSession(serverId);
+    return capabilityEnabledOrUnknown(session, "read-marker", "draft/read-marker");
   }
 
   @Override
   public boolean isLabeledResponseAvailable(String serverId) {
-    return false;
+    QuasselSession session = findEstablishedSession(serverId);
+    return capabilityEnabledOrUnknown(session, "labeled-response");
   }
 
   @Override
   public boolean isStandardRepliesAvailable(String serverId) {
-    return false;
+    QuasselSession session = findEstablishedSession(serverId);
+    return capabilityEnabledOrUnknown(session, "standard-replies");
   }
 
   @Override
@@ -667,11 +768,52 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     return OptionalLong.of(lagMs);
   }
 
-  private boolean isSessionEstablished(String serverId) {
+  private QuasselSession findEstablishedSession(String serverId) {
     QuasselSession session = sessions.get(normalizeServerId(serverId));
-    return session != null
-        && session.socketRef.get() != null
-        && session.phase.get() == QuasselSessionPhase.SESSION_ESTABLISHED;
+    if (session == null) return null;
+    if (session.socketRef.get() == null) return null;
+    if (session.phase.get() != QuasselSessionPhase.SESSION_ESTABLISHED) return null;
+    return session;
+  }
+
+  private boolean isSessionEstablished(String serverId) {
+    return findEstablishedSession(serverId) != null;
+  }
+
+  private boolean capabilityEnabledOrUnknown(QuasselSession session, String... capabilities) {
+    if (session == null) return false;
+    if (!session.capabilitySnapshotObserved.get()) return true;
+    return hasCapabilityAny(session, capabilities);
+  }
+
+  private boolean typingCapabilityEnabledOrUnknown(QuasselSession session) {
+    if (session == null) return false;
+    if (!session.capabilitySnapshotObserved.get()) return true;
+    boolean messageTags = hasCapabilityAny(session, "message-tags");
+    boolean typing = hasCapabilityAny(session, "typing", "draft/typing");
+    return messageTags && typing;
+  }
+
+  private boolean hasCapabilityAny(QuasselSession session, String... capabilities) {
+    if (session == null || capabilities == null || capabilities.length == 0) return false;
+    if (session.enabledCapabilitiesByNetworkId.isEmpty()) return false;
+    HashSet<String> wanted = new HashSet<>();
+    for (String cap : capabilities) {
+      String token = canonicalCapabilityToken(cap);
+      if (!token.isEmpty()) {
+        wanted.add(token);
+      }
+    }
+    if (wanted.isEmpty()) return false;
+    for (Set<String> enabled : session.enabledCapabilitiesByNetworkId.values()) {
+      if (enabled == null || enabled.isEmpty()) continue;
+      for (String cap : wanted) {
+        if (enabled.contains(cap)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   private HistoryRequestContext prepareHistoryRequest(
@@ -782,6 +924,15 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     TargetHistoryState state = session.historyByTarget.get(key);
     if (state == null) return UNKNOWN_MSG_ID;
     return state.anchorForTimestamp(timestamp);
+  }
+
+  private long resolveHistoryTimestampByMsgId(QuasselSession session, String target, long msgId) {
+    if (session == null || msgId <= 0L) return UNKNOWN_MSG_ID;
+    String key = normalizeHistoryTargetKey(target);
+    if (key.isEmpty()) return UNKNOWN_MSG_ID;
+    TargetHistoryState state = session.historyByTarget.get(key);
+    if (state == null) return UNKNOWN_MSG_ID;
+    return state.timestampForMsgId(msgId);
   }
 
   private void noteHistoryObservation(
@@ -1087,6 +1238,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       session.networkTokenByNetworkId.clear();
       session.networkIdByTokenLower.clear();
       session.networkCurrentNickByNetworkId.clear();
+      session.enabledCapabilitiesByNetworkId.clear();
+      session.capabilitySnapshotObserved.set(false);
       observeKnownNetworks(session, auth);
       int primaryNetworkId = primaryNetworkId(session);
       if (primaryNetworkId >= 0) {
@@ -1324,7 +1477,13 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     String slotToken = Objects.toString(slotName, "").trim();
     List<Object> values = params == null ? List.of() : params;
 
-    if ("BufferSyncer".equals(classToken) || "BufferViewConfig".equals(classToken)) {
+    if ("BufferSyncer".equals(classToken)) {
+      applyBufferInfoSnapshot(session, values);
+      handleBufferSyncerSync(session, slotToken, values);
+      return;
+    }
+
+    if ("BufferViewConfig".equals(classToken)) {
       applyBufferInfoSnapshot(session, values);
       return;
     }
@@ -1404,6 +1563,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       String networkName =
           firstNonBlank(map.get("networkName"), map.get("networkname"), map.get("name"));
       observeKnownNetwork(session, networkId, networkName);
+      observeNetworkCapabilities(session, networkId, map);
       Object maybeNick = map.get("myNick");
       String next = Objects.toString(maybeNick, "").trim();
       if (!next.isEmpty()) {
@@ -1422,7 +1582,251 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       String networkName =
           firstNonBlank(map.get("networkName"), map.get("networkname"), map.get("name"));
       observeKnownNetwork(session, networkId, networkName);
+      observeNetworkCapabilities(session, networkId, map);
     }
+  }
+
+  private void handleBufferSyncerSync(
+      QuasselSession session, String slotName, List<Object> values) {
+    if (session == null || values == null || values.isEmpty()) return;
+    String slot = Objects.toString(slotName, "").trim().toLowerCase(Locale.ROOT);
+    Instant now = Instant.now();
+
+    if (slot.contains("setmarkerline") || slot.contains("setlastseenmsg")) {
+      int bufferId = values.isEmpty() ? -1 : tryParseInt(values.get(0));
+      long markerMsgId = values.size() < 2 ? -1L : tryParseLong(values.get(1));
+      emitReadMarkerObserved(session, bufferId, markerMsgId, now);
+      return;
+    }
+
+    LinkedHashSet<ReadMarkerUpdate> updates = new LinkedHashSet<>();
+    for (Object value : values) {
+      collectBufferSyncerReadMarkers(value, updates);
+    }
+    if (updates.isEmpty()) return;
+    for (ReadMarkerUpdate update : updates) {
+      emitReadMarkerObserved(session, update.bufferId(), update.msgId(), now);
+    }
+  }
+
+  private static void collectBufferSyncerReadMarkers(Object raw, Set<ReadMarkerUpdate> out) {
+    if (raw == null || out == null) return;
+    if (raw instanceof List<?> list) {
+      for (Object value : list) {
+        collectBufferSyncerReadMarkers(value, out);
+      }
+      return;
+    }
+    if (!(raw instanceof Map<?, ?> map) || map.isEmpty()) return;
+
+    int directBufferId =
+        firstIntFromMapKeys(map, "bufferId", "bufferid", "buffer", "buffer_id", "id");
+    long directMsgId =
+        firstLongFromMapKeys(
+            map,
+            "markerLine",
+            "markerline",
+            "lastSeenMsg",
+            "lastseenmsg",
+            "lastSeen",
+            "lastseen",
+            "msgId",
+            "msgid",
+            "messageId",
+            "messageid");
+    if (directBufferId >= 0 && directMsgId > 0L) {
+      out.add(new ReadMarkerUpdate(directBufferId, directMsgId));
+    }
+
+    Object markerLines =
+        firstMapValueByKeyIgnoreCase(
+            map, "markerLines", "markerlines", "lastSeenMsgs", "lastseenmsgs");
+    if (markerLines instanceof Map<?, ?> markerMap) {
+      for (Map.Entry<?, ?> entry : markerMap.entrySet()) {
+        int bufferId = tryParseInt(entry.getKey());
+        long msgId = tryParseLong(entry.getValue());
+        if (bufferId >= 0 && msgId > 0L) {
+          out.add(new ReadMarkerUpdate(bufferId, msgId));
+        }
+      }
+    }
+
+    for (Object value : map.values()) {
+      collectBufferSyncerReadMarkers(value, out);
+    }
+  }
+
+  private void emitReadMarkerObserved(
+      QuasselSession session, int bufferId, long markerMsgId, Instant at) {
+    if (session == null || bufferId < 0 || markerMsgId <= 0L) return;
+    QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo = session.bufferInfosById.get(bufferId);
+    if (bufferInfo == null) return;
+
+    int networkId = bufferInfo.networkId();
+    String from = currentNickForNetwork(session, networkId);
+    if (from.isBlank()) {
+      from = "server";
+    }
+    String target = historyTargetForBuffer(session, bufferInfo, from);
+    if (target.isBlank()) {
+      target = qualifyTargetForNetwork(session, normalizedBufferName(bufferInfo), networkId);
+    }
+    if (target.isBlank()) return;
+
+    noteTargetNetworkHint(session, target, networkId, true);
+    Instant fallback = at == null ? Instant.now() : at;
+    long resolvedEpochMs = resolveHistoryTimestampByMsgId(session, target, markerMsgId);
+    if (resolvedEpochMs <= 0L) {
+      resolvedEpochMs = fallback.toEpochMilli();
+    }
+    String marker = "timestamp=" + MARKREAD_TS_FMT.format(Instant.ofEpochMilli(resolvedEpochMs));
+    bus.onNext(
+        new ServerIrcEvent(
+            session.serverId, new IrcEvent.ReadMarkerObserved(fallback, from, target, marker)));
+  }
+
+  private void observeNetworkCapabilities(
+      QuasselSession session, int networkId, Map<?, ?> stateMap) {
+    if (session == null || stateMap == null || stateMap.isEmpty()) return;
+    boolean hasCapabilitySnapshot =
+        containsAnyMapKeysIgnoreCase(
+            stateMap,
+            "capsEnabled",
+            "capsenabled",
+            "enabledCaps",
+            "enabledcaps",
+            "caps",
+            "capabilities",
+            "availableCaps");
+    if (!hasCapabilitySnapshot) return;
+
+    Set<String> enabled =
+        extractCapabilityTokens(
+            stateMap, "capsEnabled", "capsenabled", "enabledCaps", "enabledcaps");
+    if (enabled.isEmpty()) {
+      enabled = extractCapabilityTokens(stateMap, "caps", "capabilities", "availableCaps");
+    }
+
+    int resolvedNetworkId = networkId >= 0 ? networkId : firstKnownNetworkId(session);
+    if (resolvedNetworkId < 0) return;
+
+    session.capabilitySnapshotObserved.set(true);
+    session.enabledCapabilitiesByNetworkId.put(resolvedNetworkId, Set.copyOf(enabled));
+    trimMapToMaxSize(session.enabledCapabilitiesByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
+  }
+
+  private static Set<String> extractCapabilityTokens(Map<?, ?> map, String... keys) {
+    if (map == null || map.isEmpty() || keys == null || keys.length == 0) return Set.of();
+    LinkedHashSet<String> out = new LinkedHashSet<>();
+    for (String key : keys) {
+      Object value = firstMapValueByKeyIgnoreCase(map, key);
+      if (value == null) continue;
+      collectCapabilityTokens(value, out);
+    }
+    if (out.isEmpty()) return Set.of();
+    return Collections.unmodifiableSet(out);
+  }
+
+  private static void collectCapabilityTokens(Object raw, Set<String> out) {
+    if (raw == null || out == null) return;
+    if (raw instanceof byte[] bytes) {
+      collectCapabilityTokens(new String(bytes, java.nio.charset.StandardCharsets.UTF_8), out);
+      return;
+    }
+    if (raw instanceof String text) {
+      String cleaned = text.replace(',', ' ');
+      for (String token : cleaned.split("\\s+")) {
+        String cap = canonicalCapabilityToken(token);
+        if (!cap.isEmpty()) out.add(cap);
+      }
+      return;
+    }
+    if (raw instanceof List<?> list) {
+      for (Object value : list) {
+        collectCapabilityTokens(value, out);
+      }
+      return;
+    }
+    if (raw instanceof Map<?, ?> map) {
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        String cap = canonicalCapabilityToken(entry.getKey());
+        if (cap.isEmpty()) continue;
+        if (!isCapabilityExplicitlyDisabled(entry.getValue())) {
+          out.add(cap);
+        }
+      }
+      return;
+    }
+
+    String cap = canonicalCapabilityToken(raw);
+    if (!cap.isEmpty()) {
+      out.add(cap);
+    }
+  }
+
+  private static boolean isCapabilityExplicitlyDisabled(Object raw) {
+    if (raw instanceof Boolean b) return !b;
+    if (raw instanceof Number n) return n.intValue() == 0;
+    String token = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
+    if (token.isEmpty()) return false;
+    return "0".equals(token)
+        || "false".equals(token)
+        || "no".equals(token)
+        || "off".equals(token)
+        || "-".equals(token);
+  }
+
+  private static String canonicalCapabilityToken(Object raw) {
+    String token = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
+    if (token.isEmpty()) return "";
+    if (token.startsWith(":")) token = token.substring(1).trim();
+    if (token.startsWith("+")) token = token.substring(1).trim();
+    if (token.startsWith("-")) token = token.substring(1).trim();
+    int eq = token.indexOf('=');
+    if (eq > 0) token = token.substring(0, eq).trim();
+    if (token.isEmpty()) return "";
+    return token;
+  }
+
+  private static boolean containsAnyMapKeysIgnoreCase(Map<?, ?> map, String... keys) {
+    if (map == null || map.isEmpty() || keys == null || keys.length == 0) return false;
+    for (String key : keys) {
+      if (firstMapValueByKeyIgnoreCase(map, key) != null) return true;
+    }
+    return false;
+  }
+
+  private static Object firstMapValueByKeyIgnoreCase(Map<?, ?> map, String... keys) {
+    if (map == null || map.isEmpty() || keys == null || keys.length == 0) return null;
+    for (String wanted : keys) {
+      String needle = Objects.toString(wanted, "").trim().toLowerCase(Locale.ROOT);
+      if (needle.isEmpty()) continue;
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        String key = Objects.toString(entry.getKey(), "").trim().toLowerCase(Locale.ROOT);
+        if (needle.equals(key)) {
+          return entry.getValue();
+        }
+      }
+    }
+    return null;
+  }
+
+  private static int firstIntFromMapKeys(Map<?, ?> map, String... keys) {
+    if (map == null || map.isEmpty()) return -1;
+    for (String key : keys) {
+      int parsed = tryParseInt(firstMapValueByKeyIgnoreCase(map, key));
+      if (parsed >= 0) return parsed;
+    }
+    return -1;
+  }
+
+  private static long firstLongFromMapKeys(Map<?, ?> map, String... keys) {
+    if (map == null || map.isEmpty()) return -1L;
+    for (String key : keys) {
+      long parsed = tryParseLong(firstMapValueByKeyIgnoreCase(map, key));
+      if (parsed > 0L) return parsed;
+    }
+    return -1L;
   }
 
   private void handleIrcUserStateSync(
@@ -1598,12 +2002,29 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     int networkId = bufferInfo == null ? -1 : bufferInfo.networkId();
     String fromDisplay = from.isEmpty() ? currentNickForNetwork(session, networkId) : from;
     String content = Objects.toString(message.content(), "");
+    ParsedIrcEnvelope ircEnvelope = parseIrcEnvelope(content);
+    Map<String, String> ircv3Tags = ircEnvelope.ircv3Tags();
+    String payloadText = payloadTextFromEnvelope(ircEnvelope, content);
     String target = targetForBuffer(session, bufferInfo, fromDisplay);
     String historyTarget = historyTargetForBuffer(session, bufferInfo, fromDisplay);
     int historyNetworkId = bufferInfo == null ? -1 : bufferInfo.networkId();
     noteTargetNetworkHint(session, historyTarget, historyNetworkId, true);
     noteHistoryObservation(session, historyTarget, message.messageId(), at);
     int typeBits = message.typeBits();
+    emitObservedIrcv3Signals(session, at, fromDisplay, target, networkId, ircEnvelope, messageId);
+
+    String envelopeCommand = ircEnvelope.command();
+    if ("MARKREAD".equals(envelopeCommand)) {
+      emitReadMarkerFromCommand(session, at, fromDisplay, target, networkId, ircEnvelope);
+      return;
+    }
+    if ("REDACT".equals(envelopeCommand)) {
+      emitRedactionFromCommand(session, at, fromDisplay, target, networkId, ircEnvelope);
+      return;
+    }
+    if ("TAGMSG".equals(envelopeCommand) && payloadText.isBlank()) {
+      return;
+    }
 
     if (isBacklogMessage(message.flags()) && isHistoryTextMessage(typeBits)) {
       emitBacklogHistoryBatch(session, at, target, message, messageId);
@@ -1616,7 +2037,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
 
     if (isPartMessage(typeBits)) {
-      handlePartMessage(session, at, target, fromDisplay, content, networkId);
+      handlePartMessage(session, at, target, fromDisplay, payloadText, networkId);
       return;
     }
 
@@ -1625,13 +2046,14 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         bus.onNext(
             new ServerIrcEvent(
                 session.serverId,
-                new IrcEvent.UserQuitChannel(at, target, fromDisplay, normalizeReason(content))));
+                new IrcEvent.UserQuitChannel(
+                    at, target, fromDisplay, normalizeReason(payloadText))));
       }
       return;
     }
 
     if (isNickMessage(typeBits)) {
-      String newNick = parseNickChange(content, fromDisplay);
+      String newNick = parseNickChange(payloadText, fromDisplay);
       if (!target.isEmpty()) {
         bus.onNext(
             new ServerIrcEvent(
@@ -1645,7 +2067,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
 
     if (isTopicMessage(typeBits)) {
-      String topic = parseTopic(content);
+      String topic = parseTopic(payloadText);
       if (!target.isEmpty()) {
         bus.onNext(
             new ServerIrcEvent(
@@ -1656,7 +2078,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
 
     if (isModeMessage(typeBits)) {
       if (!target.isEmpty()) {
-        String details = parseModeDetails(content);
+        String details = parseModeDetails(payloadText);
         bus.onNext(
             new ServerIrcEvent(
                 session.serverId,
@@ -1668,7 +2090,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
 
     if (isKickMessage(typeBits)) {
       if (!target.isEmpty()) {
-        KickDetails kick = parseKickDetails(content);
+        KickDetails kick = parseKickDetails(payloadText);
         String kickedNick = Objects.toString(kick.nick(), "").trim();
         if (!kickedNick.isEmpty()) {
           if (isSelfNick(session, kickedNick, networkId)) {
@@ -1689,7 +2111,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
 
     if (isInviteMessage(typeBits)) {
-      String channel = firstChannelToken(content);
+      String channel = firstChannelToken(payloadText);
       if (channel.isEmpty()) channel = target;
       if (!channel.isEmpty()) {
         bus.onNext(
@@ -1713,7 +2135,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       bus.onNext(
           new ServerIrcEvent(
               session.serverId,
-              new IrcEvent.Notice(at, fromDisplay, target, content, messageId, Map.of())));
+              new IrcEvent.Notice(at, fromDisplay, target, payloadText, messageId, ircv3Tags)));
       return;
     }
 
@@ -1722,12 +2144,13 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         bus.onNext(
             new ServerIrcEvent(
                 session.serverId,
-                new IrcEvent.ChannelAction(at, target, fromDisplay, content, messageId, Map.of())));
+                new IrcEvent.ChannelAction(
+                    at, target, fromDisplay, payloadText, messageId, ircv3Tags)));
       } else {
         bus.onNext(
             new ServerIrcEvent(
                 session.serverId,
-                new IrcEvent.PrivateAction(at, fromDisplay, content, messageId, Map.of())));
+                new IrcEvent.PrivateAction(at, fromDisplay, payloadText, messageId, ircv3Tags)));
       }
       return;
     }
@@ -1738,17 +2161,18 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
             new ServerIrcEvent(
                 session.serverId,
                 new IrcEvent.ChannelMessage(
-                    at, target, fromDisplay, content, messageId, Map.of())));
+                    at, target, fromDisplay, payloadText, messageId, ircv3Tags)));
         return;
       }
       bus.onNext(
           new ServerIrcEvent(
               session.serverId,
-              new IrcEvent.PrivateMessage(at, fromDisplay, content, messageId, Map.of())));
+              new IrcEvent.PrivateMessage(at, fromDisplay, payloadText, messageId, ircv3Tags)));
       return;
     }
 
-    String statusLine = content.isBlank() ? renderUnknownMessageType(message, target) : content;
+    String statusLine =
+        payloadText.isBlank() ? renderUnknownMessageType(message, target) : payloadText;
     if (isErrorMessage(typeBits)) {
       bus.onNext(
           new ServerIrcEvent(
@@ -1758,9 +2182,284 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       return;
     }
 
+    IrcEvent.ServerResponseLine response = renderServerResponse(at, statusLine, content, messageId);
     bus.onNext(
         new ServerIrcEvent(
-            session.serverId, renderServerResponse(at, statusLine, content, messageId)));
+            session.serverId,
+            new IrcEvent.ServerResponseLine(
+                response.at(),
+                response.code(),
+                response.message(),
+                response.rawLine(),
+                response.messageId(),
+                ircv3Tags)));
+  }
+
+  private static String payloadTextFromEnvelope(
+      ParsedIrcEnvelope envelope, String fallbackContent) {
+    if (envelope == null || !envelope.parsed()) {
+      return Objects.toString(fallbackContent, "");
+    }
+    if ("PRIVMSG".equals(envelope.command()) || "NOTICE".equals(envelope.command())) {
+      if (!envelope.trailing().isBlank()) {
+        return envelope.trailing();
+      }
+    }
+    if ("TAGMSG".equals(envelope.command())) {
+      return "";
+    }
+    return Objects.toString(fallbackContent, "");
+  }
+
+  private void emitObservedIrcv3Signals(
+      QuasselSession session,
+      Instant at,
+      String fromDisplay,
+      String fallbackTarget,
+      int networkId,
+      ParsedIrcEnvelope envelope,
+      String messageId) {
+    if (session == null || envelope == null) return;
+    Map<String, String> tags = envelope.ircv3Tags();
+    if (tags == null || tags.isEmpty()) return;
+
+    String from = Objects.toString(fromDisplay, "").trim();
+    if (from.isEmpty()) from = "server";
+    String convTarget =
+        resolveSignalTarget(session, fromDisplay, fallbackTarget, networkId, envelope, tags);
+
+    String replyTo = PircbotxIrcv3Tags.firstTagValue(tags, "draft/reply", "+draft/reply");
+    if (!replyTo.isBlank()) {
+      bus.onNext(
+          new ServerIrcEvent(
+              session.serverId, new IrcEvent.MessageReplyObserved(at, from, convTarget, replyTo)));
+    }
+
+    String react = PircbotxIrcv3Tags.firstTagValue(tags, "draft/react", "+draft/react");
+    if (!react.isBlank()) {
+      String targetMsgId = replyTo;
+      if (targetMsgId.isBlank()) {
+        targetMsgId =
+            PircbotxIrcv3Tags.firstTagValue(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
+      }
+      if (targetMsgId.isBlank()) {
+        targetMsgId = Objects.toString(messageId, "").trim();
+      }
+      bus.onNext(
+          new ServerIrcEvent(
+              session.serverId,
+              new IrcEvent.MessageReactObserved(at, from, convTarget, react, targetMsgId)));
+    }
+
+    String unreact = PircbotxIrcv3Tags.firstTagValue(tags, "draft/unreact", "+draft/unreact");
+    if (!unreact.isBlank()) {
+      String targetMsgId = replyTo;
+      if (targetMsgId.isBlank()) {
+        targetMsgId =
+            PircbotxIrcv3Tags.firstTagValue(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
+      }
+      if (targetMsgId.isBlank()) {
+        targetMsgId = Objects.toString(messageId, "").trim();
+      }
+      bus.onNext(
+          new ServerIrcEvent(
+              session.serverId,
+              new IrcEvent.MessageUnreactObserved(at, from, convTarget, unreact, targetMsgId)));
+    }
+
+    String redactMsgId =
+        PircbotxIrcv3Tags.firstTagValue(
+            tags, "draft/delete", "+draft/delete", "draft/redact", "+draft/redact");
+    if (!redactMsgId.isBlank()) {
+      bus.onNext(
+          new ServerIrcEvent(
+              session.serverId,
+              new IrcEvent.MessageRedactionObserved(at, from, convTarget, redactMsgId)));
+    }
+
+    String typing = PircbotxIrcv3Tags.firstTagValue(tags, "typing", "+typing");
+    if (!typing.isBlank()) {
+      bus.onNext(
+          new ServerIrcEvent(
+              session.serverId, new IrcEvent.UserTypingObserved(at, from, convTarget, typing)));
+    }
+
+    String readMarker =
+        PircbotxIrcv3Tags.firstTagValue(
+            tags, "draft/read-marker", "+draft/read-marker", "read-marker", "+read-marker");
+    if (!readMarker.isBlank()) {
+      bus.onNext(
+          new ServerIrcEvent(
+              session.serverId, new IrcEvent.ReadMarkerObserved(at, from, convTarget, readMarker)));
+    }
+  }
+
+  private void emitReadMarkerFromCommand(
+      QuasselSession session,
+      Instant at,
+      String fromDisplay,
+      String fallbackTarget,
+      int networkId,
+      ParsedIrcEnvelope envelope) {
+    if (session == null || envelope == null || !envelope.parsed()) return;
+    String from = Objects.toString(fromDisplay, "").trim();
+    if (from.isEmpty()) from = "server";
+    String markerTarget = stripLeadingColon(envelope.firstParam());
+    String marker = stripLeadingColon(envelope.secondParam());
+    if (marker.isBlank()) {
+      marker = stripLeadingColon(envelope.trailing());
+    }
+    String resolvedTarget =
+        resolveSignalTargetForRawTarget(
+            session, fromDisplay, fallbackTarget, networkId, markerTarget);
+    bus.onNext(
+        new ServerIrcEvent(
+            session.serverId, new IrcEvent.ReadMarkerObserved(at, from, resolvedTarget, marker)));
+  }
+
+  private void emitRedactionFromCommand(
+      QuasselSession session,
+      Instant at,
+      String fromDisplay,
+      String fallbackTarget,
+      int networkId,
+      ParsedIrcEnvelope envelope) {
+    if (session == null || envelope == null || !envelope.parsed()) return;
+    String from = Objects.toString(fromDisplay, "").trim();
+    if (from.isEmpty()) from = "server";
+    String redactTarget = stripLeadingColon(envelope.firstParam());
+    String redactMsgId = stripLeadingColon(envelope.secondParam());
+    if (redactMsgId.isBlank()) return;
+    String resolvedTarget =
+        resolveSignalTargetForRawTarget(
+            session, fromDisplay, fallbackTarget, networkId, redactTarget);
+    bus.onNext(
+        new ServerIrcEvent(
+            session.serverId,
+            new IrcEvent.MessageRedactionObserved(at, from, resolvedTarget, redactMsgId)));
+  }
+
+  private String resolveSignalTarget(
+      QuasselSession session,
+      String fromDisplay,
+      String fallbackTarget,
+      int networkId,
+      ParsedIrcEnvelope envelope,
+      Map<String, String> tags) {
+    String channelContext =
+        PircbotxIrcv3Tags.firstTagValue(
+            tags,
+            "draft/channel-context",
+            "+draft/channel-context",
+            "channel-context",
+            "+channel-context");
+    String targetHint = stripLeadingColon(channelContext);
+    if (targetHint.isBlank()) {
+      targetHint = stripLeadingColon(envelope.firstParam());
+    }
+    return resolveSignalTargetForRawTarget(
+        session, fromDisplay, fallbackTarget, networkId, targetHint);
+  }
+
+  private String resolveSignalTargetForRawTarget(
+      QuasselSession session,
+      String fromDisplay,
+      String fallbackTarget,
+      int networkId,
+      String rawTarget) {
+    String fallback = Objects.toString(fallbackTarget, "").trim();
+    String hint = stripLeadingColon(rawTarget);
+    if (hint.isBlank()) {
+      return fallback;
+    }
+    QualifiedTarget parsed = parseQualifiedTarget(hint);
+    String base = parsed.baseTarget();
+    if (base.isBlank()) {
+      return fallback;
+    }
+    if (isSelfNick(session, base, networkId)) {
+      String from = Objects.toString(fromDisplay, "").trim();
+      if (!from.isBlank()) {
+        base = from;
+      }
+    }
+    if (!parsed.networkToken().isBlank()) {
+      return parsed.rawTarget();
+    }
+    return qualifyTargetForNetwork(session, base, networkId);
+  }
+
+  private static ParsedIrcEnvelope parseIrcEnvelope(String content) {
+    String line = Objects.toString(content, "").trim();
+    if (line.isEmpty()) return ParsedIrcEnvelope.empty(content);
+
+    int idx = 0;
+    Map<String, String> tags = Map.of();
+    if (line.charAt(idx) == '@') {
+      tags = PircbotxIrcv3Tags.fromRawLine(line);
+      int sp = line.indexOf(' ');
+      if (sp <= 0 || sp >= line.length() - 1) {
+        return ParsedIrcEnvelope.empty(content);
+      }
+      idx = sp + 1;
+      while (idx < line.length() && line.charAt(idx) == ' ') idx++;
+    }
+
+    String source = "";
+    if (idx < line.length() && line.charAt(idx) == ':') {
+      int sp = line.indexOf(' ', idx);
+      if (sp <= idx || sp >= line.length() - 1) {
+        return ParsedIrcEnvelope.empty(content);
+      }
+      source = line.substring(idx + 1, sp).trim();
+      idx = sp + 1;
+      while (idx < line.length() && line.charAt(idx) == ' ') idx++;
+    }
+    if (idx >= line.length()) {
+      return ParsedIrcEnvelope.empty(content);
+    }
+
+    int cmdStart = idx;
+    while (idx < line.length() && line.charAt(idx) != ' ') idx++;
+    String command = line.substring(cmdStart, idx).trim().toUpperCase(Locale.ROOT);
+    boolean commandOfInterest = TARGET_ROUTED_RAW_COMMANDS.contains(command) || !tags.isEmpty();
+    if (command.isBlank() || !commandOfInterest) {
+      return ParsedIrcEnvelope.empty(content);
+    }
+
+    ArrayList<String> params = new ArrayList<>();
+    String trailing = "";
+    while (idx < line.length()) {
+      while (idx < line.length() && line.charAt(idx) == ' ') idx++;
+      if (idx >= line.length()) break;
+      if (line.charAt(idx) == ':') {
+        trailing = line.substring(idx + 1);
+        break;
+      }
+      int start = idx;
+      while (idx < line.length() && line.charAt(idx) != ' ') idx++;
+      String param = line.substring(start, idx).trim();
+      if (!param.isEmpty()) {
+        params.add(param);
+      }
+    }
+
+    return new ParsedIrcEnvelope(
+        true,
+        line,
+        command,
+        source,
+        List.copyOf(params),
+        trailing,
+        tags == null || tags.isEmpty() ? Map.of() : tags);
+  }
+
+  private static String stripLeadingColon(String raw) {
+    String text = Objects.toString(raw, "").trim();
+    if (text.startsWith(":")) {
+      return text.substring(1).trim();
+    }
+    return text;
   }
 
   private void handleJoinMessage(
@@ -2225,6 +2924,19 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
   }
 
+  private static long tryParseLong(Object raw) {
+    if (raw instanceof Number n) {
+      return n.longValue();
+    }
+    String token = Objects.toString(raw, "").trim();
+    if (token.isEmpty()) return -1L;
+    try {
+      return Long.parseLong(token);
+    } catch (NumberFormatException ignored) {
+      return -1L;
+    }
+  }
+
   private static boolean isSelfNick(QuasselSession session, String nick, int networkId) {
     String candidate = Objects.toString(nick, "").trim();
     if (candidate.isEmpty()) return false;
@@ -2471,6 +3183,38 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     return prefix + "(quassel message type " + message.typeBits() + ")";
   }
 
+  private record ParsedIrcEnvelope(
+      boolean parsed,
+      String rawLine,
+      String command,
+      String source,
+      List<String> params,
+      String trailing,
+      Map<String, String> ircv3Tags) {
+    private static ParsedIrcEnvelope empty(String rawLine) {
+      return new ParsedIrcEnvelope(
+          false, Objects.toString(rawLine, ""), "", "", List.of(), "", Map.of());
+    }
+
+    private String firstParam() {
+      if (params == null || params.isEmpty()) return "";
+      return Objects.toString(params.get(0), "").trim();
+    }
+
+    private String secondParam() {
+      if (params == null || params.size() < 2) return "";
+      return Objects.toString(params.get(1), "").trim();
+    }
+  }
+
+  private record OutboundRawRoute(
+      String command,
+      QualifiedTarget requestedTarget,
+      String rewrittenRawLine,
+      int targetTypeBitsHint) {}
+
+  private record ReadMarkerUpdate(int bufferId, long msgId) {}
+
   private record QualifiedTarget(String rawTarget, String baseTarget, String networkToken) {}
 
   private record HistoryRequestContext(
@@ -2492,6 +3236,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     private long newestMsgId = UNKNOWN_MSG_ID;
     private long oldestTsEpochMs = Long.MAX_VALUE;
     private long newestTsEpochMs = UNKNOWN_MSG_ID;
+    private final NavigableMap<Long, Long> timestampByMsgId = new TreeMap<>();
 
     synchronized void observe(long messageId, long timestampEpochMs) {
       if (messageId <= 0L) return;
@@ -2500,6 +3245,17 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       if (messageId > newestMsgId) newestMsgId = messageId;
       if (ts < oldestTsEpochMs) oldestTsEpochMs = ts;
       if (ts > newestTsEpochMs) newestTsEpochMs = ts;
+
+      timestampByMsgId.put(messageId, ts);
+      if (timestampByMsgId.size() > MAX_HISTORY_MSGID_SAMPLES_PER_TARGET) {
+        boolean dropOldest =
+            timestampByMsgId.lastKey() - messageId < messageId - timestampByMsgId.firstKey();
+        if (dropOldest) {
+          timestampByMsgId.pollFirstEntry();
+        } else {
+          timestampByMsgId.pollLastEntry();
+        }
+      }
     }
 
     synchronized long anchorForTimestamp(Instant timestamp) {
@@ -2516,6 +3272,31 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       }
       long midpoint = oldestTsEpochMs + ((newestTsEpochMs - oldestTsEpochMs) / 2L);
       return ts <= midpoint ? oldestMsgId : newestMsgId;
+    }
+
+    synchronized long timestampForMsgId(long messageId) {
+      if (messageId <= 0L || timestampByMsgId.isEmpty()) return UNKNOWN_MSG_ID;
+      Long exact = timestampByMsgId.get(messageId);
+      if (exact != null && exact.longValue() > 0L) {
+        return exact.longValue();
+      }
+
+      Map.Entry<Long, Long> floor = timestampByMsgId.floorEntry(messageId);
+      Map.Entry<Long, Long> ceil = timestampByMsgId.ceilingEntry(messageId);
+      if (floor == null && ceil == null) return UNKNOWN_MSG_ID;
+      if (floor == null) return sanitizeTimestampSample(ceil.getValue());
+      if (ceil == null) return sanitizeTimestampSample(floor.getValue());
+
+      long floorDelta = Math.abs(messageId - floor.getKey());
+      long ceilDelta = Math.abs(ceil.getKey() - messageId);
+      return floorDelta <= ceilDelta
+          ? sanitizeTimestampSample(floor.getValue())
+          : sanitizeTimestampSample(ceil.getValue());
+    }
+
+    private static long sanitizeTimestampSample(Long sample) {
+      if (sample == null || sample.longValue() <= 0L) return UNKNOWN_MSG_ID;
+      return sample.longValue();
     }
   }
 
@@ -2572,6 +3353,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     session.networkTokenByNetworkId.clear();
     session.networkIdByTokenLower.clear();
     session.networkCurrentNickByNetworkId.clear();
+    session.enabledCapabilitiesByNetworkId.clear();
+    session.capabilitySnapshotObserved.set(false);
     availabilityReasonByServer.put(session.serverId, session.closeReason.get());
     if (emitDisconnected) {
       emitDisconnectedOnce(session, session.closeReason.get());
@@ -2721,6 +3504,118 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
+  private void sendRawInternal(
+      QuasselSession session, String serverId, String operation, String rawLine) throws Exception {
+    if (session == null) {
+      throw new IllegalStateException("Quassel session is missing");
+    }
+    if (firstKnownNetworkId(session) < 0) {
+      throw new BackendNotAvailableException(
+          IrcProperties.Server.Backend.QUASSEL_CORE,
+          operation,
+          serverId,
+          "no active Quassel network is available yet");
+    }
+
+    OutboundRawRoute route = routeOutboundRawLine(rawLine);
+    QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo;
+    if (route.requestedTarget() == null) {
+      bufferInfo = resolveOutboundBufferInfo(session, BUFFER_STATUS, parseQualifiedTarget(""));
+    } else {
+      bufferInfo =
+          resolveOutboundBufferInfo(session, route.targetTypeBitsHint(), route.requestedTarget());
+      noteTargetNetworkHint(
+          session, route.requestedTarget().baseTarget(), bufferInfo.networkId(), true);
+    }
+    sendInput(session, bufferInfo, "/QUOTE " + route.rewrittenRawLine());
+  }
+
+  private static OutboundRawRoute routeOutboundRawLine(String rawLine) {
+    String line = Objects.toString(rawLine, "").trim();
+    if (line.isEmpty()) {
+      return new OutboundRawRoute("", null, "", BUFFER_STATUS);
+    }
+
+    int len = line.length();
+    int cursor = 0;
+    if (line.charAt(0) == '@') {
+      int space = line.indexOf(' ');
+      if (space <= 0 || space >= (len - 1)) {
+        return new OutboundRawRoute("", null, line, BUFFER_STATUS);
+      }
+      cursor = space + 1;
+      while (cursor < len && line.charAt(cursor) == ' ') cursor++;
+    }
+    if (cursor < len && line.charAt(cursor) == ':') {
+      int space = line.indexOf(' ', cursor);
+      if (space <= cursor || space >= (len - 1)) {
+        return new OutboundRawRoute("", null, line, BUFFER_STATUS);
+      }
+      cursor = space + 1;
+      while (cursor < len && line.charAt(cursor) == ' ') cursor++;
+    }
+    if (cursor >= len) {
+      return new OutboundRawRoute("", null, line, BUFFER_STATUS);
+    }
+
+    int commandStart = cursor;
+    while (cursor < len && line.charAt(cursor) != ' ') cursor++;
+    String command = line.substring(commandStart, cursor).trim().toUpperCase(Locale.ROOT);
+    if (command.isEmpty() || !TARGET_ROUTED_RAW_COMMANDS.contains(command)) {
+      return new OutboundRawRoute(command, null, line, BUFFER_STATUS);
+    }
+
+    while (cursor < len && line.charAt(cursor) == ' ') cursor++;
+    if (cursor >= len || line.charAt(cursor) == ':') {
+      return new OutboundRawRoute(command, null, line, BUFFER_STATUS);
+    }
+
+    int targetStart = cursor;
+    while (cursor < len && line.charAt(cursor) != ' ') cursor++;
+    int targetEnd = cursor;
+    String rawTarget = line.substring(targetStart, targetEnd).trim();
+    if (rawTarget.isEmpty()) {
+      return new OutboundRawRoute(command, null, line, BUFFER_STATUS);
+    }
+    QualifiedTarget parsedTarget = parseQualifiedTarget(rawTarget);
+    if (parsedTarget.baseTarget().isEmpty()) {
+      return new OutboundRawRoute(command, null, line, BUFFER_STATUS);
+    }
+
+    String rewritten = line;
+    if (!parsedTarget.networkToken().isEmpty() && !parsedTarget.baseTarget().equals(rawTarget)) {
+      rewritten =
+          line.substring(0, targetStart) + parsedTarget.baseTarget() + line.substring(targetEnd);
+    }
+    int typeBitsHint = looksLikeChannel(parsedTarget.baseTarget()) ? BUFFER_CHANNEL : BUFFER_QUERY;
+    return new OutboundRawRoute(command, parsedTarget, rewritten, typeBitsHint);
+  }
+
+  private void sendBufferSyncerReadMarkerUpdate(
+      QuasselSession session, int bufferId, long markerMsgId) throws Exception {
+    if (session == null) return;
+    if (bufferId < 0 || markerMsgId <= 0L) return;
+
+    Socket socket = session.socketRef.get();
+    if (socket == null) {
+      throw new IllegalStateException("Quassel socket is closed");
+    }
+    int msgId = clampMsgId(markerMsgId);
+    if (msgId <= 0) return;
+
+    OutputStream out = socket.getOutputStream();
+    List<Object> params =
+        List.of(
+            new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", bufferId),
+            new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", msgId));
+    synchronized (session.writeLock) {
+      datastreamCodec.writeSignalProxySync(
+          out, BUFFER_SYNCER_CLASS, BUFFER_SYNCER_OBJECT, BUFFER_SYNCER_MARKER_SLOT, params);
+      datastreamCodec.writeSignalProxySync(
+          out, BUFFER_SYNCER_CLASS, BUFFER_SYNCER_OBJECT, BUFFER_SYNCER_LAST_SEEN_SLOT, params);
+    }
+  }
+
   private QuasselCoreDatastreamCodec.BufferInfoValue resolveOutboundBufferInfo(
       QuasselSession session, int fallbackTypeBits, QualifiedTarget requestedTarget) {
     if (requestedTarget == null) {
@@ -2793,6 +3688,17 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     return v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0;
   }
 
+  private static String normalizeTypingState(String state) {
+    String normalized = Objects.toString(state, "").trim().toLowerCase(Locale.ROOT);
+    if (normalized.isEmpty()) return "";
+    return switch (normalized) {
+      case "active", "composing" -> "active";
+      case "paused" -> "paused";
+      case "done", "inactive" -> "done";
+      default -> "";
+    };
+  }
+
   private static final class QuasselSession {
     private final String serverId;
     private final String initialNick;
@@ -2811,6 +3717,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     private final Map<Integer, String> networkDisplayByNetworkId = new ConcurrentHashMap<>();
     private final Map<Integer, String> networkTokenByNetworkId = new ConcurrentHashMap<>();
     private final Map<String, Integer> networkIdByTokenLower = new ConcurrentHashMap<>();
+    private final Map<Integer, Set<String>> enabledCapabilitiesByNetworkId =
+        new ConcurrentHashMap<>();
     private final Map<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> bufferInfosById =
         new ConcurrentHashMap<>();
     private final Map<String, TargetHistoryState> historyByTarget = new ConcurrentHashMap<>();
@@ -2820,6 +3728,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     private final AtomicLong lagProbeSentAtMs = new AtomicLong(0L);
     private final AtomicLong lagLastMeasuredMs = new AtomicLong(-1L);
     private final AtomicLong lagLastMeasuredAtMs = new AtomicLong(0L);
+    private final AtomicBoolean capabilitySnapshotObserved = new AtomicBoolean(false);
     private final AtomicBoolean syncObserved = new AtomicBoolean(false);
     private final AtomicBoolean connectionReadyEmitted = new AtomicBoolean(false);
     private final AtomicBoolean reconnectScheduled = new AtomicBoolean(false);
