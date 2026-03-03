@@ -241,17 +241,11 @@ public class ChatDockManager {
   }
 
   public Dockable openPinnedForDrag(TargetRef target) {
-    log.info("[ircafe] openPinnedForDrag target={}", target);
     PinnedChatDockable dockable = ensurePinnedDockable(target);
     if (dockable != null) {
       syncPinnedDockState(target, dockable);
       ensurePinnedDockedForDrag(dockable);
     }
-    log.info(
-        "[ircafe] openPinnedForDrag result target={} dockable={} docked={}",
-        target,
-        dockable == null ? "null" : dockable.getPersistentID(),
-        dockable != null && Docking.isDocked(dockable));
     return dockable;
   }
 

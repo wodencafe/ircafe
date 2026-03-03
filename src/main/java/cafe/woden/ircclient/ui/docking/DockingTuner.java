@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.docking;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.MouseEvent;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
@@ -218,6 +219,7 @@ public final class DockingTuner {
         JSplitPane.DIVIDER_LOCATION_PROPERTY,
         evt -> {
           if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_ADJUSTING))) return;
+          if (!isUserDividerGestureForSplit(split)) return;
 
           // Divider move events can fire before the split/dock bounds have fully settled.
           // Persist a *stable* "side width" derived from the split pane (not the dockable's inner
@@ -381,6 +383,7 @@ public final class DockingTuner {
         JSplitPane.DIVIDER_LOCATION_PROPERTY,
         evt -> {
           if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_ADJUSTING))) return;
+          if (!isUserDividerGestureForSplit(split)) return;
           int loc = split.getDividerLocation();
           if (loc > 0) lockedLeftWidth[0] = loc;
         });
@@ -469,6 +472,7 @@ public final class DockingTuner {
         JSplitPane.DIVIDER_LOCATION_PROPERTY,
         evt -> {
           if (Boolean.TRUE.equals(split.getClientProperty(CLIENT_PROP_ADJUSTING))) return;
+          if (!isUserDividerGestureForSplit(split)) return;
           int total = split.getWidth();
           if (total <= 0) return;
           int divider = split.getDividerSize();
@@ -535,6 +539,37 @@ public final class DockingTuner {
     } finally {
       split.putClientProperty(CLIENT_PROP_ADJUSTING, Boolean.FALSE);
     }
+  }
+
+  private static boolean isUserDividerGestureForSplit(JSplitPane split) {
+    if (split == null) return false;
+    AWTEvent current = EventQueue.getCurrentEvent();
+    if (!(current instanceof MouseEvent mouse)) return false;
+    int id = mouse.getID();
+    if (id != MouseEvent.MOUSE_PRESSED
+        && id != MouseEvent.MOUSE_DRAGGED
+        && id != MouseEvent.MOUSE_RELEASED) {
+      return false;
+    }
+
+    Object source = mouse.getSource();
+    if (!(source instanceof Component sourceComponent)) return false;
+    if (sourceComponent != split && !SwingUtilities.isDescendingFrom(sourceComponent, split)) {
+      return false;
+    }
+
+    Point splitPoint = SwingUtilities.convertPoint(sourceComponent, mouse.getPoint(), split);
+    return isNearDivider(split, splitPoint, 18);
+  }
+
+  private static boolean isNearDivider(JSplitPane split, Point point, int tolerancePx) {
+    if (split == null || point == null) return false;
+    int tolerance = Math.max(2, tolerancePx);
+    int dividerCenter = split.getDividerLocation() + (split.getDividerSize() / 2);
+    if (split.getOrientation() == JSplitPane.HORIZONTAL_SPLIT) {
+      return Math.abs(point.x - dividerCenter) <= tolerance;
+    }
+    return Math.abs(point.y - dividerCenter) <= tolerance;
   }
 
   private static boolean containsComponent(Component root, Component target) {

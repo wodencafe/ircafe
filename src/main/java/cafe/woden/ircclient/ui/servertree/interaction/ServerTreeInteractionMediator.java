@@ -14,13 +14,9 @@ import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /** Binds tree listeners and startup-selection choreography for server-tree interactions. */
 public final class ServerTreeInteractionMediator {
-  private static final Logger log = LoggerFactory.getLogger(ServerTreeInteractionMediator.class);
-
   public interface Context {
     void onTreeShowingChanged(boolean showing);
 
@@ -110,7 +106,6 @@ public final class ServerTreeInteractionMediator {
             // Keep prepared drag while left button is still held; clearing here can cancel an
             // in-progress drag before DnD recognizes it.
             if ((event.getModifiersEx() & InputEvent.BUTTON1_DOWN_MASK) == 0) {
-              log.info("[ircafe] server-tree clearing prepared channel drag on mouseExited");
               context.clearPreparedChannelDockDrag();
             }
             serverActionOverlay.updateHovered(null);
@@ -121,16 +116,12 @@ public final class ServerTreeInteractionMediator {
             if (serverActionOverlay.maybeHandleActionClick(event)) return;
             if (context.maybeHandleDisconnectedWarningClick(event)) return;
             context.maybeSelectRowFromLeftClick(event);
-            log.info(
-                "[ircafe] server-tree preparing channel drag on mousePressed point={}",
-                event.getPoint());
             context.prepareChannelDockDrag(event);
             serverActionOverlay.updateHovered(event);
           }
 
           @Override
           public void mouseReleased(MouseEvent event) {
-            log.info("[ircafe] server-tree clearing prepared channel drag on mouseReleased");
             context.clearPreparedChannelDockDrag();
             serverActionOverlay.updateHovered(event);
           }

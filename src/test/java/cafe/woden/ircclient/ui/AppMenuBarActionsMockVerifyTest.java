@@ -73,6 +73,15 @@ class AppMenuBarActionsMockVerifyTest {
   }
 
   @Test
+  void windowMenuIncludesResetMainViewDockAction() throws Exception {
+    AppMenuBar menuBar =
+        onEdtCall(() -> newMenuBar(mock(ApplicationShutdownCoordinator.class), null, null, null));
+
+    JMenuItem resetMainViewDock = findMenuItem(menuBar, "Reset Main View Dock");
+    assertNotNull(resetMainViewDock);
+  }
+
+  @Test
   void editServersActionOpensManageServersDialog() throws Exception {
     ServerDialogs serverDialogs = mock(ServerDialogs.class);
     AppMenuBar menuBar =

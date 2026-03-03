@@ -139,6 +139,8 @@ public class MainFrame extends JFrame {
     }
     final java.util.concurrent.atomic.AtomicBoolean initialSideSizesApplied =
         new java.util.concurrent.atomic.AtomicBoolean(false);
+    final java.util.concurrent.atomic.AtomicBoolean restoredSideLocksSeeded =
+        new java.util.concurrent.atomic.AtomicBoolean(false);
 
     // Startup stabilization: during the first ~1s, ModernDocking may perform additional layout
     // passes that can override divider locations. We allow "initial size nudging" only during
@@ -221,12 +223,28 @@ public class MainFrame extends JFrame {
               }
             }
           }
+
+          // Persist the final on-screen widths as a fallback, even if no drag event was captured.
+          int currentServerDockWidth = stableDockWidthSeed(serverTree, lastSavedServerDockWidth[0]);
+          if (Math.abs(currentServerDockWidth - lastSavedServerDockWidth[0]) >= 2) {
+            lastSavedServerDockWidth[0] = currentServerDockWidth;
+            if (runtimeConfigStore != null) {
+              runtimeConfigStore.rememberServerDockWidthPx(currentServerDockWidth);
+            }
+          }
+
+          int currentUsersDockWidth = stableDockWidthSeed(users, lastSavedUsersDockWidth[0]);
+          if (Math.abs(currentUsersDockWidth - lastSavedUsersDockWidth[0]) >= 2) {
+            lastSavedUsersDockWidth[0] = currentUsersDockWidth;
+            if (runtimeConfigStore != null) {
+              runtimeConfigStore.rememberUserDockWidthPx(currentUsersDockWidth);
+            }
+          }
         };
 
-    final boolean manageSideDockWidths = !preserveDockLayout || !restoredDockLayout;
+    final boolean enforceConfiguredSideDockWidths = !preserveDockLayout || !restoredDockLayout;
     Runnable applyDockLocks =
         () -> {
-          if (!manageSideDockWidths) return;
           int serverPx = DEFAULT_SERVER_DOCK_WIDTH_PX;
           int usersPx = DEFAULT_USERS_DOCK_WIDTH_PX;
           if (uiProps != null && uiProps.layout() != null) {
@@ -234,50 +252,40 @@ public class MainFrame extends JFrame {
             usersPx = uiProps.layout().userDockWidthPx();
           }
 
-          // On first open, ModernDocking can initially lay out side docks wider than desired.
-          // Nudge them to a reasonable default once split panes exist, then lock those sizes.
-          //
-          int frameW = Math.max(1, getWidth());
-          boolean sideDocksAreHuge =
-              serverTree.getWidth() > (int) (frameW * 0.45)
-                  || users.getWidth() > (int) (frameW * 0.45);
-          boolean inStartupStabilization = System.nanoTime() < startupStabilizationDeadlineNanos;
-          boolean shouldNudge =
-              !initialSideSizesApplied.get() || (inStartupStabilization && sideDocksAreHuge);
-          if (shouldNudge) {
-            log.debug(
-                "dock-size: apply initial sizes? initialApplied={} huge={} targets(server={}, users={}) current(server={}, chat={}, users={}) frame={}x{}",
-                initialSideSizesApplied.get(),
-                sideDocksAreHuge,
-                serverPx,
-                usersPx,
-                serverTree.getWidth(),
-                chat.getWidth(),
-                users.getWidth(),
-                getWidth(),
-                getHeight());
-            boolean west = DockingTuner.applyInitialWestDockWidth(this, serverTree, serverPx);
-            boolean east = DockingTuner.applyInitialEastDockWidth(this, users, usersPx);
+          if (enforceConfiguredSideDockWidths) {
+            // On first open, ModernDocking can initially lay out side docks wider than desired.
+            // Nudge them to a reasonable default once split panes exist, then lock those sizes.
+            int frameW = Math.max(1, getWidth());
+            boolean sideDocksAreHuge =
+                serverTree.getWidth() > (int) (frameW * 0.45)
+                    || users.getWidth() > (int) (frameW * 0.45);
+            boolean inStartupStabilization = System.nanoTime() < startupStabilizationDeadlineNanos;
+            boolean shouldNudge =
+                !initialSideSizesApplied.get() || (inStartupStabilization && sideDocksAreHuge);
+            if (shouldNudge) {
+              boolean west = DockingTuner.applyInitialWestDockWidth(this, serverTree, serverPx);
+              boolean east = DockingTuner.applyInitialEastDockWidth(this, users, usersPx);
 
-            if (west && east) {
-              initialSideSizesApplied.set(true);
+              if (west && east) {
+                initialSideSizesApplied.set(true);
+              }
             }
-
-            log.debug(
-                "dock-size: init apply results west={} east={} -> now(initialApplied={}) current(server={}, chat={}, users={})",
-                west,
-                east,
-                initialSideSizesApplied.get(),
-                serverTree.getWidth(),
-                chat.getWidth(),
-                users.getWidth());
+            // Give horizontal growth to the chat transcript instead of the side docks.
+            // Seed locks with configured widths to avoid capturing transient startup geometry.
+            DockingTuner.lockWestDockWidth(this, serverTree, serverPx);
+            DockingTuner.lockEastDockWidth(this, users, usersPx);
+          } else {
+            if (!restoredSideLocksSeeded.get()) {
+              // Restore mode: seed once from persisted widths, then keep locking without reseeding
+              // to avoid capturing transient startup geometry.
+              DockingTuner.lockWestDockWidth(this, serverTree, serverPx);
+              DockingTuner.lockEastDockWidth(this, users, usersPx);
+              restoredSideLocksSeeded.set(true);
+            } else {
+              DockingTuner.lockWestDockWidth(this, serverTree);
+              DockingTuner.lockEastDockWidth(this, users);
+            }
           }
-          // Give horizontal growth to the chat transcript instead of the side docks.
-          // Seed the WEST lock with the configured server dock width so it doesn't "capture" a
-          // transient
-          // (often too-wide) startup layout and then fight our initial sizing.
-          DockingTuner.lockWestDockWidth(this, serverTree, serverPx);
-          DockingTuner.lockEastDockWidth(this, users, usersPx);
 
           // Watch for user divider drags and persist the resulting widths.
           DockingTuner.watchDockWidthOnUserResize(
@@ -508,5 +516,22 @@ public class MainFrame extends JFrame {
     } catch (Exception ignored) {
       return dockable.getClass().getSimpleName();
     }
+  }
+
+  private static int stableDockWidthSeed(java.awt.Component dockable, int fallbackPx) {
+    int width = 0;
+    if (dockable != null) {
+      width = dockable.getWidth();
+      if (width <= 0 && dockable.getParent() != null) {
+        width = dockable.getParent().getWidth();
+      }
+      if (width <= 0) {
+        width = dockable.getPreferredSize().width;
+      }
+    }
+    if (width <= 0) {
+      width = fallbackPx;
+    }
+    return Math.max(120, Math.min(1200, width));
   }
 }

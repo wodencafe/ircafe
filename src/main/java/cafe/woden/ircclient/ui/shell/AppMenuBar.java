@@ -721,6 +721,11 @@ public class AppMenuBar extends JMenuBar {
             KeyEvent.VK_0, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
     resetLayout.addActionListener(e -> resetDockLayout());
 
+    JMenuItem resetMainViewDock = new JMenuItem("Reset Main View Dock");
+    resetMainViewDock.setIcon(SvgIcons.action("refresh", 16));
+    resetMainViewDock.setDisabledIcon(SvgIcons.actionDisabled("refresh", 16));
+    resetMainViewDock.addActionListener(e -> resetMainViewDock());
+
     JCheckBoxMenuItem showChannelListNodes = new JCheckBoxMenuItem("Show Channel List Node");
     showChannelListNodes.setSelected(true);
     showChannelListNodes.setEnabled(false);
@@ -827,6 +832,7 @@ public class AppMenuBar extends JMenuBar {
     window.add(reopenServersDock);
     window.add(reopenUsersDock);
     window.addSeparator();
+    window.add(resetMainViewDock);
     window.add(resetLayout);
     window.addSeparator();
     window.add(currentServerNodes);
@@ -1686,6 +1692,72 @@ public class AppMenuBar extends JMenuBar {
     restoreStartupLayout(root);
   }
 
+  private void resetMainViewDock() {
+    Window root = SwingUtilities.getWindowAncestor(this);
+    if (root == null) return;
+
+    if (!isDetached(chat) && Docking.isDocked(chat)) {
+      try {
+        Docking.display(chat);
+      } catch (Exception ignored) {
+      }
+      bringToFront(chat);
+      return;
+    }
+
+    boolean hadServerDock = Docking.isDocked(serverTree);
+    boolean hadUsersDock = Docking.isDocked(users);
+    int serverSeedPx =
+        hadServerDock
+            ? currentDockWidthPx(serverTree, configuredServerDockWidthPx())
+            : configuredServerDockWidthPx();
+    int usersSeedPx =
+        hadUsersDock
+            ? currentDockWidthPx(users, configuredUsersDockWidthPx())
+            : configuredUsersDockWidthPx();
+    double serverDockProportion =
+        proportionForSideDockWidth(root, DockingRegion.WEST, serverSeedPx);
+    double usersDockProportion = proportionForSideDockWidth(root, DockingRegion.EAST, usersSeedPx);
+
+    if (hadServerDock) {
+      try {
+        Docking.undock(serverTree);
+      } catch (Exception ignored) {
+      }
+    }
+    if (hadUsersDock) {
+      try {
+        Docking.undock(users);
+      } catch (Exception ignored) {
+      }
+    }
+
+    dockSafe(chat, root);
+
+    try {
+      Docking.display(chat);
+    } catch (Exception ignored) {
+    }
+
+    if (hadServerDock) {
+      dockSafe(serverTree, chat, DockingRegion.WEST, serverDockProportion);
+    }
+    if (hadUsersDock) {
+      dockSafe(users, chat, DockingRegion.EAST, usersDockProportion);
+    }
+
+    try {
+      if (hadServerDock) Docking.display(serverTree);
+      if (hadUsersDock) Docking.display(users);
+    } catch (Exception ignored) {
+    }
+    if (hadUsersDock) {
+      SwingUtilities.invokeLater(() -> stabilizeUsersDockWidthAfterReset(root, usersSeedPx));
+    }
+
+    bringToFront(chat);
+  }
+
   private void restoreStartupLayout(Window root) {
     if (root == null) return;
 
@@ -1784,33 +1856,47 @@ public class AppMenuBar extends JMenuBar {
   }
 
   private double proportionForSideDock(Window root, Dockable dockable, DockingRegion region) {
-    int serverPx = DEFAULT_SERVER_DOCK_WIDTH_PX;
-    int usersPx = DEFAULT_USERS_DOCK_WIDTH_PX;
-    if (uiProps != null && uiProps.layout() != null) {
-      serverPx = uiProps.layout().serverDockWidthPx();
-      usersPx = uiProps.layout().userDockWidthPx();
-    }
+    int serverPx = configuredServerDockWidthPx();
+    int usersPx = configuredUsersDockWidthPx();
 
     int targetPx =
         (dockable == serverTree)
             ? serverPx
             : (dockable == users) ? usersPx : DEFAULT_USERS_DOCK_WIDTH_PX;
 
+    // If the window isn't realized yet, helper falls back to sane default proportions.
+    return proportionForSideDockWidth(root, region, targetPx);
+  }
+
+  private double proportionForSideDockWidth(Window root, DockingRegion region, int targetPx) {
     int base =
         (region == DockingRegion.NORTH || region == DockingRegion.SOUTH)
-            ? Math.max(1, root.getHeight())
-            : Math.max(1, root.getWidth());
+            ? Math.max(1, root == null ? 0 : root.getHeight())
+            : Math.max(1, root == null ? 0 : root.getWidth());
 
-    // If the window isn't realized yet, fall back to sane proportions.
-    if (base <= 1) {
-      return (dockable == serverTree)
-          ? DEFAULT_SERVER_DOCK_PROPORTION
-          : DEFAULT_USERS_DOCK_PROPORTION;
+    if (base <= 1) return defaultDockProportionForRegion(region);
+
+    double widthShare = clampDockWidthShare((double) clampDockWidthPx(targetPx) / (double) base);
+    if (region == DockingRegion.EAST || region == DockingRegion.SOUTH) {
+      return 1.0 - widthShare;
     }
+    return widthShare;
+  }
 
-    double p = (double) targetPx / (double) base;
-    // Keep side docks in a reasonable band; DockingTuner will enforce px sizes right after docking.
-    return Math.max(0.10, Math.min(0.45, p));
+  private static double defaultDockProportionForRegion(DockingRegion region) {
+    if (region == DockingRegion.EAST) return 1.0 - DEFAULT_USERS_DOCK_PROPORTION;
+    if (region == DockingRegion.WEST) return DEFAULT_SERVER_DOCK_PROPORTION;
+    if (region == DockingRegion.SOUTH) return 0.70;
+    if (region == DockingRegion.NORTH) return 0.30;
+    return DEFAULT_SERVER_DOCK_PROPORTION;
+  }
+
+  private static double clampDockWidthShare(double ratio) {
+    double value = ratio;
+    if (Double.isNaN(value) || Double.isInfinite(value)) {
+      value = DEFAULT_SERVER_DOCK_PROPORTION;
+    }
+    return Math.max(0.05, Math.min(0.45, value));
   }
 
   private void dockSafe(Dockable dockable, Window root) {
@@ -1845,27 +1931,33 @@ public class AppMenuBar extends JMenuBar {
   }
 
   private boolean applySideDockLocks(Window root) {
-    int serverPx = DEFAULT_SERVER_DOCK_WIDTH_PX;
-    int usersPx = DEFAULT_USERS_DOCK_WIDTH_PX;
-    if (uiProps != null && uiProps.layout() != null) {
-      serverPx = uiProps.layout().serverDockWidthPx();
-      usersPx = uiProps.layout().userDockWidthPx();
-    }
+    return applySideDockLocks(root, configuredServerDockWidthPx(), configuredUsersDockWidthPx());
+  }
 
-    // Best-effort: nudge to our configured defaults, then lock the dividers.
+  private boolean applySideDockLocks(Window root, int serverPx, int usersPx) {
+    int serverTargetPx = clampDockWidthPx(serverPx);
+    int usersTargetPx = clampDockWidthPx(usersPx);
+
+    // Best-effort: nudge to targets, then lock the dividers.
     boolean west =
-        DockingTuner.applyInitialWestDockWidth(root, (java.awt.Component) serverTree, serverPx);
+        DockingTuner.applyInitialWestDockWidth(
+            root, (java.awt.Component) serverTree, serverTargetPx);
     boolean east =
-        DockingTuner.applyInitialEastDockWidth(root, (java.awt.Component) users, usersPx);
-    DockingTuner.lockWestDockWidth(root, (java.awt.Component) serverTree, serverPx);
-    DockingTuner.lockEastDockWidth(root, (java.awt.Component) users, usersPx);
+        DockingTuner.applyInitialEastDockWidth(root, (java.awt.Component) users, usersTargetPx);
+    DockingTuner.lockWestDockWidth(root, (java.awt.Component) serverTree, serverTargetPx);
+    DockingTuner.lockEastDockWidth(root, (java.awt.Component) users, usersTargetPx);
     return west && east;
   }
 
   private void applySideDockLocksWithStabilization(Window root) {
+    applySideDockLocksWithStabilization(
+        root, configuredServerDockWidthPx(), configuredUsersDockWidthPx());
+  }
+
+  private void applySideDockLocksWithStabilization(Window root, int serverPx, int usersPx) {
     if (root == null) return;
 
-    boolean done = applySideDockLocks(root);
+    boolean done = applySideDockLocks(root, serverPx, usersPx);
     if (done) return;
 
     final int[] passes = new int[] {0};
@@ -1873,11 +1965,69 @@ public class AppMenuBar extends JMenuBar {
     settle.addActionListener(
         e -> {
           passes[0]++;
-          boolean stable = applySideDockLocks(root);
+          boolean stable = applySideDockLocks(root, serverPx, usersPx);
           if (stable || passes[0] >= 10) {
             settle.stop();
           }
         });
+    settle.start();
+  }
+
+  private int configuredServerDockWidthPx() {
+    int width = DEFAULT_SERVER_DOCK_WIDTH_PX;
+    if (uiProps != null && uiProps.layout() != null) {
+      width = uiProps.layout().serverDockWidthPx();
+    }
+    return clampDockWidthPx(width);
+  }
+
+  private int configuredUsersDockWidthPx() {
+    int width = DEFAULT_USERS_DOCK_WIDTH_PX;
+    if (uiProps != null && uiProps.layout() != null) {
+      width = uiProps.layout().userDockWidthPx();
+    }
+    return clampDockWidthPx(width);
+  }
+
+  private int currentDockWidthPx(Dockable dockable, int fallbackPx) {
+    if (!(dockable instanceof java.awt.Component component)) return clampDockWidthPx(fallbackPx);
+    int width = component.getWidth();
+    if (width <= 0) width = component.getPreferredSize().width;
+    if (width <= 0 && component.getParent() != null) width = component.getParent().getWidth();
+    if (width <= 0) width = fallbackPx;
+    return clampDockWidthPx(width);
+  }
+
+  private static int clampDockWidthPx(int widthPx) {
+    int width = widthPx;
+    if (width <= 0) width = DEFAULT_SERVER_DOCK_WIDTH_PX;
+    return Math.max(120, Math.min(1200, width));
+  }
+
+  private void stabilizeUsersDockWidthAfterReset(Window root, int usersSeedPx) {
+    if (root == null) return;
+    int targetUsersPx = clampDockWidthPx(usersSeedPx);
+
+    Runnable applyOnce =
+        () -> {
+          DockingTuner.applyInitialEastDockWidth(root, (java.awt.Component) users, targetUsersPx);
+          DockingTuner.lockEastDockWidth(root, (java.awt.Component) users, targetUsersPx);
+        };
+
+    applyOnce.run();
+
+    final int[] passes = new int[] {0};
+    Timer settle = new Timer(120, null);
+    settle.addActionListener(
+        e -> {
+          passes[0]++;
+          applyOnce.run();
+          int usersNow = currentDockWidthPx(users, targetUsersPx);
+          if (Math.abs(usersNow - targetUsersPx) <= 8 || passes[0] >= 6) {
+            settle.stop();
+          }
+        });
+    settle.setRepeats(true);
     settle.start();
   }
 
