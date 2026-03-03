@@ -107,6 +107,10 @@ public class LagIndicatorService {
     }
 
     try {
+      try {
+        ircClientService.requestLagProbe(serverId).blockingAwait(2, TimeUnit.SECONDS);
+      } catch (Exception ignored) {
+      }
       OptionalLong lagMs = ircClientService.lastMeasuredLagMs(serverId);
       if (lagMs.isPresent()) {
         long lag = Math.max(0L, lagMs.getAsLong());

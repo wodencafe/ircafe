@@ -12,6 +12,8 @@ public sealed interface IrcEvent
         IrcEvent.Connecting,
         IrcEvent.Disconnected,
         IrcEvent.Reconnecting,
+        IrcEvent.ConnectionReady,
+        IrcEvent.ConnectionFeaturesUpdated,
         IrcEvent.NickChanged,
         IrcEvent.ChannelMessage,
         IrcEvent.ChannelAction,
@@ -104,6 +106,16 @@ public sealed interface IrcEvent
   record Disconnected(Instant at, String reason) implements IrcEvent {}
 
   record Reconnecting(Instant at, long attempt, long delayMs, String reason) implements IrcEvent {}
+
+  /** Backend reports registration/ready state (safe to run post-connect actions). */
+  record ConnectionReady(Instant at) implements IrcEvent {}
+
+  /** Backend reports capability/feature metadata changed mid-connection. */
+  record ConnectionFeaturesUpdated(Instant at, String source) implements IrcEvent {
+    public ConnectionFeaturesUpdated {
+      source = Objects.toString(source, "").trim();
+    }
+  }
 
   record NickChanged(Instant at, String oldNick, String newNick) implements IrcEvent {}
 

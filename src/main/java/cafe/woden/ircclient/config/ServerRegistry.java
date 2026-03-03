@@ -140,19 +140,6 @@ public class ServerRegistry {
 
   private static IrcProperties.Server copyServerWithAutoJoin(
       IrcProperties.Server server, List<String> autoJoin) {
-    return new IrcProperties.Server(
-        server.id(),
-        server.host(),
-        server.port(),
-        server.tls(),
-        server.serverPassword(),
-        server.nick(),
-        server.login(),
-        server.realName(),
-        server.sasl(),
-        server.nickserv(),
-        autoJoin == null ? List.of() : List.copyOf(autoJoin),
-        server.perform(),
-        server.proxy());
+    return server.withAutoJoin(autoJoin);
   }
 }

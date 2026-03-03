@@ -456,6 +456,8 @@ public class UserInfoEnrichmentService {
   }
 
   private boolean isConnected(String serverId) {
+    String backendReason = Objects.toString(irc.backendAvailabilityReason(serverId), "").trim();
+    if (!backendReason.isEmpty()) return false;
     return irc.currentNick(serverId).isPresent();
   }
 

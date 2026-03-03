@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,6 +47,7 @@ class PerformOnConnectServiceTest {
     ui = Mockito.mock(UiPort.class);
     events = PublishProcessor.create();
     when(irc.events()).thenReturn(events);
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     service = new PerformOnConnectService(irc, serverCatalog, commandParser, ui);
   }
 
@@ -62,7 +64,7 @@ class PerformOnConnectServiceTest {
     doReturn(new ParsedInput.Unknown("/weird command")).when(commandParser).parse("/weird command");
     doReturn(Completable.complete()).when(irc).sendRaw("libera", "RAW NEXT");
 
-    fireConnected();
+    fireReady();
 
     TargetRef status = new TargetRef("libera", "status");
     verify(ui, timeout(1_000))
@@ -81,7 +83,7 @@ class PerformOnConnectServiceTest {
         .joinChannel("libera", "#ircafe");
     doReturn(Completable.complete()).when(irc).sendRaw("libera", "RAW NEXT");
 
-    fireConnected();
+    fireReady();
 
     TargetRef status = new TargetRef("libera", "status");
     verify(ui, timeout(1_500))
@@ -104,17 +106,35 @@ class PerformOnConnectServiceTest {
         .when(irc)
         .sendRaw("libera", "RAW ONCE");
 
-    fireConnected();
+    fireReady();
     Thread.sleep(100);
-    fireConnected();
+    fireReady();
 
     Thread.sleep(1_300);
     assertEquals(1, rawCalls.get(), "reconnect should keep only the latest perform run active");
   }
 
-  private void fireConnected() {
-    events.onNext(
-        new ServerIrcEvent("libera", new IrcEvent.Connected(Instant.now(), "irc", 6697, "me")));
+  @Test
+  void skipsPerformWhenBackendIsUnavailable() {
+    doReturn(Optional.of(serverWithPerform("libera", List.of("RAW NEXT"))))
+        .when(serverCatalog)
+        .find("libera");
+    when(irc.backendAvailabilityReason("libera"))
+        .thenReturn("Quassel Core backend is not implemented yet");
+
+    fireReady();
+
+    TargetRef status = new TargetRef("libera", "status");
+    verify(ui, timeout(1_000))
+        .appendStatus(
+            status,
+            "(perform)",
+            "Skipping perform list: backend unavailable (Quassel Core backend is not implemented yet)");
+    verify(irc, never()).sendRaw("libera", "RAW NEXT");
+  }
+
+  private void fireReady() {
+    events.onNext(new ServerIrcEvent("libera", new IrcEvent.ConnectionReady(Instant.now())));
   }
 
   private static IrcProperties.Server serverWithPerform(String id, List<String> perform) {

@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Executes a per-server "perform" list when that server connects.
+ * Executes a per-server "perform" list when that server reports connection-ready.
  *
  * <p>HexChat-style rules:
  *
@@ -89,8 +89,23 @@ public class PerformOnConnectService {
     String sid = norm(sev.serverId());
     if (sid.isEmpty()) return;
     IrcEvent e = sev.event();
-    if (e instanceof IrcEvent.Connected c) {
-      runPerform(sid, Objects.toString(c.nick(), "").trim());
+    if (e instanceof IrcEvent.ConnectionReady) {
+      String backendReason = normalizeBackendAvailabilityReason(sid);
+      if (!backendReason.isEmpty()) {
+        TargetRef status = new TargetRef(sid, "status");
+        ui.ensureTargetExists(status);
+        ui.appendStatus(
+            status,
+            "(perform)",
+            "Skipping perform list: backend unavailable (" + backendReason + ")");
+        return;
+      }
+      String currentNick = "";
+      try {
+        currentNick = irc.currentNick(sid).orElse("");
+      } catch (Exception ignored) {
+      }
+      runPerform(sid, Objects.toString(currentNick, "").trim());
       return;
     }
     if (e instanceof IrcEvent.Disconnected) {
@@ -547,5 +562,13 @@ public class PerformOnConnectService {
     String t = Objects.toString(raw, "").trim();
     if (t.length() <= 140) return t;
     return t.substring(0, 140) + "…";
+  }
+
+  private String normalizeBackendAvailabilityReason(String serverId) {
+    String reason = Objects.toString(irc.backendAvailabilityReason(serverId), "").trim();
+    if (reason.endsWith(".")) {
+      reason = reason.substring(0, reason.length() - 1).trim();
+    }
+    return reason;
   }
 }

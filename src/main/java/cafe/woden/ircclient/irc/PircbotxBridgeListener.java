@@ -2567,7 +2567,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       if (l != null) line = String.valueOf(l);
       if (line == null || line.isBlank()) line = String.valueOf(event);
 
+      Instant now = Instant.now();
       emitServerResponseLine(event.getBot(), code, line);
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ConnectionReady(now)));
+      bus.onNext(
+          new ServerIrcEvent(
+              serverId, new IrcEvent.ConnectionFeaturesUpdated(now, "post-registration")));
       maybeLogNegotiatedCaps();
       maybeRequestZncNetworks(event.getBot());
       maybeRequestZncPlayback(event.getBot());
@@ -2618,6 +2623,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         }
       }
 
+      bus.onNext(
+          new ServerIrcEvent(
+              serverId, new IrcEvent.ConnectionFeaturesUpdated(Instant.now(), "isupport")));
       emitServerResponseLine(event.getBot(), code, line);
       return;
     }

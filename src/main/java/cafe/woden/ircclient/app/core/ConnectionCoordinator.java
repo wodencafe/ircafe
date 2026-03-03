@@ -9,6 +9,7 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.irc.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import io.reactivex.rxjava3.core.Scheduler;
@@ -62,8 +63,11 @@ public class ConnectionCoordinator {
 
   /** Next reconnect attempt wall-clock (epoch ms), when scheduled. */
   private final Map<String, Long> nextRetryAtByServer = new HashMap<>();
+  /** Last backend feature marker processed for this server (dedupe noisy phase updates). */
+  private final Map<String, String> lastFeatureMarkerByServer = new HashMap<>();
 
   private final Set<String> configuredServers = new HashSet<>();
+  private final Map<String, IrcProperties.Server> configuredServerConfigsById = new HashMap<>();
   private final Map<String, Long> restoreRunByServer = new HashMap<>();
   private final AtomicLong restoreRunSequence = new AtomicLong();
   private final Map<String, Set<String>> observedJoinedChannelKeysByServer =
@@ -91,6 +95,15 @@ public class ConnectionCoordinator {
     this.trayNotificationService = trayNotificationService;
 
     configuredServers.addAll(serverRegistry.serverIds());
+    List<IrcProperties.Server> initialServers = serverRegistry.servers();
+    if (initialServers != null) {
+      for (IrcProperties.Server server : initialServers) {
+        if (server == null) continue;
+        String id = Objects.toString(server.id(), "").trim();
+        if (id.isEmpty()) continue;
+        configuredServerConfigsById.put(id, server);
+      }
+    }
     for (String sid : configuredServers) {
       ui.setServerConnectionState(sid, ConnectionState.DISCONNECTED);
       restoreJoinedChannelTargets(sid);
@@ -249,8 +262,12 @@ public class ConnectionCoordinator {
             .subscribe(
                 () -> {},
                 err -> {
-                  ui.appendError(status, "(reconnect-error)", String.valueOf(err));
-                  setLastError(sid, String.valueOf(err));
+                  String rendered = renderError(err);
+                  ui.appendError(status, "(reconnect-error)", rendered);
+                  setLastError(sid, rendered);
+                  if (err instanceof BackendNotAvailableException) {
+                    setDesiredOnline(sid, false);
+                  }
                   setState(sid, ConnectionState.DISCONNECTED);
                   updateConnectionUi();
                 }));
@@ -321,9 +338,13 @@ public class ConnectionCoordinator {
             .subscribe(
                 () -> {},
                 err -> {
-                  ui.appendError(status, "(conn-error)", String.valueOf(err));
+                  String rendered = renderError(err);
+                  ui.appendError(status, "(conn-error)", rendered);
                   ui.appendStatus(status, "(conn)", "Connect failed");
-                  setLastError(id, String.valueOf(err));
+                  setLastError(id, rendered);
+                  if (err instanceof BackendNotAvailableException) {
+                    setDesiredOnline(id, false);
+                  }
                   setState(id, ConnectionState.DISCONNECTED);
                   updateConnectionUi();
                 }));
@@ -368,19 +389,26 @@ public class ConnectionCoordinator {
 
   public void onServersUpdated(List<IrcProperties.Server> latest, TargetRef activeTarget) {
     Set<String> current = new HashSet<>();
+    Map<String, IrcProperties.Server> latestById = new HashMap<>();
     if (latest != null) {
       for (var s : latest) {
         if (s == null) continue;
         String id = Objects.toString(s.id(), "").trim();
-        if (!id.isEmpty()) current.add(id);
+        if (id.isEmpty()) continue;
+        current.add(id);
+        latestById.put(id, s);
       }
     }
 
+    Set<String> previous = new HashSet<>(configuredServers);
     Set<String> removed = new HashSet<>(configuredServers);
     removed.removeAll(current);
 
     Set<String> added = new HashSet<>(current);
     added.removeAll(configuredServers);
+
+    Set<String> retained = new HashSet<>(current);
+    retained.retainAll(previous);
 
     configuredServers.clear();
     configuredServers.addAll(current);
@@ -418,6 +446,18 @@ public class ConnectionCoordinator {
       clearConnectionDiagnostics(sid);
       ui.setServerConnectionState(sid, ConnectionState.DISCONNECTED);
     }
+
+    for (String sid : retained) {
+      if (sid == null || sid.isBlank()) continue;
+      IrcProperties.Server before = configuredServerConfigsById.get(sid);
+      IrcProperties.Server after = latestById.get(sid);
+      if (before == null || after == null) continue;
+      if (!requiresControlledReconnect(before, after)) continue;
+      applyControlledReconnectForServerConfigChange(sid, before, after);
+    }
+
+    configuredServerConfigsById.clear();
+    configuredServerConfigsById.putAll(latestById);
 
     updateConnectionUi();
   }
@@ -472,6 +512,25 @@ public class ConnectionCoordinator {
         if (!isDesiredOnline(id)) {
           setDesiredOnline(id, true);
         }
+
+        String backendReason = Objects.toString(irc.backendAvailabilityReason(id), "").trim();
+        if (!backendReason.isEmpty()) {
+          setState(id, ConnectionState.CONNECTING);
+          ui.ensureTargetExists(status);
+          String msg = "Connected transport; waiting for backend readiness (" + backendReason + ")";
+          ui.appendStatus(status, "(conn)", msg);
+          if (ev.nick() != null && !ev.nick().isBlank()) {
+            ui.setChatCurrentNick(id, ev.nick());
+          }
+          if (activeTarget != null
+              && Objects.equals(activeTarget.serverId(), id)
+              && !activeTarget.isStatus()) {
+            ui.appendStatus(activeTarget, "(conn)", msg);
+          }
+          updateConnectionUi();
+          return ConnectivityChange.CHANGED;
+        }
+
         clearConnectionDiagnostics(id);
 
         setState(id, ConnectionState.CONNECTED);
@@ -487,6 +546,41 @@ public class ConnectionCoordinator {
         }
         updateConnectionUi();
         return ConnectivityChange.CHANGED;
+      }
+
+      case IrcEvent.ConnectionReady ignored -> {
+        if (!isDesiredOnline(id)) {
+          setDesiredOnline(id, true);
+        }
+        if (previous == ConnectionState.CONNECTED) {
+          return ConnectivityChange.NONE;
+        }
+
+        clearConnectionDiagnostics(id);
+        setNextRetryAtMs(id, null);
+        setState(id, ConnectionState.CONNECTED);
+        ui.ensureTargetExists(status);
+        String msg = "Connection ready";
+        ui.appendStatus(status, "(conn)", msg);
+        if (activeTarget != null
+            && Objects.equals(activeTarget.serverId(), id)
+            && !activeTarget.isStatus()) {
+          ui.appendStatus(activeTarget, "(conn)", msg);
+        }
+        try {
+          irc.currentNick(id).ifPresent(nick -> {
+            String value = Objects.toString(nick, "").trim();
+            if (!value.isEmpty()) ui.setChatCurrentNick(id, value);
+          });
+        } catch (Exception ignoredCurrentNick) {
+        }
+        restorePersistedTargetsAsync(id);
+        updateConnectionUi();
+        return ConnectivityChange.CHANGED;
+      }
+
+      case IrcEvent.ConnectionFeaturesUpdated ev -> {
+        return handleConnectionFeaturesUpdate(id, ev, status, activeTarget);
       }
 
       case IrcEvent.Reconnecting ev -> {
@@ -529,6 +623,7 @@ public class ConnectionCoordinator {
       case IrcEvent.Disconnected ev -> {
         restoreRunByServer.remove(id);
         observedJoinedChannelKeysByServer.remove(id);
+        lastFeatureMarkerByServer.remove(id);
         setState(id, ConnectionState.DISCONNECTED);
         String msg = "Disconnected: " + ev.reason();
         ui.appendStatus(status, "(conn)", msg);
@@ -588,6 +683,90 @@ public class ConnectionCoordinator {
     if (desired) desiredOnline.add(sid);
     else desiredOnline.remove(sid);
     ui.setServerDesiredOnline(sid, desired);
+  }
+
+  private static String renderError(Throwable err) {
+    if (err == null) return "";
+    String msg = Objects.toString(err.getMessage(), "").trim();
+    if (!msg.isEmpty()) return msg;
+    return String.valueOf(err);
+  }
+
+  private ConnectivityChange handleConnectionFeaturesUpdate(
+      String serverId, IrcEvent.ConnectionFeaturesUpdated event, TargetRef status, TargetRef activeTarget) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty() || event == null) return ConnectivityChange.NONE;
+
+    String source = Objects.toString(event.source(), "").trim();
+    if (source.isEmpty()) return ConnectivityChange.NONE;
+    String previousMarker = lastFeatureMarkerByServer.put(sid, source);
+    if (Objects.equals(previousMarker, source)) return ConnectivityChange.NONE;
+
+    String phase = quasselFeaturePhase(source);
+    if (phase.isEmpty()) return ConnectivityChange.NONE;
+    String detail = quasselFeatureDetail(source);
+
+    ui.ensureTargetExists(status);
+    String message = "";
+    switch (phase) {
+      case "transport-connected" ->
+          message = "Quassel transport connected; negotiating protocol…";
+      case "protocol-negotiated" ->
+          message = "Quassel protocol negotiated; authenticating core session…";
+      case "authenticating" -> message = "Authenticating with Quassel Core…";
+      case "session-established" -> message = "Quassel session established; waiting for sync…";
+      case "sync-ready" -> message = "Quassel sync complete; connection ready.";
+      case "setup-required" -> {
+        String reason = detail.isEmpty() ? "Quassel Core setup is required before login." : detail;
+        setLastError(sid, reason);
+        setDesiredOnline(sid, false);
+        setNextRetryAtMs(sid, null);
+        setState(sid, ConnectionState.DISCONNECTED);
+        message = "Quassel Core setup is required before this connection can log in.";
+        String notice =
+            "Quassel setup required for server '"
+                + sid
+                + "'. Open Status for details and complete core setup.";
+        ui.enqueueStatusNotice(notice, status);
+      }
+      default -> {
+        return ConnectivityChange.NONE;
+      }
+    }
+
+    if (!message.isEmpty()) {
+      ui.appendStatusAt(status, event.at(), "(conn)", message);
+      if (activeTarget != null
+          && Objects.equals(activeTarget.serverId(), sid)
+          && !activeTarget.isStatus()) {
+        ui.appendStatusAt(activeTarget, event.at(), "(conn)", message);
+      }
+    }
+
+    updateConnectionUi();
+    return ConnectivityChange.CHANGED;
+  }
+
+  private static String quasselFeaturePhase(String source) {
+    String src = Objects.toString(source, "").trim();
+    if (src.isEmpty()) return "";
+    int idx = src.indexOf("quassel-phase=");
+    if (idx < 0) return "";
+    int start = idx + "quassel-phase=".length();
+    int end = src.indexOf(';', start);
+    if (end < 0) end = src.length();
+    if (end <= start) return "";
+    return src.substring(start, end).trim().toLowerCase(Locale.ROOT);
+  }
+
+  private static String quasselFeatureDetail(String source) {
+    String src = Objects.toString(source, "").trim();
+    if (src.isEmpty()) return "";
+    int idx = src.indexOf(";detail=");
+    if (idx < 0) return "";
+    int start = idx + ";detail=".length();
+    if (start >= src.length()) return "";
+    return src.substring(start).trim();
   }
 
   private void restorePrivateMessageTargets(String serverId) {
@@ -878,5 +1057,76 @@ public class ConnectionCoordinator {
     }
 
     ui.setConnectionStatusText(text);
+  }
+
+  private void applyControlledReconnectForServerConfigChange(
+      String serverId, IrcProperties.Server previous, IrcProperties.Server next) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    ConnectionState state = stateOf(sid);
+    boolean desired = isDesiredOnline(sid);
+    if (state == ConnectionState.DISCONNECTED && !desired) return;
+
+    TargetRef status = new TargetRef(sid, "status");
+    ui.ensureTargetExists(status);
+    String message =
+        "Connection settings changed ("
+            + summarizeReconnectChange(previous, next)
+            + "); reconnecting…";
+    ui.appendStatus(status, "(servers)", message);
+
+    if (state == ConnectionState.DISCONNECTED) {
+      requestConnect(sid, false, true);
+      return;
+    }
+    reconnectOne(sid);
+  }
+
+  private static boolean requiresControlledReconnect(
+      IrcProperties.Server previous, IrcProperties.Server next) {
+    if (previous == null || next == null) return false;
+    if (previous.backend() != next.backend()) return true;
+    if (!sameTrimmed(previous.host(), next.host())) return true;
+    if (previous.port() != next.port()) return true;
+    if (previous.tls() != next.tls()) return true;
+    if (!Objects.equals(previous.proxy(), next.proxy())) return true;
+    if (!Objects.equals(previous.serverPassword(), next.serverPassword())) return true;
+    if (!sameTrimmed(previous.login(), next.login())) return true;
+    if (!sameTrimmed(previous.realName(), next.realName())) return true;
+    return !Objects.equals(previous.sasl(), next.sasl());
+  }
+
+  private static String summarizeReconnectChange(
+      IrcProperties.Server previous, IrcProperties.Server next) {
+    if (previous == null || next == null) return "connection profile updated";
+    if (previous.backend() != next.backend()) {
+      return "backend "
+          + renderBackend(previous.backend())
+          + " → "
+          + renderBackend(next.backend());
+    }
+    if (!sameTrimmed(previous.host(), next.host())
+        || previous.port() != next.port()
+        || previous.tls() != next.tls()) {
+      String tlsToken = next.tls() ? "tls" : "plain";
+      return "endpoint " + Objects.toString(next.host(), "") + ":" + next.port() + " (" + tlsToken + ")";
+    }
+    if (!Objects.equals(previous.proxy(), next.proxy())) return "proxy updated";
+    if (!Objects.equals(previous.serverPassword(), next.serverPassword())) return "server password updated";
+    if (!sameTrimmed(previous.login(), next.login())
+        || !sameTrimmed(previous.realName(), next.realName())
+        || !Objects.equals(previous.sasl(), next.sasl())) {
+      return "authentication profile updated";
+    }
+    return "connection profile updated";
+  }
+
+  private static boolean sameTrimmed(String a, String b) {
+    return Objects.toString(a, "").trim().equals(Objects.toString(b, "").trim());
+  }
+
+  private static String renderBackend(IrcProperties.Server.Backend backend) {
+    if (backend == null) return "irc";
+    return backend.token();
   }
 }

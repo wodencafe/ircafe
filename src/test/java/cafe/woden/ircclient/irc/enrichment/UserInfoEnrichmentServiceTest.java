@@ -20,6 +20,7 @@ import cafe.woden.ircclient.irc.IrcRuntimeSettings;
 import cafe.woden.ircclient.irc.IrcRuntimeSettingsProvider;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -92,6 +93,25 @@ class UserInfoEnrichmentServiceTest {
     }
   }
 
+  @Test
+  void backendUnavailableSkipsScheduledEnrichmentPolling() throws Exception {
+    Fixture fixture = fixtureWithSettings(settings(true, true));
+    try {
+      when(fixture.irc.backendAvailabilityReason("libera"))
+          .thenReturn("Quassel Core backend is not implemented yet");
+
+      invokeOnEvent(
+          fixture.service,
+          new ServerIrcEvent(
+              "libera", new IrcEvent.Connected(Instant.parse("2026-03-03T01:00:00Z"), "irc", 6697, "me")));
+      invokeTick(fixture.service);
+
+      verify(fixture.planner, never()).pollNext(anyString(), any(), any());
+    } finally {
+      fixture.service.shutdown();
+    }
+  }
+
   private static Fixture fixtureWithSettings(IrcRuntimeSettings settings) {
     IrcClientService irc = mock(IrcClientService.class);
     @SuppressWarnings("unchecked")
@@ -119,7 +139,7 @@ class UserInfoEnrichmentServiceTest {
 
     UserInfoEnrichmentService service =
         new UserInfoEnrichmentService(irc, settingsProvider, planner, exec);
-    return new Fixture(service, planner, events);
+    return new Fixture(service, irc, planner, events);
   }
 
   private static IrcRuntimeSettings settings(boolean enrichmentEnabled, boolean whoisFallback) {
@@ -129,6 +149,20 @@ class UserInfoEnrichmentServiceTest {
 
   private record Fixture(
       UserInfoEnrichmentService service,
+      IrcClientService irc,
       UserInfoEnrichmentPlanner planner,
       PublishProcessor<ServerIrcEvent> events) {}
+
+  private static void invokeOnEvent(UserInfoEnrichmentService service, ServerIrcEvent event)
+      throws Exception {
+    Method onEvent = UserInfoEnrichmentService.class.getDeclaredMethod("onEvent", ServerIrcEvent.class);
+    onEvent.setAccessible(true);
+    onEvent.invoke(service, event);
+  }
+
+  private static void invokeTick(UserInfoEnrichmentService service) throws Exception {
+    Method tick = UserInfoEnrichmentService.class.getDeclaredMethod("tick");
+    tick.setAccessible(true);
+    tick.invoke(service);
+  }
 }

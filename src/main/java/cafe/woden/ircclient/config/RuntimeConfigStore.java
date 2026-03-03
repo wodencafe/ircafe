@@ -6973,6 +6973,9 @@ public class RuntimeConfigStore {
     m.put("host", s.host());
     m.put("port", s.port());
     m.put("tls", s.tls());
+    if (s.backend() != null && s.backend() != IrcProperties.Server.Backend.IRC) {
+      m.put("backend", s.backend().token());
+    }
     if (s.serverPassword() != null && !s.serverPassword().isBlank()) {
       m.put("serverPassword", s.serverPassword());
     }

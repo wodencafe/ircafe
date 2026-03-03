@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
@@ -63,7 +64,8 @@ class PerformModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
   }
 
   @Test
-  void connectedEventRunsPerformLinesInConfiguredOrderAndSurfacesStepErrors() throws Exception {
+  void connectionReadyEventRunsPerformLinesInConfiguredOrderAndSurfacesStepErrors()
+      throws Exception {
     doReturn(
             Optional.of(
                 serverWithPerform("libera", List.of("/join #ircafe", "PRIVMSG #ircafe :hello"))))
@@ -77,7 +79,7 @@ class PerformModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
         .when(ircClientService)
         .sendRaw("libera", "PRIVMSG #ircafe :hello");
 
-    fireEvent(new IrcEvent.Connected(Instant.now(), "irc.libera.chat", 6697, "tester"));
+    fireEvent(new IrcEvent.ConnectionReady(Instant.now()));
 
     TargetRef status = new TargetRef("libera", "status");
     verify(uiPort).ensureTargetExists(status);
@@ -107,7 +109,7 @@ class PerformModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
         .when(ircClientService)
         .sendRaw("libera", "RAW SECOND");
 
-    fireEvent(new IrcEvent.Connected(Instant.now(), "irc.libera.chat", 6697, "tester"));
+    fireEvent(new IrcEvent.ConnectionReady(Instant.now()));
 
     TargetRef status = new TargetRef("libera", "status");
     verify(uiPort, timeout(1_000)).appendStatus(status, "(perform)", "Waiting 2000ms");
@@ -132,9 +134,9 @@ class PerformModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
         .when(ircClientService)
         .sendRaw("libera", "RAW SECOND");
 
-    fireEvent(new IrcEvent.Connected(Instant.now(), "irc.libera.chat", 6697, "tester"));
+    fireEvent(new IrcEvent.ConnectionReady(Instant.now()));
     Thread.sleep(120);
-    fireEvent(new IrcEvent.Connected(Instant.now(), "irc.libera.chat", 6697, "tester"));
+    fireEvent(new IrcEvent.ConnectionReady(Instant.now()));
 
     TargetRef status = new TargetRef("libera", "status");
     verify(uiPort, timeout(1_000).atLeast(2))
@@ -153,7 +155,7 @@ class PerformModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
     doReturn(new ParsedInput.Help("topic")).when(commandParser).parse("/help topic");
     doReturn(Completable.complete()).when(ircClientService).sendRaw("libera", "RAW OK");
 
-    fireEvent(new IrcEvent.Connected(Instant.now(), "irc.libera.chat", 6697, "tester"));
+    fireEvent(new IrcEvent.ConnectionReady(Instant.now()));
 
     TargetRef status = new TargetRef("libera", "status");
     verify(uiPort, timeout(1_000)).appendStatus(status, "(perform)", "Waiting 120ms");
@@ -161,6 +163,26 @@ class PerformModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
         .appendStatus(
             status, "(perform)", "Unsupported in perform: /help topic (use /quote or raw IRC)");
     verify(ircClientService, timeout(2_000)).sendRaw("libera", "RAW OK");
+  }
+
+  @Test
+  void connectionReadyEventSkipsPerformWhenBackendIsUnavailable() throws Exception {
+    doReturn(Optional.of(serverWithPerform("libera", List.of("PRIVMSG #ircafe :hello"))))
+        .when(serverCatalog)
+        .find("libera");
+    doReturn("Quassel Core backend is not implemented yet")
+        .when(ircClientService)
+        .backendAvailabilityReason("libera");
+
+    fireEvent(new IrcEvent.ConnectionReady(Instant.now()));
+
+    TargetRef status = new TargetRef("libera", "status");
+    verify(uiPort, timeout(2_000))
+        .appendStatus(
+            status,
+            "(perform)",
+            "Skipping perform list: backend unavailable (Quassel Core backend is not implemented yet)");
+    verify(ircClientService, never()).sendRaw("libera", "PRIVMSG #ircafe :hello");
   }
 
   private void fireEvent(IrcEvent event) throws Exception {

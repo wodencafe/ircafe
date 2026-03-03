@@ -135,9 +135,7 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
       return;
     }
 
-    if (!(ev instanceof IrcEvent.ServerResponseLine sr)) return;
-    int code = sr.code();
-    if (code == 376 || code == 422) {
+    if (ev instanceof IrcEvent.ConnectionReady) {
       readyByServer.put(sid, Boolean.TRUE);
       if (isFallbackEligible(sid)) {
         maybeShowFallbackNotice(sid);
@@ -148,8 +146,7 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
       return;
     }
 
-    // 005 can arrive in multiple lines; MONITOR capability availability can flip mid-connection.
-    if (code == 5) {
+    if (ev instanceof IrcEvent.ConnectionFeaturesUpdated) {
       if (isFallbackEligible(sid)) {
         maybeShowFallbackNotice(sid);
         requestImmediateRefresh(sid);
@@ -159,6 +156,8 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
       return;
     }
 
+    if (!(ev instanceof IrcEvent.ServerResponseLine sr)) return;
+    int code = sr.code();
     if (code == 303) {
       handleIsonReply(sid, sr);
     }

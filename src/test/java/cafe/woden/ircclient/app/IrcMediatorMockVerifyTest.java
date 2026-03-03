@@ -258,6 +258,18 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void connectionReadyEventIsForwardedToConnectivityCoordinator() throws Exception {
+    TargetRef active = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    IrcEvent.ConnectionReady ready = new IrcEvent.ConnectionReady(Instant.now());
+
+    invokeOnServerIrcEvent(new ServerIrcEvent("libera", ready));
+
+    verify(connectionCoordinator).handleConnectivityEvent("libera", ready, active);
+    verify(targetCoordinator).refreshInputEnabledForActiveTarget();
+  }
+
+  @Test
   void duplicateChannelMessageByMsgIdIsSuppressedBeforeUiAndSideEffects() throws Exception {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);

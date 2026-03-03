@@ -242,20 +242,7 @@ public class Ircv3StsPolicyService {
 
   private static IrcProperties.Server copyServerWithTransport(
       IrcProperties.Server s, int port, boolean tls) {
-    return new IrcProperties.Server(
-        s.id(),
-        s.host(),
-        port,
-        tls,
-        s.serverPassword(),
-        s.nick(),
-        s.login(),
-        s.realName(),
-        s.sasl(),
-        s.nickserv(),
-        s.autoJoin(),
-        s.perform(),
-        s.proxy());
+    return s.withTransport(port, tls);
   }
 
   private static String normalizeHost(String host) {

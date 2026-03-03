@@ -556,6 +556,7 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     if (caps.startsWith(":")) caps = caps.substring(1).trim();
     if (caps.isEmpty()) return;
 
+    boolean emittedAny = false;
     for (String token : caps.split("\\s+")) {
       String t = Objects.toString(token, "").trim();
       if (t.isEmpty()) continue;
@@ -578,6 +579,14 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
           new ServerIrcEvent(
               serverId,
               new IrcEvent.Ircv3CapabilityChanged(Instant.now(), action, capName, enabled)));
+      emittedAny = true;
+    }
+    if (emittedAny) {
+      sink.accept(
+          new ServerIrcEvent(
+              serverId,
+              new IrcEvent.ConnectionFeaturesUpdated(
+                  Instant.now(), "cap-" + action.toLowerCase(Locale.ROOT))));
     }
   }
 

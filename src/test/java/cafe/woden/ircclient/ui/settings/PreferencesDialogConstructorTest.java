@@ -10,7 +10,7 @@ import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.irc.PircbotxIrcClientService;
+import cafe.woden.ircclient.irc.IrcHeartbeatMaintenanceService;
 import cafe.woden.ircclient.notifications.IrcEventNotificationRulesBus;
 import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
 import cafe.woden.ircclient.notify.pushy.PushySettingsBus;
@@ -85,7 +85,7 @@ class PreferencesDialogConstructorTest {
         mock(NickColorOverridesDialog.class),
         mock(EmbedLoadPolicyDialog.class),
         mock(EmbedLoadPolicyBus.class),
-        mock(PircbotxIrcClientService.class),
+        mock(IrcHeartbeatMaintenanceService.class),
         mock(FilterSettingsBus.class),
         mock(TranscriptRebuildService.class),
         mock(ActiveTargetPort.class),

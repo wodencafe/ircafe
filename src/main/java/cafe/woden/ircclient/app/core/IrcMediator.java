@@ -619,7 +619,8 @@ public class IrcMediator implements MediatorControlPort {
     if (e instanceof IrcEvent.Connected
         || e instanceof IrcEvent.Connecting
         || e instanceof IrcEvent.Reconnecting
-        || e instanceof IrcEvent.Disconnected) {
+        || e instanceof IrcEvent.Disconnected
+        || e instanceof IrcEvent.ConnectionReady) {
       if (e instanceof IrcEvent.Connected ev) {
         ui.setServerConnectedIdentity(sid, ev.serverHost(), ev.serverPort(), ev.nick(), ev.at());
       }
@@ -1910,6 +1911,10 @@ public class IrcMediator implements MediatorControlPort {
         if (targetMsgId.isEmpty()) return;
         ui.applyMessageRedaction(
             dest, ev.at(), from, targetMsgId, "", Map.of("draft/delete", targetMsgId));
+      }
+
+      case IrcEvent.ConnectionFeaturesUpdated ignored -> {
+        // Backend-neutral feature refresh marker used by monitor fallback/sync services.
       }
 
       case IrcEvent.Ircv3CapabilityChanged ev -> {

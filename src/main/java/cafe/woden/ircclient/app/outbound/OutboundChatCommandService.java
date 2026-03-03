@@ -910,7 +910,10 @@ public class OutboundChatCommandService {
     }
 
     if (!irc.isReadMarkerAvailable(at.serverId())) {
-      ui.appendStatus(status, "(markread)", "read-marker is not negotiated on this server.");
+      ui.appendStatus(
+          status,
+          "(markread)",
+          featureUnavailableMessage(at.serverId(), "read-marker is not negotiated on this server."));
       return;
     }
 
@@ -1026,7 +1029,8 @@ public class OutboundChatCommandService {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(reply)",
-          "draft/reply is not negotiated on this server.");
+          featureUnavailableMessage(
+              at.serverId(), "draft/reply is not negotiated on this server."));
       return;
     }
 
@@ -1058,7 +1062,8 @@ public class OutboundChatCommandService {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(react)",
-          "draft/react is not negotiated on this server.");
+          featureUnavailableMessage(
+              at.serverId(), "draft/react is not negotiated on this server."));
       return;
     }
 
@@ -1090,7 +1095,8 @@ public class OutboundChatCommandService {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(unreact)",
-          "draft/unreact is not negotiated on this server.");
+          featureUnavailableMessage(
+              at.serverId(), "draft/unreact is not negotiated on this server."));
       return;
     }
 
@@ -1121,7 +1127,8 @@ public class OutboundChatCommandService {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(edit)",
-          "draft/message-edit is not negotiated on this server.");
+          featureUnavailableMessage(
+              at.serverId(), "draft/message-edit is not negotiated on this server."));
       return;
     }
 
@@ -1163,7 +1170,8 @@ public class OutboundChatCommandService {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(redact)",
-          "message-redaction is not negotiated on this server.");
+          featureUnavailableMessage(
+              at.serverId(), "message-redaction is not negotiated on this server."));
       return;
     }
 
@@ -1801,6 +1809,11 @@ public class OutboundChatCommandService {
 
   private String multilineUnavailableOrLimitReason(
       String serverId, int lineCount, long payloadUtf8Bytes) {
+    String backendUnavailableReason = normalizedBackendAvailabilityReason(serverId);
+    if (!backendUnavailableReason.isEmpty()) {
+      return ensureTerminalPunctuation(backendUnavailableReason);
+    }
+
     if (!irc.isMultilineAvailable(serverId)) {
       return "IRCv3 multiline is not negotiated on this server.";
     }
@@ -2079,32 +2092,41 @@ public class OutboundChatCommandService {
 
   private void appendEditHelp(TargetRef out) {
     boolean available = isMessageEditSupportedForServer(out);
+    String sid = out == null ? "" : out.serverId();
     ui.appendStatus(
         out,
         "(help)",
         "/edit <msgid> <message>"
             + availabilitySuffix(
-                available, "requires negotiated draft/message-edit or message-edit"));
+                available,
+                unavailableReasonForHelp(
+                    sid, "requires negotiated draft/message-edit or message-edit")));
   }
 
   private void appendMarkReadHelp(TargetRef out) {
     boolean available = isReadMarkerSupportedForServer(out);
+    String sid = out == null ? "" : out.serverId();
     ui.appendStatus(
         out,
         "(help)",
         "/markread"
             + availabilitySuffix(
-                available, "requires negotiated read-marker or draft/read-marker"));
+                available,
+                unavailableReasonForHelp(
+                    sid, "requires negotiated read-marker or draft/read-marker")));
   }
 
   private void appendRedactHelp(TargetRef out) {
     boolean available = isMessageRedactionSupportedForServer(out);
+    String sid = out == null ? "" : out.serverId();
     ui.appendStatus(
         out,
         "(help)",
         "/redact <msgid> [reason] (alias: /delete)"
             + availabilitySuffix(
-                available, "requires negotiated draft/message-redaction or message-redaction"));
+                available,
+                unavailableReasonForHelp(
+                    sid, "requires negotiated draft/message-redaction or message-redaction")));
   }
 
   private boolean isMessageEditSupportedForServer(TargetRef target) {
@@ -2151,6 +2173,76 @@ public class OutboundChatCommandService {
     String reason = Objects.toString(unavailableReason, "").trim();
     if (reason.isEmpty()) return " (unavailable)";
     return " (unavailable: " + reason + ")";
+  }
+
+  private String featureUnavailableMessage(String serverId, String fallback) {
+    String backendReason = normalizedBackendAvailabilityReason(serverId);
+    if (!backendReason.isEmpty()) return ensureTerminalPunctuation(backendReason);
+    String quasselReason = quasselCapabilityGapReason(serverId, fallback);
+    if (!quasselReason.isEmpty()) return ensureTerminalPunctuation(quasselReason);
+    return fallback;
+  }
+
+  private String unavailableReasonForHelp(String serverId, String fallback) {
+    String backendReason = normalizedBackendAvailabilityReason(serverId);
+    if (!backendReason.isEmpty()) return backendReason;
+    String quasselReason = quasselCapabilityGapReason(serverId, fallback);
+    if (!quasselReason.isEmpty()) return quasselReason;
+    return fallback;
+  }
+
+  private String normalizedBackendAvailabilityReason(String serverId) {
+    try {
+      return Objects.toString(irc.backendAvailabilityReason(serverId), "").trim();
+    } catch (Exception ignored) {
+      return "";
+    }
+  }
+
+  private static String ensureTerminalPunctuation(String message) {
+    String text = Objects.toString(message, "").trim();
+    if (text.isEmpty()) return "";
+    char last = text.charAt(text.length() - 1);
+    if (last == '.' || last == '!' || last == '?') return text;
+    return text + ".";
+  }
+
+  private String quasselCapabilityGapReason(String serverId, String fallback) {
+    if (!isLikelyQuasselBackend(serverId)) return "";
+    String feature = detectFeatureToken(fallback);
+    if (feature.isEmpty()) {
+      return "this capability is not implemented for Quassel backend yet";
+    }
+    return feature + " is not implemented for Quassel backend yet";
+  }
+
+  private boolean isLikelyQuasselBackend(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return false;
+    String availability = normalizedBackendAvailabilityReason(sid).toLowerCase(Locale.ROOT);
+    if (availability.contains("quassel")) return true;
+    try {
+      String typingReason =
+          Objects.toString(irc.typingAvailabilityReason(sid), "").trim().toLowerCase(Locale.ROOT);
+      return typingReason.contains("quassel backend");
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private static String detectFeatureToken(String fallback) {
+    String lower = Objects.toString(fallback, "").trim().toLowerCase(Locale.ROOT);
+    if (lower.isEmpty()) return "";
+    if (lower.contains("read-marker")) return "read-marker";
+    if (lower.contains("message-redaction")) return "message-redaction";
+    if (lower.contains("message-edit")) return "message-edit";
+    if (lower.contains("draft/reply")) return "draft/reply";
+    if (lower.contains("draft/react")) return "draft/react";
+    if (lower.contains("draft/unreact")) return "draft/unreact";
+    if (lower.contains("multiline")) return "multiline";
+    if (lower.contains("typing")) return "typing";
+    if (lower.contains("labeled-response")) return "labeled-response";
+    return "";
   }
 
   private boolean isOwnMessageInBuffer(TargetRef target, String messageId) {

@@ -141,7 +141,24 @@ public record IrcProperties(Client client, List<Server> servers) {
        * <p>If {@code null}, the server inherits {@code irc.client.proxy}. If non-null and {@code
        * enabled} is {@code false}, the server explicitly disables proxying.
        */
-      Proxy proxy) {
+      Proxy proxy,
+      Backend backend) {
+    /** Transport backend used for this server entry. */
+    public enum Backend {
+      IRC("irc"),
+      QUASSEL_CORE("quassel-core");
+
+      private final String token;
+
+      Backend(String token) {
+        this.token = token;
+      }
+
+      public String token() {
+        return token;
+      }
+    }
+
     public record Sasl(
         boolean enabled,
         String username,
@@ -207,6 +224,41 @@ public record IrcProperties(Client client, List<Server> servers) {
       if (perform == null) {
         perform = List.of();
       }
+      if (backend == null) {
+        backend = Backend.IRC;
+      }
+    }
+
+    // Legacy constructor kept for call sites that don't set backend explicitly.
+    public Server(
+        String id,
+        String host,
+        int port,
+        boolean tls,
+        String serverPassword,
+        String nick,
+        String login,
+        String realName,
+        Sasl sasl,
+        Nickserv nickserv,
+        List<String> autoJoin,
+        List<String> perform,
+        Proxy proxy) {
+      this(
+          id,
+          host,
+          port,
+          tls,
+          serverPassword,
+          nick,
+          login,
+          realName,
+          sasl,
+          nickserv,
+          autoJoin,
+          perform,
+          proxy,
+          Backend.IRC);
     }
 
     public Server(
@@ -235,7 +287,45 @@ public record IrcProperties(Client client, List<Server> servers) {
           null,
           autoJoin,
           perform,
-          proxy);
+          proxy,
+          Backend.IRC);
+    }
+
+    public Server withAutoJoin(List<String> nextAutoJoin) {
+      List<String> value = nextAutoJoin == null ? List.of() : List.copyOf(nextAutoJoin);
+      return new Server(
+          id,
+          host,
+          port,
+          tls,
+          serverPassword,
+          nick,
+          login,
+          realName,
+          sasl,
+          nickserv,
+          value,
+          perform,
+          proxy,
+          backend);
+    }
+
+    public Server withTransport(int nextPort, boolean nextTls) {
+      return new Server(
+          id,
+          host,
+          nextPort,
+          nextTls,
+          serverPassword,
+          nick,
+          login,
+          realName,
+          sasl,
+          nickserv,
+          autoJoin,
+          perform,
+          proxy,
+          backend);
     }
   }
 

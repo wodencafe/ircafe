@@ -89,6 +89,7 @@ public class ZncEphemeralNetworkImporter
         bouncer.nickserv(),
         autoJoinChannels == null ? List.of() : List.copyOf(autoJoinChannels),
         List.of(),
-        bouncer.proxy());
+        bouncer.proxy(),
+        bouncer.backend());
   }
 }
