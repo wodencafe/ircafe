@@ -182,7 +182,7 @@ flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flat
 Build the app image and Flatpak repo/bundle:
 
 ```bash
-./gradlew jpackage
+./gradlew jpackage generateFlatpakMetainfo
 flatpak-builder --force-clean --repo=build/flatpak/repo --default-branch=stable --install-deps-from=flathub build/flatpak/workdir packaging/flatpak/cafe.woden.IRCafe.yml
 flatpak build-bundle build/flatpak/repo build/dist/ircafe.flatpak cafe.woden.IRCafe stable --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
 ```

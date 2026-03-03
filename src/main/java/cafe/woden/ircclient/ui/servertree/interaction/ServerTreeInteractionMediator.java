@@ -287,8 +287,7 @@ public final class ServerTreeInteractionMediator {
 
   private void handleChannelSelectionOnMouseRelease(MouseEvent event) {
     if (shouldEmitPendingChannelSelection(event)) {
-      DefaultMutableTreeNode node =
-          (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+      DefaultMutableTreeNode node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
       if (node != null && !context.isSelectionBroadcastSuppressed()) {
         emitSelectionForNode(node);
       }

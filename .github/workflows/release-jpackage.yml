@@ -226,7 +226,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./gradlew --no-daemon clean jpackage -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
+          ./gradlew --no-daemon clean jpackage generateFlatpakMetainfo -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
 
       - name: Install Flatpak tooling
         shell: bash
