@@ -2,10 +2,10 @@ package cafe.woden.ircclient.ui.servertree.resolver;
 
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
-import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import javax.swing.tree.DefaultMutableTreeNode;

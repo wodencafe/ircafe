@@ -65,7 +65,8 @@ class ServerTreeBuiltInVisibilitySettingsTest {
     private final AtomicReference<String> firedPropertyName = new AtomicReference<>();
     private final AtomicReference<Boolean> firedOldValue = new AtomicReference<>();
     private final AtomicReference<Boolean> firedNewValue = new AtomicReference<>();
-    private ServerBuiltInNodesVisibility defaultVisibility = ServerBuiltInNodesVisibility.defaults();
+    private ServerBuiltInNodesVisibility defaultVisibility =
+        ServerBuiltInNodesVisibility.defaults();
     private String lastAppliedServerId;
     private boolean lastApplyPersist;
     private boolean lastApplySyncUi;

@@ -47,7 +47,8 @@ public final class ServerTreeApplicationNodes {
     if (ref == null) return;
     String normalizedLabel = Objects.toString(label, "").trim();
     String nodeLabel = normalizedLabel.isEmpty() ? labelFor(ref) : normalizedLabel;
-    DefaultMutableTreeNode leaf = new DefaultMutableTreeNode(new ServerTreeNodeData(ref, nodeLabel));
+    DefaultMutableTreeNode leaf =
+        new DefaultMutableTreeNode(new ServerTreeNodeData(ref, nodeLabel));
     leaves.put(ref, leaf);
     applicationRoot.add(leaf);
   }

@@ -21,8 +21,7 @@ class ServerTreeHeaderControlsTest {
 
     controls.setStatusText("Connecting");
 
-    assertEquals(
-        "Connect all disconnected servers. Current: Connecting", connect.getToolTipText());
+    assertEquals("Connect all disconnected servers. Current: Connecting", connect.getToolTipText());
     assertEquals(
         "Disconnect connected/connecting servers. Current: Connecting",
         disconnect.getToolTipText());

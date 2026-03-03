@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui.servertree.request;
 
 import cafe.woden.ircclient.app.api.TargetRef;
-import cafe.woden.ircclient.ui.servertree.ServerTreeDockable.ChannelModeSetRequest;
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
+import cafe.woden.ircclient.ui.servertree.ServerTreeDockable.ChannelModeSetRequest;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;

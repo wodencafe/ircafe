@@ -37,8 +37,7 @@ class ServerTreeInteractionMediatorChannelDockDragTest {
             .toArray(MouseListener[]::new);
 
     MouseEvent press =
-        new MouseEvent(
-            tree, MouseEvent.MOUSE_PRESSED, 0L, 0, 10, 12, 1, false, MouseEvent.BUTTON1);
+        new MouseEvent(tree, MouseEvent.MOUSE_PRESSED, 0L, 0, 10, 12, 1, false, MouseEvent.BUTTON1);
     for (var listener : mediatorListeners) {
       listener.mousePressed(press);
     }

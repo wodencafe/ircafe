@@ -2,10 +2,10 @@ package cafe.woden.ircclient.ui.servertree.policy;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
-import java.util.function.BiPredicate;
-import java.util.function.Function;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiPredicate;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /** Encapsulates bouncer-detach eligibility policy for server/channel actions. */

@@ -1301,9 +1301,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
           recognizer.getClass().getSimpleName());
     } catch (Exception ex) {
       log.warn(
-          "[ircafe] prepareChannelDockDrag failed to create drag recognizer target={}",
-          target,
-          ex);
+          "[ircafe] prepareChannelDockDrag failed to create drag recognizer target={}", target, ex);
       clearPreparedChannelDockDrag();
     }
   }
