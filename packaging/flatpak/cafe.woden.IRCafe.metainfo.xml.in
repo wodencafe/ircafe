@@ -10,5 +10,8 @@
   <description>
     <p>IRCafe is a Swing IRC client built with modern Java and Spring Boot.</p>
   </description>
+  <releases>
+    <release version="@@VERSION@@" date="@@RELEASE_DATE@@" />
+  </releases>
   <url type="homepage">https://github.com/wodencafe/ircafe</url>
 </component>

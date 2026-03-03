@@ -29,6 +29,6 @@ modules:
       - type: file
         path: cafe.woden.IRCafe.desktop
       - type: file
-        path: cafe.woden.IRCafe.metainfo.xml
+        path: ../../build/flatpak/cafe.woden.IRCafe.metainfo.xml
       - type: file
         path: ../../src/main/resources/icons/ircafe_512.png

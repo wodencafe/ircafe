@@ -684,6 +684,27 @@ def isMac = OperatingSystem.current().isMacOsX()
 def appName = "IRCafe"
 def appImageDir = layout.buildDirectory.dir("dist/${appName}")
 def desktopFileName = "${appName}.desktop"
+def flatpakMetainfoTemplate = file("packaging/flatpak/cafe.woden.IRCafe.metainfo.xml.in")
+def flatpakMetainfoOutput = layout.buildDirectory.file("flatpak/cafe.woden.IRCafe.metainfo.xml")
+
+tasks.register("generateFlatpakMetainfo") {
+    description = "Generates Flatpak AppStream metadata with release version."
+    inputs.file(flatpakMetainfoTemplate)
+    inputs.property("flatpakVersion", sanitizeAppVersion(project.version.toString()))
+    outputs.file(flatpakMetainfoOutput)
+
+    doLast {
+        def flatpakVersion = sanitizeAppVersion(project.version.toString())
+        def template = flatpakMetainfoTemplate.getText("UTF-8")
+        def releaseDate = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString()
+        def rendered = template
+            .replace("@@VERSION@@", flatpakVersion)
+            .replace("@@RELEASE_DATE@@", releaseDate)
+        def outputFile = flatpakMetainfoOutput.get().asFile
+        outputFile.parentFile.mkdirs()
+        outputFile.setText(rendered, "UTF-8")
+    }
+}
 
 // Where the user plans to install the app image (used to embed absolute Exec/Icon paths).
 // Override with: -PappInstallDir=/opt/IRCafe (default) or any other prefix.
