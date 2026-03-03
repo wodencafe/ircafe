@@ -44,6 +44,7 @@ import cafe.woden.ircclient.ui.coordinator.ChatTranscriptInteractionCoordinator;
 import cafe.woden.ircclient.ui.coordinator.ChatTypingCoordinator;
 import cafe.woden.ircclient.ui.coordinator.DccActionCoordinator;
 import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
+import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.ignore.IgnoresPanel;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
@@ -90,6 +91,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public static final String ID = "chat";
   private static final int MAX_DRAFT_TARGETS = 512;
+  private static final int MAIN_DOCK_ACCENT_STRIPE_PX = 2;
+  private static final int MAIN_DOCK_ICON_SIZE_PX = 12;
+  private static final String MAIN_DOCK_TAB_TOOLTIP =
+      "Main chat view (follows server-tree selection)";
 
   private final ChatTranscriptStore transcripts;
   private final ServerTreeDockable serverTree;
@@ -291,8 +296,15 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     // Keep an initial view state so the first auto-scroll behaves.
     this.activeTarget = new TargetRef("default", "status");
     updateDockTitle();
+    applyMainDockVisualIdentity();
 
     this.monitorCoordinator.bind(disposables);
+  }
+
+  @Override
+  public void updateUI() {
+    super.updateUI();
+    SwingUtilities.invokeLater(this::applyMainDockVisualIdentity);
   }
 
   private RuntimeEventsPanel createAssertjEventsPanel(
@@ -1157,8 +1169,33 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     return dockTitleCoordinator.tabText();
   }
 
+  @Override
+  public Icon getIcon() {
+    return SvgIcons.action("star", MAIN_DOCK_ICON_SIZE_PX);
+  }
+
+  @Override
+  public String getTabTooltip() {
+    return MAIN_DOCK_TAB_TOOLTIP;
+  }
+
   private void updateDockTitle() {
     dockTitleCoordinator.updateDockTitle();
+  }
+
+  private void applyMainDockVisualIdentity() {
+    setBorder(
+        BorderFactory.createMatteBorder(
+            MAIN_DOCK_ACCENT_STRIPE_PX, 0, 0, 0, resolveMainDockAccentColor()));
+  }
+
+  private static Color resolveMainDockAccentColor() {
+    Color accent = UIManager.getColor("@accentColor");
+    if (accent == null) accent = UIManager.getColor("Component.focusColor");
+    if (accent == null) accent = UIManager.getColor("Tree.selectionBackground");
+    if (accent == null) accent = UIManager.getColor("Label.foreground");
+    if (accent == null) accent = new Color(0x2D, 0x6B, 0xFF);
+    return new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 210);
   }
 
   @Override
