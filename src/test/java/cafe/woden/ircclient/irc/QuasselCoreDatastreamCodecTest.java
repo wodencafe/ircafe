@@ -114,9 +114,7 @@ class QuasselCoreDatastreamCodecTest {
     int slotLen = payload.getInt();
     byte[] slotBytes = new byte[slotLen];
     payload.get(slotBytes);
-    assertArrayEquals(
-        "2sendInput(BufferInfo,QString)".getBytes(StandardCharsets.UTF_8),
-        slotBytes);
+    assertArrayEquals("2sendInput(BufferInfo,QString)".getBytes(StandardCharsets.UTF_8), slotBytes);
   }
 
   @Test
@@ -163,8 +161,7 @@ class QuasselCoreDatastreamCodecTest {
 
     assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT, decoded.requestType());
     QuasselCoreDatastreamCodec.QtDateTimeValue parsed =
-        assertInstanceOf(
-            QuasselCoreDatastreamCodec.QtDateTimeValue.class, decoded.params().get(0));
+        assertInstanceOf(QuasselCoreDatastreamCodec.QtDateTimeValue.class, decoded.params().get(0));
     assertEquals(dt, parsed);
     assertEquals(1_700_000_123_456L, QuasselCoreDatastreamCodec.epochMsFromQtDateTime(parsed));
   }
@@ -216,8 +213,7 @@ class QuasselCoreDatastreamCodecTest {
     assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT, decoded.requestType());
     assertTrue(decoded.slotName().isEmpty());
     QuasselCoreDatastreamCodec.QtDateTimeValue dt =
-        assertInstanceOf(
-            QuasselCoreDatastreamCodec.QtDateTimeValue.class, decoded.params().get(0));
+        assertInstanceOf(QuasselCoreDatastreamCodec.QtDateTimeValue.class, decoded.params().get(0));
     assertEquals(2_460_000, dt.julianDay());
     assertEquals(1234, dt.msecsOfDay());
     assertEquals(1, dt.timeSpec());

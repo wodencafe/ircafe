@@ -207,7 +207,8 @@ class QuasselCoreProtocolWireTest {
   }
 
   private static void writeVariantUserTypeMessage(
-      ByteArrayOutputStream out, QuasselCoreDatastreamCodec.MessageValue message) throws IOException {
+      ByteArrayOutputStream out, QuasselCoreDatastreamCodec.MessageValue message)
+      throws IOException {
     writeInt32(out, 127);
     out.write(0);
     writeCString(out, "Message");
@@ -221,7 +222,8 @@ class QuasselCoreProtocolWireTest {
   }
 
   private static void writeBufferInfo(
-      ByteArrayOutputStream out, QuasselCoreDatastreamCodec.BufferInfoValue buffer) throws IOException {
+      ByteArrayOutputStream out, QuasselCoreDatastreamCodec.BufferInfoValue buffer)
+      throws IOException {
     writeInt32(out, buffer.bufferId());
     writeInt32(out, buffer.networkId());
     writeInt16(out, (short) buffer.typeBits());

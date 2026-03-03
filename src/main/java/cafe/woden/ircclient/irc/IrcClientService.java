@@ -95,8 +95,8 @@ public interface IrcClientService {
   /**
    * Human-readable reason why this backend cannot currently provide features for a server.
    *
-   * <p>Returns empty when backend availability is normal and capability checks should be interpreted
-   * as regular protocol-negotiation outcomes.
+   * <p>Returns empty when backend availability is normal and capability checks should be
+   * interpreted as regular protocol-negotiation outcomes.
    */
   default String backendAvailabilityReason(String serverId) {
     return "";

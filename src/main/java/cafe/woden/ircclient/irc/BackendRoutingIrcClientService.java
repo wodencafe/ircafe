@@ -43,7 +43,8 @@ public class BackendRoutingIrcClientService
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     Objects.requireNonNull(backendServices, "backendServices");
 
-    LinkedHashMap<IrcProperties.Server.Backend, IrcBackendClientService> map = new LinkedHashMap<>();
+    LinkedHashMap<IrcProperties.Server.Backend, IrcBackendClientService> map =
+        new LinkedHashMap<>();
     for (IrcBackendClientService backendService : backendServices) {
       if (backendService == null) continue;
       IrcProperties.Server.Backend backend = backendService.backend();
@@ -85,10 +86,7 @@ public class BackendRoutingIrcClientService
       try {
         backend.shutdownNow();
       } catch (Exception e) {
-        log.warn(
-            "Failed shutting down backend {}",
-            backend.getClass().getSimpleName(),
-            e);
+        log.warn("Failed shutting down backend {}", backend.getClass().getSimpleName(), e);
       }
     }
   }
@@ -105,9 +103,7 @@ public class BackendRoutingIrcClientService
         backend.rescheduleActiveHeartbeats();
       } catch (Exception e) {
         log.debug(
-            "Failed rescheduling heartbeats for backend {}",
-            backend.getClass().getSimpleName(),
-            e);
+            "Failed rescheduling heartbeats for backend {}", backend.getClass().getSimpleName(), e);
       }
     }
   }
@@ -217,13 +213,15 @@ public class BackendRoutingIrcClientService
   @Override
   public Completable requestChatHistoryBefore(
       String serverId, String target, String selector, int limit) {
-    return routeActiveOrConfigured(serverId).requestChatHistoryBefore(serverId, target, selector, limit);
+    return routeActiveOrConfigured(serverId)
+        .requestChatHistoryBefore(serverId, target, selector, limit);
   }
 
   @Override
   public Completable requestChatHistoryLatest(
       String serverId, String target, String selector, int limit) {
-    return routeActiveOrConfigured(serverId).requestChatHistoryLatest(serverId, target, selector, limit);
+    return routeActiveOrConfigured(serverId)
+        .requestChatHistoryLatest(serverId, target, selector, limit);
   }
 
   @Override
@@ -236,7 +234,8 @@ public class BackendRoutingIrcClientService
   @Override
   public Completable requestChatHistoryAround(
       String serverId, String target, String selector, int limit) {
-    return routeActiveOrConfigured(serverId).requestChatHistoryAround(serverId, target, selector, limit);
+    return routeActiveOrConfigured(serverId)
+        .requestChatHistoryAround(serverId, target, selector, limit);
   }
 
   @Override
@@ -388,16 +387,15 @@ public class BackendRoutingIrcClientService
     Optional<IrcProperties.Server> configuredServer =
         sid.isEmpty() ? Optional.empty() : serverCatalog.find(sid);
     IrcProperties.Server.Backend backend =
-        configuredServer.map(IrcProperties.Server::backend).orElse(IrcProperties.Server.Backend.IRC);
+        configuredServer
+            .map(IrcProperties.Server::backend)
+            .orElse(IrcProperties.Server.Backend.IRC);
     IrcBackendClientService delegate = backendsByType.get(backend);
     if (delegate != null) return delegate;
 
     if (configuredServer.isPresent()) {
       throw new IllegalStateException(
-          "["
-              + sid
-              + "] no backend service registered for configured backend "
-              + backend.token());
+          "[" + sid + "] no backend service registered for configured backend " + backend.token());
     }
 
     IrcBackendClientService fallback = backendsByType.get(IrcProperties.Server.Backend.IRC);
@@ -406,18 +404,14 @@ public class BackendRoutingIrcClientService
         log.debug("Falling back to IRC backend for blank server id");
       } else {
         log.warn(
-            "[{}] no backend registered for {}; falling back to IRC backend",
-            sid,
-            backend.token());
+            "[{}] no backend registered for {}; falling back to IRC backend", sid, backend.token());
       }
       return fallback;
     }
 
     IrcBackendClientService first = backends.get(0);
     if (sid.isEmpty()) {
-      log.debug(
-          "Falling back to backend {} for blank server id",
-          first.backend().token());
+      log.debug("Falling back to backend {} for blank server id", first.backend().token());
     } else {
       log.warn(
           "[{}] no backend registered for {}; falling back to {}",

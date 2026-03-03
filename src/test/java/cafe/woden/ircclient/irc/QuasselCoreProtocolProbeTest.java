@@ -18,9 +18,18 @@ class QuasselCoreProtocolProbeTest {
 
     byte[] expected =
         new byte[] {
-          0x42, (byte) 0xb3, 0x3f, 0x00, // magic
-          0x00, 0x00, 0x00, 0x02, // datastream
-          (byte) 0x80, 0x00, 0x00, 0x01 // legacy + end-of-list
+          0x42,
+          (byte) 0xb3,
+          0x3f,
+          0x00, // magic
+          0x00,
+          0x00,
+          0x00,
+          0x02, // datastream
+          (byte) 0x80,
+          0x00,
+          0x00,
+          0x01 // legacy + end-of-list
         };
     assertArrayEquals(expected, actual);
   }

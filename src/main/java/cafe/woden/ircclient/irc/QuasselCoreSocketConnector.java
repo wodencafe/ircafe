@@ -31,7 +31,8 @@ public class QuasselCoreSocketConnector {
     }
     int port = s.port();
     if (port <= 0 || port > 65535) {
-      throw new IllegalArgumentException("invalid server port " + port + " for id '" + s.id() + "'");
+      throw new IllegalArgumentException(
+          "invalid server port " + port + " for id '" + s.id() + "'");
     }
 
     ProxyPlan plan = proxyResolver.planForServer(s.id());

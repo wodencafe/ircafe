@@ -97,7 +97,8 @@ class ServerEditorDialogFunctionalTest {
       onEdt(() -> backendCombo.setSelectedItem(IrcProperties.Server.Backend.QUASSEL_CORE));
       onEdt(
           () -> {
-            assertFalse(authModeCombo.isEnabled(), "Quassel backend should disable direct auth mode");
+            assertFalse(
+                authModeCombo.isEnabled(), "Quassel backend should disable direct auth mode");
             loginField.setText("core-user");
             serverPassField.setText("core-secret");
           });

@@ -16,11 +16,11 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
@@ -156,12 +156,7 @@ class ConnectionCoordinatorTest {
     when(serverRegistry.servers())
         .thenReturn(
             List.of(
-                server(
-                    "hybrid",
-                    "irc.example.net",
-                    6697,
-                    true,
-                    IrcProperties.Server.Backend.IRC)));
+                server("hybrid", "irc.example.net", 6697, true, IrcProperties.Server.Backend.IRC)));
     when(serverCatalog.containsId("hybrid")).thenReturn(true);
     when(irc.connect("hybrid")).thenReturn(Completable.complete());
     when(irc.disconnect("hybrid")).thenReturn(Completable.complete());
@@ -429,7 +424,8 @@ class ConnectionCoordinatorTest {
     verify(ui).setChatCurrentNick("quassel", "transportNick");
     verify(ui, never()).ensureTargetExists(new TargetRef("quassel", "Alice"));
 
-    coordinator.handleConnectivityEvent("quassel", new IrcEvent.ConnectionReady(Instant.now()), null);
+    coordinator.handleConnectivityEvent(
+        "quassel", new IrcEvent.ConnectionReady(Instant.now()), null);
 
     verify(ui).setChatCurrentNick("quassel", "readyNick");
     verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("quassel", "Alice"));
@@ -468,7 +464,9 @@ class ConnectionCoordinatorTest {
 
     TargetRef status = new TargetRef("quassel", "status");
     verify(ui, atLeastOnce()).setServerDesiredOnline("quassel", false);
-    verify(ui).enqueueStatusNotice(argThat(text -> text != null && text.contains("setup required")), eq(status));
+    verify(ui)
+        .enqueueStatusNotice(
+            argThat(text -> text != null && text.contains("setup required")), eq(status));
     verify(ui)
         .appendStatusAt(
             eq(status),
@@ -537,19 +535,7 @@ class ConnectionCoordinatorTest {
   private static IrcProperties.Server server(
       String id, String host, int port, boolean tls, IrcProperties.Server.Backend backend) {
     return new IrcProperties.Server(
-        id,
-        host,
-        port,
-        tls,
-        "",
-        "tester",
-        "tester",
-        "Tester",
-        null,
-        null,
-        List.of(),
-        List.of(),
-        null,
-        backend);
+        id, host, port, tls, "", "tester", "tester", "Tester", null, null, List.of(), List.of(),
+        null, backend);
   }
 }

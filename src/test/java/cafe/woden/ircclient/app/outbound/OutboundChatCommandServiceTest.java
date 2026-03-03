@@ -760,8 +760,7 @@ class OutboundChatCommandServiceTest {
 
     service.handleMarkRead(disposables);
 
-    verify(ui)
-        .appendStatus(status, "(markread)", "Quassel Core backend is not implemented yet.");
+    verify(ui).appendStatus(status, "(markread)", "Quassel Core backend is not implemented yet.");
     verify(irc, never()).sendReadMarker(eq("libera"), eq("#ircafe"), any(Instant.class));
   }
 

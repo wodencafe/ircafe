@@ -110,7 +110,8 @@ class QuasselCoreIrcClientServiceMockVerifyTest {
     events.awaitDone(2, TimeUnit.SECONDS);
 
     verify(datastreamCodec).writeSignalProxyHeartBeatReply(any(OutputStream.class), eq(token));
-    verify(datastreamCodec, org.mockito.Mockito.atLeast(2)).readSignalProxyMessage(any(InputStream.class));
+    verify(datastreamCodec, org.mockito.Mockito.atLeast(2))
+        .readSignalProxyMessage(any(InputStream.class));
 
     assertEquals(
         1,

@@ -913,7 +913,8 @@ public class OutboundChatCommandService {
       ui.appendStatus(
           status,
           "(markread)",
-          featureUnavailableMessage(at.serverId(), "read-marker is not negotiated on this server."));
+          featureUnavailableMessage(
+              at.serverId(), "read-marker is not negotiated on this server."));
       return;
     }
 

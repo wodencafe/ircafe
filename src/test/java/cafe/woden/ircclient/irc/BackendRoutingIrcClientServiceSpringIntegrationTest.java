@@ -30,7 +30,8 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 
 @SpringJUnitConfig
-@ContextConfiguration(classes = BackendRoutingIrcClientServiceSpringIntegrationTest.TestConfig.class)
+@ContextConfiguration(
+    classes = BackendRoutingIrcClientServiceSpringIntegrationTest.TestConfig.class)
 class BackendRoutingIrcClientServiceSpringIntegrationTest {
 
   private final ApplicationContext applicationContext;
@@ -94,7 +95,8 @@ class BackendRoutingIrcClientServiceSpringIntegrationTest {
   void backendOwnershipFollowsReplayEventsAndClearsAfterDisconnected() {
     var events = ircClientService.events().test();
 
-    quasselStream.processor()
+    quasselStream
+        .processor()
         .onNext(
             new ServerIrcEvent(
                 "hybrid", new IrcEvent.Connected(Instant.now(), "irc.example.net", 6697, "nick")));
@@ -104,7 +106,8 @@ class BackendRoutingIrcClientServiceSpringIntegrationTest {
     verify(quasselBackend).sendRaw("hybrid", "PING :one");
     verify(ircBackend, never()).sendRaw("hybrid", "PING :one");
 
-    quasselStream.processor()
+    quasselStream
+        .processor()
         .onNext(new ServerIrcEvent("hybrid", new IrcEvent.Disconnected(Instant.now(), "bye")));
     events.awaitCount(2).assertValueCount(2);
 
@@ -130,7 +133,8 @@ class BackendRoutingIrcClientServiceSpringIntegrationTest {
     }
 
     @Bean
-    ServerCatalog serverCatalog(@Qualifier("testServersById") Map<String, IrcProperties.Server> servers) {
+    ServerCatalog serverCatalog(
+        @Qualifier("testServersById") Map<String, IrcProperties.Server> servers) {
       ServerCatalog catalog = mock(ServerCatalog.class);
       when(catalog.find(anyString()))
           .thenAnswer(

@@ -63,6 +63,7 @@ public class ConnectionCoordinator {
 
   /** Next reconnect attempt wall-clock (epoch ms), when scheduled. */
   private final Map<String, Long> nextRetryAtByServer = new HashMap<>();
+
   /** Last backend feature marker processed for this server (dedupe noisy phase updates). */
   private final Map<String, String> lastFeatureMarkerByServer = new HashMap<>();
 
@@ -568,10 +569,12 @@ public class ConnectionCoordinator {
           ui.appendStatus(activeTarget, "(conn)", msg);
         }
         try {
-          irc.currentNick(id).ifPresent(nick -> {
-            String value = Objects.toString(nick, "").trim();
-            if (!value.isEmpty()) ui.setChatCurrentNick(id, value);
-          });
+          irc.currentNick(id)
+              .ifPresent(
+                  nick -> {
+                    String value = Objects.toString(nick, "").trim();
+                    if (!value.isEmpty()) ui.setChatCurrentNick(id, value);
+                  });
         } catch (Exception ignoredCurrentNick) {
         }
         restorePersistedTargetsAsync(id);
@@ -693,7 +696,10 @@ public class ConnectionCoordinator {
   }
 
   private ConnectivityChange handleConnectionFeaturesUpdate(
-      String serverId, IrcEvent.ConnectionFeaturesUpdated event, TargetRef status, TargetRef activeTarget) {
+      String serverId,
+      IrcEvent.ConnectionFeaturesUpdated event,
+      TargetRef status,
+      TargetRef activeTarget) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty() || event == null) return ConnectivityChange.NONE;
 
@@ -709,8 +715,7 @@ public class ConnectionCoordinator {
     ui.ensureTargetExists(status);
     String message = "";
     switch (phase) {
-      case "transport-connected" ->
-          message = "Quassel transport connected; negotiating protocol…";
+      case "transport-connected" -> message = "Quassel transport connected; negotiating protocol…";
       case "protocol-negotiated" ->
           message = "Quassel protocol negotiated; authenticating core session…";
       case "authenticating" -> message = "Authenticating with Quassel Core…";
@@ -1100,19 +1105,23 @@ public class ConnectionCoordinator {
       IrcProperties.Server previous, IrcProperties.Server next) {
     if (previous == null || next == null) return "connection profile updated";
     if (previous.backend() != next.backend()) {
-      return "backend "
-          + renderBackend(previous.backend())
-          + " → "
-          + renderBackend(next.backend());
+      return "backend " + renderBackend(previous.backend()) + " → " + renderBackend(next.backend());
     }
     if (!sameTrimmed(previous.host(), next.host())
         || previous.port() != next.port()
         || previous.tls() != next.tls()) {
       String tlsToken = next.tls() ? "tls" : "plain";
-      return "endpoint " + Objects.toString(next.host(), "") + ":" + next.port() + " (" + tlsToken + ")";
+      return "endpoint "
+          + Objects.toString(next.host(), "")
+          + ":"
+          + next.port()
+          + " ("
+          + tlsToken
+          + ")";
     }
     if (!Objects.equals(previous.proxy(), next.proxy())) return "proxy updated";
-    if (!Objects.equals(previous.serverPassword(), next.serverPassword())) return "server password updated";
+    if (!Objects.equals(previous.serverPassword(), next.serverPassword()))
+      return "server password updated";
     if (!sameTrimmed(previous.login(), next.login())
         || !sameTrimmed(previous.realName(), next.realName())
         || !Objects.equals(previous.sasl(), next.sasl())) {

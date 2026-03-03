@@ -47,8 +47,7 @@ class QuasselCoreIrcClientServiceTest {
 
     assertEquals(IrcProperties.Server.Backend.QUASSEL_CORE, service.backend());
     assertEquals(
-        "Quassel Core backend is not connected",
-        service.backendAvailabilityReason("quassel"));
+        "Quassel Core backend is not connected", service.backendAvailabilityReason("quassel"));
   }
 
   @Test
@@ -111,7 +110,8 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
     QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
-    QuasselCoreDatastreamCodec datastreamCodec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    QuasselCoreDatastreamCodec datastreamCodec =
+        org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
     IrcProperties.Server server = server();
     BlockingSocket socket = new BlockingSocket();
     QuasselCoreProtocolProbe.ProbeSelection probeSelection =
@@ -149,7 +149,8 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
     QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
-    QuasselCoreDatastreamCodec datastreamCodec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    QuasselCoreDatastreamCodec datastreamCodec =
+        org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
     IrcProperties.Server server = server();
     BlockingSocket socket = new BlockingSocket();
     QuasselCoreProtocolProbe.ProbeSelection probeSelection =
@@ -163,7 +164,8 @@ class QuasselCoreIrcClientServiceTest {
     when(protocolProbe.negotiate(socket)).thenReturn(probeSelection);
     when(authHandshake.authenticate(socket, server))
         .thenReturn(
-            new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1, 2), Map.of(20, net2Buffer)));
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 1, List.of(1, 2), Map.of(20, net2Buffer)));
 
     QuasselCoreIrcClientService service =
         new QuasselCoreIrcClientService(
@@ -188,7 +190,8 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
     QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
-    QuasselCoreDatastreamCodec datastreamCodec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    QuasselCoreDatastreamCodec datastreamCodec =
+        org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
     IrcProperties.Server server = server();
     BlockingSocket socket = new BlockingSocket();
     QuasselCoreProtocolProbe.ProbeSelection probeSelection =
@@ -285,7 +288,8 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
     QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
-    QuasselCoreDatastreamCodec datastreamCodec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    QuasselCoreDatastreamCodec datastreamCodec =
+        org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
     IrcProperties.Server server = server();
     BlockingSocket socket = new BlockingSocket();
     QuasselCoreProtocolProbe.ProbeSelection probeSelection =
@@ -319,7 +323,8 @@ class QuasselCoreIrcClientServiceTest {
             List.of(QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT_REPLY, token)));
 
     long deadline = System.currentTimeMillis() + 2_000L;
-    while (service.lastMeasuredLagMs("quassel").isEmpty() && System.currentTimeMillis() < deadline) {
+    while (service.lastMeasuredLagMs("quassel").isEmpty()
+        && System.currentTimeMillis() < deadline) {
       Thread.sleep(10L);
     }
     assertTrue(service.lastMeasuredLagMs("quassel").isPresent());
@@ -331,7 +336,8 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
     QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
-    QuasselCoreDatastreamCodec datastreamCodec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    QuasselCoreDatastreamCodec datastreamCodec =
+        org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
     IrcProperties.Server server = server();
     BlockingSocket socket = new BlockingSocket();
     QuasselCoreProtocolProbe.ProbeSelection probeSelection =
@@ -377,7 +383,8 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
     QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
-    QuasselCoreDatastreamCodec datastreamCodec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    QuasselCoreDatastreamCodec datastreamCodec =
+        org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
     IrcProperties.Server server = server();
     BlockingSocket socket = new BlockingSocket();
     QuasselCoreProtocolProbe.ProbeSelection probeSelection =
@@ -451,7 +458,8 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
     QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
-    QuasselCoreDatastreamCodec datastreamCodec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    QuasselCoreDatastreamCodec datastreamCodec =
+        org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
     IrcProperties.Server server = server();
     BlockingSocket socket = new BlockingSocket();
     QuasselCoreProtocolProbe.ProbeSelection probeSelection =
@@ -497,7 +505,8 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
     QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
-    QuasselCoreDatastreamCodec datastreamCodec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    QuasselCoreDatastreamCodec datastreamCodec =
+        org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
     IrcProperties.Server server = server();
     BlockingSocket socket = new BlockingSocket();
     QuasselCoreProtocolProbe.ProbeSelection probeSelection =
@@ -560,7 +569,8 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
     QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
-    QuasselCoreDatastreamCodec datastreamCodec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    QuasselCoreDatastreamCodec datastreamCodec =
+        org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
     IrcProperties.Server server = server();
     BlockingSocket socket = new BlockingSocket();
     QuasselCoreProtocolProbe.ProbeSelection probeSelection =
@@ -802,27 +812,12 @@ class QuasselCoreIrcClientServiceTest {
             datastreamCodec,
             "2displayMsg(Message)",
             List.of(
-                message(
-                    4,
-                    0x0008,
-                    0,
-                    "quassel!u@h",
-                    "quassel is now known as quassel2",
-                    11,
-                    ""))));
+                message(4, 0x0008, 0, "quassel!u@h", "quassel is now known as quassel2", 11, ""))));
     socket.writeInbound(
         encodeRpcCall(
             datastreamCodec,
             "2displayMsg(Message)",
-            List.of(
-                message(
-                    5,
-                    0x4000,
-                    0,
-                    "alice!u@h",
-                    "changed topic to \"new topic\"",
-                    11,
-                    ""))));
+            List.of(message(5, 0x4000, 0, "alice!u@h", "changed topic to \"new topic\"", 11, ""))));
     socket.writeInbound(
         encodeRpcCall(
             datastreamCodec,
@@ -1093,11 +1088,7 @@ class QuasselCoreIrcClientServiceTest {
     IrcProperties props =
         new IrcProperties(
             new IrcProperties.Client(
-                "IRCafe",
-                new IrcProperties.Reconnect(true, 10, 10, 2.0, 0.0, 2),
-                null,
-                null,
-                null),
+                "IRCafe", new IrcProperties.Reconnect(true, 10, 10, 2.0, 0.0, 2), null, null, null),
             List.of(server));
 
     when(serverCatalog.require("quassel")).thenReturn(server);
@@ -1128,7 +1119,8 @@ class QuasselCoreIrcClientServiceTest {
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
     QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
     QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
-    QuasselCoreDatastreamCodec datastreamCodec = org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
+    QuasselCoreDatastreamCodec datastreamCodec =
+        org.mockito.Mockito.spy(new QuasselCoreDatastreamCodec());
     IrcProperties.Server server = server();
     BlockingSocket socket = new BlockingSocket();
     QuasselCoreProtocolProbe.ProbeSelection probeSelection =

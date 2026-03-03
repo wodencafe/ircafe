@@ -32,10 +32,12 @@ public final class BackendNotAvailableException extends UnsupportedOperationExce
   private static String buildMessage(
       IrcProperties.Server.Backend backend, String operation, String serverId, String detail) {
     String backendLabel =
-        backend == null ? "backend" : switch (backend) {
-          case IRC -> "IRC backend";
-          case QUASSEL_CORE -> "Quassel Core backend";
-        };
+        backend == null
+            ? "backend"
+            : switch (backend) {
+              case IRC -> "IRC backend";
+              case QUASSEL_CORE -> "Quassel Core backend";
+            };
     String op = Objects.toString(operation, "").trim();
     if (!op.isEmpty()) op = " (" + op + ")";
     String sid = Objects.toString(serverId, "").trim();
@@ -45,4 +47,3 @@ public final class BackendNotAvailableException extends UnsupportedOperationExce
     return backendLabel + " is " + d + op + sidPart;
   }
 }
-

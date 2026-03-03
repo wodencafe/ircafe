@@ -162,7 +162,8 @@ public class QuasselCoreDatastreamCodec {
     return decodeSignalProxyPayload(readFramePayload(input));
   }
 
-  public static SignalProxyMessage decodeSignalProxyPayload(byte[] payloadBytes) throws IOException {
+  public static SignalProxyMessage decodeSignalProxyPayload(byte[] payloadBytes)
+      throws IOException {
     Objects.requireNonNull(payloadBytes, "payloadBytes");
     ByteBuffer payload = ByteBuffer.wrap(payloadBytes).order(ByteOrder.BIG_ENDIAN);
 
@@ -197,7 +198,7 @@ public class QuasselCoreDatastreamCodec {
         consumed = 4;
       }
       int remainingParamCount = Math.max(0, itemCount - consumed);
-      params = decodeKnownSyncParams(className, objectName, slotName, remainingParamCount, payload);
+      params = decodeKnownSyncParams(className, slotName, remainingParamCount, payload);
     } else if ((requestType == SIGNAL_PROXY_HEARTBEAT
             || requestType == SIGNAL_PROXY_HEARTBEAT_REPLY)
         && itemCount >= 2) {
@@ -237,8 +238,7 @@ public class QuasselCoreDatastreamCodec {
     }
     if ("2displayStatusMsg(QString,QString)".equals(slotName)) {
       String first = Objects.toString(readVariant(payload, 0), "");
-      String second =
-          remainingParamCount > 1 ? Objects.toString(readVariant(payload, 0), "") : "";
+      String second = remainingParamCount > 1 ? Objects.toString(readVariant(payload, 0), "") : "";
       return List.of(first, second);
     }
     if ("2bufferInfoUpdated(BufferInfo)".equals(slotName)
@@ -250,11 +250,7 @@ public class QuasselCoreDatastreamCodec {
   }
 
   private static List<Object> decodeKnownSyncParams(
-      String className,
-      String objectName,
-      String slotName,
-      int remainingParamCount,
-      ByteBuffer payload)
+      String className, String slotName, int remainingParamCount, ByteBuffer payload)
       throws IOException {
     if (remainingParamCount <= 0) {
       return List.of();
@@ -280,7 +276,8 @@ public class QuasselCoreDatastreamCodec {
     return List.of();
   }
 
-  private static List<Object> readRemainingVariants(int count, ByteBuffer payload) throws IOException {
+  private static List<Object> readRemainingVariants(int count, ByteBuffer payload)
+      throws IOException {
     if (count <= 0) return List.of();
     ArrayList<Object> out = new ArrayList<>(count);
     for (int i = 0; i < count; i++) {
@@ -442,7 +439,8 @@ public class QuasselCoreDatastreamCodec {
     }
 
     throw new IOException(
-        "unsupported QVariant payload type: " + (value == null ? "null" : value.getClass().getName()));
+        "unsupported QVariant payload type: "
+            + (value == null ? "null" : value.getClass().getName()));
   }
 
   private static void writeUserTypeVariant(OutputStream out, String typeName, Object value)
@@ -708,10 +706,17 @@ public class QuasselCoreDatastreamCodec {
     return size;
   }
 
-  private static void ensureRemaining(ByteBuffer in, int needed, String context) throws IOException {
+  private static void ensureRemaining(ByteBuffer in, int needed, String context)
+      throws IOException {
     if (needed < 0 || in.remaining() < needed) {
       throw new IOException(
-          "unexpected EOF while decoding " + context + " (need=" + needed + ", have=" + in.remaining() + ")");
+          "unexpected EOF while decoding "
+              + context
+              + " (need="
+              + needed
+              + ", have="
+              + in.remaining()
+              + ")");
     }
   }
 
@@ -724,7 +729,8 @@ public class QuasselCoreDatastreamCodec {
     return true;
   }
 
-  private static void writeVariantHeader(OutputStream out, int type, boolean isNull) throws IOException {
+  private static void writeVariantHeader(OutputStream out, int type, boolean isNull)
+      throws IOException {
     writeInt32(out, type);
     writeBool(out, isNull);
   }
@@ -865,8 +871,8 @@ public class QuasselCoreDatastreamCodec {
   public record UserTypeValue(String typeName, Object value) {}
 
   /** Quassel BufferInfo payload used by {@code RpcHandler::sendInput}. */
-  public record BufferInfoValue(int bufferId, int networkId, int typeBits, int groupId,
-                                String bufferName) {}
+  public record BufferInfoValue(
+      int bufferId, int networkId, int typeBits, int groupId, String bufferName) {}
 
   /** Quassel Message payload used by {@code MessageEvent::displayMsg}. */
   public record MessageValue(

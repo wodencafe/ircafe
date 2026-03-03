@@ -27,10 +27,12 @@ class BackendRoutingIrcClientServiceTest {
 
     when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
     when(quasselBackend.backend()).thenReturn(IrcProperties.Server.Backend.QUASSEL_CORE);
-    when(ircBackend.events()).thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
     when(quasselBackend.events())
         .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
-    when(serverCatalog.find("irc")).thenReturn(Optional.of(server("irc", IrcProperties.Server.Backend.IRC)));
+    when(serverCatalog.find("irc"))
+        .thenReturn(Optional.of(server("irc", IrcProperties.Server.Backend.IRC)));
     when(serverCatalog.find("quassel"))
         .thenReturn(Optional.of(server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
     when(ircBackend.connect("irc")).thenReturn(Completable.complete());
@@ -54,7 +56,8 @@ class BackendRoutingIrcClientServiceTest {
 
     when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
     when(quasselBackend.backend()).thenReturn(IrcProperties.Server.Backend.QUASSEL_CORE);
-    when(ircBackend.events()).thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
     when(quasselBackend.events())
         .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
     when(serverCatalog.find("missing")).thenReturn(Optional.empty());
@@ -106,7 +109,8 @@ class BackendRoutingIrcClientServiceTest {
         new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, quasselBackend));
 
     assertEquals(
-        "Quassel Core backend is not implemented yet", service.backendAvailabilityReason("quassel"));
+        "Quassel Core backend is not implemented yet",
+        service.backendAvailabilityReason("quassel"));
   }
 
   @Test
@@ -141,7 +145,8 @@ class BackendRoutingIrcClientServiceTest {
 
     when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
     when(quasselBackend.backend()).thenReturn(IrcProperties.Server.Backend.QUASSEL_CORE);
-    when(ircBackend.events()).thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
     when(quasselBackend.events())
         .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
 

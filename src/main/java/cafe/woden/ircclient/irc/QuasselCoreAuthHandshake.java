@@ -41,12 +41,14 @@ public class QuasselCoreAuthHandshake {
 
     boolean loginSent = false;
     for (int i = 0; i < MAX_HANDSHAKE_MESSAGES; i++) {
-      QuasselCoreDatastreamCodec.HandshakeMessage message = datastreamCodec.readHandshakeMessage(in);
+      QuasselCoreDatastreamCodec.HandshakeMessage message =
+          datastreamCodec.readHandshakeMessage(in);
       String type = Objects.toString(message.messageType(), "").trim();
       Map<String, Object> fields = message.fields();
 
       if ("ClientInitReject".equals(type)) {
-        throw new IllegalStateException(renderHandshakeError(fields, "ClientInit rejected by core"));
+        throw new IllegalStateException(
+            renderHandshakeError(fields, "ClientInit rejected by core"));
       }
 
       if ("ClientInitAck".equals(type)) {
@@ -59,7 +61,8 @@ public class QuasselCoreAuthHandshake {
       }
 
       if ("ClientLoginReject".equals(type)) {
-        throw new IllegalStateException(renderHandshakeError(fields, "ClientLogin rejected by core"));
+        throw new IllegalStateException(
+            renderHandshakeError(fields, "ClientLogin rejected by core"));
       }
 
       if ("ClientLoginAck".equals(type)) {
@@ -80,19 +83,22 @@ public class QuasselCoreAuthHandshake {
       if ("CoreSetupAck".equals(type)
           || "CoreSetupReject".equals(type)
           || "CoreSetupData".equals(type)) {
-        String fallback = switch (type) {
-          case "CoreSetupAck" -> "Quassel Core setup acknowledged; reconnect after setup completes";
-          case "CoreSetupReject" -> "Quassel Core setup rejected";
-          case "CoreSetupData" -> "Quassel Core requires initial setup before login";
-          default -> "Quassel Core setup is required before login";
-        };
+        String fallback =
+            switch (type) {
+              case "CoreSetupAck" ->
+                  "Quassel Core setup acknowledged; reconnect after setup completes";
+              case "CoreSetupReject" -> "Quassel Core setup rejected";
+              case "CoreSetupData" -> "Quassel Core requires initial setup before login";
+              default -> "Quassel Core setup is required before login";
+            };
         throw coreSetupRequired(fields, fallback);
       }
 
       throw new IllegalStateException("unexpected Quassel handshake message type: " + type);
     }
 
-    throw new IOException("Quassel handshake did not reach SessionInit within expected message limit");
+    throw new IOException(
+        "Quassel handshake did not reach SessionInit within expected message limit");
   }
 
   private void sendClientInit(OutputStream out) throws IOException {
@@ -147,7 +153,8 @@ public class QuasselCoreAuthHandshake {
     }
     String rendered = renderHandshakeError(fields, detail);
     return new CoreSetupRequiredException(
-        rendered, fields == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(fields)));
+        rendered,
+        fields == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(fields)));
   }
 
   @SuppressWarnings("unchecked")

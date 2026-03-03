@@ -116,7 +116,8 @@ class QuasselCoreAuthHandshakeTest {
 
     IllegalStateException err =
         assertThrows(
-            IllegalStateException.class, () -> handshake.authenticate(socket, server("alice", "secret")));
+            IllegalStateException.class,
+            () -> handshake.authenticate(socket, server("alice", "secret")));
 
     assertTrue(err.getMessage().contains("invalid credentials"));
   }
@@ -133,7 +134,8 @@ class QuasselCoreAuthHandshakeTest {
 
     IllegalStateException err =
         assertThrows(
-            IllegalStateException.class, () -> handshake.authenticate(socket, server("alice", "secret")));
+            IllegalStateException.class,
+            () -> handshake.authenticate(socket, server("alice", "secret")));
 
     assertTrue(err.getMessage().contains("ClientInit rejected by core"));
     assertTrue(err.getMessage().contains("core policy rejected client init"));
@@ -148,7 +150,8 @@ class QuasselCoreAuthHandshakeTest {
 
     IllegalStateException err =
         assertThrows(
-            IllegalStateException.class, () -> handshake.authenticate(socket, server("alice", "secret")));
+            IllegalStateException.class,
+            () -> handshake.authenticate(socket, server("alice", "secret")));
 
     assertTrue(err.getMessage().contains("before login completed"));
   }
@@ -231,7 +234,8 @@ class QuasselCoreAuthHandshakeTest {
 
   @SafeVarargs
   private static byte[] encodeFrames(
-      QuasselCoreDatastreamCodec codec, LinkedHashMap<String, Object>... frames) throws IOException {
+      QuasselCoreDatastreamCodec codec, LinkedHashMap<String, Object>... frames)
+      throws IOException {
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     for (LinkedHashMap<String, Object> frame : frames) {
       codec.writeHandshakeMessage(out, frame);

@@ -103,7 +103,8 @@ class UserInfoEnrichmentServiceTest {
       invokeOnEvent(
           fixture.service,
           new ServerIrcEvent(
-              "libera", new IrcEvent.Connected(Instant.parse("2026-03-03T01:00:00Z"), "irc", 6697, "me")));
+              "libera",
+              new IrcEvent.Connected(Instant.parse("2026-03-03T01:00:00Z"), "irc", 6697, "me")));
       invokeTick(fixture.service);
 
       verify(fixture.planner, never()).pollNext(anyString(), any(), any());
@@ -155,7 +156,8 @@ class UserInfoEnrichmentServiceTest {
 
   private static void invokeOnEvent(UserInfoEnrichmentService service, ServerIrcEvent event)
       throws Exception {
-    Method onEvent = UserInfoEnrichmentService.class.getDeclaredMethod("onEvent", ServerIrcEvent.class);
+    Method onEvent =
+        UserInfoEnrichmentService.class.getDeclaredMethod("onEvent", ServerIrcEvent.class);
     onEvent.setAccessible(true);
     onEvent.invoke(service, event);
   }
