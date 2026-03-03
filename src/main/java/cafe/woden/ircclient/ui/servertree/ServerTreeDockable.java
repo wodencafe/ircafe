@@ -114,6 +114,8 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
+import java.awt.MouseInfo;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.dnd.DnDConstants;
 import java.awt.dnd.DragGestureEvent;
@@ -177,6 +179,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final int SERVER_ACTION_BUTTON_SIZE = 16;
   private static final int SERVER_ACTION_BUTTON_ICON_SIZE = 12;
   private static final int SERVER_ACTION_BUTTON_MARGIN = 6;
+  private static final int PREPARED_CHANNEL_DRAG_THRESHOLD_FALLBACK_PX = 5;
   private static final int TYPING_ACTIVITY_HOLD_MS = 8000;
   private static final int TYPING_ACTIVITY_FADE_MS = 900;
   private static final int TYPING_ACTIVITY_TICK_MS = 100;
@@ -1252,31 +1255,23 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (target == null) return;
 
     clearPreparedChannelDockDrag();
-    log.info("[ircafe] prepareChannelDockDrag target={}", target);
 
     DragSource dragSource = DragSource.getDefaultDragSource();
 
     DragGestureListener dragGestureListener =
         dragGestureEvent -> {
-          log.info(
-              "[ircafe] prepared channel drag gesture recognized target={} action={} origin={}",
-              target,
-              dragGestureEvent == null ? "null" : dragGestureEvent.getDragAction(),
-              dragGestureEvent == null ? "null" : dragGestureEvent.getDragOrigin());
+          if (!shouldStartPreparedChannelDockDrag(dragGestureEvent)) {
+            return;
+          }
+          Dockable dockable = ensurePinnedDockableForDrag(target);
+          if (dockable == null) {
+            log.warn(
+                "[ircafe] prepared channel drag failed: no dockable available for target={}",
+                target);
+            clearPreparedChannelDockDrag();
+            return;
+          }
           try {
-            InputEvent triggerEvent =
-                dragGestureEvent == null ? null : dragGestureEvent.getTriggerEvent();
-            if (!(triggerEvent instanceof MouseEvent mouseEvent)
-                || mouseEvent.getID() != MouseEvent.MOUSE_DRAGGED) {
-              return;
-            }
-            Dockable dockable = ensurePinnedDockableForDrag(target);
-            if (dockable == null) {
-              log.warn(
-                  "[ircafe] prepared channel drag failed: no dockable available for target={}",
-                  target);
-              return;
-            }
             beginPinnedDockDrag(dockable, dragGestureEvent);
           } finally {
             clearPreparedChannelDockDrag();
@@ -1294,11 +1289,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       preparedTreeDragRecognizer = recognizer;
       preparedTreeDragGestureListener = dragGestureListener;
       preparedTreeDragTarget = target;
-      primeAlternateDragGesture(recognizer, event, target);
-      log.info(
-          "[ircafe] prepared channel drag recognizer target={} source={}",
-          target,
-          recognizer.getClass().getSimpleName());
+      primeAlternateDragGesture(recognizer, event);
     } catch (Exception ex) {
       log.warn(
           "[ircafe] prepareChannelDockDrag failed to create drag recognizer target={}", target, ex);
@@ -1306,16 +1297,58 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     }
   }
 
-  private void primeAlternateDragGesture(
-      DragGestureRecognizer recognizer, MouseEvent pressEvent, TargetRef target) {
+  private boolean shouldStartPreparedChannelDockDrag(DragGestureEvent dragGestureEvent) {
+    if (dragGestureEvent == null) return false;
+    InputEvent triggerEvent = dragGestureEvent.getTriggerEvent();
+    if (triggerEvent instanceof MouseEvent mouseEvent
+        && mouseEvent.getID() == MouseEvent.MOUSE_DRAGGED) {
+      return true;
+    }
+
+    if (!(triggerEvent instanceof MouseEvent mouseEvent)) return false;
+
+    boolean leftButtonDown = (mouseEvent.getModifiersEx() & InputEvent.BUTTON1_DOWN_MASK) != 0;
+    double pointerDistancePx = pointerDistanceFromDragOrigin(dragGestureEvent);
+    int thresholdPx = preparedChannelDragThresholdPx();
+    return leftButtonDown && pointerDistancePx >= thresholdPx;
+  }
+
+  private int preparedChannelDragThresholdPx() {
+    try {
+      return Math.max(1, DragSource.getDragThreshold());
+    } catch (Exception ignored) {
+      return PREPARED_CHANNEL_DRAG_THRESHOLD_FALLBACK_PX;
+    }
+  }
+
+  private double pointerDistanceFromDragOrigin(DragGestureEvent dragGestureEvent) {
+    if (dragGestureEvent == null) return -1.0d;
+    Point origin = dragGestureEvent.getDragOrigin();
+    Component component = dragGestureEvent.getComponent();
+    if (origin == null || component == null) return -1.0d;
+    try {
+      Point pointer = pointerLocationInComponent(component);
+      if (pointer == null) return -1.0d;
+      return origin.distance(pointer);
+    } catch (Exception ignored) {
+      return -1.0d;
+    }
+  }
+
+  private Point pointerLocationInComponent(Component component) {
+    if (component == null) return null;
+    var pointerInfo = MouseInfo.getPointerInfo();
+    if (pointerInfo == null || pointerInfo.getLocation() == null) return null;
+    Point pointer = new Point(pointerInfo.getLocation());
+    SwingUtilities.convertPointFromScreen(pointer, component);
+    return pointer;
+  }
+
+  private void primeAlternateDragGesture(DragGestureRecognizer recognizer, MouseEvent pressEvent) {
     if (recognizer == null || pressEvent == null) return;
     try {
       if (recognizer instanceof MouseListener mouseListener) {
         mouseListener.mousePressed(pressEvent);
-        log.info(
-            "[ircafe] primed prepared drag recognizer target={} recognizer={}",
-            target,
-            recognizer.getClass().getSimpleName());
       } else {
         log.warn(
             "[ircafe] prepared drag recognizer is not MouseListener: {}",
@@ -1337,7 +1370,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (recognizer == null || dragGestureListener == null) return;
     try {
       recognizer.removeDragGestureListener(dragGestureListener);
-      log.info("[ircafe] cleared prepared channel drag target={}", target);
     } catch (Exception ex) {
       log.warn("[ircafe] failed clearing prepared channel drag target={}", target, ex);
     }
@@ -1347,14 +1379,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     if (!isChannelTarget(target)) return null;
     Function<TargetRef, Dockable> provider = pinnedDockableProvider;
     if (provider == null) return null;
-    log.info("[ircafe] ensurePinnedDockableForDrag target={}", target);
     try {
-      Dockable dockable = provider.apply(target);
-      log.info(
-          "[ircafe] ensurePinnedDockableForDrag result target={} dockable={}",
-          target,
-          dockable == null ? "null" : dockable.getPersistentID());
-      return dockable;
+      return provider.apply(target);
     } catch (Exception ex) {
       log.warn("[ircafe] failed to ensure pinned dockable for drag target={}", target, ex);
       return null;
@@ -1362,13 +1388,17 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void beginPinnedDockDrag(Dockable dockable, DragGestureEvent dragGestureEvent) {
+    beginPinnedDockDrag(dockable, dragGestureEvent, 0);
+  }
+
+  private void beginPinnedDockDrag(
+      Dockable dockable, DragGestureEvent dragGestureEvent, int attemptNumber) {
     if (dockable == null || dragGestureEvent == null) return;
-    log.info(
-        "[ircafe] beginPinnedDockDrag dockable={} dragAction={}",
-        dockable.getPersistentID(),
-        dragGestureEvent.getDragAction());
     try {
-      boolean floatingBefore = Floating.isFloating();
+      try {
+        Docking.display(dockable);
+      } catch (Exception ignored) {
+      }
       DockingAPI dockingApi = Docking.getSingleInstance();
       DockingInternal internals = DockingInternal.get(dockingApi);
       if (internals == null) {
@@ -1391,34 +1421,160 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       }
       DragGestureEvent compatibleEvent =
           compatibleDragGestureEvent(floatListener, dragGestureEvent);
-      log.info(
-          "[ircafe] beginPinnedDockDrag startDrag dockable={} compatibleAction={}",
-          dockable.getPersistentID(),
-          compatibleEvent.getDragAction());
       floatListener.startDrag(compatibleEvent);
       boolean floatingAfter = Floating.isFloating();
-      log.info(
-          "[ircafe] beginPinnedDockDrag invoked startDrag for {} floatingBefore={} floatingAfter={}",
-          dockable.getPersistentID(),
-          floatingBefore,
-          floatingAfter);
       if (!floatingAfter) {
-        log.warn(
-            "[ircafe] beginPinnedDockDrag did not enter floating mode for {}; forcing dock display",
-            dockable.getPersistentID());
-        try {
-          Docking.display(dockable);
-        } catch (Exception displayEx) {
+        if (attemptNumber == 0) {
+          boolean floatedViaFloatSource =
+              retryPinnedDockDragWithFloatSource(floatListener, dragGestureEvent, dockable);
+          if (floatedViaFloatSource || Floating.isFloating()) return;
           log.warn(
-              "[ircafe] beginPinnedDockDrag fallback display failed for {}",
-              dockable.getPersistentID(),
-              displayEx);
+              "[ircafe] beginPinnedDockDrag did not enter floating mode for {}; scheduling one retry",
+              dockable.getPersistentID());
+          SwingUtilities.invokeLater(
+              () -> beginPinnedDockDrag(dockable, dragGestureEvent, attemptNumber + 1));
+        } else {
+          log.warn(
+              "[ircafe] beginPinnedDockDrag did not enter floating mode for {} after retry",
+              dockable.getPersistentID());
         }
       }
     } catch (Exception ex) {
       log.warn(
           "[ircafe] failed to begin pinned dock drag dockable={}", dockable.getPersistentID(), ex);
     }
+  }
+
+  private boolean retryPinnedDockDragWithFloatSource(
+      FloatListener floatListener, DragGestureEvent seedEvent, Dockable dockable) {
+    if (floatListener == null || seedEvent == null || dockable == null) return false;
+    DragSource floatDragSource = floatListenerDragSource(floatListener);
+    Component sourceComponent = seedEvent.getComponent();
+    if (sourceComponent == null) {
+      sourceComponent = tree;
+    }
+    if (floatDragSource == null || sourceComponent == null) {
+      return false;
+    }
+
+    DragGestureListener retryListener =
+        retryEvent -> {
+          if (retryEvent != null) {
+            floatListener.startDrag(retryEvent);
+          }
+        };
+
+    DragGestureRecognizer retryRecognizer = null;
+    try {
+      retryRecognizer =
+          floatDragSource.createDefaultDragGestureRecognizer(
+              sourceComponent, DnDConstants.ACTION_MOVE, retryListener);
+      if (retryRecognizer == null) {
+        return false;
+      }
+
+      MouseEvent pressEvent = seedPressEventForRecognizer(seedEvent, sourceComponent);
+      if (pressEvent == null) return false;
+      if (retryRecognizer instanceof MouseListener mouseListener) {
+        mouseListener.mousePressed(pressEvent);
+      }
+
+      MouseEvent dragEvent = seedDragEventForRecognizer(seedEvent, sourceComponent, pressEvent);
+      if (dragEvent != null
+          && retryRecognizer instanceof java.awt.event.MouseMotionListener motion) {
+        motion.mouseDragged(dragEvent);
+      }
+
+      boolean floatingAfter = Floating.isFloating();
+      return floatingAfter;
+    } catch (Exception ex) {
+      log.warn("[ircafe] float-source retry failed for {}", dockable.getPersistentID(), ex);
+      return false;
+    } finally {
+      if (retryRecognizer != null) {
+        try {
+          retryRecognizer.removeDragGestureListener(retryListener);
+        } catch (Exception ignored) {
+        }
+      }
+    }
+  }
+
+  private MouseEvent seedPressEventForRecognizer(
+      DragGestureEvent seedEvent, Component sourceComponent) {
+    if (seedEvent == null || sourceComponent == null) return null;
+    InputEvent triggerEvent = seedEvent.getTriggerEvent();
+    int modifiers = InputEvent.BUTTON1_DOWN_MASK;
+    long when = System.currentTimeMillis();
+    Point point = null;
+    if (triggerEvent instanceof MouseEvent triggerMouse) {
+      modifiers |= triggerMouse.getModifiersEx();
+      when = triggerMouse.getWhen();
+      point = eventPointInComponent(triggerMouse, sourceComponent);
+    }
+    if (point == null) {
+      point = pointerLocationInComponent(sourceComponent);
+    }
+    if (point == null) return null;
+    return new MouseEvent(
+        sourceComponent,
+        MouseEvent.MOUSE_PRESSED,
+        when,
+        modifiers,
+        point.x,
+        point.y,
+        1,
+        false,
+        MouseEvent.BUTTON1);
+  }
+
+  private MouseEvent seedDragEventForRecognizer(
+      DragGestureEvent seedEvent, Component sourceComponent, MouseEvent pressEvent) {
+    if (seedEvent == null || sourceComponent == null) return null;
+    Point dragPoint = pointerLocationInComponent(sourceComponent);
+    if (dragPoint == null && pressEvent != null) {
+      dragPoint = new Point(pressEvent.getPoint());
+    }
+    if (dragPoint == null) return null;
+
+    Point basePoint = pressEvent != null ? pressEvent.getPoint() : new Point(dragPoint);
+    int minDistance = preparedChannelDragThresholdPx() + 2;
+    if (basePoint.distance(dragPoint) < minDistance) {
+      dragPoint = new Point(basePoint.x + minDistance, basePoint.y + minDistance);
+    }
+    int maxX = Math.max(0, sourceComponent.getWidth() - 1);
+    int maxY = Math.max(0, sourceComponent.getHeight() - 1);
+    dragPoint.x = Math.max(0, Math.min(maxX, dragPoint.x));
+    dragPoint.y = Math.max(0, Math.min(maxY, dragPoint.y));
+
+    int modifiers = InputEvent.BUTTON1_DOWN_MASK;
+    InputEvent triggerEvent = seedEvent.getTriggerEvent();
+    if (triggerEvent instanceof MouseEvent triggerMouse) {
+      modifiers |= triggerMouse.getModifiersEx();
+    }
+
+    return new MouseEvent(
+        sourceComponent,
+        MouseEvent.MOUSE_DRAGGED,
+        System.currentTimeMillis(),
+        modifiers,
+        dragPoint.x,
+        dragPoint.y,
+        1,
+        false,
+        MouseEvent.BUTTON1);
+  }
+
+  private Point eventPointInComponent(MouseEvent sourceEvent, Component targetComponent) {
+    if (sourceEvent == null || targetComponent == null) return null;
+    Point point = new Point(sourceEvent.getPoint());
+    Component sourceComponent = sourceEvent.getComponent();
+    if (sourceComponent != null) {
+      SwingUtilities.convertPointToScreen(point, sourceComponent);
+      SwingUtilities.convertPointFromScreen(point, targetComponent);
+      return point;
+    }
+    return point;
   }
 
   private DragGestureEvent compatibleDragGestureEvent(
@@ -1430,7 +1586,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       return originalEvent;
     }
     if (expectedSource == originalEvent.getDragSource()) {
-      log.info("[ircafe] drag-event adaptation skipped: original drag source already compatible");
       return originalEvent;
     }
     Component component = floatListenerDragComponent(floatListener);
@@ -1461,14 +1616,26 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     ArrayList<InputEvent> events = new ArrayList<>(1);
     InputEvent trigger = originalEvent.getTriggerEvent();
+    boolean triggerIsMouseDragged =
+        trigger instanceof MouseEvent mouseEvent && mouseEvent.getID() == MouseEvent.MOUSE_DRAGGED;
+    if (!triggerIsMouseDragged) {
+      Point livePointer = pointerLocationInComponent(component);
+      if (livePointer != null) {
+        origin = livePointer;
+      }
+    }
     int triggerModifiers =
         trigger instanceof MouseEvent mouseEvent
             ? mouseEvent.getModifiersEx()
             : InputEvent.BUTTON1_DOWN_MASK;
+    triggerModifiers |= InputEvent.BUTTON1_DOWN_MASK;
     long triggerWhen =
         trigger instanceof MouseEvent mouseEvent
             ? mouseEvent.getWhen()
             : System.currentTimeMillis();
+    if (!triggerIsMouseDragged) {
+      triggerWhen = System.currentTimeMillis();
+    }
     events.add(
         new MouseEvent(
             component,
@@ -1484,14 +1651,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     try {
       DragGestureRecognizer recognizer =
           new SyntheticDragGestureRecognizer(expectedSource, component, action);
-      DragGestureEvent adapted = new DragGestureEvent(recognizer, action, origin, events);
-      log.info(
-          "[ircafe] drag-event adapted from source={} to source={} component={} action={}",
-          originalEvent.getDragSource(),
-          expectedSource,
-          component.getClass().getSimpleName(),
-          action);
-      return adapted;
+      return new DragGestureEvent(recognizer, action, origin, events);
     } catch (Exception ex) {
       log.warn("[ircafe] failed to adapt drag gesture event; using original event", ex);
       return originalEvent;
