@@ -135,15 +135,7 @@ public class MainFrame extends JFrame {
     }
 
     if (!restoredDockLayout) {
-      // First dock must be to an empty root container.
-      Docking.dock(chat, this);
-
-      Docking.dock(serverTree, chat, DockingRegion.WEST, 0.22);
-      // ModernDocking's "size" parameter maps to the JSplitPane divider *location* proportion.
-      // For EAST docking, that proportion is measured from the LEFT edge, so 0.18 means:
-      //   left=18% (chat) / right=82% (users)  -> comically huge user list.
-      // We want the *users* panel to be ~18% of the width, so the divider should be at ~82%.
-      Docking.dock(users, chat, DockingRegion.EAST, 0.82);
+      ensureStartupDockLayout(chat, serverTree, users);
     }
     final java.util.concurrent.atomic.AtomicBoolean initialSideSizesApplied =
         new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -446,6 +438,75 @@ public class MainFrame extends JFrame {
     } catch (Exception ex) {
       log.warn("docking: failed persist phase={}", phase, ex);
       return false;
+    }
+  }
+
+  private void ensureStartupDockLayout(
+      ChatDockable chat, ServerTreeDockable serverTree, UserListDockable users) {
+    if (!Docking.isDocked(chat)) {
+      safeDockRoot(chat);
+    }
+
+    Dockable anchor = Docking.isDocked(chat) ? chat : firstDockedAnchor(serverTree, users);
+    if (anchor == null) {
+      log.warn(
+          "docking: could not establish startup anchor (chat/server/users not docked); side docks skipped");
+      return;
+    }
+
+    if (!Docking.isDocked(serverTree)) {
+      safeDockRelative(serverTree, anchor, DockingRegion.WEST, 0.22);
+    }
+    if (!Docking.isDocked(users)) {
+      // ModernDocking's "size" parameter maps to the JSplitPane divider *location* proportion.
+      // For EAST docking, that proportion is measured from the LEFT edge, so 0.18 means:
+      //   left=18% (chat) / right=82% (users)  -> comically huge user list.
+      // We want the *users* panel to be ~18% of the width, so the divider should be at ~82%.
+      safeDockRelative(users, anchor, DockingRegion.EAST, 0.82);
+    }
+  }
+
+  private void safeDockRoot(Dockable dockable) {
+    try {
+      Docking.dock(dockable, this);
+    } catch (Exception ex) {
+      log.warn("docking: failed root-docking {}", safePersistentId(dockable), ex);
+    }
+  }
+
+  private void safeDockRelative(
+      Dockable dockable, Dockable anchor, DockingRegion region, double proportion) {
+    if (dockable == null || anchor == null) return;
+    if (!Docking.isDocked(anchor)) return;
+    try {
+      Docking.dock(dockable, anchor, region, proportion);
+    } catch (Exception ex) {
+      log.warn(
+          "docking: failed relative-docking {} against {} region={} proportion={}",
+          safePersistentId(dockable),
+          safePersistentId(anchor),
+          region,
+          proportion,
+          ex);
+    }
+  }
+
+  private Dockable firstDockedAnchor(Dockable... candidates) {
+    if (candidates == null) return null;
+    for (Dockable candidate : candidates) {
+      if (candidate != null && Docking.isDocked(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  private static String safePersistentId(Dockable dockable) {
+    if (dockable == null) return "null";
+    try {
+      return dockable.getPersistentID();
+    } catch (Exception ignored) {
+      return dockable.getClass().getSimpleName();
     }
   }
 }

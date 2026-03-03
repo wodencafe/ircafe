@@ -21,6 +21,7 @@ import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.shell.AppMenuBar;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Window;
 import java.lang.reflect.InvocationTargetException;
 import javax.swing.AbstractAction;
 import javax.swing.JMenuItem;
@@ -87,16 +88,50 @@ class AppMenuBarActionsMockVerifyTest {
     verify(serverDialogs).openManageServers(any());
   }
 
+  @Test
+  void syncDockAppearanceAfterLayoutResetReappliesThemeAppearance() throws Exception {
+    ThemeManager themeManager = mock(ThemeManager.class);
+    when(themeManager.featuredThemes()).thenReturn(new ThemeManager.ThemeOption[0]);
+    AppMenuBar menuBar =
+        onEdtCall(
+            () ->
+                newMenuBar(
+                    mock(ApplicationShutdownCoordinator.class), null, null, null, themeManager));
+
+    var method =
+        AppMenuBar.class.getDeclaredMethod("syncDockAppearanceAfterLayoutReset", Window.class);
+    method.setAccessible(true);
+    onEdt(
+        () -> {
+          try {
+            method.invoke(menuBar, new Object[] {null});
+          } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+          }
+        });
+
+    verify(themeManager).applyAppearance(false);
+  }
+
   private static AppMenuBar newMenuBar(
       ApplicationShutdownCoordinator shutdownCoordinator,
       ChatDockable chatOverride,
       ServerTreeDockable treeOverride,
       ServerDialogs dialogsOverride) {
+    return newMenuBar(shutdownCoordinator, chatOverride, treeOverride, dialogsOverride, null);
+  }
+
+  private static AppMenuBar newMenuBar(
+      ApplicationShutdownCoordinator shutdownCoordinator,
+      ChatDockable chatOverride,
+      ServerTreeDockable treeOverride,
+      ServerDialogs dialogsOverride,
+      ThemeManager themeOverride) {
     PreferencesDialog preferencesDialog = mock(PreferencesDialog.class);
     NickColorOverridesDialog nickColorOverridesDialog = mock(NickColorOverridesDialog.class);
     IgnoreListDialog ignoreListDialog = mock(IgnoreListDialog.class);
     ThemeSelectionDialog themeSelectionDialog = mock(ThemeSelectionDialog.class);
-    ThemeManager themeManager = mock(ThemeManager.class);
+    ThemeManager themeManager = themeOverride != null ? themeOverride : mock(ThemeManager.class);
     when(themeManager.featuredThemes()).thenReturn(new ThemeManager.ThemeOption[0]);
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(null);

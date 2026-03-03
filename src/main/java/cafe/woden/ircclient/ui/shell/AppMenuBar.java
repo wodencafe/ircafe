@@ -145,6 +145,7 @@ public class AppMenuBar extends JMenuBar {
   private final PushyNotificationService pushyNotificationService;
   private final NotificationSoundService notificationSoundService;
   private final RuntimeJfrService runtimeJfrService;
+  private final ThemeManager themeManager;
   private final ChatDockable chat;
   private final ServerTreeDockable serverTree;
   private final UserListDockable users;
@@ -202,6 +203,7 @@ public class AppMenuBar extends JMenuBar {
     this.pushyNotificationService = pushyNotificationService;
     this.notificationSoundService = notificationSoundService;
     this.runtimeJfrService = runtimeJfrService;
+    this.themeManager = themeManager;
     this.chat = chat;
     this.serverTree = serverTree;
     this.users = users;
@@ -1726,8 +1728,38 @@ public class AppMenuBar extends JMenuBar {
     // Re-apply split-pane sizing/locks (px-based) after re-docking.
     // Run a short stabilization loop because ModernDocking may rebuild split panes over several EDT
     // ticks.
-    SwingUtilities.invokeLater(() -> applySideDockLocksWithStabilization(root));
+    SwingUtilities.invokeLater(
+        () -> {
+          applySideDockLocksWithStabilization(root);
+          syncDockAppearanceAfterLayoutReset(root);
+        });
     bringToFront(chat);
+  }
+
+  private void syncDockAppearanceAfterLayoutReset(Window root) {
+    if (themeManager != null) {
+      themeManager.applyAppearance(false);
+      return;
+    }
+
+    for (Window w : Window.getWindows()) {
+      if (w == null) continue;
+      try {
+        SwingUtilities.updateComponentTreeUI(w);
+        w.invalidate();
+        w.repaint();
+      } catch (Exception ignored) {
+      }
+    }
+
+    if (root != null) {
+      try {
+        SwingUtilities.updateComponentTreeUI(root);
+        root.invalidate();
+        root.repaint();
+      } catch (Exception ignored) {
+      }
+    }
   }
 
   private void ensureSideDockVisible(Dockable dockable, DockingRegion region) {
