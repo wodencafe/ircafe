@@ -1922,7 +1922,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       bus.onNext(
           new ServerIrcEvent(
               serverId,
-              new IrcEvent.ChannelModesListed(Instant.now(), parsed.channel(), parsed.details())));
+              ChannelModeObservationFactory.fromNumeric324(
+                  Instant.now(), parsed.channel(), parsed.details())));
       return;
     }
 
@@ -2642,7 +2643,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         bus.onNext(
             new ServerIrcEvent(
                 serverId,
-                new IrcEvent.ChannelModesListed(
+                ChannelModeObservationFactory.fromNumeric324(
                     Instant.now(), parsed.channel(), parsed.details())));
       } else {
         // Defensive fallback: if parsing fails, still surface the raw numeric.
@@ -3430,7 +3431,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     if (details != null && !details.isBlank()) {
       bus.onNext(
           new ServerIrcEvent(
-              serverId, new IrcEvent.ChannelModeChanged(Instant.now(), chan, by, details)));
+              serverId,
+              ChannelModeObservationFactory.fromLiveMode(Instant.now(), chan, by, details)));
     }
   }
 

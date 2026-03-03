@@ -806,20 +806,18 @@ public class IrcMediator implements MediatorControlPort {
           }
         }
       }
-      case IrcEvent.ChannelModeChanged ev -> {
-        inboundModeEventHandler.handleChannelModeChanged(sid, ev);
-        maybeNotifyModeEvents(sid, ev);
-        recordInterceptorEvent(
-            sid,
-            ev.channel(),
-            ev.by(),
-            learnedHostmaskForNick(sid, ev.by()),
-            ev.details(),
-            InterceptorEventType.MODE);
-      }
-
-      case IrcEvent.ChannelModesListed ev -> {
-        inboundModeEventHandler.handleChannelModesListed(sid, ev);
+      case IrcEvent.ChannelModeObserved ev -> {
+        inboundModeEventHandler.handleChannelModeObserved(sid, ev);
+        if (ev.kind() == IrcEvent.ChannelModeKind.DELTA) {
+          maybeNotifyModeEvents(sid, ev);
+          recordInterceptorEvent(
+              sid,
+              ev.channel(),
+              ev.by(),
+              learnedHostmaskForNick(sid, ev.by()),
+              ev.details(),
+              InterceptorEventType.MODE);
+        }
       }
 
       case IrcEvent.ChannelTopicUpdated ev -> {
@@ -2135,7 +2133,7 @@ public class IrcMediator implements MediatorControlPort {
         || m.contains("banned from this server");
   }
 
-  private void maybeNotifyModeEvents(String serverId, IrcEvent.ChannelModeChanged ev) {
+  private void maybeNotifyModeEvents(String serverId, IrcEvent.ChannelModeObserved ev) {
     if (serverId == null || ev == null) return;
 
     String channel = Objects.toString(ev.channel(), "").trim();

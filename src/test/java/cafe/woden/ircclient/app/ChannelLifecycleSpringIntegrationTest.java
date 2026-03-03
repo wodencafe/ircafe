@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -191,6 +192,38 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
             eq(chan), any(), eq("alice"), anyString(), eq(false), eq(msgId), any(), any());
     verify(trayNotificationsPort, times(1))
         .notifyHighlight(eq(sid), eq(channel), eq("alice"), anyString());
+  }
+
+  @Test
+  void liveSnapshotAfterModeDeltaUpdatesSnapshotWithoutTranscriptEcho() {
+    String sid = primaryServerId();
+    String channel = "#it-mode-snapshot";
+    TargetRef chan = new TargetRef(sid, channel);
+    Instant at = Instant.parse("2026-03-03T18:11:00Z");
+
+    emitServerEvent(
+        sid,
+        new IrcEvent.ChannelModeObserved(
+            at,
+            channel,
+            "FurBot",
+            "+o Arca",
+            IrcEvent.ChannelModeKind.DELTA,
+            IrcEvent.ChannelModeProvenance.LIVE_MODE_EVENT));
+    emitServerEvent(
+        sid,
+        new IrcEvent.ChannelModeObserved(
+            at.plusMillis(5),
+            channel,
+            "",
+            "+nrf [10j#R10]:5",
+            IrcEvent.ChannelModeKind.SNAPSHOT,
+            IrcEvent.ChannelModeProvenance.LIVE_MODE_EVENT));
+
+    verify(swingUiPort, atLeastOnce())
+        .appendNotice(chan, "(mode)", "FurBot gives channel operator privileges to Arca.");
+    verify(swingUiPort, never())
+        .appendNotice(chan, "(mode)", "Channel modes: no outside messages, registered only, +f");
   }
 
   private void emitServerEvent(String serverId, IrcEvent event) {

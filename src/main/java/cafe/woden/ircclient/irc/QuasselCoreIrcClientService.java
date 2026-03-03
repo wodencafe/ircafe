@@ -1660,7 +1660,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         bus.onNext(
             new ServerIrcEvent(
                 session.serverId,
-                new IrcEvent.ChannelModeChanged(at, target, fromDisplay, details)));
+                ChannelModeObservationFactory.fromQuasselDisplayMessage(
+                    at, target, fromDisplay, details)));
         return;
       }
     }

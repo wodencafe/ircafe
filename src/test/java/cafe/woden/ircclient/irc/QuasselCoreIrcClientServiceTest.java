@@ -847,9 +847,11 @@ class QuasselCoreIrcClientServiceTest {
     IrcEvent.ChannelTopicUpdated topic =
         assertInstanceOf(IrcEvent.ChannelTopicUpdated.class, events.values().get(8).event());
     assertEquals("new topic", topic.topic());
-    IrcEvent.ChannelModeChanged mode =
-        assertInstanceOf(IrcEvent.ChannelModeChanged.class, events.values().get(9).event());
+    IrcEvent.ChannelModeObserved mode =
+        assertInstanceOf(IrcEvent.ChannelModeObserved.class, events.values().get(9).event());
     assertEquals("+o alice", mode.details());
+    assertEquals(IrcEvent.ChannelModeKind.DELTA, mode.kind());
+    assertEquals(IrcEvent.ChannelModeProvenance.QUASSEL_DISPLAY_MESSAGE, mode.provenance());
     IrcEvent.KickedFromChannel kicked =
         assertInstanceOf(IrcEvent.KickedFromChannel.class, events.values().get(10).event());
     assertEquals("gone", kicked.reason());

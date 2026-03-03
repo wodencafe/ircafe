@@ -397,7 +397,7 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
         sink.accept(
             new ServerIrcEvent(
                 serverId,
-                new IrcEvent.ChannelModesListed(
+                ChannelModeObservationFactory.fromNumeric324Fallback(
                     Instant.now(), parsed.channel(), parsed.details())));
       } else {
         log.warn(

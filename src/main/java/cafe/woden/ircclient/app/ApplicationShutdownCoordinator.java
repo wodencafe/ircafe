@@ -86,7 +86,8 @@ public class ApplicationShutdownCoordinator {
       } else {
         int springExitCode = SpringApplication.exit(applicationContext, () -> 0);
         if (springExitCode != 0) {
-          log.debug("[ircafe] Spring exit code {} ignored for normal desktop shutdown.", springExitCode);
+          log.debug(
+              "[ircafe] Spring exit code {} ignored for normal desktop shutdown.", springExitCode);
         }
       }
     } catch (IllegalStateException ise) {
@@ -125,9 +126,7 @@ public class ApplicationShutdownCoordinator {
 
     if (worker.isAlive()) {
       log.error(
-          "[ircafe] Shutdown phase '{}' exceeded {}ms; continuing shutdown.",
-          phase,
-          timeoutMs);
+          "[ircafe] Shutdown phase '{}' exceeded {}ms; continuing shutdown.", phase, timeoutMs);
       return;
     }
 
