@@ -65,6 +65,10 @@ ircafe:
     # Show unread/highlight notification badges in the server tree.
     serverTreeNotificationBadgesEnabled: true
 
+    # Memory widget refresh cadence in milliseconds (250..60000).
+    # Lower values update more frequently but increase wakeups/CPU.
+    memoryUsageRefreshIntervalMs: 1000
+
     # Optional chat transcript color overrides (hex like "#RRGGBB").
     # Leave unset to follow the active theme/preset defaults.
     # chatThemePreset: DEFAULT
@@ -182,7 +186,7 @@ ircafe:
         # If EDT stalls longer than this, write freeze events to Application -> AssertJ Swing.
         edtFreezeThresholdMs: 2500
         # Watchdog poll cadence.
-        edtWatchdogPollMs: 500
+        edtWatchdogPollMs: 1000
         # Fallback detector throttling: minimum interval between repeated off-EDT violation reports.
         edtFallbackViolationReportMs: 5000
         # Optional issue actions when EDT freeze/violation problems are detected.

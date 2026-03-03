@@ -94,6 +94,7 @@ public class ChatDockManager {
 
   @PostConstruct
   void wire() {
+    serverTree.setPinnedDockableProvider(this::openPinnedForDrag);
     disposables.add(
         serverTree
             .openPinnedChatRequests()
@@ -110,6 +111,7 @@ public class ChatDockManager {
 
   @PreDestroy
   void shutdown() {
+    serverTree.setPinnedDockableProvider(null);
     disposables.dispose();
     // Best-effort cleanup of dynamically created dockables.
     for (PinnedChatDockable d : openPinned.values()) {
@@ -235,20 +237,45 @@ public class ChatDockManager {
   }
 
   public void openPinned(TargetRef target) {
-    if (target == null) return;
+    openPinnedInternal(target);
+  }
+
+  public Dockable openPinnedForDrag(TargetRef target) {
+    log.info("[ircafe] openPinnedForDrag target={}", target);
+    PinnedChatDockable dockable = ensurePinnedDockable(target);
+    if (dockable != null) {
+      syncPinnedDockState(target, dockable);
+      ensurePinnedDockedForDrag(dockable);
+    }
+    log.info(
+        "[ircafe] openPinnedForDrag result target={} dockable={} docked={}",
+        target,
+        dockable == null ? "null" : dockable.getPersistentID(),
+        dockable != null && Docking.isDocked(dockable));
+    return dockable;
+  }
+
+  private void ensurePinnedDockedForDrag(PinnedChatDockable dock) {
+    if (dock == null) return;
+    try {
+      if (!Docking.isDocked(dock)) {
+        Docking.dock(dock, mainChat, DockingRegion.CENTER);
+      }
+    } catch (Exception ex) {
+      log.warn(
+          "[ircafe] failed to ensure pinned dockable is docked for drag: {}",
+          dock.getPersistentID(),
+          ex);
+    }
+  }
+
+  private PinnedChatDockable openPinnedInternal(TargetRef target) {
+    if (target == null) return null;
 
     PinnedChatDockable dock = ensurePinnedDockable(target);
-    if (dock == null) return;
+    if (dock == null) return null;
 
-    // Keep in sync with current settings/draft even for already-registered dockables.
-    dock.setInputEnabled(pinnedInputsEnabled);
-    dock.setTopic(mainChat.topicFor(target));
-
-    // Avoid clobbering undo/caret state unless we actually need to apply a different draft.
-    String desiredDraft = pinnedDrafts.get(target);
-    if (desiredDraft != null && !desiredDraft.equals(dock.getDraftText())) {
-      dock.setDraftText(desiredDraft);
-    }
+    syncPinnedDockState(target, dock);
 
     // If the user previously closed the dock via the UI, it is likely undocked but still
     // registered.
@@ -270,6 +297,20 @@ public class ChatDockManager {
     try {
       dock.onShown();
     } catch (Exception ignored) {
+    }
+    return dock;
+  }
+
+  private void syncPinnedDockState(TargetRef target, PinnedChatDockable dock) {
+    if (target == null || dock == null) return;
+    // Keep in sync with current settings/draft even for already-registered dockables.
+    dock.setInputEnabled(pinnedInputsEnabled);
+    dock.setTopic(mainChat.topicFor(target));
+
+    // Avoid clobbering undo/caret state unless we actually need to apply a different draft.
+    String desiredDraft = pinnedDrafts.get(target);
+    if (desiredDraft != null && !desiredDraft.equals(dock.getDraftText())) {
+      dock.setDraftText(desiredDraft);
     }
   }
 

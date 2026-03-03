@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.servertree.coordinator;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeChannelStateStore;
@@ -11,6 +12,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -28,6 +32,45 @@ public final class ServerTreeChannelStateCoordinator {
     void restoreExpandedTreePaths(Set<TreePath> expanded);
 
     void emitManagedChannelsChanged(String serverId);
+  }
+
+  public static Context context(
+      Function<String, String> normalizeServerId,
+      Function<String, DefaultMutableTreeNode> channelListNode,
+      Supplier<Set<TreePath>> snapshotExpandedTreePaths,
+      Consumer<Set<TreePath>> restoreExpandedTreePaths,
+      Consumer<String> emitManagedChannelsChanged) {
+    Objects.requireNonNull(normalizeServerId, "normalizeServerId");
+    Objects.requireNonNull(channelListNode, "channelListNode");
+    Objects.requireNonNull(snapshotExpandedTreePaths, "snapshotExpandedTreePaths");
+    Objects.requireNonNull(restoreExpandedTreePaths, "restoreExpandedTreePaths");
+    Objects.requireNonNull(emitManagedChannelsChanged, "emitManagedChannelsChanged");
+    return new Context() {
+      @Override
+      public String normalizeServerId(String serverId) {
+        return normalizeServerId.apply(serverId);
+      }
+
+      @Override
+      public DefaultMutableTreeNode channelListNode(String serverId) {
+        return channelListNode.apply(serverId);
+      }
+
+      @Override
+      public Set<TreePath> snapshotExpandedTreePaths() {
+        return snapshotExpandedTreePaths.get();
+      }
+
+      @Override
+      public void restoreExpandedTreePaths(Set<TreePath> expanded) {
+        restoreExpandedTreePaths.accept(expanded);
+      }
+
+      @Override
+      public void emitManagedChannelsChanged(String serverId) {
+        emitManagedChannelsChanged.accept(serverId);
+      }
+    };
   }
 
   private final RuntimeConfigStore runtimeConfig;
@@ -554,7 +597,7 @@ public final class ServerTreeChannelStateCoordinator {
   }
 
   private static String foldChannelKey(String channel) {
-    return Objects.toString(channel, "").trim().toLowerCase(java.util.Locale.ROOT);
+    return ServerTreeConventions.foldChannelKey(channel);
   }
 
   private static boolean containsIgnoreCase(List<String> values, String needle) {

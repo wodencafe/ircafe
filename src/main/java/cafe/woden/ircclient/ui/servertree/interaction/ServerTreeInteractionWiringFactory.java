@@ -62,6 +62,8 @@ public final class ServerTreeInteractionWiringFactory {
       Consumer<Runnable> withSuppressedSelectionBroadcast,
       Runnable refreshNodeActionsEnabled,
       Function<TreePath, JPopupMenu> buildPopupMenu,
+      Consumer<MouseEvent> prepareChannelDockDrag,
+      Runnable clearPreparedChannelDockDrag,
       Supplier<ServerTreeMiddleDragReorderHandler.Context> middleDragReorderContext,
       BooleanSupplier startupSelectionCompleted,
       Runnable markStartupSelectionCompleted,
@@ -118,6 +120,9 @@ public final class ServerTreeInteractionWiringFactory {
                 in.withSuppressedSelectionBroadcast(), "withSuppressedSelectionBroadcast"),
             Objects.requireNonNull(in.refreshNodeActionsEnabled(), "refreshNodeActionsEnabled"),
             Objects.requireNonNull(in.buildPopupMenu(), "buildPopupMenu"),
+            Objects.requireNonNull(in.prepareChannelDockDrag(), "prepareChannelDockDrag"),
+            Objects.requireNonNull(
+                in.clearPreparedChannelDockDrag(), "clearPreparedChannelDockDrag"),
             Objects.requireNonNull(in.middleDragReorderContext(), "middleDragReorderContext"),
             Objects.requireNonNull(in.startupSelectionCompleted(), "startupSelectionCompleted"),
             Objects.requireNonNull(

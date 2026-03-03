@@ -51,6 +51,7 @@ public record UiProperties(
     Integer commandHistoryMaxSize,
     Integer chatTranscriptMaxLinesPerTarget,
     String memoryUsageDisplayMode,
+    Integer memoryUsageRefreshIntervalMs,
     Integer memoryUsageWarningNearMaxPercent,
     Boolean memoryUsageWarningTooltipEnabled,
     Boolean memoryUsageWarningToastEnabled,
@@ -380,7 +381,7 @@ public record UiProperties(
     public Layout {
       if (serverDockWidthPx == null || serverDockWidthPx <= 0) serverDockWidthPx = 280;
       if (userDockWidthPx == null || userDockWidthPx <= 0) userDockWidthPx = 240;
-      if (preserveDockLayout == null) preserveDockLayout = false;
+      if (preserveDockLayout == null) preserveDockLayout = true;
     }
   }
 
@@ -408,7 +409,7 @@ public record UiProperties(
       if (edtFreezeWatchdogEnabled == null) edtFreezeWatchdogEnabled = true;
       if (edtFreezeThresholdMs == null || edtFreezeThresholdMs < 500) edtFreezeThresholdMs = 2500;
       if (edtFreezeThresholdMs > 120_000) edtFreezeThresholdMs = 120_000;
-      if (edtWatchdogPollMs == null || edtWatchdogPollMs < 100) edtWatchdogPollMs = 500;
+      if (edtWatchdogPollMs == null || edtWatchdogPollMs < 100) edtWatchdogPollMs = 1000;
       if (edtWatchdogPollMs > 10_000) edtWatchdogPollMs = 10_000;
       if (edtFallbackViolationReportMs == null || edtFallbackViolationReportMs < 250) {
         edtFallbackViolationReportMs = 5000;

@@ -33,6 +33,8 @@ public final class ServerTreeInteractionMediatorContextAdapter
   private final Consumer<Runnable> withSuppressedSelectionBroadcast;
   private final Runnable refreshNodeActionsEnabled;
   private final Function<TreePath, JPopupMenu> buildPopupMenu;
+  private final Consumer<MouseEvent> prepareChannelDockDrag;
+  private final Runnable clearPreparedChannelDockDrag;
   private final Supplier<ServerTreeMiddleDragReorderHandler.Context> middleDragReorderContext;
   private final BooleanSupplier startupSelectionCompleted;
   private final Runnable markStartupSelectionCompleted;
@@ -54,6 +56,8 @@ public final class ServerTreeInteractionMediatorContextAdapter
       Consumer<Runnable> withSuppressedSelectionBroadcast,
       Runnable refreshNodeActionsEnabled,
       Function<TreePath, JPopupMenu> buildPopupMenu,
+      Consumer<MouseEvent> prepareChannelDockDrag,
+      Runnable clearPreparedChannelDockDrag,
       Supplier<ServerTreeMiddleDragReorderHandler.Context> middleDragReorderContext,
       BooleanSupplier startupSelectionCompleted,
       Runnable markStartupSelectionCompleted,
@@ -83,6 +87,10 @@ public final class ServerTreeInteractionMediatorContextAdapter
     this.refreshNodeActionsEnabled =
         Objects.requireNonNull(refreshNodeActionsEnabled, "refreshNodeActionsEnabled");
     this.buildPopupMenu = Objects.requireNonNull(buildPopupMenu, "buildPopupMenu");
+    this.prepareChannelDockDrag =
+        Objects.requireNonNull(prepareChannelDockDrag, "prepareChannelDockDrag");
+    this.clearPreparedChannelDockDrag =
+        Objects.requireNonNull(clearPreparedChannelDockDrag, "clearPreparedChannelDockDrag");
     this.middleDragReorderContext =
         Objects.requireNonNull(middleDragReorderContext, "middleDragReorderContext");
     this.startupSelectionCompleted =
@@ -156,6 +164,16 @@ public final class ServerTreeInteractionMediatorContextAdapter
   @Override
   public JPopupMenu buildPopupMenu(TreePath path) {
     return buildPopupMenu.apply(path);
+  }
+
+  @Override
+  public void prepareChannelDockDrag(MouseEvent event) {
+    prepareChannelDockDrag.accept(event);
+  }
+
+  @Override
+  public void clearPreparedChannelDockDrag() {
+    clearPreparedChannelDockDrag.run();
   }
 
   @Override

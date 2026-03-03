@@ -175,6 +175,28 @@ class ChannelListPanelManagedOrderTest {
   }
 
   @Test
+  void managedModesPreferLatestChannelModeSnapshot() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ChannelListPanel panel = new ChannelListPanel();
+            panel.setServerId("libera");
+            panel.setManagedChannels(
+                "libera",
+                List.of(new ChannelListPanel.ManagedChannelRow("#alpha", true, true)),
+                ChannelListPanel.ManagedSortMode.CUSTOM);
+            panel.setChannelModeSnapshot(
+                "libera", "#alpha", "+nt", "Channel modes: topic locked, no outside messages");
+
+            JTable managedTable = field(panel, "managedTable", JTable.class);
+            assertEquals("+nt", managedTable.getValueAt(0, 4));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
   void listLoadingDisablesActionsAndUsesAlisButtonActivityIconUntilCompletion() throws Exception {
     ChannelListPanel panel = new ChannelListPanel();
     onEdt(() -> panel.setServerId("libera"));

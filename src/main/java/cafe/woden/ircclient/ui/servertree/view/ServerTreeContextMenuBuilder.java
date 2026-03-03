@@ -11,6 +11,7 @@ import java.util.Objects;
 import java.util.Optional;
 import javax.swing.Action;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -109,6 +110,14 @@ public final class ServerTreeContextMenuBuilder {
     boolean isChannelMuted(TargetRef target);
 
     void setChannelMuted(TargetRef target, boolean muted);
+
+    void openChannelModeDetails(TargetRef target);
+
+    void requestChannelModeRefresh(TargetRef target);
+
+    boolean canEditChannelModes(TargetRef target);
+
+    void promptAndRequestChannelModeSet(TargetRef target, String channelLabel);
 
     void requestCloseTarget(TargetRef target);
 
@@ -356,6 +365,27 @@ public final class ServerTreeContextMenuBuilder {
     JMenuItem pinToggle = new JMenuItem(pinned ? "Unpin Channel" : "Pin Channel");
     pinToggle.addActionListener(ev -> context.setChannelPinned(ref, !pinned));
     menu.add(pinToggle);
+
+    JMenu channelModes = new JMenu("Channel Modes");
+
+    JMenuItem modeDetails = new JMenuItem("View Details...");
+    modeDetails.addActionListener(ev -> context.openChannelModeDetails(ref));
+    channelModes.add(modeDetails);
+
+    JMenuItem refreshModes = new JMenuItem("Refresh Modes");
+    refreshModes.addActionListener(ev -> context.requestChannelModeRefresh(ref));
+    channelModes.add(refreshModes);
+
+    JMenuItem setModes = new JMenuItem("Set Modes...");
+    boolean canEditModes = context.canEditChannelModes(ref);
+    setModes.setEnabled(canEditModes);
+    setModes.setToolTipText(
+        canEditModes
+            ? "Set channel modes (sends /mode command)"
+            : "Requires owner/admin/op privileges for this channel");
+    setModes.addActionListener(ev -> context.promptAndRequestChannelModeSet(ref, nodeData.label));
+    channelModes.add(setModes);
+    menu.add(channelModes);
 
     JCheckBoxMenuItem muted = new JCheckBoxMenuItem("Mute notifications in this channel");
     muted.setSelected(context.isChannelMuted(ref));

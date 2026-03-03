@@ -301,6 +301,11 @@ final class ModePrettyPrinter {
       return who + " removes admin privileges from " + safe(arg) + ".";
     }
     if (m == 'q') {
+      // Network-dependent: +q may be owner status or quiet-mask list mode.
+      if (looksLikeQuietMaskTarget(arg)) {
+        if (add) return who + " adds a quiet rule for " + safe(arg) + ".";
+        return who + " removes a quiet rule for " + safe(arg) + ".";
+      }
       if (add) return who + " gives owner privileges to " + safe(arg) + ".";
       return who + " removes owner privileges from " + safe(arg) + ".";
     }
@@ -370,6 +375,15 @@ final class ModePrettyPrinter {
   private static String safe(String s) {
     if (s == null || s.isBlank()) return "(unknown)";
     return s;
+  }
+
+  private static boolean looksLikeQuietMaskTarget(String arg) {
+    String a = safe(arg);
+    return a.indexOf('!') >= 0
+        || a.indexOf('@') >= 0
+        || a.indexOf('*') >= 0
+        || a.indexOf('$') >= 0
+        || a.indexOf(':') >= 0;
   }
 
   private record ParsedModes(List<ModeChange> changes) {}

@@ -21,6 +21,7 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.util.List;
 import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -42,6 +43,7 @@ class ChatChannelListCoordinatorTest {
             userListStore,
             usersDock,
             () -> TargetRef.channelList("libera"),
+            sid -> "",
             (sid, channel) -> "",
             (sid, channel) -> List.of());
 
@@ -87,6 +89,7 @@ class ChatChannelListCoordinatorTest {
             userListStore,
             usersDock,
             () -> TargetRef.channelList("libera"),
+            sid -> "",
             (sid, channel) -> "",
             (sid, channel) -> List.of());
 
@@ -116,6 +119,7 @@ class ChatChannelListCoordinatorTest {
             userListStore,
             usersDock,
             () -> TargetRef.channelList("libera"),
+            sid -> "",
             (sid, channel) -> "",
             (sid, channel) -> List.of());
 
@@ -150,6 +154,7 @@ class ChatChannelListCoordinatorTest {
             userListStore,
             usersDock,
             () -> TargetRef.channelList("libera"),
+            sid -> "",
             (sid, channel) -> "",
             (sid, channel) -> List.of());
 
@@ -181,6 +186,7 @@ class ChatChannelListCoordinatorTest {
             userListStore,
             usersDock,
             () -> new TargetRef("libera", "status"),
+            sid -> "",
             (sid, channel) -> "",
             (sid, channel) -> List.of());
 
@@ -215,6 +221,7 @@ class ChatChannelListCoordinatorTest {
             userListStore,
             usersDock,
             () -> TargetRef.channelList("libera"),
+            sid -> "",
             (sid, channel) -> "",
             (sid, channel) -> List.of());
 
@@ -248,6 +255,7 @@ class ChatChannelListCoordinatorTest {
             userListStore,
             usersDock,
             () -> TargetRef.channelList("libera"),
+            sid -> "",
             (sid, channel) -> "",
             (sid, channel) -> List.of());
 
@@ -258,6 +266,209 @@ class ChatChannelListCoordinatorTest {
 
     verify(serverTree).selectTarget(TargetRef.channelList("libera"));
     verify(outboundLineBus).emit("/mode #ircafe +b");
+    disposables.dispose();
+  }
+
+  @Test
+  void bindModeRefreshCallbackEmitsModeQuery() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(channelListPanel.currentServerId()).thenReturn("libera");
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            sid -> "",
+            (sid, channel) -> "",
+            (sid, channel) -> List.of());
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    BiConsumer<String, String> modeRefresh = captureModeRefreshCallback(channelListPanel);
+    modeRefresh.accept("", "#ircafe");
+
+    verify(outboundLineBus).emit("/mode #ircafe");
+    disposables.dispose();
+  }
+
+  @Test
+  void bindModeSetCallbackEmitsModeSetCommand() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(channelListPanel.currentServerId()).thenReturn("libera");
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            sid -> "",
+            (sid, channel) -> "",
+            (sid, channel) -> List.of());
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    ChannelListPanel.ChannelModeCommandHandler modeSet = captureModeSetCallback(channelListPanel);
+    modeSet.accept("", "#ircafe", "+m");
+
+    verify(outboundLineBus).emit("/mode #ircafe +m");
+    disposables.dispose();
+  }
+
+  @Test
+  void bindCanEditModesPredicateReturnsTrueForOperatorLikePrefixes() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(channelListPanel.currentServerId()).thenReturn("libera");
+    when(userListStore.get("libera", "#ircafe"))
+        .thenReturn(List.of(new NickInfo("me", "@", null, null)));
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            sid -> "me",
+            (sid, channel) -> "",
+            (sid, channel) -> List.of());
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    BiPredicate<String, String> canEdit = captureCanEditModesCallback(channelListPanel);
+
+    org.junit.jupiter.api.Assertions.assertTrue(canEdit.test("libera", "#ircafe"));
+    disposables.dispose();
+  }
+
+  @Test
+  void bindTreeModeDetailsRequestSelectsChannelListAndOpensDetails() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    FlowableProcessor<TargetRef> modeDetails = PublishProcessor.<TargetRef>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(serverTree.channelModeDetailsRequests()).thenReturn(modeDetails.onBackpressureBuffer());
+    when(serverTree.managedChannelsForServer("libera")).thenReturn(List.of());
+    when(serverTree.channelSortModeForServer("libera"))
+        .thenReturn(ServerTreeDockable.ChannelSortMode.CUSTOM);
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            sid -> "",
+            (sid, channel) -> "",
+            (sid, channel) -> List.of());
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    modeDetails.onNext(new TargetRef("libera", "#ircafe"));
+
+    verify(serverTree).selectTarget(TargetRef.channelList("libera"));
+    verify(channelListPanel).showChannelDetails("libera", "#ircafe");
+    disposables.dispose();
+  }
+
+  @Test
+  void bindTreeModeRefreshRequestSelectsChannelListAndEmitsModeCommand() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    FlowableProcessor<TargetRef> modeRefresh = PublishProcessor.<TargetRef>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(serverTree.channelModeRefreshRequests()).thenReturn(modeRefresh.onBackpressureBuffer());
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            sid -> "",
+            (sid, channel) -> "",
+            (sid, channel) -> List.of());
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    modeRefresh.onNext(new TargetRef("libera", "#ircafe"));
+
+    verify(serverTree).selectTarget(TargetRef.channelList("libera"));
+    verify(outboundLineBus).emit("/mode #ircafe");
+    disposables.dispose();
+  }
+
+  @Test
+  void bindTreeModeSetRequestEmitsModeSetCommandWhenEditable() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    FlowableProcessor<ServerTreeDockable.ChannelModeSetRequest> modeSet =
+        PublishProcessor.<ServerTreeDockable.ChannelModeSetRequest>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(serverTree.channelModeSetRequests()).thenReturn(modeSet.onBackpressureBuffer());
+    when(userListStore.get("libera", "#ircafe"))
+        .thenReturn(List.of(new NickInfo("me", "@", null, null)));
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            sid -> "me",
+            (sid, channel) -> "",
+            (sid, channel) -> List.of());
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    modeSet.onNext(
+        new ServerTreeDockable.ChannelModeSetRequest(new TargetRef("libera", "#ircafe"), "+m"));
+
+    verify(serverTree).selectTarget(TargetRef.channelList("libera"));
+    verify(outboundLineBus).emit("/mode #ircafe +m");
     disposables.dispose();
   }
 
@@ -281,6 +492,7 @@ class ChatChannelListCoordinatorTest {
             userListStore,
             usersDock,
             () -> TargetRef.channelList("libera"),
+            sid -> "",
             (sid, channel) -> "",
             (sid, channel) -> List.of());
 
@@ -312,6 +524,30 @@ class ChatChannelListCoordinatorTest {
       ChannelListPanel channelListPanel) {
     ArgumentCaptor<BiConsumer> captor = ArgumentCaptor.forClass(BiConsumer.class);
     verify(channelListPanel).setOnChannelBanListRefreshRequest(captor.capture());
+    return captor.getValue();
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static BiConsumer<String, String> captureModeRefreshCallback(
+      ChannelListPanel channelListPanel) {
+    ArgumentCaptor<BiConsumer> captor = ArgumentCaptor.forClass(BiConsumer.class);
+    verify(channelListPanel).setOnChannelModeRefreshRequest(captor.capture());
+    return captor.getValue();
+  }
+
+  private static ChannelListPanel.ChannelModeCommandHandler captureModeSetCallback(
+      ChannelListPanel channelListPanel) {
+    ArgumentCaptor<ChannelListPanel.ChannelModeCommandHandler> captor =
+        ArgumentCaptor.forClass(ChannelListPanel.ChannelModeCommandHandler.class);
+    verify(channelListPanel).setOnChannelModeSetRequest(captor.capture());
+    return captor.getValue();
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static BiPredicate<String, String> captureCanEditModesCallback(
+      ChannelListPanel channelListPanel) {
+    ArgumentCaptor<BiPredicate> captor = ArgumentCaptor.forClass(BiPredicate.class);
+    verify(channelListPanel).setCanEditChannelModes(captor.capture());
     return captor.getValue();
   }
 

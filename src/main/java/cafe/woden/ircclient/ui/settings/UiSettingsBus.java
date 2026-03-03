@@ -86,6 +86,8 @@ public class UiSettingsBus {
         NotificationBackendMode.fromToken(tray != null ? tray.notificationBackend() : null);
     MemoryUsageDisplayMode memoryUsageDisplayMode =
         MemoryUsageDisplayMode.fromToken(props.memoryUsageDisplayMode());
+    int memoryUsageRefreshIntervalMs =
+        props.memoryUsageRefreshIntervalMs() != null ? props.memoryUsageRefreshIntervalMs() : 1000;
     int memoryUsageWarningNearMaxPercent =
         props.memoryUsageWarningNearMaxPercent() != null
             ? props.memoryUsageWarningNearMaxPercent()
@@ -276,6 +278,7 @@ public class UiSettingsBus {
                 ? props.notificationRuleCooldownSeconds()
                 : 15,
             memoryUsageDisplayMode,
+            memoryUsageRefreshIntervalMs,
             memoryUsageWarningNearMaxPercent,
             memoryUsageWarningTooltipEnabled,
             memoryUsageWarningToastEnabled,

@@ -2,11 +2,16 @@ package cafe.woden.ircclient.ui.servertree.coordinator;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeChannelStateStore;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreePrivateMessageOnlineStateStore;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /** Handles non-tree state cleanup when a target is removed from the server tree. */
 public final class ServerTreeTargetRemovalStateCoordinator {
@@ -19,6 +24,38 @@ public final class ServerTreeTargetRemovalStateCoordinator {
     String foldChannelKey(String channelName);
 
     void emitManagedChannelsChanged(String serverId);
+  }
+
+  public static Context context(
+      Predicate<TargetRef> isPrivateMessageTarget,
+      BooleanSupplier shouldPersistPrivateMessageList,
+      Function<String, String> foldChannelKey,
+      Consumer<String> emitManagedChannelsChanged) {
+    Objects.requireNonNull(isPrivateMessageTarget, "isPrivateMessageTarget");
+    Objects.requireNonNull(shouldPersistPrivateMessageList, "shouldPersistPrivateMessageList");
+    Objects.requireNonNull(foldChannelKey, "foldChannelKey");
+    Objects.requireNonNull(emitManagedChannelsChanged, "emitManagedChannelsChanged");
+    return new Context() {
+      @Override
+      public boolean isPrivateMessageTarget(TargetRef ref) {
+        return isPrivateMessageTarget.test(ref);
+      }
+
+      @Override
+      public boolean shouldPersistPrivateMessageList() {
+        return shouldPersistPrivateMessageList.getAsBoolean();
+      }
+
+      @Override
+      public String foldChannelKey(String channelName) {
+        return foldChannelKey.apply(channelName);
+      }
+
+      @Override
+      public void emitManagedChannelsChanged(String serverId) {
+        emitManagedChannelsChanged.accept(serverId);
+      }
+    };
   }
 
   private final ServerTreePrivateMessageOnlineStateStore privateMessageOnlineStateStore;
@@ -87,6 +124,6 @@ public final class ServerTreeTargetRemovalStateCoordinator {
   }
 
   private static String normalizeServerId(String serverId) {
-    return Objects.toString(serverId, "").trim();
+    return ServerTreeConventions.normalizeServerId(serverId);
   }
 }

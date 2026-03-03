@@ -66,6 +66,10 @@ public final class ServerTreeContextMenuBuilderContextAdapter
   private final BiConsumer<TargetRef, Boolean> setChannelPinned;
   private final Predicate<TargetRef> isChannelMuted;
   private final BiConsumer<TargetRef, Boolean> setChannelMuted;
+  private final Consumer<TargetRef> openChannelModeDetails;
+  private final Consumer<TargetRef> requestChannelModeRefresh;
+  private final Predicate<TargetRef> canEditChannelModes;
+  private final BiConsumer<TargetRef, String> promptAndRequestChannelModeSet;
   private final Consumer<TargetRef> requestCloseTarget;
   private final Function<TargetRef, InterceptorDefinition> interceptorDefinition;
   private final BiConsumer<TargetRef, Boolean> setInterceptorEnabled;
@@ -123,6 +127,10 @@ public final class ServerTreeContextMenuBuilderContextAdapter
       BiConsumer<TargetRef, Boolean> setChannelPinned,
       Predicate<TargetRef> isChannelMuted,
       BiConsumer<TargetRef, Boolean> setChannelMuted,
+      Consumer<TargetRef> openChannelModeDetails,
+      Consumer<TargetRef> requestChannelModeRefresh,
+      Predicate<TargetRef> canEditChannelModes,
+      BiConsumer<TargetRef, String> promptAndRequestChannelModeSet,
       Consumer<TargetRef> requestCloseTarget,
       Function<TargetRef, InterceptorDefinition> interceptorDefinition,
       BiConsumer<TargetRef, Boolean> setInterceptorEnabled,
@@ -203,6 +211,13 @@ public final class ServerTreeContextMenuBuilderContextAdapter
     this.setChannelPinned = Objects.requireNonNull(setChannelPinned, "setChannelPinned");
     this.isChannelMuted = Objects.requireNonNull(isChannelMuted, "isChannelMuted");
     this.setChannelMuted = Objects.requireNonNull(setChannelMuted, "setChannelMuted");
+    this.openChannelModeDetails =
+        Objects.requireNonNull(openChannelModeDetails, "openChannelModeDetails");
+    this.requestChannelModeRefresh =
+        Objects.requireNonNull(requestChannelModeRefresh, "requestChannelModeRefresh");
+    this.canEditChannelModes = Objects.requireNonNull(canEditChannelModes, "canEditChannelModes");
+    this.promptAndRequestChannelModeSet =
+        Objects.requireNonNull(promptAndRequestChannelModeSet, "promptAndRequestChannelModeSet");
     this.requestCloseTarget = Objects.requireNonNull(requestCloseTarget, "requestCloseTarget");
     this.interceptorDefinition =
         Objects.requireNonNull(interceptorDefinition, "interceptorDefinition");
@@ -437,6 +452,26 @@ public final class ServerTreeContextMenuBuilderContextAdapter
   @Override
   public void setChannelMuted(TargetRef target, boolean muted) {
     setChannelMuted.accept(target, muted);
+  }
+
+  @Override
+  public void openChannelModeDetails(TargetRef target) {
+    openChannelModeDetails.accept(target);
+  }
+
+  @Override
+  public void requestChannelModeRefresh(TargetRef target) {
+    requestChannelModeRefresh.accept(target);
+  }
+
+  @Override
+  public boolean canEditChannelModes(TargetRef target) {
+    return canEditChannelModes.test(target);
+  }
+
+  @Override
+  public void promptAndRequestChannelModeSet(TargetRef target, String channelLabel) {
+    promptAndRequestChannelModeSet.accept(target, channelLabel);
   }
 
   @Override

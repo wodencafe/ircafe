@@ -1,12 +1,14 @@
 package cafe.woden.ircclient.ui.coordinator;
 
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.UserListDockable;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
+import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -14,6 +16,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +32,7 @@ public final class ChatChannelListCoordinator {
   private final UserListStore userListStore;
   private final UserListDockable usersDock;
   private final Supplier<TargetRef> activeTargetSupplier;
+  private final Function<String, String> currentNickLookup;
   private final BiFunction<String, String, String> topicLookup;
   private final BiFunction<String, String, List<String>> banListSnapshotLookup;
 
@@ -42,6 +46,7 @@ public final class ChatChannelListCoordinator {
       UserListStore userListStore,
       UserListDockable usersDock,
       Supplier<TargetRef> activeTargetSupplier,
+      Function<String, String> currentNickLookup,
       BiFunction<String, String, String> topicLookup,
       BiFunction<String, String, List<String>> banListSnapshotLookup) {
     this.channelListPanel = Objects.requireNonNull(channelListPanel, "channelListPanel");
@@ -51,6 +56,7 @@ public final class ChatChannelListCoordinator {
     this.usersDock = Objects.requireNonNull(usersDock, "usersDock");
     this.activeTargetSupplier =
         Objects.requireNonNull(activeTargetSupplier, "activeTargetSupplier");
+    this.currentNickLookup = Objects.requireNonNull(currentNickLookup, "currentNickLookup");
     this.topicLookup = Objects.requireNonNull(topicLookup, "topicLookup");
     this.banListSnapshotLookup =
         Objects.requireNonNull(banListSnapshotLookup, "banListSnapshotLookup");
@@ -166,6 +172,25 @@ public final class ChatChannelListCoordinator {
           serverTree.selectTarget(TargetRef.channelList(sid));
           outboundBus.emit("/mode " + ch + " +b");
         });
+    channelListPanel.setOnChannelModeRefreshRequest(
+        (serverId, channel) -> {
+          String sid = Objects.toString(serverId, "").trim();
+          if (sid.isBlank()) sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          if (sid.isBlank() || ch.isEmpty()) return;
+          outboundBus.emit("/mode " + ch);
+        });
+    channelListPanel.setOnChannelModeSetRequest(
+        (serverId, channel, modeSpec) -> {
+          String sid = Objects.toString(serverId, "").trim();
+          if (sid.isBlank()) sid = channelListServerIdForActions();
+          String ch = normalizeChannelName(channel);
+          String spec = Objects.toString(modeSpec, "").trim();
+          if (sid.isBlank() || ch.isEmpty() || spec.isEmpty()) return;
+          outboundBus.emit("/mode " + ch + " " + spec);
+        });
+    channelListPanel.setCanEditChannelModes(this::canEditChannelModes);
+    serverTree.setCanEditChannelModes(this::canEditChannelModes);
 
     disposables.add(
         channelListCommandRequests
@@ -185,6 +210,28 @@ public final class ChatChannelListCoordinator {
                   refreshManagedChannelsCard(changed);
                 },
                 err -> log.debug("[ircafe] managed-channel refresh stream failed", err)));
+    Flowable<TargetRef> modeDetailsRequests = serverTree.channelModeDetailsRequests();
+    if (modeDetailsRequests != null) {
+      disposables.add(
+          modeDetailsRequests.subscribe(
+              this::openChannelModeDetailsFromTree,
+              err -> log.debug("[ircafe] channel-mode details flow failed", err)));
+    }
+    Flowable<TargetRef> modeRefreshRequests = serverTree.channelModeRefreshRequests();
+    if (modeRefreshRequests != null) {
+      disposables.add(
+          modeRefreshRequests.subscribe(
+              this::refreshChannelModesFromTree,
+              err -> log.debug("[ircafe] channel-mode refresh flow failed", err)));
+    }
+    Flowable<ServerTreeDockable.ChannelModeSetRequest> modeSetRequests =
+        serverTree.channelModeSetRequests();
+    if (modeSetRequests != null) {
+      disposables.add(
+          modeSetRequests.subscribe(
+              this::setChannelModesFromTree,
+              err -> log.debug("[ircafe] channel-mode set flow failed", err)));
+    }
   }
 
   public void refreshManagedChannelsCard(String serverId) {
@@ -205,7 +252,7 @@ public final class ChatChannelListCoordinator {
                       entry.autoReattach(),
                       users,
                       entry.notifications(),
-                      modeSummaryForChannel());
+                      modeSummaryForChannel(sid, entry.channel()));
                 })
             .toList();
     ChannelListPanel.ManagedSortMode sortMode =
@@ -256,8 +303,66 @@ public final class ChatChannelListCoordinator {
     return Objects.toString(target.serverId(), "").trim();
   }
 
-  private static String modeSummaryForChannel() {
+  private String modeSummaryForChannel(String serverId, String channel) {
+    String modes = Objects.toString(channelListPanel.rawChannelModeSnapshot(serverId, channel), "");
+    modes = modes.trim();
+    if (!modes.isBlank()) return modes;
     return "(Unknown)";
+  }
+
+  private boolean canEditChannelModes(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isBlank()) sid = channelListServerIdForActions();
+    String ch = normalizeChannelName(channel);
+    if (sid.isBlank() || ch.isEmpty()) return false;
+
+    String me = Objects.toString(currentNickLookup.apply(sid), "").trim();
+    if (me.isEmpty()) return false;
+
+    List<NickInfo> nicks = userListStore.get(sid, ch);
+    for (NickInfo ni : nicks) {
+      if (ni == null) continue;
+      String nick = Objects.toString(ni.nick(), "").trim();
+      if (!nick.equalsIgnoreCase(me)) continue;
+      String prefix = Objects.toString(ni.prefix(), "");
+      return prefix.contains("~")
+          || prefix.contains("&")
+          || prefix.contains("@")
+          || prefix.contains("%");
+    }
+    return false;
+  }
+
+  private void openChannelModeDetailsFromTree(TargetRef target) {
+    if (target == null || !target.isChannel()) return;
+    String sid = Objects.toString(target.serverId(), "").trim();
+    String channel = normalizeChannelName(target.target());
+    if (sid.isBlank() || channel.isEmpty()) return;
+    serverTree.selectTarget(TargetRef.channelList(sid));
+    refreshManagedChannelsCard(sid);
+    channelListPanel.showChannelDetails(sid, channel);
+  }
+
+  private void refreshChannelModesFromTree(TargetRef target) {
+    if (target == null || !target.isChannel()) return;
+    String sid = Objects.toString(target.serverId(), "").trim();
+    String channel = normalizeChannelName(target.target());
+    if (sid.isBlank() || channel.isEmpty()) return;
+    serverTree.selectTarget(TargetRef.channelList(sid));
+    outboundBus.emit("/mode " + channel);
+  }
+
+  private void setChannelModesFromTree(ServerTreeDockable.ChannelModeSetRequest request) {
+    if (request == null) return;
+    TargetRef target = request.target();
+    if (target == null || !target.isChannel()) return;
+    String sid = Objects.toString(target.serverId(), "").trim();
+    String channel = normalizeChannelName(target.target());
+    String modeSpec = Objects.toString(request.modeSpec(), "").trim();
+    if (sid.isBlank() || channel.isEmpty() || modeSpec.isEmpty()) return;
+    if (!canEditChannelModes(sid, channel)) return;
+    serverTree.selectTarget(TargetRef.channelList(sid));
+    outboundBus.emit("/mode " + channel + " " + modeSpec);
   }
 
   private static String normalizeChannelName(String channel) {

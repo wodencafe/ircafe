@@ -7,6 +7,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /** Manages default/per-server built-in node visibility state and persistence. */
 public final class ServerTreeBuiltInVisibilityCoordinator {
@@ -17,6 +19,31 @@ public final class ServerTreeBuiltInVisibilityCoordinator {
     Set<String> currentServerIds();
 
     void syncUiLeafVisibility();
+  }
+
+  public static Context context(
+      Function<String, String> normalizeServerId,
+      Supplier<Set<String>> currentServerIds,
+      Runnable syncUiLeafVisibility) {
+    Objects.requireNonNull(normalizeServerId, "normalizeServerId");
+    Objects.requireNonNull(currentServerIds, "currentServerIds");
+    Objects.requireNonNull(syncUiLeafVisibility, "syncUiLeafVisibility");
+    return new Context() {
+      @Override
+      public String normalizeServerId(String serverId) {
+        return normalizeServerId.apply(serverId);
+      }
+
+      @Override
+      public Set<String> currentServerIds() {
+        return currentServerIds.get();
+      }
+
+      @Override
+      public void syncUiLeafVisibility() {
+        syncUiLeafVisibility.run();
+      }
+    };
   }
 
   private final RuntimeConfigStore runtimeConfig;

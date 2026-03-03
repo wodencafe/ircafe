@@ -49,6 +49,7 @@ import java.awt.RenderingHints;
 import java.awt.Stroke;
 import java.awt.Toolkit;
 import java.awt.Window;
+import java.awt.event.HierarchyEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -100,7 +101,11 @@ public class AppMenuBar extends JMenuBar {
   // These constants are only a fallback if the window isn't sized yet.
   private static final double DEFAULT_SERVER_DOCK_PROPORTION = 0.22;
   private static final double DEFAULT_USERS_DOCK_PROPORTION = 0.18;
-  private static final int MEMORY_REFRESH_MS = 1000;
+  private static final int DEFAULT_MEMORY_REFRESH_INTERVAL_MS = 1000;
+  private static final int MIN_MEMORY_REFRESH_INTERVAL_MS = 250;
+  private static final int MAX_MEMORY_REFRESH_INTERVAL_MS = 60_000;
+  private static final int[] MEMORY_REFRESH_INTERVAL_PRESETS_MS =
+      new int[] {2000, 5000, 10_000, 30_000, 60_000};
   private static final long MEMORY_WARNING_COOLDOWN_MS = 120_000L;
   private static final int MOON_ICON_SIZE = 16;
   private static final long MIB = 1024L * 1024L;
@@ -148,8 +153,10 @@ public class AppMenuBar extends JMenuBar {
   private final JProgressBar memoryIndicator = new JProgressBar(0, 100);
   private final JPanel memoryWidget = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
   private final JPopupMenu memoryModePopup = new JPopupMenu();
-  private final Timer memoryTimer = new Timer(MEMORY_REFRESH_MS, e -> refreshMemoryUsage());
+  private final Timer memoryTimer =
+      new Timer(DEFAULT_MEMORY_REFRESH_INTERVAL_MS, e -> refreshMemoryUsage());
   private MemoryUsageDisplayMode memoryUsageDisplayMode = MemoryUsageDisplayMode.LONG;
+  private int memoryUsageRefreshIntervalMs = DEFAULT_MEMORY_REFRESH_INTERVAL_MS;
   private final Border memoryButtonDefaultBorder;
   private final Insets memoryButtonDefaultMargin;
   private final boolean memoryButtonDefaultContentAreaFilled;
@@ -254,13 +261,17 @@ public class AppMenuBar extends JMenuBar {
     memoryWidget.add(memoryMoonButton);
     memoryTimer.setRepeats(true);
     buildMemoryModePopup();
+    addHierarchyListener(this::onHierarchyChanged);
 
+    UiSettings initialSettings = settingsBus != null ? settingsBus.get() : null;
     MemoryUsageDisplayMode initialMemoryMode =
-        settingsBus.get() != null
-            ? settingsBus.get().memoryUsageDisplayMode()
+        initialSettings != null
+            ? initialSettings.memoryUsageDisplayMode()
             : MemoryUsageDisplayMode.fromToken(
                 uiProps != null ? uiProps.memoryUsageDisplayMode() : null);
+    int initialMemoryRefreshIntervalMs = resolveMemoryUsageRefreshIntervalMs(initialSettings);
     applyMemoryUsageDisplayMode(initialMemoryMode);
+    applyMemoryUsageRefreshIntervalMs(initialMemoryRefreshIntervalMs);
     refreshMemoryUsage();
 
     // File
@@ -635,6 +646,7 @@ public class AppMenuBar extends JMenuBar {
                     ? current.memoryUsageDisplayMode()
                     : MemoryUsageDisplayMode.fromToken(
                         uiProps != null ? uiProps.memoryUsageDisplayMode() : null));
+            applyMemoryUsageRefreshIntervalMs(resolveMemoryUsageRefreshIntervalMs(current));
             refreshMemoryUsage();
           }
         };
@@ -974,9 +986,7 @@ public class AppMenuBar extends JMenuBar {
     updateMemoryButtonStyleForCurrentMode();
     updateMemoryButtonHeightForCurrentMode();
     updateMemoryIndicatorSizeForCurrentMode();
-    if (memoryUsageDisplayMode != MemoryUsageDisplayMode.HIDDEN && !memoryTimer.isRunning()) {
-      memoryTimer.start();
-    }
+    updateMemoryTimerState();
   }
 
   @Override
@@ -1026,16 +1036,35 @@ public class AppMenuBar extends JMenuBar {
     updateMemoryButtonStyleForCurrentMode();
     syncMemoryModePopupSelection();
     if (memoryUsageDisplayMode == MemoryUsageDisplayMode.HIDDEN) {
-      memoryTimer.stop();
       if (memoryDialog != null) memoryDialog.setVisible(false);
       hideWarningTooltip();
-    } else if (isDisplayable() && !memoryTimer.isRunning()) {
-      memoryTimer.start();
     }
+    updateMemoryTimerState();
     updateMemoryButtonHeightForCurrentMode();
     updateMemoryIndicatorSizeForCurrentMode();
     revalidate();
     repaint();
+  }
+
+  private void onHierarchyChanged(HierarchyEvent event) {
+    if (event == null) return;
+    long flags = event.getChangeFlags();
+    if ((flags & (HierarchyEvent.DISPLAYABILITY_CHANGED | HierarchyEvent.SHOWING_CHANGED)) == 0L) {
+      return;
+    }
+    updateMemoryTimerState();
+  }
+
+  private void updateMemoryTimerState() {
+    if (memoryUsageDisplayMode == MemoryUsageDisplayMode.HIDDEN
+        || !isDisplayable()
+        || !isShowing()) {
+      memoryTimer.stop();
+      return;
+    }
+    if (!memoryTimer.isRunning()) {
+      memoryTimer.start();
+    }
   }
 
   private void refreshMemoryUsage() {
@@ -1443,22 +1472,91 @@ public class AppMenuBar extends JMenuBar {
 
   private void buildMemoryModePopup() {
     memoryModePopup.removeAll();
-    ButtonGroup group = new ButtonGroup();
+
+    JMenu modeMenu = new JMenu("Display Mode");
+    ButtonGroup modeGroup = new ButtonGroup();
     for (MemoryUsageDisplayMode mode : MemoryUsageDisplayMode.values()) {
       JRadioButtonMenuItem item = new JRadioButtonMenuItem(mode.toString());
       item.putClientProperty("memoryMode", mode);
       item.addActionListener(e -> setMemoryUsageDisplayModeFromUi(mode));
-      group.add(item);
-      memoryModePopup.add(item);
+      modeGroup.add(item);
+      modeMenu.add(item);
     }
+    memoryModePopup.add(modeMenu);
+
+    JMenu refreshIntervalMenu = new JMenu("Refresh Interval");
+    ButtonGroup refreshGroup = new ButtonGroup();
+    for (int intervalMs : MEMORY_REFRESH_INTERVAL_PRESETS_MS) {
+      JRadioButtonMenuItem item =
+          new JRadioButtonMenuItem(formatMemoryRefreshIntervalLabel(intervalMs));
+      item.putClientProperty("memoryRefreshIntervalMs", intervalMs);
+      item.addActionListener(e -> setMemoryUsageRefreshIntervalFromUi(intervalMs));
+      refreshGroup.add(item);
+      refreshIntervalMenu.add(item);
+    }
+    refreshIntervalMenu.addSeparator();
+    JMenuItem customRefresh = new JMenuItem("Custom");
+    customRefresh.addActionListener(e -> promptForCustomMemoryRefreshInterval());
+    refreshIntervalMenu.add(customRefresh);
+    memoryModePopup.add(refreshIntervalMenu);
   }
 
   private void syncMemoryModePopupSelection() {
-    for (Component c : memoryModePopup.getComponents()) {
+    syncMemoryModePopupSelection(memoryModePopup.getComponents());
+  }
+
+  private void syncMemoryModePopupSelection(Component[] components) {
+    if (components == null || components.length == 0) return;
+    for (Component c : components) {
+      if (c instanceof JMenu menu) {
+        syncMemoryModePopupSelection(menu.getMenuComponents());
+        continue;
+      }
       if (!(c instanceof JRadioButtonMenuItem item)) continue;
-      Object v = item.getClientProperty("memoryMode");
-      item.setSelected(v == memoryUsageDisplayMode);
+      Object modeValue = item.getClientProperty("memoryMode");
+      if (modeValue instanceof MemoryUsageDisplayMode mode) {
+        item.setSelected(mode == memoryUsageDisplayMode);
+        continue;
+      }
+      Object refreshValue = item.getClientProperty("memoryRefreshIntervalMs");
+      if (refreshValue instanceof Integer refreshInterval) {
+        item.setSelected(refreshInterval == memoryUsageRefreshIntervalMs);
+      }
     }
+  }
+
+  private static String formatMemoryRefreshIntervalLabel(int intervalMs) {
+    int normalized = clampMemoryUsageRefreshIntervalMs(intervalMs);
+    if (normalized >= 1000 && normalized % 1000 == 0) {
+      return (normalized / 1000) + " s";
+    }
+    return normalized + " ms";
+  }
+
+  private void promptForCustomMemoryRefreshInterval() {
+    String initialValue = Integer.toString(memoryUsageRefreshIntervalMs);
+    String input =
+        JOptionPane.showInputDialog(
+            SwingUtilities.getWindowAncestor(this),
+            "Memory widget refresh interval in milliseconds (250 - 60000):",
+            initialValue);
+    if (input == null) return;
+
+    String trimmed = input.trim();
+    if (trimmed.isEmpty()) return;
+
+    int parsed;
+    try {
+      parsed = Integer.parseInt(trimmed);
+    } catch (NumberFormatException ex) {
+      JOptionPane.showMessageDialog(
+          SwingUtilities.getWindowAncestor(this),
+          "Enter a whole number between 250 and 60000 milliseconds.",
+          "Invalid refresh interval",
+          JOptionPane.ERROR_MESSAGE);
+      return;
+    }
+    setMemoryUsageRefreshIntervalFromUi(parsed);
   }
 
   private void setMemoryUsageDisplayModeFromUi(MemoryUsageDisplayMode mode) {
@@ -1474,6 +1572,52 @@ public class AppMenuBar extends JMenuBar {
     if (runtimeConfig != null) {
       runtimeConfig.rememberMemoryUsageDisplayMode(mode.token());
     }
+  }
+
+  private void setMemoryUsageRefreshIntervalFromUi(int intervalMs) {
+    int normalized = clampMemoryUsageRefreshIntervalMs(intervalMs);
+    UiSettings current = settingsBus != null ? settingsBus.get() : null;
+    if (current != null && settingsBus != null) {
+      UiSettings updated = current.withMemoryUsageRefreshIntervalMs(normalized);
+      settingsBus.set(updated);
+    } else {
+      applyMemoryUsageRefreshIntervalMs(normalized);
+      refreshMemoryUsage();
+    }
+    if (runtimeConfig != null) {
+      runtimeConfig.rememberMemoryUsageRefreshIntervalMs(normalized);
+    }
+  }
+
+  private void applyMemoryUsageRefreshIntervalMs(int intervalMs) {
+    int normalized = clampMemoryUsageRefreshIntervalMs(intervalMs);
+    memoryUsageRefreshIntervalMs = normalized;
+    memoryTimer.setDelay(normalized);
+    memoryTimer.setInitialDelay(normalized);
+    syncMemoryModePopupSelection();
+  }
+
+  private int resolveMemoryUsageRefreshIntervalMs(UiSettings current) {
+    if (current != null) {
+      return clampMemoryUsageRefreshIntervalMs(current.memoryUsageRefreshIntervalMs());
+    }
+    int fallback =
+        clampMemoryUsageRefreshIntervalMs(
+            uiProps != null && uiProps.memoryUsageRefreshIntervalMs() != null
+                ? uiProps.memoryUsageRefreshIntervalMs()
+                : DEFAULT_MEMORY_REFRESH_INTERVAL_MS);
+    if (runtimeConfig != null) {
+      return runtimeConfig.readMemoryUsageRefreshIntervalMs(fallback);
+    }
+    return fallback;
+  }
+
+  private static int clampMemoryUsageRefreshIntervalMs(int intervalMs) {
+    int value = intervalMs;
+    if (value <= 0) value = DEFAULT_MEMORY_REFRESH_INTERVAL_MS;
+    if (value < MIN_MEMORY_REFRESH_INTERVAL_MS) value = MIN_MEMORY_REFRESH_INTERVAL_MS;
+    if (value > MAX_MEMORY_REFRESH_INTERVAL_MS) value = MAX_MEMORY_REFRESH_INTERVAL_MS;
+    return value;
   }
 
   private void installMemoryContextMenuTrigger(JComponent component) {

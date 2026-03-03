@@ -1543,6 +1543,46 @@ public class RuntimeConfigStore {
     }
   }
 
+  public synchronized int readMemoryUsageRefreshIntervalMs(int defaultValue) {
+    int fallback = clampMemoryUsageRefreshIntervalMs(defaultValue);
+    try {
+      if (file.toString().isBlank()) return fallback;
+      if (!Files.exists(file)) return fallback;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return fallback;
+
+      Object raw = ui.get("memoryUsageRefreshIntervalMs");
+      if (raw == null) return fallback;
+
+      return asInt(raw).map(this::clampMemoryUsageRefreshIntervalMs).orElse(fallback);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.memoryUsageRefreshIntervalMs from '{}'", file, e);
+      return fallback;
+    }
+  }
+
+  public synchronized void rememberMemoryUsageRefreshIntervalMs(int intervalMs) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      int normalized = clampMemoryUsageRefreshIntervalMs(intervalMs);
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+      ui.put("memoryUsageRefreshIntervalMs", normalized);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn(
+          "[ircafe] Could not persist ui.memoryUsageRefreshIntervalMs setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberMemoryUsageWarningNearMaxPercent(int percent) {
     try {
       if (file.toString().isBlank()) return;
@@ -1577,6 +1617,14 @@ public class RuntimeConfigStore {
 
   public synchronized void rememberMemoryUsageWarningSoundEnabled(boolean enabled) {
     rememberMemoryUsageWarningBoolean("memoryUsageWarningSoundEnabled", enabled);
+  }
+
+  private int clampMemoryUsageRefreshIntervalMs(int intervalMs) {
+    int value = intervalMs;
+    if (value <= 0) value = 1000;
+    if (value < 250) value = 250;
+    if (value > 60_000) value = 60_000;
+    return value;
   }
 
   /**

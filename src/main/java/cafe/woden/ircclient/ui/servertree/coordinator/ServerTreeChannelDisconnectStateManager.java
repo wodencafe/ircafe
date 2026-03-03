@@ -1,9 +1,12 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.Timer;
 import javax.swing.tree.DefaultMutableTreeNode;
 
@@ -20,6 +23,38 @@ public final class ServerTreeChannelDisconnectStateManager {
     void emitManagedChannelsChanged(String serverId);
   }
 
+  public static Context context(
+      Consumer<TargetRef> ensureNode,
+      Function<TargetRef, DefaultMutableTreeNode> leafNode,
+      Consumer<DefaultMutableTreeNode> nodeChanged,
+      Consumer<String> emitManagedChannelsChanged) {
+    Objects.requireNonNull(ensureNode, "ensureNode");
+    Objects.requireNonNull(leafNode, "leafNode");
+    Objects.requireNonNull(nodeChanged, "nodeChanged");
+    Objects.requireNonNull(emitManagedChannelsChanged, "emitManagedChannelsChanged");
+    return new Context() {
+      @Override
+      public void ensureNode(TargetRef ref) {
+        ensureNode.accept(ref);
+      }
+
+      @Override
+      public DefaultMutableTreeNode leafNode(TargetRef ref) {
+        return leafNode.apply(ref);
+      }
+
+      @Override
+      public void nodeChanged(DefaultMutableTreeNode node) {
+        nodeChanged.accept(node);
+      }
+
+      @Override
+      public void emitManagedChannelsChanged(String serverId) {
+        emitManagedChannelsChanged.accept(serverId);
+      }
+    };
+  }
+
   private final Set<DefaultMutableTreeNode> typingActivityNodes;
   private final Timer typingActivityTimer;
   private final Context context;
@@ -32,7 +67,7 @@ public final class ServerTreeChannelDisconnectStateManager {
   }
 
   public void setChannelDisconnected(TargetRef ref, boolean detached, String warningReason) {
-    if (ref == null || !ref.isChannel()) return;
+    if (!ServerTreeConventions.isChannelTarget(ref)) return;
     context.ensureNode(ref);
     DefaultMutableTreeNode node = context.leafNode(ref);
     if (node == null) return;
@@ -70,7 +105,7 @@ public final class ServerTreeChannelDisconnectStateManager {
   }
 
   public void clearChannelDisconnectedWarning(TargetRef ref) {
-    if (ref == null || !ref.isChannel()) return;
+    if (!ServerTreeConventions.isChannelTarget(ref)) return;
     DefaultMutableTreeNode node = context.leafNode(ref);
     if (node == null) return;
     Object userObject = node.getUserObject();
@@ -81,7 +116,7 @@ public final class ServerTreeChannelDisconnectStateManager {
   }
 
   public boolean isChannelDisconnected(TargetRef ref) {
-    if (ref == null || !ref.isChannel()) return false;
+    if (!ServerTreeConventions.isChannelTarget(ref)) return false;
     DefaultMutableTreeNode node = context.leafNode(ref);
     if (node == null) return false;
     Object userObject = node.getUserObject();

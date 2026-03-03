@@ -113,13 +113,12 @@ public class LagIndicatorService {
         statusBar.setLagIndicatorReading(
             lag, "Round-trip lag to '" + serverId + "': " + lag + " ms.");
       } else {
-        statusBar.setLagIndicatorReading(null, "Measuring lag to '" + serverId + "'...");
+        statusBar.setLagIndicatorReading(
+            null, "Waiting for ping/pong activity on '" + serverId + "'...");
       }
     } catch (Exception ignored) {
       statusBar.setLagIndicatorReading(null, "Lag unavailable for '" + serverId + "'.");
     }
-
-    var unused = ircClientService.requestLagProbe(serverId).subscribe(() -> {}, ignored -> {});
   }
 
   private String resolveActiveServerId() {

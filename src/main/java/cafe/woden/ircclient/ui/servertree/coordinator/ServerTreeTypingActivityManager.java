@@ -7,6 +7,9 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 import javax.swing.Timer;
 import javax.swing.tree.DefaultMutableTreeNode;
 
@@ -21,6 +24,38 @@ public final class ServerTreeTypingActivityManager {
     boolean uiShowing();
 
     void repaintTreeNode(DefaultMutableTreeNode node);
+  }
+
+  public static Context context(
+      Predicate<TargetRef> supportsTypingActivity,
+      BooleanSupplier typingIndicatorsEnabled,
+      BooleanSupplier uiShowing,
+      Consumer<DefaultMutableTreeNode> repaintTreeNode) {
+    Objects.requireNonNull(supportsTypingActivity, "supportsTypingActivity");
+    Objects.requireNonNull(typingIndicatorsEnabled, "typingIndicatorsEnabled");
+    Objects.requireNonNull(uiShowing, "uiShowing");
+    Objects.requireNonNull(repaintTreeNode, "repaintTreeNode");
+    return new Context() {
+      @Override
+      public boolean supportsTypingActivity(TargetRef ref) {
+        return supportsTypingActivity.test(ref);
+      }
+
+      @Override
+      public boolean typingIndicatorsEnabled() {
+        return typingIndicatorsEnabled.getAsBoolean();
+      }
+
+      @Override
+      public boolean uiShowing() {
+        return uiShowing.getAsBoolean();
+      }
+
+      @Override
+      public void repaintTreeNode(DefaultMutableTreeNode node) {
+        repaintTreeNode.accept(node);
+      }
+    };
   }
 
   private final Map<TargetRef, DefaultMutableTreeNode> leaves;

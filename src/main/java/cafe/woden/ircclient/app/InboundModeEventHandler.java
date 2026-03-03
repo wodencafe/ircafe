@@ -66,6 +66,7 @@ public class InboundModeEventHandler {
     joinModeBurstService.clearChannel(serverId, channel);
     channelFlagModeState.clearChannel(serverId, channel);
     recentStatusModeState.clearChannel(serverId, channel);
+    ui.setChannelModeSnapshot(serverId, channel, "", "");
   }
 
   public void handleChannelModeChanged(String serverId, IrcEvent.ChannelModeChanged ev) {
@@ -87,6 +88,14 @@ public class InboundModeEventHandler {
     boolean changedFlagState = false;
     if (flagOnly) {
       changedFlagState = channelFlagModeState.applyDelta(serverId, ev.channel(), details);
+      String rawModes = channelFlagModeState.snapshotModeSummary(serverId, ev.channel());
+      if (!rawModes.isBlank()) {
+        ui.setChannelModeSnapshot(
+            serverId,
+            ev.channel(),
+            rawModes,
+            modeFormattingService.describeCurrentChannelModes(rawModes));
+      }
     }
 
     if (joinModeBurstService.handleChannelModeChanged(serverId, ev.channel(), details)) {
@@ -157,13 +166,48 @@ public class InboundModeEventHandler {
     if (sp < 0) return false; // no args; not a status-mode change
 
     String modeToken = d.substring(0, sp);
+    String argsPart = d.substring(sp + 1).trim();
+    String[] argTokens = argsPart.isEmpty() ? new String[0] : argsPart.split("\\s+");
+    int argIdx = 0;
+    boolean adding = true;
     for (int i = 0; i < modeToken.length(); i++) {
       char c = modeToken.charAt(i);
-      if (c == '+' || c == '-') continue;
-      // Common prefix/status modes (may vary by network, but these cover most):
-      if (c == 'q' || c == 'a' || c == 'o' || c == 'h' || c == 'v') return true;
+      if (c == '+') {
+        adding = true;
+        continue;
+      }
+      if (c == '-') {
+        adding = false;
+        continue;
+      }
+      String arg = null;
+      if (modeTakesArg(c, adding) && argIdx < argTokens.length) {
+        arg = argTokens[argIdx++];
+      }
+      // Common prefix/status modes (network-dependent).
+      if (c == 'a' || c == 'o' || c == 'h' || c == 'v') return true;
+      // +q is ambiguous across networks: owner status vs quiet-mask list mode.
+      if (c == 'q' && !looksLikeQuietMaskTarget(arg)) return true;
     }
     return false;
+  }
+
+  private static boolean modeTakesArg(char mode, boolean adding) {
+    return switch (mode) {
+      case 'o', 'v', 'h', 'a', 'q', 'y', 'b', 'e', 'I', 'k', 'f', 'j' -> true;
+      case 'l' -> adding;
+      default -> false;
+    };
+  }
+
+  private static boolean looksLikeQuietMaskTarget(String arg) {
+    String a = (arg == null) ? "" : arg.trim();
+    if (a.isEmpty()) return false;
+    return a.indexOf('!') >= 0
+        || a.indexOf('@') >= 0
+        || a.indexOf('*') >= 0
+        || a.indexOf('$') >= 0
+        || a.indexOf(':') >= 0;
   }
 
   private static String clip(Object v) {
@@ -201,6 +245,10 @@ public class InboundModeEventHandler {
     ui.ensureTargetExists(out);
 
     String summary = modeFormattingService.describeCurrentChannelModes(ev.details());
+    String rawModes = normalizeModeDetailsForSnapshot(ev.details());
+    if (!rawModes.isBlank() || (summary != null && !summary.isBlank())) {
+      ui.setChannelModeSnapshot(serverId, ev.channel(), rawModes, summary);
+    }
     if (summary != null && !summary.isBlank()) {
       boolean outputIsChannel = out.equals(chan);
       if (joinModeBurstService.shouldSuppressModesListedSummary(
@@ -227,5 +275,39 @@ public class InboundModeEventHandler {
       }
       ui.appendNotice(out, "(mode)", summary);
     }
+  }
+
+  private static String normalizeModeDetailsForSnapshot(String details) {
+    if (details == null) return "";
+    String d = details.trim();
+    if (d.isEmpty()) return "";
+
+    String det = d;
+    if (det.startsWith(":")) {
+      int sp = det.indexOf(' ');
+      if (sp > 0) det = det.substring(sp + 1).trim();
+    }
+
+    String[] toks = det.split("\\s+");
+    for (int i = 0; i < toks.length; i++) {
+      if ("MODE".equalsIgnoreCase(toks[i])) {
+        int idx = i + 2; // MODE <channel> <modes...>
+        if (idx >= toks.length) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int j = idx; j < toks.length; j++) {
+          if (j > idx) sb.append(' ');
+          sb.append(toks[j]);
+        }
+        det = sb.toString().trim();
+        break;
+      }
+    }
+
+    if (det.isEmpty()) return "";
+    String[] modeToks = det.split("\\s+");
+    if (modeToks.length == 0) return "";
+    String first = modeToks[0];
+    if (first.indexOf('+') < 0 && first.indexOf('-') < 0) return "";
+    return det;
   }
 }

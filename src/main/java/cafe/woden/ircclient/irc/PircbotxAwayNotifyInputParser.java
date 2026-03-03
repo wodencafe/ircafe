@@ -86,7 +86,14 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
       String lagToken = extractLagProbeToken(parsedLine, line);
       if (!lagToken.isBlank()) {
         conn.observeLagProbePong(lagToken, System.currentTimeMillis());
+        return;
       }
+      observePassiveLagSampleFromServerTime(tags, line);
+      return;
+    }
+
+    if ("PING".equalsIgnoreCase(command)) {
+      observePassiveLagSampleFromServerTime(tags, line);
       return;
     }
 
@@ -421,6 +428,26 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     }
     if (details.length() == 0) return null;
     return new PircbotxChannelModeParsers.ParsedRpl324(channel, details.toString());
+  }
+
+  private void observePassiveLagSampleFromServerTime(
+      ImmutableMap<String, String> tags, String rawLine) {
+    Instant serverTaggedAt = serverTimeFromTagsOrLine(tags, rawLine);
+    if (serverTaggedAt == null) return;
+    long nowMs = System.currentTimeMillis();
+    conn.observePassiveLagSample(nowMs - serverTaggedAt.toEpochMilli(), nowMs);
+  }
+
+  private static Instant serverTimeFromTagsOrLine(
+      ImmutableMap<String, String> tags, String rawLine) {
+    String tagged = PircbotxIrcv3Tags.firstTagValue(tags, "time");
+    if (!tagged.isBlank()) {
+      try {
+        return Instant.parse(tagged);
+      } catch (Exception ignored) {
+      }
+    }
+    return PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(rawLine);
   }
 
   private static String extractLagProbeToken(List<String> parsedLine, String rawLine) {

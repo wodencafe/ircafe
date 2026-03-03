@@ -11,6 +11,7 @@ import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
 import java.awt.Component;
+import java.awt.GraphicsEnvironment;
 import java.awt.Window;
 import java.util.Objects;
 import java.util.Optional;
@@ -20,6 +21,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import javax.swing.Action;
+import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 
@@ -71,6 +73,10 @@ public final class ServerTreeContextMenuContextFactory {
       BiConsumer<TargetRef, Boolean> setChannelPinned,
       Predicate<TargetRef> isChannelMuted,
       BiConsumer<TargetRef, Boolean> setChannelMuted,
+      Consumer<TargetRef> openChannelModeDetails,
+      Consumer<TargetRef> requestChannelModeRefresh,
+      Predicate<TargetRef> canEditChannelModes,
+      BiConsumer<TargetRef, String> requestChannelModeSet,
       Consumer<TargetRef> requestCloseTarget,
       BiConsumer<TargetRef, Boolean> setInterceptorEnabled,
       BiConsumer<TargetRef, String> promptRenameInterceptor,
@@ -161,6 +167,32 @@ public final class ServerTreeContextMenuContextFactory {
         Objects.requireNonNull(in.setChannelPinned(), "setChannelPinned"),
         Objects.requireNonNull(in.isChannelMuted(), "isChannelMuted"),
         Objects.requireNonNull(in.setChannelMuted(), "setChannelMuted"),
+        Objects.requireNonNull(in.openChannelModeDetails(), "openChannelModeDetails"),
+        Objects.requireNonNull(in.requestChannelModeRefresh(), "requestChannelModeRefresh"),
+        Objects.requireNonNull(in.canEditChannelModes(), "canEditChannelModes"),
+        (target, channelLabel) -> {
+          if (target == null || !target.isChannel()) return;
+          if (!in.canEditChannelModes().test(target)) return;
+          if (GraphicsEnvironment.isHeadless()) return;
+
+          Window owner = SwingUtilities.getWindowAncestor(in.ownerComponent());
+          String pretty =
+              Objects.toString(channelLabel, "").isBlank()
+                  ? target.target()
+                  : Objects.toString(channelLabel, "");
+          String modeSpec =
+              Objects.toString(
+                      JOptionPane.showInputDialog(
+                          owner,
+                          "Enter channel mode changes for "
+                              + pretty
+                              + " (examples: +m, -m, +o nick):",
+                          ""),
+                      "")
+                  .trim();
+          if (modeSpec.isEmpty()) return;
+          in.requestChannelModeSet().accept(target, modeSpec);
+        },
         Objects.requireNonNull(in.requestCloseTarget(), "requestCloseTarget"),
         target -> interceptorDefinition(in.interceptorStore(), target),
         Objects.requireNonNull(in.setInterceptorEnabled(), "setInterceptorEnabled"),

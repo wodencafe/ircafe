@@ -166,7 +166,7 @@ public final class RuntimeEventsPanel extends JPanel {
     refreshTimer = new Timer(1000, e -> refreshNow());
     refreshTimer.setRepeats(true);
     addHierarchyListener(this::onHierarchyChanged);
-    startAutoRefresh();
+    updateAutoRefreshState();
 
     refreshNow();
     updateButtons();
@@ -202,8 +202,15 @@ public final class RuntimeEventsPanel extends JPanel {
 
   private void onHierarchyChanged(HierarchyEvent event) {
     if (event == null) return;
-    if ((event.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) == 0L) return;
-    if (!isDisplayable()) {
+    long flags = event.getChangeFlags();
+    if ((flags & (HierarchyEvent.DISPLAYABILITY_CHANGED | HierarchyEvent.SHOWING_CHANGED)) == 0L) {
+      return;
+    }
+    updateAutoRefreshState();
+  }
+
+  private void updateAutoRefreshState() {
+    if (!isDisplayable() || !isShowing()) {
       stopAutoRefresh();
       return;
     }
@@ -234,6 +241,7 @@ public final class RuntimeEventsPanel extends JPanel {
     refreshTriggerSubscription =
         refreshTrigger.subscribe(
             __ -> {
+              if (!isShowing()) return;
               if (SwingUtilities.isEventDispatchThread()) {
                 refreshNow();
               } else {
@@ -241,6 +249,7 @@ public final class RuntimeEventsPanel extends JPanel {
               }
             },
             err -> {
+              if (!isShowing()) return;
               if (SwingUtilities.isEventDispatchThread()) {
                 refreshNow();
               } else {

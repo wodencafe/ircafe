@@ -170,6 +170,15 @@ public interface UiPort {
   /** Mark completion of a ban-list stream for one channel. */
   default void endChannelBanList(String serverId, String channel, String summary) {}
 
+  /**
+   * Update best-effort channel mode snapshot shown in UI details surfaces.
+   *
+   * <p>{@code rawModes} is typically the raw mode token string (for example {@code +ntlk key 50}).
+   * {@code friendlySummary} is an optional human-readable summary.
+   */
+  default void setChannelModeSnapshot(
+      String serverId, String channel, String rawModes, String friendlySummary) {}
+
   void setStatusBarChannel(String channel);
 
   void setStatusBarCounts(int users, int ops);

@@ -1,8 +1,12 @@
 package cafe.woden.ircclient.ui.servertree.policy;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiPredicate;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /** Encapsulates bouncer-detach eligibility policy for server/channel actions. */
 public final class ServerTreeBouncerDetachPolicy {
@@ -15,6 +19,38 @@ public final class ServerTreeBouncerDetachPolicy {
     boolean isZncEphemeralServer(String serverId);
 
     boolean hasBouncerCapability(String serverId, String capability);
+  }
+
+  public static Context context(
+      Function<String, ConnectionState> connectionStateForServer,
+      Predicate<String> isSojuEphemeralServer,
+      Predicate<String> isZncEphemeralServer,
+      BiPredicate<String, String> hasBouncerCapability) {
+    Objects.requireNonNull(connectionStateForServer, "connectionStateForServer");
+    Objects.requireNonNull(isSojuEphemeralServer, "isSojuEphemeralServer");
+    Objects.requireNonNull(isZncEphemeralServer, "isZncEphemeralServer");
+    Objects.requireNonNull(hasBouncerCapability, "hasBouncerCapability");
+    return new Context() {
+      @Override
+      public ConnectionState connectionStateForServer(String serverId) {
+        return connectionStateForServer.apply(serverId);
+      }
+
+      @Override
+      public boolean isSojuEphemeralServer(String serverId) {
+        return isSojuEphemeralServer.test(serverId);
+      }
+
+      @Override
+      public boolean isZncEphemeralServer(String serverId) {
+        return isZncEphemeralServer.test(serverId);
+      }
+
+      @Override
+      public boolean hasBouncerCapability(String serverId, String capability) {
+        return hasBouncerCapability.test(serverId, capability);
+      }
+    };
   }
 
   private final Set<String> sojuBouncerControlServerIds;
@@ -49,6 +85,6 @@ public final class ServerTreeBouncerDetachPolicy {
   }
 
   private static String normalize(String value) {
-    return Objects.toString(value, "").trim();
+    return ServerTreeConventions.normalize(value);
   }
 }

@@ -490,6 +490,12 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void setChannelModeSnapshot(
+      String serverId, String channel, String rawModes, String friendlySummary) {
+    onEdt(() -> chat.setChannelModeSnapshot(serverId, channel, rawModes, friendlySummary));
+  }
+
+  @Override
   public void setStatusBarChannel(String channel) {
     onEdt(() -> statusBar.setChannel(channel));
   }

@@ -3,10 +3,13 @@ package cafe.woden.ircclient.ui.servertree.actions;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import java.awt.Component;
 import java.awt.Window;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -28,6 +31,52 @@ public final class ServerTreeInterceptorActions {
     DefaultMutableTreeNode interceptorsGroupNode(String serverId);
 
     void nodeChanged(DefaultMutableTreeNode node);
+  }
+
+  public static Context context(
+      Consumer<TargetRef> ensureNode,
+      Consumer<TargetRef> selectTarget,
+      Consumer<TargetRef> removeTarget,
+      Function<TargetRef, DefaultMutableTreeNode> leafNode,
+      Function<String, DefaultMutableTreeNode> interceptorsGroupNode,
+      Consumer<DefaultMutableTreeNode> nodeChanged) {
+    Objects.requireNonNull(ensureNode, "ensureNode");
+    Objects.requireNonNull(selectTarget, "selectTarget");
+    Objects.requireNonNull(removeTarget, "removeTarget");
+    Objects.requireNonNull(leafNode, "leafNode");
+    Objects.requireNonNull(interceptorsGroupNode, "interceptorsGroupNode");
+    Objects.requireNonNull(nodeChanged, "nodeChanged");
+    return new Context() {
+      @Override
+      public void ensureNode(TargetRef ref) {
+        ensureNode.accept(ref);
+      }
+
+      @Override
+      public void selectTarget(TargetRef ref) {
+        selectTarget.accept(ref);
+      }
+
+      @Override
+      public void removeTarget(TargetRef ref) {
+        removeTarget.accept(ref);
+      }
+
+      @Override
+      public DefaultMutableTreeNode leafNode(TargetRef ref) {
+        return leafNode.apply(ref);
+      }
+
+      @Override
+      public DefaultMutableTreeNode interceptorsGroupNode(String serverId) {
+        return interceptorsGroupNode.apply(serverId);
+      }
+
+      @Override
+      public void nodeChanged(DefaultMutableTreeNode node) {
+        nodeChanged.accept(node);
+      }
+    };
   }
 
   private static final Logger log = LoggerFactory.getLogger(ServerTreeInterceptorActions.class);
@@ -222,7 +271,7 @@ public final class ServerTreeInterceptorActions {
   }
 
   private static String normalizeServerId(String serverId) {
-    return Objects.toString(serverId, "").trim();
+    return ServerTreeConventions.normalizeServerId(serverId);
   }
 
   private static String normalizeInterceptorId(String interceptorId) {
