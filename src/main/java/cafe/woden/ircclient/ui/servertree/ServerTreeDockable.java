@@ -1254,26 +1254,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     clearPreparedChannelDockDrag();
     log.info("[ircafe] prepareChannelDockDrag target={}", target);
 
-    Dockable dockable = ensurePinnedDockableForDrag(target);
-    if (dockable == null) {
-      log.warn("[ircafe] prepareChannelDockDrag failed: no dockable for target={}", target);
-      return;
-    }
-
-    FloatListener floatListener = floatListenerForDockable(dockable);
-    if (floatListener == null) {
-      log.warn(
-          "[ircafe] prepareChannelDockDrag failed: no float listener for dockable={}",
-          dockable.getPersistentID());
-      return;
-    }
-    DragSource dragSource = floatListenerDragSource(floatListener);
-    if (dragSource == null) {
-      log.warn(
-          "[ircafe] prepareChannelDockDrag failed: no drag source for float listener dockable={}",
-          dockable.getPersistentID());
-      return;
-    }
+    DragSource dragSource = DragSource.getDefaultDragSource();
 
     DragGestureListener dragGestureListener =
         dragGestureEvent -> {
@@ -1283,6 +1264,19 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
               dragGestureEvent == null ? "null" : dragGestureEvent.getDragAction(),
               dragGestureEvent == null ? "null" : dragGestureEvent.getDragOrigin());
           try {
+            InputEvent triggerEvent =
+                dragGestureEvent == null ? null : dragGestureEvent.getTriggerEvent();
+            if (!(triggerEvent instanceof MouseEvent mouseEvent)
+                || mouseEvent.getID() != MouseEvent.MOUSE_DRAGGED) {
+              return;
+            }
+            Dockable dockable = ensurePinnedDockableForDrag(target);
+            if (dockable == null) {
+              log.warn(
+                  "[ircafe] prepared channel drag failed: no dockable available for target={}",
+                  target);
+              return;
+            }
             beginPinnedDockDrag(dockable, dragGestureEvent);
           } finally {
             clearPreparedChannelDockDrag();
@@ -1302,9 +1296,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       preparedTreeDragTarget = target;
       primeAlternateDragGesture(recognizer, event, target);
       log.info(
-          "[ircafe] prepared channel drag recognizer target={} dockable={} source={}",
+          "[ircafe] prepared channel drag recognizer target={} source={}",
           target,
-          dockable.getPersistentID(),
           recognizer.getClass().getSimpleName());
     } catch (Exception ex) {
       log.warn(
@@ -1515,21 +1508,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       return value instanceof DragSource dragSource ? dragSource : null;
     } catch (Exception ex) {
       log.warn("[ircafe] could not access float listener drag source", ex);
-      return null;
-    }
-  }
-
-  private FloatListener floatListenerForDockable(Dockable dockable) {
-    if (dockable == null) return null;
-    try {
-      DockingAPI dockingApi = Docking.getSingleInstance();
-      DockingInternal internals = DockingInternal.get(dockingApi);
-      if (internals == null) return null;
-      DockableWrapper wrapper = internals.getWrapper(dockable);
-      if (wrapper == null) return null;
-      return wrapper.getFloatListener();
-    } catch (Exception ex) {
-      log.warn("[ircafe] could not resolve float listener for dockable={}", dockable.getPersistentID(), ex);
       return null;
     }
   }

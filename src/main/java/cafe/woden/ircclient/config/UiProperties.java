@@ -381,7 +381,7 @@ public record UiProperties(
     public Layout {
       if (serverDockWidthPx == null || serverDockWidthPx <= 0) serverDockWidthPx = 280;
       if (userDockWidthPx == null || userDockWidthPx <= 0) userDockWidthPx = 240;
-      if (preserveDockLayout == null) preserveDockLayout = false;
+      if (preserveDockLayout == null) preserveDockLayout = true;
     }
   }
 

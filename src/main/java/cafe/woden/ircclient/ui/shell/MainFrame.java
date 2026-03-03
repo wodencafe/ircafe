@@ -6,6 +6,7 @@ import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.UserListDockable;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
+import cafe.woden.ircclient.ui.docking.DockingHeaderContextMenuInstaller;
 import cafe.woden.ircclient.ui.docking.DockingTuner;
 import cafe.woden.ircclient.ui.icons.AppIcons;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
@@ -43,6 +44,9 @@ public class MainFrame extends JFrame {
   // and then preserved by the split-pane "lock" logic.
   private static final int DEFAULT_SERVER_DOCK_WIDTH_PX = 280;
   private static final int DEFAULT_USERS_DOCK_WIDTH_PX = 240;
+
+  private final boolean preserveDockLayoutEnabled;
+  private volatile boolean layoutSnapshotPersistedOnWindowClosing;
 
   public MainFrame(
       AppMenuBar menuBar,
@@ -88,6 +92,7 @@ public class MainFrame extends JFrame {
             });
 
     resetDockingRuntime("startup");
+    DockingHeaderContextMenuInstaller.install();
     Docking.initialize(this);
     // DockingUI.initialize(); // TODO: Investigate this.
 
@@ -106,6 +111,7 @@ public class MainFrame extends JFrame {
         uiProps != null
             && uiProps.layout() != null
             && Boolean.TRUE.equals(uiProps.layout().preserveDockLayout());
+    this.preserveDockLayoutEnabled = preserveDockLayout;
     boolean restoredDockLayout = false;
     try {
       var dockingApi = Docking.getSingleInstance();
@@ -340,7 +346,8 @@ public class MainFrame extends JFrame {
           @Override
           public void windowClosing(WindowEvent e) {
             flushPendingDockWidths.run();
-            persistDockLayoutSnapshot(preserveDockLayout);
+            layoutSnapshotPersistedOnWindowClosing =
+                persistDockLayoutSnapshot(preserveDockLayoutEnabled, "windowClosing");
             // Optional "close-to-tray": close button hides to tray (when supported/enabled).
             if (trayService != null
                 && trayService.shouldCloseToTray()
@@ -368,7 +375,14 @@ public class MainFrame extends JFrame {
 
   @Override
   public void dispose() {
-    persistDockLayoutSnapshot(true);
+    if (!preserveDockLayoutEnabled) {
+      super.dispose();
+      return;
+    }
+
+    if (!layoutSnapshotPersistedOnWindowClosing && isShowing()) {
+      persistDockLayoutSnapshot(true, "dispose(showing)");
+    }
     super.dispose();
   }
 
@@ -420,14 +434,18 @@ public class MainFrame extends JFrame {
     }
   }
 
-  private void persistDockLayoutSnapshot(boolean enabled) {
-    if (!enabled) return;
+  private boolean persistDockLayoutSnapshot(boolean enabled, String phase) {
+    if (!enabled) return false;
     try {
       var dockingApi = Docking.getSingleInstance();
       if (dockingApi != null && dockingApi.getAppState() != null) {
         dockingApi.getAppState().persist();
+        return true;
       }
-    } catch (Exception ignored) {
+      return false;
+    } catch (Exception ex) {
+      log.warn("docking: failed persist phase={}", phase, ex);
+      return false;
     }
   }
 }

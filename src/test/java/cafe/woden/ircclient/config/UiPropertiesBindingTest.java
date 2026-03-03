@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -54,6 +56,26 @@ class UiPropertiesBindingTest {
             ctx -> {
               UiProperties props = ctx.getBean(UiProperties.class);
               assertEquals(1500, props.memoryUsageRefreshIntervalMs());
+            });
+  }
+
+  @Test
+  void dockLayoutPreserveDefaultsEnabled() {
+    runner.run(
+        ctx -> {
+          UiProperties props = ctx.getBean(UiProperties.class);
+          assertTrue(props.layout().preserveDockLayout());
+        });
+  }
+
+  @Test
+  void dockLayoutPreserveCanBeDisabledExplicitly() {
+    runner
+        .withPropertyValues("ircafe.ui.layout.preserveDockLayout=false")
+        .run(
+            ctx -> {
+              UiProperties props = ctx.getBean(UiProperties.class);
+              assertFalse(props.layout().preserveDockLayout());
             });
   }
 
