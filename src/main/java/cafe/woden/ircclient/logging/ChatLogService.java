@@ -26,6 +26,8 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
   private static final int MAX_MAX_QUEUE = 1_000_000;
   private static final int MIN_BATCH_SIZE = 1;
   private static final int MAX_BATCH_SIZE = 10_000;
+  private static final long WRITER_POLL_TIMEOUT_MS = 250;
+  private static final long WRITER_STOP_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(15);
 
   private final int maxQueue;
   private final int batchSize;
@@ -87,12 +89,16 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
   private void writerLoop() {
     while (true) {
       try {
-        LogLine first = queue.take();
-        flushSafely(first);
-      } catch (InterruptedException ie) {
-        if (closed.get()) {
-          return;
+        LogLine first = queue.poll(WRITER_POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        if (first != null) {
+          flushSafely(first);
         }
+      } catch (InterruptedException ie) {
+        // Re-check shutdown condition below.
+      }
+
+      if (closed.get() && queue.isEmpty()) {
+        return;
       }
     }
   }
@@ -148,24 +154,32 @@ public class ChatLogService implements ChatLogWriter, AutoCloseable {
     if (!closed.compareAndSet(false, true)) return;
 
     writerThread.interrupt();
-    try {
-      writerThread.join(TimeUnit.SECONDS.toMillis(2));
-    } catch (InterruptedException ie) {
-      Thread.currentThread().interrupt();
-    }
-
-    if (writerThread.isAlive()) {
+    if (!awaitWriterStop()) {
       log.warn(
-          "[ircafe] Chat log writer did not stop within timeout; skipping final synchronous flush");
-      return;
+          "[ircafe] Chat log writer did not stop within {} ms (queued lines: {})",
+          WRITER_STOP_TIMEOUT_MS,
+          queue.size());
     }
+  }
 
-    // Final flush (best effort).
-    try {
-      flushNow();
-    } catch (Throwable t) {
-      log.warn("[ircafe] Final chat log flush failed", t);
+  private boolean awaitWriterStop() {
+    long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(WRITER_STOP_TIMEOUT_MS);
+    while (writerThread.isAlive()) {
+      long remainingNanos = deadlineNanos - System.nanoTime();
+      if (remainingNanos <= 0) {
+        return false;
+      }
+      long waitMillis =
+          Math.min(
+              WRITER_POLL_TIMEOUT_MS, Math.max(1, TimeUnit.NANOSECONDS.toMillis(remainingNanos)));
+      try {
+        writerThread.join(waitMillis);
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        return false;
+      }
     }
+    return true;
   }
 
   private static int clamp(Integer raw, int fallback, int min, int max, String settingName) {
