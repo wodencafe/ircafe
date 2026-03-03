@@ -10,6 +10,7 @@ import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -26,12 +27,14 @@ import java.util.Optional;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
@@ -46,6 +49,9 @@ import net.miginfocom.swing.MigLayout;
 public class ServerEditorDialog extends JDialog {
 
   private Optional<IrcProperties.Server> result = Optional.empty();
+  private final IrcProperties.Server.Backend seedBackend;
+  private final JComboBox<IrcProperties.Server.Backend> backendCombo =
+      new JComboBox<>(IrcProperties.Server.Backend.values());
 
   private final JTextField idField = new JTextField();
   private final JTextField hostField = new JTextField();
@@ -54,10 +60,15 @@ public class ServerEditorDialog extends JDialog {
   private final JTextField serverPassField = new JTextField();
   private final JCheckBox autoConnectOnStartBox =
       new JCheckBox("Auto-connect this server on startup");
+  private final JLabel serverPasswordLabel = new JLabel("Server password");
+  private final JLabel connectionBackendHintLabel = new JLabel(" ");
 
   private final JTextField nickField = new JTextField();
   private final JTextField loginField = new JTextField();
   private final JTextField realNameField = new JTextField();
+  private final JLabel nickLabel = new JLabel("Nick");
+  private final JLabel loginLabel = new JLabel("Login/Ident");
+  private final JLabel realNameLabel = new JLabel("Real name");
 
   private enum AuthMode {
     DISABLED("Disabled"),
@@ -171,6 +182,23 @@ public class ServerEditorDialog extends JDialog {
   public ServerEditorDialog(
       Window parent, String title, IrcProperties.Server seed, boolean autoConnectOnStart) {
     super(parent, title, ModalityType.APPLICATION_MODAL);
+    this.seedBackend = seed != null ? seed.backend() : IrcProperties.Server.Backend.IRC;
+    backendCombo.setSelectedItem(seedBackend);
+    backendCombo.setRenderer(
+        new DefaultListCellRenderer() {
+          @Override
+          public Component getListCellRendererComponent(
+              JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+            JLabel label =
+                (JLabel)
+                    super.getListCellRendererComponent(
+                        list, value, index, isSelected, cellHasFocus);
+            if (value instanceof IrcProperties.Server.Backend backend) {
+              label.setText(backendLabel(backend));
+            }
+            return label;
+          }
+        });
     nickservDelayJoinBox.setSelected(true);
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
     setLayout(new BorderLayout(10, 10));
@@ -282,6 +310,7 @@ public class ServerEditorDialog extends JDialog {
     appendStyle(proxyPassField, "showRevealButton:true");
     applyFieldStyle(proxyConnectTimeoutMsField, "20000");
     applyFieldStyle(proxyReadTimeoutMsField, "30000");
+    appendStyle(backendCombo, "arc:10");
     autoJoinArea.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#channel\n#another");
     autoJoinPmArea.putClientProperty(
         FlatClientProperties.PLACEHOLDER_TEXT, "NickServ\nfriend_nick");
@@ -320,7 +349,13 @@ public class ServerEditorDialog extends JDialog {
     authModeCombo.addActionListener(e -> updateAuthModeUi());
     saslMechanism.addActionListener(e -> updateAuthModeUi());
     nickservDelayJoinBox.addActionListener(e -> updateValidation());
+    backendCombo.addActionListener(
+        e -> {
+          updateBackendUi();
+          updateAuthModeUi();
+        });
     updateAuthModeUi();
+    updateBackendUi();
 
     proxyOverrideBox.addActionListener(e -> updateProxyEnabled());
     proxyEnabledBox.addActionListener(e -> updateProxyEnabled());
@@ -332,7 +367,10 @@ public class ServerEditorDialog extends JDialog {
     idField.getDocument().addDocumentListener(vdl);
     hostField.getDocument().addDocumentListener(vdl);
     // portField already has a listener for portAuto; it also calls updateValidation().
+    serverPassField.getDocument().addDocumentListener(vdl);
     nickField.getDocument().addDocumentListener(vdl);
+    loginField.getDocument().addDocumentListener(vdl);
+    realNameField.getDocument().addDocumentListener(vdl);
 
     saslUserField.getDocument().addDocumentListener(vdl);
     saslPassField.getDocument().addDocumentListener(vdl);
@@ -700,7 +738,8 @@ public class ServerEditorDialog extends JDialog {
     GridBagConstraints g = baseGbc();
 
     addRow(p, g, 0, "Server ID", idField);
-    addRow(p, g, 1, "Host", hostField);
+    addRow(p, g, 1, "Backend", backendCombo);
+    addRow(p, g, 2, "Host", hostField);
 
     // Port row with TLS
     JPanel portRow = new JPanel(new GridBagLayout());
@@ -718,11 +757,14 @@ public class ServerEditorDialog extends JDialog {
     pg.fill = GridBagConstraints.HORIZONTAL;
     portRow.add(tlsBox, pg);
 
-    addRow(p, g, 2, "Port", portRow);
-    addRow(p, g, 3, "Server password", serverPassField);
-    addRow(p, g, 4, "Startup", autoConnectOnStartBox);
+    addRow(p, g, 3, "Port", portRow);
+    addRow(p, g, 4, serverPasswordLabel, serverPassField);
+    addRow(p, g, 5, "Startup", autoConnectOnStartBox);
+    connectionBackendHintLabel.putClientProperty(
+        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+    addRow(p, g, 6, "Backend hint", connectionBackendHintLabel);
 
-    g.gridy = 6;
+    g.gridy = 8;
     g.gridx = 0;
     g.gridwidth = 2;
     g.weighty = 1.0;
@@ -736,9 +778,9 @@ public class ServerEditorDialog extends JDialog {
     p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
     GridBagConstraints g = baseGbc();
-    addRow(p, g, 0, "Nick", nickField);
-    addRow(p, g, 1, "Login/Ident", loginField);
-    addRow(p, g, 2, "Real name", realNameField);
+    addRow(p, g, 0, nickLabel, nickField);
+    addRow(p, g, 1, loginLabel, loginField);
+    addRow(p, g, 2, realNameLabel, realNameField);
 
     g.gridy = 3;
     g.gridx = 0;
@@ -904,9 +946,58 @@ public class ServerEditorDialog extends JDialog {
 
   private void updateAuthModeUi() {
     AuthMode mode = selectedAuthMode();
+    if (isQuasselBackendSelected() && mode != AuthMode.DISABLED) {
+      mode = AuthMode.DISABLED;
+      authModeCombo.setSelectedItem(mode);
+    }
     showAuthCard(mode);
     updateSaslEnabled();
     updateNickservEnabled();
+    updateValidation();
+  }
+
+  private IrcProperties.Server.Backend selectedBackend() {
+    Object selected = backendCombo.getSelectedItem();
+    if (selected instanceof IrcProperties.Server.Backend backend) return backend;
+    return seedBackend;
+  }
+
+  private boolean isQuasselBackendSelected() {
+    return selectedBackend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+  }
+
+  private void updateBackendUi() {
+    boolean quassel = isQuasselBackendSelected();
+    if (quassel) {
+      serverPasswordLabel.setText("Core password");
+      nickLabel.setText("Default nick");
+      loginLabel.setText("Core username");
+      realNameLabel.setText("Core real name");
+      connectionBackendHintLabel.setText(
+          "Quassel backend logs into Quassel Core here; SASL/NickServ below are ignored.");
+      authModeCombo.setEnabled(false);
+      authModeCombo.setSelectedItem(AuthMode.DISABLED);
+      authDisabledHintLabel.setText(
+          asHtml(
+              "Quassel backend does not run direct IRC SASL/NickServ auth from IRCafe."
+                  + " Configure upstream network auth inside Quassel Core."));
+      applyFieldStyle(serverPassField, "core password");
+      applyFieldStyle(loginField, "quassel core username");
+      applyFieldStyle(nickField, "display nick (optional)");
+      applyFieldStyle(realNameField, "display name (optional)");
+    } else {
+      serverPasswordLabel.setText("Server password");
+      nickLabel.setText("Nick");
+      loginLabel.setText("Login/Ident");
+      realNameLabel.setText("Real name");
+      connectionBackendHintLabel.setText("Direct IRC connection using this profile.");
+      authModeCombo.setEnabled(true);
+      authDisabledHintLabel.setText(asHtml(AUTH_DISABLED_HINT_TEXT));
+      applyFieldStyle(serverPassField, "(optional)");
+      applyFieldStyle(loginField, "ircafe");
+      applyFieldStyle(nickField, "IRCafeUser");
+      applyFieldStyle(realNameField, "IRCafe User");
+    }
     updateValidation();
   }
 
@@ -1034,6 +1125,7 @@ public class ServerEditorDialog extends JDialog {
 
   private void updateValidation() {
     boolean ok = true;
+    boolean quasselBackend = isQuasselBackendSelected();
 
     boolean idBad = trim(idField.getText()).isEmpty();
     setError(idField, idBad);
@@ -1047,14 +1139,22 @@ public class ServerEditorDialog extends JDialog {
     setError(portField, portBad);
     ok &= !portBad;
 
-    boolean nickBad = trim(nickField.getText()).isEmpty();
+    boolean corePasswordBad = quasselBackend && trim(serverPassField.getText()).isEmpty();
+    setError(serverPassField, corePasswordBad);
+    ok &= !corePasswordBad;
+
+    boolean loginBad = quasselBackend && trim(loginField.getText()).isEmpty();
+    setError(loginField, loginBad);
+    ok &= !loginBad;
+
+    boolean nickBad = !quasselBackend && trim(nickField.getText()).isEmpty();
     setError(nickField, nickBad);
     ok &= !nickBad;
 
     AuthMode authMode = selectedAuthMode();
 
     // SASL validation
-    if (authMode != AuthMode.SASL) {
+    if (quasselBackend || authMode != AuthMode.SASL) {
       clearOutline(saslUserField);
       clearOutline(saslPassField);
     } else {
@@ -1093,7 +1193,7 @@ public class ServerEditorDialog extends JDialog {
     }
 
     // NickServ validation
-    if (authMode != AuthMode.NICKSERV) {
+    if (quasselBackend || authMode != AuthMode.NICKSERV) {
       clearOutline(nickservServiceField);
       clearOutline(nickservPassField);
     } else {
@@ -1246,19 +1346,40 @@ public class ServerEditorDialog extends JDialog {
     }
     if (port <= 0 || port > 65535) throw new IllegalArgumentException("Port must be 1-65535");
 
+    Object backendSelection = backendCombo.getSelectedItem();
+    IrcProperties.Server.Backend backend =
+        backendSelection instanceof IrcProperties.Server.Backend selected ? selected : seedBackend;
+    boolean quasselBackend = backend == IrcProperties.Server.Backend.QUASSEL_CORE;
+
     boolean tls = tlsBox.isSelected();
     String serverPassword = Objects.toString(serverPassField.getText(), "");
+    if (quasselBackend && serverPassword.isBlank()) {
+      throw new IllegalArgumentException("Quassel Core password is required");
+    }
 
     String nick = trim(nickField.getText());
-    if (nick.isEmpty()) throw new IllegalArgumentException("Nick is required");
+    if (!quasselBackend && nick.isEmpty()) {
+      throw new IllegalArgumentException("Nick is required");
+    }
 
     String login = trim(loginField.getText());
+    if (quasselBackend && login.isEmpty()) {
+      throw new IllegalArgumentException("Quassel Core username is required");
+    }
     if (login.isEmpty()) login = nick;
+    if (login.isEmpty()) login = "quassel-user";
 
     String realName = trim(realNameField.getText());
-    if (realName.isEmpty()) realName = nick;
+    if (realName.isEmpty()) realName = nick.isEmpty() ? login : nick;
+
+    if (nick.isEmpty()) {
+      nick = login;
+    }
 
     AuthMode authMode = selectedAuthMode();
+    if (quasselBackend) {
+      authMode = AuthMode.DISABLED;
+    }
 
     IrcProperties.Server.Sasl sasl;
     if (authMode == AuthMode.SASL) {
@@ -1368,7 +1489,15 @@ public class ServerEditorDialog extends JDialog {
         nickserv,
         autoJoin,
         perform,
-        proxyOverride);
+        proxyOverride,
+        backend);
+  }
+
+  private static String backendLabel(IrcProperties.Server.Backend backend) {
+    return switch (backend) {
+      case IRC -> "IRC";
+      case QUASSEL_CORE -> "Quassel Core";
+    };
   }
 
   private static void applyFieldStyle(JTextField f, String placeholder) {
@@ -1400,17 +1529,30 @@ public class ServerEditorDialog extends JDialog {
 
   private static void addRow(
       JPanel panel, GridBagConstraints g, int row, String label, java.awt.Component field) {
+    addRow(panel, g, row, styledLabel(label), field);
+  }
+
+  private static void addRow(
+      JPanel panel, GridBagConstraints g, int row, JLabel label, java.awt.Component field) {
     g.gridy = row;
     g.gridx = 0;
     g.weightx = 0.0;
     g.gridwidth = 1;
-    JLabel l = new JLabel(label);
-    l.putClientProperty(FlatClientProperties.STYLE, "font:+0");
+    JLabel l = label == null ? styledLabel("") : label;
+    if (l.getClientProperty(FlatClientProperties.STYLE) == null) {
+      l.putClientProperty(FlatClientProperties.STYLE, "font:+0");
+    }
     panel.add(l, g);
 
     g.gridx = 1;
     g.weightx = 1.0;
     panel.add(field, g);
+  }
+
+  private static JLabel styledLabel(String text) {
+    JLabel l = new JLabel(text);
+    l.putClientProperty(FlatClientProperties.STYLE, "font:+0");
+    return l;
   }
 
   private static String asHtml(String text) {

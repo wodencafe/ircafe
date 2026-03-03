@@ -10,8 +10,8 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.PushyProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.irc.IrcHeartbeatMaintenanceService;
 import cafe.woden.ircclient.irc.PircbotxBotFactory;
-import cafe.woden.ircclient.irc.PircbotxIrcClientService;
 import cafe.woden.ircclient.model.BuiltInSound;
 import cafe.woden.ircclient.model.FilterRule;
 import cafe.woden.ircclient.model.FilterScopeOverride;
@@ -164,7 +164,7 @@ public class PreferencesDialog {
   private final NickColorOverridesDialog nickColorOverridesDialog;
   private final EmbedLoadPolicyDialog embedLoadPolicyDialog;
   private final EmbedLoadPolicyBus embedLoadPolicyBus;
-  private final PircbotxIrcClientService ircClientService;
+  private final IrcHeartbeatMaintenanceService ircHeartbeatMaintenancePort;
   private final FilterSettingsBus filterSettingsBus;
   private final TranscriptRebuildService transcriptRebuildService;
   private final ActiveTargetPort targetCoordinator;
@@ -200,7 +200,7 @@ public class PreferencesDialog {
       NickColorOverridesDialog nickColorOverridesDialog,
       EmbedLoadPolicyDialog embedLoadPolicyDialog,
       EmbedLoadPolicyBus embedLoadPolicyBus,
-      PircbotxIrcClientService ircClientService,
+      IrcHeartbeatMaintenanceService ircHeartbeatMaintenancePort,
       FilterSettingsBus filterSettingsBus,
       TranscriptRebuildService transcriptRebuildService,
       ActiveTargetPort targetCoordinator,
@@ -233,7 +233,7 @@ public class PreferencesDialog {
     this.nickColorOverridesDialog = nickColorOverridesDialog;
     this.embedLoadPolicyDialog = embedLoadPolicyDialog;
     this.embedLoadPolicyBus = embedLoadPolicyBus;
-    this.ircClientService = ircClientService;
+    this.ircHeartbeatMaintenancePort = ircHeartbeatMaintenancePort;
     this.filterSettingsBus = filterSettingsBus;
     this.transcriptRebuildService = transcriptRebuildService;
     this.targetCoordinator = targetCoordinator;
@@ -1988,8 +1988,8 @@ public class PreferencesDialog {
             NetProxyContext.configure(proxyCfg);
             runtimeConfig.rememberClientHeartbeat(heartbeatCfg);
             NetHeartbeatContext.configure(heartbeatCfg);
-            if (ircClientService != null) {
-              ircClientService.rescheduleActiveHeartbeats();
+            if (ircHeartbeatMaintenancePort != null) {
+              ircHeartbeatMaintenancePort.rescheduleActiveHeartbeats();
             }
             boolean trustAllTlsV = trustAllTlsCertificates.isSelected();
             runtimeConfig.rememberClientTlsTrustAllCertificates(trustAllTlsV);

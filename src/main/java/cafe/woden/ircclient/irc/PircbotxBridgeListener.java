@@ -1922,7 +1922,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       bus.onNext(
           new ServerIrcEvent(
               serverId,
-              new IrcEvent.ChannelModesListed(Instant.now(), parsed.channel(), parsed.details())));
+              ChannelModeObservationFactory.fromNumeric324(
+                  Instant.now(), parsed.channel(), parsed.details())));
       return;
     }
 
@@ -2567,7 +2568,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       if (l != null) line = String.valueOf(l);
       if (line == null || line.isBlank()) line = String.valueOf(event);
 
+      Instant now = Instant.now();
       emitServerResponseLine(event.getBot(), code, line);
+      bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.ConnectionReady(now)));
+      bus.onNext(
+          new ServerIrcEvent(
+              serverId, new IrcEvent.ConnectionFeaturesUpdated(now, "post-registration")));
       maybeLogNegotiatedCaps();
       maybeRequestZncNetworks(event.getBot());
       maybeRequestZncPlayback(event.getBot());
@@ -2618,6 +2624,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         }
       }
 
+      bus.onNext(
+          new ServerIrcEvent(
+              serverId, new IrcEvent.ConnectionFeaturesUpdated(Instant.now(), "isupport")));
       emitServerResponseLine(event.getBot(), code, line);
       return;
     }
@@ -2634,7 +2643,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         bus.onNext(
             new ServerIrcEvent(
                 serverId,
-                new IrcEvent.ChannelModesListed(
+                ChannelModeObservationFactory.fromNumeric324(
                     Instant.now(), parsed.channel(), parsed.details())));
       } else {
         // Defensive fallback: if parsing fails, still surface the raw numeric.
@@ -3422,7 +3431,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     if (details != null && !details.isBlank()) {
       bus.onNext(
           new ServerIrcEvent(
-              serverId, new IrcEvent.ChannelModeChanged(Instant.now(), chan, by, details)));
+              serverId,
+              ChannelModeObservationFactory.fromLiveMode(Instant.now(), chan, by, details)));
     }
   }
 

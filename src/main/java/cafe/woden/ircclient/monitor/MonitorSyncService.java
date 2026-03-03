@@ -15,7 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-/** Re-applies persisted IRC MONITOR nick lists after connect-ready numerics. */
+/** Re-applies persisted IRC MONITOR nick lists once the backend reports connection-ready. */
 @Component
 @ApplicationLayer
 public class MonitorSyncService {
@@ -65,16 +65,13 @@ public class MonitorSyncService {
       return;
     }
 
-    if (!(event instanceof IrcEvent.ServerResponseLine sr)) return;
-    int code = sr.code();
-    if (code == 376 || code == 422) {
+    if (event instanceof IrcEvent.ConnectionReady) {
       readyByServer.put(sid, Boolean.TRUE);
       maybeSyncNow(sid);
       return;
     }
 
-    // 005 can arrive in multiple lines; once MONITOR is observed after MOTD, sync immediately.
-    if (code == 5) {
+    if (event instanceof IrcEvent.ConnectionFeaturesUpdated) {
       maybeSyncNow(sid);
     }
   }

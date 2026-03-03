@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.IrcProperties;
 import java.awt.GraphicsEnvironment;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -30,6 +31,7 @@ class ServerEditorDialogFunctionalTest {
     ServerEditorDialog dialog = onEdtCall(() -> new ServerEditorDialog(null, "Add Server", null));
     JCheckBox tlsBox = readField(dialog, "tlsBox", JCheckBox.class);
     JTextField portField = readField(dialog, "portField", JTextField.class);
+    JComboBox<?> backendCombo = readField(dialog, "backendCombo", JComboBox.class);
     JComboBox<?> authModeCombo = readField(dialog, "authModeCombo", JComboBox.class);
     JComboBox<?> saslMechanism = readField(dialog, "saslMechanism", JComboBox.class);
     JTextField saslUserField = readField(dialog, "saslUserField", JTextField.class);
@@ -43,10 +45,18 @@ class ServerEditorDialogFunctionalTest {
     JTextField idField = readField(dialog, "idField", JTextField.class);
     JTextField hostField = readField(dialog, "hostField", JTextField.class);
     JTextField nickField = readField(dialog, "nickField", JTextField.class);
+    JTextField loginField = readField(dialog, "loginField", JTextField.class);
+    JTextField serverPassField = readField(dialog, "serverPassField", JTextField.class);
     JButton saveBtn = readField(dialog, "saveBtn", JButton.class);
 
     try {
       onEdt(() -> assertEquals("6697", portField.getText(), "tls default should set secure port"));
+      onEdt(
+          () ->
+              assertEquals(
+                  IrcProperties.Server.Backend.IRC,
+                  backendCombo.getSelectedItem(),
+                  "new servers should default to IRC backend"));
 
       onEdt(tlsBox::doClick);
       onEdt(() -> assertEquals("6667", portField.getText(), "plain mode should use 6667"));
@@ -84,6 +94,14 @@ class ServerEditorDialogFunctionalTest {
             saslPassField.setText("sasl-secret");
             saslContinueOnFailureBox.setSelected(true);
           });
+      onEdt(() -> backendCombo.setSelectedItem(IrcProperties.Server.Backend.QUASSEL_CORE));
+      onEdt(
+          () -> {
+            assertFalse(
+                authModeCombo.isEnabled(), "Quassel backend should disable direct auth mode");
+            loginField.setText("core-user");
+            serverPassField.setText("core-secret");
+          });
       waitFor(() -> onEdtBoolean(saveBtn::isEnabled), Duration.ofSeconds(2));
 
       onEdt(saveBtn::doClick);
@@ -93,10 +111,12 @@ class ServerEditorDialogFunctionalTest {
       Object server = result.get();
       Method id = server.getClass().getMethod("id");
       assertEquals("libera", id.invoke(server));
-      Method sasl = server.getClass().getMethod("sasl");
-      Object saslConfig = sasl.invoke(server);
-      Method disconnectOnFailure = saslConfig.getClass().getMethod("disconnectOnFailure");
-      assertFalse((Boolean) disconnectOnFailure.invoke(saslConfig));
+      Method backend = server.getClass().getMethod("backend");
+      assertEquals(IrcProperties.Server.Backend.QUASSEL_CORE, backend.invoke(server));
+      Method login = server.getClass().getMethod("login");
+      assertEquals("core-user", login.invoke(server));
+      Method serverPassword = server.getClass().getMethod("serverPassword");
+      assertEquals("core-secret", serverPassword.invoke(server));
     } finally {
       onEdt(dialog::dispose);
       flushEdt();

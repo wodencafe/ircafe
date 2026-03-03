@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.ui.shell;
 
+import static com.google.common.base.Verify.verify;
+
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -107,6 +109,10 @@ public class LagIndicatorService {
     }
 
     try {
+      try {
+        verify(ircClientService.requestLagProbe(serverId).blockingAwait(2, TimeUnit.SECONDS));
+      } catch (Exception ignored) {
+      }
       OptionalLong lagMs = ircClientService.lastMeasuredLagMs(serverId);
       if (lagMs.isPresent()) {
         long lag = Math.max(0L, lagMs.getAsLong());

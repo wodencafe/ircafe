@@ -38,7 +38,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @InfrastructureLayer
-public class PircbotxIrcClientService implements IrcClientService {
+public class PircbotxIrcClientService implements IrcBackendClientService {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxIrcClientService.class);
   private static final DateTimeFormatter MARKREAD_TS_FMT =
@@ -90,12 +90,18 @@ public class PircbotxIrcClientService implements IrcClientService {
         playbackCursorProviderProvider.getIfAvailable(() -> (String sid) -> OptionalLong.empty());
   }
 
+  @Override
+  public IrcProperties.Server.Backend backend() {
+    return IrcProperties.Server.Backend.IRC;
+  }
+
   /**
    * Reschedules heartbeat tickers for all currently-active connections.
    *
    * <p>This is used when the user changes heartbeat settings in Preferences and clicks Apply. We
    * rebuild the Rx interval so the new check period/timeout takes effect immediately.
    */
+  @Override
   public void rescheduleActiveHeartbeats() {
     if (shuttingDown.get()) return;
     for (PircbotxConnectionState c : connections.values()) {

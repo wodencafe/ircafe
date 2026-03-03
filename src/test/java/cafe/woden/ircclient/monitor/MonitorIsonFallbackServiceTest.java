@@ -58,8 +58,7 @@ class MonitorIsonFallbackServiceTest {
   @Test
   void activatesAfterReadyAndAppliesIsonPresenceTransitions() {
     events.onNext(new ServerIrcEvent("libera", connected()));
-    events.onNext(
-        new ServerIrcEvent("libera", serverResponse(376, ":server 376 me :End of /MOTD")));
+    events.onNext(new ServerIrcEvent("libera", connectionReady()));
 
     service.requestImmediateRefresh("libera");
     events.onNext(new ServerIrcEvent("libera", serverResponse(303, ":server 303 me :alice")));
@@ -82,8 +81,7 @@ class MonitorIsonFallbackServiceTest {
     org.junit.jupiter.api.Assertions.assertFalse(
         service.shouldSuppressIsonServerResponse("libera"));
 
-    events.onNext(
-        new ServerIrcEvent("libera", serverResponse(376, ":server 376 me :End of /MOTD")));
+    events.onNext(new ServerIrcEvent("libera", connectionReady()));
     org.junit.jupiter.api.Assertions.assertTrue(service.shouldSuppressIsonServerResponse("libera"));
   }
 
@@ -93,6 +91,10 @@ class MonitorIsonFallbackServiceTest {
 
   private static IrcEvent.Connected connected() {
     return new IrcEvent.Connected(Instant.now(), "irc.example.net", 6697, "ircafe");
+  }
+
+  private static IrcEvent.ConnectionReady connectionReady() {
+    return new IrcEvent.ConnectionReady(Instant.now());
   }
 
   private static UiSettingsSnapshot defaultUiSettings() {

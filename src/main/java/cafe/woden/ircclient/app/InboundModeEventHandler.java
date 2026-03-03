@@ -69,42 +69,49 @@ public class InboundModeEventHandler {
     ui.setChannelModeSnapshot(serverId, channel, "", "");
   }
 
-  public void handleChannelModeChanged(String serverId, IrcEvent.ChannelModeChanged ev) {
+  public void handleChannelModeObserved(String serverId, IrcEvent.ChannelModeObserved ev) {
     if (serverId == null || ev == null) return;
+    if (ev.kind() == IrcEvent.ChannelModeKind.SNAPSHOT) {
+      handleChannelModeSnapshot(serverId, ev.channel(), ev.details(), ev.provenance());
+      return;
+    }
+    handleChannelModeDelta(serverId, ev.channel(), ev.by(), ev.details());
+  }
 
-    TargetRef chan = new TargetRef(serverId, ev.channel());
+  private void handleChannelModeDelta(String serverId, String channel, String by, String details) {
+    if (serverId == null || channel == null) return;
+
+    TargetRef chan = new TargetRef(serverId, channel);
     ui.ensureTargetExists(chan);
-
-    String details = ev.details();
 
     // Weak signal: if this is a status-mode change (+v/+o/+h/+a/+q) we may see a MODE echo right
     // after.
     if (containsStatusMode(details)) {
-      recentStatusModeState.markStatusMode(serverId, ev.channel());
+      recentStatusModeState.markStatusMode(serverId, channel);
     }
 
     boolean flagOnly = isFlagOnly(details);
-    boolean hadFlagState = flagOnly && channelFlagModeState.hasAnyState(serverId, ev.channel());
+    boolean hadFlagState = flagOnly && channelFlagModeState.hasAnyState(serverId, channel);
     boolean changedFlagState = false;
     if (flagOnly) {
-      changedFlagState = channelFlagModeState.applyDelta(serverId, ev.channel(), details);
-      String rawModes = channelFlagModeState.snapshotModeSummary(serverId, ev.channel());
+      changedFlagState = channelFlagModeState.applyDelta(serverId, channel, details);
+      String rawModes = channelFlagModeState.snapshotModeSummary(serverId, channel);
       if (!rawModes.isBlank()) {
         ui.setChannelModeSnapshot(
             serverId,
-            ev.channel(),
+            channel,
             rawModes,
             modeFormattingService.describeCurrentChannelModes(rawModes));
       }
     }
 
-    if (joinModeBurstService.handleChannelModeChanged(serverId, ev.channel(), details)) {
+    if (joinModeBurstService.handleChannelModeChanged(serverId, channel, details)) {
       if (log.isDebugEnabled()) {
         log.debug(
             "MODEDBG handler ChannelModeChanged consumedByJoinBurst serverId={} channel={} by={} details={}",
             serverId,
-            ev.channel(),
-            ev.by(),
+            channel,
+            by,
             clip(details));
       }
       return;
@@ -112,12 +119,12 @@ public class InboundModeEventHandler {
 
     // Suppress no-op flag echoes like "+Cnst" that appear after a status change.
     if (flagOnly) {
-      if (!hadFlagState && recentStatusModeState.isRecent(serverId, ev.channel(), 2000L)) {
+      if (!hadFlagState && recentStatusModeState.isRecent(serverId, channel, 2000L)) {
         if (log.isDebugEnabled()) {
           log.debug(
               "MODEDBG handler suppress echo (no flag state yet) serverId={} channel={} details={}",
               serverId,
-              ev.channel(),
+              channel,
               clip(details));
         }
         return;
@@ -127,21 +134,20 @@ public class InboundModeEventHandler {
           log.debug(
               "MODEDBG handler suppress no-op flag delta serverId={} channel={} details={}",
               serverId,
-              ev.channel(),
+              channel,
               clip(details));
         }
         return;
       }
     }
 
-    String byRaw = ev.by();
-    var lines = modeFormattingService.prettyModeChange(byRaw, ev.channel(), details);
+    var lines = modeFormattingService.prettyModeChange(by, channel, details);
     if (log.isDebugEnabled()) {
       log.debug(
           "MODEDBG handler ChannelModeChanged serverId={} channel={} by={} details={} -> {} lines",
           serverId,
-          ev.channel(),
-          byRaw,
+          channel,
+          by,
           clip(details),
           lines.size());
     }
@@ -155,6 +161,86 @@ public class InboundModeEventHandler {
     String d = details.trim();
     if (d.isEmpty()) return false;
     return d.indexOf(' ') < 0;
+  }
+
+  private void handleChannelModeSnapshot(
+      String serverId, String channel, String details, IrcEvent.ChannelModeProvenance provenance) {
+    if (serverId == null || channel == null) return;
+
+    boolean hadFlagState = channelFlagModeState.hasAnyState(serverId, channel);
+    boolean changedFlagState = false;
+    if (details != null) {
+      String d = details.trim();
+      if (!d.isEmpty()) {
+        int sp = d.indexOf(' ');
+        String token = (sp < 0) ? d : d.substring(0, sp);
+        changedFlagState = channelFlagModeState.applyDelta(serverId, channel, token);
+      }
+    }
+
+    boolean joinBootstrapActive = joinModeBurstService.hasActiveJoinModeBuffer(serverId, channel);
+    TargetRef chan = new TargetRef(serverId, channel);
+    ui.ensureTargetExists(chan);
+    joinModeBurstService.discardJoinModeBuffer(serverId, channel);
+
+    TargetRef out = modeRoutingState.removePendingModeTarget(serverId, channel);
+    boolean hadPendingModeTarget = out != null;
+    if (out == null) out = chan;
+    ui.ensureTargetExists(out);
+
+    String summary = modeFormattingService.describeCurrentChannelModes(details);
+    String rawModes = normalizeModeDetailsForSnapshot(details);
+    if (!rawModes.isBlank() || (summary != null && !summary.isBlank())) {
+      ui.setChannelModeSnapshot(serverId, channel, rawModes, summary);
+    }
+    if (summary == null || summary.isBlank()) return;
+
+    boolean outputIsChannel = out.equals(chan);
+    if (joinModeBurstService.shouldSuppressModesListedSummary(serverId, channel, outputIsChannel)) {
+      return;
+    }
+
+    if (shouldSuppressLiveModeSnapshot(
+        provenance, hadPendingModeTarget, outputIsChannel, joinBootstrapActive)) {
+      if (log.isDebugEnabled()) {
+        log.debug(
+            "MODEDBG handler suppress live snapshot echo serverId={} channel={} provenance={} details={}",
+            serverId,
+            channel,
+            provenance,
+            clip(details));
+      }
+      return;
+    }
+
+    // Some networks emit a MODE listing (324) immediately after +v/+o updates.
+    // If the summary is unsolicited and does not change our tracked channel flags, suppress it.
+    if (!hadPendingModeTarget
+        && outputIsChannel
+        && recentStatusModeState.isRecent(serverId, channel, 2000L)
+        && (!hadFlagState || !changedFlagState)) {
+      if (log.isDebugEnabled()) {
+        log.debug(
+            "MODEDBG handler suppress 324 status echo serverId={} channel={} details={} hadFlagState={} changedFlagState={}",
+            serverId,
+            channel,
+            clip(details),
+            hadFlagState,
+            changedFlagState);
+      }
+      return;
+    }
+    ui.appendNotice(out, "(mode)", summary);
+  }
+
+  private static boolean shouldSuppressLiveModeSnapshot(
+      IrcEvent.ChannelModeProvenance provenance,
+      boolean hadPendingModeTarget,
+      boolean outputIsChannel,
+      boolean joinBootstrapActive) {
+    if (provenance != IrcEvent.ChannelModeProvenance.LIVE_MODE_EVENT) return false;
+    if (hadPendingModeTarget || !outputIsChannel) return false;
+    return !joinBootstrapActive;
   }
 
   private static boolean containsStatusMode(String details) {
@@ -217,64 +303,6 @@ public class InboundModeEventHandler {
     s = s.replace('\n', ' ').replace('\r', ' ');
     if (s.length() > 220) return s.substring(0, 217) + "...";
     return s;
-  }
-
-  public void handleChannelModesListed(String serverId, IrcEvent.ChannelModesListed ev) {
-    if (serverId == null || ev == null) return;
-
-    // Seed our flag-mode state from the 324 listing (first token is the mode string).
-    String listed = ev.details();
-    boolean hadFlagState = channelFlagModeState.hasAnyState(serverId, ev.channel());
-    boolean changedFlagState = false;
-    if (listed != null) {
-      String d = listed.trim();
-      if (!d.isEmpty()) {
-        int sp = d.indexOf(' ');
-        String token = (sp < 0) ? d : d.substring(0, sp);
-        changedFlagState = channelFlagModeState.applyDelta(serverId, ev.channel(), token);
-      }
-    }
-
-    TargetRef chan = new TargetRef(serverId, ev.channel());
-    ui.ensureTargetExists(chan);
-    joinModeBurstService.discardJoinModeBuffer(serverId, ev.channel());
-
-    TargetRef out = modeRoutingState.removePendingModeTarget(serverId, ev.channel());
-    boolean hadPendingModeTarget = out != null;
-    if (out == null) out = chan;
-    ui.ensureTargetExists(out);
-
-    String summary = modeFormattingService.describeCurrentChannelModes(ev.details());
-    String rawModes = normalizeModeDetailsForSnapshot(ev.details());
-    if (!rawModes.isBlank() || (summary != null && !summary.isBlank())) {
-      ui.setChannelModeSnapshot(serverId, ev.channel(), rawModes, summary);
-    }
-    if (summary != null && !summary.isBlank()) {
-      boolean outputIsChannel = out.equals(chan);
-      if (joinModeBurstService.shouldSuppressModesListedSummary(
-          serverId, ev.channel(), outputIsChannel)) {
-        return;
-      }
-
-      // Some networks emit a MODE listing (324) immediately after +v/+o updates.
-      // If the summary is unsolicited and does not change our tracked channel flags, suppress it.
-      if (!hadPendingModeTarget
-          && outputIsChannel
-          && recentStatusModeState.isRecent(serverId, ev.channel(), 2000L)
-          && (!hadFlagState || !changedFlagState)) {
-        if (log.isDebugEnabled()) {
-          log.debug(
-              "MODEDBG handler suppress 324 status echo serverId={} channel={} details={} hadFlagState={} changedFlagState={}",
-              serverId,
-              ev.channel(),
-              clip(ev.details()),
-              hadFlagState,
-              changedFlagState);
-        }
-        return;
-      }
-      ui.appendNotice(out, "(mode)", summary);
-    }
   }
 
   private static String normalizeModeDetailsForSnapshot(String details) {

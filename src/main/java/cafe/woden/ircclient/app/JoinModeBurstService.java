@@ -114,6 +114,11 @@ public final class JoinModeBurstService {
     if (removed != null) removed.dispose();
   }
 
+  public boolean hasActiveJoinModeBuffer(String serverId, String channel) {
+    if (channel == null || channel.isBlank()) return false;
+    return joinModeBuffers.containsKey(ModeKey.of(serverId, channel));
+  }
+
   public void clearChannel(String serverId, String channel) {
     if (channel == null || channel.isBlank()) return;
     ModeKey key = ModeKey.of(serverId, channel);

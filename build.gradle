@@ -974,7 +974,8 @@ tasks.register("bundleTerminalNotifier") {
         }
 
         copy {
-            from notifierSrc
+            from notifierSrc.parentFile
+            include "${notifierSrc.name}/**"
             into resourcesDir
         }
 

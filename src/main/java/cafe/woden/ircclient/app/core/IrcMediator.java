@@ -619,7 +619,8 @@ public class IrcMediator implements MediatorControlPort {
     if (e instanceof IrcEvent.Connected
         || e instanceof IrcEvent.Connecting
         || e instanceof IrcEvent.Reconnecting
-        || e instanceof IrcEvent.Disconnected) {
+        || e instanceof IrcEvent.Disconnected
+        || e instanceof IrcEvent.ConnectionReady) {
       if (e instanceof IrcEvent.Connected ev) {
         ui.setServerConnectedIdentity(sid, ev.serverHost(), ev.serverPort(), ev.nick(), ev.at());
       }
@@ -805,20 +806,18 @@ public class IrcMediator implements MediatorControlPort {
           }
         }
       }
-      case IrcEvent.ChannelModeChanged ev -> {
-        inboundModeEventHandler.handleChannelModeChanged(sid, ev);
-        maybeNotifyModeEvents(sid, ev);
-        recordInterceptorEvent(
-            sid,
-            ev.channel(),
-            ev.by(),
-            learnedHostmaskForNick(sid, ev.by()),
-            ev.details(),
-            InterceptorEventType.MODE);
-      }
-
-      case IrcEvent.ChannelModesListed ev -> {
-        inboundModeEventHandler.handleChannelModesListed(sid, ev);
+      case IrcEvent.ChannelModeObserved ev -> {
+        inboundModeEventHandler.handleChannelModeObserved(sid, ev);
+        if (ev.kind() == IrcEvent.ChannelModeKind.DELTA) {
+          maybeNotifyModeEvents(sid, ev);
+          recordInterceptorEvent(
+              sid,
+              ev.channel(),
+              ev.by(),
+              learnedHostmaskForNick(sid, ev.by()),
+              ev.details(),
+              InterceptorEventType.MODE);
+        }
       }
 
       case IrcEvent.ChannelTopicUpdated ev -> {
@@ -1912,6 +1911,10 @@ public class IrcMediator implements MediatorControlPort {
             dest, ev.at(), from, targetMsgId, "", Map.of("draft/delete", targetMsgId));
       }
 
+      case IrcEvent.ConnectionFeaturesUpdated ignored -> {
+        // Backend-neutral feature refresh marker used by monitor fallback/sync services.
+      }
+
       case IrcEvent.Ircv3CapabilityChanged ev -> {
         ensureTargetExists(status);
         String sub = Objects.toString(ev.subcommand(), "").trim().toUpperCase(Locale.ROOT);
@@ -2130,7 +2133,7 @@ public class IrcMediator implements MediatorControlPort {
         || m.contains("banned from this server");
   }
 
-  private void maybeNotifyModeEvents(String serverId, IrcEvent.ChannelModeChanged ev) {
+  private void maybeNotifyModeEvents(String serverId, IrcEvent.ChannelModeObserved ev) {
     if (serverId == null || ev == null) return;
 
     String channel = Objects.toString(ev.channel(), "").trim();

@@ -301,6 +301,25 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void multilineSendUsesBackendAvailabilityReasonWhenProvided() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.backendAvailabilityReason("libera"))
+        .thenReturn("Quassel Core backend is not implemented yet");
+    when(ui.confirmMultilineSplitFallback(
+            chan, 2, 17L, "Quassel Core backend is not implemented yet."))
+        .thenReturn(false);
+
+    service.handleSay(disposables, "line one\nline two");
+
+    verify(ui)
+        .confirmMultilineSplitFallback(
+            chan, 2, 17L, "Quassel Core backend is not implemented yet.");
+    verify(irc, never()).sendMessage(eq("libera"), eq("#ircafe"), any());
+  }
+
+  @Test
   void multilineSendFallsBackToSplitLinesWhenOverNegotiatedMaxLines() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
@@ -730,6 +749,40 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void markReadShowsBackendAvailabilityReasonWhenProvided() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(false);
+    when(irc.backendAvailabilityReason("libera"))
+        .thenReturn("Quassel Core backend is not implemented yet");
+
+    service.handleMarkRead(disposables);
+
+    verify(ui).appendStatus(status, "(markread)", "Quassel Core backend is not implemented yet.");
+    verify(irc, never()).sendReadMarker(eq("libera"), eq("#ircafe"), any(Instant.class));
+  }
+
+  @Test
+  void markReadUsesQuasselCapabilityGapReasonWhenBackendIsConnected() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(false);
+    when(irc.typingAvailabilityReason("libera"))
+        .thenReturn("typing indicators are not implemented for Quassel backend yet");
+
+    service.handleMarkRead(disposables);
+
+    verify(ui)
+        .appendStatus(
+            status, "(markread)", "read-marker is not implemented for Quassel backend yet.");
+    verify(irc, never()).sendReadMarker(eq("libera"), eq("#ircafe"), any(Instant.class));
+  }
+
+  @Test
   void helpAnnotatesEditAndRedactAsUnavailableWhenCapsNotNegotiated() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
@@ -747,6 +800,69 @@ class OutboundChatCommandServiceTest {
             eq("(help)"),
             contains("/redact <msgid> [reason] (alias: /delete) (unavailable:"));
     verify(ui).appendStatus(eq(chan), eq("(help)"), contains("/markread (unavailable:"));
+  }
+
+  @Test
+  void helpUsesBackendAvailabilityReasonWhenPresent() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(irc.backendAvailabilityReason("libera"))
+        .thenReturn("Quassel Core backend is not implemented yet");
+    when(irc.isMessageEditAvailable("libera")).thenReturn(false);
+    when(irc.isMessageRedactionAvailable("libera")).thenReturn(false);
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(false);
+
+    service.handleHelp("");
+
+    verify(ui)
+        .appendStatus(
+            eq(chan),
+            eq("(help)"),
+            contains(
+                "/edit <msgid> <message> (unavailable: Quassel Core backend is not implemented yet)"));
+    verify(ui)
+        .appendStatus(
+            eq(chan),
+            eq("(help)"),
+            contains(
+                "/redact <msgid> [reason] (alias: /delete) (unavailable: Quassel Core backend is not implemented yet)"));
+    verify(ui)
+        .appendStatus(
+            eq(chan),
+            eq("(help)"),
+            contains("/markread (unavailable: Quassel Core backend is not implemented yet)"));
+  }
+
+  @Test
+  void helpUsesQuasselCapabilityGapReasonsWhenConnected() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(irc.typingAvailabilityReason("libera"))
+        .thenReturn("typing indicators are not implemented for Quassel backend yet");
+    when(irc.isMessageEditAvailable("libera")).thenReturn(false);
+    when(irc.isMessageRedactionAvailable("libera")).thenReturn(false);
+    when(irc.isReadMarkerAvailable("libera")).thenReturn(false);
+
+    service.handleHelp("");
+
+    verify(ui)
+        .appendStatus(
+            eq(chan),
+            eq("(help)"),
+            contains(
+                "/edit <msgid> <message> (unavailable: message-edit is not implemented for Quassel backend yet)"));
+    verify(ui)
+        .appendStatus(
+            eq(chan),
+            eq("(help)"),
+            contains(
+                "/redact <msgid> [reason] (alias: /delete) (unavailable: message-redaction is not implemented for Quassel backend yet)"));
+    verify(ui)
+        .appendStatus(
+            eq(chan),
+            eq("(help)"),
+            contains(
+                "/markread (unavailable: read-marker is not implemented for Quassel backend yet)"));
   }
 
   @Test

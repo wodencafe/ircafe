@@ -12,11 +12,12 @@ public sealed interface IrcEvent
         IrcEvent.Connecting,
         IrcEvent.Disconnected,
         IrcEvent.Reconnecting,
+        IrcEvent.ConnectionReady,
+        IrcEvent.ConnectionFeaturesUpdated,
         IrcEvent.NickChanged,
         IrcEvent.ChannelMessage,
         IrcEvent.ChannelAction,
-        IrcEvent.ChannelModeChanged,
-        IrcEvent.ChannelModesListed,
+        IrcEvent.ChannelModeObserved,
         IrcEvent.ChannelTopicUpdated,
         IrcEvent.PrivateMessage,
         IrcEvent.PrivateAction,
@@ -105,6 +106,16 @@ public sealed interface IrcEvent
 
   record Reconnecting(Instant at, long attempt, long delayMs, String reason) implements IrcEvent {}
 
+  /** Backend reports registration/ready state (safe to run post-connect actions). */
+  record ConnectionReady(Instant at) implements IrcEvent {}
+
+  /** Backend reports capability/feature metadata changed mid-connection. */
+  record ConnectionFeaturesUpdated(Instant at, String source) implements IrcEvent {
+    public ConnectionFeaturesUpdated {
+      source = Objects.toString(source, "").trim();
+    }
+  }
+
   record NickChanged(Instant at, String oldNick, String newNick) implements IrcEvent {}
 
   record ChannelMessage(
@@ -143,10 +154,35 @@ public sealed interface IrcEvent
     }
   }
 
-  record ChannelModeChanged(Instant at, String channel, String by, String details)
-      implements IrcEvent {}
+  enum ChannelModeKind {
+    DELTA,
+    SNAPSHOT
+  }
 
-  record ChannelModesListed(Instant at, String channel, String details) implements IrcEvent {}
+  enum ChannelModeProvenance {
+    LIVE_MODE_EVENT,
+    NUMERIC_324,
+    NUMERIC_324_FALLBACK,
+    QUASSEL_DISPLAY_MESSAGE,
+    UNKNOWN
+  }
+
+  record ChannelModeObserved(
+      Instant at,
+      String channel,
+      String by,
+      String details,
+      ChannelModeKind kind,
+      ChannelModeProvenance provenance)
+      implements IrcEvent {
+    public ChannelModeObserved {
+      channel = Objects.toString(channel, "").trim();
+      by = Objects.toString(by, "").trim();
+      details = Objects.toString(details, "").trim();
+      kind = (kind == null) ? ChannelModeKind.DELTA : kind;
+      provenance = (provenance == null) ? ChannelModeProvenance.UNKNOWN : provenance;
+    }
+  }
 
   record ChannelTopicUpdated(Instant at, String channel, String topic) implements IrcEvent {}
 

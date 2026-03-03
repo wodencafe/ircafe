@@ -93,6 +93,16 @@ public interface IrcClientService {
   Completable sendRaw(String serverId, String rawLine);
 
   /**
+   * Human-readable reason why this backend cannot currently provide features for a server.
+   *
+   * <p>Returns empty when backend availability is normal and capability checks should be
+   * interpreted as regular protocol-negotiation outcomes.
+   */
+  default String backendAvailabilityReason(String serverId) {
+    return "";
+  }
+
+  /**
    * Request chat history from the server/bouncer.
    *
    * <p>Requires IRCv3 {@code chathistory} (or legacy {@code draft/chathistory}), and typically

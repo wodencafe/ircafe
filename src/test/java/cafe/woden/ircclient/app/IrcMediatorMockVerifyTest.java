@@ -258,6 +258,66 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void connectionReadyEventIsForwardedToConnectivityCoordinator() throws Exception {
+    TargetRef active = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    IrcEvent.ConnectionReady ready = new IrcEvent.ConnectionReady(Instant.now());
+
+    invokeOnServerIrcEvent(new ServerIrcEvent("libera", ready));
+
+    verify(connectionCoordinator).handleConnectivityEvent("libera", ready, active);
+    verify(targetCoordinator).refreshInputEnabledForActiveTarget();
+  }
+
+  @Test
+  void modeSnapshotObservedRoutesToHandlerWithoutModeInterceptorIngest() throws Exception {
+    IrcEvent.ChannelModeObserved snapshot =
+        new IrcEvent.ChannelModeObserved(
+            Instant.now(),
+            "#ircafe",
+            "",
+            "+nrf [10j#R10]:5",
+            IrcEvent.ChannelModeKind.SNAPSHOT,
+            IrcEvent.ChannelModeProvenance.LIVE_MODE_EVENT);
+
+    invokeOnServerIrcEvent(new ServerIrcEvent("libera", snapshot));
+
+    verify(inboundModeEventHandler).handleChannelModeObserved("libera", snapshot);
+    verify(interceptorIngestPort, never())
+        .ingestEvent(
+            anyString(),
+            anyString(),
+            anyString(),
+            anyString(),
+            anyString(),
+            eq(InterceptorEventType.MODE));
+  }
+
+  @Test
+  void modeDeltaObservedRoutesToHandlerAndRecordsModeInterceptorEvent() throws Exception {
+    IrcEvent.ChannelModeObserved delta =
+        new IrcEvent.ChannelModeObserved(
+            Instant.now(),
+            "#ircafe",
+            "FurBot",
+            "+o Arca",
+            IrcEvent.ChannelModeKind.DELTA,
+            IrcEvent.ChannelModeProvenance.LIVE_MODE_EVENT);
+
+    invokeOnServerIrcEvent(new ServerIrcEvent("libera", delta));
+
+    verify(inboundModeEventHandler).handleChannelModeObserved("libera", delta);
+    verify(interceptorIngestPort)
+        .ingestEvent(
+            eq("libera"),
+            eq("#ircafe"),
+            eq("FurBot"),
+            anyString(),
+            eq("+o Arca"),
+            eq(InterceptorEventType.MODE));
+  }
+
+  @Test
   void duplicateChannelMessageByMsgIdIsSuppressedBeforeUiAndSideEffects() throws Exception {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);

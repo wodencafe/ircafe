@@ -16,7 +16,6 @@ import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +44,7 @@ class MonitorSyncServiceTest {
     when(monitorListService.listNicks("libera")).thenReturn(List.of("alice", "bob", "carol"));
 
     events.onNext(new ServerIrcEvent("libera", connected()));
-    events.onNext(new ServerIrcEvent("libera", serverResponse(376)));
+    events.onNext(new ServerIrcEvent("libera", connectionReady()));
 
     var order = inOrder(irc);
     order.verify(irc).sendRaw("libera", "MONITOR C");
@@ -53,8 +52,8 @@ class MonitorSyncServiceTest {
     order.verify(irc).sendRaw("libera", "MONITOR +carol");
     verify(irc, times(3)).sendRaw(eq("libera"), anyString());
 
-    // Additional 005 lines after first sync should not replay until reconnect.
-    events.onNext(new ServerIrcEvent("libera", serverResponse(5)));
+    // Additional feature updates after first sync should not replay until reconnect.
+    events.onNext(new ServerIrcEvent("libera", connectionFeaturesUpdated()));
     verify(irc, times(3)).sendRaw(eq("libera"), anyString());
   }
 
@@ -65,10 +64,10 @@ class MonitorSyncServiceTest {
     when(monitorListService.listNicks("libera")).thenReturn(List.of("alice"));
 
     events.onNext(new ServerIrcEvent("libera", connected()));
-    events.onNext(new ServerIrcEvent("libera", serverResponse(376)));
+    events.onNext(new ServerIrcEvent("libera", connectionReady()));
     events.onNext(new ServerIrcEvent("libera", disconnected()));
     events.onNext(new ServerIrcEvent("libera", connected()));
-    events.onNext(new ServerIrcEvent("libera", serverResponse(422)));
+    events.onNext(new ServerIrcEvent("libera", connectionReady()));
 
     verify(irc, times(2)).sendRaw("libera", "MONITOR C");
     verify(irc, times(2)).sendRaw("libera", "MONITOR +alice");
@@ -80,7 +79,7 @@ class MonitorSyncServiceTest {
     when(monitorListService.listNicks("libera")).thenReturn(List.of("alice"));
 
     events.onNext(new ServerIrcEvent("libera", connected()));
-    events.onNext(new ServerIrcEvent("libera", serverResponse(376)));
+    events.onNext(new ServerIrcEvent("libera", connectionReady()));
 
     verify(irc, never()).sendRaw(eq("libera"), anyString());
   }
@@ -93,7 +92,11 @@ class MonitorSyncServiceTest {
     return new IrcEvent.Disconnected(Instant.now(), "bye");
   }
 
-  private static IrcEvent.ServerResponseLine serverResponse(int code) {
-    return new IrcEvent.ServerResponseLine(Instant.now(), code, "", "raw", "", Map.of());
+  private static IrcEvent.ConnectionReady connectionReady() {
+    return new IrcEvent.ConnectionReady(Instant.now());
+  }
+
+  private static IrcEvent.ConnectionFeaturesUpdated connectionFeaturesUpdated() {
+    return new IrcEvent.ConnectionFeaturesUpdated(Instant.now(), "isupport");
   }
 }
