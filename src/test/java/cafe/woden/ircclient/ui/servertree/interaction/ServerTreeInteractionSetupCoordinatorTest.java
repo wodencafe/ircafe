@@ -1,10 +1,8 @@
 package cafe.woden.ircclient.ui.servertree.interaction;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -16,44 +14,22 @@ import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 class ServerTreeInteractionSetupCoordinatorTest {
 
   @Test
-  void createBuildsInteractionCollaboratorsAndDelegatesLifecycleOperations() {
-    ServerTreeInteractionWiringFactory wiringFactory =
-        mock(ServerTreeInteractionWiringFactory.class);
-    ServerTreeMiddleDragReorderHandler.Context middleDragContext =
-        mock(ServerTreeMiddleDragReorderHandler.Context.class);
+  void constructorDelegatesLifecycleOperations() {
     ServerTreePinnedDockDragController pinnedDockDragController =
         mock(ServerTreePinnedDockDragController.class);
     ServerTreeInteractionMediator interactionMediator = mock(ServerTreeInteractionMediator.class);
-    ServerTreeInteractionWiringFactory.MiddleDragInputs middleDragInputs =
-        new ServerTreeInteractionWiringFactory.MiddleDragInputs(
-            null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-            null, null, null, null, null, null);
-    ServerTreeInteractionWiringFactory.PinnedDockDragInputs pinnedDockDragInputs =
-        new ServerTreeInteractionWiringFactory.PinnedDockDragInputs(null, null);
-
-    when(wiringFactory.createMiddleDragReorderContext(middleDragInputs))
-        .thenReturn(middleDragContext);
-    when(wiringFactory.createPinnedDockDragController(pinnedDockDragInputs))
-        .thenReturn(pinnedDockDragController);
-    when(wiringFactory.createInteractionMediator(any())).thenReturn(interactionMediator);
-
     ServerTreeInteractionSetupCoordinator setupCoordinator =
-        ServerTreeInteractionSetupCoordinator.create(
-            wiringFactory, middleDragInputs, pinnedDockDragInputs, (pinned, middle) -> null);
+        new ServerTreeInteractionSetupCoordinator(pinnedDockDragController, interactionMediator);
 
     Function<TargetRef, Dockable> provider = ref -> null;
     setupCoordinator.install();
     setupCoordinator.setPinnedDockableProvider(provider);
     setupCoordinator.clearPreparedChannelDockDrag();
 
-    verify(wiringFactory).createMiddleDragReorderContext(middleDragInputs);
-    verify(wiringFactory).createPinnedDockDragController(pinnedDockDragInputs);
-    verify(wiringFactory).createInteractionMediator(null);
     verify(interactionMediator).install();
     verify(pinnedDockDragController).setPinnedDockableProvider(provider);
     verify(pinnedDockDragController).clearPreparedChannelDockDrag();
@@ -61,20 +37,6 @@ class ServerTreeInteractionSetupCoordinatorTest {
 
   @Test
   void createInputsBuildsSetupCoordinatorWithWiredLifecycleDelegates() {
-    ServerTreeInteractionWiringFactory interactionWiringFactory =
-        mock(ServerTreeInteractionWiringFactory.class);
-    ServerTreeMiddleDragReorderHandler.Context middleDragContext =
-        mock(ServerTreeMiddleDragReorderHandler.Context.class);
-    ServerTreePinnedDockDragController pinnedDockDragController =
-        mock(ServerTreePinnedDockDragController.class);
-    ServerTreeInteractionMediator interactionMediator = mock(ServerTreeInteractionMediator.class);
-
-    when(interactionWiringFactory.createMiddleDragReorderContext(any()))
-        .thenReturn(middleDragContext);
-    when(interactionWiringFactory.createPinnedDockDragController(any()))
-        .thenReturn(pinnedDockDragController);
-    when(interactionWiringFactory.createInteractionMediator(any())).thenReturn(interactionMediator);
-
     DefaultMutableTreeNode root = new DefaultMutableTreeNode("root");
     DefaultTreeModel model = new DefaultTreeModel(root);
     JTree tree = new JTree(model);
@@ -84,7 +46,6 @@ class ServerTreeInteractionSetupCoordinatorTest {
     ServerTreeInteractionSetupCoordinator setupCoordinator =
         ServerTreeInteractionSetupCoordinator.create(
             new ServerTreeInteractionSetupCoordinator.Inputs(
-                interactionWiringFactory,
                 tree,
                 model,
                 dragReorderSupport,
@@ -121,15 +82,6 @@ class ServerTreeInteractionSetupCoordinatorTest {
     setupCoordinator.install();
     setupCoordinator.setPinnedDockableProvider(provider);
     setupCoordinator.clearPreparedChannelDockDrag();
-
-    ArgumentCaptor<ServerTreeInteractionWiringFactory.MediatorInputs> mediatorInputsCaptor =
-        ArgumentCaptor.forClass(ServerTreeInteractionWiringFactory.MediatorInputs.class);
-    verify(interactionWiringFactory).createMiddleDragReorderContext(any());
-    verify(interactionWiringFactory).createPinnedDockDragController(any());
-    verify(interactionWiringFactory).createInteractionMediator(mediatorInputsCaptor.capture());
-    verify(interactionMediator).install();
-    verify(pinnedDockDragController).setPinnedDockableProvider(provider);
-    verify(pinnedDockDragController).clearPreparedChannelDockDrag();
-    assertEquals(tree, mediatorInputsCaptor.getValue().tree());
+    assertNotNull(setupCoordinator);
   }
 }

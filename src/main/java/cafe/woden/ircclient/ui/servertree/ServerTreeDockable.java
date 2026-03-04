@@ -50,7 +50,6 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibility
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiRefreshCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeDragReorderSupport;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinator;
-import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionWiringFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeRowInteractionHandler;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutOrchestrator;
@@ -1049,12 +1048,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         serverCatalog, notificationStore, interceptorStore, sojuAutoConnect, zncAutoConnect);
 
     settingsSynchronizer.bindListeners();
-    ServerTreeInteractionWiringFactory interactionWiringFactory =
-        new ServerTreeInteractionWiringFactory();
     this.interactionSetupCoordinator =
         ServerTreeInteractionSetupCoordinator.create(
             new ServerTreeInteractionSetupCoordinator.Inputs(
-                interactionWiringFactory,
                 tree,
                 model,
                 dragReorderSupport,

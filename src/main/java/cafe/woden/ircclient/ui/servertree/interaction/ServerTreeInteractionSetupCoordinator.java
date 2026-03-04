@@ -22,15 +22,7 @@ import javax.swing.tree.TreePath;
 /** Owns interaction wiring assembly and exposes lifecycle operations used by the dockable. */
 public final class ServerTreeInteractionSetupCoordinator {
 
-  @FunctionalInterface
-  public interface MediatorInputsFactory
-      extends BiFunction<
-          ServerTreePinnedDockDragController,
-          ServerTreeMiddleDragReorderHandler.Context,
-          ServerTreeInteractionWiringFactory.MediatorInputs> {}
-
   public record Inputs(
-      ServerTreeInteractionWiringFactory interactionWiringFactory,
       JTree tree,
       DefaultTreeModel model,
       ServerTreeDragReorderSupport dragReorderSupport,
@@ -74,9 +66,8 @@ public final class ServerTreeInteractionSetupCoordinator {
         Objects.requireNonNull(in.dragReorderSupport(), "dragReorderSupport");
     JTree tree = Objects.requireNonNull(in.tree(), "tree");
 
-    return create(
-        Objects.requireNonNull(in.interactionWiringFactory(), "interactionWiringFactory"),
-        new ServerTreeInteractionWiringFactory.MiddleDragInputs(
+    ServerTreeMiddleDragReorderHandler.Context middleDragContext =
+        ServerTreeMiddleDragReorderHandler.context(
             tree,
             Objects.requireNonNull(in.model(), "model"),
             dragReorderSupport::isDraggableChannelNode,
@@ -104,13 +95,16 @@ public final class ServerTreeInteractionSetupCoordinator {
                 in.persistRootSiblingOrderFromTree(), "persistRootSiblingOrderFromTree"),
             Objects.requireNonNull(
                 in.withSuppressedSelectionBroadcast(), "withSuppressedSelectionBroadcast"),
-            Objects.requireNonNull(in.refreshNodeActionsEnabled(), "refreshNodeActionsEnabled")),
-        new ServerTreeInteractionWiringFactory.PinnedDockDragInputs(
-            tree, Objects.requireNonNull(in.channelTargetForHit(), "channelTargetForHit")),
-        (pinnedDockDragController, middleDragReorderContext) ->
-            new ServerTreeInteractionWiringFactory.MediatorInputs(
-                tree,
-                Objects.requireNonNull(in.serverActionOverlay(), "serverActionOverlay"),
+            Objects.requireNonNull(in.refreshNodeActionsEnabled(), "refreshNodeActionsEnabled"));
+
+    ServerTreePinnedDockDragController pinnedDockDragController =
+        new ServerTreePinnedDockDragController(
+            tree, Objects.requireNonNull(in.channelTargetForHit(), "channelTargetForHit"));
+    ServerTreeInteractionMediator interactionMediator =
+        new ServerTreeInteractionMediator(
+            tree,
+            Objects.requireNonNull(in.serverActionOverlay(), "serverActionOverlay"),
+            ServerTreeInteractionMediator.context(
                 Objects.requireNonNull(in.onTreeShowingChanged(), "onTreeShowingChanged"),
                 Objects.requireNonNull(
                     in.isSelectionBroadcastSuppressed(), "isSelectionBroadcastSuppressed"),
@@ -123,14 +117,14 @@ public final class ServerTreeInteractionSetupCoordinator {
                     "maybeHandleDisconnectedWarningClick"),
                 Objects.requireNonNull(
                     in.maybeSelectRowFromLeftClick(), "maybeSelectRowFromLeftClick"),
-                Objects.requireNonNull(in.treePathForRowHit(), "treePathForRowHit"),
+                (x, y) -> in.treePathForRowHit().apply(x, y),
                 Objects.requireNonNull(
                     in.withSuppressedSelectionBroadcast(), "withSuppressedSelectionBroadcast"),
                 Objects.requireNonNull(in.refreshNodeActionsEnabled(), "refreshNodeActionsEnabled"),
                 Objects.requireNonNull(in.buildPopupMenu(), "buildPopupMenu"),
                 pinnedDockDragController::prepareChannelDockDrag,
                 pinnedDockDragController::clearPreparedChannelDockDrag,
-                () -> middleDragReorderContext,
+                () -> middleDragContext,
                 Objects.requireNonNull(in.startupSelectionCompleted(), "startupSelectionCompleted"),
                 Objects.requireNonNull(
                     in.markStartupSelectionCompleted(), "markStartupSelectionCompleted"),
@@ -139,26 +133,6 @@ public final class ServerTreeInteractionSetupCoordinator {
                 Objects.requireNonNull(
                     in.selectStartupDefaultForServer(), "selectStartupDefaultForServer"),
                 Objects.requireNonNull(in.defaultSelectionPath(), "defaultSelectionPath")));
-  }
-
-  public static ServerTreeInteractionSetupCoordinator create(
-      ServerTreeInteractionWiringFactory interactionWiringFactory,
-      ServerTreeInteractionWiringFactory.MiddleDragInputs middleDragInputs,
-      ServerTreeInteractionWiringFactory.PinnedDockDragInputs pinnedDockDragInputs,
-      MediatorInputsFactory mediatorInputsFactory) {
-    Objects.requireNonNull(interactionWiringFactory, "interactionWiringFactory");
-    Objects.requireNonNull(middleDragInputs, "middleDragInputs");
-    Objects.requireNonNull(pinnedDockDragInputs, "pinnedDockDragInputs");
-    Objects.requireNonNull(mediatorInputsFactory, "mediatorInputsFactory");
-
-    ServerTreeMiddleDragReorderHandler.Context middleDragContext =
-        interactionWiringFactory.createMiddleDragReorderContext(middleDragInputs);
-    ServerTreePinnedDockDragController pinnedDockDragController =
-        interactionWiringFactory.createPinnedDockDragController(pinnedDockDragInputs);
-    ServerTreeInteractionWiringFactory.MediatorInputs mediatorInputs =
-        mediatorInputsFactory.apply(pinnedDockDragController, middleDragContext);
-    ServerTreeInteractionMediator interactionMediator =
-        interactionWiringFactory.createInteractionMediator(mediatorInputs);
     return new ServerTreeInteractionSetupCoordinator(pinnedDockDragController, interactionMediator);
   }
 
