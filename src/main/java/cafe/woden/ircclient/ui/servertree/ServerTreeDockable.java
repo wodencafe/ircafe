@@ -92,6 +92,7 @@ import cafe.woden.ircclient.ui.servertree.state.ServerTreeBuiltInVisibilitySetti
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeChannelStateStore;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeExpansionStateManager;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater;
+import cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeVisibilityApi;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreePrivateMessageOnlineStateStore;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeServerRuntimeUiUpdater;
@@ -317,6 +318,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final ServerTreeBuiltInLayoutVisibilityFacade builtInLayoutVisibilityFacade;
   private final ServerTreeBuiltInVisibilitySettings builtInVisibilitySettings;
+  private final ServerTreeNodeVisibilityApi nodeVisibilityApi;
   private final ServerTreeTargetNodePolicy targetNodePolicy;
   private final ServerTreeChannelStateCoordinator channelStateCoordinator;
   private final ServerTreeChannelQueryService channelQueryService;
@@ -347,10 +349,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private volatile boolean serverTreeNotificationBadgesEnabled = true;
   private volatile Color unreadChannelTextColor = null;
   private volatile Color highlightChannelTextColor = null;
-  private volatile boolean showChannelListNodes = true;
-  private volatile boolean showDccTransfersNodes = false;
   private boolean startupSelectionCompleted = false;
-  private volatile boolean showApplicationRoot = true;
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
@@ -499,6 +498,19 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 ServerTreeDockable.this.firePropertyChange(propertyName, oldValue, newValue);
               }
             });
+    this.nodeVisibilityApi =
+        new ServerTreeNodeVisibilityApi(
+            builtInVisibilitySettings,
+            this::syncUiLeafVisibility,
+            this::syncApplicationRootVisibility,
+            this::firePropertyChange,
+            PROP_CHANNEL_LIST_NODES_VISIBLE,
+            PROP_DCC_TRANSFERS_NODES_VISIBLE,
+            PROP_LOG_VIEWER_NODES_VISIBLE,
+            PROP_NOTIFICATIONS_NODES_VISIBLE,
+            PROP_MONITOR_NODES_VISIBLE,
+            PROP_INTERCEPTORS_NODES_VISIBLE,
+            PROP_APPLICATION_ROOT_VISIBLE);
     this.serverLabelPolicy =
         new ServerTreeServerLabelPolicy(
             serverDisplayNames,
@@ -717,7 +729,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             this::applyBuiltInLayoutToTree,
             this::applyRootSiblingOrderToTree,
             statusLabelManager::statusLeafLabelForServer,
-            () -> showDccTransfersNodes,
+            nodeVisibilityApi::isDccTransfersNodesVisible,
             leaves::get);
     this.uiLeafVisibilitySynchronizer =
         new ServerTreeUiLeafVisibilitySynchronizer(
@@ -734,7 +746,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 serverId -> builtInNodesVisibility(serverId).logViewer(),
                 serverId -> builtInNodesVisibility(serverId).monitor(),
                 serverId -> builtInNodesVisibility(serverId).interceptors(),
-                () -> showDccTransfersNodes,
+                nodeVisibilityApi::isDccTransfersNodesVisible,
                 this::selectBestFallbackForServer));
     this.expansionStateManager =
         new ServerTreeExpansionStateManager(tree, root, ircRoot, applicationRoot);
@@ -743,7 +755,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             new ServerTreeApplicationRootVisibilityContextAdapter(
                 this::snapshotExpandedTreePaths,
                 this::restoreExpandedTreePaths,
-                () -> showApplicationRoot,
+                nodeVisibilityApi::isApplicationRootVisible,
                 () -> applicationRoot.getParent() == root,
                 root::getChildCount,
                 index ->
@@ -908,7 +920,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 channelStateCoordinator::loadChannelStateForServer,
                 serverParentResolver::resolveParentForServer,
                 this::builtInNodesVisibility,
-                () -> showDccTransfersNodes,
+                nodeVisibilityApi::isDccTransfersNodesVisible,
                 statusLabelManager::statusLeafLabelForServer,
                 serverId -> notificationStore == null ? 0 : notificationStore.count(serverId),
                 serverId -> interceptorStore == null ? 0 : interceptorStore.totalHitCount(serverId),
@@ -961,12 +973,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             targetRemovalStateCoordinator,
             targetNodeRemovalMutator,
             new ServerTreeTargetLifecycleContextAdapter(
-                () -> showApplicationRoot,
+                nodeVisibilityApi::isApplicationRootVisible,
                 this::setApplicationRootVisible,
                 applicationNodes::labelFor,
                 applicationNodes::addLeaf,
                 () -> model.nodeStructureChanged(applicationRoot),
-                () -> showDccTransfersNodes,
+                nodeVisibilityApi::isDccTransfersNodesVisible,
                 this::setDccTransfersNodesVisible,
                 this::builtInNodesVisibility,
                 this::addServerRoot,
@@ -1035,7 +1047,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     root.add(ircRoot);
     applicationNodes.initialize();
-    if (showApplicationRoot) {
+    if (nodeVisibilityApi.isApplicationRootVisible()) {
       root.add(applicationRoot);
     }
 
@@ -1516,105 +1528,83 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public boolean isChannelListNodesVisible() {
-    return true;
+    return nodeVisibilityApi.isChannelListNodesVisible();
   }
 
   public boolean isDccTransfersNodesVisible() {
-    return showDccTransfersNodes;
+    return nodeVisibilityApi.isDccTransfersNodesVisible();
   }
 
   public boolean isServerNodesVisible() {
-    return builtInVisibilitySettings.defaultVisibility(ServerBuiltInNodesVisibility::server);
+    return nodeVisibilityApi.isServerNodesVisible();
   }
 
   public boolean isLogViewerNodesVisible() {
-    return builtInVisibilitySettings.defaultVisibility(ServerBuiltInNodesVisibility::logViewer);
+    return nodeVisibilityApi.isLogViewerNodesVisible();
   }
 
   public boolean isNotificationsNodesVisible() {
-    return builtInVisibilitySettings.defaultVisibility(ServerBuiltInNodesVisibility::notifications);
+    return nodeVisibilityApi.isNotificationsNodesVisible();
   }
 
   public boolean isMonitorNodesVisible() {
-    return builtInVisibilitySettings.defaultVisibility(ServerBuiltInNodesVisibility::monitor);
+    return nodeVisibilityApi.isMonitorNodesVisible();
   }
 
   public boolean isInterceptorsNodesVisible() {
-    return builtInVisibilitySettings.defaultVisibility(ServerBuiltInNodesVisibility::interceptors);
+    return nodeVisibilityApi.isInterceptorsNodesVisible();
   }
 
   public boolean isServerNodeVisibleForServer(String serverId) {
-    return builtInVisibilitySettings.serverVisibility(
-        serverId, ServerBuiltInNodesVisibility::server);
+    return nodeVisibilityApi.isServerNodeVisibleForServer(serverId);
   }
 
   public boolean isLogViewerNodeVisibleForServer(String serverId) {
-    return builtInVisibilitySettings.serverVisibility(
-        serverId, ServerBuiltInNodesVisibility::logViewer);
+    return nodeVisibilityApi.isLogViewerNodeVisibleForServer(serverId);
   }
 
   public boolean isNotificationsNodeVisibleForServer(String serverId) {
-    return builtInVisibilitySettings.serverVisibility(
-        serverId, ServerBuiltInNodesVisibility::notifications);
+    return nodeVisibilityApi.isNotificationsNodeVisibleForServer(serverId);
   }
 
   public boolean isMonitorNodeVisibleForServer(String serverId) {
-    return builtInVisibilitySettings.serverVisibility(
-        serverId, ServerBuiltInNodesVisibility::monitor);
+    return nodeVisibilityApi.isMonitorNodeVisibleForServer(serverId);
   }
 
   public boolean isInterceptorsNodeVisibleForServer(String serverId) {
-    return builtInVisibilitySettings.serverVisibility(
-        serverId, ServerBuiltInNodesVisibility::interceptors);
+    return nodeVisibilityApi.isInterceptorsNodeVisibleForServer(serverId);
   }
 
   public void setServerNodeVisibleForServer(String serverId, boolean visible) {
-    builtInVisibilitySettings.setVisibilityForServer(
-        serverId, visible, ServerBuiltInNodesVisibility::withServer);
+    nodeVisibilityApi.setServerNodeVisibleForServer(serverId, visible);
   }
 
   public void setLogViewerNodeVisibleForServer(String serverId, boolean visible) {
-    builtInVisibilitySettings.setVisibilityForServer(
-        serverId, visible, ServerBuiltInNodesVisibility::withLogViewer);
+    nodeVisibilityApi.setLogViewerNodeVisibleForServer(serverId, visible);
   }
 
   public void setNotificationsNodeVisibleForServer(String serverId, boolean visible) {
-    builtInVisibilitySettings.setVisibilityForServer(
-        serverId, visible, ServerBuiltInNodesVisibility::withNotifications);
+    nodeVisibilityApi.setNotificationsNodeVisibleForServer(serverId, visible);
   }
 
   public void setMonitorNodeVisibleForServer(String serverId, boolean visible) {
-    builtInVisibilitySettings.setVisibilityForServer(
-        serverId, visible, ServerBuiltInNodesVisibility::withMonitor);
+    nodeVisibilityApi.setMonitorNodeVisibleForServer(serverId, visible);
   }
 
   public void setInterceptorsNodeVisibleForServer(String serverId, boolean visible) {
-    builtInVisibilitySettings.setVisibilityForServer(
-        serverId, visible, ServerBuiltInNodesVisibility::withInterceptors);
+    nodeVisibilityApi.setInterceptorsNodeVisibleForServer(serverId, visible);
   }
 
   public boolean isApplicationRootVisible() {
-    return showApplicationRoot;
+    return nodeVisibilityApi.isApplicationRootVisible();
   }
 
   public void setChannelListNodesVisible(boolean visible) {
-    // Channel List is always visible for each server.
-    if (!visible) return;
-    boolean old = showChannelListNodes;
-    showChannelListNodes = true;
-    if (!old) {
-      syncUiLeafVisibility();
-      firePropertyChange(PROP_CHANNEL_LIST_NODES_VISIBLE, false, true);
-    }
+    nodeVisibilityApi.setChannelListNodesVisible(visible);
   }
 
   public void setDccTransfersNodesVisible(boolean visible) {
-    boolean old = showDccTransfersNodes;
-    boolean next = visible;
-    if (old == next) return;
-    showDccTransfersNodes = next;
-    syncUiLeafVisibility();
-    firePropertyChange(PROP_DCC_TRANSFERS_NODES_VISIBLE, old, next);
+    nodeVisibilityApi.setDccTransfersNodesVisible(visible);
   }
 
   /**
@@ -1623,52 +1613,27 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
    * <p>Per-server callers should use {@link #setServerNodeVisibleForServer(String, boolean)}.
    */
   public void setServerNodesVisible(boolean visible) {
-    builtInVisibilitySettings.setDefaultVisibility(
-        visible,
-        ServerBuiltInNodesVisibility::server,
-        ServerBuiltInNodesVisibility::withServer,
-        null);
+    nodeVisibilityApi.setServerNodesVisible(visible);
   }
 
   public void setLogViewerNodesVisible(boolean visible) {
-    builtInVisibilitySettings.setDefaultVisibility(
-        visible,
-        ServerBuiltInNodesVisibility::logViewer,
-        ServerBuiltInNodesVisibility::withLogViewer,
-        PROP_LOG_VIEWER_NODES_VISIBLE);
+    nodeVisibilityApi.setLogViewerNodesVisible(visible);
   }
 
   public void setNotificationsNodesVisible(boolean visible) {
-    builtInVisibilitySettings.setDefaultVisibility(
-        visible,
-        ServerBuiltInNodesVisibility::notifications,
-        ServerBuiltInNodesVisibility::withNotifications,
-        PROP_NOTIFICATIONS_NODES_VISIBLE);
+    nodeVisibilityApi.setNotificationsNodesVisible(visible);
   }
 
   public void setMonitorNodesVisible(boolean visible) {
-    builtInVisibilitySettings.setDefaultVisibility(
-        visible,
-        ServerBuiltInNodesVisibility::monitor,
-        ServerBuiltInNodesVisibility::withMonitor,
-        PROP_MONITOR_NODES_VISIBLE);
+    nodeVisibilityApi.setMonitorNodesVisible(visible);
   }
 
   public void setInterceptorsNodesVisible(boolean visible) {
-    builtInVisibilitySettings.setDefaultVisibility(
-        visible,
-        ServerBuiltInNodesVisibility::interceptors,
-        ServerBuiltInNodesVisibility::withInterceptors,
-        PROP_INTERCEPTORS_NODES_VISIBLE);
+    nodeVisibilityApi.setInterceptorsNodesVisible(visible);
   }
 
   public void setApplicationRootVisible(boolean visible) {
-    boolean old = showApplicationRoot;
-    boolean next = visible;
-    if (old == next) return;
-    showApplicationRoot = next;
-    syncApplicationRootVisibility();
-    firePropertyChange(PROP_APPLICATION_ROOT_VISIBLE, old, next);
+    nodeVisibilityApi.setApplicationRootVisible(visible);
   }
 
   public boolean canOpenSelectedNodeInChatDock() {
