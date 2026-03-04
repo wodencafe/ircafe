@@ -38,6 +38,7 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoor
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOperations;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreePrivateMessageOnlineStateCoordinator;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeSelectionBroadcastCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLeafVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLifecycleFacade;
@@ -109,8 +110,6 @@ import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import io.reactivex.rxjava3.processors.FlowableProcessor;
-import io.reactivex.rxjava3.processors.ReplayProcessor;
 import jakarta.annotation.PreDestroy;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -204,14 +203,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeInteractionWiringFactory interactionWiringFactory =
       new ServerTreeInteractionWiringFactory();
   private final TreeNodeActions<TargetRef> nodeActions;
-
-  private final FlowableProcessor<TargetRef> selections =
-      ReplayProcessor.<TargetRef>createWithSize(1).toSerialized();
+  private final ServerTreeSelectionBroadcastCoordinator selectionBroadcastCoordinator =
+      new ServerTreeSelectionBroadcastCoordinator();
   private final ServerTreeRequestStreams requestStreams = new ServerTreeRequestStreams();
   private final ServerTreeRequestEmitter requestEmitter = requestStreams.requestEmitter();
-
-  /** Suppress broadcasting selection changes when selection is set for context menus. */
-  private boolean suppressSelectionBroadcast = false;
 
   private final ServerTreeChannelModeRequestBus channelModeRequestBus =
       new ServerTreeChannelModeRequestBus();
@@ -353,7 +348,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private volatile boolean showChannelListNodes = true;
   private volatile boolean showDccTransfersNodes = false;
   private boolean startupSelectionCompleted = false;
-  private volatile TargetRef lastBroadcastSelectionRef = null;
   private volatile boolean showApplicationRoot = true;
 
   public ServerTreeDockable(
@@ -686,7 +680,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.selectionPersistencePolicy =
         new ServerTreeSelectionPersistencePolicy(
             ServerTreeSelectionPersistencePolicy.context(
-                () -> lastBroadcastSelectionRef,
+                selectionBroadcastCoordinator::lastBroadcastSelectionRef,
                 this::selectedTargetRef,
                 () -> (DefaultMutableTreeNode) tree.getLastSelectedPathComponent(),
                 nodeClassifier::owningServerIdForNode,
@@ -1166,7 +1160,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 },
                 this::persistBuiltInLayoutFromTree,
                 this::persistRootSiblingOrderFromTree,
-                this::withSuppressedSelectionBroadcast,
+                selectionBroadcastCoordinator::withSuppressedSelectionBroadcast,
                 nodeActions::refreshEnabledState));
     this.pinnedDockDragController =
         interactionWiringFactory.createPinnedDockDragController(
@@ -1186,19 +1180,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                   }
                   typingActivityTimer.stop();
                 },
-                () -> suppressSelectionBroadcast,
-                ref -> {
-                  if (ref == null) return;
-                  lastBroadcastSelectionRef = ref;
-                  selections.onNext(ref);
-                },
+                selectionBroadcastCoordinator::suppressSelectionBroadcast,
+                selectionBroadcastCoordinator::publishSelection,
                 nodeClassifier::isMonitorGroupNode,
                 nodeClassifier::isInterceptorsGroupNode,
                 nodeClassifier::owningServerIdForNode,
                 rowInteractionHandler::maybeHandleDisconnectedWarningClick,
                 rowInteractionHandler::maybeSelectRowFromLeftClick,
                 (x, y) -> rowInteractionHandler.treePathForRowHit(x, y),
-                this::withSuppressedSelectionBroadcast,
+                selectionBroadcastCoordinator::withSuppressedSelectionBroadcast,
                 nodeActions::refreshEnabledState,
                 contextMenuBuilder::build,
                 pinnedDockDragController::prepareChannelDockDrag,
@@ -1251,16 +1241,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private void persistRootSiblingOrderForServer(
       String serverId, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
     builtInLayoutVisibilityFacade.rememberRootSiblingOrder(serverId, order);
-  }
-
-  private void withSuppressedSelectionBroadcast(Runnable task) {
-    if (task == null) return;
-    suppressSelectionBroadcast = true;
-    try {
-      task.run();
-    } finally {
-      suppressSelectionBroadcast = false;
-    }
   }
 
   private TargetRef channelTargetForTreePath(TreePath path) {
@@ -1352,7 +1332,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public Flowable<TargetRef> selectionStream() {
-    return selections.onBackpressureLatest();
+    return selectionBroadcastCoordinator.selectionStream();
   }
 
   public Flowable<String> connectServerRequests() {
