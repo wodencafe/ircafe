@@ -62,7 +62,7 @@ import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutVisibili
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier;
-import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeChannelListNodeEnsurer;
 import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeEnsureNodeLeafInserter;
 import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeNodeVisibilityMutator;
 import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeTargetNodeRemovalMutator;
@@ -70,7 +70,6 @@ import cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
-import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLeafInsertPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeStartupSelectionRestorer;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTypingTargetPolicy;
@@ -380,6 +379,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeChannelQueryService channelQueryService;
   private final ServerTreeChannelTargetOperations channelTargetOperations;
   private final ServerTreeEnsureNodeParentResolver ensureNodeParentResolver;
+  private final ServerTreeChannelListNodeEnsurer channelListNodeEnsurer;
   private final ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter;
   private final ServerTreeChannelDisconnectStateManager channelDisconnectStateManager;
   private final ServerTreeTargetNodeRemovalMutator targetNodeRemovalMutator;
@@ -848,6 +848,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             requestEmitter,
             this::onChannelMutedStateChangedFromChannelTarget);
     this.ensureNodeParentResolver = stateInteractionCollaborators.ensureNodeParentResolver();
+    this.channelListNodeEnsurer =
+        new ServerTreeChannelListNodeEnsurer(CHANNEL_LIST_LABEL, leaves, model::nodesWereInserted);
     this.ensureNodeLeafInserter = stateInteractionCollaborators.ensureNodeLeafInserter();
     this.targetNodeRemovalMutator = stateInteractionCollaborators.targetNodeRemovalMutator();
     this.targetRemovalStateCoordinator =
@@ -1855,19 +1857,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private DefaultMutableTreeNode ensureChannelListNodeForEnsureNode(ServerNodes sn) {
-    if (sn == null || sn.serverNode == null || sn.channelListRef == null) return null;
-    DefaultMutableTreeNode channelListNode = leaves.get(sn.channelListRef);
-    if (channelListNode != null) return channelListNode;
-
-    DefaultMutableTreeNode channelListLeaf =
-        new DefaultMutableTreeNode(new ServerTreeNodeData(sn.channelListRef, CHANNEL_LIST_LABEL));
-    int channelListIdx =
-        ServerTreeServerLeafInsertPolicy.fixedServerLeafInsertIndexFor(
-            sn, sn.channelListRef, leaves::get);
-    sn.serverNode.insert(channelListLeaf, channelListIdx);
-    leaves.put(sn.channelListRef, channelListLeaf);
-    model.nodesWereInserted(sn.serverNode, new int[] {channelListIdx});
-    return channelListLeaf;
+    return channelListNodeEnsurer.ensureChannelListNode(sn);
   }
 
   public void selectTarget(TargetRef ref) {
