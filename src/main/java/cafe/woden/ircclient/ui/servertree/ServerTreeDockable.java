@@ -26,10 +26,12 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInLayoutOrchest
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeContextMenuContextFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceContextAdapter;
+import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionPersistenceContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerRootLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeStartupSelectionRestorerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetLifecycleContextAdapter;
+import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetSelectionContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTooltipContextFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeUiLeafVisibilitySynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
@@ -679,7 +681,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 tree));
     this.selectionPersistencePolicy =
         new ServerTreeSelectionPersistencePolicy(
-            ServerTreeSelectionPersistencePolicy.context(
+            new ServerTreeSelectionPersistenceContextAdapter(
                 selectionBroadcastCoordinator::lastBroadcastSelectionRef,
                 this::selectedTargetRef,
                 () -> (DefaultMutableTreeNode) tree.getLastSelectedPathComponent(),
@@ -1071,16 +1073,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::emitManagedChannelsChanged));
     this.targetSelectionCoordinator =
         new ServerTreeTargetSelectionCoordinator(
-            ServerTreeTargetSelectionCoordinator.context(
+            new ServerTreeTargetSelectionContextAdapter(
                 this::ensureNode,
                 serverNodeResolver::monitorNodeForServer,
                 serverNodeResolver::interceptorsNodeForServer,
-                (serverId, node) -> {
-                  ServerNodes nodes = serverNodeResolver.serverNodesForServer(serverId);
-                  if (nodes == null || node == null) return false;
-                  return node.getParent() == nodes.serverNode
-                      || node.getParent() == nodes.otherNode;
-                },
+                serverNodeResolver::serverNodesForServer,
                 leaves::get,
                 node -> {
                   if (node == null) return;
