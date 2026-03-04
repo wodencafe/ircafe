@@ -37,6 +37,7 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelDisconnec
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLeafVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerRootLifecycleManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeStatusLabelManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetLifecycleCoordinator;
@@ -65,6 +66,7 @@ import cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLeafInsertPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeStartupSelectionRestorer;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTypingTargetPolicy;
@@ -364,8 +366,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeSelectionFallbackPolicy selectionFallbackPolicy;
   private final ServerTreeSelectionPersistencePolicy selectionPersistencePolicy;
   private final ServerTreeStartupSelectionRestorer startupSelectionRestorer;
+  private final ServerTreeServerLeafVisibilityCoordinator serverLeafVisibilityCoordinator;
   private final ServerTreeUiLeafVisibilitySynchronizer uiLeafVisibilitySynchronizer;
-  private final ServerTreeNodeVisibilityMutator nodeVisibilityMutator;
   private final ServerTreeExpansionStateManager expansionStateManager;
   private final ServerTreeApplicationRootVisibilityCoordinator applicationRootVisibilityCoordinator;
 
@@ -746,6 +748,27 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::interceptorsNodeForServer,
                 this::serverNodesForServer,
                 this::selectTarget));
+    ServerTreeNodeVisibilityMutator nodeVisibilityMutator =
+        new ServerTreeNodeVisibilityMutator(model, leaves, typingActivityNodes);
+    this.serverLeafVisibilityCoordinator =
+        new ServerTreeServerLeafVisibilityCoordinator(
+            CHANNEL_LIST_LABEL,
+            WEECHAT_FILTERS_LABEL,
+            IGNORES_LABEL,
+            DCC_TRANSFERS_LABEL,
+            "Notifications",
+            LOG_VIEWER_LABEL,
+            nodeVisibilityMutator,
+            ServerTreeDockable::normalizeServerId,
+            this::serverNodesForServer,
+            this::builtInNodesVisibility,
+            this::builtInLayout,
+            this::rootSiblingOrder,
+            this::applyBuiltInLayoutToTree,
+            this::applyRootSiblingOrderToTree,
+            statusLabelManager::statusLeafLabelForServer,
+            () -> showDccTransfersNodes,
+            leaves::get);
     this.uiLeafVisibilitySynchronizer =
         new ServerTreeUiLeafVisibilitySynchronizer(
             new ServerTreeUiLeafVisibilitySynchronizerContextAdapter(
@@ -755,7 +778,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 nodeClassifier::isInterceptorsGroupNode,
                 nodeClassifier::owningServerIdForNode,
                 () -> List.copyOf(servers.keySet()),
-                this::syncUiLeafVisibilityForServer,
+                serverLeafVisibilityCoordinator::syncUiLeafVisibilityForServer,
                 serverId -> builtInNodesVisibility(serverId).server(),
                 serverId -> builtInNodesVisibility(serverId).notifications(),
                 serverId -> builtInNodesVisibility(serverId).logViewer(),
@@ -763,8 +786,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 serverId -> builtInNodesVisibility(serverId).interceptors(),
                 () -> showDccTransfersNodes,
                 this::selectBestFallbackForServer));
-    this.nodeVisibilityMutator =
-        new ServerTreeNodeVisibilityMutator(model, leaves, typingActivityNodes);
     this.expansionStateManager =
         new ServerTreeExpansionStateManager(tree, root, ircRoot, applicationRoot);
     this.applicationRootVisibilityCoordinator =
@@ -1886,27 +1907,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     uiLeafVisibilitySynchronizer.syncUiLeafVisibility();
   }
 
-  private void syncUiLeafVisibilityForServer(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    ServerNodes sn = servers.get(sid);
-    if (sn == null || sn.serverNode == null) return;
-
-    ServerBuiltInNodesVisibility vis = builtInNodesVisibility(sid);
-    ensureMovableBuiltInLeafVisible(
-        sn, sn.statusRef, statusLabelManager.statusLeafLabelForServer(sid), vis.server());
-    ensureMovableBuiltInLeafVisible(sn, sn.notificationsRef, "Notifications", vis.notifications());
-    ensureMovableBuiltInLeafVisible(sn, sn.logViewerRef, LOG_VIEWER_LABEL, vis.logViewer());
-    ensureUiLeafVisible(sn, sn.channelListRef, CHANNEL_LIST_LABEL, true);
-    ensureMovableBuiltInLeafVisible(sn, sn.weechatFiltersRef, WEECHAT_FILTERS_LABEL, true);
-    ensureMovableBuiltInLeafVisible(sn, sn.ignoresRef, IGNORES_LABEL, true);
-    ensureUiLeafVisible(sn, sn.dccTransfersRef, DCC_TRANSFERS_LABEL, showDccTransfersNodes);
-    ensureMonitorGroupVisible(sn, vis.monitor());
-    ensureInterceptorsGroupVisible(sn, vis.interceptors());
-    applyBuiltInLayoutToTree(sn, builtInLayout(sid));
-    applyRootSiblingOrderToTree(sn, rootSiblingOrder(sid));
-  }
-
   private void selectBestFallbackForServer(String serverId) {
     selectionFallbackPolicy.selectBestFallbackForServer(serverId);
   }
@@ -1916,48 +1916,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       return;
     }
     selectionFallbackPolicy.selectStartupDefaultForServer(serverId);
-  }
-
-  private boolean ensureUiLeafVisible(
-      ServerNodes sn, TargetRef ref, String label, boolean visible) {
-    if (sn == null || sn.serverNode == null || ref == null) return false;
-    return nodeVisibilityMutator.ensureLeafVisible(
-        sn.serverNode, ref, label, visible, true, fixedServerLeafInsertIndexFor(sn, ref));
-  }
-
-  private boolean ensureMovableBuiltInLeafVisible(
-      ServerNodes sn, TargetRef ref, String label, boolean visible) {
-    if (sn == null || sn.serverNode == null || ref == null) return false;
-    return nodeVisibilityMutator.ensureLeafVisible(sn.serverNode, ref, label, visible, false, 0);
-  }
-
-  private boolean ensureInterceptorsGroupVisible(ServerNodes sn, boolean visible) {
-    if (sn == null) return false;
-    return nodeVisibilityMutator.ensureGroupVisible(
-        sn.serverNode, sn.otherNode, sn.interceptorsNode, visible);
-  }
-
-  private boolean ensureMonitorGroupVisible(ServerNodes sn, boolean visible) {
-    if (sn == null) return false;
-    return nodeVisibilityMutator.ensureGroupVisible(
-        sn.serverNode, sn.otherNode, sn.monitorNode, visible);
-  }
-
-  private int fixedServerLeafInsertIndexFor(ServerNodes sn, TargetRef ref) {
-    if (sn == null || sn.serverNode == null || ref == null) return 0;
-    if (ref.equals(sn.channelListRef)) {
-      return 0;
-    }
-    if (ref.equals(sn.dccTransfersRef)) {
-      DefaultMutableTreeNode channelListNode = leaves.get(sn.channelListRef);
-      int idx = 0;
-      if (channelListNode != null && channelListNode.getParent() == sn.serverNode) {
-        int channelIdx = sn.serverNode.getIndex(channelListNode);
-        if (channelIdx >= 0) idx = channelIdx + 1;
-      }
-      return Math.max(0, Math.min(idx, sn.serverNode.getChildCount()));
-    }
-    return sn.serverNode.getChildCount();
   }
 
   private void applyBuiltInLayoutToTree(
@@ -1994,7 +1952,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     DefaultMutableTreeNode channelListLeaf =
         new DefaultMutableTreeNode(new ServerTreeNodeData(sn.channelListRef, CHANNEL_LIST_LABEL));
-    int channelListIdx = fixedServerLeafInsertIndexFor(sn, sn.channelListRef);
+    int channelListIdx =
+        ServerTreeServerLeafInsertPolicy.fixedServerLeafInsertIndexFor(
+            sn, sn.channelListRef, leaves::get);
     sn.serverNode.insert(channelListLeaf, channelListIdx);
     leaves.put(sn.channelListRef, channelListLeaf);
     model.nodesWereInserted(sn.serverNode, new int[] {channelListIdx});
