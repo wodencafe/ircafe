@@ -21,10 +21,11 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaborat
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaborators;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeApplicationRootVisibilityContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInLayoutOrchestratorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeContextMenuContextFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionPersistenceContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
@@ -33,7 +34,6 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeSettingsSynchronizer
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeStartupSelectionRestorerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetSelectionContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeTooltipContextFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeUiLeafVisibilitySynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelDisconnectStateManager;
@@ -106,7 +106,6 @@ import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeHeaderControls;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeNetworkInfoDialogBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
-import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipProvider;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipResolver;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTypingIndicatorStyle;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
@@ -339,7 +338,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
   private final ServerTreeRuntimeHeaderApi runtimeHeaderApi;
   private final ServerTreeUiRefreshCoordinator uiRefreshCoordinator;
-  private final ServerTreeTooltipProvider tooltipProvider;
+
   private final ServerTreeTooltipResolver tooltipResolver;
   private final ServerTreeContextMenuBuilder contextMenuBuilder;
   private final ServerTreeExternalStreamBinder externalStreamBinder;
@@ -810,99 +809,50 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         stateInteractionCollaborators.targetRemovalStateCoordinator();
 
     this.rowInteractionHandler = stateInteractionCollaborators.rowInteractionHandler();
-    this.tooltipProvider =
-        new ServerTreeTooltipProvider(
-            tree,
-            ServerTreeTooltipContextFactory.create(
-                new ServerTreeTooltipContextFactory.Inputs(
-                    rowInteractionHandler::serverIdAt,
-                    uiHooks,
-                    nodeAccess::isIrcRootNode,
-                    nodeAccess::isApplicationRootNode,
-                    networkGroupManager::isSojuNetworksGroupNode,
-                    networkGroupManager::isZncNetworksGroupNode,
-                    nodeClassifier::isInterceptorsGroupNode,
-                    nodeClassifier::isMonitorGroupNode,
-                    nodeClassifier::isOtherGroupNode,
-                    runtimeState::desiredOnlineForServer,
-                    runtimeState::connectionDiagnosticsTipForServer,
-                    serverLabelPolicy::isSojuEphemeralServer,
-                    serverLabelPolicy::isZncEphemeralServer,
-                    sojuOriginByServerId::get,
-                    zncOriginByServerId::get,
-                    serverId -> serverDisplayNames.getOrDefault(serverId, serverId),
-                    (originId, networkKey) ->
-                        sojuAutoConnect != null && sojuAutoConnect.isEnabled(originId, networkKey),
-                    (originId, networkKey) ->
-                        zncAutoConnect != null && zncAutoConnect.isEnabled(originId, networkKey),
-                    this::isApplicationJfrActive,
-                    nodeData -> {
-                      if (nodeData == null || nodeData.ref == null || !nodeData.ref.isStatus()) {
-                        return false;
-                      }
-                      if (!BOUNCER_CONTROL_LABEL.equals(nodeData.label)) {
-                        return false;
-                      }
-                      String serverId = nodeData.ref.serverId();
-                      return sojuBouncerControlServerIds.contains(serverId)
-                          || zncBouncerControlServerIds.contains(serverId);
-                    })));
-    this.tooltipResolver = new ServerTreeTooltipResolver(serverActionOverlay, tooltipProvider);
-    this.contextMenuBuilder =
-        new ServerTreeContextMenuBuilder(
-            ServerTreeContextMenuContextFactory.create(
-                new ServerTreeContextMenuContextFactory.Inputs(
-                    uiHooks::isServerNode,
-                    nodeAccess::isRootServerNode,
-                    serverLabelPolicy::prettyServerLabel,
-                    uiHooks::connectionStateForServer,
-                    runtimeState::connectionDiagnosticsTipForServer,
-                    serverCatalog,
-                    this::moveNodeUpAction,
-                    this::moveNodeDownAction,
-                    uiHooks::connectServer,
-                    uiHooks::disconnectServer,
-                    this::openServerInfoDialog,
-                    requestEmitter::emitOpenQuasselSetup,
-                    requestEmitter::emitOpenQuasselNetworkManager,
-                    interceptorStore,
-                    interceptorActions::promptAndAddInterceptor,
-                    serverDialogs,
-                    this,
-                    runtimeConfig,
-                    serverLabelPolicy::isSojuEphemeralServer,
-                    serverLabelPolicy::isZncEphemeralServer,
-                    sojuOriginByServerId::get,
-                    zncOriginByServerId::get,
-                    serverId -> serverDisplayNames.getOrDefault(serverId, serverId),
-                    sojuAutoConnect,
-                    zncAutoConnect,
-                    nodeBadgeUpdater::refreshSojuAutoConnectBadges,
-                    nodeBadgeUpdater::refreshZncAutoConnectBadges,
-                    nodeClassifier::isInterceptorsGroupNode,
-                    nodeClassifier::owningServerIdForNode,
-                    uiHooks::openPinnedChat,
-                    uiHooks::confirmAndClearLog,
-                    this::isChannelDisconnected,
-                    uiHooks::joinChannel,
-                    uiHooks::disconnectChannel,
-                    uiHooks::closeChannel,
-                    bouncerDetachPolicy::supportsBouncerDetach,
-                    uiHooks::bouncerDetachChannel,
-                    this::isChannelAutoReattach,
-                    this::setChannelAutoReattach,
-                    this::isChannelPinned,
-                    this::setChannelPinned,
-                    this::isChannelMuted,
-                    this::setChannelMuted,
-                    channelModeRequestBus::emitDetailsRequest,
-                    channelModeRequestBus::emitRefreshRequest,
-                    channelTargetOperations::canEditChannelModesForTarget,
-                    channelModeRequestBus::emitSetRequest,
-                    uiHooks::closeTarget,
-                    interceptorActions::setInterceptorEnabled,
-                    interceptorActions::promptRenameInterceptor,
-                    interceptorActions::confirmDeleteInterceptor)));
+    ServerTreeViewInteractionCollaborators viewInteractionCollaborators =
+        ServerTreeViewInteractionCollaboratorsFactory.create(
+            new ServerTreeViewInteractionCollaboratorsFactory.Inputs(
+                tree,
+                rowInteractionHandler,
+                uiHooks,
+                nodeAccess,
+                networkGroupManager,
+                nodeClassifier,
+                runtimeState,
+                serverLabelPolicy,
+                serverDisplayNames,
+                sojuBouncerControlServerIds,
+                zncBouncerControlServerIds,
+                sojuOriginByServerId,
+                zncOriginByServerId,
+                sojuAutoConnect,
+                zncAutoConnect,
+                this::isApplicationJfrActive,
+                serverActionOverlay,
+                serverCatalog,
+                this::moveNodeUpAction,
+                this::moveNodeDownAction,
+                this::openServerInfoDialog,
+                requestEmitter,
+                interceptorStore,
+                interceptorActions,
+                serverDialogs,
+                this,
+                runtimeConfig,
+                nodeBadgeUpdater,
+                bouncerDetachPolicy,
+                this::isChannelDisconnected,
+                this::isChannelAutoReattach,
+                this::setChannelAutoReattach,
+                this::isChannelPinned,
+                this::setChannelPinned,
+                this::isChannelMuted,
+                this::setChannelMuted,
+                channelModeRequestBus,
+                channelTargetOperations::canEditChannelModesForTarget));
+
+    this.tooltipResolver = viewInteractionCollaborators.tooltipResolver();
+    this.contextMenuBuilder = viewInteractionCollaborators.contextMenuBuilder();
     this.serverRootLifecycleManager =
         new ServerTreeServerRootLifecycleManager(
             serverNodeBuilder,
