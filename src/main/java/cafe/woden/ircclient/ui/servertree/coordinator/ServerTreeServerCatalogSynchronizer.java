@@ -8,7 +8,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+import javax.swing.JTree;
+import javax.swing.SwingUtilities;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 
 /** Synchronizes the server tree structure with the latest server catalog snapshot. */
 public final class ServerTreeServerCatalogSynchronizer {
@@ -54,6 +63,150 @@ public final class ServerTreeServerCatalogSynchronizer {
     void selectStartupDefaultForServer(String serverId);
 
     void selectDefaultPath();
+  }
+
+  public static Context context(
+      JTree tree,
+      Map<String, ServerNodes> servers,
+      Map<TargetRef, DefaultMutableTreeNode> leaves,
+      DefaultTreeModel model,
+      DefaultMutableTreeNode root,
+      BooleanSupplier startupSelectionCompleted,
+      Runnable markStartupSelectionCompleted,
+      Supplier<TargetRef> selectedTargetRef,
+      Consumer<String> addServerRoot,
+      Consumer<String> removeServerRoot,
+      BiConsumer<Set<String>, Set<String>> updateBouncerControlLabels,
+      Supplier<Set<TreePath>> snapshotExpandedTreePaths,
+      Consumer<Set<TreePath>> restoreExpandedTreePaths,
+      BooleanSupplier hasValidTreeSelection,
+      Consumer<TargetRef> selectTarget,
+      Supplier<String> firstServerId,
+      Consumer<String> selectStartupDefaultForServer,
+      Supplier<TreePath> defaultSelectionPath) {
+    Objects.requireNonNull(tree, "tree");
+    Objects.requireNonNull(servers, "servers");
+    Objects.requireNonNull(leaves, "leaves");
+    Objects.requireNonNull(model, "model");
+    Objects.requireNonNull(root, "root");
+    Objects.requireNonNull(startupSelectionCompleted, "startupSelectionCompleted");
+    Objects.requireNonNull(markStartupSelectionCompleted, "markStartupSelectionCompleted");
+    Objects.requireNonNull(selectedTargetRef, "selectedTargetRef");
+    Objects.requireNonNull(addServerRoot, "addServerRoot");
+    Objects.requireNonNull(removeServerRoot, "removeServerRoot");
+    Objects.requireNonNull(updateBouncerControlLabels, "updateBouncerControlLabels");
+    Objects.requireNonNull(snapshotExpandedTreePaths, "snapshotExpandedTreePaths");
+    Objects.requireNonNull(restoreExpandedTreePaths, "restoreExpandedTreePaths");
+    Objects.requireNonNull(hasValidTreeSelection, "hasValidTreeSelection");
+    Objects.requireNonNull(selectTarget, "selectTarget");
+    Objects.requireNonNull(firstServerId, "firstServerId");
+    Objects.requireNonNull(selectStartupDefaultForServer, "selectStartupDefaultForServer");
+    Objects.requireNonNull(defaultSelectionPath, "defaultSelectionPath");
+    return new Context() {
+      @Override
+      public boolean treeHasSelectionPath() {
+        return tree.getSelectionPath() != null;
+      }
+
+      @Override
+      public void markStartupSelectionCompleted() {
+        markStartupSelectionCompleted.run();
+      }
+
+      @Override
+      public boolean startupSelectionCompleted() {
+        return startupSelectionCompleted.getAsBoolean();
+      }
+
+      @Override
+      public TargetRef selectedTargetRef() {
+        return selectedTargetRef.get();
+      }
+
+      @Override
+      public boolean hasServer(String serverId) {
+        return servers.containsKey(serverId);
+      }
+
+      @Override
+      public Set<String> currentServerIds() {
+        return servers.keySet();
+      }
+
+      @Override
+      public void addServerRoot(String serverId) {
+        addServerRoot.accept(serverId);
+      }
+
+      @Override
+      public void removeServerRoot(String serverId) {
+        removeServerRoot.accept(serverId);
+      }
+
+      @Override
+      public void updateBouncerControlLabels(
+          Set<String> nextSojuBouncerControl, Set<String> nextZncBouncerControl) {
+        updateBouncerControlLabels.accept(nextSojuBouncerControl, nextZncBouncerControl);
+      }
+
+      @Override
+      public void nodeChangedForServer(String serverId) {
+        ServerNodes serverNodes = servers.get(serverId);
+        if (serverNodes != null) {
+          model.nodeChanged(serverNodes.serverNode);
+        }
+      }
+
+      @Override
+      public Set<TreePath> snapshotExpandedTreePaths() {
+        return snapshotExpandedTreePaths.get();
+      }
+
+      @Override
+      public void reloadTreeModel() {
+        model.reload(root);
+      }
+
+      @Override
+      public void restoreExpandedTreePaths(Set<TreePath> expanded) {
+        restoreExpandedTreePaths.accept(expanded);
+      }
+
+      @Override
+      public void runLater(Runnable task) {
+        SwingUtilities.invokeLater(task);
+      }
+
+      @Override
+      public boolean hasValidTreeSelection() {
+        return hasValidTreeSelection.getAsBoolean();
+      }
+
+      @Override
+      public boolean hasLeaf(TargetRef ref) {
+        return leaves.containsKey(ref);
+      }
+
+      @Override
+      public void selectTarget(TargetRef ref) {
+        selectTarget.accept(ref);
+      }
+
+      @Override
+      public String firstServerId() {
+        return firstServerId.get();
+      }
+
+      @Override
+      public void selectStartupDefaultForServer(String serverId) {
+        selectStartupDefaultForServer.accept(serverId);
+      }
+
+      @Override
+      public void selectDefaultPath() {
+        tree.setSelectionPath(defaultSelectionPath.get());
+      }
+    };
   }
 
   private final Map<String, String> serverDisplayNames;

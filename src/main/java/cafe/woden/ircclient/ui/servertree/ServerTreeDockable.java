@@ -29,11 +29,7 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTargetLifecycleC
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTreeInteractionBindingsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaboratorsFactory;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeApplicationRootVisibilityContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInLayoutOrchestratorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelInteractionApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
@@ -58,7 +54,9 @@ import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetup
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionWiringFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeRowInteractionHandler;
+import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutOrchestrator;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutVisibilityFacade;
+import cafe.woden.ircclient.ui.servertree.layout.ServerTreeLayoutPersistenceCoordinator;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier;
@@ -418,14 +416,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             runtimeConfig,
             ServerTreeBuiltInVisibilityCoordinator.context(
                 ServerTreeDockable::normalizeServerId, servers::keySet, this::syncUiLeafVisibility),
-            new ServerTreeLayoutPersistenceContextAdapter(
+            ServerTreeLayoutPersistenceCoordinator.context(
                 this::rootSiblingNodeKindForNode,
                 this::builtInLayoutNodeKindForNode,
                 this::rootSiblingOrder,
                 this::builtInLayout,
                 this::persistRootSiblingOrderForServer,
                 this::persistBuiltInLayoutForServer),
-            new ServerTreeBuiltInLayoutOrchestratorContextAdapter(
+            ServerTreeBuiltInLayoutOrchestrator.context(
                 ServerTreeDockable::normalizeServerId,
                 serverId -> servers.get(ServerTreeDockable.normalizeServerId(serverId)),
                 leaves::get,
@@ -541,7 +539,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             zncBouncerControlServerIds,
             sojuOriginByServerId,
             zncOriginByServerId,
-            new ServerTreeServerCatalogSynchronizerContextAdapter(
+            ServerTreeServerCatalogSynchronizer.context(
                 tree,
                 servers,
                 leaves,
@@ -741,7 +739,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeExpansionStateManager(tree, root, ircRoot, applicationRoot);
     this.applicationRootVisibilityCoordinator =
         new ServerTreeApplicationRootVisibilityCoordinator(
-            new ServerTreeApplicationRootVisibilityContextAdapter(
+            ServerTreeApplicationRootVisibilityCoordinator.context(
                 this::snapshotExpandedTreePaths,
                 this::restoreExpandedTreePaths,
                 nodeVisibilityApi::isApplicationRootVisible,

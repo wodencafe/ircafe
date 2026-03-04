@@ -5,6 +5,8 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 /** Coordinates built-in layout/root-sibling apply and persistence against the tree model. */
@@ -23,6 +25,54 @@ public final class ServerTreeBuiltInLayoutOrchestrator {
         DefaultMutableTreeNode node);
 
     void nodeStructureChanged(DefaultMutableTreeNode node);
+  }
+
+  public static Context context(
+      Function<String, String> normalizeServerId,
+      Function<String, ServerNodes> serverNodes,
+      Function<TargetRef, DefaultMutableTreeNode> leafNode,
+      Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility,
+      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeRootSiblingNode>
+          rootSiblingNodeKindForNode,
+      Consumer<DefaultMutableTreeNode> nodeStructureChanged) {
+    Objects.requireNonNull(normalizeServerId, "normalizeServerId");
+    Objects.requireNonNull(serverNodes, "serverNodes");
+    Objects.requireNonNull(leafNode, "leafNode");
+    Objects.requireNonNull(builtInNodesVisibility, "builtInNodesVisibility");
+    Objects.requireNonNull(rootSiblingNodeKindForNode, "rootSiblingNodeKindForNode");
+    Objects.requireNonNull(nodeStructureChanged, "nodeStructureChanged");
+    return new Context() {
+      @Override
+      public String normalizeServerId(String serverId) {
+        return normalizeServerId.apply(serverId);
+      }
+
+      @Override
+      public ServerNodes serverNodes(String serverId) {
+        return serverNodes.apply(serverId);
+      }
+
+      @Override
+      public DefaultMutableTreeNode leafNode(TargetRef ref) {
+        return leafNode.apply(ref);
+      }
+
+      @Override
+      public ServerBuiltInNodesVisibility builtInNodesVisibility(String serverId) {
+        return builtInNodesVisibility.apply(serverId);
+      }
+
+      @Override
+      public RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
+          DefaultMutableTreeNode node) {
+        return rootSiblingNodeKindForNode.apply(node);
+      }
+
+      @Override
+      public void nodeStructureChanged(DefaultMutableTreeNode node) {
+        nodeStructureChanged.accept(node);
+      }
+    };
   }
 
   private final ServerTreeLayoutApplier layoutApplier;
