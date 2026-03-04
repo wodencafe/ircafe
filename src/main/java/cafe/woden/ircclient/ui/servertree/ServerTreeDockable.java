@@ -78,9 +78,8 @@ import cafe.woden.ircclient.ui.servertree.query.ServerTreeNodeAccess;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeServerNodeResolver;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeTargetSnapshotProvider;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeChannelModeRequestBus;
-import cafe.woden.ircclient.ui.servertree.request.ServerTreeProcessorRequestEmitter;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestEmitter;
-import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestLoggingDecorator;
+import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeServerParentResolver;
 import cafe.woden.ircclient.ui.servertree.state.ServerRuntimeMetadata;
@@ -111,7 +110,6 @@ import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
-import io.reactivex.rxjava3.processors.PublishProcessor;
 import io.reactivex.rxjava3.processors.ReplayProcessor;
 import jakarta.annotation.PreDestroy;
 import java.awt.BorderLayout;
@@ -209,66 +207,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final FlowableProcessor<TargetRef> selections =
       ReplayProcessor.<TargetRef>createWithSize(1).toSerialized();
+  private final ServerTreeRequestStreams requestStreams = new ServerTreeRequestStreams();
+  private final ServerTreeRequestEmitter requestEmitter = requestStreams.requestEmitter();
 
   /** Suppress broadcasting selection changes when selection is set for context menus. */
   private boolean suppressSelectionBroadcast = false;
 
-  private final FlowableProcessor<String> connectServerRequests =
-      PublishProcessor.<String>create().toSerialized();
-  private final FlowableProcessor<String> disconnectServerRequests =
-      PublishProcessor.<String>create().toSerialized();
-
-  private final FlowableProcessor<TargetRef> closeTargetRequests =
-      PublishProcessor.<TargetRef>create().toSerialized();
-
-  private final FlowableProcessor<TargetRef> joinChannelRequests =
-      PublishProcessor.<TargetRef>create().toSerialized();
-
-  private final FlowableProcessor<TargetRef> disconnectChannelRequests =
-      PublishProcessor.<TargetRef>create().toSerialized();
-
-  private final FlowableProcessor<TargetRef> bouncerDetachChannelRequests =
-      PublishProcessor.<TargetRef>create().toSerialized();
-
-  private final FlowableProcessor<TargetRef> closeChannelRequests =
-      PublishProcessor.<TargetRef>create().toSerialized();
-
-  private final FlowableProcessor<String> managedChannelsChangedByServer =
-      PublishProcessor.<String>create().toSerialized();
-
-  private final FlowableProcessor<TargetRef> clearLogRequests =
-      PublishProcessor.<TargetRef>create().toSerialized();
-
-  private final FlowableProcessor<TargetRef> openPinnedChatRequests =
-      PublishProcessor.<TargetRef>create().toSerialized();
-
-  private final FlowableProcessor<String> openQuasselSetupRequests =
-      PublishProcessor.<String>create().toSerialized();
-
-  private final FlowableProcessor<String> openQuasselNetworkManagerRequests =
-      PublishProcessor.<String>create().toSerialized();
-
   private final ServerTreeChannelModeRequestBus channelModeRequestBus =
       new ServerTreeChannelModeRequestBus();
-
-  private final FlowableProcessor<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests =
-      PublishProcessor.<Ircv3CapabilityToggleRequest>create().toSerialized();
-  private final ServerTreeRequestEmitter requestEmitter =
-      new ServerTreeRequestLoggingDecorator(
-          new ServerTreeProcessorRequestEmitter(
-              connectServerRequests,
-              disconnectServerRequests,
-              closeTargetRequests,
-              joinChannelRequests,
-              disconnectChannelRequests,
-              bouncerDetachChannelRequests,
-              closeChannelRequests,
-              managedChannelsChangedByServer,
-              clearLogRequests,
-              openPinnedChatRequests,
-              openQuasselSetupRequests,
-              openQuasselNetworkManagerRequests,
-              ircv3CapabilityToggleRequests));
 
   // Hidden top-level container. Visible top-level nodes are siblings: IRC + Application.
   private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("(root)");
@@ -1410,51 +1356,51 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public Flowable<String> connectServerRequests() {
-    return connectServerRequests.onBackpressureLatest();
+    return requestStreams.connectServerRequests();
   }
 
   public Flowable<String> disconnectServerRequests() {
-    return disconnectServerRequests.onBackpressureLatest();
+    return requestStreams.disconnectServerRequests();
   }
 
   public Flowable<TargetRef> closeTargetRequests() {
-    return closeTargetRequests.onBackpressureLatest();
+    return requestStreams.closeTargetRequests();
   }
 
   public Flowable<TargetRef> joinChannelRequests() {
-    return joinChannelRequests.onBackpressureLatest();
+    return requestStreams.joinChannelRequests();
   }
 
   public Flowable<TargetRef> disconnectChannelRequests() {
-    return disconnectChannelRequests.onBackpressureLatest();
+    return requestStreams.disconnectChannelRequests();
   }
 
   public Flowable<TargetRef> bouncerDetachChannelRequests() {
-    return bouncerDetachChannelRequests.onBackpressureLatest();
+    return requestStreams.bouncerDetachChannelRequests();
   }
 
   public Flowable<TargetRef> closeChannelRequests() {
-    return closeChannelRequests.onBackpressureLatest();
+    return requestStreams.closeChannelRequests();
   }
 
   public Flowable<String> managedChannelsChangedByServer() {
-    return managedChannelsChangedByServer.onBackpressureLatest();
+    return requestStreams.managedChannelsChangedByServer();
   }
 
   public Flowable<TargetRef> clearLogRequests() {
-    return clearLogRequests.onBackpressureLatest();
+    return requestStreams.clearLogRequests();
   }
 
   public Flowable<TargetRef> openPinnedChatRequests() {
-    return openPinnedChatRequests.onBackpressureLatest();
+    return requestStreams.openPinnedChatRequests();
   }
 
   public Flowable<String> quasselSetupRequests() {
-    return openQuasselSetupRequests.onBackpressureLatest();
+    return requestStreams.openQuasselSetupRequests();
   }
 
   public Flowable<String> quasselNetworkManagerRequests() {
-    return openQuasselNetworkManagerRequests.onBackpressureLatest();
+    return requestStreams.openQuasselNetworkManagerRequests();
   }
 
   public void setPinnedDockableProvider(Function<TargetRef, Dockable> provider) {
@@ -1474,7 +1420,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public Flowable<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests() {
-    return ircv3CapabilityToggleRequests.onBackpressureLatest();
+    return requestStreams.ircv3CapabilityToggleRequests();
   }
 
   /**
