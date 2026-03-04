@@ -47,6 +47,9 @@ public final class ServerTreeInteractionWiringFactory {
       Consumer<Runnable> withSuppressedSelectionBroadcast,
       Runnable refreshNodeActionsEnabled) {}
 
+  public record PinnedDockDragInputs(
+      JTree tree, BiFunction<Integer, Integer, TargetRef> channelTargetForHit) {}
+
   public record MediatorInputs(
       JTree tree,
       ServerTreeServerActionOverlay serverActionOverlay,
@@ -97,6 +100,14 @@ public final class ServerTreeInteractionWiringFactory {
         Objects.requireNonNull(
             in.withSuppressedSelectionBroadcast(), "withSuppressedSelectionBroadcast"),
         Objects.requireNonNull(in.refreshNodeActionsEnabled(), "refreshNodeActionsEnabled"));
+  }
+
+  public ServerTreePinnedDockDragController createPinnedDockDragController(
+      PinnedDockDragInputs in) {
+    Objects.requireNonNull(in, "in");
+    return new ServerTreePinnedDockDragController(
+        Objects.requireNonNull(in.tree(), "tree"),
+        Objects.requireNonNull(in.channelTargetForHit(), "channelTargetForHit"));
   }
 
   public ServerTreeInteractionMediator createInteractionMediator(MediatorInputs in) {

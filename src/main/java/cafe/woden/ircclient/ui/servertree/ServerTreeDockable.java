@@ -50,6 +50,7 @@ import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionWirin
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeKeyBindingsInstaller;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeMiddleDragReorderHandler;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
+import cafe.woden.ircclient.ui.servertree.interaction.ServerTreePinnedDockDragController;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeRowInteractionHandler;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutVisibilityFacade;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
@@ -97,12 +98,6 @@ import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import cafe.woden.ircclient.ui.util.TreeWheelSelectionDecorator;
 import io.github.andrewauclair.moderndocking.Dockable;
-import io.github.andrewauclair.moderndocking.api.DockingAPI;
-import io.github.andrewauclair.moderndocking.app.Docking;
-import io.github.andrewauclair.moderndocking.internal.DockableWrapper;
-import io.github.andrewauclair.moderndocking.internal.DockingInternal;
-import io.github.andrewauclair.moderndocking.internal.floating.FloatListener;
-import io.github.andrewauclair.moderndocking.internal.floating.Floating;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -111,23 +106,12 @@ import io.reactivex.rxjava3.processors.ReplayProcessor;
 import jakarta.annotation.PreDestroy;
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
-import java.awt.MouseInfo;
-import java.awt.Point;
 import java.awt.Rectangle;
-import java.awt.dnd.DnDConstants;
-import java.awt.dnd.DragGestureEvent;
-import java.awt.dnd.DragGestureListener;
-import java.awt.dnd.DragGestureRecognizer;
-import java.awt.dnd.DragSource;
-import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -181,12 +165,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final int SERVER_ACTION_BUTTON_SIZE = 16;
   private static final int SERVER_ACTION_BUTTON_ICON_SIZE = 12;
   private static final int SERVER_ACTION_BUTTON_MARGIN = 6;
-  private static final int PREPARED_CHANNEL_DRAG_THRESHOLD_FALLBACK_PX = 5;
   private static final int TYPING_ACTIVITY_HOLD_MS = 8000;
   private static final int TYPING_ACTIVITY_FADE_MS = 900;
   private static final int TYPING_ACTIVITY_TICK_MS = 100;
   private static final int TREE_BADGE_SCALE_PERCENT_DEFAULT = 100;
-  private static final Function<TargetRef, Dockable> NO_PINNED_DOCKABLE_PROVIDER = target -> null;
   public static final String PROP_CHANNEL_LIST_NODES_VISIBLE = "channelListNodesVisible";
   public static final String PROP_DCC_TRANSFERS_NODES_VISIBLE = "dccTransfersNodesVisible";
   public static final String PROP_LOG_VIEWER_NODES_VISIBLE = "logViewerNodesVisible";
@@ -392,6 +374,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeTargetSelectionCoordinator targetSelectionCoordinator;
   private final ServerTreeUnreadStateCoordinator unreadStateCoordinator;
   private final ServerTreeInteractionMediator interactionMediator;
+  private final ServerTreePinnedDockDragController pinnedDockDragController;
   private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
   private final ServerTreeTooltipProvider tooltipProvider;
   private final ServerTreeTooltipResolver tooltipResolver;
@@ -413,11 +396,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private volatile TargetRef lastBroadcastSelectionRef = null;
   private volatile boolean showApplicationRoot = true;
   private volatile BiPredicate<String, String> canEditChannelModes = (serverId, channel) -> false;
-  private volatile Function<TargetRef, Dockable> pinnedDockableProvider =
-      NO_PINNED_DOCKABLE_PROVIDER;
-  private volatile DragGestureRecognizer preparedTreeDragRecognizer = null;
-  private volatile DragGestureListener preparedTreeDragGestureListener = null;
-  private volatile TargetRef preparedTreeDragTarget = null;
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
@@ -1158,6 +1136,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::persistRootSiblingOrderFromTree,
                 this::withSuppressedSelectionBroadcast,
                 nodeActions::refreshEnabledState));
+    this.pinnedDockDragController =
+        interactionWiringFactory.createPinnedDockDragController(
+            new ServerTreeInteractionWiringFactory.PinnedDockDragInputs(
+                tree,
+                (x, y) -> channelTargetForTreePath(rowInteractionHandler.treePathForRowHit(x, y))));
     this.interactionMediator =
         interactionWiringFactory.createInteractionMediator(
             new ServerTreeInteractionWiringFactory.MediatorInputs(
@@ -1186,8 +1169,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::withSuppressedSelectionBroadcast,
                 nodeActions::refreshEnabledState,
                 contextMenuBuilder::build,
-                this::prepareChannelDockDrag,
-                this::clearPreparedChannelDockDrag,
+                pinnedDockDragController::prepareChannelDockDrag,
+                pinnedDockDragController::clearPreparedChannelDockDrag,
                 () -> middleDragReorderContext,
                 () -> startupSelectionCompleted,
                 () -> startupSelectionCompleted = true,
@@ -1255,458 +1238,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     TargetRef ref = nodeAccess.targetRefForNode(node);
     if (ref == null || !ref.isChannel()) return null;
     return ref;
-  }
-
-  private void prepareChannelDockDrag(MouseEvent event) {
-    if (event == null || event.isConsumed()) return;
-    if (!SwingUtilities.isLeftMouseButton(event) || event.isPopupTrigger()) return;
-
-    TreePath path = rowInteractionHandler.treePathForRowHit(event.getX(), event.getY());
-    TargetRef target = channelTargetForTreePath(path);
-    if (target == null) return;
-
-    clearPreparedChannelDockDrag();
-
-    DragSource dragSource = DragSource.getDefaultDragSource();
-
-    DragGestureListener dragGestureListener =
-        dragGestureEvent -> {
-          if (!shouldStartPreparedChannelDockDrag(dragGestureEvent)) {
-            return;
-          }
-          Dockable dockable = ensurePinnedDockableForDrag(target);
-          if (dockable == null) {
-            log.warn(
-                "[ircafe] prepared channel drag failed: no dockable available for target={}",
-                target);
-            clearPreparedChannelDockDrag();
-            return;
-          }
-          try {
-            beginPinnedDockDrag(dockable, dragGestureEvent);
-          } finally {
-            clearPreparedChannelDockDrag();
-          }
-        };
-    try {
-      DragGestureRecognizer recognizer =
-          dragSource.createDefaultDragGestureRecognizer(
-              tree, DnDConstants.ACTION_MOVE, dragGestureListener);
-      if (recognizer == null) {
-        log.warn(
-            "[ircafe] prepareChannelDockDrag failed: recognizer not created target={}", target);
-        return;
-      }
-      preparedTreeDragRecognizer = recognizer;
-      preparedTreeDragGestureListener = dragGestureListener;
-      preparedTreeDragTarget = target;
-      primeAlternateDragGesture(recognizer, event);
-    } catch (Exception ex) {
-      log.warn(
-          "[ircafe] prepareChannelDockDrag failed to create drag recognizer target={}", target, ex);
-      clearPreparedChannelDockDrag();
-    }
-  }
-
-  private boolean shouldStartPreparedChannelDockDrag(DragGestureEvent dragGestureEvent) {
-    if (dragGestureEvent == null) return false;
-    InputEvent triggerEvent = dragGestureEvent.getTriggerEvent();
-    if (triggerEvent instanceof MouseEvent mouseEvent
-        && mouseEvent.getID() == MouseEvent.MOUSE_DRAGGED) {
-      return true;
-    }
-
-    if (!(triggerEvent instanceof MouseEvent mouseEvent)) return false;
-
-    boolean leftButtonDown = (mouseEvent.getModifiersEx() & InputEvent.BUTTON1_DOWN_MASK) != 0;
-    double pointerDistancePx = pointerDistanceFromDragOrigin(dragGestureEvent);
-    int thresholdPx = preparedChannelDragThresholdPx();
-    return leftButtonDown && pointerDistancePx >= thresholdPx;
-  }
-
-  private int preparedChannelDragThresholdPx() {
-    try {
-      return Math.max(1, DragSource.getDragThreshold());
-    } catch (Exception ignored) {
-      return PREPARED_CHANNEL_DRAG_THRESHOLD_FALLBACK_PX;
-    }
-  }
-
-  private double pointerDistanceFromDragOrigin(DragGestureEvent dragGestureEvent) {
-    if (dragGestureEvent == null) return -1.0d;
-    Point origin = dragGestureEvent.getDragOrigin();
-    Component component = dragGestureEvent.getComponent();
-    if (origin == null || component == null) return -1.0d;
-    try {
-      Point pointer = pointerLocationInComponent(component);
-      if (pointer == null) return -1.0d;
-      return origin.distance(pointer);
-    } catch (Exception ignored) {
-      return -1.0d;
-    }
-  }
-
-  private Point pointerLocationInComponent(Component component) {
-    if (component == null) return null;
-    var pointerInfo = MouseInfo.getPointerInfo();
-    if (pointerInfo == null || pointerInfo.getLocation() == null) return null;
-    Point pointer = new Point(pointerInfo.getLocation());
-    SwingUtilities.convertPointFromScreen(pointer, component);
-    return pointer;
-  }
-
-  private void primeAlternateDragGesture(DragGestureRecognizer recognizer, MouseEvent pressEvent) {
-    if (recognizer == null || pressEvent == null) return;
-    try {
-      if (recognizer instanceof MouseListener mouseListener) {
-        mouseListener.mousePressed(pressEvent);
-      } else {
-        log.warn(
-            "[ircafe] prepared drag recognizer is not MouseListener: {}",
-            recognizer.getClass().getName());
-      }
-    } catch (Exception ex) {
-      log.warn("[ircafe] failed to prime prepared drag recognizer", ex);
-    }
-  }
-
-  private void clearPreparedChannelDockDrag() {
-    DragGestureRecognizer recognizer = preparedTreeDragRecognizer;
-    DragGestureListener dragGestureListener = preparedTreeDragGestureListener;
-    TargetRef target = preparedTreeDragTarget;
-    preparedTreeDragRecognizer = null;
-    preparedTreeDragGestureListener = null;
-    preparedTreeDragTarget = null;
-
-    if (recognizer == null || dragGestureListener == null) return;
-    try {
-      recognizer.removeDragGestureListener(dragGestureListener);
-    } catch (Exception ex) {
-      log.warn("[ircafe] failed clearing prepared channel drag target={}", target, ex);
-    }
-  }
-
-  private Dockable ensurePinnedDockableForDrag(TargetRef target) {
-    if (!isChannelTarget(target)) return null;
-    Function<TargetRef, Dockable> provider = pinnedDockableProvider;
-    if (provider == null) return null;
-    try {
-      return provider.apply(target);
-    } catch (Exception ex) {
-      log.warn("[ircafe] failed to ensure pinned dockable for drag target={}", target, ex);
-      return null;
-    }
-  }
-
-  private void beginPinnedDockDrag(Dockable dockable, DragGestureEvent dragGestureEvent) {
-    beginPinnedDockDrag(dockable, dragGestureEvent, 0);
-  }
-
-  private void beginPinnedDockDrag(
-      Dockable dockable, DragGestureEvent dragGestureEvent, int attemptNumber) {
-    if (dockable == null || dragGestureEvent == null) return;
-    try {
-      try {
-        Docking.display(dockable);
-      } catch (Exception ignored) {
-      }
-      DockingAPI dockingApi = Docking.getSingleInstance();
-      DockingInternal internals = DockingInternal.get(dockingApi);
-      if (internals == null) {
-        log.warn("[ircafe] beginPinnedDockDrag aborted: DockingInternal unavailable");
-        return;
-      }
-      DockableWrapper wrapper = internals.getWrapper(dockable);
-      if (wrapper == null) {
-        log.warn(
-            "[ircafe] beginPinnedDockDrag aborted: no DockableWrapper for {}",
-            dockable.getPersistentID());
-        return;
-      }
-      FloatListener floatListener = wrapper.getFloatListener();
-      if (floatListener == null) {
-        log.warn(
-            "[ircafe] beginPinnedDockDrag aborted: no FloatListener for {}",
-            dockable.getPersistentID());
-        return;
-      }
-      DragGestureEvent compatibleEvent =
-          compatibleDragGestureEvent(floatListener, dragGestureEvent);
-      floatListener.startDrag(compatibleEvent);
-      boolean floatingAfter = Floating.isFloating();
-      if (!floatingAfter) {
-        if (attemptNumber == 0) {
-          boolean floatedViaFloatSource =
-              retryPinnedDockDragWithFloatSource(floatListener, dragGestureEvent, dockable);
-          if (floatedViaFloatSource || Floating.isFloating()) return;
-          log.warn(
-              "[ircafe] beginPinnedDockDrag did not enter floating mode for {}; scheduling one retry",
-              dockable.getPersistentID());
-          SwingUtilities.invokeLater(
-              () -> beginPinnedDockDrag(dockable, dragGestureEvent, attemptNumber + 1));
-        } else {
-          log.warn(
-              "[ircafe] beginPinnedDockDrag did not enter floating mode for {} after retry",
-              dockable.getPersistentID());
-        }
-      }
-    } catch (Exception ex) {
-      log.warn(
-          "[ircafe] failed to begin pinned dock drag dockable={}", dockable.getPersistentID(), ex);
-    }
-  }
-
-  private boolean retryPinnedDockDragWithFloatSource(
-      FloatListener floatListener, DragGestureEvent seedEvent, Dockable dockable) {
-    if (floatListener == null || seedEvent == null || dockable == null) return false;
-    DragSource floatDragSource = floatListenerDragSource(floatListener);
-    Component sourceComponent = seedEvent.getComponent();
-    if (sourceComponent == null) {
-      sourceComponent = tree;
-    }
-    if (floatDragSource == null || sourceComponent == null) {
-      return false;
-    }
-
-    DragGestureListener retryListener =
-        retryEvent -> {
-          if (retryEvent != null) {
-            floatListener.startDrag(retryEvent);
-          }
-        };
-
-    DragGestureRecognizer retryRecognizer = null;
-    try {
-      retryRecognizer =
-          floatDragSource.createDefaultDragGestureRecognizer(
-              sourceComponent, DnDConstants.ACTION_MOVE, retryListener);
-      if (retryRecognizer == null) {
-        return false;
-      }
-
-      MouseEvent pressEvent = seedPressEventForRecognizer(seedEvent, sourceComponent);
-      if (pressEvent == null) return false;
-      if (retryRecognizer instanceof MouseListener mouseListener) {
-        mouseListener.mousePressed(pressEvent);
-      }
-
-      MouseEvent dragEvent = seedDragEventForRecognizer(seedEvent, sourceComponent, pressEvent);
-      if (dragEvent != null
-          && retryRecognizer instanceof java.awt.event.MouseMotionListener motion) {
-        motion.mouseDragged(dragEvent);
-      }
-
-      boolean floatingAfter = Floating.isFloating();
-      return floatingAfter;
-    } catch (Exception ex) {
-      log.warn("[ircafe] float-source retry failed for {}", dockable.getPersistentID(), ex);
-      return false;
-    } finally {
-      if (retryRecognizer != null) {
-        try {
-          retryRecognizer.removeDragGestureListener(retryListener);
-        } catch (Exception ignored) {
-        }
-      }
-    }
-  }
-
-  private MouseEvent seedPressEventForRecognizer(
-      DragGestureEvent seedEvent, Component sourceComponent) {
-    if (seedEvent == null || sourceComponent == null) return null;
-    InputEvent triggerEvent = seedEvent.getTriggerEvent();
-    int modifiers = InputEvent.BUTTON1_DOWN_MASK;
-    long when = System.currentTimeMillis();
-    Point point = null;
-    if (triggerEvent instanceof MouseEvent triggerMouse) {
-      modifiers |= triggerMouse.getModifiersEx();
-      when = triggerMouse.getWhen();
-      point = eventPointInComponent(triggerMouse, sourceComponent);
-    }
-    if (point == null) {
-      point = pointerLocationInComponent(sourceComponent);
-    }
-    if (point == null) return null;
-    return new MouseEvent(
-        sourceComponent,
-        MouseEvent.MOUSE_PRESSED,
-        when,
-        modifiers,
-        point.x,
-        point.y,
-        1,
-        false,
-        MouseEvent.BUTTON1);
-  }
-
-  private MouseEvent seedDragEventForRecognizer(
-      DragGestureEvent seedEvent, Component sourceComponent, MouseEvent pressEvent) {
-    if (seedEvent == null || sourceComponent == null) return null;
-    Point dragPoint = pointerLocationInComponent(sourceComponent);
-    if (dragPoint == null && pressEvent != null) {
-      dragPoint = new Point(pressEvent.getPoint());
-    }
-    if (dragPoint == null) return null;
-
-    Point basePoint = pressEvent != null ? pressEvent.getPoint() : new Point(dragPoint);
-    int minDistance = preparedChannelDragThresholdPx() + 2;
-    if (basePoint.distance(dragPoint) < minDistance) {
-      dragPoint = new Point(basePoint.x + minDistance, basePoint.y + minDistance);
-    }
-    int maxX = Math.max(0, sourceComponent.getWidth() - 1);
-    int maxY = Math.max(0, sourceComponent.getHeight() - 1);
-    dragPoint.x = Math.max(0, Math.min(maxX, dragPoint.x));
-    dragPoint.y = Math.max(0, Math.min(maxY, dragPoint.y));
-
-    int modifiers = InputEvent.BUTTON1_DOWN_MASK;
-    InputEvent triggerEvent = seedEvent.getTriggerEvent();
-    if (triggerEvent instanceof MouseEvent triggerMouse) {
-      modifiers |= triggerMouse.getModifiersEx();
-    }
-
-    return new MouseEvent(
-        sourceComponent,
-        MouseEvent.MOUSE_DRAGGED,
-        System.currentTimeMillis(),
-        modifiers,
-        dragPoint.x,
-        dragPoint.y,
-        1,
-        false,
-        MouseEvent.BUTTON1);
-  }
-
-  private Point eventPointInComponent(MouseEvent sourceEvent, Component targetComponent) {
-    if (sourceEvent == null || targetComponent == null) return null;
-    Point point = new Point(sourceEvent.getPoint());
-    Component sourceComponent = sourceEvent.getComponent();
-    if (sourceComponent != null) {
-      SwingUtilities.convertPointToScreen(point, sourceComponent);
-      SwingUtilities.convertPointFromScreen(point, targetComponent);
-      return point;
-    }
-    return point;
-  }
-
-  private DragGestureEvent compatibleDragGestureEvent(
-      FloatListener floatListener, DragGestureEvent originalEvent) {
-    if (floatListener == null || originalEvent == null) return originalEvent;
-    DragSource expectedSource = floatListenerDragSource(floatListener);
-    if (expectedSource == null) {
-      log.warn("[ircafe] drag-event adaptation skipped: float listener drag source unavailable");
-      return originalEvent;
-    }
-    if (expectedSource == originalEvent.getDragSource()) {
-      return originalEvent;
-    }
-    Component component = floatListenerDragComponent(floatListener);
-    if (component == null) {
-      component = originalEvent.getComponent();
-    }
-    if (component == null) {
-      log.warn("[ircafe] drag-event adaptation skipped: missing source component");
-      return originalEvent;
-    }
-
-    int action = originalEvent.getDragAction();
-    if (action == DnDConstants.ACTION_NONE) {
-      action = DnDConstants.ACTION_MOVE;
-    }
-
-    java.awt.Point originScreen = originalEvent.getDragOrigin();
-    if (originScreen == null) {
-      originScreen = new java.awt.Point(0, 0);
-    }
-    Component originalComponent = originalEvent.getComponent();
-    if (originalComponent != null) {
-      SwingUtilities.convertPointToScreen(originScreen, originalComponent);
-    }
-
-    java.awt.Point origin = new java.awt.Point(originScreen);
-    SwingUtilities.convertPointFromScreen(origin, component);
-
-    ArrayList<InputEvent> events = new ArrayList<>(1);
-    InputEvent trigger = originalEvent.getTriggerEvent();
-    boolean triggerIsMouseDragged =
-        trigger instanceof MouseEvent mouseEvent && mouseEvent.getID() == MouseEvent.MOUSE_DRAGGED;
-    if (!triggerIsMouseDragged) {
-      Point livePointer = pointerLocationInComponent(component);
-      if (livePointer != null) {
-        origin = livePointer;
-      }
-    }
-    int triggerModifiers =
-        trigger instanceof MouseEvent mouseEvent
-            ? mouseEvent.getModifiersEx()
-            : InputEvent.BUTTON1_DOWN_MASK;
-    triggerModifiers |= InputEvent.BUTTON1_DOWN_MASK;
-    long triggerWhen =
-        trigger instanceof MouseEvent mouseEvent
-            ? mouseEvent.getWhen()
-            : System.currentTimeMillis();
-    if (!triggerIsMouseDragged) {
-      triggerWhen = System.currentTimeMillis();
-    }
-    events.add(
-        new MouseEvent(
-            component,
-            MouseEvent.MOUSE_DRAGGED,
-            triggerWhen,
-            triggerModifiers,
-            origin.x,
-            origin.y,
-            1,
-            false,
-            MouseEvent.BUTTON1));
-
-    try {
-      DragGestureRecognizer recognizer =
-          new SyntheticDragGestureRecognizer(expectedSource, component, action);
-      return new DragGestureEvent(recognizer, action, origin, events);
-    } catch (Exception ex) {
-      log.warn("[ircafe] failed to adapt drag gesture event; using original event", ex);
-      return originalEvent;
-    }
-  }
-
-  private DragSource floatListenerDragSource(FloatListener floatListener) {
-    try {
-      var field = FloatListener.class.getDeclaredField("dragSource");
-      field.setAccessible(true);
-      Object value = field.get(floatListener);
-      return value instanceof DragSource dragSource ? dragSource : null;
-    } catch (Exception ex) {
-      log.warn("[ircafe] could not access float listener drag source", ex);
-      return null;
-    }
-  }
-
-  private Component floatListenerDragComponent(FloatListener floatListener) {
-    try {
-      var field = FloatListener.class.getDeclaredField("dragComponent");
-      field.setAccessible(true);
-      Object value = field.get(floatListener);
-      return value instanceof Component component ? component : null;
-    } catch (Exception ex) {
-      log.warn("[ircafe] could not access float listener drag component", ex);
-      return null;
-    }
-  }
-
-  private static final class SyntheticDragGestureRecognizer extends DragGestureRecognizer {
-    SyntheticDragGestureRecognizer(DragSource dragSource, Component component, int sourceActions) {
-      super(dragSource, component, sourceActions);
-    }
-
-    @Override
-    protected void registerListeners() {
-      // No-op: synthetic recognizer used only to carry a compatible DragGestureEvent.
-    }
-
-    @Override
-    protected void unregisterListeners() {
-      // No-op: synthetic recognizer used only to carry a compatible DragGestureEvent.
-    }
   }
 
   private static boolean isChannelTarget(TargetRef ref) {
@@ -1937,7 +1468,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setPinnedDockableProvider(Function<TargetRef, Dockable> provider) {
-    pinnedDockableProvider = provider == null ? NO_PINNED_DOCKABLE_PROVIDER : provider;
+    pinnedDockDragController.setPinnedDockableProvider(provider);
   }
 
   public Flowable<TargetRef> channelModeDetailsRequests() {
@@ -2669,7 +2200,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   @PreDestroy
   public void shutdown() {
     try {
-      clearPreparedChannelDockDrag();
+      pinnedDockDragController.clearPreparedChannelDockDrag();
       settingsSynchronizer.shutdown();
       if (typingActivityTimer != null) typingActivityTimer.stop();
       if (treeWheelSelectionDecorator != null) treeWheelSelectionDecorator.close();
