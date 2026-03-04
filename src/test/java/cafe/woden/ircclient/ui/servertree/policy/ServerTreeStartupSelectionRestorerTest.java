@@ -74,6 +74,28 @@ class ServerTreeStartupSelectionRestorerTest {
     assertNull(restorer.rememberedSelection());
   }
 
+  @Test
+  void contextDelegatesSelectionOperations() {
+    TargetRef leaf = new TargetRef("libera", "#ircafe");
+    List<TargetRef> selections = new ArrayList<>();
+
+    ServerTreeStartupSelectionRestorer.Context context =
+        ServerTreeStartupSelectionRestorer.context(
+            id -> Objects.toString(id, "").trim(),
+            ref -> Objects.equals(ref, leaf),
+            sid -> "libera".equals(Objects.toString(sid, "").trim()),
+            sid -> false,
+            selections::add);
+
+    assertEquals("libera", context.normalizeServerId(" libera "));
+    assertTrue(context.hasLeaf(leaf));
+    assertTrue(context.isMonitorGroupSelectable("libera"));
+    assertFalse(context.isInterceptorsGroupSelectable("libera"));
+
+    context.selectTarget(leaf);
+    assertEquals(List.of(leaf), selections);
+  }
+
   private static final class StubContext implements ServerTreeStartupSelectionRestorer.Context {
     private final Set<TargetRef> leaves = new HashSet<>();
     private final Set<String> selectableMonitorGroups = new HashSet<>();

@@ -4,6 +4,9 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /** Restores and consumes startup remembered tree selection when it becomes selectable. */
 public final class ServerTreeStartupSelectionRestorer {
@@ -18,6 +21,45 @@ public final class ServerTreeStartupSelectionRestorer {
     boolean isInterceptorsGroupSelectable(String serverId);
 
     void selectTarget(TargetRef ref);
+  }
+
+  public static Context context(
+      Function<String, String> normalizeServerId,
+      Predicate<TargetRef> hasLeaf,
+      Predicate<String> isMonitorGroupSelectable,
+      Predicate<String> isInterceptorsGroupSelectable,
+      Consumer<TargetRef> selectTarget) {
+    Objects.requireNonNull(normalizeServerId, "normalizeServerId");
+    Objects.requireNonNull(hasLeaf, "hasLeaf");
+    Objects.requireNonNull(isMonitorGroupSelectable, "isMonitorGroupSelectable");
+    Objects.requireNonNull(isInterceptorsGroupSelectable, "isInterceptorsGroupSelectable");
+    Objects.requireNonNull(selectTarget, "selectTarget");
+    return new Context() {
+      @Override
+      public String normalizeServerId(String serverId) {
+        return normalizeServerId.apply(serverId);
+      }
+
+      @Override
+      public boolean hasLeaf(TargetRef ref) {
+        return hasLeaf.test(ref);
+      }
+
+      @Override
+      public boolean isMonitorGroupSelectable(String serverId) {
+        return isMonitorGroupSelectable.test(serverId);
+      }
+
+      @Override
+      public boolean isInterceptorsGroupSelectable(String serverId) {
+        return isInterceptorsGroupSelectable.test(serverId);
+      }
+
+      @Override
+      public void selectTarget(TargetRef ref) {
+        selectTarget.accept(ref);
+      }
+    };
   }
 
   public static TargetRef readRememberedSelection(RuntimeConfigStore runtimeConfig) {

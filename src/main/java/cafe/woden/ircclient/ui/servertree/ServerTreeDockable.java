@@ -34,8 +34,6 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInLayoutOrchest
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeStartupSelectionRestorerContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeUiLeafVisibilitySynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelInteractionApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
@@ -695,12 +693,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.startupSelectionRestorer =
         new ServerTreeStartupSelectionRestorer(
             ServerTreeStartupSelectionRestorer.readRememberedSelection(runtimeConfig),
-            new ServerTreeStartupSelectionRestorerContextAdapter(
+            ServerTreeStartupSelectionRestorer.context(
                 ServerTreeDockable::normalizeServerId,
                 ref -> ref != null && leaves.containsKey(ref),
-                serverNodeResolver::monitorNodeForServer,
-                serverNodeResolver::interceptorsNodeForServer,
-                serverNodeResolver::serverNodesForServer,
+                serverId -> isServerGroupNodeSelectable(serverNodeResolver, serverId, true),
+                serverId -> isServerGroupNodeSelectable(serverNodeResolver, serverId, false),
                 this::selectTarget));
     ServerTreeNodeVisibilityMutator nodeVisibilityMutator =
         new ServerTreeNodeVisibilityMutator(model, leaves, typingActivityNodes);
@@ -725,7 +722,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             leaves::get);
     this.uiLeafVisibilitySynchronizer =
         new ServerTreeUiLeafVisibilitySynchronizer(
-            new ServerTreeUiLeafVisibilitySynchronizerContextAdapter(
+            ServerTreeUiLeafVisibilitySynchronizer.context(
                 this::selectedTargetRef,
                 () -> (DefaultMutableTreeNode) tree.getLastSelectedPathComponent(),
                 nodeClassifier::isMonitorGroupNode,
@@ -1123,6 +1120,20 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private static String normalizeServerId(String serverId) {
     return ServerTreeConventions.normalizeServerId(serverId);
+  }
+
+  private static boolean isServerGroupNodeSelectable(
+      ServerTreeServerNodeResolver serverNodeResolver, String serverId, boolean monitorGroup) {
+    if (serverNodeResolver == null) return false;
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+    ServerNodes nodes = serverNodeResolver.serverNodesForServer(sid);
+    DefaultMutableTreeNode node =
+        monitorGroup
+            ? serverNodeResolver.monitorNodeForServer(sid)
+            : serverNodeResolver.interceptorsNodeForServer(sid);
+    if (nodes == null || node == null) return false;
+    return node.getParent() == nodes.serverNode || node.getParent() == nodes.otherNode;
   }
 
   private ServerBuiltInNodesVisibility builtInNodesVisibility(String serverId) {
