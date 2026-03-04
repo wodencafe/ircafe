@@ -45,6 +45,7 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalSta
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetSelectionCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTypingActivityManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibilitySynchronizer;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiRefreshCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUnreadStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeDragReorderSupport;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionMediator;
@@ -112,7 +113,6 @@ import jakarta.annotation.PreDestroy;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
@@ -137,7 +137,6 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.ToolTipManager;
-import javax.swing.UIManager;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -386,6 +385,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeInteractionMediator interactionMediator;
   private final ServerTreePinnedDockDragController pinnedDockDragController;
   private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
+  private final ServerTreeUiRefreshCoordinator uiRefreshCoordinator;
   private final ServerTreeTooltipProvider tooltipProvider;
   private final ServerTreeTooltipResolver tooltipResolver;
   private final ServerTreeContextMenuBuilder contextMenuBuilder;
@@ -1048,6 +1048,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 nodeClassifier::isPrivateMessagesGroupNode,
                 networkGroupManager::isSojuNetworksGroupNode,
                 networkGroupManager::isZncNetworksGroupNode));
+    this.uiRefreshCoordinator =
+        new ServerTreeUiRefreshCoordinator(
+            tree,
+            model,
+            root,
+            treeCellRenderer,
+            this::snapshotExpandedTreePaths,
+            this::restoreExpandedTreePaths);
 
     this.headerControls =
         new ServerTreeHeaderControls(this, connectBtn, disconnectBtn, serverDialogs);
@@ -1064,7 +1072,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     tree.setRootVisible(false);
     tree.setShowsRootHandles(true);
     tree.setRowHeight(0);
-    applyTreeFontFromUiDefaults();
+    ServerTreeUiRefreshCoordinator.applyTreeFontFromUiDefaults(tree);
 
     tree.setCellRenderer(treeCellRenderer);
     this.typingActivityTimer =
@@ -2081,36 +2089,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void refreshTreeLayoutAfterUiChange() {
-    try {
-      applyTreeFontFromUiDefaults();
-      Set<TreePath> expanded = snapshotExpandedTreePaths();
-      tree.setRowHeight(0);
-      try {
-        treeCellRenderer.updateUI();
-        treeCellRenderer.setOpenIcon(UIManager.getIcon("Tree.openIcon"));
-        treeCellRenderer.setClosedIcon(UIManager.getIcon("Tree.closedIcon"));
-        treeCellRenderer.setLeafIcon(UIManager.getIcon("Tree.leafIcon"));
-      } catch (Exception ignored) {
-      }
-      tree.setCellRenderer(treeCellRenderer);
-      ToolTipManager.sharedInstance().registerComponent(tree);
-      model.reload(root);
-      restoreExpandedTreePaths(expanded);
-
-      tree.revalidate();
-      tree.repaint();
-    } catch (Exception ignored) {
-    }
-  }
-
-  private void applyTreeFontFromUiDefaults() {
-    Font next = UIManager.getFont("Tree.font");
-    if (next == null) next = UIManager.getFont("defaultFont");
-    if (next == null) return;
-    Font cur = tree.getFont();
-    if (!next.equals(cur)) {
-      tree.setFont(next);
-    }
+    uiRefreshCoordinator.refreshTreeLayoutAfterUiChange();
   }
 
   @PreDestroy
