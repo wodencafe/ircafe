@@ -14,6 +14,11 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 /**
@@ -74,6 +79,188 @@ public final class ServerTreeTargetLifecycleCoordinator {
     void expandPath(DefaultMutableTreeNode parentNode);
 
     void reloadRoot();
+  }
+
+  public static Context context(
+      Supplier<Boolean> applicationRootVisible,
+      Consumer<Boolean> setApplicationRootVisible,
+      Function<TargetRef, String> applicationLeafLabel,
+      BiConsumer<TargetRef, String> addApplicationLeaf,
+      Runnable nodeStructureChangedForApplicationRoot,
+      Supplier<Boolean> dccTransfersNodesVisible,
+      Consumer<Boolean> setDccTransfersNodesVisible,
+      Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility,
+      Function<String, ServerNodes> addServerRoot,
+      Function<TargetRef, RuntimeConfigStore.ServerTreeBuiltInLayoutNode> builtInLayoutNodeKindForRef,
+      Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayout,
+      Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> rootSiblingOrder,
+      Function<ServerNodes, DefaultMutableTreeNode> ensureChannelListNode,
+      BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeBuiltInLayout> applyBuiltInLayoutToTree,
+      BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder> applyRootSiblingOrderToTree,
+      Consumer<String> persistBuiltInLayoutFromTree,
+      Predicate<TargetRef> isPrivateMessageTarget,
+      Supplier<Boolean> shouldPersistPrivateMessageList,
+      BiConsumer<String, String> rememberPrivateMessageTarget,
+      Consumer<TargetRef> ensureChannelKnownInConfig,
+      Consumer<String> sortChannelsUnderChannelList,
+      Consumer<String> emitManagedChannelsChanged,
+      Function<String, String> normalizeServerId,
+      Consumer<DefaultMutableTreeNode> expandPath,
+      Runnable reloadRoot) {
+    Objects.requireNonNull(applicationRootVisible, "applicationRootVisible");
+    Objects.requireNonNull(setApplicationRootVisible, "setApplicationRootVisible");
+    Objects.requireNonNull(applicationLeafLabel, "applicationLeafLabel");
+    Objects.requireNonNull(addApplicationLeaf, "addApplicationLeaf");
+    Objects.requireNonNull(nodeStructureChangedForApplicationRoot, "nodeStructureChangedForApplicationRoot");
+    Objects.requireNonNull(dccTransfersNodesVisible, "dccTransfersNodesVisible");
+    Objects.requireNonNull(setDccTransfersNodesVisible, "setDccTransfersNodesVisible");
+    Objects.requireNonNull(builtInNodesVisibility, "builtInNodesVisibility");
+    Objects.requireNonNull(addServerRoot, "addServerRoot");
+    Objects.requireNonNull(builtInLayoutNodeKindForRef, "builtInLayoutNodeKindForRef");
+    Objects.requireNonNull(builtInLayout, "builtInLayout");
+    Objects.requireNonNull(rootSiblingOrder, "rootSiblingOrder");
+    Objects.requireNonNull(ensureChannelListNode, "ensureChannelListNode");
+    Objects.requireNonNull(applyBuiltInLayoutToTree, "applyBuiltInLayoutToTree");
+    Objects.requireNonNull(applyRootSiblingOrderToTree, "applyRootSiblingOrderToTree");
+    Objects.requireNonNull(persistBuiltInLayoutFromTree, "persistBuiltInLayoutFromTree");
+    Objects.requireNonNull(isPrivateMessageTarget, "isPrivateMessageTarget");
+    Objects.requireNonNull(shouldPersistPrivateMessageList, "shouldPersistPrivateMessageList");
+    Objects.requireNonNull(rememberPrivateMessageTarget, "rememberPrivateMessageTarget");
+    Objects.requireNonNull(ensureChannelKnownInConfig, "ensureChannelKnownInConfig");
+    Objects.requireNonNull(sortChannelsUnderChannelList, "sortChannelsUnderChannelList");
+    Objects.requireNonNull(emitManagedChannelsChanged, "emitManagedChannelsChanged");
+    Objects.requireNonNull(normalizeServerId, "normalizeServerId");
+    Objects.requireNonNull(expandPath, "expandPath");
+    Objects.requireNonNull(reloadRoot, "reloadRoot");
+    return new Context() {
+      @Override
+      public boolean applicationRootVisible() {
+        return applicationRootVisible.get();
+      }
+
+      @Override
+      public void setApplicationRootVisible(boolean visible) {
+        setApplicationRootVisible.accept(visible);
+      }
+
+      @Override
+      public String applicationLeafLabel(TargetRef ref) {
+        return applicationLeafLabel.apply(ref);
+      }
+
+      @Override
+      public void addApplicationLeaf(TargetRef ref, String label) {
+        addApplicationLeaf.accept(ref, label);
+      }
+
+      @Override
+      public void nodeStructureChangedForApplicationRoot() {
+        nodeStructureChangedForApplicationRoot.run();
+      }
+
+      @Override
+      public boolean dccTransfersNodesVisible() {
+        return dccTransfersNodesVisible.get();
+      }
+
+      @Override
+      public void setDccTransfersNodesVisible(boolean visible) {
+        setDccTransfersNodesVisible.accept(visible);
+      }
+
+      @Override
+      public ServerBuiltInNodesVisibility builtInNodesVisibility(String serverId) {
+        return builtInNodesVisibility.apply(serverId);
+      }
+
+      @Override
+      public ServerNodes addServerRoot(String serverId) {
+        return addServerRoot.apply(serverId);
+      }
+
+      @Override
+      public RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(
+          TargetRef ref) {
+        return builtInLayoutNodeKindForRef.apply(ref);
+      }
+
+      @Override
+      public RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout(String serverId) {
+        return builtInLayout.apply(serverId);
+      }
+
+      @Override
+      public RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
+        return rootSiblingOrder.apply(serverId);
+      }
+
+      @Override
+      public DefaultMutableTreeNode ensureChannelListNode(ServerNodes serverNodes) {
+        return ensureChannelListNode.apply(serverNodes);
+      }
+
+      @Override
+      public void applyBuiltInLayoutToTree(
+          ServerNodes serverNodes, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
+        applyBuiltInLayoutToTree.accept(serverNodes, layout);
+      }
+
+      @Override
+      public void applyRootSiblingOrderToTree(
+          ServerNodes serverNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
+        applyRootSiblingOrderToTree.accept(serverNodes, order);
+      }
+
+      @Override
+      public void persistBuiltInLayoutFromTree(String serverId) {
+        persistBuiltInLayoutFromTree.accept(serverId);
+      }
+
+      @Override
+      public boolean isPrivateMessageTarget(TargetRef ref) {
+        return isPrivateMessageTarget.test(ref);
+      }
+
+      @Override
+      public boolean shouldPersistPrivateMessageList() {
+        return shouldPersistPrivateMessageList.get();
+      }
+
+      @Override
+      public void rememberPrivateMessageTarget(String serverId, String target) {
+        rememberPrivateMessageTarget.accept(serverId, target);
+      }
+
+      @Override
+      public void ensureChannelKnownInConfig(TargetRef ref) {
+        ensureChannelKnownInConfig.accept(ref);
+      }
+
+      @Override
+      public void sortChannelsUnderChannelList(String serverId) {
+        sortChannelsUnderChannelList.accept(serverId);
+      }
+
+      @Override
+      public void emitManagedChannelsChanged(String serverId) {
+        emitManagedChannelsChanged.accept(serverId);
+      }
+
+      @Override
+      public String normalizeServerId(String serverId) {
+        return normalizeServerId.apply(serverId);
+      }
+
+      @Override
+      public void expandPath(DefaultMutableTreeNode parentNode) {
+        expandPath.accept(parentNode);
+      }
+
+      @Override
+      public void reloadRoot() {
+        reloadRoot.run();
+      }
+    };
   }
 
   private final Map<String, ServerNodes> servers;

@@ -8,7 +8,6 @@ import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions;
 import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerRootLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLifecycleFacade;
@@ -53,7 +52,7 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
             Objects.requireNonNull(in.logViewerLabel(), "logViewerLabel"),
             Objects.requireNonNull(in.monitorGroupLabel(), "monitorGroupLabel"),
             Objects.requireNonNull(in.interceptorsGroupLabel(), "interceptorsGroupLabel"),
-            new ServerTreeServerRootLifecycleContextAdapter(
+            ServerTreeServerRootLifecycleManager.context(
                 Objects.requireNonNull(in.normalizeServerId(), "normalizeServerId"),
                 Objects.requireNonNull(in.servers(), "servers"),
                 Objects.requireNonNull(in.runtimeState(), "runtimeState")::markServerKnown,
@@ -163,8 +162,8 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
       Map<TargetRef, DefaultMutableTreeNode> leaves,
       Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayout,
       Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> rootSiblingOrder,
-      ServerTreeServerRootLifecycleContextAdapter.BiLayoutConsumer applyBuiltInLayoutToTree,
-      ServerTreeServerRootLifecycleContextAdapter.BiRootOrderConsumer applyRootSiblingOrderToTree,
+      ServerTreeServerRootLifecycleManager.BiLayoutConsumer applyBuiltInLayoutToTree,
+      ServerTreeServerRootLifecycleManager.BiRootOrderConsumer applyRootSiblingOrderToTree,
       DefaultTreeModel model,
       DefaultMutableTreeNode root,
       JTree tree,

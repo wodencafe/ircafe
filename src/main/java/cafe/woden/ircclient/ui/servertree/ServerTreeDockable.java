@@ -29,7 +29,6 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTargetLifecycleC
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTreeInteractionBindingsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaboratorsFactory;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelInteractionApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
@@ -934,7 +933,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeCellRenderer(
             IRC_ROOT_LABEL,
             APPLICATION_ROOT_LABEL,
-            new ServerTreeCellRendererContextAdapter(
+            ServerTreeCellRenderer.context(
                 () -> serverTreeNotificationBadgesEnabled,
                 () -> unreadBadgeScalePercent,
                 () -> typingIndicatorStyle,

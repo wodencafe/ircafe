@@ -3,7 +3,6 @@ package cafe.woden.ircclient.ui.servertree.composition;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetLifecycleCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
@@ -41,7 +40,7 @@ public final class ServerTreeTargetLifecycleCoordinatorFactory {
         Objects.requireNonNull(in.targetSnapshotProvider(), "targetSnapshotProvider"),
         Objects.requireNonNull(in.targetRemovalStateCoordinator(), "targetRemovalStateCoordinator"),
         Objects.requireNonNull(in.targetNodeRemovalMutator(), "targetNodeRemovalMutator"),
-        new ServerTreeTargetLifecycleContextAdapter(
+        ServerTreeTargetLifecycleCoordinator.context(
             Objects.requireNonNull(in.applicationRootVisible(), "applicationRootVisible"),
             Objects.requireNonNull(in.setApplicationRootVisible(), "setApplicationRootVisible"),
             Objects.requireNonNull(in.applicationLeafLabel(), "applicationLeafLabel"),
