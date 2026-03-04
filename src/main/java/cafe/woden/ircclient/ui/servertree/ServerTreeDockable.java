@@ -63,6 +63,7 @@ import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeNodeVisibilityMutat
 import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeTargetNodeRemovalMutator;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistencePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeStartupSelectionRestorer;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
@@ -361,6 +362,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeBouncerDetachPolicy bouncerDetachPolicy;
   private final ServerTreeNodeBadgeUpdater nodeBadgeUpdater;
   private final ServerTreeSelectionFallbackPolicy selectionFallbackPolicy;
+  private final ServerTreeSelectionPersistencePolicy selectionPersistencePolicy;
   private final ServerTreeStartupSelectionRestorer startupSelectionRestorer;
   private final ServerTreeUiLeafVisibilitySynchronizer uiLeafVisibilitySynchronizer;
   private final ServerTreeNodeVisibilityMutator nodeVisibilityMutator;
@@ -725,6 +727,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 leaves,
                 this::selectTarget,
                 tree));
+    this.selectionPersistencePolicy =
+        new ServerTreeSelectionPersistencePolicy(
+            ServerTreeSelectionPersistencePolicy.context(
+                () -> lastBroadcastSelectionRef,
+                this::selectedTargetRef,
+                () -> (DefaultMutableTreeNode) tree.getLastSelectedPathComponent(),
+                nodeClassifier::owningServerIdForNode,
+                nodeClassifier::isMonitorGroupNode,
+                nodeClassifier::isInterceptorsGroupNode));
     this.startupSelectionRestorer =
         new ServerTreeStartupSelectionRestorer(
             ServerTreeStartupSelectionRestorer.readRememberedSelection(runtimeConfig),
@@ -1414,25 +1425,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
    * target refs.
    */
   public TargetRef selectedTargetForPersistence() {
-    TargetRef emitted = lastBroadcastSelectionRef;
-    if (emitted != null) return emitted;
-
-    TargetRef selected = selectedTargetRef();
-    if (selected != null) return selected;
-
-    Object selectedNode = tree.getLastSelectedPathComponent();
-    if (!(selectedNode instanceof DefaultMutableTreeNode node)) return null;
-
-    String serverId = nodeClassifier.owningServerIdForNode(node);
-    if (serverId.isBlank()) return null;
-
-    if (nodeClassifier.isMonitorGroupNode(node)) {
-      return TargetRef.monitorGroup(serverId);
-    }
-    if (nodeClassifier.isInterceptorsGroupNode(node)) {
-      return TargetRef.interceptorsGroup(serverId);
-    }
-    return null;
+    return selectionPersistencePolicy.selectedTargetForPersistence();
   }
 
   public Flowable<TargetRef> selectionStream() {
