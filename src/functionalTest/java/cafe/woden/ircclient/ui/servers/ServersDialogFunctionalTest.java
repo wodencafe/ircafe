@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.servers;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -18,6 +19,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JList;
 import javax.swing.JTextField;
@@ -82,6 +85,41 @@ class ServersDialogFunctionalTest {
     }
   }
 
+  @Test
+  void addQuasselServerWorkflowPersistsBackendAndCoreCredentials() throws Exception {
+    Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
+
+    IrcProperties initial = new IrcProperties(null, List.of());
+    RuntimeConfigStore runtimeConfig =
+        new RuntimeConfigStore(tempDir.resolve("ircafe.yml").toString(), initial);
+    ServerRegistry registry = new ServerRegistry(initial, runtimeConfig);
+
+    ServersDialog dialog = onEdtCall(() -> new ServersDialog(null, registry, runtimeConfig));
+    JButton addBtn = readField(dialog, "addBtn", JButton.class);
+    try {
+      Automation addFlow =
+          automate(
+              "Add Server",
+              window ->
+                  fillQuasselServerEditorAndSave(
+                      window, "quassel-core", "127.0.0.1", "core-admin", "core-secret"));
+      onEdt(addBtn::doClick);
+      joinFlow(addFlow);
+
+      waitFor(() -> registry.containsId("quassel-core"), Duration.ofSeconds(4));
+
+      IrcProperties.Server saved = registry.require("quassel-core");
+      assertEquals(IrcProperties.Server.Backend.QUASSEL_CORE, saved.backend());
+      assertEquals("127.0.0.1", saved.host());
+      assertEquals(4242, saved.port());
+      assertEquals("core-admin", saved.login());
+      assertEquals("core-secret", saved.serverPassword());
+    } finally {
+      onEdt(dialog::dispose);
+      flushEdt();
+    }
+  }
+
   private static Automation automate(String dialogTitle, WindowAction action) {
     AtomicReference<Throwable> error = new AtomicReference<>();
     Thread t =
@@ -122,6 +160,29 @@ class ServersDialogFunctionalTest {
     idField.setText(id);
     hostField.setText(host);
     nickField.setText(nick);
+    saveBtn.doClick();
+  }
+
+  private static void fillQuasselServerEditorAndSave(
+      Window window, String id, String host, String login, String corePassword) throws Exception {
+    JTextField idField = readField(window, "idField", JTextField.class);
+    JTextField hostField = readField(window, "hostField", JTextField.class);
+    JTextField loginField = readField(window, "loginField", JTextField.class);
+    JTextField serverPassField = readField(window, "serverPassField", JTextField.class);
+    JTextField portField = readField(window, "portField", JTextField.class);
+    JCheckBox tlsBox = readField(window, "tlsBox", JCheckBox.class);
+    JComboBox<?> backendCombo = readField(window, "backendCombo", JComboBox.class);
+    JButton saveBtn = readField(window, "saveBtn", JButton.class);
+
+    idField.setText(id);
+    hostField.setText(host);
+    backendCombo.setSelectedItem(IrcProperties.Server.Backend.QUASSEL_CORE);
+    if (tlsBox.isSelected()) {
+      tlsBox.doClick();
+    }
+    loginField.setText(login);
+    serverPassField.setText(corePassword);
+    assertEquals("4242", portField.getText(), "quassel plain transport should default to 4242");
     saveBtn.doClick();
   }
 

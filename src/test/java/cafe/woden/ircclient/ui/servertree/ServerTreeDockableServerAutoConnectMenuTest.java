@@ -16,12 +16,14 @@ import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.disposables.Disposable;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
@@ -109,6 +111,94 @@ class ServerTreeDockableServerAutoConnectMenuTest {
         });
   }
 
+  @Test
+  void quasselServerPopupShowsManageNetworksAction() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerCatalog serverCatalog = mock(ServerCatalog.class);
+            RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+            when(serverCatalog.entries()).thenReturn(List.of());
+            when(serverCatalog.updates()).thenReturn(Flowable.never());
+            when(serverCatalog.findEntry("quassel"))
+                .thenReturn(
+                    Optional.of(
+                        ServerEntry.persistent(
+                            server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE))));
+
+            ServerTreeDockable dockable = newDockable(serverCatalog, runtimeConfig);
+            invokeAddServerRoot(dockable, "quassel");
+
+            JPopupMenu menu = buildPopupMenuForServerRoot(dockable, "quassel");
+            assertNotNull(menu);
+            assertNotNull(findMenuItem(menu, "Manage Quassel Networks..."));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void regularIrcServerPopupDoesNotShowManageQuasselNetworksAction() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerCatalog serverCatalog = mock(ServerCatalog.class);
+            RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+            when(serverCatalog.entries()).thenReturn(List.of());
+            when(serverCatalog.updates()).thenReturn(Flowable.never());
+            when(serverCatalog.findEntry("libera"))
+                .thenReturn(Optional.of(ServerEntry.persistent(server("libera"))));
+
+            ServerTreeDockable dockable = newDockable(serverCatalog, runtimeConfig);
+            invokeAddServerRoot(dockable, "libera");
+
+            JPopupMenu menu = buildPopupMenuForServerRoot(dockable, "libera");
+            assertNotNull(menu);
+            assertNull(findMenuItem(menu, "Manage Quassel Networks..."));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void quasselManageNetworksMenuItemEmitsRequest() throws Exception {
+    onEdt(
+        () -> {
+          Disposable requestSub = null;
+          try {
+            ServerCatalog serverCatalog = mock(ServerCatalog.class);
+            RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+            when(serverCatalog.entries()).thenReturn(List.of());
+            when(serverCatalog.updates()).thenReturn(Flowable.never());
+            when(serverCatalog.findEntry("quassel"))
+                .thenReturn(
+                    Optional.of(
+                        ServerEntry.persistent(
+                            server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE))));
+
+            ServerTreeDockable dockable = newDockable(serverCatalog, runtimeConfig);
+            invokeAddServerRoot(dockable, "quassel");
+
+            AtomicReference<String> requestedServer = new AtomicReference<>();
+            requestSub = dockable.quasselNetworkManagerRequests().subscribe(requestedServer::set);
+
+            JPopupMenu menu = buildPopupMenuForServerRoot(dockable, "quassel");
+            assertNotNull(menu);
+            JMenuItem manage = findMenuItem(menu, "Manage Quassel Networks...");
+            assertNotNull(manage);
+            manage.doClick();
+
+            assertTrue("quassel".equals(requestedServer.get()));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          } finally {
+            if (requestSub != null) requestSub.dispose();
+          }
+        });
+  }
+
   private static ServerTreeDockable newDockable(
       ServerCatalog serverCatalog, RuntimeConfigStore runtimeConfig) {
     return new ServerTreeDockable(
@@ -172,6 +262,10 @@ class ServerTreeDockableServerAutoConnectMenuTest {
   }
 
   private static IrcProperties.Server server(String id) {
+    return server(id, IrcProperties.Server.Backend.IRC);
+  }
+
+  private static IrcProperties.Server server(String id, IrcProperties.Server.Backend backend) {
     return new IrcProperties.Server(
         id,
         "irc.example.net",
@@ -182,9 +276,11 @@ class ServerTreeDockableServerAutoConnectMenuTest {
         "ircafe",
         "IRCafe User",
         null,
+        null,
         List.of(),
         List.of(),
-        null);
+        null,
+        backend);
   }
 
   private static void onEdt(Runnable r) throws InvocationTargetException, InterruptedException {

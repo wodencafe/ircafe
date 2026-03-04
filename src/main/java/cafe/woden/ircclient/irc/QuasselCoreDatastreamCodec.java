@@ -294,6 +294,9 @@ public class QuasselCoreDatastreamCodec {
   }
 
   private static String decodeSlotName(Object raw) throws IOException {
+    if (raw == null) {
+      return "";
+    }
     if (raw instanceof byte[] bytes) {
       return new String(bytes, StandardCharsets.UTF_8);
     }

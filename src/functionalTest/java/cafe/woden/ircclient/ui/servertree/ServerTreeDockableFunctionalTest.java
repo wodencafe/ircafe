@@ -2,18 +2,30 @@ package cafe.woden.ircclient.ui.servertree;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
+import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.event.ActionEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
@@ -175,10 +187,87 @@ class ServerTreeDockableFunctionalTest {
     }
   }
 
+  @Test
+  void quasselServerContextMenuShowsManageActionAndPublishesRequest() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    when(serverCatalog.entries()).thenReturn(List.of());
+    when(serverCatalog.updates()).thenReturn(Flowable.never());
+    when(serverCatalog.findEntry("quassel"))
+        .thenReturn(
+            Optional.of(
+                ServerEntry.persistent(
+                    server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE))));
+
+    ServerTreeDockable dockable = newDockable(serverCatalog, runtimeConfig);
+    AtomicReference<String> requestedServer = new AtomicReference<>();
+    Disposable requestSub =
+        dockable.quasselNetworkManagerRequests().subscribe(requestedServer::set);
+
+    try {
+      onEdt(() -> invokeAddServerRoot(dockable, "quassel"));
+      flushEdt();
+
+      JPopupMenu menu = onEdtCall(() -> popupForServerRoot(dockable, "quassel"));
+      JMenuItem manage = findMenuItem(menu, "Manage Quassel Networks...");
+      assertNotNull(manage, "quassel backend server should expose manager action");
+
+      onEdt(manage::doClick);
+      flushEdt();
+      waitFor(() -> "quassel".equals(requestedServer.get()), Duration.ofSeconds(2));
+    } finally {
+      requestSub.dispose();
+      onEdt(dockable::shutdown);
+      flushEdt();
+    }
+  }
+
+  @Test
+  void regularIrcServerContextMenuOmitsManageQuasselAction() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    when(serverCatalog.entries()).thenReturn(List.of());
+    when(serverCatalog.updates()).thenReturn(Flowable.never());
+    when(serverCatalog.findEntry("libera"))
+        .thenReturn(
+            Optional.of(
+                ServerEntry.persistent(server("libera", IrcProperties.Server.Backend.IRC))));
+
+    ServerTreeDockable dockable = newDockable(serverCatalog, runtimeConfig);
+    try {
+      onEdt(() -> invokeAddServerRoot(dockable, "libera"));
+      flushEdt();
+
+      JPopupMenu menu = onEdtCall(() -> popupForServerRoot(dockable, "libera"));
+      assertNull(
+          findMenuItem(menu, "Manage Quassel Networks..."),
+          "regular IRC backend server should not expose quassel manager action");
+    } finally {
+      onEdt(dockable::shutdown);
+      flushEdt();
+    }
+  }
+
   private static ServerTreeDockable newDockable() {
     return new ServerTreeDockable(
         null,
         null,
+        null,
+        null,
+        null,
+        new ConnectButton(),
+        new DisconnectButton(),
+        null,
+        null,
+        null,
+        null);
+  }
+
+  private static ServerTreeDockable newDockable(
+      ServerCatalog serverCatalog, RuntimeConfigStore runtimeConfig) {
+    return new ServerTreeDockable(
+        serverCatalog,
+        runtimeConfig,
         null,
         null,
         null,
@@ -254,6 +343,54 @@ class ServerTreeDockableFunctionalTest {
         contextMenuBuilder.getClass().getDeclaredMethod("build", TreePath.class);
     buildPopupMenu.setAccessible(true);
     return (JPopupMenu) buildPopupMenu.invoke(contextMenuBuilder, new TreePath(node.getPath()));
+  }
+
+  @SuppressWarnings("unchecked")
+  private static JPopupMenu popupForServerRoot(ServerTreeDockable dockable, String serverId)
+      throws Exception {
+    Field serversField = ServerTreeDockable.class.getDeclaredField("servers");
+    serversField.setAccessible(true);
+    Map<String, ?> servers = (Map<String, ?>) serversField.get(dockable);
+    Object serverNodes = servers.get(serverId);
+    if (serverNodes == null) return null;
+
+    Field serverNodeField = serverNodes.getClass().getDeclaredField("serverNode");
+    serverNodeField.setAccessible(true);
+    DefaultMutableTreeNode serverNode = (DefaultMutableTreeNode) serverNodeField.get(serverNodes);
+
+    Field contextMenuBuilderField = ServerTreeDockable.class.getDeclaredField("contextMenuBuilder");
+    contextMenuBuilderField.setAccessible(true);
+    Object contextMenuBuilder = contextMenuBuilderField.get(dockable);
+    Method buildPopupMenu =
+        contextMenuBuilder.getClass().getDeclaredMethod("build", TreePath.class);
+    buildPopupMenu.setAccessible(true);
+    return (JPopupMenu)
+        buildPopupMenu.invoke(contextMenuBuilder, new TreePath(serverNode.getPath()));
+  }
+
+  private static void invokeAddServerRoot(ServerTreeDockable dockable, String serverId)
+      throws Exception {
+    Method method = ServerTreeDockable.class.getDeclaredMethod("addServerRoot", String.class);
+    method.setAccessible(true);
+    method.invoke(dockable, serverId);
+  }
+
+  private static IrcProperties.Server server(String id, IrcProperties.Server.Backend backend) {
+    return new IrcProperties.Server(
+        id,
+        "irc.example.net",
+        6697,
+        true,
+        "",
+        "ircafe",
+        "ircafe",
+        "IRCafe User",
+        null,
+        null,
+        List.of(),
+        List.of(),
+        null,
+        backend);
   }
 
   private static JMenuItem findMenuItem(JPopupMenu menu, String text) {

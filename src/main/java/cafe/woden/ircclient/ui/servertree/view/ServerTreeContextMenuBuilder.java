@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.servertree.view;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
@@ -40,6 +41,8 @@ public final class ServerTreeContextMenuBuilder {
     void requestDisconnectServer(String serverId);
 
     void openServerInfoDialog(String serverId);
+
+    void openQuasselNetworkManager(String serverId);
 
     boolean interceptorStoreAvailable();
 
@@ -196,6 +199,20 @@ public final class ServerTreeContextMenuBuilder {
     networkInfo.setDisabledIcon(SvgIcons.actionDisabled("info", 16));
     networkInfo.addActionListener(ev -> context.openServerInfoDialog(serverId));
     menu.add(networkInfo);
+
+    boolean quasselCoreServer =
+        serverEntry
+            .map(ServerEntry::server)
+            .map(IrcProperties.Server::backend)
+            .map(backend -> backend == IrcProperties.Server.Backend.QUASSEL_CORE)
+            .orElse(false);
+    if (quasselCoreServer) {
+      JMenuItem manageQuasselNetworks = new JMenuItem("Manage Quassel Networks...");
+      manageQuasselNetworks.setIcon(SvgIcons.action("edit", 16));
+      manageQuasselNetworks.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
+      manageQuasselNetworks.addActionListener(ev -> context.openQuasselNetworkManager(serverId));
+      menu.add(manageQuasselNetworks);
+    }
 
     boolean ephemeral = serverEntry.map(ServerEntry::ephemeral).orElse(false);
     if (ephemeral) {

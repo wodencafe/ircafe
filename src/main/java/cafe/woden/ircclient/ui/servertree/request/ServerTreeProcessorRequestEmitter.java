@@ -18,6 +18,7 @@ public final class ServerTreeProcessorRequestEmitter implements ServerTreeReques
   private final FlowableProcessor<String> managedChannelsChangedByServer;
   private final FlowableProcessor<TargetRef> clearLogRequests;
   private final FlowableProcessor<TargetRef> openPinnedChatRequests;
+  private final FlowableProcessor<String> openQuasselNetworkManagerRequests;
   private final FlowableProcessor<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests;
 
   public ServerTreeProcessorRequestEmitter(
@@ -31,6 +32,7 @@ public final class ServerTreeProcessorRequestEmitter implements ServerTreeReques
       FlowableProcessor<String> managedChannelsChangedByServer,
       FlowableProcessor<TargetRef> clearLogRequests,
       FlowableProcessor<TargetRef> openPinnedChatRequests,
+      FlowableProcessor<String> openQuasselNetworkManagerRequests,
       FlowableProcessor<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests) {
     this.connectServerRequests =
         Objects.requireNonNull(connectServerRequests, "connectServerRequests");
@@ -49,6 +51,9 @@ public final class ServerTreeProcessorRequestEmitter implements ServerTreeReques
     this.clearLogRequests = Objects.requireNonNull(clearLogRequests, "clearLogRequests");
     this.openPinnedChatRequests =
         Objects.requireNonNull(openPinnedChatRequests, "openPinnedChatRequests");
+    this.openQuasselNetworkManagerRequests =
+        Objects.requireNonNull(
+            openQuasselNetworkManagerRequests, "openQuasselNetworkManagerRequests");
     this.ircv3CapabilityToggleRequests =
         Objects.requireNonNull(ircv3CapabilityToggleRequests, "ircv3CapabilityToggleRequests");
   }
@@ -101,6 +106,11 @@ public final class ServerTreeProcessorRequestEmitter implements ServerTreeReques
   @Override
   public void emitOpenPinnedChat(TargetRef ref) {
     openPinnedChatRequests.onNext(ref);
+  }
+
+  @Override
+  public void emitOpenQuasselNetworkManager(String serverId) {
+    openQuasselNetworkManagerRequests.onNext(serverId);
   }
 
   @Override

@@ -56,6 +56,18 @@ class QuasselCoreProtocolWireTest {
   }
 
   @Test
+  void decodesRpcFrameWithNullSlotNameWithoutThrowing() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        codec.readSignalProxyMessage(new ByteArrayInputStream(rpcNullSlotFrameFixture()));
+
+    assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL, decoded.requestType());
+    assertEquals("", decoded.slotName());
+    assertEquals(List.of(), decoded.params());
+  }
+
+  @Test
   void decodesNetworkInfoSyncFromWireFixture() throws Exception {
     QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
 
@@ -174,6 +186,14 @@ class QuasselCoreProtocolWireTest {
     return frame(payload.toByteArray());
   }
 
+  private static byte[] rpcNullSlotFrameFixture() throws IOException {
+    ByteArrayOutputStream payload = new ByteArrayOutputStream();
+    writeInt32(payload, 2);
+    writeVariantInt(payload, QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL);
+    writeVariantNull(payload, 12);
+    return frame(payload.toByteArray());
+  }
+
   private static byte[] backlogRequestSyncFrameFixture() throws IOException {
     ByteArrayOutputStream payload = new ByteArrayOutputStream();
     writeInt32(payload, 9);
@@ -212,6 +232,11 @@ class QuasselCoreProtocolWireTest {
     writeInt32(out, 2);
     out.write(0);
     writeInt32(out, value);
+  }
+
+  private static void writeVariantNull(ByteArrayOutputStream out, int type) {
+    writeInt32(out, type);
+    out.write(1);
   }
 
   private static void writeVariantQByteArray(ByteArrayOutputStream out, String value)

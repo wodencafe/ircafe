@@ -152,6 +152,7 @@ public class ServerEditorDialog extends JDialog {
   private ProxyTestSnapshot lastProxyTestOk;
 
   private boolean portAuto = true;
+  private boolean updatingPortProgrammatically = false;
 
   private record ProxyTestSnapshot(
       boolean override,
@@ -322,26 +323,32 @@ public class ServerEditorDialog extends JDialog {
             + "/sleep 1000");
 
     // Auto-update default port when toggling TLS, if the user hasn't customized it.
-    tlsBox.addActionListener(e -> maybeAdjustPortForTls());
+    tlsBox.addActionListener(e -> maybeAdjustPortForBackendAndTls());
     portField
         .getDocument()
         .addDocumentListener(
             new javax.swing.event.DocumentListener() {
               @Override
               public void insertUpdate(javax.swing.event.DocumentEvent e) {
-                portAuto = false;
+                if (!updatingPortProgrammatically) {
+                  portAuto = false;
+                }
                 updateValidation();
               }
 
               @Override
               public void removeUpdate(javax.swing.event.DocumentEvent e) {
-                portAuto = false;
+                if (!updatingPortProgrammatically) {
+                  portAuto = false;
+                }
                 updateValidation();
               }
 
               @Override
               public void changedUpdate(javax.swing.event.DocumentEvent e) {
-                portAuto = false;
+                if (!updatingPortProgrammatically) {
+                  portAuto = false;
+                }
                 updateValidation();
               }
             });
@@ -351,6 +358,7 @@ public class ServerEditorDialog extends JDialog {
     nickservDelayJoinBox.addActionListener(e -> updateValidation());
     backendCombo.addActionListener(
         e -> {
+          maybeAdjustPortForBackendAndTls();
           updateBackendUi();
           updateAuthModeUi();
         });
@@ -974,15 +982,16 @@ public class ServerEditorDialog extends JDialog {
       loginLabel.setText("Core username");
       realNameLabel.setText("Core real name");
       connectionBackendHintLabel.setText(
-          "Quassel backend logs into Quassel Core here; SASL/NickServ below are ignored.");
+          "Quassel backend logs into Quassel Core here (default ports: 4242 plain, 4243 TLS)."
+              + " Core password can be blank before initial setup. SASL/NickServ below are ignored.");
       authModeCombo.setEnabled(false);
       authModeCombo.setSelectedItem(AuthMode.DISABLED);
       authDisabledHintLabel.setText(
           asHtml(
               "Quassel backend does not run direct IRC SASL/NickServ auth from IRCafe."
                   + " Configure upstream network auth inside Quassel Core."));
-      applyFieldStyle(serverPassField, "core password");
-      applyFieldStyle(loginField, "quassel core username");
+      applyFieldStyle(serverPassField, "(optional until core is configured)");
+      applyFieldStyle(loginField, "quassel-user");
       applyFieldStyle(nickField, "display nick (optional)");
       applyFieldStyle(realNameField, "display name (optional)");
     } else {
@@ -1139,11 +1148,11 @@ public class ServerEditorDialog extends JDialog {
     setError(portField, portBad);
     ok &= !portBad;
 
-    boolean corePasswordBad = quasselBackend && trim(serverPassField.getText()).isEmpty();
+    boolean corePasswordBad = false;
     setError(serverPassField, corePasswordBad);
     ok &= !corePasswordBad;
 
-    boolean loginBad = quasselBackend && trim(loginField.getText()).isEmpty();
+    boolean loginBad = false;
     setError(loginField, loginBad);
     ok &= !loginBad;
 
@@ -1315,9 +1324,20 @@ public class ServerEditorDialog extends JDialog {
     }
   }
 
-  private void maybeAdjustPortForTls() {
+  private void maybeAdjustPortForBackendAndTls() {
     if (!portAuto) return;
-    portField.setText(tlsBox.isSelected() ? "6697" : "6667");
+    String nextPort;
+    if (isQuasselBackendSelected()) {
+      nextPort = tlsBox.isSelected() ? "4243" : "4242";
+    } else {
+      nextPort = tlsBox.isSelected() ? "6697" : "6667";
+    }
+    updatingPortProgrammatically = true;
+    try {
+      portField.setText(nextPort);
+    } finally {
+      updatingPortProgrammatically = false;
+    }
   }
 
   private void onSave() {
@@ -1353,8 +1373,8 @@ public class ServerEditorDialog extends JDialog {
 
     boolean tls = tlsBox.isSelected();
     String serverPassword = Objects.toString(serverPassField.getText(), "");
-    if (quasselBackend && serverPassword.isBlank()) {
-      throw new IllegalArgumentException("Quassel Core password is required");
+    if (containsCrlf(serverPassword)) {
+      throw new IllegalArgumentException("Server/Core password must not contain newlines");
     }
 
     String nick = trim(nickField.getText());
@@ -1363,9 +1383,6 @@ public class ServerEditorDialog extends JDialog {
     }
 
     String login = trim(loginField.getText());
-    if (quasselBackend && login.isEmpty()) {
-      throw new IllegalArgumentException("Quassel Core username is required");
-    }
     if (login.isEmpty()) login = nick;
     if (login.isEmpty()) login = "quassel-user";
 
@@ -1566,5 +1583,10 @@ public class ServerEditorDialog extends JDialog {
 
   private static String trim(String s) {
     return s == null ? "" : s.trim();
+  }
+
+  private static boolean containsCrlf(String s) {
+    String v = Objects.toString(s, "");
+    return v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0;
   }
 }

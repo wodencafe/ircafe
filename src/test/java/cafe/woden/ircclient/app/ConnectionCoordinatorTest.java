@@ -463,10 +463,16 @@ class ConnectionCoordinatorTest {
         null);
 
     TargetRef status = new TargetRef("quassel", "status");
+    verify(ui, atLeastOnce()).ensureTargetExists(status);
     verify(ui, atLeastOnce()).setServerDesiredOnline("quassel", false);
     verify(ui)
         .enqueueStatusNotice(
-            argThat(text -> text != null && text.contains("setup required")), eq(status));
+            argThat(
+                text ->
+                    text != null
+                        && text.contains("setup required")
+                        && text.contains("/quasselsetup quassel")),
+            eq(status));
     verify(ui)
         .appendStatusAt(
             eq(status),
@@ -509,6 +515,169 @@ class ConnectionCoordinatorTest {
             any(Instant.class),
             eq("(conn)"),
             eq("Quassel protocol negotiated; authenticating core session…"));
+  }
+
+  @Test
+  void connectionFeaturesSyncReadyAppendsProgressStatusToStatusAndActiveTarget() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
+    when(serverCatalog.containsId("quassel")).thenReturn(true);
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    TargetRef active = new TargetRef("quassel", "#ircafe");
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(
+            Instant.now(), "quassel-phase=sync-ready;detail=backlog complete"),
+        active);
+
+    verify(ui)
+        .appendStatusAt(
+            eq(new TargetRef("quassel", "status")),
+            any(Instant.class),
+            eq("(conn)"),
+            eq("Quassel sync complete; connection ready."));
+    verify(ui)
+        .appendStatusAt(
+            eq(active),
+            any(Instant.class),
+            eq("(conn)"),
+            eq("Quassel sync complete; connection ready."));
+  }
+
+  @Test
+  void connectionFeaturesPhaseProgressionAppendsAllUserVisibleStatusMessages() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
+    when(serverCatalog.containsId("quassel")).thenReturn(true);
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(
+            Instant.now(), "quassel-phase=transport-connected;detail=tcp"),
+        null);
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(
+            Instant.now(), "quassel-phase=protocol-negotiated;detail=probe=datastream"),
+        null);
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(
+            Instant.now(), "quassel-phase=authenticating;detail=login"),
+        null);
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(
+            Instant.now(), "quassel-phase=session-established;detail=session"),
+        null);
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(
+            Instant.now(), "quassel-phase=sync-ready;detail=complete"),
+        null);
+
+    TargetRef status = new TargetRef("quassel", "status");
+    verify(ui)
+        .appendStatusAt(
+            eq(status),
+            any(Instant.class),
+            eq("(conn)"),
+            eq("Quassel transport connected; negotiating protocol…"));
+    verify(ui)
+        .appendStatusAt(
+            eq(status),
+            any(Instant.class),
+            eq("(conn)"),
+            eq("Quassel protocol negotiated; authenticating core session…"));
+    verify(ui)
+        .appendStatusAt(
+            eq(status), any(Instant.class), eq("(conn)"), eq("Authenticating with Quassel Core…"));
+    verify(ui)
+        .appendStatusAt(
+            eq(status),
+            any(Instant.class),
+            eq("(conn)"),
+            eq("Quassel session established; waiting for sync…"));
+    verify(ui)
+        .appendStatusAt(
+            eq(status),
+            any(Instant.class),
+            eq("(conn)"),
+            eq("Quassel sync complete; connection ready."));
+  }
+
+  @Test
+  void reconnectingAndDisconnectedEventsAppendClearStatusMessages() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
+    when(serverCatalog.containsId("quassel")).thenReturn(true);
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    TargetRef active = new TargetRef("quassel", "#ircafe");
+    coordinator.handleConnectivityEvent(
+        "quassel", new IrcEvent.Reconnecting(Instant.now(), 2, 5_000L, "Ping timeout"), active);
+    coordinator.handleConnectivityEvent(
+        "quassel", new IrcEvent.Disconnected(Instant.now(), "Ping timeout"), active);
+
+    verify(ui)
+        .appendStatus(
+            eq(new TargetRef("quassel", "status")),
+            eq("(conn)"),
+            eq("Reconnecting in 5s (attempt 2) — Ping timeout"));
+    verify(ui)
+        .appendStatus(
+            eq(active), eq("(conn)"), eq("Reconnecting in 5s (attempt 2) — Ping timeout"));
+    verify(ui)
+        .appendStatus(
+            eq(new TargetRef("quassel", "status")), eq("(conn)"), eq("Disconnected: Ping timeout"));
+    verify(ui).appendStatus(eq(active), eq("(conn)"), eq("Disconnected: Ping timeout"));
   }
 
   @Test

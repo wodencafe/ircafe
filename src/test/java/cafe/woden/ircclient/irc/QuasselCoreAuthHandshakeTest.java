@@ -217,6 +217,71 @@ class QuasselCoreAuthHandshakeTest {
     assertEquals("sasl-secret", QuasselCoreAuthHandshake.configuredAuthPassword(withSasl));
   }
 
+  @Test
+  void performCoreSetupSendsCoreSetupDataAndAcceptsAck() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    QuasselCoreAuthHandshake handshake = new QuasselCoreAuthHandshake(codec);
+
+    byte[] inbound =
+        encodeFrames(
+            codec,
+            message(
+                "ClientInitAck",
+                field("CoreConfigured", false),
+                field(
+                    "BackendInfo",
+                    List.of(Map.of("BackendId", "SQLite"), Map.of("BackendId", "PostgreSQL"))),
+                field("AuthenticatorInfo", List.of(Map.of("AuthenticatorId", "Database")))),
+            message("CoreSetupAck"));
+    ScriptedSocket socket = new ScriptedSocket(inbound);
+
+    handshake.performCoreSetup(
+        socket,
+        new QuasselCoreAuthHandshake.CoreSetupRequest(
+            "admin",
+            "secret",
+            "SQLite",
+            "Database",
+            Map.of("DatabaseName", "quassel-storage"),
+            Map.of()));
+
+    ByteArrayInputStream outbound = new ByteArrayInputStream(socket.writtenBytes());
+    QuasselCoreDatastreamCodec.HandshakeMessage first = codec.readHandshakeMessage(outbound);
+    QuasselCoreDatastreamCodec.HandshakeMessage second = codec.readHandshakeMessage(outbound);
+
+    assertEquals("ClientInit", first.messageType());
+    assertEquals("CoreSetupData", second.messageType());
+    @SuppressWarnings("unchecked")
+    Map<String, Object> setupData = (Map<String, Object>) second.fields().get("SetupData");
+    assertEquals("admin", setupData.get("AdminUser"));
+    assertEquals("secret", setupData.get("AdminPasswd"));
+    assertEquals("SQLite", setupData.get("Backend"));
+    assertEquals("Database", setupData.get("Authenticator"));
+  }
+
+  @Test
+  void performCoreSetupFailsWhenCoreRejectsSetup() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    QuasselCoreAuthHandshake handshake = new QuasselCoreAuthHandshake(codec);
+    byte[] inbound =
+        encodeFrames(
+            codec,
+            message("ClientInitAck", field("CoreConfigured", false)),
+            message("CoreSetupReject", field("Error", "admin user already exists")));
+    ScriptedSocket socket = new ScriptedSocket(inbound);
+
+    IllegalStateException err =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                handshake.performCoreSetup(
+                    socket,
+                    new QuasselCoreAuthHandshake.CoreSetupRequest(
+                        "admin", "secret", "SQLite", "Database", Map.of(), Map.of())));
+
+    assertTrue(err.getMessage().contains("already exists"));
+  }
+
   @SafeVarargs
   private static LinkedHashMap<String, Object> message(
       String msgType, java.util.Map.Entry<String, Object>... additionalFields) {

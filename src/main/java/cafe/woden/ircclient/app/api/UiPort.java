@@ -1,10 +1,12 @@
 package cafe.woden.ircclient.app.api;
 
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Boundary between application logic and the Swing UI. */
@@ -45,6 +47,11 @@ public interface UiPort {
   Flowable<String> connectServerRequests();
 
   Flowable<String> disconnectServerRequests();
+
+  /** User-initiated request to open dialog-driven Quassel network manager for a server. */
+  default Flowable<String> quasselNetworkManagerRequests() {
+    return Flowable.empty();
+  }
 
   Flowable<TargetRef> closeTargetRequests();
 
@@ -191,6 +198,26 @@ public interface UiPort {
    * <p>If {@code clickTarget} is provided, clicking the notice should navigate to that target.
    */
   default void enqueueStatusNotice(String text, TargetRef clickTarget) {}
+
+  /**
+   * Prompt the user for Quassel Core initial setup values (admin credentials and backend choices).
+   *
+   * <p>Returns empty when canceled or unsupported in the current UI implementation.
+   */
+  default Optional<IrcClientService.QuasselCoreSetupRequest> promptQuasselCoreSetup(
+      String serverId, IrcClientService.QuasselCoreSetupPrompt prompt) {
+    return Optional.empty();
+  }
+
+  /**
+   * Prompt for one Quassel network manager operation.
+   *
+   * <p>Returns empty when the dialog is canceled/closed.
+   */
+  default Optional<QuasselNetworkManagerAction> promptQuasselNetworkManagerAction(
+      String serverId, List<IrcClientService.QuasselCoreNetworkSummary> networks) {
+    return Optional.empty();
+  }
 
   void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled);
 

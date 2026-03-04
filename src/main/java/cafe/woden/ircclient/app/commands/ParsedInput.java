@@ -6,6 +6,8 @@ public sealed interface ParsedInput
         ParsedInput.Connect,
         ParsedInput.Disconnect,
         ParsedInput.Reconnect,
+        ParsedInput.QuasselSetup,
+        ParsedInput.QuasselNetwork,
         ParsedInput.Quit,
         ParsedInput.Nick,
         ParsedInput.Away,
@@ -84,6 +86,12 @@ public sealed interface ParsedInput
 
   /** /reconnect [serverId|all] */
   record Reconnect(String target) implements ParsedInput {}
+
+  /** /quasselsetup [serverId] */
+  record QuasselSetup(String serverId) implements ParsedInput {}
+
+  /** /quasselnet ... */
+  record QuasselNetwork(String args) implements ParsedInput {}
 
   /** /quit [reason...] */
   record Quit(String reason) implements ParsedInput {}

@@ -101,6 +101,99 @@ public class QuasselCoreAuthHandshake {
         "Quassel handshake did not reach SessionInit within expected message limit");
   }
 
+  /**
+   * Perform Quassel Core initial setup exchange for an unconfigured core.
+   *
+   * <p>Sequence: ClientInit -> ClientInitAck/CoreSetupData -> CoreSetupData -> CoreSetupAck.
+   */
+  public void performCoreSetup(Socket socket, CoreSetupRequest request) throws IOException {
+    Socket s = Objects.requireNonNull(socket, "socket");
+    CoreSetupRequest req = Objects.requireNonNull(request, "request");
+
+    String adminUser = Objects.toString(req.adminUser(), "").trim();
+    if (adminUser.isEmpty()) {
+      throw new IllegalArgumentException("admin user is required");
+    }
+    String adminPassword = Objects.toString(req.adminPassword(), "");
+    if (adminPassword.isBlank()) {
+      throw new IllegalArgumentException("admin password is required");
+    }
+
+    String storageBackend = Objects.toString(req.storageBackend(), "").trim();
+    if (storageBackend.isEmpty()) {
+      throw new IllegalArgumentException("storage backend is required");
+    }
+    String authenticator = Objects.toString(req.authenticator(), "").trim();
+    if (authenticator.isEmpty()) {
+      throw new IllegalArgumentException("authenticator is required");
+    }
+
+    Map<String, Object> storageSetupData = normalizeSetupMap(req.storageSetupData());
+    Map<String, Object> authSetupData = normalizeSetupMap(req.authSetupData());
+
+    OutputStream out = s.getOutputStream();
+    InputStream in = s.getInputStream();
+    sendClientInit(out);
+
+    boolean setupSent = false;
+    for (int i = 0; i < MAX_HANDSHAKE_MESSAGES; i++) {
+      QuasselCoreDatastreamCodec.HandshakeMessage message =
+          datastreamCodec.readHandshakeMessage(in);
+      String type = Objects.toString(message.messageType(), "").trim();
+      Map<String, Object> fields = message.fields();
+
+      if ("ClientInitReject".equals(type)) {
+        throw new IllegalStateException(
+            renderHandshakeError(fields, "ClientInit rejected by core"));
+      }
+
+      if ("ClientInitAck".equals(type)) {
+        if (isCoreConfigured(fields)) {
+          throw new IllegalStateException("Quassel Core is already configured");
+        }
+        sendCoreSetupData(
+            out,
+            adminUser,
+            adminPassword,
+            storageBackend,
+            storageSetupData,
+            authenticator,
+            authSetupData);
+        setupSent = true;
+        continue;
+      }
+
+      if ("CoreSetupData".equals(type)) {
+        // Some cores explicitly send CoreSetupData after ClientInitAck.
+        if (!setupSent) {
+          sendCoreSetupData(
+              out,
+              adminUser,
+              adminPassword,
+              storageBackend,
+              storageSetupData,
+              authenticator,
+              authSetupData);
+          setupSent = true;
+        }
+        continue;
+      }
+
+      if ("CoreSetupReject".equals(type)) {
+        throw new IllegalStateException(
+            renderHandshakeError(fields, "Quassel Core setup rejected"));
+      }
+
+      if ("CoreSetupAck".equals(type)) {
+        return;
+      }
+
+      throw new IllegalStateException("unexpected Quassel setup message type: " + type);
+    }
+
+    throw new IOException("Quassel setup did not reach CoreSetupAck within expected message limit");
+  }
+
   private void sendClientInit(OutputStream out) throws IOException {
     LinkedHashMap<String, Object> msg = new LinkedHashMap<>();
     msg.put("MsgType", "ClientInit");
@@ -119,7 +212,49 @@ public class QuasselCoreAuthHandshake {
     datastreamCodec.writeHandshakeMessage(out, msg);
   }
 
+  private void sendCoreSetupData(
+      OutputStream out,
+      String adminUser,
+      String adminPassword,
+      String storageBackend,
+      Map<String, Object> storageSetupData,
+      String authenticator,
+      Map<String, Object> authSetupData)
+      throws IOException {
+    LinkedHashMap<String, Object> setup = new LinkedHashMap<>();
+    setup.put("AdminUser", adminUser);
+    // Quassel core expects AdminPasswd (legacy spelling) inside SetupData.
+    setup.put("AdminPasswd", adminPassword);
+    setup.put("Backend", storageBackend);
+    setup.put("SetupData", storageSetupData);
+    setup.put("Authenticator", authenticator);
+    setup.put("AuthProperties", authSetupData);
+
+    LinkedHashMap<String, Object> msg = new LinkedHashMap<>();
+    msg.put("MsgType", "CoreSetupData");
+    msg.put("SetupData", setup);
+    datastreamCodec.writeHandshakeMessage(out, msg);
+  }
+
+  private static Map<String, Object> normalizeSetupMap(Map<String, Object> raw) {
+    if (raw == null || raw.isEmpty()) return Map.of();
+    LinkedHashMap<String, Object> out = new LinkedHashMap<>();
+    for (Map.Entry<String, Object> entry : raw.entrySet()) {
+      if (entry == null) continue;
+      String key = Objects.toString(entry.getKey(), "").trim();
+      if (key.isEmpty()) continue;
+      out.put(key, entry.getValue());
+    }
+    if (out.isEmpty()) return Map.of();
+    return Collections.unmodifiableMap(out);
+  }
+
   private static boolean isCoreConfigured(Map<String, Object> fields) {
+    Object coreConfigured = fields.get("CoreConfigured");
+    if (coreConfigured instanceof Boolean value) {
+      return value;
+    }
+
     Object configured = fields.get("Configured");
     if (configured instanceof Boolean value) {
       return value;
@@ -226,6 +361,15 @@ public class QuasselCoreAuthHandshake {
       int primaryNetworkId,
       List<Integer> networkIds,
       Map<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> initialBuffers) {}
+
+  /** User-provided parameters for Quassel Core initial setup. */
+  public record CoreSetupRequest(
+      String adminUser,
+      String adminPassword,
+      String storageBackend,
+      String authenticator,
+      Map<String, Object> storageSetupData,
+      Map<String, Object> authSetupData) {}
 
   /** Indicates the core requires initial setup before an authenticated session can start. */
   public static final class CoreSetupRequiredException extends IllegalStateException {

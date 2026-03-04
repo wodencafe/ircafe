@@ -60,6 +60,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -162,7 +163,7 @@ class IrcMediatorMockVerifyTest {
         inOrder(mediatorUiSubscriptionBinder, irc, ui, mediatorConnectionSubscriptionBinder);
     inOrder
         .verify(mediatorUiSubscriptionBinder)
-        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any());
+        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
     inOrder.verify(irc).events();
     inOrder.verify(ui).ircv3CapabilityToggleRequests();
     inOrder
@@ -175,7 +176,7 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class));
 
     verify(mediatorUiSubscriptionBinder, times(1))
-        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any());
+        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
     verify(mediatorConnectionSubscriptionBinder, times(1))
         .bind(
             eq(ui),
@@ -211,6 +212,31 @@ class IrcMediatorMockVerifyTest {
     inOrder
         .verify(outboundCommandDispatcher)
         .dispatch(any(CompositeDisposable.class), same(message));
+  }
+
+  @Test
+  void quasselNetworkManagerRequestFromUiBinderOpensNetworkManager() {
+    when(irc.events()).thenReturn(Flowable.never());
+    when(ui.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
+
+    mediator.start();
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Consumer<String>> quasselRequestCaptor =
+        ArgumentCaptor.forClass((Class<Consumer<String>>) (Class<?>) Consumer.class);
+    verify(mediatorUiSubscriptionBinder)
+        .bind(
+            eq(ui),
+            eq(targetCoordinator),
+            any(CompositeDisposable.class),
+            any(),
+            any(),
+            quasselRequestCaptor.capture());
+
+    quasselRequestCaptor.getValue().accept("quassel");
+
+    verify(outboundCommandDispatcher)
+        .openQuasselNetworkManager(any(CompositeDisposable.class), eq("quassel"));
   }
 
   @Test

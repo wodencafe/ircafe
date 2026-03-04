@@ -48,6 +48,28 @@ class CommandParserTest {
   }
 
   @Test
+  void parsesQuasselSetupCommandAndAlias() {
+    ParsedInput setup = parser.parse("/quasselsetup quassel");
+    assertTrue(setup instanceof ParsedInput.QuasselSetup);
+    assertEquals("quassel", ((ParsedInput.QuasselSetup) setup).serverId());
+
+    ParsedInput alias = parser.parse("/qsetup");
+    assertTrue(alias instanceof ParsedInput.QuasselSetup);
+    assertEquals("", ((ParsedInput.QuasselSetup) alias).serverId());
+  }
+
+  @Test
+  void parsesQuasselNetworkCommandAndAlias() {
+    ParsedInput direct = parser.parse("/quasselnet list");
+    assertTrue(direct instanceof ParsedInput.QuasselNetwork);
+    assertEquals("list", ((ParsedInput.QuasselNetwork) direct).args());
+
+    ParsedInput alias = parser.parse("/qnet quassel connect libera");
+    assertTrue(alias instanceof ParsedInput.QuasselNetwork);
+    assertEquals("quassel connect libera", ((ParsedInput.QuasselNetwork) alias).args());
+  }
+
+  @Test
   void parsesWhowasWithOptionalCount() {
     ParsedInput in = parser.parse("/whowas oldNick 3");
     assertTrue(in instanceof ParsedInput.Whowas);

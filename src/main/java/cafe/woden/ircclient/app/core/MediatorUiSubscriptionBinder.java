@@ -18,7 +18,8 @@ public class MediatorUiSubscriptionBinder {
       TargetCoordinator targetCoordinator,
       CompositeDisposable disposables,
       Consumer<UserActionRequest> onUserActionRequest,
-      Consumer<String> onOutboundLine) {
+      Consumer<String> onOutboundLine,
+      Consumer<String> onQuasselNetworkManagerRequest) {
     disposables.add(
         ui.targetSelections()
             // Some UI refresh paths (e.g. LAF/theme updates) can cause the current selection
@@ -64,6 +65,15 @@ public class MediatorUiSubscriptionBinder {
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 onOutboundLine::accept,
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
+
+    disposables.add(
+        ui.quasselNetworkManagerRequests()
+            .observeOn(AppSchedulers.edt())
+            .subscribe(
+                onQuasselNetworkManagerRequest::accept,
                 err ->
                     ui.appendError(
                         targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));

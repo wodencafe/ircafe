@@ -89,6 +89,24 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
+  void dispatchQuasselSetupRoutesToChatService() {
+    dispatcher.dispatch(disposables, new ParsedInput.QuasselSetup("quassel"));
+    verify(chat).handleQuasselSetup(disposables, "quassel");
+  }
+
+  @Test
+  void dispatchQuasselNetworkRoutesToChatService() {
+    dispatcher.dispatch(disposables, new ParsedInput.QuasselNetwork("list"));
+    verify(chat).handleQuasselNetwork(disposables, "list");
+  }
+
+  @Test
+  void openQuasselNetworkManagerRoutesToChatService() {
+    dispatcher.openQuasselNetworkManager(disposables, "quassel");
+    verify(chat).handleQuasselNetworkManager(disposables, "quassel");
+  }
+
+  @Test
   void dispatchTopicRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.Topic("#ircafe", "new topic"));
     verify(chat).handleTopic(disposables, "#ircafe", "new topic");
