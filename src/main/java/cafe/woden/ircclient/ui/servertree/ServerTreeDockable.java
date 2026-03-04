@@ -29,6 +29,7 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceCon
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionPersistenceContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerRootLifecycleContextAdapter;
+import cafe.woden.ircclient.ui.servertree.context.ServerTreeSettingsSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeStartupSelectionRestorerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetSelectionContextAdapter;
@@ -36,6 +37,7 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeTooltipContextFactor
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeUiLeafVisibilitySynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelDisconnectStateManager;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelInteractionApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOperations;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
@@ -323,6 +325,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeChannelStateCoordinator channelStateCoordinator;
   private final ServerTreeChannelQueryService channelQueryService;
   private final ServerTreeChannelTargetOperations channelTargetOperations;
+  private final ServerTreeChannelInteractionApi channelInteractionApi;
   private final ServerTreeEnsureNodeParentResolver ensureNodeParentResolver;
   private final ServerTreeChannelListNodeEnsurer channelListNodeEnsurer;
   private final ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter;
@@ -797,10 +800,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             ServerTreeDockable::normalizeServerId);
     this.channelTargetOperations =
         new ServerTreeChannelTargetOperations(
-            edtExecutor,
-            channelStateCoordinator,
-            requestEmitter,
-            this::onChannelMutedStateChangedFromChannelTarget);
+            edtExecutor, channelStateCoordinator, requestEmitter, (ref, muted) -> {});
     this.ensureNodeParentResolver = stateInteractionCollaborators.ensureNodeParentResolver();
     this.channelListNodeEnsurer =
         new ServerTreeChannelListNodeEnsurer(CHANNEL_LIST_LABEL, leaves, model::nodesWereInserted);
@@ -944,7 +944,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeServerLifecycleFacade(serverRootLifecycleManager, statusLabelManager);
     this.settingsSynchronizer =
         new ServerTreeSettingsSynchronizer(
-            ServerTreeSettingsSynchronizer.context(
+            new ServerTreeSettingsSynchronizerContextAdapter(
                 settingsBus,
                 jfrRuntimeEventsService,
                 runtimeConfig,
@@ -1105,6 +1105,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             channelStateCoordinator::noteChannelActivity,
             channelStateCoordinator::onChannelUnreadCountsChanged,
             this::emitManagedChannelsChanged);
+    this.channelInteractionApi =
+        new ServerTreeChannelInteractionApi(
+            channelQueryService,
+            channelTargetOperations,
+            channelDisconnectStateManager,
+            unreadStateCoordinator,
+            typingActivityManager);
     ToolTipManager.sharedInstance().registerComponent(tree);
     tree.addPropertyChangeListener(
         "UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
@@ -1418,39 +1425,39 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
    * <p>Safe to call from any thread.
    */
   public List<String> openChannelsForServer(String serverId) {
-    return channelQueryService.openChannelsForServer(serverId);
+    return channelInteractionApi.openChannelsForServer(serverId);
   }
 
   public List<ManagedChannelEntry> managedChannelsForServer(String serverId) {
-    return channelQueryService.managedChannelsForServer(serverId);
+    return channelInteractionApi.managedChannelsForServer(serverId);
   }
 
   public ChannelSortMode channelSortModeForServer(String serverId) {
-    return channelQueryService.channelSortModeForServer(serverId);
+    return channelInteractionApi.channelSortModeForServer(serverId);
   }
 
   public void setChannelSortModeForServer(String serverId, ChannelSortMode mode) {
-    channelQueryService.setChannelSortModeForServer(serverId, mode);
+    channelInteractionApi.setChannelSortModeForServer(serverId, mode);
   }
 
   public void setChannelCustomOrderForServer(String serverId, List<String> channels) {
-    channelQueryService.setChannelCustomOrderForServer(serverId, channels);
+    channelInteractionApi.setChannelCustomOrderForServer(serverId, channels);
   }
 
   public void setCanEditChannelModes(BiPredicate<String, String> canEditChannelModes) {
-    channelTargetOperations.setCanEditChannelModes(canEditChannelModes);
+    channelInteractionApi.setCanEditChannelModes(canEditChannelModes);
   }
 
   public void requestJoinChannel(TargetRef target) {
-    channelTargetOperations.requestJoinChannel(target);
+    channelInteractionApi.requestJoinChannel(target);
   }
 
   public void requestDisconnectChannel(TargetRef target) {
-    channelTargetOperations.requestDisconnectChannel(target);
+    channelInteractionApi.requestDisconnectChannel(target);
   }
 
   public void requestCloseChannel(TargetRef target) {
-    channelTargetOperations.requestCloseChannel(target);
+    channelInteractionApi.requestCloseChannel(target);
   }
 
   public Action moveNodeUpAction() {
@@ -1761,44 +1768,39 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setChannelDisconnected(TargetRef ref, boolean detached, String warningReason) {
-    channelDisconnectStateManager.setChannelDisconnected(ref, detached, warningReason);
+    channelInteractionApi.setChannelDisconnected(ref, detached, warningReason);
   }
 
   public void clearChannelDisconnectedWarning(TargetRef ref) {
-    channelDisconnectStateManager.clearChannelDisconnectedWarning(ref);
+    channelInteractionApi.clearChannelDisconnectedWarning(ref);
   }
 
   public boolean isChannelDisconnected(TargetRef ref) {
-    return channelDisconnectStateManager.isChannelDisconnected(ref);
+    return channelInteractionApi.isChannelDisconnected(ref);
   }
 
   public boolean isChannelAutoReattach(TargetRef ref) {
-    return channelTargetOperations.isChannelAutoReattach(ref);
+    return channelInteractionApi.isChannelAutoReattach(ref);
   }
 
   public void setChannelAutoReattach(TargetRef ref, boolean autoReattach) {
-    channelTargetOperations.setChannelAutoReattach(ref, autoReattach);
+    channelInteractionApi.setChannelAutoReattach(ref, autoReattach);
   }
 
   public boolean isChannelPinned(TargetRef ref) {
-    return channelTargetOperations.isChannelPinned(ref);
+    return channelInteractionApi.isChannelPinned(ref);
   }
 
   public void setChannelPinned(TargetRef ref, boolean pinned) {
-    channelTargetOperations.setChannelPinned(ref, pinned);
+    channelInteractionApi.setChannelPinned(ref, pinned);
   }
 
   public boolean isChannelMuted(TargetRef ref) {
-    return channelTargetOperations.isChannelMuted(ref);
+    return channelInteractionApi.isChannelMuted(ref);
   }
 
   public void setChannelMuted(TargetRef ref, boolean muted) {
-    channelTargetOperations.setChannelMuted(ref, muted);
-  }
-
-  private void onChannelMutedStateChangedFromChannelTarget(TargetRef ref, boolean muted) {
-    if (unreadStateCoordinator == null) return;
-    unreadStateCoordinator.onChannelMutedStateChanged(ref, muted);
+    channelInteractionApi.setChannelMuted(ref, muted);
   }
 
   private void emitManagedChannelsChanged(String serverId) {
@@ -1812,19 +1814,19 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void markUnread(TargetRef ref) {
-    unreadStateCoordinator.markUnread(ref);
+    channelInteractionApi.markUnread(ref);
   }
 
   public void markHighlight(TargetRef ref) {
-    unreadStateCoordinator.markHighlight(ref);
+    channelInteractionApi.markHighlight(ref);
   }
 
   public void clearUnread(TargetRef ref) {
-    unreadStateCoordinator.clearUnread(ref);
+    channelInteractionApi.clearUnread(ref);
   }
 
   public void markTypingActivity(TargetRef ref, String state) {
-    typingActivityManager.markTypingActivity(ref, state);
+    channelInteractionApi.markTypingActivity(ref, state);
   }
 
   private void onTypingActivityAnimationTick() {
