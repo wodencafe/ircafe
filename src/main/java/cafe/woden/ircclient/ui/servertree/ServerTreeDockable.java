@@ -42,6 +42,7 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoor
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOperations;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreePrivateMessageOnlineStateCoordinator;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRequestApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRuntimeHeaderApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeSelectionBroadcastCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
@@ -58,6 +59,7 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiRefreshCoordin
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUnreadStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeDragReorderSupport;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinator;
+import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinatorFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionWiringFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeKeyBindingsInstaller;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
@@ -204,8 +206,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final ServerTreeNodeActionsFactory nodeActionsFactory =
       new ServerTreeNodeActionsFactory();
-  private final ServerTreeInteractionWiringFactory interactionWiringFactory =
-      new ServerTreeInteractionWiringFactory();
   private final TreeNodeActions<TargetRef> nodeActions;
   private final ServerTreeSelectionBroadcastCoordinator selectionBroadcastCoordinator =
       new ServerTreeSelectionBroadcastCoordinator();
@@ -335,6 +335,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeTargetSelectionCoordinator targetSelectionCoordinator;
   private final ServerTreeUnreadStateCoordinator unreadStateCoordinator;
   private final ServerTreeInteractionSetupCoordinator interactionSetupCoordinator;
+  private final ServerTreeRequestApi requestApi;
   private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
   private final ServerTreeRuntimeHeaderApi runtimeHeaderApi;
   private final ServerTreeUiRefreshCoordinator uiRefreshCoordinator;
@@ -1150,70 +1151,57 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         serverCatalog, notificationStore, interceptorStore, sojuAutoConnect, zncAutoConnect);
 
     settingsSynchronizer.bindListeners();
+    ServerTreeInteractionWiringFactory interactionWiringFactory =
+        new ServerTreeInteractionWiringFactory();
     this.interactionSetupCoordinator =
-        ServerTreeInteractionSetupCoordinator.create(
-            interactionWiringFactory,
-            new ServerTreeInteractionWiringFactory.MiddleDragInputs(
+        ServerTreeInteractionSetupCoordinatorFactory.create(
+            new ServerTreeInteractionSetupCoordinatorFactory.Inputs(
+                interactionWiringFactory,
                 tree,
                 model,
-                dragReorderSupport::isDraggableChannelNode,
-                dragReorderSupport::isRootSiblingReorderableNode,
-                dragReorderSupport::isMovableBuiltInNode,
+                dragReorderSupport,
+                nodeAccess::isChannelListLeafNode,
                 nodeClassifier::owningServerIdForNode,
                 serverId -> servers.get(ServerTreeDockable.normalizeServerId(serverId)),
                 this::rootSiblingNodeKindForNode,
                 this::builtInLayoutNodeKindForNode,
-                dragReorderSupport::minInsertIndex,
-                dragReorderSupport::maxInsertIndex,
                 builtInLayoutVisibilityFacade::rootBuiltInInsertIndex,
-                dragReorderSupport::setInsertionLineForIndex,
-                dragReorderSupport::clearInsertionLine,
-                nodeAccess::isChannelListLeafNode,
-                parentNode -> {
-                  String serverId = nodeClassifier.owningServerIdForNode(parentNode);
-                  if (serverId.isBlank()) return;
-                  channelStateCoordinator.persistOrderAndResortAfterManualMove(serverId);
-                },
+                channelStateCoordinator::persistOrderAndResortAfterManualMove,
                 this::persistBuiltInLayoutFromTree,
                 this::persistRootSiblingOrderFromTree,
                 selectionBroadcastCoordinator::withSuppressedSelectionBroadcast,
-                nodeActions::refreshEnabledState),
-            new ServerTreeInteractionWiringFactory.PinnedDockDragInputs(
-                tree,
-                (x, y) -> channelTargetForTreePath(rowInteractionHandler.treePathForRowHit(x, y))),
-            (pinnedDockDragController, middleDragReorderContext) ->
-                new ServerTreeInteractionWiringFactory.MediatorInputs(
-                    tree,
-                    serverActionOverlay,
-                    showing -> {
-                      if (showing) {
-                        typingActivityManager.startTypingActivityTimerIfNeeded();
-                        tree.repaint();
-                        return;
-                      }
-                      typingActivityTimer.stop();
-                    },
-                    selectionBroadcastCoordinator::suppressSelectionBroadcast,
-                    selectionBroadcastCoordinator::publishSelection,
-                    nodeClassifier::isMonitorGroupNode,
-                    nodeClassifier::isInterceptorsGroupNode,
-                    nodeClassifier::owningServerIdForNode,
-                    rowInteractionHandler::maybeHandleDisconnectedWarningClick,
-                    rowInteractionHandler::maybeSelectRowFromLeftClick,
-                    (x, y) -> rowInteractionHandler.treePathForRowHit(x, y),
-                    selectionBroadcastCoordinator::withSuppressedSelectionBroadcast,
-                    nodeActions::refreshEnabledState,
-                    contextMenuBuilder::build,
-                    pinnedDockDragController::prepareChannelDockDrag,
-                    pinnedDockDragController::clearPreparedChannelDockDrag,
-                    () -> middleDragReorderContext,
-                    () -> startupSelectionCompleted,
-                    () -> startupSelectionCompleted = true,
-                    this::isPathInCurrentTreeModel,
-                    this::firstServerIdOrEmpty,
-                    this::selectStartupDefaultForServer,
-                    this::defaultSelectionPath));
+                nodeActions::refreshEnabledState,
+                (x, y) -> channelTargetForTreePath(rowInteractionHandler.treePathForRowHit(x, y)),
+                serverActionOverlay,
+                showing -> {
+                  if (showing) {
+                    typingActivityManager.startTypingActivityTimerIfNeeded();
+                    tree.repaint();
+                    return;
+                  }
+                  typingActivityTimer.stop();
+                },
+                selectionBroadcastCoordinator::suppressSelectionBroadcast,
+                selectionBroadcastCoordinator::publishSelection,
+                nodeClassifier::isMonitorGroupNode,
+                nodeClassifier::isInterceptorsGroupNode,
+                rowInteractionHandler::maybeHandleDisconnectedWarningClick,
+                rowInteractionHandler::maybeSelectRowFromLeftClick,
+                rowInteractionHandler::treePathForRowHit,
+                contextMenuBuilder::build,
+                () -> startupSelectionCompleted,
+                () -> startupSelectionCompleted = true,
+                this::isPathInCurrentTreeModel,
+                this::firstServerIdOrEmpty,
+                this::selectStartupDefaultForServer,
+                this::defaultSelectionPath));
     this.interactionSetupCoordinator.install();
+    this.requestApi =
+        new ServerTreeRequestApi(
+            selectionBroadcastCoordinator,
+            requestStreams,
+            channelModeRequestBus,
+            interactionSetupCoordinator);
   }
 
   @Override
@@ -1345,75 +1333,75 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public Flowable<TargetRef> selectionStream() {
-    return selectionBroadcastCoordinator.selectionStream();
+    return requestApi.selectionStream();
   }
 
   public Flowable<String> connectServerRequests() {
-    return requestStreams.connectServerRequests();
+    return requestApi.connectServerRequests();
   }
 
   public Flowable<String> disconnectServerRequests() {
-    return requestStreams.disconnectServerRequests();
+    return requestApi.disconnectServerRequests();
   }
 
   public Flowable<TargetRef> closeTargetRequests() {
-    return requestStreams.closeTargetRequests();
+    return requestApi.closeTargetRequests();
   }
 
   public Flowable<TargetRef> joinChannelRequests() {
-    return requestStreams.joinChannelRequests();
+    return requestApi.joinChannelRequests();
   }
 
   public Flowable<TargetRef> disconnectChannelRequests() {
-    return requestStreams.disconnectChannelRequests();
+    return requestApi.disconnectChannelRequests();
   }
 
   public Flowable<TargetRef> bouncerDetachChannelRequests() {
-    return requestStreams.bouncerDetachChannelRequests();
+    return requestApi.bouncerDetachChannelRequests();
   }
 
   public Flowable<TargetRef> closeChannelRequests() {
-    return requestStreams.closeChannelRequests();
+    return requestApi.closeChannelRequests();
   }
 
   public Flowable<String> managedChannelsChangedByServer() {
-    return requestStreams.managedChannelsChangedByServer();
+    return requestApi.managedChannelsChangedByServer();
   }
 
   public Flowable<TargetRef> clearLogRequests() {
-    return requestStreams.clearLogRequests();
+    return requestApi.clearLogRequests();
   }
 
   public Flowable<TargetRef> openPinnedChatRequests() {
-    return requestStreams.openPinnedChatRequests();
+    return requestApi.openPinnedChatRequests();
   }
 
   public Flowable<String> quasselSetupRequests() {
-    return requestStreams.openQuasselSetupRequests();
+    return requestApi.quasselSetupRequests();
   }
 
   public Flowable<String> quasselNetworkManagerRequests() {
-    return requestStreams.openQuasselNetworkManagerRequests();
+    return requestApi.quasselNetworkManagerRequests();
   }
 
   public void setPinnedDockableProvider(Function<TargetRef, Dockable> provider) {
-    interactionSetupCoordinator.setPinnedDockableProvider(provider);
+    requestApi.setPinnedDockableProvider(provider);
   }
 
   public Flowable<TargetRef> channelModeDetailsRequests() {
-    return channelModeRequestBus.detailsRequests();
+    return requestApi.channelModeDetailsRequests();
   }
 
   public Flowable<TargetRef> channelModeRefreshRequests() {
-    return channelModeRequestBus.refreshRequests();
+    return requestApi.channelModeRefreshRequests();
   }
 
   public Flowable<ChannelModeSetRequest> channelModeSetRequests() {
-    return channelModeRequestBus.setRequests();
+    return requestApi.channelModeSetRequests();
   }
 
   public Flowable<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests() {
-    return requestStreams.ircv3CapabilityToggleRequests();
+    return requestApi.ircv3CapabilityToggleRequests();
   }
 
   /**
