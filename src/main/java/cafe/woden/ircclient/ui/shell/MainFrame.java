@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.shell;
 
 import cafe.woden.ircclient.app.ApplicationShutdownCoordinator;
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.ui.ChatDockable;
@@ -28,6 +29,8 @@ import java.awt.event.WindowEvent;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +48,9 @@ public class MainFrame extends JFrame {
   private static final int DEFAULT_SERVER_DOCK_WIDTH_PX = 280;
   private static final int DEFAULT_USERS_DOCK_WIDTH_PX = 240;
 
+  private final RuntimeConfigStore runtimeConfigStore;
+  private final ServerTreeDockable serverTree;
+  private final AtomicBoolean selectedTargetPersistedOnShutdown = new AtomicBoolean(false);
   private final boolean preserveDockLayoutEnabled;
   private volatile boolean layoutSnapshotPersistedOnWindowClosing;
 
@@ -62,6 +68,8 @@ public class MainFrame extends JFrame {
       StatusBar statusBar,
       ApplicationShutdownCoordinator shutdownCoordinator) {
     super(AppVersion.windowTitle());
+    this.runtimeConfigStore = runtimeConfigStore;
+    this.serverTree = serverTree;
 
     // Window/taskbar icon (best-effort, cross-platform).
     try {
@@ -356,6 +364,7 @@ public class MainFrame extends JFrame {
               trayService.maybeShowCloseBalloon();
               return;
             }
+            persistSelectedTargetForShutdown();
             try {
               setVisible(false);
               dispose();
@@ -375,6 +384,8 @@ public class MainFrame extends JFrame {
 
   @Override
   public void dispose() {
+    persistSelectedTargetForShutdown();
+
     if (!preserveDockLayoutEnabled) {
       super.dispose();
       return;
@@ -384,6 +395,33 @@ public class MainFrame extends JFrame {
       persistDockLayoutSnapshot(true, "dispose(showing)");
     }
     super.dispose();
+  }
+
+  private void persistSelectedTargetForShutdown() {
+    if (runtimeConfigStore == null || serverTree == null) return;
+    if (!selectedTargetPersistedOnShutdown.compareAndSet(false, true)) return;
+
+    TargetRef selected = readSelectedTargetOnEdt();
+    if (selected == null) return;
+
+    try {
+      runtimeConfigStore.rememberLastSelectedTarget(selected.serverId(), selected.target());
+    } catch (Exception ignored) {
+    }
+  }
+
+  private TargetRef readSelectedTargetOnEdt() {
+    if (SwingUtilities.isEventDispatchThread()) {
+      return serverTree.selectedTargetForPersistence();
+    }
+
+    AtomicReference<TargetRef> selectedRef = new AtomicReference<>();
+    try {
+      SwingUtilities.invokeAndWait(
+          () -> selectedRef.set(serverTree.selectedTargetForPersistence()));
+    } catch (Exception ignored) {
+    }
+    return selectedRef.get();
   }
 
   private void registerDockableIfNeeded(Dockable dockable) {
