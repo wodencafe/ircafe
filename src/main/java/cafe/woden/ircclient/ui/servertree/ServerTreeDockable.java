@@ -37,6 +37,7 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelDisconnec
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOperations;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreePrivateMessageOnlineStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLeafVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLifecycleFacade;
@@ -323,6 +324,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       new ServerTreeTargetSnapshotProvider(leaves, root);
   private final ServerTreePrivateMessageOnlineStateStore privateMessageOnlineStateStore =
       new ServerTreePrivateMessageOnlineStateStore();
+  private final ServerTreePrivateMessageOnlineStateCoordinator privateMessageOnlineStateCoordinator;
   private final ServerTreeChannelStateStore channelStateStore = new ServerTreeChannelStateStore();
 
   private final ServerTreeUiHooks uiHooks;
@@ -826,6 +828,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             WEECHAT_FILTERS_LABEL,
             IGNORES_LABEL,
             DCC_TRANSFERS_LABEL);
+    this.privateMessageOnlineStateCoordinator =
+        new ServerTreePrivateMessageOnlineStateCoordinator(
+            privateMessageOnlineStateStore,
+            leaves,
+            model::nodeChanged,
+            this::isPrivateMessageTarget);
     this.channelStateCoordinator = stateInteractionCollaborators.channelStateCoordinator();
     this.channelQueryService =
         new ServerTreeChannelQueryService(
@@ -1763,34 +1771,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setPrivateMessageOnlineState(String serverId, String nick, boolean online) {
-    String sid = Objects.toString(serverId, "").trim();
-    String n = Objects.toString(nick, "").trim();
-    if (sid.isEmpty() || n.isEmpty()) return;
-
-    TargetRef pm;
-    try {
-      pm = new TargetRef(sid, n);
-    } catch (Exception ignored) {
-      return;
-    }
-    if (!isPrivateMessageTarget(pm)) return;
-
-    privateMessageOnlineStateStore.put(pm, online);
-    DefaultMutableTreeNode node = leaves.get(pm);
-    if (node != null) {
-      model.nodeChanged(node);
-    }
+    privateMessageOnlineStateCoordinator.setPrivateMessageOnlineState(serverId, nick, online);
   }
 
   public void clearPrivateMessageOnlineStates(String serverId) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return;
-    for (TargetRef ref : privateMessageOnlineStateStore.clearServer(sid)) {
-      DefaultMutableTreeNode node = leaves.get(ref);
-      if (node != null) {
-        model.nodeChanged(node);
-      }
-    }
+    privateMessageOnlineStateCoordinator.clearPrivateMessageOnlineStates(serverId);
   }
 
   private void syncApplicationRootVisibility() {
