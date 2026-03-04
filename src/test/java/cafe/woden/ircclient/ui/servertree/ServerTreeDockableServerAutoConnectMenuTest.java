@@ -165,6 +165,36 @@ class ServerTreeDockableServerAutoConnectMenuTest {
   }
 
   @Test
+  void quasselSetupPendingPopupShowsCompleteSetupActionLabel() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerCatalog serverCatalog = mock(ServerCatalog.class);
+            RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+            when(serverCatalog.entries()).thenReturn(List.of());
+            when(serverCatalog.updates()).thenReturn(Flowable.never());
+            when(serverCatalog.findEntry("quassel"))
+                .thenReturn(
+                    Optional.of(
+                        ServerEntry.persistent(
+                            server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE))));
+
+            ServerTreeDockable dockable = newDockable(serverCatalog, runtimeConfig);
+            invokeAddServerRoot(dockable, "quassel");
+            dockable.setServerConnectionDiagnostics(
+                "quassel", "Quassel Core setup is required before login", null);
+
+            JPopupMenu menu = buildPopupMenuForServerRoot(dockable, "quassel");
+            assertNotNull(menu);
+            assertNotNull(findMenuItem(menu, "Complete Quassel Setup..."));
+            assertNull(findMenuItem(menu, "Run Quassel Setup..."));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
   void quasselManageNetworksMenuItemEmitsRequest() throws Exception {
     onEdt(
         () -> {

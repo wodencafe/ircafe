@@ -269,6 +269,7 @@ public class OutboundChatCommandService {
         irc.submitQuasselCoreSetup(sid, maybeRequest.orElseThrow())
             .subscribe(
                 () -> {
+                  connectionCoordinator.markQuasselSetupSubmitted(sid);
                   ui.appendStatus(
                       status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
                   connectionCoordinator.connectOne(sid);

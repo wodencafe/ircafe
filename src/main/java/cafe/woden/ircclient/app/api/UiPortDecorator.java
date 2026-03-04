@@ -80,6 +80,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void openQuasselNetworkManager(String serverId) {
+    delegate.openQuasselNetworkManager(serverId);
+  }
+
+  @Override
   public Flowable<TargetRef> closeTargetRequests() {
     return delegate.closeTargetRequests();
   }

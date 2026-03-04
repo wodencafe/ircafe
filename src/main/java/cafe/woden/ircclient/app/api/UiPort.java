@@ -58,6 +58,9 @@ public interface UiPort {
     return Flowable.empty();
   }
 
+  /** Request opening the Quassel network manager flow for a server. */
+  default void openQuasselNetworkManager(String serverId) {}
+
   Flowable<TargetRef> closeTargetRequests();
 
   /** User-initiated request to join a detached channel target. */

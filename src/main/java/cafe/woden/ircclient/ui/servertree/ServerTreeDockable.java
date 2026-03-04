@@ -832,6 +832,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                     nodeAccess::isRootServerNode,
                     serverLabelPolicy::prettyServerLabel,
                     uiHooks::connectionStateForServer,
+                    runtimeState::connectionDiagnosticsTipForServer,
                     serverCatalog,
                     this::moveNodeUpAction,
                     this::moveNodeDownAction,

@@ -479,6 +479,9 @@ class ConnectionCoordinatorTest {
             any(Instant.class),
             eq("(conn)"),
             eq("Quassel Core setup is required before this connection can log in."));
+    verify(ui, atLeastOnce())
+        .setConnectionStatusText(
+            argThat(text -> text != null && text.contains("Quassel setup required")));
   }
 
   @Test
@@ -503,6 +506,7 @@ class ConnectionCoordinatorTest {
     when(irc.quasselCoreSetupPrompt("quassel")).thenReturn(Optional.of(prompt));
     when(ui.promptQuasselCoreSetup("quassel", prompt)).thenReturn(Optional.of(request));
     when(irc.submitQuasselCoreSetup("quassel", request)).thenReturn(Completable.complete());
+    when(irc.quasselCoreNetworks("quassel")).thenReturn(List.of());
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
@@ -521,11 +525,21 @@ class ConnectionCoordinatorTest {
             Instant.now(),
             "quassel-phase=setup-required;detail=Quassel Core setup is required before login"),
         null);
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(Instant.now(), "quassel-phase=sync-ready"),
+        null);
 
     TargetRef status = new TargetRef("quassel", "status");
     verify(ui).promptQuasselCoreSetup("quassel", prompt);
     verify(irc).submitQuasselCoreSetup("quassel", request);
     verify(ui).appendStatus(status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
+    verify(ui)
+        .appendStatus(
+            eq(status),
+            eq("(qsetup)"),
+            argThat(text -> text != null && text.contains("Opening Quassel Network Manager")));
+    verify(ui).openQuasselNetworkManager("quassel");
     verify(irc, times(2)).connect("quassel");
   }
 

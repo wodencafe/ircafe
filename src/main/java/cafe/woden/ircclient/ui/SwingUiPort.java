@@ -22,6 +22,8 @@ import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.shell.StatusBar;
 import com.formdev.flatlaf.FlatClientProperties;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.processors.FlowableProcessor;
+import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -56,6 +58,8 @@ public class SwingUiPort implements UiPort {
   private final OutboundLineBus outboundBus;
   private final ChatDockManager chatDockManager;
   private final ActiveInputRouter activeInputRouter;
+  private final FlowableProcessor<String> quasselNetworkManagerRequestsFromApp =
+      PublishProcessor.<String>create().toSerialized();
 
   // Avoid rebuilding nick completions on every metadata refresh (away/account/hostmask) by
   // skipping completion updates if the nick *set* hasn't changed.
@@ -272,7 +276,17 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public Flowable<String> quasselNetworkManagerRequests() {
-    return serverTree.quasselNetworkManagerRequests();
+    return Flowable.mergeArray(
+            serverTree.quasselNetworkManagerRequests(),
+            quasselNetworkManagerRequestsFromApp.onBackpressureLatest())
+        .onBackpressureBuffer();
+  }
+
+  @Override
+  public void openQuasselNetworkManager(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    quasselNetworkManagerRequestsFromApp.onNext(sid);
   }
 
   @Override

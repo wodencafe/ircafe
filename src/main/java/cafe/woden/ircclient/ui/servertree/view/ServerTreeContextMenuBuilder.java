@@ -8,6 +8,7 @@ import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import javax.swing.Action;
@@ -29,6 +30,8 @@ public final class ServerTreeContextMenuBuilder {
     String prettyServerLabel(String serverId);
 
     ConnectionState connectionStateForServer(String serverId);
+
+    String connectionDiagnosticsTipForServer(String serverId);
 
     Optional<ServerEntry> serverEntry(String serverId);
 
@@ -209,7 +212,13 @@ public final class ServerTreeContextMenuBuilder {
             .map(backend -> backend == IrcProperties.Server.Backend.QUASSEL_CORE)
             .orElse(false);
     if (quasselCoreServer) {
-      JMenuItem runQuasselSetup = new JMenuItem("Run Quassel Setup...");
+      String diagnostics =
+          Objects.toString(context.connectionDiagnosticsTipForServer(serverId), "")
+              .toLowerCase(Locale.ROOT);
+      boolean setupPending =
+          diagnostics.contains("setup required") || diagnostics.contains("setup is required");
+      JMenuItem runQuasselSetup =
+          new JMenuItem(setupPending ? "Complete Quassel Setup..." : "Run Quassel Setup...");
       runQuasselSetup.setIcon(SvgIcons.action("edit", 16));
       runQuasselSetup.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
       runQuasselSetup.addActionListener(ev -> context.openQuasselSetup(serverId));

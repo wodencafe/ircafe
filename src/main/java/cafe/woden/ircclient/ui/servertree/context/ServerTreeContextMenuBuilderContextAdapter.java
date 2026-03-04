@@ -25,6 +25,7 @@ public final class ServerTreeContextMenuBuilderContextAdapter
   private final Predicate<DefaultMutableTreeNode> isRootServerNode;
   private final Function<String, String> prettyServerLabel;
   private final Function<String, ConnectionState> connectionStateForServer;
+  private final Function<String, String> connectionDiagnosticsTipForServer;
   private final Function<String, Optional<ServerEntry>> serverEntry;
   private final Supplier<Action> moveNodeUpAction;
   private final Supplier<Action> moveNodeDownAction;
@@ -88,6 +89,7 @@ public final class ServerTreeContextMenuBuilderContextAdapter
       Predicate<DefaultMutableTreeNode> isRootServerNode,
       Function<String, String> prettyServerLabel,
       Function<String, ConnectionState> connectionStateForServer,
+      Function<String, String> connectionDiagnosticsTipForServer,
       Function<String, Optional<ServerEntry>> serverEntry,
       Supplier<Action> moveNodeUpAction,
       Supplier<Action> moveNodeDownAction,
@@ -145,6 +147,9 @@ public final class ServerTreeContextMenuBuilderContextAdapter
     this.prettyServerLabel = Objects.requireNonNull(prettyServerLabel, "prettyServerLabel");
     this.connectionStateForServer =
         Objects.requireNonNull(connectionStateForServer, "connectionStateForServer");
+    this.connectionDiagnosticsTipForServer =
+        Objects.requireNonNull(
+            connectionDiagnosticsTipForServer, "connectionDiagnosticsTipForServer");
     this.serverEntry = Objects.requireNonNull(serverEntry, "serverEntry");
     this.moveNodeUpAction = Objects.requireNonNull(moveNodeUpAction, "moveNodeUpAction");
     this.moveNodeDownAction = Objects.requireNonNull(moveNodeDownAction, "moveNodeDownAction");
@@ -254,6 +259,11 @@ public final class ServerTreeContextMenuBuilderContextAdapter
   @Override
   public ConnectionState connectionStateForServer(String serverId) {
     return connectionStateForServer.apply(serverId);
+  }
+
+  @Override
+  public String connectionDiagnosticsTipForServer(String serverId) {
+    return connectionDiagnosticsTipForServer.apply(serverId);
   }
 
   @Override

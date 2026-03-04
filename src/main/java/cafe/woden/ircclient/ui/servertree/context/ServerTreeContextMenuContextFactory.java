@@ -37,6 +37,7 @@ public final class ServerTreeContextMenuContextFactory {
       Predicate<DefaultMutableTreeNode> isRootServerNode,
       Function<String, String> prettyServerLabel,
       Function<String, ConnectionState> connectionStateForServer,
+      Function<String, String> connectionDiagnosticsTipForServer,
       ServerCatalog serverCatalog,
       Supplier<Action> moveNodeUpAction,
       Supplier<Action> moveNodeDownAction,
@@ -92,6 +93,8 @@ public final class ServerTreeContextMenuContextFactory {
         Objects.requireNonNull(in.isRootServerNode(), "isRootServerNode"),
         Objects.requireNonNull(in.prettyServerLabel(), "prettyServerLabel"),
         Objects.requireNonNull(in.connectionStateForServer(), "connectionStateForServer"),
+        Objects.requireNonNull(
+            in.connectionDiagnosticsTipForServer(), "connectionDiagnosticsTipForServer"),
         serverId -> {
           ServerCatalog catalog = in.serverCatalog();
           return catalog != null ? catalog.findEntry(serverId) : Optional.empty();

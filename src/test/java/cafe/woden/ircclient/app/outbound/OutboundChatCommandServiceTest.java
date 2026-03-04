@@ -236,6 +236,7 @@ class OutboundChatCommandServiceTest {
 
     verify(ui).promptQuasselCoreSetup("quassel", prompt);
     verify(irc).submitQuasselCoreSetup("quassel", request);
+    verify(connectionCoordinator).markQuasselSetupSubmitted("quassel");
     verify(ui).appendStatus(status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
     verify(connectionCoordinator).connectOne("quassel");
   }
