@@ -23,6 +23,7 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLifecycleSetting
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLifecycleSettingsCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTargetLifecycleCoordinatorFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeApplicationRootVisibilityContextAdapter;
@@ -32,7 +33,6 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceCon
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionPersistenceContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeStartupSelectionRestorerContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetSelectionContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeUiLeafVisibilitySynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
@@ -903,17 +903,17 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.serverLifecycleFacade = lifecycleSettingsCollaborators.serverLifecycleFacade();
     this.settingsSynchronizer = lifecycleSettingsCollaborators.settingsSynchronizer();
     this.targetLifecycleCoordinator =
-        new ServerTreeTargetLifecycleCoordinator(
-            servers,
-            leaves,
-            serverCatalog,
-            ensureNodeParentResolver,
-            ensureNodeLeafInserter,
-            targetNodePolicy,
-            targetSnapshotProvider,
-            targetRemovalStateCoordinator,
-            targetNodeRemovalMutator,
-            new ServerTreeTargetLifecycleContextAdapter(
+        ServerTreeTargetLifecycleCoordinatorFactory.create(
+            new ServerTreeTargetLifecycleCoordinatorFactory.Inputs(
+                servers,
+                leaves,
+                serverCatalog,
+                ensureNodeParentResolver,
+                ensureNodeLeafInserter,
+                targetNodePolicy,
+                targetSnapshotProvider,
+                targetRemovalStateCoordinator,
+                targetNodeRemovalMutator,
                 nodeVisibilityApi::isApplicationRootVisible,
                 this::setApplicationRootVisible,
                 applicationNodes::labelFor,
