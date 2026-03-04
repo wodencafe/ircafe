@@ -157,12 +157,13 @@ tasks.withType(Test).configureEach {
     if (!maxParallelForksValue.isEmpty()) {
         maxParallelForks = Math.max(1, Integer.parseInt(maxParallelForksValue))
     }
-    // Allow opt-in Quassel integration tests to be controlled from Gradle CLI:
+    // Allow opt-in integration tests to be controlled from Gradle CLI:
     //   ./gradlew integrationTest -Dquassel.it.enabled=true ...
+    //   ./gradlew integrationTest -Dirc.it.container.e2e.enabled=true ...
     // Forward only the scoped test-control properties.
     System.getProperties().each { key, value ->
         String k = key == null ? '' : key.toString()
-        if (!k.startsWith('quassel.it.')) {
+        if (!k.startsWith('quassel.it.') && !k.startsWith('irc.it.')) {
             return
         }
         systemProperty k, value
