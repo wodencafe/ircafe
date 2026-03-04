@@ -42,6 +42,7 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoor
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOperations;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreePrivateMessageOnlineStateCoordinator;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeRuntimeHeaderApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeSelectionBroadcastCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLeafVisibilityCoordinator;
@@ -56,12 +57,10 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibility
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiRefreshCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUnreadStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeDragReorderSupport;
-import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionMediator;
+import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionWiringFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeKeyBindingsInstaller;
-import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeMiddleDragReorderHandler;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
-import cafe.woden.ircclient.ui.servertree.interaction.ServerTreePinnedDockDragController;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeRowInteractionHandler;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutVisibilityFacade;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
@@ -335,9 +334,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeTargetLifecycleCoordinator targetLifecycleCoordinator;
   private final ServerTreeTargetSelectionCoordinator targetSelectionCoordinator;
   private final ServerTreeUnreadStateCoordinator unreadStateCoordinator;
-  private final ServerTreeInteractionMediator interactionMediator;
-  private final ServerTreePinnedDockDragController pinnedDockDragController;
+  private final ServerTreeInteractionSetupCoordinator interactionSetupCoordinator;
   private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
+  private final ServerTreeRuntimeHeaderApi runtimeHeaderApi;
   private final ServerTreeUiRefreshCoordinator uiRefreshCoordinator;
   private final ServerTreeTooltipProvider tooltipProvider;
   private final ServerTreeTooltipResolver tooltipResolver;
@@ -1043,6 +1042,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     this.headerControls =
         new ServerTreeHeaderControls(this, connectBtn, disconnectBtn, serverDialogs);
+    this.runtimeHeaderApi = new ServerTreeRuntimeHeaderApi(serverRuntimeUiUpdater, headerControls);
     JPanel header = headerControls.panel();
 
     root.add(ircRoot);
@@ -1150,9 +1150,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         serverCatalog, notificationStore, interceptorStore, sojuAutoConnect, zncAutoConnect);
 
     settingsSynchronizer.bindListeners();
-
-    ServerTreeMiddleDragReorderHandler.Context middleDragReorderContext =
-        interactionWiringFactory.createMiddleDragReorderContext(
+    this.interactionSetupCoordinator =
+        ServerTreeInteractionSetupCoordinator.create(
+            interactionWiringFactory,
             new ServerTreeInteractionWiringFactory.MiddleDragInputs(
                 tree,
                 model,
@@ -1177,46 +1177,43 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::persistBuiltInLayoutFromTree,
                 this::persistRootSiblingOrderFromTree,
                 selectionBroadcastCoordinator::withSuppressedSelectionBroadcast,
-                nodeActions::refreshEnabledState));
-    this.pinnedDockDragController =
-        interactionWiringFactory.createPinnedDockDragController(
+                nodeActions::refreshEnabledState),
             new ServerTreeInteractionWiringFactory.PinnedDockDragInputs(
                 tree,
-                (x, y) -> channelTargetForTreePath(rowInteractionHandler.treePathForRowHit(x, y))));
-    this.interactionMediator =
-        interactionWiringFactory.createInteractionMediator(
-            new ServerTreeInteractionWiringFactory.MediatorInputs(
-                tree,
-                serverActionOverlay,
-                showing -> {
-                  if (showing) {
-                    typingActivityManager.startTypingActivityTimerIfNeeded();
-                    tree.repaint();
-                    return;
-                  }
-                  typingActivityTimer.stop();
-                },
-                selectionBroadcastCoordinator::suppressSelectionBroadcast,
-                selectionBroadcastCoordinator::publishSelection,
-                nodeClassifier::isMonitorGroupNode,
-                nodeClassifier::isInterceptorsGroupNode,
-                nodeClassifier::owningServerIdForNode,
-                rowInteractionHandler::maybeHandleDisconnectedWarningClick,
-                rowInteractionHandler::maybeSelectRowFromLeftClick,
-                (x, y) -> rowInteractionHandler.treePathForRowHit(x, y),
-                selectionBroadcastCoordinator::withSuppressedSelectionBroadcast,
-                nodeActions::refreshEnabledState,
-                contextMenuBuilder::build,
-                pinnedDockDragController::prepareChannelDockDrag,
-                pinnedDockDragController::clearPreparedChannelDockDrag,
-                () -> middleDragReorderContext,
-                () -> startupSelectionCompleted,
-                () -> startupSelectionCompleted = true,
-                this::isPathInCurrentTreeModel,
-                this::firstServerIdOrEmpty,
-                this::selectStartupDefaultForServer,
-                this::defaultSelectionPath));
-    this.interactionMediator.install();
+                (x, y) -> channelTargetForTreePath(rowInteractionHandler.treePathForRowHit(x, y))),
+            (pinnedDockDragController, middleDragReorderContext) ->
+                new ServerTreeInteractionWiringFactory.MediatorInputs(
+                    tree,
+                    serverActionOverlay,
+                    showing -> {
+                      if (showing) {
+                        typingActivityManager.startTypingActivityTimerIfNeeded();
+                        tree.repaint();
+                        return;
+                      }
+                      typingActivityTimer.stop();
+                    },
+                    selectionBroadcastCoordinator::suppressSelectionBroadcast,
+                    selectionBroadcastCoordinator::publishSelection,
+                    nodeClassifier::isMonitorGroupNode,
+                    nodeClassifier::isInterceptorsGroupNode,
+                    nodeClassifier::owningServerIdForNode,
+                    rowInteractionHandler::maybeHandleDisconnectedWarningClick,
+                    rowInteractionHandler::maybeSelectRowFromLeftClick,
+                    (x, y) -> rowInteractionHandler.treePathForRowHit(x, y),
+                    selectionBroadcastCoordinator::withSuppressedSelectionBroadcast,
+                    nodeActions::refreshEnabledState,
+                    contextMenuBuilder::build,
+                    pinnedDockDragController::prepareChannelDockDrag,
+                    pinnedDockDragController::clearPreparedChannelDockDrag,
+                    () -> middleDragReorderContext,
+                    () -> startupSelectionCompleted,
+                    () -> startupSelectionCompleted = true,
+                    this::isPathInCurrentTreeModel,
+                    this::firstServerIdOrEmpty,
+                    this::selectStartupDefaultForServer,
+                    this::defaultSelectionPath));
+    this.interactionSetupCoordinator.install();
   }
 
   @Override
@@ -1400,7 +1397,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setPinnedDockableProvider(Function<TargetRef, Dockable> provider) {
-    pinnedDockDragController.setPinnedDockableProvider(provider);
+    interactionSetupCoordinator.setPinnedDockableProvider(provider);
   }
 
   public Flowable<TargetRef> channelModeDetailsRequests() {
@@ -1473,31 +1470,30 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setServerConnectionState(String serverId, ConnectionState state) {
-    serverRuntimeUiUpdater.setServerConnectionState(serverId, state);
+    runtimeHeaderApi.setServerConnectionState(serverId, state);
   }
 
   public void setServerDesiredOnline(String serverId, boolean desiredOnline) {
-    serverRuntimeUiUpdater.setServerDesiredOnline(serverId, desiredOnline);
+    runtimeHeaderApi.setServerDesiredOnline(serverId, desiredOnline);
   }
 
   public void setServerConnectionDiagnostics(
       String serverId, String lastError, Long nextRetryEpochMs) {
-    serverRuntimeUiUpdater.setServerConnectionDiagnostics(serverId, lastError, nextRetryEpochMs);
+    runtimeHeaderApi.setServerConnectionDiagnostics(serverId, lastError, nextRetryEpochMs);
   }
 
   public void setServerConnectedIdentity(
       String serverId, String connectedHost, int connectedPort, String nick, Instant at) {
-    serverRuntimeUiUpdater.setServerConnectedIdentity(
-        serverId, connectedHost, connectedPort, nick, at);
+    runtimeHeaderApi.setServerConnectedIdentity(serverId, connectedHost, connectedPort, nick, at);
   }
 
   public void setServerIrcv3Capability(
       String serverId, String capability, String subcommand, boolean enabled) {
-    serverRuntimeUiUpdater.setServerIrcv3Capability(serverId, capability, subcommand, enabled);
+    runtimeHeaderApi.setServerIrcv3Capability(serverId, capability, subcommand, enabled);
   }
 
   public void setServerIsupportToken(String serverId, String tokenName, String tokenValue) {
-    serverRuntimeUiUpdater.setServerIsupportToken(serverId, tokenName, tokenValue);
+    runtimeHeaderApi.setServerIsupportToken(serverId, tokenName, tokenValue);
   }
 
   public void setServerVersionDetails(
@@ -1506,7 +1502,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       String serverVersion,
       String userModes,
       String channelModes) {
-    serverRuntimeUiUpdater.setServerVersionDetails(
+    runtimeHeaderApi.setServerVersionDetails(
         serverId, serverName, serverVersion, userModes, channelModes);
   }
 
@@ -1517,11 +1513,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setStatusText(String text) {
-    headerControls.setStatusText(text);
+    runtimeHeaderApi.setStatusText(text);
   }
 
   public void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled) {
-    headerControls.setConnectionControlsEnabled(connectEnabled, disconnectEnabled);
+    runtimeHeaderApi.setConnectionControlsEnabled(connectEnabled, disconnectEnabled);
   }
 
   /**
@@ -1531,7 +1527,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
    */
   @Deprecated
   public void setConnectedUi(boolean connected) {
-    setConnectionControlsEnabled(!connected, connected);
+    runtimeHeaderApi.setConnectedUi(connected);
   }
 
   public boolean isChannelListNodesVisible() {
@@ -1876,7 +1872,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   @PreDestroy
   public void shutdown() {
     try {
-      pinnedDockDragController.clearPreparedChannelDockDrag();
+      interactionSetupCoordinator.clearPreparedChannelDockDrag();
       settingsSynchronizer.shutdown();
       if (typingActivityTimer != null) typingActivityTimer.stop();
       if (treeWheelSelectionDecorator != null) treeWheelSelectionDecorator.close();
