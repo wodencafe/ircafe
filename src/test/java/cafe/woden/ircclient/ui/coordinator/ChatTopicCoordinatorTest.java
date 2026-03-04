@@ -15,6 +15,9 @@ import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import org.junit.jupiter.api.Test;
@@ -99,13 +102,48 @@ class ChatTopicCoordinatorTest {
     verifyNoInteractions(channelListPanel);
   }
 
+  @Test
+  void updateTopicPanelFallsBackToPersistedTopicWhenRuntimeCacheIsEmpty() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    AtomicReference<TargetRef> lookupTarget = new AtomicReference<>();
+    Function<TargetRef, String> lookup =
+        target -> {
+          lookupTarget.set(target);
+          return "persisted topic";
+        };
+    ChatTopicCoordinator coordinator =
+        newCoordinator(channelListPanel, () -> {}, lookup, (t, p) -> {});
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+
+    coordinator.updateTopicPanelForActiveTarget(channel);
+
+    assertEquals(channel, lookupTarget.get());
+    assertEquals("persisted topic", coordinator.topicFor(channel));
+    JSplitPane split = (JSplitPane) coordinator.topicSplit();
+    assertTrue(split.getDividerSize() > 0);
+  }
+
   private static ChatTopicCoordinator newCoordinator(
       ChannelListPanel channelListPanel, Runnable refresh) {
+    return newCoordinator(channelListPanel, refresh, target -> "", (target, topic) -> {});
+  }
+
+  private static ChatTopicCoordinator newCoordinator(
+      ChannelListPanel channelListPanel,
+      Runnable refresh,
+      Function<TargetRef, String> persistedLookup,
+      BiConsumer<TargetRef, String> persistedSink) {
     NotificationStore notificationStore = mock(NotificationStore.class);
     when(notificationStore.listAll("libera")).thenReturn(List.of());
     when(notificationStore.listAllRuleMatches("libera")).thenReturn(List.of());
     when(notificationStore.listAllIrcEventRules("libera")).thenReturn(List.of());
     return new ChatTopicCoordinator(
-        new JScrollPane(), channelListPanel, notificationStore, target -> {}, refresh);
+        new JScrollPane(),
+        channelListPanel,
+        notificationStore,
+        target -> {},
+        refresh,
+        persistedLookup,
+        persistedSink);
   }
 }

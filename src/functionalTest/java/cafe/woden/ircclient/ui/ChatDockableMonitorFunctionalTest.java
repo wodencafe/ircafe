@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.ChannelMetadataPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -122,6 +123,7 @@ class ChatDockableMonitorFunctionalTest {
     NickContextMenuFactory nickContextMenuFactory = new NickContextMenuFactory();
     ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);
+    ChannelMetadataPort channelMetadataStore = mock(ChannelMetadataPort.class);
     ChatLogViewerService chatLogViewerService = mock(ChatLogViewerService.class);
     InterceptorStore interceptorStore = mock(InterceptorStore.class);
     when(interceptorStore.changes()).thenReturn(Flowable.never());
@@ -157,6 +159,7 @@ class ChatDockableMonitorFunctionalTest {
                     nickContextMenuFactory,
                     proxyResolver,
                     chatHistoryService,
+                    channelMetadataStore,
                     chatLogViewerService,
                     interceptorStore,
                     dccTransferStore,

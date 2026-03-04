@@ -23,7 +23,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -34,10 +36,13 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Owns topic state, topic panel rendering, and topic update events for {@link ChatDockable}. */
 public final class ChatTopicCoordinator {
 
+  private static final Logger log = LoggerFactory.getLogger(ChatTopicCoordinator.class);
   private static final int TOPIC_DIVIDER_SIZE = 6;
   private static final int NOTIFICATION_PREVIEW_LIMIT = 8;
   private static final DateTimeFormatter NOTIFICATION_TIME_FMT =
@@ -52,6 +57,8 @@ public final class ChatTopicCoordinator {
   private final NotificationStore notificationStore;
   private final Consumer<TargetRef> targetSelector;
   private final Runnable uiRefresh;
+  private final Function<TargetRef, String> persistedTopicLookup;
+  private final BiConsumer<TargetRef, String> persistedTopicSink;
 
   private int lastTopicHeightPx = 58;
   private boolean topicVisible = false;
@@ -64,10 +71,31 @@ public final class ChatTopicCoordinator {
       NotificationStore notificationStore,
       Consumer<TargetRef> targetSelector,
       Runnable uiRefresh) {
+    this(
+        transcriptScroll,
+        channelListPanel,
+        notificationStore,
+        targetSelector,
+        uiRefresh,
+        target -> "",
+        (target, topic) -> {});
+  }
+
+  public ChatTopicCoordinator(
+      JScrollPane transcriptScroll,
+      ChannelListPanel channelListPanel,
+      NotificationStore notificationStore,
+      Consumer<TargetRef> targetSelector,
+      Runnable uiRefresh,
+      Function<TargetRef, String> persistedTopicLookup,
+      BiConsumer<TargetRef, String> persistedTopicSink) {
     this.channelListPanel = Objects.requireNonNull(channelListPanel, "channelListPanel");
     this.notificationStore = Objects.requireNonNull(notificationStore, "notificationStore");
     this.targetSelector = targetSelector != null ? targetSelector : unused -> {};
     this.uiRefresh = Objects.requireNonNull(uiRefresh, "uiRefresh");
+    this.persistedTopicLookup = persistedTopicLookup != null ? persistedTopicLookup : target -> "";
+    this.persistedTopicSink =
+        persistedTopicSink != null ? persistedTopicSink : (target, topic) -> {};
     JScrollPane scroll = Objects.requireNonNull(transcriptScroll, "transcriptScroll");
 
     topicSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, topicPanel, scroll);
@@ -114,6 +142,7 @@ public final class ChatTopicCoordinator {
     } else {
       topicByTarget.put(target, normalized);
     }
+    persistTopicSnapshot(target, normalized);
 
     if (target.equals(activeTarget)) {
       updateTopicPanelForActiveTarget(activeTarget);
@@ -126,6 +155,9 @@ public final class ChatTopicCoordinator {
     if (target == null) return;
 
     String removed = topicByTarget.remove(target);
+    if (removed != null && !removed.isBlank()) {
+      persistTopicSnapshot(target, "");
+    }
     if (target.equals(activeTarget)) {
       updateTopicPanelForActiveTarget(activeTarget);
     }
@@ -137,7 +169,14 @@ public final class ChatTopicCoordinator {
 
   public String topicFor(TargetRef target) {
     if (target == null) return "";
-    return topicByTarget.getOrDefault(target, "");
+    String inMemory = topicByTarget.getOrDefault(target, "");
+    if (!inMemory.isBlank()) return inMemory;
+    if (!target.isChannel()) return "";
+
+    String persisted = Objects.toString(persistedTopicLookup.apply(target), "").trim();
+    if (persisted.isEmpty()) return "";
+    topicByTarget.put(target, persisted);
+    return persisted;
   }
 
   public Flowable<ChatDockable.TopicUpdate> topicUpdates() {
@@ -158,7 +197,7 @@ public final class ChatTopicCoordinator {
     topicPanel.setNotificationState(true, summary.totalCount());
     topicPanel.setNotificationTooltip(buildNotificationTooltip(summary));
 
-    String topic = Objects.toString(topicByTarget.getOrDefault(activeTarget, ""), "").trim();
+    String topic = topicFor(activeTarget).trim();
     topicPanel.setTopic(activeTarget.target(), topic);
 
     boolean hasTopic = !topic.isEmpty();
@@ -343,6 +382,15 @@ public final class ChatTopicCoordinator {
     String s = Objects.toString(raw, "");
     if (s.isEmpty()) return "";
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+  }
+
+  private void persistTopicSnapshot(TargetRef target, String topic) {
+    if (target == null || !target.isChannel()) return;
+    try {
+      persistedTopicSink.accept(target, Objects.toString(topic, ""));
+    } catch (Exception ex) {
+      log.debug("[ircafe] failed to persist channel topic snapshot for {}", target, ex);
+    }
   }
 
   private record NotificationEntry(Instant at, String title, String detail) {}

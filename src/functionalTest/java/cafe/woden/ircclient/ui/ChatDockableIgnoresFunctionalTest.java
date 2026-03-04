@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.ChannelMetadataPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.ignore.IgnoreListService;
@@ -102,6 +103,7 @@ class ChatDockableIgnoresFunctionalTest {
     NickContextMenuFactory nickContextMenuFactory = new NickContextMenuFactory();
     ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);
+    ChannelMetadataPort channelMetadataStore = mock(ChannelMetadataPort.class);
     ChatLogViewerService chatLogViewerService = mock(ChatLogViewerService.class);
     InterceptorStore interceptorStore = mock(InterceptorStore.class);
     when(interceptorStore.changes()).thenReturn(Flowable.never());
@@ -133,6 +135,7 @@ class ChatDockableIgnoresFunctionalTest {
                     nickContextMenuFactory,
                     proxyResolver,
                     chatHistoryService,
+                    channelMetadataStore,
                     chatLogViewerService,
                     interceptorStore,
                     dccTransferStore,

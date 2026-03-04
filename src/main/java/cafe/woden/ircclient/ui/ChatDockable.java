@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui;
 
+import cafe.woden.ircclient.app.api.ChannelMetadataPort;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UserActionRequest;
@@ -201,6 +202,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       NickContextMenuFactory nickContextMenuFactory,
       ServerProxyResolver proxyResolver,
       ChatHistoryService chatHistoryService,
+      ChannelMetadataPort channelMetadata,
       ChatLogViewerService chatLogViewerService,
       InterceptorStore interceptorStore,
       DccTransferStore dccTransferStore,
@@ -247,7 +249,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     // Show something harmless on startup; first selection will swap it.
     setDocument(new DefaultStyledDocument());
 
-    TopicCoordinatorBundle topicBundle = createTopicCoordinatorBundle(notificationStore);
+    TopicCoordinatorBundle topicBundle =
+        createTopicCoordinatorBundle(notificationStore, channelMetadata);
     this.topicCoordinator = topicBundle.topicCoordinator();
     this.banListCoordinator = topicBundle.banListCoordinator();
     bindTopicNotificationIndicatorUpdates(notificationStore);
@@ -416,7 +419,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     return List.copyOf(out);
   }
 
-  private TopicCoordinatorBundle createTopicCoordinatorBundle(NotificationStore notificationStore) {
+  private TopicCoordinatorBundle createTopicCoordinatorBundle(
+      NotificationStore notificationStore, ChannelMetadataPort channelMetadata) {
+    ChannelMetadataPort metadata =
+        java.util.Objects.requireNonNull(channelMetadata, "channelMetadata");
     // Insert an optional topic panel above the transcript.
     remove(scroll);
     ChatTopicCoordinator topicCoordinator =
@@ -433,7 +439,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             () -> {
               revalidate();
               repaint();
-            });
+            },
+            metadata::topicFor,
+            (target, topic) -> metadata.rememberTopic(target, topic, null, null));
     ChatBanListCoordinator banListCoordinator = new ChatBanListCoordinator(channelListPanel);
     return new TopicCoordinatorBundle(topicCoordinator, banListCoordinator);
   }

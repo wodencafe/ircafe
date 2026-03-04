@@ -46,6 +46,7 @@ public class ExecutorConfig {
   public static final String PREFERENCES_PUSHY_TEST_EXECUTOR = "preferencesPushyTestExecutor";
   public static final String PREFERENCES_NOTIFICATION_RULE_TEST_EXECUTOR =
       "preferencesNotificationRuleTestExecutor";
+  public static final String CHANNEL_METADATA_PERSIST_EXECUTOR = "channelMetadataPersistExecutor";
 
   @Bean(name = TARGET_COORDINATOR_MAINTENANCE_EXECUTOR, destroyMethod = "shutdown")
   public ExecutorService targetCoordinatorMaintenanceExecutor() {
@@ -185,5 +186,10 @@ public class ExecutorConfig {
   @Bean(name = PREFERENCES_NOTIFICATION_RULE_TEST_EXECUTOR, destroyMethod = "shutdown")
   public ExecutorService preferencesNotificationRuleTestExecutor() {
     return VirtualThreads.newSingleThreadExecutor("ircafe-notification-rule-test");
+  }
+
+  @Bean(name = CHANNEL_METADATA_PERSIST_EXECUTOR, destroyMethod = "shutdown")
+  public ExecutorService channelMetadataPersistExecutor() {
+    return VirtualThreads.newSingleThreadExecutor("ircafe-channel-metadata");
   }
 }
