@@ -63,6 +63,7 @@ import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeTargetNodeRemovalMu
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionFallbackPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
+import cafe.woden.ircclient.ui.servertree.policy.ServerTreeStartupSelectionRestorer;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTypingTargetPolicy;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeNodeAccess;
@@ -117,7 +118,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -360,6 +360,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeBouncerDetachPolicy bouncerDetachPolicy;
   private final ServerTreeNodeBadgeUpdater nodeBadgeUpdater;
   private final ServerTreeSelectionFallbackPolicy selectionFallbackPolicy;
+  private final ServerTreeStartupSelectionRestorer startupSelectionRestorer;
   private final ServerTreeUiLeafVisibilitySynchronizer uiLeafVisibilitySynchronizer;
   private final ServerTreeNodeVisibilityMutator nodeVisibilityMutator;
   private final ServerTreeExpansionStateManager expansionStateManager;
@@ -396,7 +397,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private volatile boolean showChannelListNodes = true;
   private volatile boolean showDccTransfersNodes = false;
   private boolean startupSelectionCompleted = false;
-  private volatile TargetRef startupRememberedSelectionRef = null;
   private volatile TargetRef lastBroadcastSelectionRef = null;
   private volatile boolean showApplicationRoot = true;
   private volatile BiPredicate<String, String> canEditChannelModes = (serverId, channel) -> false;
@@ -446,7 +446,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     this.runtimeConfig = runtimeConfig;
     this.logProps = logProps;
-    this.startupRememberedSelectionRef = readStartupRememberedSelectionRef();
 
     this.interceptorStore = interceptorStore;
     this.jfrRuntimeEventsService = jfrRuntimeEventsService;
@@ -725,6 +724,37 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 leaves,
                 this::selectTarget,
                 tree));
+    this.startupSelectionRestorer =
+        new ServerTreeStartupSelectionRestorer(
+            ServerTreeStartupSelectionRestorer.readRememberedSelection(runtimeConfig),
+            new ServerTreeStartupSelectionRestorer.Context() {
+              @Override
+              public String normalizeServerId(String serverId) {
+                return ServerTreeDockable.normalizeServerId(serverId);
+              }
+
+              @Override
+              public boolean hasLeaf(TargetRef ref) {
+                return ref != null && leaves.containsKey(ref);
+              }
+
+              @Override
+              public boolean isMonitorGroupSelectable(String serverId) {
+                String sid = normalizeServerId(serverId);
+                return isGroupNodeSelectableForServer(sid, monitorNodeForServer(sid));
+              }
+
+              @Override
+              public boolean isInterceptorsGroupSelectable(String serverId) {
+                String sid = normalizeServerId(serverId);
+                return isGroupNodeSelectableForServer(sid, interceptorsNodeForServer(sid));
+              }
+
+              @Override
+              public void selectTarget(TargetRef ref) {
+                ServerTreeDockable.this.selectTarget(ref);
+              }
+            });
     this.uiLeafVisibilitySynchronizer =
         new ServerTreeUiLeafVisibilitySynchronizer(
             new ServerTreeUiLeafVisibilitySynchronizerContextAdapter(
@@ -1328,7 +1358,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private String firstServerIdOrEmpty() {
-    TargetRef remembered = startupRememberedSelectionRef;
+    TargetRef remembered = startupSelectionRestorer.rememberedSelection();
     if (remembered != null) {
       String preferred = normalizeServerId(remembered.serverId());
       if (!preferred.isEmpty() && servers.containsKey(preferred)) {
@@ -1909,51 +1939,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void selectStartupDefaultForServer(String serverId) {
-    if (trySelectStartupRememberedTarget(serverId)) {
+    if (startupSelectionRestorer.tryRestoreForServer(serverId)) {
       return;
     }
     selectionFallbackPolicy.selectStartupDefaultForServer(serverId);
-  }
-
-  private TargetRef readStartupRememberedSelectionRef() {
-    if (runtimeConfig == null) return null;
-    Optional<RuntimeConfigStore.LastSelectedTarget> remembered =
-        runtimeConfig.readLastSelectedTarget();
-    if (remembered.isEmpty()) return null;
-    RuntimeConfigStore.LastSelectedTarget selected = remembered.get();
-    if (!selected.isValid()) return null;
-    try {
-      return new TargetRef(selected.serverId(), selected.target());
-    } catch (Exception ignored) {
-      return null;
-    }
-  }
-
-  private boolean trySelectStartupRememberedTarget(String serverId) {
-    TargetRef remembered = startupRememberedSelectionRef;
-    if (remembered == null) return false;
-
-    String expectedServerId = normalizeServerId(serverId);
-    String rememberedServerId = normalizeServerId(remembered.serverId());
-    if (expectedServerId.isEmpty() || !expectedServerId.equals(rememberedServerId)) return false;
-    if (!isStartupRememberedTargetSelectable(remembered)) return false;
-
-    selectTarget(remembered);
-    startupRememberedSelectionRef = null;
-    return true;
-  }
-
-  private boolean isStartupRememberedTargetSelectable(TargetRef ref) {
-    if (ref == null) return false;
-    if (ref.isMonitorGroup()) {
-      String sid = normalizeServerId(ref.serverId());
-      return isGroupNodeSelectableForServer(sid, monitorNodeForServer(sid));
-    }
-    if (ref.isInterceptorsGroup()) {
-      String sid = normalizeServerId(ref.serverId());
-      return isGroupNodeSelectableForServer(sid, interceptorsNodeForServer(sid));
-    }
-    return leaves.containsKey(ref);
   }
 
   private boolean isGroupNodeSelectableForServer(String serverId, DefaultMutableTreeNode node) {
@@ -2028,17 +2017,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   public void ensureNode(TargetRef ref) {
     targetLifecycleCoordinator.ensureNode(ref);
-    trySelectStartupRememberedTargetAfterEnsure(ref);
-  }
-
-  private void trySelectStartupRememberedTargetAfterEnsure(TargetRef ensuredRef) {
-    TargetRef remembered = startupRememberedSelectionRef;
-    if (remembered == null || ensuredRef == null) return;
-    if (!remembered.equals(ensuredRef)) return;
-    if (!isStartupRememberedTargetSelectable(remembered)) return;
-
-    startupRememberedSelectionRef = null;
-    selectTarget(remembered);
+    startupSelectionRestorer.tryRestoreAfterEnsure(ref);
   }
 
   private DefaultMutableTreeNode ensureChannelListNodeForEnsureNode(ServerNodes sn) {
