@@ -21,11 +21,12 @@ public class ChannelMetadataRepository {
         channel_key,
         channel_display,
         topic,
+        topic_panel_height_px,
         topic_set_by,
         topic_set_at_epoch_ms,
         updated_at_epoch_ms
       )
-      VALUES (?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?)
       """;
 
   private static final String UPDATE_SQL =
@@ -33,6 +34,7 @@ public class ChannelMetadataRepository {
       UPDATE channel_metadata
          SET channel_display = ?,
              topic = ?,
+             topic_panel_height_px = ?,
              topic_set_by = ?,
              topic_set_at_epoch_ms = ?,
              updated_at_epoch_ms = ?
@@ -49,7 +51,7 @@ public class ChannelMetadataRepository {
 
   private static final String SELECT_ONE_SQL =
       """
-      SELECT server_id, channel_key, channel_display, topic, topic_set_by, topic_set_at_epoch_ms, updated_at_epoch_ms
+      SELECT server_id, channel_key, channel_display, topic, topic_panel_height_px, topic_set_by, topic_set_at_epoch_ms, updated_at_epoch_ms
         FROM channel_metadata
        WHERE server_id = ?
          AND channel_key = ?
@@ -57,7 +59,7 @@ public class ChannelMetadataRepository {
 
   private static final String SELECT_ALL_SQL =
       """
-      SELECT server_id, channel_key, channel_display, topic, topic_set_by, topic_set_at_epoch_ms, updated_at_epoch_ms
+      SELECT server_id, channel_key, channel_display, topic, topic_panel_height_px, topic_set_by, topic_set_at_epoch_ms, updated_at_epoch_ms
         FROM channel_metadata
       """;
 
@@ -68,6 +70,9 @@ public class ChannelMetadataRepository {
               Objects.toString(rs.getString("channel_key"), "").trim(),
               Objects.toString(rs.getString("channel_display"), "").trim(),
               Objects.toString(rs.getString("topic"), "").trim(),
+              rs.getObject("topic_panel_height_px") != null
+                  ? rs.getInt("topic_panel_height_px")
+                  : null,
               trimToNull(rs.getString("topic_set_by")),
               rs.getObject("topic_set_at_epoch_ms") != null
                   ? rs.getLong("topic_set_at_epoch_ms")
@@ -81,6 +86,7 @@ public class ChannelMetadataRepository {
       String channelKey,
       String channelDisplay,
       String topic,
+      Integer topicPanelHeightPx,
       String topicSetBy,
       Long topicSetAtEpochMs,
       long updatedAtEpochMs) {
@@ -90,10 +96,30 @@ public class ChannelMetadataRepository {
       channelKey = Objects.toString(channelKey, "").trim();
       channelDisplay = truncate(Objects.toString(channelDisplay, "").trim(), CHANNEL_MAX);
       topic = truncate(Objects.toString(topic, "").trim(), TOPIC_MAX);
+      topicPanelHeightPx = normalizeTopicPanelHeightPx(topicPanelHeightPx);
       topicSetBy = truncate(trimToNull(topicSetBy), TOPIC_SET_BY_MAX);
       if (updatedAtEpochMs <= 0L) {
         updatedAtEpochMs = System.currentTimeMillis();
       }
+    }
+
+    public ChannelMetadataRow(
+        String serverId,
+        String channelKey,
+        String channelDisplay,
+        String topic,
+        String topicSetBy,
+        Long topicSetAtEpochMs,
+        long updatedAtEpochMs) {
+      this(
+          serverId,
+          channelKey,
+          channelDisplay,
+          topic,
+          null,
+          topicSetBy,
+          topicSetAtEpochMs,
+          updatedAtEpochMs);
     }
   }
 
@@ -104,7 +130,6 @@ public class ChannelMetadataRepository {
   public void upsert(ChannelMetadataRow row) {
     if (row == null) return;
     if (row.serverId().isEmpty() || row.channelKey().isEmpty()) return;
-    if (row.topic().isEmpty()) return;
     String channelDisplay =
         row.channelDisplay().isEmpty() ? row.channelKey() : row.channelDisplay();
 
@@ -113,6 +138,7 @@ public class ChannelMetadataRepository {
             UPDATE_SQL,
             channelDisplay,
             row.topic(),
+            row.topicPanelHeightPx(),
             row.topicSetBy(),
             row.topicSetAtEpochMs(),
             row.updatedAtEpochMs(),
@@ -127,6 +153,7 @@ public class ChannelMetadataRepository {
           row.channelKey(),
           channelDisplay,
           row.topic(),
+          row.topicPanelHeightPx(),
           row.topicSetBy(),
           row.topicSetAtEpochMs(),
           row.updatedAtEpochMs());
@@ -137,6 +164,7 @@ public class ChannelMetadataRepository {
           UPDATE_SQL,
           channelDisplay,
           row.topic(),
+          row.topicPanelHeightPx(),
           row.topicSetBy(),
           row.topicSetAtEpochMs(),
           row.updatedAtEpochMs(),
@@ -188,5 +216,10 @@ public class ChannelMetadataRepository {
       cause = cause.getCause();
     }
     return false;
+  }
+
+  private static Integer normalizeTopicPanelHeightPx(Integer heightPx) {
+    if (heightPx == null) return null;
+    return Math.max(40, Math.min(200, heightPx));
   }
 }

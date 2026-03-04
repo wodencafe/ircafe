@@ -302,6 +302,7 @@ public class ChatDockManager {
     // Keep in sync with current settings/draft even for already-registered dockables.
     String mainTopic = mainChat.topicFor(target);
     dock.setInputEnabled(pinnedInputsEnabled);
+    dock.setTopicPanelHeightPx(mainChat.topicPanelHeightPxFor(target));
     dock.setTopic(mainTopic);
     requestPinnedHistoryPrefill(target);
 
@@ -389,6 +390,14 @@ public class ChatDockManager {
             });
     created.setDraftText(initialDraft);
     created.setInputEnabled(pinnedInputsEnabled);
+    created.setTopicPanelHeightPx(mainChat.topicPanelHeightPxFor(target));
+    created.setOnTopicPanelHeightChanged(
+        heightPx -> {
+          try {
+            mainChat.setTopicPanelHeightPxFor(target, heightPx);
+          } catch (Exception ignored) {
+          }
+        });
     openPinned.put(target, created);
 
     Docking.registerDockable(created);

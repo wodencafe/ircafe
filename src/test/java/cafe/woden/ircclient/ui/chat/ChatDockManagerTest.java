@@ -61,6 +61,7 @@ class ChatDockManagerTest {
     PinnedChatDockable pinnedDock = mock(PinnedChatDockable.class);
     openPinned(manager).put(target, pinnedDock);
     AtomicBoolean topicLookupOnEdt = new AtomicBoolean(false);
+    when(mainChat.topicPanelHeightPxFor(target)).thenReturn(144);
     when(mainChat.topicFor(target))
         .thenAnswer(
             ignored -> {
@@ -72,6 +73,8 @@ class ChatDockManagerTest {
 
     assertSame(pinnedDock, restored);
     verify(pinnedDock).setInputEnabled(true);
+    verify(mainChat).topicPanelHeightPxFor(target);
+    verify(pinnedDock).setTopicPanelHeightPx(144);
     verify(mainChat).topicFor(target);
     verify(pinnedDock).setTopic("Topic restored");
     verify(chatHistoryService).onTargetSelected(target);

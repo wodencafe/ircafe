@@ -441,7 +441,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
               repaint();
             },
             metadata::topicFor,
-            (target, topic) -> metadata.rememberTopic(target, topic, null, null));
+            (target, topic) -> metadata.rememberTopic(target, topic, null, null),
+            metadata::topicPanelHeightPxFor,
+            metadata::rememberTopicPanelHeight);
     ChatBanListCoordinator banListCoordinator = new ChatBanListCoordinator(channelListPanel);
     return new TopicCoordinatorBundle(topicCoordinator, banListCoordinator);
   }
@@ -979,6 +981,22 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public String topicFor(TargetRef target) {
     return topicCoordinator.topicFor(target);
+  }
+
+  public int topicPanelHeightPx() {
+    return topicCoordinator.topicPanelHeightPx();
+  }
+
+  public int topicPanelHeightPxFor(TargetRef target) {
+    return topicCoordinator.topicPanelHeightPxFor(target);
+  }
+
+  public void setTopicPanelHeightPx(int heightPx) {
+    topicCoordinator.setTopicPanelHeightPx(heightPx);
+  }
+
+  public void setTopicPanelHeightPxFor(TargetRef target, int heightPx) {
+    topicCoordinator.setTopicPanelHeightPxFor(target, heightPx);
   }
 
   public Flowable<TopicUpdate> topicUpdates() {

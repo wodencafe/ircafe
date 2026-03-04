@@ -60,4 +60,28 @@ class ChannelMetadataStoreTest {
     assertEquals("", store.topicFor(target));
     verify(repository).delete("libera", "#ircafe");
   }
+
+  @Test
+  void rememberTopicPanelHeightUpdatesCacheAndPersists() {
+    ChannelMetadataRepository repository = mock(ChannelMetadataRepository.class);
+    when(repository.findAll()).thenReturn(List.of());
+    ChannelMetadataStore store = new ChannelMetadataStore(repository, Runnable::run);
+    store.initializeCache();
+
+    TargetRef target = new TargetRef("libera", "#ircafe");
+    store.rememberTopicPanelHeight(target, 147);
+
+    assertEquals(147, store.topicPanelHeightPxFor(target));
+    verify(repository).upsert(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void topicPanelHeightFallsBackToDefaultWhenMissing() {
+    ChannelMetadataRepository repository = mock(ChannelMetadataRepository.class);
+    when(repository.findAll()).thenReturn(List.of());
+    ChannelMetadataStore store = new ChannelMetadataStore(repository, Runnable::run);
+    store.initializeCache();
+
+    assertEquals(58, store.topicPanelHeightPxFor(new TargetRef("libera", "#ircafe")));
+  }
 }

@@ -22,14 +22,15 @@ class ChannelMetadataRepositoryTest {
 
       repo.upsert(
           new ChannelMetadataRepository.ChannelMetadataRow(
-              "libera", "#ircafe", "#IRCafe", "Topic one", "alice", 10L, 100L));
+              "libera", "#ircafe", "#IRCafe", "Topic one", 120, "alice", 10L, 100L));
       repo.upsert(
           new ChannelMetadataRepository.ChannelMetadataRow(
-              "libera", "#ircafe", "#IRCafe", "Topic two", "bob", 20L, 200L));
+              "libera", "#ircafe", "#IRCafe", "Topic two", 132, "bob", 20L, 200L));
 
       var stored = repo.find("libera", "#ircafe");
       assertTrue(stored.isPresent());
       assertEquals("Topic two", stored.orElseThrow().topic());
+      assertEquals(132, stored.orElseThrow().topicPanelHeightPx());
       assertEquals("bob", stored.orElseThrow().topicSetBy());
       assertEquals(20L, stored.orElseThrow().topicSetAtEpochMs());
       assertEquals(200L, stored.orElseThrow().updatedAtEpochMs());

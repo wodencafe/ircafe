@@ -18,10 +18,14 @@ import org.springframework.stereotype.Component;
 public class ChannelMetadataStore implements ChannelMetadataPort {
 
   private static final Logger log = LoggerFactory.getLogger(ChannelMetadataStore.class);
+  private static final int DEFAULT_TOPIC_PANEL_HEIGHT_PX = 58;
+  private static final int MIN_TOPIC_PANEL_HEIGHT_PX = 40;
+  private static final int MAX_TOPIC_PANEL_HEIGHT_PX = 200;
 
   private final ChannelMetadataRepository repository;
   private final Executor persistExecutor;
   private final Map<TargetRef, String> topicByTarget = new ConcurrentHashMap<>();
+  private final Map<TargetRef, Integer> topicHeightByTarget = new ConcurrentHashMap<>();
 
   public ChannelMetadataStore(
       ChannelMetadataRepository repository,
@@ -39,9 +43,14 @@ public class ChannelMetadataStore implements ChannelMetadataPort {
       TargetRef ref = toTargetRef(row.serverId(), row.channelDisplay(), row.channelKey());
       if (ref == null || !ref.isChannel()) continue;
       String topic = normalizeTopic(row.topic());
-      if (topic.isEmpty()) continue;
-      topicByTarget.put(ref, topic);
-      loaded++;
+      if (!topic.isEmpty()) {
+        topicByTarget.put(ref, topic);
+        loaded++;
+      }
+      Integer topicHeight = normalizeTopicPanelHeight(row.topicPanelHeightPx());
+      if (topicHeight != null) {
+        topicHeightByTarget.put(ref, topicHeight);
+      }
     }
     log.info("[ircafe] loaded {} persisted channel topic snapshots", loaded);
   }
@@ -53,17 +62,29 @@ public class ChannelMetadataStore implements ChannelMetadataPort {
   }
 
   @Override
+  public int topicPanelHeightPxFor(TargetRef target) {
+    if (target == null || !target.isChannel()) return DEFAULT_TOPIC_PANEL_HEIGHT_PX;
+    Integer saved = topicHeightByTarget.get(target);
+    if (saved == null) return DEFAULT_TOPIC_PANEL_HEIGHT_PX;
+    return normalizeTopicPanelHeight(saved);
+  }
+
+  @Override
   public void rememberTopic(
       TargetRef target, String topic, String topicSetBy, Long topicSetAtEpochMs) {
     if (target == null || !target.isChannel()) return;
     String normalized = normalizeTopic(topic);
+    Integer savedTopicHeight = topicHeightByTarget.get(target);
     if (normalized.isEmpty()) {
       topicByTarget.remove(target);
-      persistExecutor.execute(() -> safeDelete(target.serverId(), target.key()));
-      return;
+      // Keep per-channel rows when they carry topic panel height metadata.
+      if (savedTopicHeight == null) {
+        persistExecutor.execute(() -> safeDelete(target.serverId(), target.key()));
+        return;
+      }
+    } else {
+      topicByTarget.put(target, normalized);
     }
-
-    topicByTarget.put(target, normalized);
     long now = System.currentTimeMillis();
     ChannelMetadataRepository.ChannelMetadataRow row =
         new ChannelMetadataRepository.ChannelMetadataRow(
@@ -71,8 +92,29 @@ public class ChannelMetadataStore implements ChannelMetadataPort {
             target.key(),
             target.target(),
             normalized,
+            savedTopicHeight,
             normalizeOptional(topicSetBy),
             normalizeEpoch(topicSetAtEpochMs),
+            now);
+    persistExecutor.execute(() -> safeUpsert(row));
+  }
+
+  @Override
+  public void rememberTopicPanelHeight(TargetRef target, int heightPx) {
+    if (target == null || !target.isChannel()) return;
+    int normalizedHeight = normalizeTopicPanelHeight(heightPx);
+    topicHeightByTarget.put(target, normalizedHeight);
+    String topic = topicFor(target);
+    long now = System.currentTimeMillis();
+    ChannelMetadataRepository.ChannelMetadataRow row =
+        new ChannelMetadataRepository.ChannelMetadataRow(
+            target.serverId(),
+            target.key(),
+            target.target(),
+            topic,
+            normalizedHeight,
+            null,
+            null,
             now);
     persistExecutor.execute(() -> safeUpsert(row));
   }
@@ -128,5 +170,14 @@ public class ChannelMetadataStore implements ChannelMetadataPort {
   private static Long normalizeEpoch(Long epochMs) {
     if (epochMs == null || epochMs <= 0L) return null;
     return epochMs;
+  }
+
+  private static Integer normalizeTopicPanelHeight(Integer heightPx) {
+    if (heightPx == null) return null;
+    return Math.max(MIN_TOPIC_PANEL_HEIGHT_PX, Math.min(MAX_TOPIC_PANEL_HEIGHT_PX, heightPx));
+  }
+
+  private static int normalizeTopicPanelHeight(int heightPx) {
+    return Math.max(MIN_TOPIC_PANEL_HEIGHT_PX, Math.min(MAX_TOPIC_PANEL_HEIGHT_PX, heightPx));
   }
 }
