@@ -3,7 +3,9 @@ package cafe.woden.ircclient.ui.servertree.composition;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
+import cafe.woden.ircclient.ui.util.TreeNodeActions;
 import java.beans.PropertyChangeEvent;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.swing.JComponent;
@@ -22,7 +24,7 @@ class ServerTreeTreeInteractionBindingsFactoryTest {
     JTree tree = new JTree(model);
     AtomicInteger refreshCalls = new AtomicInteger();
 
-    ServerTreeTreeInteractionBindings bindings =
+    TreeNodeActions<TargetRef> nodeActions =
         ServerTreeTreeInteractionBindingsFactory.create(
             new ServerTreeTreeInteractionBindingsFactory.Inputs(
                 new ServerTreeNodeActionsFactory(),
@@ -45,7 +47,7 @@ class ServerTreeTreeInteractionBindingsFactoryTest {
                 refreshCalls::incrementAndGet,
                 () -> {}));
 
-    assertNotNull(bindings.nodeActions());
+    assertNotNull(nodeActions);
     assertNotNull(
         tree.getInputMap(JComponent.WHEN_FOCUSED)
             .get(javax.swing.KeyStroke.getKeyStroke("ctrl shift UP")));

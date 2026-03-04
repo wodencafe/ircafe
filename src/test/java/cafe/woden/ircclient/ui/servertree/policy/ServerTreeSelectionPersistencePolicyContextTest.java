@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.ui.servertree.context;
+package cafe.woden.ircclient.ui.servertree.policy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -9,15 +9,16 @@ import cafe.woden.ircclient.app.api.TargetRef;
 import javax.swing.tree.DefaultMutableTreeNode;
 import org.junit.jupiter.api.Test;
 
-class ServerTreeSelectionPersistenceContextAdapterTest {
+class ServerTreeSelectionPersistencePolicyContextTest {
 
   @Test
-  void delegatesSelectionPersistenceContextLookups() {
+  void contextDelegatesSelectionPersistenceLookups() {
     TargetRef lastBroadcast = new TargetRef("libera", "status");
     TargetRef selectedTarget = new TargetRef("libera", "#ircafe");
     DefaultMutableTreeNode selectedNode = new DefaultMutableTreeNode("selected");
-    ServerTreeSelectionPersistenceContextAdapter adapter =
-        new ServerTreeSelectionPersistenceContextAdapter(
+
+    ServerTreeSelectionPersistencePolicy.Context context =
+        ServerTreeSelectionPersistencePolicy.context(
             () -> lastBroadcast,
             () -> selectedTarget,
             () -> selectedNode,
@@ -25,11 +26,11 @@ class ServerTreeSelectionPersistenceContextAdapterTest {
             node -> node == selectedNode,
             node -> false);
 
-    assertSame(lastBroadcast, adapter.lastBroadcastSelection());
-    assertSame(selectedTarget, adapter.selectedTargetRef());
-    assertSame(selectedNode, adapter.selectedTreeNode());
-    assertEquals("libera", adapter.owningServerIdForNode(selectedNode));
-    assertTrue(adapter.isMonitorGroupNode(selectedNode));
-    assertFalse(adapter.isInterceptorsGroupNode(selectedNode));
+    assertSame(lastBroadcast, context.lastBroadcastSelection());
+    assertSame(selectedTarget, context.selectedTargetRef());
+    assertSame(selectedNode, context.selectedTreeNode());
+    assertEquals("libera", context.owningServerIdForNode(selectedNode));
+    assertTrue(context.isMonitorGroupNode(selectedNode));
+    assertFalse(context.isInterceptorsGroupNode(selectedNode));
   }
 }

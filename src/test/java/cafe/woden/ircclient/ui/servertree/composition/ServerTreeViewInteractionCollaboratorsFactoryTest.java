@@ -11,8 +11,8 @@ import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeNodeAccess;
-import cafe.woden.ircclient.ui.servertree.request.ServerTreeChannelModeRequestBus;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestEmitter;
+import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
@@ -70,7 +70,7 @@ class ServerTreeViewInteractionCollaboratorsFactoryTest {
                 (ref, enabled) -> {},
                 __ -> false,
                 (ref, enabled) -> {},
-                mock(ServerTreeChannelModeRequestBus.class),
+                mock(ServerTreeRequestStreams.class),
                 __ -> false));
 
     assertNotNull(collaborators.tooltipProvider());

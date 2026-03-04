@@ -2,9 +2,12 @@ package cafe.woden.ircclient.ui.servertree.request;
 
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
+import cafe.woden.ircclient.ui.servertree.ServerTreeDockable.ChannelModeSetRequest;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import java.util.Objects;
 
 /** Owns outbound request processors and exposes both stream and emitter views. */
 public final class ServerTreeRequestStreams {
@@ -35,6 +38,12 @@ public final class ServerTreeRequestStreams {
       PublishProcessor.<String>create().toSerialized();
   private final FlowableProcessor<String> openQuasselNetworkManagerRequests =
       PublishProcessor.<String>create().toSerialized();
+  private final FlowableProcessor<TargetRef> channelModeDetailsRequests =
+      PublishProcessor.<TargetRef>create().toSerialized();
+  private final FlowableProcessor<TargetRef> channelModeRefreshRequests =
+      PublishProcessor.<TargetRef>create().toSerialized();
+  private final FlowableProcessor<ChannelModeSetRequest> channelModeSetRequests =
+      PublishProcessor.<ChannelModeSetRequest>create().toSerialized();
   private final FlowableProcessor<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests =
       PublishProcessor.<Ircv3CapabilityToggleRequest>create().toSerialized();
 
@@ -105,6 +114,35 @@ public final class ServerTreeRequestStreams {
 
   public Flowable<String> openQuasselNetworkManagerRequests() {
     return openQuasselNetworkManagerRequests.onBackpressureLatest();
+  }
+
+  public Flowable<TargetRef> channelModeDetailsRequests() {
+    return channelModeDetailsRequests.onBackpressureLatest();
+  }
+
+  public Flowable<TargetRef> channelModeRefreshRequests() {
+    return channelModeRefreshRequests.onBackpressureLatest();
+  }
+
+  public Flowable<ChannelModeSetRequest> channelModeSetRequests() {
+    return channelModeSetRequests.onBackpressureLatest();
+  }
+
+  public void emitChannelModeDetailsRequest(TargetRef target) {
+    if (!ServerTreeConventions.isChannelTarget(target)) return;
+    channelModeDetailsRequests.onNext(target);
+  }
+
+  public void emitChannelModeRefreshRequest(TargetRef target) {
+    if (!ServerTreeConventions.isChannelTarget(target)) return;
+    channelModeRefreshRequests.onNext(target);
+  }
+
+  public void emitChannelModeSetRequest(TargetRef target, String modeSpec) {
+    if (!ServerTreeConventions.isChannelTarget(target)) return;
+    String spec = Objects.toString(modeSpec, "").trim();
+    if (spec.isEmpty()) return;
+    channelModeSetRequests.onNext(new ChannelModeSetRequest(target, spec));
   }
 
   public Flowable<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests() {

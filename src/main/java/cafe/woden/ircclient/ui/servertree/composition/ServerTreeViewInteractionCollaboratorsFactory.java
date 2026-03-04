@@ -18,8 +18,8 @@ import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeBouncerDetachPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeNodeAccess;
-import cafe.woden.ircclient.ui.servertree.request.ServerTreeChannelModeRequestBus;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestEmitter;
+import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
@@ -46,6 +46,8 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
   public static ServerTreeViewInteractionCollaborators create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
     JTree tree = Objects.requireNonNull(in.tree(), "tree");
+    ServerTreeRequestStreams requestStreams =
+        Objects.requireNonNull(in.requestStreams(), "requestStreams");
 
     ServerTreeTooltipProvider tooltipProvider =
         new ServerTreeTooltipProvider(
@@ -136,10 +138,10 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
                     in.setChannelPinned(),
                     in.isChannelMuted(),
                     in.setChannelMuted(),
-                    in.channelModeRequestBus()::emitDetailsRequest,
-                    in.channelModeRequestBus()::emitRefreshRequest,
+                    requestStreams::emitChannelModeDetailsRequest,
+                    requestStreams::emitChannelModeRefreshRequest,
                     in.canEditChannelModes(),
-                    in.channelModeRequestBus()::emitSetRequest,
+                    requestStreams::emitChannelModeSetRequest,
                     in.uiHooks()::closeTarget,
                     in.interceptorActions()::setInterceptorEnabled,
                     in.interceptorActions()::promptRenameInterceptor,
@@ -197,6 +199,6 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       BiConsumer<TargetRef, Boolean> setChannelPinned,
       Predicate<TargetRef> isChannelMuted,
       BiConsumer<TargetRef, Boolean> setChannelMuted,
-      ServerTreeChannelModeRequestBus channelModeRequestBus,
+      ServerTreeRequestStreams requestStreams,
       Predicate<TargetRef> canEditChannelModes) {}
 }

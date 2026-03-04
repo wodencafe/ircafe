@@ -4,7 +4,6 @@ import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinator;
-import cafe.woden.ircclient.ui.servertree.request.ServerTreeChannelModeRequestBus;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -15,19 +14,15 @@ import java.util.function.Function;
 public final class ServerTreeRequestApi {
   private final ServerTreeSelectionBroadcastCoordinator selectionBroadcastCoordinator;
   private final ServerTreeRequestStreams requestStreams;
-  private final ServerTreeChannelModeRequestBus channelModeRequestBus;
   private final ServerTreeInteractionSetupCoordinator interactionSetupCoordinator;
 
   public ServerTreeRequestApi(
       ServerTreeSelectionBroadcastCoordinator selectionBroadcastCoordinator,
       ServerTreeRequestStreams requestStreams,
-      ServerTreeChannelModeRequestBus channelModeRequestBus,
       ServerTreeInteractionSetupCoordinator interactionSetupCoordinator) {
     this.selectionBroadcastCoordinator =
         Objects.requireNonNull(selectionBroadcastCoordinator, "selectionBroadcastCoordinator");
     this.requestStreams = Objects.requireNonNull(requestStreams, "requestStreams");
-    this.channelModeRequestBus =
-        Objects.requireNonNull(channelModeRequestBus, "channelModeRequestBus");
     this.interactionSetupCoordinator =
         Objects.requireNonNull(interactionSetupCoordinator, "interactionSetupCoordinator");
   }
@@ -89,15 +84,15 @@ public final class ServerTreeRequestApi {
   }
 
   public Flowable<TargetRef> channelModeDetailsRequests() {
-    return channelModeRequestBus.detailsRequests();
+    return requestStreams.channelModeDetailsRequests();
   }
 
   public Flowable<TargetRef> channelModeRefreshRequests() {
-    return channelModeRequestBus.refreshRequests();
+    return requestStreams.channelModeRefreshRequests();
   }
 
   public Flowable<ServerTreeDockable.ChannelModeSetRequest> channelModeSetRequests() {
-    return channelModeRequestBus.setRequests();
+    return requestStreams.channelModeSetRequests();
   }
 
   public Flowable<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests() {

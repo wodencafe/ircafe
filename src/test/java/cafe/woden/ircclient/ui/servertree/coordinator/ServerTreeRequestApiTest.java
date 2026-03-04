@@ -5,7 +5,6 @@ import static org.mockito.Mockito.verify;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinator;
-import cafe.woden.ircclient.ui.servertree.request.ServerTreeChannelModeRequestBus;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import io.github.andrewauclair.moderndocking.Dockable;
 import java.util.function.Function;
@@ -18,15 +17,12 @@ class ServerTreeRequestApiTest {
     ServerTreeSelectionBroadcastCoordinator selectionBroadcastCoordinator =
         mock(ServerTreeSelectionBroadcastCoordinator.class);
     ServerTreeRequestStreams requestStreams = mock(ServerTreeRequestStreams.class);
-    ServerTreeChannelModeRequestBus channelModeRequestBus =
-        mock(ServerTreeChannelModeRequestBus.class);
     ServerTreeInteractionSetupCoordinator interactionSetupCoordinator =
         mock(ServerTreeInteractionSetupCoordinator.class);
     ServerTreeRequestApi api =
         new ServerTreeRequestApi(
             selectionBroadcastCoordinator,
             requestStreams,
-            channelModeRequestBus,
             interactionSetupCoordinator);
 
     Function<TargetRef, Dockable> provider = __ -> null;
@@ -63,9 +59,9 @@ class ServerTreeRequestApiTest {
     verify(requestStreams).openPinnedChatRequests();
     verify(requestStreams).openQuasselSetupRequests();
     verify(requestStreams).openQuasselNetworkManagerRequests();
-    verify(channelModeRequestBus).detailsRequests();
-    verify(channelModeRequestBus).refreshRequests();
-    verify(channelModeRequestBus).setRequests();
+    verify(requestStreams).channelModeDetailsRequests();
+    verify(requestStreams).channelModeRefreshRequests();
+    verify(requestStreams).channelModeSetRequests();
     verify(requestStreams).ircv3CapabilityToggleRequests();
     verify(interactionSetupCoordinator).setPinnedDockableProvider(provider);
   }

@@ -9,7 +9,6 @@ import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions;
 import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerRootLifecycleContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeSettingsSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLifecycleFacade;
@@ -106,7 +105,7 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
             Objects.requireNonNull(in.statusLabelManager(), "statusLabelManager"));
     ServerTreeSettingsSynchronizer settingsSynchronizer =
         new ServerTreeSettingsSynchronizer(
-            new ServerTreeSettingsSynchronizerContextAdapter(
+            ServerTreeSettingsSynchronizer.context(
                 in.settingsBus(),
                 in.jfrRuntimeEventsService(),
                 in.runtimeConfig(),

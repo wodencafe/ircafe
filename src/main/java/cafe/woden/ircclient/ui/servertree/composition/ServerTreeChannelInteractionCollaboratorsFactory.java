@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.composition;
 
 import cafe.woden.ircclient.app.api.TargetRef;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetSelectionContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelDisconnectStateManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelInteractionApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOperations;
@@ -63,12 +62,18 @@ public final class ServerTreeChannelInteractionCollaboratorsFactory {
                     in.emitManagedChannelsChanged(), "emitManagedChannelsChanged")));
     ServerTreeTargetSelectionCoordinator targetSelectionCoordinator =
         new ServerTreeTargetSelectionCoordinator(
-            new ServerTreeTargetSelectionContextAdapter(
-                in.ensureNode(),
+            ServerTreeTargetSelectionCoordinator.context(
+                Objects.requireNonNull(in.ensureNode(), "ensureNode"),
                 Objects.requireNonNull(in.monitorNodeForServer(), "monitorNodeForServer"),
                 Objects.requireNonNull(in.interceptorsNodeForServer(), "interceptorsNodeForServer"),
-                Objects.requireNonNull(in.serverNodesForServer(), "serverNodesForServer"),
-                in.leafForTarget(),
+                (serverId, node) -> {
+                  ServerNodes nodes =
+                      Objects.requireNonNull(in.serverNodesForServer(), "serverNodesForServer")
+                          .apply(serverId);
+                  if (nodes == null || node == null) return false;
+                  return node.getParent() == nodes.serverNode || node.getParent() == nodes.otherNode;
+                },
+                Objects.requireNonNull(in.leafForTarget(), "leafForTarget"),
                 node -> {
                   if (node == null) return;
                   TreePath path = new TreePath(node.getPath());

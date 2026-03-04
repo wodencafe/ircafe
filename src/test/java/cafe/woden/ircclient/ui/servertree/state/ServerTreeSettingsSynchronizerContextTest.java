@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.ui.servertree.context;
+package cafe.woden.ircclient.ui.servertree.state;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -16,10 +16,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
-class ServerTreeSettingsSynchronizerContextAdapterTest {
+class ServerTreeSettingsSynchronizerContextTest {
 
   @Test
-  void delegatesSettingsSynchronizerContextOperations() {
+  void contextDelegatesSettingsSynchronizerOperations() {
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     JfrRuntimeEventsService jfrRuntimeEventsService = mock(JfrRuntimeEventsService.class);
@@ -33,8 +33,8 @@ class ServerTreeSettingsSynchronizerContextAdapterTest {
     AtomicBoolean refreshedLayout = new AtomicBoolean(false);
     AtomicBoolean refreshedJfr = new AtomicBoolean(false);
 
-    ServerTreeSettingsSynchronizerContextAdapter adapter =
-        new ServerTreeSettingsSynchronizerContextAdapter(
+    ServerTreeSettingsSynchronizer.Context context =
+        ServerTreeSettingsSynchronizer.context(
             settingsBus,
             jfrRuntimeEventsService,
             runtimeConfig,
@@ -49,20 +49,20 @@ class ServerTreeSettingsSynchronizerContextAdapterTest {
             () -> refreshedLayout.set(true),
             () -> refreshedJfr.set(true));
 
-    assertSame(settingsBus, adapter.settingsBus());
-    assertSame(jfrRuntimeEventsService, adapter.jfrRuntimeEventsService());
-    assertSame(runtimeConfig, adapter.runtimeConfig());
-    assertTrue(adapter.typingIndicatorsTreeEnabled());
+    assertSame(settingsBus, context.settingsBus());
+    assertSame(jfrRuntimeEventsService, context.jfrRuntimeEventsService());
+    assertSame(runtimeConfig, context.runtimeConfig());
+    assertTrue(context.typingIndicatorsTreeEnabled());
 
-    adapter.setTypingIndicatorsTreeEnabled(false);
-    adapter.clearTypingIndicatorsFromTree();
-    adapter.setTypingIndicatorStyle(ServerTreeTypingIndicatorStyle.DOTS);
-    adapter.setServerTreeNotificationBadgesEnabled(true);
-    adapter.setUnreadBadgeScalePercent(123);
-    adapter.setUnreadChannelTextColor(Color.GREEN);
-    adapter.setHighlightChannelTextColor(Color.ORANGE);
-    adapter.refreshTreeLayoutAfterUiChange();
-    adapter.refreshApplicationJfrNode();
+    context.setTypingIndicatorsTreeEnabled(false);
+    context.clearTypingIndicatorsFromTree();
+    context.setTypingIndicatorStyle(ServerTreeTypingIndicatorStyle.DOTS);
+    context.setServerTreeNotificationBadgesEnabled(true);
+    context.setUnreadBadgeScalePercent(123);
+    context.setUnreadChannelTextColor(Color.GREEN);
+    context.setHighlightChannelTextColor(Color.ORANGE);
+    context.refreshTreeLayoutAfterUiChange();
+    context.refreshApplicationJfrNode();
 
     assertFalse(typingEnabled.get());
     assertTrue(typingCleared.get());

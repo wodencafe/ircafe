@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.ui.servertree.ServerTreeDockable.ChannelModeSetRequest;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import org.junit.jupiter.api.Test;
 
@@ -61,5 +62,34 @@ class ServerTreeRequestStreamsTest {
     openNetworkManager.assertValue("libera");
     toggleCaps.assertValue(toggle);
     assertEquals(1, connect.values().size());
+  }
+
+  @Test
+  void emitsChannelModeDetailsOnlyForChannelTargets() {
+    ServerTreeRequestStreams streams = new ServerTreeRequestStreams();
+    TestSubscriber<TargetRef> details = streams.channelModeDetailsRequests().test();
+
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    streams.emitChannelModeDetailsRequest(TargetRef.notifications("libera"));
+    details.assertNoValues();
+
+    streams.emitChannelModeDetailsRequest(channel);
+    details.assertValue(channel);
+  }
+
+  @Test
+  void emitsChannelModeSetRequestsWithTrimmedSpecs() {
+    ServerTreeRequestStreams streams = new ServerTreeRequestStreams();
+    TestSubscriber<ChannelModeSetRequest> setRequests = streams.channelModeSetRequests().test();
+
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    streams.emitChannelModeSetRequest(channel, "   ");
+    setRequests.assertNoValues();
+
+    streams.emitChannelModeSetRequest(channel, "  +m  ");
+    assertEquals(1, setRequests.values().size());
+    ChannelModeSetRequest emitted = setRequests.values().getFirst();
+    assertEquals(channel, emitted.target());
+    assertEquals("+m", emitted.modeSpec());
   }
 }

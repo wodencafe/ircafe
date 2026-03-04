@@ -26,7 +26,6 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLifecycleSetting
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTargetLifecycleCoordinatorFactory;
-import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTreeInteractionBindings;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTreeInteractionBindingsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaboratorsFactory;
@@ -34,7 +33,6 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeApplicationRootVisib
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeBuiltInLayoutOrchestratorContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionPersistenceContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeStartupSelectionRestorerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeUiLeafVisibilitySynchronizerContextAdapter;
@@ -59,7 +57,6 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibility
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiRefreshCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeDragReorderSupport;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinator;
-import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinatorFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionWiringFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeRowInteractionHandler;
@@ -81,7 +78,6 @@ import cafe.woden.ircclient.ui.servertree.query.ServerTreeChannelQueryService;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeNodeAccess;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeServerNodeResolver;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeTargetSnapshotProvider;
-import cafe.woden.ircclient.ui.servertree.request.ServerTreeChannelModeRequestBus;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestEmitter;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
@@ -207,9 +203,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       new ServerTreeSelectionBroadcastCoordinator();
   private final ServerTreeRequestStreams requestStreams = new ServerTreeRequestStreams();
   private final ServerTreeRequestEmitter requestEmitter = requestStreams.requestEmitter();
-
-  private final ServerTreeChannelModeRequestBus channelModeRequestBus =
-      new ServerTreeChannelModeRequestBus();
 
   // Hidden top-level container. Visible top-level nodes are siblings: IRC + Application.
   private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("(root)");
@@ -692,7 +685,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 tree));
     this.selectionPersistencePolicy =
         new ServerTreeSelectionPersistencePolicy(
-            new ServerTreeSelectionPersistenceContextAdapter(
+            ServerTreeSelectionPersistencePolicy.context(
                 selectionBroadcastCoordinator::lastBroadcastSelectionRef,
                 this::selectedTargetRef,
                 () -> (DefaultMutableTreeNode) tree.getLastSelectedPathComponent(),
@@ -845,7 +838,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::setChannelPinned,
                 this::isChannelMuted,
                 this::setChannelMuted,
-                channelModeRequestBus,
+                requestStreams,
                 channelTargetOperations::canEditChannelModesForTarget));
 
     this.tooltipResolver = viewInteractionCollaborators.tooltipResolver();
@@ -1030,7 +1023,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.targetSelectionCoordinator = channelInteractionCollaborators.targetSelectionCoordinator();
 
     this.channelInteractionApi = channelInteractionCollaborators.channelInteractionApi();
-    ServerTreeTreeInteractionBindings treeInteractionBindings =
+    this.nodeActions =
         ServerTreeTreeInteractionBindingsFactory.create(
             new ServerTreeTreeInteractionBindingsFactory.Inputs(
                 nodeActionsFactory,
@@ -1052,7 +1045,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::persistBuiltInLayoutFromTree,
                 this::refreshTreeLayoutAfterUiChange,
                 this::openSelectedNodeInChatDock));
-    this.nodeActions = treeInteractionBindings.nodeActions();
 
     treeScroll.setPreferredSize(new Dimension(260, 400));
     treeScroll.setMinimumSize(new Dimension(0, 0));
@@ -1066,8 +1058,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     ServerTreeInteractionWiringFactory interactionWiringFactory =
         new ServerTreeInteractionWiringFactory();
     this.interactionSetupCoordinator =
-        ServerTreeInteractionSetupCoordinatorFactory.create(
-            new ServerTreeInteractionSetupCoordinatorFactory.Inputs(
+        ServerTreeInteractionSetupCoordinator.create(
+            new ServerTreeInteractionSetupCoordinator.Inputs(
                 interactionWiringFactory,
                 tree,
                 model,
@@ -1112,7 +1104,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeRequestApi(
             selectionBroadcastCoordinator,
             requestStreams,
-            channelModeRequestBus,
             interactionSetupCoordinator);
   }
 

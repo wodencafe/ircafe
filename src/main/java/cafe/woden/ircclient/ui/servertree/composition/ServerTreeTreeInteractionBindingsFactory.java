@@ -18,7 +18,7 @@ public final class ServerTreeTreeInteractionBindingsFactory {
 
   private ServerTreeTreeInteractionBindingsFactory() {}
 
-  public static ServerTreeTreeInteractionBindings create(Inputs inputs) {
+  public static TreeNodeActions<TargetRef> create(Inputs inputs) {
     Inputs in = Objects.requireNonNull(inputs, "inputs");
     JTree tree = Objects.requireNonNull(in.tree(), "tree");
 
@@ -62,7 +62,7 @@ public final class ServerTreeTreeInteractionBindingsFactory {
         nodeActions::closeAction,
         Objects.requireNonNull(in.openSelectedNodeInChatDock(), "openSelectedNodeInChatDock"));
 
-    return new ServerTreeTreeInteractionBindings(nodeActions);
+    return nodeActions;
   }
 
   public record Inputs(
