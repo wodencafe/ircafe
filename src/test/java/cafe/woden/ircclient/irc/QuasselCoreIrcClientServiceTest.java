@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -954,7 +955,7 @@ class QuasselCoreIrcClientServiceTest {
                     "irc.example.net",
                     ":irc.example.net CAP quassel ACK :message-tags typing"))));
 
-    events.awaitDone(2, TimeUnit.SECONDS);
+    awaitEvent(events, ev -> ev instanceof IrcEvent.Ircv3CapabilityChanged);
     assertTrue(
         events.values().stream()
             .map(ServerIrcEvent::event)
@@ -1011,7 +1012,7 @@ class QuasselCoreIrcClientServiceTest {
                     "irc.example.net",
                     raw))));
 
-    events.awaitDone(2, TimeUnit.SECONDS);
+    awaitEvent(events, ev -> ev instanceof IrcEvent.StandardReply);
     IrcEvent.StandardReply reply =
         events.values().stream()
             .map(ServerIrcEvent::event)
@@ -1123,7 +1124,7 @@ class QuasselCoreIrcClientServiceTest {
                     "irc.example.net",
                     ":irc.example.net 734 quassel 100 dave,erin :Monitor list is full"))));
 
-    events.awaitDone(2, TimeUnit.SECONDS);
+    awaitEvent(events, ev -> ev instanceof IrcEvent.MonitorListFull);
     assertTrue(
         events.values().stream()
             .map(ServerIrcEvent::event)
@@ -1263,7 +1264,7 @@ class QuasselCoreIrcClientServiceTest {
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 42))));
 
-    events.awaitDone(2, TimeUnit.SECONDS);
+    awaitEvent(events, ev -> ev instanceof IrcEvent.ReadMarkerObserved);
     assertTrue(
         events.values().stream()
             .map(ServerIrcEvent::event)
@@ -1323,7 +1324,7 @@ class QuasselCoreIrcClientServiceTest {
                 new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
                 new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 4242))));
 
-    events.awaitDone(2, TimeUnit.SECONDS);
+    awaitEvent(events, ev -> ev instanceof IrcEvent.ReadMarkerObserved);
     IrcEvent.ReadMarkerObserved markerEvent =
         events.values().stream()
             .map(ServerIrcEvent::event)
@@ -1380,7 +1381,8 @@ class QuasselCoreIrcClientServiceTest {
                     "alice!u@h",
                     "@+draft/reply=42 :alice!u@h PRIVMSG #ircafe :hello tagged"))));
 
-    events.awaitDone(2, TimeUnit.SECONDS);
+    awaitEvent(
+        events, ev -> ev instanceof IrcEvent.ChannelMessage msg && "501".equals(msg.messageId()));
     assertTrue(
         events.values().stream()
             .map(ServerIrcEvent::event)
@@ -1444,7 +1446,7 @@ class QuasselCoreIrcClientServiceTest {
                     "alice!u@h",
                     "@+typing=active;+draft/react=thumbsup;+draft/reply=42;+draft/unreact=thumbsup;+draft/delete=99;+draft/read-marker=timestamp=2026-03-03T12:00:00.000Z :alice!u@h TAGMSG #ircafe"))));
 
-    events.awaitDone(2, TimeUnit.SECONDS);
+    awaitEvent(events, ev -> ev instanceof IrcEvent.MessageRedactionObserved);
     assertTrue(
         events.values().stream()
             .map(ServerIrcEvent::event)
@@ -1529,7 +1531,7 @@ class QuasselCoreIrcClientServiceTest {
                     "alice!u@h",
                     ":alice!u@h REDACT #ircafe 777 :cleanup"))));
 
-    events.awaitDone(2, TimeUnit.SECONDS);
+    awaitEvent(events, ev -> ev instanceof IrcEvent.MessageRedactionObserved);
     assertTrue(
         events.values().stream()
             .map(ServerIrcEvent::event)
@@ -2170,7 +2172,7 @@ class QuasselCoreIrcClientServiceTest {
                 "sync()".getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 Map.of("name", "#ircafe", "topic", "Topic from sync"))));
 
-    events.awaitDone(2, TimeUnit.SECONDS);
+    awaitEvent(events, ev -> ev instanceof IrcEvent.ChannelTopicUpdated);
 
     assertTrue(
         events.values().stream()
@@ -2315,7 +2317,11 @@ class QuasselCoreIrcClientServiceTest {
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
     service.connect("quassel").blockingAwait();
-    events.awaitDone(2, TimeUnit.SECONDS);
+    awaitEvent(
+        events,
+        ev ->
+            ev instanceof IrcEvent.ConnectionFeaturesUpdated updated
+                && updated.source().startsWith("quassel-phase=setup-required"));
 
     assertTrue(
         events.values().stream()
@@ -2621,6 +2627,16 @@ class QuasselCoreIrcClientServiceTest {
         List.of(),
         null,
         IrcProperties.Server.Backend.QUASSEL_CORE);
+  }
+
+  private static void awaitEvent(
+      TestSubscriber<ServerIrcEvent> events, Predicate<IrcEvent> predicate) throws Exception {
+    long deadline = System.currentTimeMillis() + 2_000L;
+    while (System.currentTimeMillis() < deadline) {
+      boolean matched = events.values().stream().map(ServerIrcEvent::event).anyMatch(predicate);
+      if (matched) return;
+      Thread.sleep(10L);
+    }
   }
 
   private static byte[] encodeRpcCall(

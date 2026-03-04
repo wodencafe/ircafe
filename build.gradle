@@ -149,6 +149,14 @@ def errorPronePatchChecks =
 tasks.withType(Test).configureEach {
     javaLauncher = javaLauncher25
     systemProperty 'java.awt.headless', 'true'
+    // Reduce per-test scheduler teardown latency while preserving graceful shutdown behavior.
+    systemProperty 'ircafe.rx.shutdown.grace.ms', (findProperty('testRxShutdownGraceMs') ?: '200').toString()
+
+    // Opt-in parallel test JVMs: ./gradlew test -PtestMaxParallelForks=4
+    String maxParallelForksValue = (findProperty('testMaxParallelForks') ?: '').toString().trim()
+    if (!maxParallelForksValue.isEmpty()) {
+        maxParallelForks = Math.max(1, Integer.parseInt(maxParallelForksValue))
+    }
     // Allow opt-in Quassel integration tests to be controlled from Gradle CLI:
     //   ./gradlew integrationTest -Dquassel.it.enabled=true ...
     // Forward only the scoped test-control properties.
