@@ -150,8 +150,9 @@ public class PresenceFoldComponent extends JPanel {
   }
 
   private void updateSummaryText() {
-    String arrow = expanded ? "▼ " : "▶ ";
-    summary.setText(arrow + buildSummaryCounts(entries));
+    // Keep disclosure marker ASCII so it always renders cleanly with configured chat fonts.
+    String marker = expanded ? "v " : "> ";
+    summary.setText(marker + buildSummaryCounts(entries));
 
     // keep the "status" vibe
     Color dim = UIManager.getColor("Label.disabledForeground");
