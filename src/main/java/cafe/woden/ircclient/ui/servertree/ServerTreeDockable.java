@@ -35,6 +35,7 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeUiLeafVisibilitySync
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelDisconnectStateManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
+import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOperations;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLeafVisibilityCoordinator;
@@ -124,7 +125,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiPredicate;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.swing.Action;
 import javax.swing.JPanel;
@@ -374,6 +374,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeBuiltInVisibilitySettings builtInVisibilitySettings;
   private final ServerTreeTargetNodePolicy targetNodePolicy;
   private final ServerTreeChannelStateCoordinator channelStateCoordinator;
+  private final ServerTreeChannelTargetOperations channelTargetOperations;
   private final ServerTreeEnsureNodeParentResolver ensureNodeParentResolver;
   private final ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter;
   private final ServerTreeChannelDisconnectStateManager channelDisconnectStateManager;
@@ -404,7 +405,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private boolean startupSelectionCompleted = false;
   private volatile TargetRef lastBroadcastSelectionRef = null;
   private volatile boolean showApplicationRoot = true;
-  private volatile BiPredicate<String, String> canEditChannelModes = (serverId, channel) -> false;
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
@@ -821,6 +821,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             IGNORES_LABEL,
             DCC_TRANSFERS_LABEL);
     this.channelStateCoordinator = stateInteractionCollaborators.channelStateCoordinator();
+    this.channelTargetOperations =
+        new ServerTreeChannelTargetOperations(
+            edtExecutor,
+            channelStateCoordinator,
+            requestEmitter,
+            this::onChannelMutedStateChangedFromChannelTarget);
     this.ensureNodeParentResolver = stateInteractionCollaborators.ensureNodeParentResolver();
     this.ensureNodeLeafInserter = stateInteractionCollaborators.ensureNodeLeafInserter();
     this.targetNodeRemovalMutator = stateInteractionCollaborators.targetNodeRemovalMutator();
@@ -915,7 +921,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                     this::setChannelMuted,
                     channelModeRequestBus::emitDetailsRequest,
                     channelModeRequestBus::emitRefreshRequest,
-                    this::canEditChannelModesForTarget,
+                    channelTargetOperations::canEditChannelModesForTarget,
                     channelModeRequestBus::emitSetRequest,
                     uiHooks::closeTarget,
                     interceptorActions::setInterceptorEnabled,
@@ -1296,37 +1302,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return ref;
   }
 
-  private static boolean isChannelTarget(TargetRef ref) {
-    return ServerTreeConventions.isChannelTarget(ref);
-  }
-
-  private boolean readChannelState(
-      TargetRef ref, boolean fallback, Function<TargetRef, Boolean> reader) {
-    if (!isChannelTarget(ref)) return fallback;
-    return edtExecutor.read(() -> reader.apply(ref), fallback, null);
-  }
-
-  private void writeChannelState(TargetRef ref, Runnable writer) {
-    if (!isChannelTarget(ref)) return;
-    edtExecutor.write(writer);
-  }
-
-  private void emitChannelRequest(TargetRef target, Consumer<TargetRef> emitter) {
-    if (!isChannelTarget(target)) return;
-    emitter.accept(target);
-  }
-
-  private boolean canEditChannelModesForTarget(TargetRef target) {
-    if (!isChannelTarget(target)) return false;
-    BiPredicate<String, String> predicate = canEditChannelModes;
-    if (predicate == null) return false;
-    try {
-      return predicate.test(target.serverId(), target.target());
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
   private String serverNodeDisplayLabel(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return sid;
@@ -1576,20 +1551,19 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public void setCanEditChannelModes(BiPredicate<String, String> canEditChannelModes) {
-    this.canEditChannelModes =
-        canEditChannelModes == null ? (serverId, channel) -> false : canEditChannelModes;
+    channelTargetOperations.setCanEditChannelModes(canEditChannelModes);
   }
 
   public void requestJoinChannel(TargetRef target) {
-    emitChannelRequest(target, requestEmitter::emitJoinChannel);
+    channelTargetOperations.requestJoinChannel(target);
   }
 
   public void requestDisconnectChannel(TargetRef target) {
-    emitChannelRequest(target, requestEmitter::emitDisconnectChannel);
+    channelTargetOperations.requestDisconnectChannel(target);
   }
 
   public void requestCloseChannel(TargetRef target) {
-    emitChannelRequest(target, requestEmitter::emitCloseChannel);
+    channelTargetOperations.requestCloseChannel(target);
   }
 
   public Action moveNodeUpAction() {
@@ -1994,32 +1968,32 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   public boolean isChannelAutoReattach(TargetRef ref) {
-    return readChannelState(ref, true, channelStateCoordinator::isChannelAutoReattach);
+    return channelTargetOperations.isChannelAutoReattach(ref);
   }
 
   public void setChannelAutoReattach(TargetRef ref, boolean autoReattach) {
-    writeChannelState(ref, () -> channelStateCoordinator.setChannelAutoReattach(ref, autoReattach));
+    channelTargetOperations.setChannelAutoReattach(ref, autoReattach);
   }
 
   public boolean isChannelPinned(TargetRef ref) {
-    return readChannelState(ref, false, channelStateCoordinator::isChannelPinned);
+    return channelTargetOperations.isChannelPinned(ref);
   }
 
   public void setChannelPinned(TargetRef ref, boolean pinned) {
-    writeChannelState(ref, () -> channelStateCoordinator.setChannelPinned(ref, pinned));
+    channelTargetOperations.setChannelPinned(ref, pinned);
   }
 
   public boolean isChannelMuted(TargetRef ref) {
-    return readChannelState(ref, false, channelStateCoordinator::isChannelMuted);
+    return channelTargetOperations.isChannelMuted(ref);
   }
 
   public void setChannelMuted(TargetRef ref, boolean muted) {
-    writeChannelState(
-        ref,
-        () -> {
-          channelStateCoordinator.setChannelMuted(ref, muted);
-          unreadStateCoordinator.onChannelMutedStateChanged(ref, muted);
-        });
+    channelTargetOperations.setChannelMuted(ref, muted);
+  }
+
+  private void onChannelMutedStateChangedFromChannelTarget(TargetRef ref, boolean muted) {
+    if (unreadStateCoordinator == null) return;
+    unreadStateCoordinator.onChannelMutedStateChanged(ref, muted);
   }
 
   private void emitManagedChannelsChanged(String serverId) {
