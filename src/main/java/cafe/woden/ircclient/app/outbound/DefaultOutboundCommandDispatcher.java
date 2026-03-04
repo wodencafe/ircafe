@@ -191,6 +191,11 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   }
 
   @Override
+  public void openQuasselSetup(CompositeDisposable disposables, String serverId) {
+    outboundChatCommandService.handleQuasselSetup(disposables, serverId);
+  }
+
+  @Override
   public void openQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
     outboundChatCommandService.handleQuasselNetworkManager(disposables, serverId);
   }

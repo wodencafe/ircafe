@@ -18,6 +18,7 @@ public final class ServerTreeProcessorRequestEmitter implements ServerTreeReques
   private final FlowableProcessor<String> managedChannelsChangedByServer;
   private final FlowableProcessor<TargetRef> clearLogRequests;
   private final FlowableProcessor<TargetRef> openPinnedChatRequests;
+  private final FlowableProcessor<String> openQuasselSetupRequests;
   private final FlowableProcessor<String> openQuasselNetworkManagerRequests;
   private final FlowableProcessor<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests;
 
@@ -32,6 +33,7 @@ public final class ServerTreeProcessorRequestEmitter implements ServerTreeReques
       FlowableProcessor<String> managedChannelsChangedByServer,
       FlowableProcessor<TargetRef> clearLogRequests,
       FlowableProcessor<TargetRef> openPinnedChatRequests,
+      FlowableProcessor<String> openQuasselSetupRequests,
       FlowableProcessor<String> openQuasselNetworkManagerRequests,
       FlowableProcessor<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests) {
     this.connectServerRequests =
@@ -51,6 +53,8 @@ public final class ServerTreeProcessorRequestEmitter implements ServerTreeReques
     this.clearLogRequests = Objects.requireNonNull(clearLogRequests, "clearLogRequests");
     this.openPinnedChatRequests =
         Objects.requireNonNull(openPinnedChatRequests, "openPinnedChatRequests");
+    this.openQuasselSetupRequests =
+        Objects.requireNonNull(openQuasselSetupRequests, "openQuasselSetupRequests");
     this.openQuasselNetworkManagerRequests =
         Objects.requireNonNull(
             openQuasselNetworkManagerRequests, "openQuasselNetworkManagerRequests");
@@ -106,6 +110,11 @@ public final class ServerTreeProcessorRequestEmitter implements ServerTreeReques
   @Override
   public void emitOpenPinnedChat(TargetRef ref) {
     openPinnedChatRequests.onNext(ref);
+  }
+
+  @Override
+  public void emitOpenQuasselSetup(String serverId) {
+    openQuasselSetupRequests.onNext(serverId);
   }
 
   @Override

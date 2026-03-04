@@ -251,6 +251,7 @@ public class IrcMediator implements MediatorControlPort {
         disposables,
         this::handleUserActionRequest,
         this::handleOutgoingLine,
+        this::handleQuasselSetupRequest,
         this::handleQuasselNetworkManagerRequest);
     bindIrcEventSubscriptions();
     bindLabeledResponseTimeoutTicker();
@@ -604,6 +605,10 @@ public class IrcMediator implements MediatorControlPort {
 
   private void handleQuasselNetworkManagerRequest(String serverId) {
     outboundCommandDispatcher.openQuasselNetworkManager(disposables, serverId);
+  }
+
+  private void handleQuasselSetupRequest(String serverId) {
+    outboundCommandDispatcher.openQuasselSetup(disposables, serverId);
   }
 
   private TargetRef activeTargetForServerOrStatus(String sid, TargetRef status) {

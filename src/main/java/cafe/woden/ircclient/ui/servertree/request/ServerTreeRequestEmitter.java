@@ -26,6 +26,8 @@ public interface ServerTreeRequestEmitter {
 
   void emitOpenPinnedChat(TargetRef ref);
 
+  void emitOpenQuasselSetup(String serverId);
+
   void emitOpenQuasselNetworkManager(String serverId);
 
   void emitIrcv3CapabilityToggle(Ircv3CapabilityToggleRequest request);

@@ -163,7 +163,14 @@ class IrcMediatorMockVerifyTest {
         inOrder(mediatorUiSubscriptionBinder, irc, ui, mediatorConnectionSubscriptionBinder);
     inOrder
         .verify(mediatorUiSubscriptionBinder)
-        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
+        .bind(
+            eq(ui),
+            eq(targetCoordinator),
+            any(CompositeDisposable.class),
+            any(),
+            any(),
+            any(),
+            any());
     inOrder.verify(irc).events();
     inOrder.verify(ui).ircv3CapabilityToggleRequests();
     inOrder
@@ -176,7 +183,14 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class));
 
     verify(mediatorUiSubscriptionBinder, times(1))
-        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
+        .bind(
+            eq(ui),
+            eq(targetCoordinator),
+            any(CompositeDisposable.class),
+            any(),
+            any(),
+            any(),
+            any());
     verify(mediatorConnectionSubscriptionBinder, times(1))
         .bind(
             eq(ui),
@@ -231,12 +245,39 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class),
             any(),
             any(),
+            any(),
             quasselRequestCaptor.capture());
 
     quasselRequestCaptor.getValue().accept("quassel");
 
     verify(outboundCommandDispatcher)
         .openQuasselNetworkManager(any(CompositeDisposable.class), eq("quassel"));
+  }
+
+  @Test
+  void quasselSetupRequestFromUiBinderOpensSetupFlow() {
+    when(irc.events()).thenReturn(Flowable.never());
+    when(ui.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
+
+    mediator.start();
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Consumer<String>> quasselSetupRequestCaptor =
+        ArgumentCaptor.forClass((Class<Consumer<String>>) (Class<?>) Consumer.class);
+    verify(mediatorUiSubscriptionBinder)
+        .bind(
+            eq(ui),
+            eq(targetCoordinator),
+            any(CompositeDisposable.class),
+            any(),
+            any(),
+            quasselSetupRequestCaptor.capture(),
+            any());
+
+    quasselSetupRequestCaptor.getValue().accept("quassel");
+
+    verify(outboundCommandDispatcher)
+        .openQuasselSetup(any(CompositeDisposable.class), eq("quassel"));
   }
 
   @Test

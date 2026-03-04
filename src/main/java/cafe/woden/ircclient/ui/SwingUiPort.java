@@ -266,6 +266,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public Flowable<String> quasselSetupRequests() {
+    return serverTree.quasselSetupRequests();
+  }
+
+  @Override
   public Flowable<String> quasselNetworkManagerRequests() {
     return serverTree.quasselNetworkManagerRequests();
   }

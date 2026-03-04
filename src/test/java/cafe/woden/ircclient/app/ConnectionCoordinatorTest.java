@@ -482,6 +482,54 @@ class ConnectionCoordinatorTest {
   }
 
   @Test
+  void connectionFeaturesSetupRequiredAutoPromptsAndSubmitsSetup() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
+    when(serverCatalog.containsId("quassel")).thenReturn(true);
+    when(irc.connect("quassel")).thenReturn(Completable.never());
+    when(irc.isQuasselCoreSetupPending("quassel")).thenReturn(true);
+    IrcClientService.QuasselCoreSetupPrompt prompt =
+        new IrcClientService.QuasselCoreSetupPrompt(
+            "quassel", "setup required", List.of("SQLite"), List.of("Database"), Map.of());
+    IrcClientService.QuasselCoreSetupRequest request =
+        new IrcClientService.QuasselCoreSetupRequest(
+            "admin", "secret", "SQLite", "Database", Map.of(), Map.of());
+    when(irc.quasselCoreSetupPrompt("quassel")).thenReturn(Optional.of(prompt));
+    when(ui.promptQuasselCoreSetup("quassel", prompt)).thenReturn(Optional.of(request));
+    when(irc.submitQuasselCoreSetup("quassel", request)).thenReturn(Completable.complete());
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    coordinator.connectOne("quassel");
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(
+            Instant.now(),
+            "quassel-phase=setup-required;detail=Quassel Core setup is required before login"),
+        null);
+
+    TargetRef status = new TargetRef("quassel", "status");
+    verify(ui).promptQuasselCoreSetup("quassel", prompt);
+    verify(irc).submitQuasselCoreSetup("quassel", request);
+    verify(ui).appendStatus(status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
+    verify(irc, times(2)).connect("quassel");
+  }
+
+  @Test
   void connectionFeaturesProtocolNegotiatedAppendsProgressStatus() {
     IrcClientService irc = mock(IrcClientService.class);
     UiPort ui = mock(UiPort.class);

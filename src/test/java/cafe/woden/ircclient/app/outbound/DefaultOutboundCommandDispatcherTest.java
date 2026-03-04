@@ -107,6 +107,12 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
+  void openQuasselSetupRoutesToChatService() {
+    dispatcher.openQuasselSetup(disposables, "quassel");
+    verify(chat).handleQuasselSetup(disposables, "quassel");
+  }
+
+  @Test
   void dispatchTopicRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.Topic("#ircafe", "new topic"));
     verify(chat).handleTopic(disposables, "#ircafe", "new topic");

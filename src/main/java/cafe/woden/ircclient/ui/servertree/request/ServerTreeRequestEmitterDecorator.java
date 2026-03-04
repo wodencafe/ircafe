@@ -68,6 +68,11 @@ public abstract class ServerTreeRequestEmitterDecorator implements ServerTreeReq
   }
 
   @Override
+  public void emitOpenQuasselSetup(String serverId) {
+    delegate.emitOpenQuasselSetup(serverId);
+  }
+
+  @Override
   public void emitOpenQuasselNetworkManager(String serverId) {
     delegate.emitOpenQuasselNetworkManager(serverId);
   }

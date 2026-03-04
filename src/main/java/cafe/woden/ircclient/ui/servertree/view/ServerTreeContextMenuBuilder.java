@@ -42,6 +42,8 @@ public final class ServerTreeContextMenuBuilder {
 
     void openServerInfoDialog(String serverId);
 
+    void openQuasselSetup(String serverId);
+
     void openQuasselNetworkManager(String serverId);
 
     boolean interceptorStoreAvailable();
@@ -207,6 +209,12 @@ public final class ServerTreeContextMenuBuilder {
             .map(backend -> backend == IrcProperties.Server.Backend.QUASSEL_CORE)
             .orElse(false);
     if (quasselCoreServer) {
+      JMenuItem runQuasselSetup = new JMenuItem("Run Quassel Setup...");
+      runQuasselSetup.setIcon(SvgIcons.action("edit", 16));
+      runQuasselSetup.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
+      runQuasselSetup.addActionListener(ev -> context.openQuasselSetup(serverId));
+      menu.add(runQuasselSetup);
+
       JMenuItem manageQuasselNetworks = new JMenuItem("Manage Quassel Networks...");
       manageQuasselNetworks.setIcon(SvgIcons.action("edit", 16));
       manageQuasselNetworks.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));

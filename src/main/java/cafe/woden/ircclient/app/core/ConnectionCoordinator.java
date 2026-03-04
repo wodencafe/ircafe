@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -714,6 +715,7 @@ public class ConnectionCoordinator {
 
     ui.ensureTargetExists(status);
     String message = "";
+    boolean promptQuasselSetup = false;
     switch (phase) {
       case "transport-connected" -> message = "Quassel transport connected; negotiating protocol…";
       case "protocol-negotiated" ->
@@ -735,6 +737,7 @@ public class ConnectionCoordinator {
                 + sid
                 + ".";
         ui.enqueueStatusNotice(notice, status);
+        promptQuasselSetup = true;
       }
       default -> {
         return ConnectivityChange.NONE;
@@ -749,9 +752,39 @@ public class ConnectionCoordinator {
         ui.appendStatusAt(activeTarget, event.at(), "(conn)", message);
       }
     }
+    if (promptQuasselSetup) {
+      maybePromptQuasselSetup(sid, status);
+    }
 
     updateConnectionUi();
     return ConnectivityChange.CHANGED;
+  }
+
+  private void maybePromptQuasselSetup(String serverId, TargetRef status) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    if (!irc.isQuasselCoreSetupPending(sid)) return;
+
+    IrcClientService.QuasselCoreSetupPrompt prompt =
+        irc.quasselCoreSetupPrompt(sid)
+            .orElse(
+                new IrcClientService.QuasselCoreSetupPrompt(
+                    sid, "", List.of(), List.of(), Map.of()));
+    Optional<IrcClientService.QuasselCoreSetupRequest> maybeRequest =
+        ui.promptQuasselCoreSetup(sid, prompt);
+    if (maybeRequest == null || maybeRequest.isEmpty()) {
+      return;
+    }
+
+    disposables.add(
+        irc.submitQuasselCoreSetup(sid, maybeRequest.orElseThrow())
+            .subscribe(
+                () -> {
+                  ui.appendStatus(
+                      status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
+                  connectOne(sid);
+                },
+                err -> ui.appendError(status, "(qsetup-error)", String.valueOf(err))));
   }
 
   private static String quasselFeaturePhase(String source) {

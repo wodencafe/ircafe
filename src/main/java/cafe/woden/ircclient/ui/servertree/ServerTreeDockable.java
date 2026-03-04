@@ -240,6 +240,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final FlowableProcessor<TargetRef> openPinnedChatRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
+  private final FlowableProcessor<String> openQuasselSetupRequests =
+      PublishProcessor.<String>create().toSerialized();
+
   private final FlowableProcessor<String> openQuasselNetworkManagerRequests =
       PublishProcessor.<String>create().toSerialized();
 
@@ -261,6 +264,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
               managedChannelsChangedByServer,
               clearLogRequests,
               openPinnedChatRequests,
+              openQuasselSetupRequests,
               openQuasselNetworkManagerRequests,
               ircv3CapabilityToggleRequests));
 
@@ -834,6 +838,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                     uiHooks::connectServer,
                     uiHooks::disconnectServer,
                     this::openServerInfoDialog,
+                    requestEmitter::emitOpenQuasselSetup,
                     requestEmitter::emitOpenQuasselNetworkManager,
                     interceptorStore,
                     interceptorActions::promptAndAddInterceptor,
@@ -1461,6 +1466,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   public Flowable<TargetRef> openPinnedChatRequests() {
     return openPinnedChatRequests.onBackpressureLatest();
+  }
+
+  public Flowable<String> quasselSetupRequests() {
+    return openQuasselSetupRequests.onBackpressureLatest();
   }
 
   public Flowable<String> quasselNetworkManagerRequests() {

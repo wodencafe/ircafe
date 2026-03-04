@@ -131,6 +131,7 @@ class ServerTreeDockableServerAutoConnectMenuTest {
 
             JPopupMenu menu = buildPopupMenuForServerRoot(dockable, "quassel");
             assertNotNull(menu);
+            assertNotNull(findMenuItem(menu, "Run Quassel Setup..."));
             assertNotNull(findMenuItem(menu, "Manage Quassel Networks..."));
           } catch (Exception e) {
             throw new RuntimeException(e);
@@ -155,6 +156,7 @@ class ServerTreeDockableServerAutoConnectMenuTest {
 
             JPopupMenu menu = buildPopupMenuForServerRoot(dockable, "libera");
             assertNotNull(menu);
+            assertNull(findMenuItem(menu, "Run Quassel Setup..."));
             assertNull(findMenuItem(menu, "Manage Quassel Networks..."));
           } catch (Exception e) {
             throw new RuntimeException(e);
@@ -189,6 +191,43 @@ class ServerTreeDockableServerAutoConnectMenuTest {
             JMenuItem manage = findMenuItem(menu, "Manage Quassel Networks...");
             assertNotNull(manage);
             manage.doClick();
+
+            assertTrue("quassel".equals(requestedServer.get()));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          } finally {
+            if (requestSub != null) requestSub.dispose();
+          }
+        });
+  }
+
+  @Test
+  void quasselSetupMenuItemEmitsRequest() throws Exception {
+    onEdt(
+        () -> {
+          Disposable requestSub = null;
+          try {
+            ServerCatalog serverCatalog = mock(ServerCatalog.class);
+            RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+            when(serverCatalog.entries()).thenReturn(List.of());
+            when(serverCatalog.updates()).thenReturn(Flowable.never());
+            when(serverCatalog.findEntry("quassel"))
+                .thenReturn(
+                    Optional.of(
+                        ServerEntry.persistent(
+                            server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE))));
+
+            ServerTreeDockable dockable = newDockable(serverCatalog, runtimeConfig);
+            invokeAddServerRoot(dockable, "quassel");
+
+            AtomicReference<String> requestedServer = new AtomicReference<>();
+            requestSub = dockable.quasselSetupRequests().subscribe(requestedServer::set);
+
+            JPopupMenu menu = buildPopupMenuForServerRoot(dockable, "quassel");
+            assertNotNull(menu);
+            JMenuItem setup = findMenuItem(menu, "Run Quassel Setup...");
+            assertNotNull(setup);
+            setup.doClick();
 
             assertTrue("quassel".equals(requestedServer.get()));
           } catch (Exception e) {

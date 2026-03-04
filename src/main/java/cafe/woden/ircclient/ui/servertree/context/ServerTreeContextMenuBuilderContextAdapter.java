@@ -31,6 +31,7 @@ public final class ServerTreeContextMenuBuilderContextAdapter
   private final Consumer<String> requestConnectServer;
   private final Consumer<String> requestDisconnectServer;
   private final Consumer<String> openServerInfoDialog;
+  private final Consumer<String> openQuasselSetup;
   private final Consumer<String> openQuasselNetworkManager;
   private final Supplier<Boolean> interceptorStoreAvailable;
   private final Consumer<String> promptAndAddInterceptor;
@@ -93,6 +94,7 @@ public final class ServerTreeContextMenuBuilderContextAdapter
       Consumer<String> requestConnectServer,
       Consumer<String> requestDisconnectServer,
       Consumer<String> openServerInfoDialog,
+      Consumer<String> openQuasselSetup,
       Consumer<String> openQuasselNetworkManager,
       Supplier<Boolean> interceptorStoreAvailable,
       Consumer<String> promptAndAddInterceptor,
@@ -152,6 +154,7 @@ public final class ServerTreeContextMenuBuilderContextAdapter
         Objects.requireNonNull(requestDisconnectServer, "requestDisconnectServer");
     this.openServerInfoDialog =
         Objects.requireNonNull(openServerInfoDialog, "openServerInfoDialog");
+    this.openQuasselSetup = Objects.requireNonNull(openQuasselSetup, "openQuasselSetup");
     this.openQuasselNetworkManager =
         Objects.requireNonNull(openQuasselNetworkManager, "openQuasselNetworkManager");
     this.interceptorStoreAvailable =
@@ -281,6 +284,11 @@ public final class ServerTreeContextMenuBuilderContextAdapter
   @Override
   public void openServerInfoDialog(String serverId) {
     openServerInfoDialog.accept(serverId);
+  }
+
+  @Override
+  public void openQuasselSetup(String serverId) {
+    openQuasselSetup.accept(serverId);
   }
 
   @Override

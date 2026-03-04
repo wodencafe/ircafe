@@ -19,6 +19,7 @@ public class MediatorUiSubscriptionBinder {
       CompositeDisposable disposables,
       Consumer<UserActionRequest> onUserActionRequest,
       Consumer<String> onOutboundLine,
+      Consumer<String> onQuasselSetupRequest,
       Consumer<String> onQuasselNetworkManagerRequest) {
     disposables.add(
         ui.targetSelections()
@@ -65,6 +66,15 @@ public class MediatorUiSubscriptionBinder {
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 onOutboundLine::accept,
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
+
+    disposables.add(
+        ui.quasselSetupRequests()
+            .observeOn(AppSchedulers.edt())
+            .subscribe(
+                onQuasselSetupRequest::accept,
                 err ->
                     ui.appendError(
                         targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
