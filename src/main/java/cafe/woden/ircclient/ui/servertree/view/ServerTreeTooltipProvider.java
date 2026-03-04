@@ -5,12 +5,20 @@ import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import java.awt.event.MouseEvent;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
 
 /** Resolves tree tooltips for server tree nodes. */
 public final class ServerTreeTooltipProvider {
+
+  @FunctionalInterface
+  public interface IntPairFunction<T> {
+    T apply(int first, int second);
+  }
 
   public interface Context {
     String serverIdAt(int x, int y);
@@ -56,6 +64,164 @@ public final class ServerTreeTooltipProvider {
     boolean isApplicationJfrActive();
 
     boolean isBouncerControlStatusNode(ServerTreeNodeData nodeData);
+  }
+
+  public static Context context(
+      IntPairFunction<String> serverIdAt,
+      Function<String, TreePath> serverPathForId,
+      Predicate<DefaultMutableTreeNode> isIrcRootNode,
+      Predicate<DefaultMutableTreeNode> isApplicationRootNode,
+      Predicate<DefaultMutableTreeNode> isSojuNetworksGroupNode,
+      Predicate<DefaultMutableTreeNode> isZncNetworksGroupNode,
+      Predicate<DefaultMutableTreeNode> isInterceptorsGroupNode,
+      Predicate<DefaultMutableTreeNode> isMonitorGroupNode,
+      Predicate<DefaultMutableTreeNode> isOtherGroupNode,
+      Predicate<DefaultMutableTreeNode> isServerNode,
+      Function<String, ConnectionState> connectionStateForServer,
+      Function<String, Boolean> desiredOnlineForServer,
+      Function<String, String> connectionDiagnosticsTipForServer,
+      Predicate<String> isSojuEphemeralServer,
+      Predicate<String> isZncEphemeralServer,
+      Function<String, String> sojuOriginByServerId,
+      Function<String, String> zncOriginByServerId,
+      Function<String, String> serverDisplayName,
+      java.util.function.BiPredicate<String, String> isSojuAutoConnectEnabled,
+      java.util.function.BiPredicate<String, String> isZncAutoConnectEnabled,
+      Supplier<Boolean> isApplicationJfrActive,
+      Predicate<ServerTreeNodeData> isBouncerControlStatusNode) {
+    Objects.requireNonNull(serverIdAt, "serverIdAt");
+    Objects.requireNonNull(serverPathForId, "serverPathForId");
+    Objects.requireNonNull(isIrcRootNode, "isIrcRootNode");
+    Objects.requireNonNull(isApplicationRootNode, "isApplicationRootNode");
+    Objects.requireNonNull(isSojuNetworksGroupNode, "isSojuNetworksGroupNode");
+    Objects.requireNonNull(isZncNetworksGroupNode, "isZncNetworksGroupNode");
+    Objects.requireNonNull(isInterceptorsGroupNode, "isInterceptorsGroupNode");
+    Objects.requireNonNull(isMonitorGroupNode, "isMonitorGroupNode");
+    Objects.requireNonNull(isOtherGroupNode, "isOtherGroupNode");
+    Objects.requireNonNull(isServerNode, "isServerNode");
+    Objects.requireNonNull(connectionStateForServer, "connectionStateForServer");
+    Objects.requireNonNull(desiredOnlineForServer, "desiredOnlineForServer");
+    Objects.requireNonNull(connectionDiagnosticsTipForServer, "connectionDiagnosticsTipForServer");
+    Objects.requireNonNull(isSojuEphemeralServer, "isSojuEphemeralServer");
+    Objects.requireNonNull(isZncEphemeralServer, "isZncEphemeralServer");
+    Objects.requireNonNull(sojuOriginByServerId, "sojuOriginByServerId");
+    Objects.requireNonNull(zncOriginByServerId, "zncOriginByServerId");
+    Objects.requireNonNull(serverDisplayName, "serverDisplayName");
+    Objects.requireNonNull(isSojuAutoConnectEnabled, "isSojuAutoConnectEnabled");
+    Objects.requireNonNull(isZncAutoConnectEnabled, "isZncAutoConnectEnabled");
+    Objects.requireNonNull(isApplicationJfrActive, "isApplicationJfrActive");
+    Objects.requireNonNull(isBouncerControlStatusNode, "isBouncerControlStatusNode");
+    return new Context() {
+      @Override
+      public String serverIdAt(int x, int y) {
+        return serverIdAt.apply(x, y);
+      }
+
+      @Override
+      public TreePath serverPathForId(String serverId) {
+        return serverPathForId.apply(serverId);
+      }
+
+      @Override
+      public boolean isIrcRootNode(DefaultMutableTreeNode node) {
+        return isIrcRootNode.test(node);
+      }
+
+      @Override
+      public boolean isApplicationRootNode(DefaultMutableTreeNode node) {
+        return isApplicationRootNode.test(node);
+      }
+
+      @Override
+      public boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node) {
+        return isSojuNetworksGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isZncNetworksGroupNode(DefaultMutableTreeNode node) {
+        return isZncNetworksGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isInterceptorsGroupNode(DefaultMutableTreeNode node) {
+        return isInterceptorsGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isMonitorGroupNode(DefaultMutableTreeNode node) {
+        return isMonitorGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isOtherGroupNode(DefaultMutableTreeNode node) {
+        return isOtherGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isServerNode(DefaultMutableTreeNode node) {
+        return isServerNode.test(node);
+      }
+
+      @Override
+      public ConnectionState connectionStateForServer(String serverId) {
+        return connectionStateForServer.apply(serverId);
+      }
+
+      @Override
+      public boolean desiredOnlineForServer(String serverId) {
+        return desiredOnlineForServer.apply(serverId);
+      }
+
+      @Override
+      public String connectionDiagnosticsTipForServer(String serverId) {
+        return connectionDiagnosticsTipForServer.apply(serverId);
+      }
+
+      @Override
+      public boolean isSojuEphemeralServer(String serverId) {
+        return isSojuEphemeralServer.test(serverId);
+      }
+
+      @Override
+      public boolean isZncEphemeralServer(String serverId) {
+        return isZncEphemeralServer.test(serverId);
+      }
+
+      @Override
+      public String sojuOriginByServerId(String serverId) {
+        return sojuOriginByServerId.apply(serverId);
+      }
+
+      @Override
+      public String zncOriginByServerId(String serverId) {
+        return zncOriginByServerId.apply(serverId);
+      }
+
+      @Override
+      public String serverDisplayName(String serverId) {
+        return serverDisplayName.apply(serverId);
+      }
+
+      @Override
+      public boolean isSojuAutoConnectEnabled(String originId, String networkKey) {
+        return isSojuAutoConnectEnabled.test(originId, networkKey);
+      }
+
+      @Override
+      public boolean isZncAutoConnectEnabled(String originId, String networkKey) {
+        return isZncAutoConnectEnabled.test(originId, networkKey);
+      }
+
+      @Override
+      public boolean isApplicationJfrActive() {
+        return isApplicationJfrActive.get();
+      }
+
+      @Override
+      public boolean isBouncerControlStatusNode(ServerTreeNodeData nodeData) {
+        return isBouncerControlStatusNode.test(nodeData);
+      }
+    };
   }
 
   private final JTree tree;
