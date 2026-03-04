@@ -78,7 +78,7 @@ public final class ServerTreeInteractionWiringFactory {
   public ServerTreeMiddleDragReorderHandler.Context createMiddleDragReorderContext(
       MiddleDragInputs in) {
     Objects.requireNonNull(in, "in");
-    return new ServerTreeMiddleDragReorderContextAdapter(
+    return ServerTreeMiddleDragReorderHandler.context(
         Objects.requireNonNull(in.tree(), "tree"),
         Objects.requireNonNull(in.model(), "model"),
         Objects.requireNonNull(in.isDraggableChannelNode(), "isDraggableChannelNode"),
@@ -115,7 +115,7 @@ public final class ServerTreeInteractionWiringFactory {
     return new ServerTreeInteractionMediator(
         Objects.requireNonNull(in.tree(), "tree"),
         Objects.requireNonNull(in.serverActionOverlay(), "serverActionOverlay"),
-        new ServerTreeInteractionMediatorContextAdapter(
+        ServerTreeInteractionMediator.context(
             Objects.requireNonNull(in.onTreeShowingChanged(), "onTreeShowingChanged"),
             Objects.requireNonNull(
                 in.isSelectionBroadcastSuppressed(), "isSelectionBroadcastSuppressed"),

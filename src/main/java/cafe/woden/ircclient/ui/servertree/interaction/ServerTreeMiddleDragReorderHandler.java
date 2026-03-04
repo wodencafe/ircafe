@@ -7,6 +7,12 @@ import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Objects;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.ToIntFunction;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -58,6 +64,154 @@ public final class ServerTreeMiddleDragReorderHandler extends MouseAdapter {
     void withSuppressedSelectionBroadcast(Runnable task);
 
     void refreshNodeActionsEnabled();
+  }
+
+  public static Context context(
+      JTree tree,
+      DefaultTreeModel model,
+      Predicate<DefaultMutableTreeNode> isDraggableChannelNode,
+      Predicate<DefaultMutableTreeNode> isRootSiblingReorderableNode,
+      Predicate<DefaultMutableTreeNode> isMovableBuiltInNode,
+      Function<DefaultMutableTreeNode, String> owningServerIdForNode,
+      Function<String, ServerNodes> serverNodes,
+      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeRootSiblingNode>
+          rootSiblingNodeKindForNode,
+      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeBuiltInLayoutNode>
+          builtInLayoutNodeKindForNode,
+      ToIntFunction<DefaultMutableTreeNode> minInsertIndex,
+      ToIntFunction<DefaultMutableTreeNode> maxInsertIndex,
+      BiFunction<ServerNodes, Integer, Integer> rootBuiltInInsertIndex,
+      BiConsumer<DefaultMutableTreeNode, Integer> setInsertionLineForIndex,
+      Runnable clearInsertionLine,
+      Predicate<DefaultMutableTreeNode> isChannelListLeafNode,
+      Consumer<DefaultMutableTreeNode> persistCustomOrderForParent,
+      Consumer<String> persistBuiltInLayout,
+      Consumer<String> persistRootSiblingOrder,
+      Consumer<Runnable> withSuppressedSelectionBroadcast,
+      Runnable refreshNodeActionsEnabled) {
+    Objects.requireNonNull(tree, "tree");
+    Objects.requireNonNull(model, "model");
+    Objects.requireNonNull(isDraggableChannelNode, "isDraggableChannelNode");
+    Objects.requireNonNull(isRootSiblingReorderableNode, "isRootSiblingReorderableNode");
+    Objects.requireNonNull(isMovableBuiltInNode, "isMovableBuiltInNode");
+    Objects.requireNonNull(owningServerIdForNode, "owningServerIdForNode");
+    Objects.requireNonNull(serverNodes, "serverNodes");
+    Objects.requireNonNull(rootSiblingNodeKindForNode, "rootSiblingNodeKindForNode");
+    Objects.requireNonNull(builtInLayoutNodeKindForNode, "builtInLayoutNodeKindForNode");
+    Objects.requireNonNull(minInsertIndex, "minInsertIndex");
+    Objects.requireNonNull(maxInsertIndex, "maxInsertIndex");
+    Objects.requireNonNull(rootBuiltInInsertIndex, "rootBuiltInInsertIndex");
+    Objects.requireNonNull(setInsertionLineForIndex, "setInsertionLineForIndex");
+    Objects.requireNonNull(clearInsertionLine, "clearInsertionLine");
+    Objects.requireNonNull(isChannelListLeafNode, "isChannelListLeafNode");
+    Objects.requireNonNull(persistCustomOrderForParent, "persistCustomOrderForParent");
+    Objects.requireNonNull(persistBuiltInLayout, "persistBuiltInLayout");
+    Objects.requireNonNull(persistRootSiblingOrder, "persistRootSiblingOrder");
+    Objects.requireNonNull(withSuppressedSelectionBroadcast, "withSuppressedSelectionBroadcast");
+    Objects.requireNonNull(refreshNodeActionsEnabled, "refreshNodeActionsEnabled");
+    return new Context() {
+      @Override
+      public JTree tree() {
+        return tree;
+      }
+
+      @Override
+      public DefaultTreeModel model() {
+        return model;
+      }
+
+      @Override
+      public boolean isDraggableChannelNode(DefaultMutableTreeNode node) {
+        return isDraggableChannelNode.test(node);
+      }
+
+      @Override
+      public boolean isRootSiblingReorderableNode(DefaultMutableTreeNode node) {
+        return isRootSiblingReorderableNode.test(node);
+      }
+
+      @Override
+      public boolean isMovableBuiltInNode(DefaultMutableTreeNode node) {
+        return isMovableBuiltInNode.test(node);
+      }
+
+      @Override
+      public String owningServerIdForNode(DefaultMutableTreeNode node) {
+        return owningServerIdForNode.apply(node);
+      }
+
+      @Override
+      public ServerNodes serverNodes(String serverId) {
+        return serverNodes.apply(serverId);
+      }
+
+      @Override
+      public RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
+          DefaultMutableTreeNode node) {
+        return rootSiblingNodeKindForNode.apply(node);
+      }
+
+      @Override
+      public RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
+          DefaultMutableTreeNode node) {
+        return builtInLayoutNodeKindForNode.apply(node);
+      }
+
+      @Override
+      public int minInsertIndex(DefaultMutableTreeNode parentNode) {
+        return minInsertIndex.applyAsInt(parentNode);
+      }
+
+      @Override
+      public int maxInsertIndex(DefaultMutableTreeNode parentNode) {
+        return maxInsertIndex.applyAsInt(parentNode);
+      }
+
+      @Override
+      public int rootBuiltInInsertIndex(ServerNodes serverNodes, int desiredIndex) {
+        return rootBuiltInInsertIndex.apply(serverNodes, desiredIndex);
+      }
+
+      @Override
+      public void setInsertionLineForIndex(DefaultMutableTreeNode parent, int insertBeforeIndex) {
+        setInsertionLineForIndex.accept(parent, insertBeforeIndex);
+      }
+
+      @Override
+      public void clearInsertionLine() {
+        clearInsertionLine.run();
+      }
+
+      @Override
+      public boolean isChannelListLeafNode(DefaultMutableTreeNode node) {
+        return isChannelListLeafNode.test(node);
+      }
+
+      @Override
+      public void persistCustomOrderForParent(DefaultMutableTreeNode parentNode) {
+        persistCustomOrderForParent.accept(parentNode);
+      }
+
+      @Override
+      public void persistBuiltInLayout(String serverId) {
+        persistBuiltInLayout.accept(serverId);
+      }
+
+      @Override
+      public void persistRootSiblingOrder(String serverId) {
+        persistRootSiblingOrder.accept(serverId);
+      }
+
+      @Override
+      public void withSuppressedSelectionBroadcast(Runnable task) {
+        withSuppressedSelectionBroadcast.accept(task);
+      }
+
+      @Override
+      public void refreshNodeActionsEnabled() {
+        refreshNodeActionsEnabled.run();
+      }
+    };
   }
 
   private final Context context;
