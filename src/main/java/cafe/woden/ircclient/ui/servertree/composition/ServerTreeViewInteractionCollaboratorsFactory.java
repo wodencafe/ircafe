@@ -22,7 +22,9 @@ import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerNodeMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeTargetNodeMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipProvider;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipResolver;
 import java.awt.GraphicsEnvironment;
@@ -96,8 +98,10 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             tooltipProvider);
     ServerTreeContextMenuBuilder contextMenuBuilder =
         new ServerTreeContextMenuBuilder(
-            ServerTreeContextMenuBuilder.context(
+            ServerTreeContextMenuBuilder.routingContext(
                 in.uiHooks()::isServerNode,
+                in.nodeClassifier()::isInterceptorsGroupNode),
+            ServerTreeServerNodeMenuBuilder.context(
                 in.nodeAccess()::isRootServerNode,
                 in.serverLabelPolicy()::prettyServerLabel,
                 in.uiHooks()::connectionStateForServer,
@@ -165,9 +169,11 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
                 },
                 in.nodeBadgeUpdater()::refreshSojuAutoConnectBadges,
                 in.nodeBadgeUpdater()::refreshZncAutoConnectBadges,
-                in.nodeClassifier()::isInterceptorsGroupNode,
-                in.nodeClassifier()::owningServerIdForNode,
+                in.nodeClassifier()::owningServerIdForNode),
+            ServerTreeTargetNodeMenuBuilder.context(
                 in.uiHooks()::openPinnedChat,
+                Objects.requireNonNull(in.moveNodeUpAction(), "moveNodeUpAction"),
+                Objects.requireNonNull(in.moveNodeDownAction(), "moveNodeDownAction"),
                 in.uiHooks()::confirmAndClearLog,
                 in.isChannelDisconnected(),
                 in.uiHooks()::joinChannel,
@@ -209,6 +215,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
                 },
                 in.uiHooks()::closeTarget,
                 target -> interceptorDefinition(in.interceptorStore(), target),
+                () -> in.interceptorStore() != null,
                 in.interceptorActions()::setInterceptorEnabled,
                 in.interceptorActions()::promptRenameInterceptor,
                 in.interceptorActions()::confirmDeleteInterceptor));

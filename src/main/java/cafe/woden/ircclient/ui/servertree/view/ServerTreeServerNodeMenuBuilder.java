@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.view;
 
+import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
@@ -7,17 +8,324 @@ import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateVie
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import javax.swing.Action;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 /** Builds server-node and interceptor-group context menus for server tree. */
-final class ServerTreeServerNodeMenuBuilder {
+public final class ServerTreeServerNodeMenuBuilder {
 
-  private final ServerTreeContextMenuBuilder.Context context;
+  public interface Context {
+    boolean isRootServerNode(DefaultMutableTreeNode node);
 
-  ServerTreeServerNodeMenuBuilder(ServerTreeContextMenuBuilder.Context context) {
+    String prettyServerLabel(String serverId);
+
+    ConnectionState connectionStateForServer(String serverId);
+
+    String connectionDiagnosticsTipForServer(String serverId);
+
+    Optional<ServerEntry> serverEntry(String serverId);
+
+    Action moveNodeUpAction();
+
+    Action moveNodeDownAction();
+
+    void requestConnectServer(String serverId);
+
+    void requestDisconnectServer(String serverId);
+
+    void openServerInfoDialog(String serverId);
+
+    void openQuasselSetup(String serverId);
+
+    void openQuasselNetworkManager(String serverId);
+
+    boolean interceptorStoreAvailable();
+
+    void promptAndAddInterceptor(String serverId);
+
+    boolean serverDialogsAvailable();
+
+    void openSaveEphemeralServer(String serverId);
+
+    void openEditServer(String serverId);
+
+    boolean runtimeConfigAvailable();
+
+    boolean readServerAutoConnectOnStart(String serverId, boolean defaultValue);
+
+    void rememberServerAutoConnectOnStart(String serverId, boolean enabled);
+
+    boolean isSojuEphemeralServer(String serverId);
+
+    boolean isZncEphemeralServer(String serverId);
+
+    String sojuOriginForServer(String serverId);
+
+    String zncOriginForServer(String serverId);
+
+    String serverDisplayNameOrDefault(String serverId);
+
+    boolean isSojuAutoConnectEnabled(String originId, String networkKey);
+
+    boolean isZncAutoConnectEnabled(String originId, String networkKey);
+
+    void setSojuAutoConnectEnabled(String originId, String networkKey, boolean enabled);
+
+    void setZncAutoConnectEnabled(String originId, String networkKey, boolean enabled);
+
+    void refreshSojuAutoConnectBadges();
+
+    void refreshZncAutoConnectBadges();
+
+    String owningServerIdForNode(DefaultMutableTreeNode node);
+  }
+
+  @FunctionalInterface
+  public interface TriConsumer<A, B, C> {
+    void accept(A first, B second, C third);
+  }
+
+  public static Context context(
+      Predicate<DefaultMutableTreeNode> isRootServerNode,
+      Function<String, String> prettyServerLabel,
+      Function<String, ConnectionState> connectionStateForServer,
+      Function<String, String> connectionDiagnosticsTipForServer,
+      Function<String, Optional<ServerEntry>> serverEntry,
+      Supplier<Action> moveNodeUpAction,
+      Supplier<Action> moveNodeDownAction,
+      Consumer<String> requestConnectServer,
+      Consumer<String> requestDisconnectServer,
+      Consumer<String> openServerInfoDialog,
+      Consumer<String> openQuasselSetup,
+      Consumer<String> openQuasselNetworkManager,
+      Supplier<Boolean> interceptorStoreAvailable,
+      Consumer<String> promptAndAddInterceptor,
+      Supplier<Boolean> serverDialogsAvailable,
+      Consumer<String> openSaveEphemeralServer,
+      Consumer<String> openEditServer,
+      Supplier<Boolean> runtimeConfigAvailable,
+      BiFunction<String, Boolean, Boolean> readServerAutoConnectOnStart,
+      BiConsumer<String, Boolean> rememberServerAutoConnectOnStart,
+      Predicate<String> isSojuEphemeralServer,
+      Predicate<String> isZncEphemeralServer,
+      Function<String, String> sojuOriginForServer,
+      Function<String, String> zncOriginForServer,
+      Function<String, String> serverDisplayNameOrDefault,
+      BiPredicate<String, String> isSojuAutoConnectEnabled,
+      BiPredicate<String, String> isZncAutoConnectEnabled,
+      TriConsumer<String, String, Boolean> setSojuAutoConnectEnabled,
+      TriConsumer<String, String, Boolean> setZncAutoConnectEnabled,
+      Runnable refreshSojuAutoConnectBadges,
+      Runnable refreshZncAutoConnectBadges,
+      Function<DefaultMutableTreeNode, String> owningServerIdForNode) {
+    Objects.requireNonNull(isRootServerNode, "isRootServerNode");
+    Objects.requireNonNull(prettyServerLabel, "prettyServerLabel");
+    Objects.requireNonNull(connectionStateForServer, "connectionStateForServer");
+    Objects.requireNonNull(connectionDiagnosticsTipForServer, "connectionDiagnosticsTipForServer");
+    Objects.requireNonNull(serverEntry, "serverEntry");
+    Objects.requireNonNull(moveNodeUpAction, "moveNodeUpAction");
+    Objects.requireNonNull(moveNodeDownAction, "moveNodeDownAction");
+    Objects.requireNonNull(requestConnectServer, "requestConnectServer");
+    Objects.requireNonNull(requestDisconnectServer, "requestDisconnectServer");
+    Objects.requireNonNull(openServerInfoDialog, "openServerInfoDialog");
+    Objects.requireNonNull(openQuasselSetup, "openQuasselSetup");
+    Objects.requireNonNull(openQuasselNetworkManager, "openQuasselNetworkManager");
+    Objects.requireNonNull(interceptorStoreAvailable, "interceptorStoreAvailable");
+    Objects.requireNonNull(promptAndAddInterceptor, "promptAndAddInterceptor");
+    Objects.requireNonNull(serverDialogsAvailable, "serverDialogsAvailable");
+    Objects.requireNonNull(openSaveEphemeralServer, "openSaveEphemeralServer");
+    Objects.requireNonNull(openEditServer, "openEditServer");
+    Objects.requireNonNull(runtimeConfigAvailable, "runtimeConfigAvailable");
+    Objects.requireNonNull(readServerAutoConnectOnStart, "readServerAutoConnectOnStart");
+    Objects.requireNonNull(rememberServerAutoConnectOnStart, "rememberServerAutoConnectOnStart");
+    Objects.requireNonNull(isSojuEphemeralServer, "isSojuEphemeralServer");
+    Objects.requireNonNull(isZncEphemeralServer, "isZncEphemeralServer");
+    Objects.requireNonNull(sojuOriginForServer, "sojuOriginForServer");
+    Objects.requireNonNull(zncOriginForServer, "zncOriginForServer");
+    Objects.requireNonNull(serverDisplayNameOrDefault, "serverDisplayNameOrDefault");
+    Objects.requireNonNull(isSojuAutoConnectEnabled, "isSojuAutoConnectEnabled");
+    Objects.requireNonNull(isZncAutoConnectEnabled, "isZncAutoConnectEnabled");
+    Objects.requireNonNull(setSojuAutoConnectEnabled, "setSojuAutoConnectEnabled");
+    Objects.requireNonNull(setZncAutoConnectEnabled, "setZncAutoConnectEnabled");
+    Objects.requireNonNull(refreshSojuAutoConnectBadges, "refreshSojuAutoConnectBadges");
+    Objects.requireNonNull(refreshZncAutoConnectBadges, "refreshZncAutoConnectBadges");
+    Objects.requireNonNull(owningServerIdForNode, "owningServerIdForNode");
+    return new Context() {
+      @Override
+      public boolean isRootServerNode(DefaultMutableTreeNode node) {
+        return isRootServerNode.test(node);
+      }
+
+      @Override
+      public String prettyServerLabel(String serverId) {
+        return prettyServerLabel.apply(serverId);
+      }
+
+      @Override
+      public ConnectionState connectionStateForServer(String serverId) {
+        return connectionStateForServer.apply(serverId);
+      }
+
+      @Override
+      public String connectionDiagnosticsTipForServer(String serverId) {
+        return connectionDiagnosticsTipForServer.apply(serverId);
+      }
+
+      @Override
+      public Optional<ServerEntry> serverEntry(String serverId) {
+        return serverEntry.apply(serverId);
+      }
+
+      @Override
+      public Action moveNodeUpAction() {
+        return moveNodeUpAction.get();
+      }
+
+      @Override
+      public Action moveNodeDownAction() {
+        return moveNodeDownAction.get();
+      }
+
+      @Override
+      public void requestConnectServer(String serverId) {
+        requestConnectServer.accept(serverId);
+      }
+
+      @Override
+      public void requestDisconnectServer(String serverId) {
+        requestDisconnectServer.accept(serverId);
+      }
+
+      @Override
+      public void openServerInfoDialog(String serverId) {
+        openServerInfoDialog.accept(serverId);
+      }
+
+      @Override
+      public void openQuasselSetup(String serverId) {
+        openQuasselSetup.accept(serverId);
+      }
+
+      @Override
+      public void openQuasselNetworkManager(String serverId) {
+        openQuasselNetworkManager.accept(serverId);
+      }
+
+      @Override
+      public boolean interceptorStoreAvailable() {
+        return interceptorStoreAvailable.get();
+      }
+
+      @Override
+      public void promptAndAddInterceptor(String serverId) {
+        promptAndAddInterceptor.accept(serverId);
+      }
+
+      @Override
+      public boolean serverDialogsAvailable() {
+        return serverDialogsAvailable.get();
+      }
+
+      @Override
+      public void openSaveEphemeralServer(String serverId) {
+        openSaveEphemeralServer.accept(serverId);
+      }
+
+      @Override
+      public void openEditServer(String serverId) {
+        openEditServer.accept(serverId);
+      }
+
+      @Override
+      public boolean runtimeConfigAvailable() {
+        return runtimeConfigAvailable.get();
+      }
+
+      @Override
+      public boolean readServerAutoConnectOnStart(String serverId, boolean defaultValue) {
+        return readServerAutoConnectOnStart.apply(serverId, defaultValue);
+      }
+
+      @Override
+      public void rememberServerAutoConnectOnStart(String serverId, boolean enabled) {
+        rememberServerAutoConnectOnStart.accept(serverId, enabled);
+      }
+
+      @Override
+      public boolean isSojuEphemeralServer(String serverId) {
+        return isSojuEphemeralServer.test(serverId);
+      }
+
+      @Override
+      public boolean isZncEphemeralServer(String serverId) {
+        return isZncEphemeralServer.test(serverId);
+      }
+
+      @Override
+      public String sojuOriginForServer(String serverId) {
+        return sojuOriginForServer.apply(serverId);
+      }
+
+      @Override
+      public String zncOriginForServer(String serverId) {
+        return zncOriginForServer.apply(serverId);
+      }
+
+      @Override
+      public String serverDisplayNameOrDefault(String serverId) {
+        return serverDisplayNameOrDefault.apply(serverId);
+      }
+
+      @Override
+      public boolean isSojuAutoConnectEnabled(String originId, String networkKey) {
+        return isSojuAutoConnectEnabled.test(originId, networkKey);
+      }
+
+      @Override
+      public boolean isZncAutoConnectEnabled(String originId, String networkKey) {
+        return isZncAutoConnectEnabled.test(originId, networkKey);
+      }
+
+      @Override
+      public void setSojuAutoConnectEnabled(String originId, String networkKey, boolean enabled) {
+        setSojuAutoConnectEnabled.accept(originId, networkKey, enabled);
+      }
+
+      @Override
+      public void setZncAutoConnectEnabled(String originId, String networkKey, boolean enabled) {
+        setZncAutoConnectEnabled.accept(originId, networkKey, enabled);
+      }
+
+      @Override
+      public void refreshSojuAutoConnectBadges() {
+        refreshSojuAutoConnectBadges.run();
+      }
+
+      @Override
+      public void refreshZncAutoConnectBadges() {
+        refreshZncAutoConnectBadges.run();
+      }
+
+      @Override
+      public String owningServerIdForNode(DefaultMutableTreeNode node) {
+        return owningServerIdForNode.apply(node);
+      }
+    };
+  }
+
+  private final Context context;
+
+  public ServerTreeServerNodeMenuBuilder(Context context) {
     this.context = Objects.requireNonNull(context, "context");
   }
 
@@ -26,7 +334,7 @@ final class ServerTreeServerNodeMenuBuilder {
     if (serverId.isEmpty()) return null;
 
     String pretty = context.prettyServerLabel(serverId);
-    cafe.woden.ircclient.app.api.ConnectionState state = context.connectionStateForServer(serverId);
+    ConnectionState state = context.connectionStateForServer(serverId);
     boolean canReorder = context.isRootServerNode(node);
 
     Optional<ServerEntry> serverEntry = context.serverEntry(serverId);
