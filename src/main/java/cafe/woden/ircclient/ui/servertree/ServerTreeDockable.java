@@ -19,6 +19,8 @@ import cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions;
 import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaboratorsFactory;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLifecycleSettingsCollaborators;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLifecycleSettingsCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaborators;
@@ -29,8 +31,6 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeCellRendererContextA
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionPersistenceContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerRootLifecycleContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeSettingsSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeStartupSelectionRestorerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetLifecycleContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetSelectionContextAdapter;
@@ -48,7 +48,6 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeSelectionBroadca
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerCatalogSynchronizer;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLeafVisibilityCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerLifecycleFacade;
-import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeServerRootLifecycleManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeStatusLabelManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetLifecycleCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
@@ -302,7 +301,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeNetworkGroupManager networkGroupManager;
   private final ServerTreeServerStateCleaner serverStateCleaner;
   private final ServerTreeServerNodeBuilder serverNodeBuilder;
-  private final ServerTreeServerRootLifecycleManager serverRootLifecycleManager;
+
   private final ServerTreeServerLifecycleFacade serverLifecycleFacade;
   private final ServerTreeServerParentResolver serverParentResolver;
   private final ServerTreeServerLabelPolicy serverLabelPolicy;
@@ -853,31 +852,27 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     this.tooltipResolver = viewInteractionCollaborators.tooltipResolver();
     this.contextMenuBuilder = viewInteractionCollaborators.contextMenuBuilder();
-    this.serverRootLifecycleManager =
-        new ServerTreeServerRootLifecycleManager(
-            serverNodeBuilder,
-            CHANNEL_LIST_LABEL,
-            WEECHAT_FILTERS_LABEL,
-            IGNORES_LABEL,
-            DCC_TRANSFERS_LABEL,
-            LOG_VIEWER_LABEL,
-            MONITOR_GROUP_LABEL,
-            INTERCEPTORS_GROUP_LABEL,
-            new ServerTreeServerRootLifecycleContextAdapter(
+    ServerTreeLifecycleSettingsCollaborators lifecycleSettingsCollaborators =
+        ServerTreeLifecycleSettingsCollaboratorsFactory.create(
+            new ServerTreeLifecycleSettingsCollaboratorsFactory.Inputs(
+                serverNodeBuilder,
+                CHANNEL_LIST_LABEL,
+                WEECHAT_FILTERS_LABEL,
+                IGNORES_LABEL,
+                DCC_TRANSFERS_LABEL,
+                LOG_VIEWER_LABEL,
+                MONITOR_GROUP_LABEL,
+                INTERCEPTORS_GROUP_LABEL,
                 ServerTreeDockable::normalizeServerId,
                 servers,
-                runtimeState::markServerKnown,
-                channelStateCoordinator::loadChannelStateForServer,
-                serverParentResolver::resolveParentForServer,
+                runtimeState,
+                channelStateCoordinator,
+                serverParentResolver,
                 this::builtInNodesVisibility,
                 nodeVisibilityApi::isDccTransfersNodesVisible,
-                statusLabelManager::statusLeafLabelForServer,
-                serverId -> notificationStore == null ? 0 : notificationStore.count(serverId),
-                serverId -> interceptorStore == null ? 0 : interceptorStore.totalHitCount(serverId),
-                serverId ->
-                    interceptorStore == null
-                        ? List.of()
-                        : interceptorStore.listInterceptors(serverId),
+                statusLabelManager,
+                notificationStore,
+                interceptorStore,
                 leaves,
                 this::builtInLayout,
                 this::rootSiblingOrder,
@@ -886,31 +881,27 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 model,
                 root,
                 tree,
-                nodeBadgeUpdater::refreshNotificationsCount,
-                interceptorActions::refreshInterceptorGroupCount,
-                serverStateCleaner::cleanupServerState,
-                networkGroupManager::removeEmptyGroupIfNeeded));
-    this.serverLifecycleFacade =
-        new ServerTreeServerLifecycleFacade(serverRootLifecycleManager, statusLabelManager);
-    this.settingsSynchronizer =
-        new ServerTreeSettingsSynchronizer(
-            new ServerTreeSettingsSynchronizerContextAdapter(
+                nodeBadgeUpdater,
+                interceptorActions,
+                serverStateCleaner,
+                networkGroupManager,
                 settingsBus,
                 jfrRuntimeEventsService,
                 runtimeConfig,
                 () -> typingIndicatorsTreeEnabled,
                 enabled -> typingIndicatorsTreeEnabled = enabled,
                 this::clearTypingIndicatorsIfReady,
-                style ->
-                    typingIndicatorStyle =
-                        style == null ? ServerTreeTypingIndicatorStyle.DOTS : style,
+                style -> typingIndicatorStyle = style,
                 enabled -> serverTreeNotificationBadgesEnabled = enabled,
                 percent -> unreadBadgeScalePercent = percent,
                 color -> unreadChannelTextColor = color,
                 color -> highlightChannelTextColor = color,
                 this::refreshTreeLayoutAfterUiChange,
-                this::refreshApplicationJfrNode),
-            TREE_BADGE_SCALE_PERCENT_DEFAULT);
+                this::refreshApplicationJfrNode,
+                TREE_BADGE_SCALE_PERCENT_DEFAULT));
+
+    this.serverLifecycleFacade = lifecycleSettingsCollaborators.serverLifecycleFacade();
+    this.settingsSynchronizer = lifecycleSettingsCollaborators.settingsSynchronizer();
     this.targetLifecycleCoordinator =
         new ServerTreeTargetLifecycleCoordinator(
             servers,
