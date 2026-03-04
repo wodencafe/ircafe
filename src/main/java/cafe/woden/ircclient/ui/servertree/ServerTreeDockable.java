@@ -72,6 +72,7 @@ import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLeafInsertPolic
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeStartupSelectionRestorer;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTypingTargetPolicy;
+import cafe.woden.ircclient.ui.servertree.query.ServerTreeChannelQueryService;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeNodeAccess;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeTargetSnapshotProvider;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeChannelModeRequestBus;
@@ -140,15 +141,11 @@ import javax.swing.ToolTipManager;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 
 @org.springframework.stereotype.Component
 @Lazy
 public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
-  private static final Logger log = LoggerFactory.getLogger(ServerTreeDockable.class);
-
   // UI label for the per-server "status" transcript target.
   // The target id remains "status" internally; this is just what the user sees in the tree.
   private static final String STATUS_LABEL = "Server";
@@ -374,6 +371,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeBuiltInVisibilitySettings builtInVisibilitySettings;
   private final ServerTreeTargetNodePolicy targetNodePolicy;
   private final ServerTreeChannelStateCoordinator channelStateCoordinator;
+  private final ServerTreeChannelQueryService channelQueryService;
   private final ServerTreeChannelTargetOperations channelTargetOperations;
   private final ServerTreeEnsureNodeParentResolver ensureNodeParentResolver;
   private final ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter;
@@ -821,6 +819,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             IGNORES_LABEL,
             DCC_TRANSFERS_LABEL);
     this.channelStateCoordinator = stateInteractionCollaborators.channelStateCoordinator();
+    this.channelQueryService =
+        new ServerTreeChannelQueryService(
+            edtExecutor,
+            targetSnapshotProvider,
+            channelStateCoordinator,
+            ServerTreeDockable::normalizeServerId);
     this.channelTargetOperations =
         new ServerTreeChannelTargetOperations(
             edtExecutor,
@@ -1510,44 +1514,23 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
    * <p>Safe to call from any thread.
    */
   public List<String> openChannelsForServer(String serverId) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return List.of();
-    return edtExecutor.read(
-        () -> targetSnapshotProvider.snapshotOpenChannelsForServer(sid),
-        List.of(),
-        ex -> log.debug("[ircafe] open channel snapshot failed for server={}", sid, ex));
+    return channelQueryService.openChannelsForServer(serverId);
   }
 
   public List<ManagedChannelEntry> managedChannelsForServer(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return List.of();
-    return edtExecutor.read(
-        () -> channelStateCoordinator.snapshotManagedChannelsForServer(sid),
-        List.of(),
-        ex -> log.debug("[ircafe] managed channel snapshot failed for server={}", sid, ex));
+    return channelQueryService.managedChannelsForServer(serverId);
   }
 
   public ChannelSortMode channelSortModeForServer(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return ChannelSortMode.CUSTOM;
-    return edtExecutor.read(
-        () -> channelStateCoordinator.channelSortModeForServer(sid),
-        ChannelSortMode.CUSTOM,
-        ex -> log.debug("[ircafe] channel sort mode snapshot failed for server={}", sid, ex));
+    return channelQueryService.channelSortModeForServer(serverId);
   }
 
   public void setChannelSortModeForServer(String serverId, ChannelSortMode mode) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    ChannelSortMode next = mode == null ? ChannelSortMode.CUSTOM : mode;
-    edtExecutor.write(() -> channelStateCoordinator.setChannelSortModeForServer(sid, next));
+    channelQueryService.setChannelSortModeForServer(serverId, mode);
   }
 
   public void setChannelCustomOrderForServer(String serverId, List<String> channels) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    List<String> requested = channels == null ? List.of() : List.copyOf(channels);
-    edtExecutor.write(() -> channelStateCoordinator.setChannelCustomOrderForServer(sid, requested));
+    channelQueryService.setChannelCustomOrderForServer(serverId, channels);
   }
 
   public void setCanEditChannelModes(BiPredicate<String, String> canEditChannelModes) {
