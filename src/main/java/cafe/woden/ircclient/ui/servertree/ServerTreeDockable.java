@@ -26,6 +26,8 @@ import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLifecycleSetting
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTargetLifecycleCoordinatorFactory;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTreeInteractionBindings;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeTreeInteractionBindingsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeViewInteractionCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeApplicationRootVisibilityContextAdapter;
@@ -59,7 +61,6 @@ import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeDragReorderSuppo
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinatorFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionWiringFactory;
-import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeKeyBindingsInstaller;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeRowInteractionHandler;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutVisibilityFacade;
@@ -138,7 +139,6 @@ import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
-import javax.swing.ToolTipManager;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -1030,12 +1030,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.targetSelectionCoordinator = channelInteractionCollaborators.targetSelectionCoordinator();
 
     this.channelInteractionApi = channelInteractionCollaborators.channelInteractionApi();
-    ToolTipManager.sharedInstance().registerComponent(tree);
-    tree.addPropertyChangeListener(
-        "UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
-    this.nodeActions =
-        nodeActionsFactory.create(
-            new ServerTreeNodeActionsFactory.Inputs(
+    ServerTreeTreeInteractionBindings treeInteractionBindings =
+        ServerTreeTreeInteractionBindingsFactory.create(
+            new ServerTreeTreeInteractionBindingsFactory.Inputs(
+                nodeActionsFactory,
                 tree,
                 model,
                 uiHooks::isServerNode,
@@ -1051,13 +1049,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 nodeClassifier::owningServerIdForNode,
                 channelStateCoordinator::persistOrderAndResortAfterManualMove,
                 this::persistRootSiblingOrderFromTree,
-                this::persistBuiltInLayoutFromTree));
-    ServerTreeKeyBindingsInstaller.install(
-        tree,
-        this::moveNodeUpAction,
-        this::moveNodeDownAction,
-        this::closeNodeAction,
-        this::openSelectedNodeInChatDock);
+                this::persistBuiltInLayoutFromTree,
+                this::refreshTreeLayoutAfterUiChange,
+                this::openSelectedNodeInChatDock));
+    this.nodeActions = treeInteractionBindings.nodeActions();
 
     treeScroll.setPreferredSize(new Dimension(260, 400));
     treeScroll.setMinimumSize(new Dimension(0, 0));
