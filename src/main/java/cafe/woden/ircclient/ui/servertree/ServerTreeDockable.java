@@ -17,6 +17,8 @@ import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
 import cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions;
 import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeChannelInteractionCollaborators;
+import cafe.woden.ircclient.ui.servertree.composition.ServerTreeChannelInteractionCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaborators;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLayoutCollaboratorsFactory;
 import cafe.woden.ircclient.ui.servertree.composition.ServerTreeLifecycleSettingsCollaborators;
@@ -33,10 +35,8 @@ import cafe.woden.ircclient.ui.servertree.context.ServerTreeLayoutPersistenceCon
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeSelectionPersistenceContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeServerCatalogSynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeStartupSelectionRestorerContextAdapter;
-import cafe.woden.ircclient.ui.servertree.context.ServerTreeTargetSelectionContextAdapter;
 import cafe.woden.ircclient.ui.servertree.context.ServerTreeUiLeafVisibilitySynchronizerContextAdapter;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeApplicationRootVisibilityCoordinator;
-import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelDisconnectStateManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelInteractionApi;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelTargetOperations;
@@ -55,7 +55,6 @@ import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetSelectionC
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTypingActivityManager;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiLeafVisibilitySynchronizer;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUiRefreshCoordinator;
-import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeUnreadStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeDragReorderSupport;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinator;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinatorFactory;
@@ -77,7 +76,6 @@ import cafe.woden.ircclient.ui.servertree.policy.ServerTreeSelectionPersistenceP
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLabelPolicy;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeStartupSelectionRestorer;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTargetNodePolicy;
-import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTypingTargetPolicy;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeChannelQueryService;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeNodeAccess;
 import cafe.woden.ircclient.ui.servertree.query.ServerTreeServerNodeResolver;
@@ -326,12 +324,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeEnsureNodeParentResolver ensureNodeParentResolver;
   private final ServerTreeChannelListNodeEnsurer channelListNodeEnsurer;
   private final ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter;
-  private final ServerTreeChannelDisconnectStateManager channelDisconnectStateManager;
+
   private final ServerTreeTargetNodeRemovalMutator targetNodeRemovalMutator;
   private final ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator;
   private final ServerTreeTargetLifecycleCoordinator targetLifecycleCoordinator;
   private final ServerTreeTargetSelectionCoordinator targetSelectionCoordinator;
-  private final ServerTreeUnreadStateCoordinator unreadStateCoordinator;
+
   private final ServerTreeInteractionSetupCoordinator interactionSetupCoordinator;
   private final ServerTreeRequestApi requestApi;
   private final ServerTreeServerRuntimeUiUpdater serverRuntimeUiUpdater;
@@ -1001,59 +999,37 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     ServerTreeUiRefreshCoordinator.applyTreeFontFromUiDefaults(tree);
 
     tree.setCellRenderer(treeCellRenderer);
-    this.typingActivityTimer =
-        new Timer(TYPING_ACTIVITY_TICK_MS, e -> onTypingActivityAnimationTick());
-    this.typingActivityTimer.setRepeats(true);
-    this.typingActivityManager =
-        new ServerTreeTypingActivityManager(
-            leaves,
-            typingActivityNodes,
-            typingActivityTimer,
-            TYPING_ACTIVITY_HOLD_MS,
-            TYPING_ACTIVITY_FADE_MS,
-            ServerTreeTypingActivityManager.context(
-                ServerTreeTypingTargetPolicy::supportsTypingActivity,
+    ServerTreeChannelInteractionCollaborators channelInteractionCollaborators =
+        ServerTreeChannelInteractionCollaboratorsFactory.create(
+            new ServerTreeChannelInteractionCollaboratorsFactory.Inputs(
+                tree,
+                model,
+                leaves,
+                typingActivityNodes,
+                TYPING_ACTIVITY_TICK_MS,
+                TYPING_ACTIVITY_HOLD_MS,
+                TYPING_ACTIVITY_FADE_MS,
+                this::onTypingActivityAnimationTick,
                 () -> typingIndicatorsTreeEnabled,
                 () -> ServerTreeDockable.this.isShowing() && tree.isShowing(),
-                this::repaintTreeNode));
-    this.channelDisconnectStateManager =
-        new ServerTreeChannelDisconnectStateManager(
-            typingActivityNodes,
-            typingActivityTimer,
-            ServerTreeChannelDisconnectStateManager.context(
+                this::repaintTreeNode,
                 this::ensureNode,
                 leaves::get,
-                model::nodeChanged,
-                this::emitManagedChannelsChanged));
-    this.targetSelectionCoordinator =
-        new ServerTreeTargetSelectionCoordinator(
-            new ServerTreeTargetSelectionContextAdapter(
-                this::ensureNode,
+                this::emitManagedChannelsChanged,
                 serverNodeResolver::monitorNodeForServer,
                 serverNodeResolver::interceptorsNodeForServer,
                 serverNodeResolver::serverNodesForServer,
-                leaves::get,
-                node -> {
-                  if (node == null) return;
-                  TreePath path = new TreePath(node.getPath());
-                  tree.setSelectionPath(path);
-                  tree.scrollPathToVisible(path);
-                }));
-    this.unreadStateCoordinator =
-        new ServerTreeUnreadStateCoordinator(
-            leaves,
-            model,
-            this::isChannelMuted,
-            channelStateCoordinator::noteChannelActivity,
-            channelStateCoordinator::onChannelUnreadCountsChanged,
-            this::emitManagedChannelsChanged);
-    this.channelInteractionApi =
-        new ServerTreeChannelInteractionApi(
-            channelQueryService,
-            channelTargetOperations,
-            channelDisconnectStateManager,
-            unreadStateCoordinator,
-            typingActivityManager);
+                this::isChannelMuted,
+                channelStateCoordinator::noteChannelActivity,
+                channelStateCoordinator::onChannelUnreadCountsChanged,
+                channelQueryService,
+                channelTargetOperations));
+    this.typingActivityTimer = channelInteractionCollaborators.typingActivityTimer();
+    this.typingActivityManager = channelInteractionCollaborators.typingActivityManager();
+
+    this.targetSelectionCoordinator = channelInteractionCollaborators.targetSelectionCoordinator();
+
+    this.channelInteractionApi = channelInteractionCollaborators.channelInteractionApi();
     ToolTipManager.sharedInstance().registerComponent(tree);
     tree.addPropertyChangeListener(
         "UI", e -> SwingUtilities.invokeLater(this::refreshTreeLayoutAfterUiChange));
