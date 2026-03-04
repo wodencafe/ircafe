@@ -23,7 +23,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -34,11 +36,17 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Owns topic state, topic panel rendering, and topic update events for {@link ChatDockable}. */
 public final class ChatTopicCoordinator {
 
+  private static final Logger log = LoggerFactory.getLogger(ChatTopicCoordinator.class);
   private static final int TOPIC_DIVIDER_SIZE = 6;
+  private static final int DEFAULT_TOPIC_HEIGHT_PX = 58;
+  private static final int MIN_TOPIC_HEIGHT_PX = 40;
+  private static final int MAX_TOPIC_HEIGHT_PX = 200;
   private static final int NOTIFICATION_PREVIEW_LIMIT = 8;
   private static final DateTimeFormatter NOTIFICATION_TIME_FMT =
       DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
@@ -52,8 +60,13 @@ public final class ChatTopicCoordinator {
   private final NotificationStore notificationStore;
   private final Consumer<TargetRef> targetSelector;
   private final Runnable uiRefresh;
+  private final Function<TargetRef, String> persistedTopicLookup;
+  private final BiConsumer<TargetRef, String> persistedTopicSink;
+  private final Function<TargetRef, Integer> persistedTopicHeightLookup;
+  private final BiConsumer<TargetRef, Integer> persistedTopicHeightSink;
+  private final Map<TargetRef, Integer> topicHeightByTarget = new HashMap<>();
 
-  private int lastTopicHeightPx = 58;
+  private int lastTopicHeightPx = DEFAULT_TOPIC_HEIGHT_PX;
   private boolean topicVisible = false;
   private boolean topicCompact = false;
   private TargetRef activeTarget;
@@ -64,10 +77,41 @@ public final class ChatTopicCoordinator {
       NotificationStore notificationStore,
       Consumer<TargetRef> targetSelector,
       Runnable uiRefresh) {
+    this(
+        transcriptScroll,
+        channelListPanel,
+        notificationStore,
+        targetSelector,
+        uiRefresh,
+        target -> "",
+        (target, topic) -> {},
+        target -> DEFAULT_TOPIC_HEIGHT_PX,
+        (target, heightPx) -> {});
+  }
+
+  public ChatTopicCoordinator(
+      JScrollPane transcriptScroll,
+      ChannelListPanel channelListPanel,
+      NotificationStore notificationStore,
+      Consumer<TargetRef> targetSelector,
+      Runnable uiRefresh,
+      Function<TargetRef, String> persistedTopicLookup,
+      BiConsumer<TargetRef, String> persistedTopicSink,
+      Function<TargetRef, Integer> persistedTopicHeightLookup,
+      BiConsumer<TargetRef, Integer> persistedTopicHeightSink) {
     this.channelListPanel = Objects.requireNonNull(channelListPanel, "channelListPanel");
     this.notificationStore = Objects.requireNonNull(notificationStore, "notificationStore");
     this.targetSelector = targetSelector != null ? targetSelector : unused -> {};
     this.uiRefresh = Objects.requireNonNull(uiRefresh, "uiRefresh");
+    this.persistedTopicLookup = persistedTopicLookup != null ? persistedTopicLookup : target -> "";
+    this.persistedTopicSink =
+        persistedTopicSink != null ? persistedTopicSink : (target, topic) -> {};
+    this.persistedTopicHeightLookup =
+        persistedTopicHeightLookup != null
+            ? persistedTopicHeightLookup
+            : target -> DEFAULT_TOPIC_HEIGHT_PX;
+    this.persistedTopicHeightSink =
+        persistedTopicHeightSink != null ? persistedTopicHeightSink : (target, topicHeightPx) -> {};
     JScrollPane scroll = Objects.requireNonNull(transcriptScroll, "transcriptScroll");
 
     topicSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, topicPanel, scroll);
@@ -84,7 +128,10 @@ public final class ChatTopicCoordinator {
           if (!topicVisible || topicCompact) return;
           Object value = evt.getNewValue();
           if (value instanceof Integer location) {
-            lastTopicHeightPx = Math.max(0, location);
+            int normalized = normalizeTopicHeightPx(location);
+            if (lastTopicHeightPx == normalized) return;
+            lastTopicHeightPx = normalized;
+            persistTopicPanelHeight(activeTarget, normalized);
           }
         });
 
@@ -114,6 +161,7 @@ public final class ChatTopicCoordinator {
     } else {
       topicByTarget.put(target, normalized);
     }
+    persistTopicSnapshot(target, normalized);
 
     if (target.equals(activeTarget)) {
       updateTopicPanelForActiveTarget(activeTarget);
@@ -126,6 +174,9 @@ public final class ChatTopicCoordinator {
     if (target == null) return;
 
     String removed = topicByTarget.remove(target);
+    if (removed != null && !removed.isBlank()) {
+      persistTopicSnapshot(target, "");
+    }
     if (target.equals(activeTarget)) {
       updateTopicPanelForActiveTarget(activeTarget);
     }
@@ -137,11 +188,58 @@ public final class ChatTopicCoordinator {
 
   public String topicFor(TargetRef target) {
     if (target == null) return "";
-    return topicByTarget.getOrDefault(target, "");
+    String inMemory = topicByTarget.getOrDefault(target, "");
+    if (!inMemory.isBlank()) return inMemory;
+    if (!target.isChannel()) return "";
+
+    String persisted = Objects.toString(persistedTopicLookup.apply(target), "").trim();
+    if (persisted.isEmpty()) return "";
+    topicByTarget.put(target, persisted);
+    return persisted;
   }
 
   public Flowable<ChatDockable.TopicUpdate> topicUpdates() {
     return topicUpdates.onBackpressureLatest();
+  }
+
+  public int topicPanelHeightPx() {
+    return lastTopicHeightPx;
+  }
+
+  public int topicPanelHeightPxFor(TargetRef target) {
+    if (target == null || !target.isChannel()) return DEFAULT_TOPIC_HEIGHT_PX;
+    Integer inMemory = topicHeightByTarget.get(target);
+    if (inMemory != null) return normalizeTopicHeightPx(inMemory);
+
+    Integer persisted = persistedTopicHeightLookup.apply(target);
+    int resolved = normalizeTopicHeightPx(persisted == null ? DEFAULT_TOPIC_HEIGHT_PX : persisted);
+    topicHeightByTarget.put(target, resolved);
+    return resolved;
+  }
+
+  public void setTopicPanelHeightPx(int heightPx) {
+    int normalized = normalizeTopicHeightPx(heightPx);
+    TargetRef target = activeTarget;
+    if (target != null && target.isChannel()) {
+      setTopicPanelHeightPxFor(target, normalized);
+      return;
+    }
+    lastTopicHeightPx = normalized;
+    if (!topicVisible || topicCompact) return;
+    topicSplit.setDividerLocation(lastTopicHeightPx);
+    uiRefresh.run();
+  }
+
+  public void setTopicPanelHeightPxFor(TargetRef target, int heightPx) {
+    if (target == null || !target.isChannel()) return;
+    int normalized = normalizeTopicHeightPx(heightPx);
+    topicHeightByTarget.put(target, normalized);
+    persistTopicPanelHeight(target, normalized);
+    if (!target.equals(activeTarget)) return;
+    lastTopicHeightPx = normalized;
+    if (!topicVisible || topicCompact) return;
+    topicSplit.setDividerLocation(lastTopicHeightPx);
+    uiRefresh.run();
   }
 
   public void updateTopicPanelForActiveTarget(TargetRef activeTarget) {
@@ -157,8 +255,9 @@ public final class ChatTopicCoordinator {
     NotificationSummary summary = summarizeChannelNotifications(activeTarget);
     topicPanel.setNotificationState(true, summary.totalCount());
     topicPanel.setNotificationTooltip(buildNotificationTooltip(summary));
+    lastTopicHeightPx = topicPanelHeightPxFor(activeTarget);
 
-    String topic = Objects.toString(topicByTarget.getOrDefault(activeTarget, ""), "").trim();
+    String topic = topicFor(activeTarget).trim();
     topicPanel.setTopic(activeTarget.target(), topic);
 
     boolean hasTopic = !topic.isEmpty();
@@ -345,6 +444,26 @@ public final class ChatTopicCoordinator {
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
   }
 
+  private void persistTopicSnapshot(TargetRef target, String topic) {
+    if (target == null || !target.isChannel()) return;
+    try {
+      persistedTopicSink.accept(target, Objects.toString(topic, ""));
+    } catch (Exception ex) {
+      log.debug("[ircafe] failed to persist channel topic snapshot for {}", target, ex);
+    }
+  }
+
+  private void persistTopicPanelHeight(TargetRef target, int heightPx) {
+    if (target == null || !target.isChannel()) return;
+    int normalized = normalizeTopicHeightPx(heightPx);
+    topicHeightByTarget.put(target, normalized);
+    try {
+      persistedTopicHeightSink.accept(target, normalized);
+    } catch (Exception ex) {
+      log.debug("[ircafe] failed to persist channel topic panel height for {}", target, ex);
+    }
+  }
+
   private record NotificationEntry(Instant at, String title, String detail) {}
 
   private record NotificationSummary(int totalCount, List<NotificationEntry> previews) {
@@ -355,6 +474,10 @@ public final class ChatTopicCoordinator {
     if (topic == null) return "";
     // Strip IRC formatting control chars and other low ASCII controls.
     return topic.replaceAll("[\\x00-\\x1F\\x7F]", "");
+  }
+
+  private static int normalizeTopicHeightPx(int heightPx) {
+    return Math.max(MIN_TOPIC_HEIGHT_PX, Math.min(MAX_TOPIC_HEIGHT_PX, heightPx));
   }
 
   private static final class TopicPanel extends JPanel {

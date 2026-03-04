@@ -107,6 +107,7 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import io.reactivex.rxjava3.processors.ReplayProcessor;
 import jakarta.annotation.PreDestroy;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -132,6 +133,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -222,7 +224,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final TreeNodeActions<TargetRef> nodeActions;
 
   private final FlowableProcessor<TargetRef> selections =
-      PublishProcessor.<TargetRef>create().toSerialized();
+      ReplayProcessor.<TargetRef>createWithSize(1).toSerialized();
 
   /** Suppress broadcasting selection changes when selection is set for context menus. */
   private boolean suppressSelectionBroadcast = false;
@@ -256,6 +258,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final FlowableProcessor<TargetRef> openPinnedChatRequests =
       PublishProcessor.<TargetRef>create().toSerialized();
 
+  private final FlowableProcessor<String> openQuasselNetworkManagerRequests =
+      PublishProcessor.<String>create().toSerialized();
+
   private final ServerTreeChannelModeRequestBus channelModeRequestBus =
       new ServerTreeChannelModeRequestBus();
 
@@ -274,6 +279,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
               managedChannelsChangedByServer,
               clearLogRequests,
               openPinnedChatRequests,
+              openQuasselNetworkManagerRequests,
               ircv3CapabilityToggleRequests));
 
   // Hidden top-level container. Visible top-level nodes are siblings: IRC + Application.
@@ -403,6 +409,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private volatile boolean showChannelListNodes = true;
   private volatile boolean showDccTransfersNodes = false;
   private boolean startupSelectionCompleted = false;
+  private volatile TargetRef startupRememberedSelectionRef = null;
+  private volatile TargetRef lastBroadcastSelectionRef = null;
   private volatile boolean showApplicationRoot = true;
   private volatile BiPredicate<String, String> canEditChannelModes = (serverId, channel) -> false;
   private volatile Function<TargetRef, Dockable> pinnedDockableProvider =
@@ -456,6 +464,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     this.runtimeConfig = runtimeConfig;
     this.logProps = logProps;
+    this.startupRememberedSelectionRef = readStartupRememberedSelectionRef();
 
     this.interceptorStore = interceptorStore;
     this.jfrRuntimeEventsService = jfrRuntimeEventsService;
@@ -847,6 +856,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                     uiHooks::connectServer,
                     uiHooks::disconnectServer,
                     this::openServerInfoDialog,
+                    requestEmitter::emitOpenQuasselNetworkManager,
                     interceptorStore,
                     interceptorActions::promptAndAddInterceptor,
                     serverDialogs,
@@ -1164,6 +1174,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 () -> suppressSelectionBroadcast,
                 ref -> {
                   if (ref == null) return;
+                  lastBroadcastSelectionRef = ref;
                   selections.onNext(ref);
                 },
                 nodeClassifier::isMonitorGroupNode,
@@ -1780,6 +1791,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private String firstServerIdOrEmpty() {
+    TargetRef remembered = startupRememberedSelectionRef;
+    if (remembered != null) {
+      String preferred = normalizeServerId(remembered.serverId());
+      if (!preferred.isEmpty() && servers.containsKey(preferred)) {
+        return preferred;
+      }
+    }
     return servers.values().stream().findFirst().map(sn -> sn.statusRef.serverId()).orElse("");
   }
 
@@ -1842,6 +1860,34 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return true;
   }
 
+  /**
+   * Best-effort current selection suitable for persistence.
+   *
+   * <p>Includes synthetic group selections (monitor/interceptors) that do not have direct leaf
+   * target refs.
+   */
+  public TargetRef selectedTargetForPersistence() {
+    TargetRef emitted = lastBroadcastSelectionRef;
+    if (emitted != null) return emitted;
+
+    TargetRef selected = selectedTargetRef();
+    if (selected != null) return selected;
+
+    Object selectedNode = tree.getLastSelectedPathComponent();
+    if (!(selectedNode instanceof DefaultMutableTreeNode node)) return null;
+
+    String serverId = nodeClassifier.owningServerIdForNode(node);
+    if (serverId.isBlank()) return null;
+
+    if (nodeClassifier.isMonitorGroupNode(node)) {
+      return TargetRef.monitorGroup(serverId);
+    }
+    if (nodeClassifier.isInterceptorsGroupNode(node)) {
+      return TargetRef.interceptorsGroup(serverId);
+    }
+    return null;
+  }
+
   public Flowable<TargetRef> selectionStream() {
     return selections.onBackpressureLatest();
   }
@@ -1884,6 +1930,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   public Flowable<TargetRef> openPinnedChatRequests() {
     return openPinnedChatRequests.onBackpressureLatest();
+  }
+
+  public Flowable<String> quasselNetworkManagerRequests() {
+    return openQuasselNetworkManagerRequests.onBackpressureLatest();
   }
 
   public void setPinnedDockableProvider(Function<TargetRef, Dockable> provider) {
@@ -2318,7 +2368,57 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void selectStartupDefaultForServer(String serverId) {
+    if (trySelectStartupRememberedTarget(serverId)) {
+      return;
+    }
     selectionFallbackPolicy.selectStartupDefaultForServer(serverId);
+  }
+
+  private TargetRef readStartupRememberedSelectionRef() {
+    if (runtimeConfig == null) return null;
+    Optional<RuntimeConfigStore.LastSelectedTarget> remembered =
+        runtimeConfig.readLastSelectedTarget();
+    if (remembered.isEmpty()) return null;
+    RuntimeConfigStore.LastSelectedTarget selected = remembered.get();
+    if (!selected.isValid()) return null;
+    try {
+      return new TargetRef(selected.serverId(), selected.target());
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private boolean trySelectStartupRememberedTarget(String serverId) {
+    TargetRef remembered = startupRememberedSelectionRef;
+    if (remembered == null) return false;
+
+    String expectedServerId = normalizeServerId(serverId);
+    String rememberedServerId = normalizeServerId(remembered.serverId());
+    if (expectedServerId.isEmpty() || !expectedServerId.equals(rememberedServerId)) return false;
+    if (!isStartupRememberedTargetSelectable(remembered)) return false;
+
+    selectTarget(remembered);
+    startupRememberedSelectionRef = null;
+    return true;
+  }
+
+  private boolean isStartupRememberedTargetSelectable(TargetRef ref) {
+    if (ref == null) return false;
+    if (ref.isMonitorGroup()) {
+      String sid = normalizeServerId(ref.serverId());
+      return isGroupNodeSelectableForServer(sid, monitorNodeForServer(sid));
+    }
+    if (ref.isInterceptorsGroup()) {
+      String sid = normalizeServerId(ref.serverId());
+      return isGroupNodeSelectableForServer(sid, interceptorsNodeForServer(sid));
+    }
+    return leaves.containsKey(ref);
+  }
+
+  private boolean isGroupNodeSelectableForServer(String serverId, DefaultMutableTreeNode node) {
+    ServerNodes nodes = serverNodesForServer(serverId);
+    if (nodes == null || node == null) return false;
+    return node.getParent() == nodes.serverNode || node.getParent() == nodes.otherNode;
   }
 
   private boolean ensureUiLeafVisible(
@@ -2387,6 +2487,17 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   public void ensureNode(TargetRef ref) {
     targetLifecycleCoordinator.ensureNode(ref);
+    trySelectStartupRememberedTargetAfterEnsure(ref);
+  }
+
+  private void trySelectStartupRememberedTargetAfterEnsure(TargetRef ensuredRef) {
+    TargetRef remembered = startupRememberedSelectionRef;
+    if (remembered == null || ensuredRef == null) return;
+    if (!remembered.equals(ensuredRef)) return;
+    if (!isStartupRememberedTargetSelectable(remembered)) return;
+
+    startupRememberedSelectionRef = null;
+    selectTarget(remembered);
   }
 
   private DefaultMutableTreeNode ensureChannelListNodeForEnsureNode(ServerNodes sn) {

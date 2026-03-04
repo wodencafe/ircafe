@@ -10,7 +10,8 @@ import java.util.concurrent.TimeUnit;
 public final class RxVirtualSchedulers {
   private static final int COMPUTATION_THREADS =
       Math.max(2, Runtime.getRuntime().availableProcessors());
-  private static final long SHUTDOWN_GRACE_MS = 1500L;
+  private static final long DEFAULT_SHUTDOWN_GRACE_MS = 1500L;
+  private static final String SHUTDOWN_GRACE_PROPERTY = "ircafe.rx.shutdown.grace.ms";
 
   private static final Object LOCK = new Object();
   private static ExecutorService ioExec;
@@ -36,7 +37,7 @@ public final class RxVirtualSchedulers {
 
   public static void shutdown() {
     synchronized (LOCK) {
-      long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SHUTDOWN_GRACE_MS);
+      long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(shutdownGraceMillis());
       shutdownExecutor(ioExec, deadlineNanos);
       shutdownExecutor(computationExec, deadlineNanos);
       ioExec = null;
@@ -83,6 +84,16 @@ public final class RxVirtualSchedulers {
       computationExec =
           VirtualThreads.newScheduledThreadPool(COMPUTATION_THREADS, "ircafe-rx-computation");
       computationScheduler = Schedulers.from(computationExec);
+    }
+  }
+
+  private static long shutdownGraceMillis() {
+    String raw = System.getProperty(SHUTDOWN_GRACE_PROPERTY);
+    if (raw == null || raw.isBlank()) return DEFAULT_SHUTDOWN_GRACE_MS;
+    try {
+      return Math.max(0L, Long.parseLong(raw.trim()));
+    } catch (NumberFormatException ignored) {
+      return DEFAULT_SHUTDOWN_GRACE_MS;
     }
   }
 }

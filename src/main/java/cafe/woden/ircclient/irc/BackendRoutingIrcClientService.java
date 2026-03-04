@@ -244,6 +244,55 @@ public class BackendRoutingIrcClientService
   }
 
   @Override
+  public boolean isQuasselCoreSetupPending(String serverId) {
+    return routeActiveOrConfigured(serverId).isQuasselCoreSetupPending(serverId);
+  }
+
+  @Override
+  public Optional<QuasselCoreSetupPrompt> quasselCoreSetupPrompt(String serverId) {
+    return routeActiveOrConfigured(serverId).quasselCoreSetupPrompt(serverId);
+  }
+
+  @Override
+  public Completable submitQuasselCoreSetup(String serverId, QuasselCoreSetupRequest request) {
+    return routeActiveOrConfigured(serverId).submitQuasselCoreSetup(serverId, request);
+  }
+
+  @Override
+  public List<QuasselCoreNetworkSummary> quasselCoreNetworks(String serverId) {
+    return routeActiveOrConfigured(serverId).quasselCoreNetworks(serverId);
+  }
+
+  @Override
+  public Completable quasselCoreConnectNetwork(String serverId, String networkIdOrName) {
+    return routeActiveOrConfigured(serverId).quasselCoreConnectNetwork(serverId, networkIdOrName);
+  }
+
+  @Override
+  public Completable quasselCoreDisconnectNetwork(String serverId, String networkIdOrName) {
+    return routeActiveOrConfigured(serverId)
+        .quasselCoreDisconnectNetwork(serverId, networkIdOrName);
+  }
+
+  @Override
+  public Completable quasselCoreCreateNetwork(
+      String serverId, QuasselCoreNetworkCreateRequest request) {
+    return routeActiveOrConfigured(serverId).quasselCoreCreateNetwork(serverId, request);
+  }
+
+  @Override
+  public Completable quasselCoreUpdateNetwork(
+      String serverId, String networkIdOrName, QuasselCoreNetworkUpdateRequest request) {
+    return routeActiveOrConfigured(serverId)
+        .quasselCoreUpdateNetwork(serverId, networkIdOrName, request);
+  }
+
+  @Override
+  public Completable quasselCoreRemoveNetwork(String serverId, String networkIdOrName) {
+    return routeActiveOrConfigured(serverId).quasselCoreRemoveNetwork(serverId, networkIdOrName);
+  }
+
+  @Override
   public boolean isChatHistoryAvailable(String serverId) {
     return routeActiveOrConfigured(serverId).isChatHistoryAvailable(serverId);
   }

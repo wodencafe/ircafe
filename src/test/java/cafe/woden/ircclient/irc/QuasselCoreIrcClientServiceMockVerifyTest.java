@@ -23,7 +23,6 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -107,7 +106,15 @@ class QuasselCoreIrcClientServiceMockVerifyTest {
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 
     service.connect("quassel").blockingAwait();
-    events.awaitDone(2, TimeUnit.SECONDS);
+    long deadline = System.currentTimeMillis() + 2_000L;
+    while (System.currentTimeMillis() < deadline) {
+      boolean ready =
+          events.values().stream()
+              .map(ServerIrcEvent::event)
+              .anyMatch(IrcEvent.ConnectionReady.class::isInstance);
+      if (ready) break;
+      Thread.sleep(10L);
+    }
 
     verify(datastreamCodec).writeSignalProxyHeartBeatReply(any(OutputStream.class), eq(token));
     verify(datastreamCodec, org.mockito.Mockito.atLeast(2))

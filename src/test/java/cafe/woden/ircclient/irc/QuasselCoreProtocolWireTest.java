@@ -56,6 +56,18 @@ class QuasselCoreProtocolWireTest {
   }
 
   @Test
+  void decodesRpcFrameWithNullSlotNameWithoutThrowing() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        codec.readSignalProxyMessage(new ByteArrayInputStream(rpcNullSlotFrameFixture()));
+
+    assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL, decoded.requestType());
+    assertEquals("", decoded.slotName());
+    assertEquals(List.of(), decoded.params());
+  }
+
+  @Test
   void decodesNetworkInfoSyncFromWireFixture() throws Exception {
     QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
 
@@ -70,6 +82,39 @@ class QuasselCoreProtocolWireTest {
     Map<String, Object> state = assertInstanceOf(Map.class, decoded.params().get(0));
     assertEquals("libera", state.get("networkName"));
     assertEquals("bot", state.get("myNick"));
+  }
+
+  @Test
+  void decodesBufferSyncerMarkerSyncFromWireFixture() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        codec.readSignalProxyMessage(
+            new ByteArrayInputStream(bufferSyncerMarkerSyncFrameFixture()));
+
+    assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC, decoded.requestType());
+    assertEquals("BufferSyncer", decoded.className());
+    assertEquals("global", decoded.objectName());
+    assertEquals("setMarkerLine(BufferId,MsgId)", decoded.slotName());
+    assertEquals(11, ((Number) decoded.params().get(0)).intValue());
+    assertEquals(4242, ((Number) decoded.params().get(1)).intValue());
+  }
+
+  @Test
+  void encodesBufferSyncerMarkerSyncToWireFixture() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+    codec.writeSignalProxySync(
+        out,
+        "BufferSyncer",
+        "global",
+        "setMarkerLine(BufferId,MsgId)",
+        List.of(
+            new QuasselCoreDatastreamCodec.UserTypeValue("BufferId", 11),
+            new QuasselCoreDatastreamCodec.UserTypeValue("MsgId", 4242)));
+
+    assertArrayEquals(bufferSyncerMarkerSyncFrameFixture(), out.toByteArray());
   }
 
   @Test
@@ -141,6 +186,14 @@ class QuasselCoreProtocolWireTest {
     return frame(payload.toByteArray());
   }
 
+  private static byte[] rpcNullSlotFrameFixture() throws IOException {
+    ByteArrayOutputStream payload = new ByteArrayOutputStream();
+    writeInt32(payload, 2);
+    writeVariantInt(payload, QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL);
+    writeVariantNull(payload, 12);
+    return frame(payload.toByteArray());
+  }
+
   private static byte[] backlogRequestSyncFrameFixture() throws IOException {
     ByteArrayOutputStream payload = new ByteArrayOutputStream();
     writeInt32(payload, 9);
@@ -156,6 +209,18 @@ class QuasselCoreProtocolWireTest {
     return frame(payload.toByteArray());
   }
 
+  private static byte[] bufferSyncerMarkerSyncFrameFixture() throws IOException {
+    ByteArrayOutputStream payload = new ByteArrayOutputStream();
+    writeInt32(payload, 6);
+    writeVariantInt(payload, QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC);
+    writeVariantQByteArray(payload, "BufferSyncer");
+    writeVariantQByteArray(payload, "global");
+    writeVariantQByteArray(payload, "setMarkerLine(BufferId,MsgId)");
+    writeVariantUserTypeId(payload, "BufferId", 11);
+    writeVariantUserTypeId(payload, "MsgId", 4242);
+    return frame(payload.toByteArray());
+  }
+
   private static byte[] frame(byte[] payload) throws IOException {
     ByteArrayOutputStream frame = new ByteArrayOutputStream();
     writeInt32(frame, payload.length);
@@ -167,6 +232,11 @@ class QuasselCoreProtocolWireTest {
     writeInt32(out, 2);
     out.write(0);
     writeInt32(out, value);
+  }
+
+  private static void writeVariantNull(ByteArrayOutputStream out, int type) {
+    writeInt32(out, type);
+    out.write(1);
   }
 
   private static void writeVariantQByteArray(ByteArrayOutputStream out, String value)

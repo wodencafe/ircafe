@@ -240,6 +240,17 @@ public class RuntimeConfigStore {
     }
   }
 
+  public record LastSelectedTarget(String serverId, String target) {
+    public LastSelectedTarget {
+      serverId = Objects.toString(serverId, "").trim();
+      target = Objects.toString(target, "").trim();
+    }
+
+    public boolean isValid() {
+      return !serverId.isEmpty() && !target.isEmpty();
+    }
+  }
+
   public record EmbedLoadPolicyScope(
       List<String> userWhitelist,
       List<String> userBlacklist,
@@ -2164,6 +2175,59 @@ public class RuntimeConfigStore {
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist ui.layout.preserveDockLayout to '{}'", file, e);
+    }
+  }
+
+  /** Reads {@code ircafe.ui.lastSelectedTarget} if present and valid. */
+  public synchronized Optional<LastSelectedTarget> readLastSelectedTarget() {
+    try {
+      if (file.toString().isBlank()) return Optional.empty();
+      if (!Files.exists(file)) return Optional.empty();
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Optional.empty();
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return Optional.empty();
+
+      Object raw = ui.get("lastSelectedTarget");
+      if (!(raw instanceof Map<?, ?> selected)) return Optional.empty();
+
+      LastSelectedTarget out =
+          new LastSelectedTarget(
+              Objects.toString(selected.get("serverId"), ""),
+              Objects.toString(selected.get("target"), ""));
+      if (!out.isValid()) return Optional.empty();
+      return Optional.of(out);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.lastSelectedTarget from '{}'", file, e);
+      return Optional.empty();
+    }
+  }
+
+  /** Persists {@code ircafe.ui.lastSelectedTarget}. Blank values clear the persisted target. */
+  public synchronized void rememberLastSelectedTarget(String serverId, String target) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      LastSelectedTarget next = new LastSelectedTarget(serverId, target);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      if (!next.isValid()) {
+        ui.remove("lastSelectedTarget");
+      } else {
+        Map<String, Object> selected = getOrCreateMap(ui, "lastSelectedTarget");
+        selected.put("serverId", next.serverId());
+        selected.put("target", next.target());
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.lastSelectedTarget to '{}'", file, e);
     }
   }
 

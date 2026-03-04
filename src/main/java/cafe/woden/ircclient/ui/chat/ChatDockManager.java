@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.SwingUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -298,8 +300,11 @@ public class ChatDockManager {
   private void syncPinnedDockState(TargetRef target, PinnedChatDockable dock) {
     if (target == null || dock == null) return;
     // Keep in sync with current settings/draft even for already-registered dockables.
+    String mainTopic = mainChat.topicFor(target);
     dock.setInputEnabled(pinnedInputsEnabled);
-    dock.setTopic(mainChat.topicFor(target));
+    dock.setTopicPanelHeightPx(mainChat.topicPanelHeightPxFor(target));
+    dock.setTopic(mainTopic);
+    requestPinnedHistoryPrefill(target);
 
     // Avoid clobbering undo/caret state unless we actually need to apply a different draft.
     String desiredDraft = pinnedDrafts.get(target);
@@ -308,10 +313,42 @@ public class ChatDockManager {
     }
   }
 
+  private void requestPinnedHistoryPrefill(TargetRef target) {
+    if (target == null || target.isUiOnly() || chatHistoryService == null) return;
+    try {
+      chatHistoryService.onTargetSelected(target);
+    } catch (Exception ex) {
+      log.debug("[ircafe] failed to prefill pinned dock history for {}", target, ex);
+    }
+  }
+
   public Dockable dynamicDockableForPersistentId(String persistentId) {
+    if (!SwingUtilities.isEventDispatchThread()) {
+      AtomicReference<Dockable> restored = new AtomicReference<>();
+      try {
+        SwingUtilities.invokeAndWait(
+            () -> restored.set(dynamicDockableForPersistentIdInternal(persistentId)));
+      } catch (Exception ex) {
+        log.warn("[ircafe] failed to restore dynamic pinned dockable {}", persistentId, ex);
+        return null;
+      }
+      return restored.get();
+    }
+    return dynamicDockableForPersistentIdInternal(persistentId);
+  }
+
+  private Dockable dynamicDockableForPersistentIdInternal(String persistentId) {
     TargetRef target = targetFromPinnedPersistentId(persistentId);
     if (target == null) return null;
-    return ensurePinnedDockable(target);
+    PinnedChatDockable dock = ensurePinnedDockable(target);
+    if (dock != null) {
+      syncPinnedDockState(target, dock);
+      try {
+        dock.onShown();
+      } catch (Exception ignored) {
+      }
+    }
+    return dock;
   }
 
   private PinnedChatDockable ensurePinnedDockable(TargetRef target) {
@@ -353,6 +390,14 @@ public class ChatDockManager {
             });
     created.setDraftText(initialDraft);
     created.setInputEnabled(pinnedInputsEnabled);
+    created.setTopicPanelHeightPx(mainChat.topicPanelHeightPxFor(target));
+    created.setOnTopicPanelHeightChanged(
+        heightPx -> {
+          try {
+            mainChat.setTopicPanelHeightPxFor(target, heightPx);
+          } catch (Exception ignored) {
+          }
+        });
     openPinned.put(target, created);
 
     Docking.registerDockable(created);

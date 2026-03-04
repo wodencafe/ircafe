@@ -58,6 +58,10 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       case ParsedInput.Connect cmd -> outboundChatCommandService.handleConnect(cmd.target());
       case ParsedInput.Disconnect cmd -> outboundChatCommandService.handleDisconnect(cmd.target());
       case ParsedInput.Reconnect cmd -> outboundChatCommandService.handleReconnect(cmd.target());
+      case ParsedInput.QuasselSetup cmd ->
+          outboundChatCommandService.handleQuasselSetup(disposables, cmd.serverId());
+      case ParsedInput.QuasselNetwork cmd ->
+          outboundChatCommandService.handleQuasselNetwork(disposables, cmd.args());
       case ParsedInput.Quit cmd -> outboundChatCommandService.handleQuit(cmd.reason());
       case ParsedInput.Nick cmd ->
           outboundChatCommandService.handleNick(disposables, cmd.newNick());
@@ -184,5 +188,10 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     String line = rawUnknown == null ? "" : rawUnknown.trim();
     if (line.startsWith("/")) line = line.substring(1);
     return line.trim();
+  }
+
+  @Override
+  public void openQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
+    outboundChatCommandService.handleQuasselNetworkManager(disposables, serverId);
   }
 }

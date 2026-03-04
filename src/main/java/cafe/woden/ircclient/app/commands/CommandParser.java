@@ -78,6 +78,22 @@ public class CommandParser {
       return new ParsedInput.Reconnect(target);
     }
 
+    if (matchesCommand(line, "/quasselsetup") || matchesCommand(line, "/qsetup")) {
+      String serverId =
+          matchesCommand(line, "/quasselsetup")
+              ? argAfter(line, "/quasselsetup")
+              : argAfter(line, "/qsetup");
+      return new ParsedInput.QuasselSetup(serverId);
+    }
+
+    if (matchesCommand(line, "/quasselnet") || matchesCommand(line, "/qnet")) {
+      String args =
+          matchesCommand(line, "/quasselnet")
+              ? argAfter(line, "/quasselnet")
+              : argAfter(line, "/qnet");
+      return new ParsedInput.QuasselNetwork(args);
+    }
+
     if (matchesCommand(line, "/quit")) {
       String reason = argAfter(line, "/quit");
       return new ParsedInput.Quit(reason);

@@ -731,7 +731,9 @@ public class ConnectionCoordinator {
         String notice =
             "Quassel setup required for server '"
                 + sid
-                + "'. Open Status for details and complete core setup.";
+                + "'. Open Status for details, then run /quasselsetup "
+                + sid
+                + ".";
         ui.enqueueStatusNotice(notice, status);
       }
       default -> {

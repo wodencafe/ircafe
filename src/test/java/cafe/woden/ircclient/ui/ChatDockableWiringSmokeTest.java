@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.ChannelMetadataPort;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.dcc.DccTransferStore;
@@ -219,6 +220,7 @@ class ChatDockableWiringSmokeTest {
     NickContextMenuFactory nickContextMenuFactory = new NickContextMenuFactory();
     ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);
+    ChannelMetadataPort channelMetadataStore = mock(ChannelMetadataPort.class);
     ChatLogViewerService chatLogViewerService = mock(ChatLogViewerService.class);
     InterceptorStore interceptorStore = mock(InterceptorStore.class);
     when(interceptorStore.changes()).thenReturn(Flowable.never());
@@ -250,6 +252,7 @@ class ChatDockableWiringSmokeTest {
                     nickContextMenuFactory,
                     proxyResolver,
                     chatHistoryService,
+                    channelMetadataStore,
                     chatLogViewerService,
                     interceptorStore,
                     dccTransferStore,

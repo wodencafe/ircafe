@@ -40,7 +40,7 @@ public record PresenceEvent(
         String r = safe(reason);
         yield r.isBlank() ? base : base + " (" + r + ")";
       }
-      case NICK -> safe(oldNick) + " → " + safe(newNick);
+      case NICK -> safe(oldNick) + " is now known as " + safe(newNick);
     };
   }
 

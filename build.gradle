@@ -149,6 +149,24 @@ def errorPronePatchChecks =
 tasks.withType(Test).configureEach {
     javaLauncher = javaLauncher25
     systemProperty 'java.awt.headless', 'true'
+    // Reduce per-test scheduler teardown latency while preserving graceful shutdown behavior.
+    systemProperty 'ircafe.rx.shutdown.grace.ms', (findProperty('testRxShutdownGraceMs') ?: '200').toString()
+
+    // Opt-in parallel test JVMs: ./gradlew test -PtestMaxParallelForks=4
+    String maxParallelForksValue = (findProperty('testMaxParallelForks') ?: '').toString().trim()
+    if (!maxParallelForksValue.isEmpty()) {
+        maxParallelForks = Math.max(1, Integer.parseInt(maxParallelForksValue))
+    }
+    // Allow opt-in Quassel integration tests to be controlled from Gradle CLI:
+    //   ./gradlew integrationTest -Dquassel.it.enabled=true ...
+    // Forward only the scoped test-control properties.
+    System.getProperties().each { key, value ->
+        String k = key == null ? '' : key.toString()
+        if (!k.startsWith('quassel.it.')) {
+            return
+        }
+        systemProperty k, value
+    }
 
     // Long Swing-heavy test runs can accumulate heap/metaspace pressure in one JVM.
     // Use a larger heap and periodic process recycling for stability.
@@ -399,11 +417,12 @@ dependencies {
     testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.modulith:spring-modulith-starter-test'
+    testImplementation 'org.testcontainers:testcontainers:1.20.4'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     // Focused mutation testing for ignore normalization + irssi option parsing compatibility.
-    mutationTestTool 'org.pitest:pitest-command-line:1.17.2'
-    mutationTestTool 'org.pitest:pitest-junit5-plugin:1.2.2'
+    mutationTestTool 'org.pitest:pitest-command-line:1.22.1'
+    mutationTestTool 'org.pitest:pitest-junit5-plugin:1.2.3'
 }
 
 tasks.named('test') {
@@ -469,7 +488,7 @@ tasks.register('pitestIgnoreCompatibility', JavaExec) {
                 sourceSets.test.output,
                 sourceSets.main.runtimeClasspath,
                 sourceSets.test.runtimeClasspath
-            ).asPath
+            ).files.collect { it.absolutePath }.join(',')
         String mutableCodePaths =
             sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
         args = [
@@ -483,7 +502,8 @@ tasks.register('pitestIgnoreCompatibility', JavaExec) {
             "--mutableCodePaths=${mutableCodePaths}",
             "--classPath=${testClasspath}",
             '--threads=4',
-            '--testPlugin=junit5',
+            '--testPlugin',
+            'junit5',
             '--verbose=true',
             '--failWhenNoMutations=false'
         ]
@@ -508,7 +528,7 @@ tasks.register('pitestExecutorLifecycle', JavaExec) {
                 sourceSets.test.output,
                 sourceSets.main.runtimeClasspath,
                 sourceSets.test.runtimeClasspath
-            ).asPath
+            ).files.collect { it.absolutePath }.join(',')
         String mutableCodePaths =
             sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
         args = [
@@ -537,7 +557,52 @@ tasks.register('pitestExecutorLifecycle', JavaExec) {
             "--mutableCodePaths=${mutableCodePaths}",
             "--classPath=${testClasspath}",
             '--threads=4',
-            '--testPlugin=junit5',
+            '--testPlugin',
+            'junit5',
+            '--verbose=true',
+            '--failWhenNoMutations=false'
+        ]
+    }
+}
+
+tasks.register('pitestQuasselBackend', JavaExec) {
+    group = 'verification'
+    description = 'Runs PIT mutation checks for Quassel backend routing and command orchestration.'
+    dependsOn(tasks.named('testClasses'))
+    classpath = configurations.mutationTestTool
+    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
+
+    def reportDirProvider = layout.buildDirectory.dir('reports/pitest/quassel-backend')
+    inputs.files(sourceSets.main.output, sourceSets.test.output, configurations.testRuntimeClasspath)
+    outputs.dir(reportDirProvider)
+
+    doFirst {
+        String testClasspath =
+            files(
+                sourceSets.main.output,
+                sourceSets.test.output,
+                sourceSets.main.runtimeClasspath,
+                sourceSets.test.runtimeClasspath
+            ).files.collect { it.absolutePath }.join(',')
+        String mutableCodePaths =
+            sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
+        args = [
+            "--reportDir=${reportDirProvider.get().asFile.absolutePath}",
+            '--outputFormats=HTML,XML',
+            '--targetClasses=cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder*',
+            '--targetClasses=cafe.woden.ircclient.app.outbound.DefaultOutboundCommandDispatcher*',
+            '--targetClasses=cafe.woden.ircclient.app.commands.CommandParser*',
+            '--targetClasses=cafe.woden.ircclient.irc.BackendRoutingIrcClientService*',
+            '--targetTests=cafe.woden.ircclient.app.MediatorUiSubscriptionBinderTest*',
+            '--targetTests=cafe.woden.ircclient.app.outbound.DefaultOutboundCommandDispatcherTest*',
+            '--targetTests=cafe.woden.ircclient.app.commands.CommandParserTest*',
+            '--targetTests=cafe.woden.ircclient.irc.BackendRoutingIrcClientServiceTest*',
+            "--sourceDirs=${file('src/main/java').absolutePath}",
+            "--mutableCodePaths=${mutableCodePaths}",
+            "--classPath=${testClasspath}",
+            '--threads=4',
+            '--testPlugin',
+            'junit5',
             '--verbose=true',
             '--failWhenNoMutations=false'
         ]
@@ -547,7 +612,11 @@ tasks.register('pitestExecutorLifecycle', JavaExec) {
 tasks.register('mutationTest') {
     group = 'verification'
     description = 'Alias for focused PIT mutation checks.'
-    dependsOn(tasks.named('pitestIgnoreCompatibility'), tasks.named('pitestExecutorLifecycle'))
+    dependsOn(
+        tasks.named('pitestIgnoreCompatibility'),
+        tasks.named('pitestExecutorLifecycle'),
+        tasks.named('pitestQuasselBackend')
+    )
 }
 
 tasks.register('themeValidate', Test) {

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.ChannelMetadataPort;
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
@@ -147,6 +148,7 @@ class ChannelListLoggingDecoratorFunctionalTest {
     NickContextMenuFactory nickContextMenuFactory = new NickContextMenuFactory();
     ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);
+    ChannelMetadataPort channelMetadataStore = mock(ChannelMetadataPort.class);
     ChatLogViewerService chatLogViewerService = mock(ChatLogViewerService.class);
     DccTransferStore dccTransferStore = new DccTransferStore();
     TerminalDockable terminalDockable = new TerminalDockable(mock(ConsoleTeeService.class));
@@ -180,6 +182,7 @@ class ChannelListLoggingDecoratorFunctionalTest {
                     nickContextMenuFactory,
                     proxyResolver,
                     chatHistoryService,
+                    channelMetadataStore,
                     chatLogViewerService,
                     interceptorStore,
                     dccTransferStore,

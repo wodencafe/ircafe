@@ -578,6 +578,15 @@ public class PreferencesDialog {
           fontPreviewDebounce.close();
         });
 
+    final ThemeAccentSettings defaultAccentSettings =
+        new ThemeAccentSettings(
+            UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH);
+    final ThemeTweakSettings defaultTweakSettings =
+        new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
+    final ChatThemeSettings defaultChatThemeSettings =
+        new ChatThemeSettings(
+            ChatThemeSettings.Preset.DEFAULT, null, null, null, 35, null, null, null, null, null);
+
     final Runnable restoreCommittedAppearance =
         () -> {
           if (themeManager == null) return;
@@ -587,49 +596,71 @@ public class PreferencesDialog {
             chatPreviewDebounce.cancelPending();
             fontPreviewDebounce.cancelPending();
 
-            UiSettings ui = committedUiSettings.get();
-            if (ui != null) {
-              settingsBus.set(ui);
+            UiSettings committedUi = committedUiSettings.get();
+            UiSettings liveUi = settingsBus != null ? settingsBus.get() : null;
+            ThemeAccentSettings targetAccent =
+                committedAccentSettings.get() != null
+                    ? committedAccentSettings.get()
+                    : defaultAccentSettings;
+            ThemeAccentSettings liveAccent =
+                accentSettingsBus != null ? accentSettingsBus.get() : null;
+            ThemeTweakSettings targetTweaks =
+                committedTweakSettings.get() != null
+                    ? committedTweakSettings.get()
+                    : defaultTweakSettings;
+            ThemeTweakSettings liveTweaks =
+                tweakSettingsBus != null ? tweakSettingsBus.get() : null;
+            ChatThemeSettings targetChatTheme =
+                committedChatThemeSettings.get() != null
+                    ? committedChatThemeSettings.get()
+                    : defaultChatThemeSettings;
+            ChatThemeSettings liveChatTheme =
+                chatThemeSettingsBus != null ? chatThemeSettingsBus.get() : null;
+            String committedTheme = committedThemeId.get();
+            String liveTheme = normalizeThemeIdInternal(liveUi != null ? liveUi.theme() : null);
+
+            AppearanceRollbackPlan rollbackPlan =
+                planAppearanceRollback(
+                    committedTheme,
+                    liveTheme,
+                    committedUi,
+                    liveUi,
+                    accentSettingsBus != null,
+                    targetAccent,
+                    liveAccent,
+                    tweakSettingsBus != null,
+                    targetTweaks,
+                    liveTweaks,
+                    chatThemeSettingsBus != null,
+                    targetChatTheme,
+                    liveChatTheme);
+
+            if (!rollbackPlan.hasAnyWork()) {
+              lastPreviewThemeId.set(committedTheme);
+              return;
             }
-            if (accentSettingsBus != null) {
-              ThemeAccentSettings a = committedAccentSettings.get();
-              accentSettingsBus.set(
-                  a != null
-                      ? a
-                      : new ThemeAccentSettings(
-                          UiProperties.DEFAULT_ACCENT_COLOR, UiProperties.DEFAULT_ACCENT_STRENGTH));
+            if (rollbackPlan.restoreUiSettings() && committedUi != null) {
+              settingsBus.set(committedUi);
             }
-            if (tweakSettingsBus != null) {
-              ThemeTweakSettings tw = committedTweakSettings.get();
-              tweakSettingsBus.set(
-                  tw != null
-                      ? tw
-                      : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10));
+            if (rollbackPlan.restoreAccentSettings() && accentSettingsBus != null) {
+              accentSettingsBus.set(targetAccent);
             }
-            if (chatThemeSettingsBus != null) {
-              ChatThemeSettings ct = committedChatThemeSettings.get();
-              chatThemeSettingsBus.set(
-                  ct != null
-                      ? ct
-                      : new ChatThemeSettings(
-                          ChatThemeSettings.Preset.DEFAULT,
-                          null,
-                          null,
-                          null,
-                          35,
-                          null,
-                          null,
-                          null,
-                          null,
-                          null));
+            if (rollbackPlan.restoreTweakSettings() && tweakSettingsBus != null) {
+              tweakSettingsBus.set(targetTweaks);
+            }
+            if (rollbackPlan.restoreChatThemeSettings() && chatThemeSettingsBus != null) {
+              chatThemeSettingsBus.set(targetChatTheme);
             }
 
-            String committed = committedThemeId.get();
-            if (java.util.Objects.equals(committed, lastPreviewThemeId.get())) {
-              themeManager.applyAppearance(true);
-            } else {
-              themeManager.applyTheme(committed);
-              lastPreviewThemeId.set(committed);
+            if (rollbackPlan.applyTheme()) {
+              themeManager.applyTheme(committedTheme);
+              lastPreviewThemeId.set(committedTheme);
+            } else if (rollbackPlan.applyAppearance()) {
+              // Cancel/close should restore quickly and avoid an extra transition flash.
+              themeManager.applyAppearance(false);
+              lastPreviewThemeId.set(committedTheme);
+            } else if (rollbackPlan.refreshChatStyles()) {
+              themeManager.refreshChatStyles();
             }
           } finally {
             suppressLivePreview.set(false);
@@ -2036,11 +2067,18 @@ public class PreferencesDialog {
     apply.addActionListener(e -> doApply.run());
     final JDialog d = createDialog(owner);
     this.dialog = d;
+    final AtomicBoolean rollbackOnClose = new AtomicBoolean(true);
+    final AtomicBoolean rollbackScheduled = new AtomicBoolean(false);
     d.addWindowListener(
         new java.awt.event.WindowAdapter() {
           @Override
-          public void windowClosing(java.awt.event.WindowEvent e) {
-            restoreCommittedAppearance.run();
+          public void windowClosed(java.awt.event.WindowEvent e) {
+            if (!rollbackOnClose.get()) return;
+            if (!rollbackScheduled.compareAndSet(false, true)) return;
+            SwingUtilities.invokeLater(
+                () -> {
+                  if (rollbackOnClose.get()) restoreCommittedAppearance.run();
+                });
           }
         });
 
@@ -2054,11 +2092,11 @@ public class PreferencesDialog {
     ok.addActionListener(
         e -> {
           doApply.run();
+          rollbackOnClose.set(false);
           d.dispose();
         });
     cancel.addActionListener(
         e -> {
-          restoreCommittedAppearance.run();
           d.dispose();
         });
 
@@ -9398,6 +9436,59 @@ public class PreferencesDialog {
   private record Token(int start, int end) {}
 
   private record RuleMatch(int start, int end) {}
+
+  static AppearanceRollbackPlan planAppearanceRollback(
+      String committedThemeId,
+      String liveThemeId,
+      UiSettings committedUi,
+      UiSettings liveUi,
+      boolean accentBusAvailable,
+      ThemeAccentSettings committedAccent,
+      ThemeAccentSettings liveAccent,
+      boolean tweakBusAvailable,
+      ThemeTweakSettings committedTweaks,
+      ThemeTweakSettings liveTweaks,
+      boolean chatThemeBusAvailable,
+      ChatThemeSettings committedChatTheme,
+      ChatThemeSettings liveChatTheme) {
+    boolean themeChanged = !sameThemeInternal(committedThemeId, liveThemeId);
+    boolean uiChanged = committedUi != null && !Objects.equals(committedUi, liveUi);
+    boolean accentChanged = accentBusAvailable && !Objects.equals(committedAccent, liveAccent);
+    boolean tweakChanged = tweakBusAvailable && !Objects.equals(committedTweaks, liveTweaks);
+    boolean chatThemeChanged =
+        chatThemeBusAvailable && !Objects.equals(committedChatTheme, liveChatTheme);
+
+    boolean applyTheme = themeChanged;
+    boolean applyAppearance = !applyTheme && (uiChanged || accentChanged || tweakChanged);
+    boolean refreshChatStyles = !applyTheme && !applyAppearance && chatThemeChanged;
+    return new AppearanceRollbackPlan(
+        uiChanged,
+        accentChanged,
+        tweakChanged,
+        chatThemeChanged,
+        applyTheme,
+        applyAppearance,
+        refreshChatStyles);
+  }
+
+  static record AppearanceRollbackPlan(
+      boolean restoreUiSettings,
+      boolean restoreAccentSettings,
+      boolean restoreTweakSettings,
+      boolean restoreChatThemeSettings,
+      boolean applyTheme,
+      boolean applyAppearance,
+      boolean refreshChatStyles) {
+    boolean hasAnyWork() {
+      return restoreUiSettings
+          || restoreAccentSettings
+          || restoreTweakSettings
+          || restoreChatThemeSettings
+          || applyTheme
+          || applyAppearance
+          || refreshChatStyles;
+    }
+  }
 
   private static String normalizeThemeIdInternal(String id) {
     return ThemeIdUtils.normalizeThemeId(id);

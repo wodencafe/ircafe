@@ -76,6 +76,12 @@ public final class ServerTreeRequestLoggingDecorator extends ServerTreeRequestEm
   }
 
   @Override
+  public void emitOpenQuasselNetworkManager(String serverId) {
+    logRequest("openQuasselNetworkManager", serverId);
+    super.emitOpenQuasselNetworkManager(serverId);
+  }
+
+  @Override
   public void emitIrcv3CapabilityToggle(Ircv3CapabilityToggleRequest request) {
     logRequest("ircv3CapabilityToggle", request);
     super.emitIrcv3CapabilityToggle(request);

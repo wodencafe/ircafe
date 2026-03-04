@@ -212,6 +212,50 @@ Targeted suites:
 ./gradlew functionalTest
 ```
 
+Real Quassel Core integration (opt-in):
+
+```bash
+# Validates live Quassel Core connect/auth/sync, lag probe heartbeat, disconnect, reconnect.
+# Requires a reachable Quassel Core and credentials.
+QUASSEL_IT_LOGIN=alice QUASSEL_IT_PASSWORD=secret \
+./gradlew integrationTest --tests 'cafe.woden.ircclient.irc.QuasselCoreRealServerIntegrationTest' \
+  -Dquassel.it.enabled=true \
+  -Dquassel.it.host=127.0.0.1 \
+  -Dquassel.it.port=4242 \
+  -Dquassel.it.login=alice \
+  -Dquassel.it.password=secret
+```
+
+Optional knobs (env vars or `-D` properties): `quassel.it.server-id`, `quassel.it.tls`,
+`quassel.it.nick`, `quassel.it.real-name`.
+
+Containerized Quassel Core integration via Testcontainers (also opt-in):
+
+```bash
+# Starts Quassel Core in Docker and validates setup/connect/sync/heartbeat/reconnect.
+./gradlew integrationTest --tests 'cafe.woden.ircclient.irc.QuasselCoreContainerIntegrationTest' \
+  -Dquassel.it.container.enabled=true
+```
+
+Optional knobs: `quassel.it.container.image`, `quassel.it.container.login`,
+`quassel.it.container.password`, `quassel.it.container.startup-timeout-seconds`.
+Default image is pinned to `linuxserver/quassel-core:0.14.0` for amd64 compatibility.
+
+Expanded two-container Quassel E2E (Quassel Core + local ngIRCd):
+
+```bash
+# Validates Quassel create/connect network flow plus live channel message ingress.
+./gradlew integrationTest --tests 'cafe.woden.ircclient.irc.QuasselCoreContainerNetworkE2eIntegrationTest' \
+  -Dquassel.it.container.e2e.enabled=true
+```
+
+Optional knobs: `quassel.it.container.e2e.quassel-image`,
+`quassel.it.container.e2e.irc-image`, `quassel.it.container.e2e.channel`,
+`quassel.it.container.e2e.message`, `quassel.it.container.e2e.login`,
+`quassel.it.container.e2e.password`.
+Note: this test skips when the selected Quassel image does not expose runtime
+network creation to remote clients.
+
 When to run which tests:
 
 - Spring Modulith/jMolecules/ArchUnit or module-boundary refactors: `./gradlew architectureTest test`

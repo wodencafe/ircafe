@@ -1,11 +1,13 @@
 package cafe.woden.ircclient.app.api;
 
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /** Decorator base for {@link UiPort}. */
 public abstract class UiPortDecorator implements UiPort {
@@ -65,6 +67,11 @@ public abstract class UiPortDecorator implements UiPort {
   @Override
   public Flowable<String> disconnectServerRequests() {
     return delegate.disconnectServerRequests();
+  }
+
+  @Override
+  public Flowable<String> quasselNetworkManagerRequests() {
+    return delegate.quasselNetworkManagerRequests();
   }
 
   @Override
@@ -242,6 +249,18 @@ public abstract class UiPortDecorator implements UiPort {
   @Override
   public void enqueueStatusNotice(String text, TargetRef clickTarget) {
     delegate.enqueueStatusNotice(text, clickTarget);
+  }
+
+  @Override
+  public Optional<IrcClientService.QuasselCoreSetupRequest> promptQuasselCoreSetup(
+      String serverId, IrcClientService.QuasselCoreSetupPrompt prompt) {
+    return delegate.promptQuasselCoreSetup(serverId, prompt);
+  }
+
+  @Override
+  public Optional<QuasselNetworkManagerAction> promptQuasselNetworkManagerAction(
+      String serverId, List<IrcClientService.QuasselCoreNetworkSummary> networks) {
+    return delegate.promptQuasselNetworkManagerAction(serverId, networks);
   }
 
   @Override

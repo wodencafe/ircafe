@@ -97,8 +97,15 @@ class ServerEditorDialogFunctionalTest {
       onEdt(() -> backendCombo.setSelectedItem(IrcProperties.Server.Backend.QUASSEL_CORE));
       onEdt(
           () -> {
+            assertEquals(
+                "4242",
+                portField.getText(),
+                "quassel backend should auto-select core default port when auto-port is enabled");
             assertFalse(
                 authModeCombo.isEnabled(), "Quassel backend should disable direct auth mode");
+            assertTrue(
+                saveBtn.isEnabled(),
+                "Quassel profiles should save without pre-existing core credentials");
             loginField.setText("core-user");
             serverPassField.setText("core-secret");
           });

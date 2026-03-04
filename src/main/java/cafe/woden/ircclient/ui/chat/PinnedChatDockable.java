@@ -23,6 +23,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -71,8 +72,12 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private final TopicPanel topicPanel = new TopicPanel();
   private final JSplitPane topicSplit;
   private static final int TOPIC_DIVIDER_SIZE = 6;
-  private int lastTopicHeightPx = 58;
+  private static final int DEFAULT_TOPIC_HEIGHT_PX = 58;
+  private static final int MIN_TOPIC_HEIGHT_PX = 40;
+  private static final int MAX_TOPIC_HEIGHT_PX = 200;
+  private int lastTopicHeightPx = DEFAULT_TOPIC_HEIGHT_PX;
   private boolean topicVisible = false;
+  private IntConsumer topicHeightChanged = heightPx -> {};
 
   public PinnedChatDockable(
       TargetRef target,
@@ -115,7 +120,10 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
           if (!topicVisible) return;
           Object v = evt.getNewValue();
           if (v instanceof Integer i) {
-            lastTopicHeightPx = Math.max(0, i);
+            int normalized = normalizeTopicHeightPx(i);
+            if (normalized == lastTopicHeightPx) return;
+            lastTopicHeightPx = normalized;
+            topicHeightChanged.accept(normalized);
           }
         });
     add(topicSplit, BorderLayout.CENTER);
@@ -233,6 +241,22 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     topicPanel.setTopic(target.target(), sanitized);
     showTopicPanel();
+  }
+
+  public int topicPanelHeightPx() {
+    return lastTopicHeightPx;
+  }
+
+  public void setTopicPanelHeightPx(int heightPx) {
+    lastTopicHeightPx = normalizeTopicHeightPx(heightPx);
+    if (!topicVisible) return;
+    topicSplit.setDividerLocation(lastTopicHeightPx);
+    revalidate();
+    repaint();
+  }
+
+  public void setOnTopicPanelHeightChanged(IntConsumer listener) {
+    topicHeightChanged = listener != null ? listener : heightPx -> {};
   }
 
   @Override
@@ -584,7 +608,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     topicVisible = true;
     topicPanel.setVisible(true);
     topicSplit.setDividerSize(TOPIC_DIVIDER_SIZE);
-    int targetHeight = Math.max(28, Math.min(lastTopicHeightPx, 200));
+    int targetHeight = normalizeTopicHeightPx(lastTopicHeightPx);
     topicSplit.setDividerLocation(targetHeight);
     revalidate();
     repaint();
@@ -602,6 +626,10 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private static String sanitizeTopic(String topic) {
     if (topic == null) return "";
     return topic.replaceAll("[\\x00-\\x1F\\x7F]", "");
+  }
+
+  private static int normalizeTopicHeightPx(int heightPx) {
+    return Math.max(MIN_TOPIC_HEIGHT_PX, Math.min(MAX_TOPIC_HEIGHT_PX, heightPx));
   }
 
   private static final class TopicPanel extends JPanel {

@@ -14,6 +14,7 @@ import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -46,6 +47,36 @@ class BackendRoutingIrcClientServiceTest {
 
     verify(ircBackend).connect("irc");
     verify(quasselBackend).connect("quassel");
+  }
+
+  @Test
+  void routesRegularIrcOperationsToQuasselBackendWhenServerUsesQuassel() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+    IrcBackendClientService quasselBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(quasselBackend.backend()).thenReturn(IrcProperties.Server.Backend.QUASSEL_CORE);
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(quasselBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("quassel"))
+        .thenReturn(Optional.of(server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(quasselBackend.joinChannel("quassel", "#ircafe")).thenReturn(Completable.complete());
+    when(quasselBackend.sendToChannel("quassel", "#ircafe", "hello"))
+        .thenReturn(Completable.complete());
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, quasselBackend));
+
+    service.joinChannel("quassel", "#ircafe").blockingAwait();
+    service.sendMessage("quassel", "#ircafe", "hello").blockingAwait();
+
+    verify(quasselBackend).joinChannel("quassel", "#ircafe");
+    verify(quasselBackend).sendToChannel("quassel", "#ircafe", "hello");
+    verify(ircBackend, never()).joinChannel("quassel", "#ircafe");
+    verify(ircBackend, never()).sendToChannel("quassel", "#ircafe", "hello");
   }
 
   @Test
@@ -111,6 +142,74 @@ class BackendRoutingIrcClientServiceTest {
     assertEquals(
         "Quassel Core backend is not implemented yet",
         service.backendAvailabilityReason("quassel"));
+  }
+
+  @Test
+  void routesQuasselSetupOperationsToConfiguredBackend() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+    IrcBackendClientService quasselBackend = mock(IrcBackendClientService.class);
+    IrcClientService.QuasselCoreSetupPrompt prompt =
+        new IrcClientService.QuasselCoreSetupPrompt(
+            "quassel", "setup required", List.of("SQLite"), List.of("Database"), Map.of());
+    IrcClientService.QuasselCoreSetupRequest request =
+        new IrcClientService.QuasselCoreSetupRequest(
+            "admin", "secret", "SQLite", "Database", Map.of(), Map.of());
+    IrcClientService.QuasselCoreNetworkSummary network =
+        new IrcClientService.QuasselCoreNetworkSummary(
+            1, "libera", true, true, 1, "irc.libera.chat", 6697, true, Map.of());
+    IrcClientService.QuasselCoreNetworkCreateRequest createRequest =
+        new IrcClientService.QuasselCoreNetworkCreateRequest(
+            "libera", "irc.libera.chat", 6697, true, "", true, 1, List.of());
+    IrcClientService.QuasselCoreNetworkUpdateRequest updateRequest =
+        new IrcClientService.QuasselCoreNetworkUpdateRequest(
+            "", "irc2.libera.chat", 6667, false, "", true, null, null);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(quasselBackend.backend()).thenReturn(IrcProperties.Server.Backend.QUASSEL_CORE);
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(quasselBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("quassel"))
+        .thenReturn(Optional.of(server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(quasselBackend.isQuasselCoreSetupPending("quassel")).thenReturn(true);
+    when(quasselBackend.quasselCoreSetupPrompt("quassel")).thenReturn(Optional.of(prompt));
+    when(quasselBackend.submitQuasselCoreSetup("quassel", request))
+        .thenReturn(Completable.complete());
+    when(quasselBackend.quasselCoreNetworks("quassel")).thenReturn(List.of(network));
+    when(quasselBackend.quasselCoreConnectNetwork("quassel", "libera"))
+        .thenReturn(Completable.complete());
+    when(quasselBackend.quasselCoreDisconnectNetwork("quassel", "libera"))
+        .thenReturn(Completable.complete());
+    when(quasselBackend.quasselCoreCreateNetwork("quassel", createRequest))
+        .thenReturn(Completable.complete());
+    when(quasselBackend.quasselCoreUpdateNetwork("quassel", "libera", updateRequest))
+        .thenReturn(Completable.complete());
+    when(quasselBackend.quasselCoreRemoveNetwork("quassel", "libera"))
+        .thenReturn(Completable.complete());
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, quasselBackend));
+
+    assertEquals(true, service.isQuasselCoreSetupPending("quassel"));
+    assertEquals(Optional.of(prompt), service.quasselCoreSetupPrompt("quassel"));
+    service.submitQuasselCoreSetup("quassel", request).blockingAwait();
+    assertEquals(List.of(network), service.quasselCoreNetworks("quassel"));
+    service.quasselCoreConnectNetwork("quassel", "libera").blockingAwait();
+    service.quasselCoreDisconnectNetwork("quassel", "libera").blockingAwait();
+    service.quasselCoreCreateNetwork("quassel", createRequest).blockingAwait();
+    service.quasselCoreUpdateNetwork("quassel", "libera", updateRequest).blockingAwait();
+    service.quasselCoreRemoveNetwork("quassel", "libera").blockingAwait();
+
+    verify(quasselBackend).submitQuasselCoreSetup("quassel", request);
+    verify(quasselBackend).quasselCoreNetworks("quassel");
+    verify(quasselBackend).quasselCoreConnectNetwork("quassel", "libera");
+    verify(quasselBackend).quasselCoreDisconnectNetwork("quassel", "libera");
+    verify(quasselBackend).quasselCoreCreateNetwork("quassel", createRequest);
+    verify(quasselBackend).quasselCoreUpdateNetwork("quassel", "libera", updateRequest);
+    verify(quasselBackend).quasselCoreRemoveNetwork("quassel", "libera");
+    verify(ircBackend, never()).submitQuasselCoreSetup("quassel", request);
   }
 
   @Test
