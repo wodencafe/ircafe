@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.config;
 
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
 import cafe.woden.ircclient.model.FilterRule;
 import cafe.woden.ircclient.model.FilterScopeOverride;
@@ -35,7 +36,7 @@ import org.yaml.snakeyaml.Yaml;
 
 @Component
 public class RuntimeConfigStore
-    implements ChatCommandRuntimeConfigPort, InviteAutoJoinConfigPort {
+    implements ChatCommandRuntimeConfigPort, InviteAutoJoinConfigPort, ConnectionRuntimeConfigPort {
 
   private static final Logger log = LoggerFactory.getLogger(RuntimeConfigStore.class);
   private static final java.util.Set<String> KNOWN_IGNORE_LEVELS =
@@ -717,6 +718,7 @@ public class RuntimeConfigStore
   }
 
   /** Returns known channels for this server (attached + detached). */
+  @Override
   public synchronized List<String> readKnownChannels(String serverId) {
     ServerTreeChannelState state = readServerTreeChannelState(serverId);
     if (state == null || state.channels() == null || state.channels().isEmpty()) {
@@ -1362,6 +1364,7 @@ public class RuntimeConfigStore
         });
   }
 
+  @Override
   public synchronized List<String> readPrivateMessageTargets(String serverId) {
     try {
       if (file.toString().isBlank()) return List.of();
@@ -2456,6 +2459,7 @@ public class RuntimeConfigStore
    * <p>Stored under {@code ircafe.ui.serverAutoConnectOnStartByServer.<serverId>}. Default behavior
    * is enabled, so this map usually contains only {@code false} entries.
    */
+  @Override
   public synchronized Map<String, Boolean> readServerAutoConnectOnStartByServer() {
     try {
       if (file.toString().isBlank()) return Map.of();

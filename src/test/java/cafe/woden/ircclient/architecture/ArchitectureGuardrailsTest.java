@@ -300,7 +300,8 @@ class ArchitectureGuardrailsTest {
           .resideInAPackage("cafe.woden.ircclient.state.api..")
           .should()
           .dependOnClassesThat(STATE_INTERNAL_CLASSES)
-          .because("state::api should stay implementation-agnostic and independent from state internals");
+          .because(
+              "state::api should stay implementation-agnostic and independent from state internals");
 
   @ArchTest
   static final ArchRule app_outbound_should_not_depend_on_config_module_internals_directly =
@@ -320,6 +321,16 @@ class ArchitectureGuardrailsTest {
           .should()
           .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
           .because("state should depend on config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule connection_coordinator_should_not_depend_on_runtime_config_store_directly =
+      noClasses()
+          .that()
+          .haveFullyQualifiedName("cafe.woden.ircclient.app.core.ConnectionCoordinator")
+          .should()
+          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+          .because(
+              "ConnectionCoordinator should depend on config::api ports, not RuntimeConfigStore directly");
 
   @ArchTest
   static final ArchRule ui_ignore_should_not_depend_on_app_internal_or_irc_packages =

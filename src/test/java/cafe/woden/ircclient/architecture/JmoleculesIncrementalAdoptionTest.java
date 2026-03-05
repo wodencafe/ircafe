@@ -32,6 +32,7 @@ import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
@@ -164,6 +165,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(RecentStatusModePort.class, ApplicationLayer.class);
     assertAnnotated(InviteAutoJoinConfigPort.class, ApplicationLayer.class);
     assertAnnotated(ChatCommandRuntimeConfigPort.class, ApplicationLayer.class);
+    assertAnnotated(ConnectionRuntimeConfigPort.class, ApplicationLayer.class);
     assertAnnotated(LocalFilterCommandHandler.class, ApplicationLayer.class);
     assertAnnotated(PerformOnConnectService.class, ApplicationLayer.class);
     assertAnnotated(JfrSnapshotSummarizer.class, ApplicationLayer.class);
@@ -246,6 +248,9 @@ class JmoleculesIncrementalAdoptionTest {
     assertTrue(
         ChatCommandRuntimeConfigPort.class.isInterface(),
         "ChatCommandRuntimeConfigPort should remain an interface");
+    assertTrue(
+        ConnectionRuntimeConfigPort.class.isInterface(),
+        "ConnectionRuntimeConfigPort should remain an interface");
   }
 
   @Test

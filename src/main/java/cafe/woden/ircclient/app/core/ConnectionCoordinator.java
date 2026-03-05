@@ -1,17 +1,17 @@
 package cafe.woden.ircclient.app.core;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
@@ -48,7 +48,7 @@ public class ConnectionCoordinator {
   private final UiPort ui;
   private final ServerRegistry serverRegistry;
   private final ServerCatalog serverCatalog;
-  private final RuntimeConfigStore runtimeConfig;
+  private final ConnectionRuntimeConfigPort runtimeConfig;
   private final LogProperties logProps;
   private final TrayNotificationsPort trayNotificationService;
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -88,7 +88,7 @@ public class ConnectionCoordinator {
       UiPort ui,
       ServerRegistry serverRegistry,
       ServerCatalog serverCatalog,
-      RuntimeConfigStore runtimeConfig,
+      ConnectionRuntimeConfigPort runtimeConfig,
       LogProperties logProps,
       TrayNotificationsPort trayNotificationService) {
     this.irc = irc;
