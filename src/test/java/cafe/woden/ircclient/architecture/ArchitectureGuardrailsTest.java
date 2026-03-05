@@ -483,7 +483,7 @@ class ArchitectureGuardrailsTest {
               "bouncer core should stay parser-agnostic and receive normalized discovery events only");
 
   @ArchTest
-  static final ArchRule only_soju_and_znc_should_depend_on_bouncer_internal_types =
+  static final ArchRule only_bouncer_and_backend_adapters_should_depend_on_bouncer_internal_types =
       noClasses()
           .that()
           .resideOutsideOfPackages(
@@ -493,7 +493,7 @@ class ArchitectureGuardrailsTest {
           .should()
           .dependOnClassesThat(BOUNCER_INTERNAL_TYPES)
           .because(
-              "bouncer internals should remain shared implementation details used only by Soju/ZNC specializations");
+              "bouncer internals should remain implementation details used only by bouncer core and backend-specific IRC adapters");
 
   @ArchTest
   static final ArchRule only_virtual_threads_factory_should_depend_on_executors =
