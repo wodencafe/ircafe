@@ -20,6 +20,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 import org.pircbotx.Configuration;
@@ -30,6 +34,7 @@ import org.pircbotx.hooks.events.FingerEvent;
 import org.pircbotx.hooks.events.PingEvent;
 import org.pircbotx.hooks.events.TimeEvent;
 import org.pircbotx.hooks.events.VersionEvent;
+import org.pircbotx.hooks.managers.ThreadedListenerManager;
 import org.springframework.stereotype.Component;
 
 /** Factory for building a configured {@link PircBotX} instance for a given server. */
@@ -37,6 +42,8 @@ import org.springframework.stereotype.Component;
 public class PircbotxBotFactory {
 
   private static final long DEFAULT_MESSAGE_DELAY_MS = 200L;
+  private static final long LISTENER_THREAD_KEEP_ALIVE_SECONDS = 30L;
+  private static final AtomicInteger LISTENER_THREAD_SEQ = new AtomicInteger();
   private static final List<String> BASE_CAPABILITIES =
       List.of(
           "multi-prefix",
@@ -117,8 +124,11 @@ public class PircbotxBotFactory {
             .setSocketFactory(socketFactory)
             .setCapEnabled(true)
             .setAutoNickChange(true)
-            .setAutoReconnect(false)
-            .addListener(listener);
+            .setAutoReconnect(false);
+    // Keep listener callbacks serialized per connection; CHATHISTORY batch control lines must stay
+    // in order with tagged messages to avoid replay lines leaking into live transcript flow.
+    builder.setListenerManager(createOrderedListenerManager(s.id()));
+    builder.addListener(listener);
     // Keep core behavior (PING, NickServ flows, etc.) but disable automatic CTCP replies.
     builder.replaceCoreHooksListener(new NoAutoCtcpCoreHooks());
     configureCapHandlers(builder);
@@ -187,6 +197,25 @@ public class PircbotxBotFactory {
     }
 
     return new PircBotX(builder.buildConfiguration());
+  }
+
+  private static ThreadedListenerManager createOrderedListenerManager(String serverId) {
+    String id = (serverId == null || serverId.isBlank()) ? "server" : serverId.trim();
+    String namePrefix = "ircafe-listener-" + id + "-" + LISTENER_THREAD_SEQ.incrementAndGet();
+    ThreadPoolExecutor pool =
+        new ThreadPoolExecutor(
+            1,
+            1,
+            LISTENER_THREAD_KEEP_ALIVE_SECONDS,
+            TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(),
+            runnable -> {
+              Thread t = new Thread(runnable, namePrefix);
+              t.setDaemon(true);
+              return t;
+            });
+    pool.allowCoreThreadTimeOut(true);
+    return new ThreadedListenerManager(pool);
   }
 
   private void configureCapHandlers(Configuration.Builder builder) {
