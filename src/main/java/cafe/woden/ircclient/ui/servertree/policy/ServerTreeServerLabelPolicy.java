@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.servertree.policy;
 import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
+import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -45,51 +46,89 @@ public final class ServerTreeServerLabelPolicy {
     if (id.isEmpty()) return id;
 
     String display = serverDisplayNames.getOrDefault(id, id);
-    if (isSojuEphemeralServer(id)) {
-      String origin = sojuOriginByServerId.get(id);
-      if (origin != null && sojuAutoConnect != null && sojuAutoConnect.isEnabled(origin, display)) {
-        return display + " (auto)";
-      }
+    String backendId = backendIdForEphemeralServer(id);
+    if (backendId == null || backendId.isBlank()) {
       return display;
     }
-
-    if (isZncEphemeralServer(id)) {
-      String origin = zncOriginByServerId.get(id);
-      if (origin != null && zncAutoConnect != null && zncAutoConnect.isEnabled(origin, display)) {
-        return display + " (auto)";
-      }
-      return display;
+    String origin = originForServer(backendId, id);
+    if (origin != null && !origin.isBlank() && isAutoConnectEnabled(backendId, origin, display)) {
+      return display + " (auto)";
     }
-
-    if (isGenericEphemeralServer(id)) {
-      String origin = genericOriginByServerId.get(id);
-      if (origin == null || origin.isBlank()) {
-        origin = parseOrigin(id, "bouncer:");
-      }
-      if (origin != null
-          && genericAutoConnect != null
-          && genericAutoConnect.isEnabled(origin, display)) {
-        return display + " (auto)";
-      }
-      return display;
-    }
-
     return display;
   }
 
   public boolean isSojuEphemeralServer(String serverId) {
-    String id = normalize(serverId);
-    return !id.isEmpty() && id.startsWith("soju:") && ephemeralServerIds.contains(id);
+    return isEphemeralServer(ServerTreeBouncerBackends.SOJU, serverId);
   }
 
   public boolean isZncEphemeralServer(String serverId) {
-    String id = normalize(serverId);
-    return !id.isEmpty() && id.startsWith("znc:") && ephemeralServerIds.contains(id);
+    return isEphemeralServer(ServerTreeBouncerBackends.ZNC, serverId);
   }
 
   public boolean isGenericEphemeralServer(String serverId) {
+    return isEphemeralServer(ServerTreeBouncerBackends.GENERIC, serverId);
+  }
+
+  public String backendIdForEphemeralServer(String serverId) {
+    for (String backendId : ServerTreeBouncerBackends.orderedIds()) {
+      if (isEphemeralServer(backendId, serverId)) {
+        return backendId;
+      }
+    }
+    return null;
+  }
+
+  public boolean isEphemeralServer(String backendId, String serverId) {
     String id = normalize(serverId);
-    return !id.isEmpty() && id.startsWith("bouncer:") && ephemeralServerIds.contains(id);
+    String prefix = normalize(ServerTreeBouncerBackends.prefixFor(backendId));
+    return !id.isEmpty()
+        && !prefix.isEmpty()
+        && id.startsWith(prefix)
+        && ephemeralServerIds.contains(id);
+  }
+
+  public String originForServer(String backendId, String serverId) {
+    String id = normalize(serverId);
+    if (id.isEmpty()) return null;
+    Map<String, String> originByServerId = originMapForBackend(backendId);
+    String origin = originByServerId == null ? null : originByServerId.get(id);
+    if (origin != null && !origin.isBlank()) {
+      return origin;
+    }
+    return parseOrigin(id, ServerTreeBouncerBackends.prefixFor(backendId));
+  }
+
+  public boolean isAutoConnectEnabled(String backendId, String originId, String networkKey) {
+    String backend = normalize(backendId);
+    String origin = normalize(originId);
+    String network = normalize(networkKey);
+    if (backend.isEmpty() || origin.isEmpty() || network.isEmpty()) {
+      return false;
+    }
+    if (ServerTreeBouncerBackends.SOJU.equals(backend)) {
+      return sojuAutoConnect != null && sojuAutoConnect.isEnabled(origin, network);
+    }
+    if (ServerTreeBouncerBackends.ZNC.equals(backend)) {
+      return zncAutoConnect != null && zncAutoConnect.isEnabled(origin, network);
+    }
+    if (ServerTreeBouncerBackends.GENERIC.equals(backend)) {
+      return genericAutoConnect != null && genericAutoConnect.isEnabled(origin, network);
+    }
+    return false;
+  }
+
+  private Map<String, String> originMapForBackend(String backendId) {
+    String backend = normalize(backendId);
+    if (ServerTreeBouncerBackends.SOJU.equals(backend)) {
+      return sojuOriginByServerId;
+    }
+    if (ServerTreeBouncerBackends.ZNC.equals(backend)) {
+      return zncOriginByServerId;
+    }
+    if (ServerTreeBouncerBackends.GENERIC.equals(backend)) {
+      return genericOriginByServerId;
+    }
+    return null;
   }
 
   private static String parseOrigin(String serverId, String prefix) {

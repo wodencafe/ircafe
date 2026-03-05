@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
@@ -33,6 +34,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -974,7 +976,9 @@ class PircbotxContainerNetworkE2eIntegrationTest {
     ServerProxyResolver proxyResolver = new ServerProxyResolver(serverCatalog);
     PircbotxBotFactory botFactory = new PircbotxBotFactory(proxyResolver, sojuProps, null);
 
+    BouncerBackendRegistry bouncerBackends = mock(BouncerBackendRegistry.class);
     BouncerDiscoveryEventPort bouncerDiscoveryEvents = mock(BouncerDiscoveryEventPort.class);
+    when(bouncerBackends.backendIds()).thenReturn(Set.of());
 
     ScheduledExecutorService heartbeatExec =
         Executors.newSingleThreadScheduledExecutor(namedDaemonFactory("it-pircbotx-heartbeat"));
@@ -996,6 +1000,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
             zncProps,
             null,
             stsPolicies,
+            bouncerBackends,
             bouncerDiscoveryEvents,
             timers,
             playbackCursorProviderProvider);

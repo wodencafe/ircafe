@@ -75,11 +75,7 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
 
     boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node);
 
-    boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node);
-
-    boolean isZncNetworksGroupNode(DefaultMutableTreeNode node);
-
-    boolean isGenericNetworksGroupNode(DefaultMutableTreeNode node);
+    String backendIdForNetworksGroupNode(DefaultMutableTreeNode node);
   }
 
   public static Context context(
@@ -105,9 +101,7 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       Predicate<DefaultMutableTreeNode> isIrcRootNode,
       Predicate<DefaultMutableTreeNode> isApplicationRootNode,
       Predicate<DefaultMutableTreeNode> isPrivateMessagesGroupNode,
-      Predicate<DefaultMutableTreeNode> isSojuNetworksGroupNode,
-      Predicate<DefaultMutableTreeNode> isZncNetworksGroupNode,
-      Predicate<DefaultMutableTreeNode> isGenericNetworksGroupNode) {
+      Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode) {
     Objects.requireNonNull(
         serverTreeNotificationBadgesEnabled, "serverTreeNotificationBadgesEnabled");
     Objects.requireNonNull(unreadBadgeScalePercent, "unreadBadgeScalePercent");
@@ -131,9 +125,7 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     Objects.requireNonNull(isIrcRootNode, "isIrcRootNode");
     Objects.requireNonNull(isApplicationRootNode, "isApplicationRootNode");
     Objects.requireNonNull(isPrivateMessagesGroupNode, "isPrivateMessagesGroupNode");
-    Objects.requireNonNull(isSojuNetworksGroupNode, "isSojuNetworksGroupNode");
-    Objects.requireNonNull(isZncNetworksGroupNode, "isZncNetworksGroupNode");
-    Objects.requireNonNull(isGenericNetworksGroupNode, "isGenericNetworksGroupNode");
+    Objects.requireNonNull(backendIdForNetworksGroupNode, "backendIdForNetworksGroupNode");
     return new Context() {
       @Override
       public boolean serverTreeNotificationBadgesEnabled() {
@@ -246,18 +238,8 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       }
 
       @Override
-      public boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node) {
-        return isSojuNetworksGroupNode.test(node);
-      }
-
-      @Override
-      public boolean isZncNetworksGroupNode(DefaultMutableTreeNode node) {
-        return isZncNetworksGroupNode.test(node);
-      }
-
-      @Override
-      public boolean isGenericNetworksGroupNode(DefaultMutableTreeNode node) {
-        return isGenericNetworksGroupNode.test(node);
+      public String backendIdForNetworksGroupNode(DefaultMutableTreeNode node) {
+        return backendIdForNetworksGroupNode.apply(node);
       }
     };
   }
@@ -467,9 +449,7 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       } else if (context.isOtherGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("settings");
-      } else if (context.isSojuNetworksGroupNode(node)
-          || context.isZncNetworksGroupNode(node)
-          || context.isGenericNetworksGroupNode(node)) {
+      } else if (isNetworksGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("dock-left");
       } else {
@@ -550,6 +530,11 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     Icon disabled = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
     setIcon(icon);
     setDisabledIcon(disabled);
+  }
+
+  private boolean isNetworksGroupNode(DefaultMutableTreeNode node) {
+    String backendId = context.backendIdForNetworksGroupNode(node);
+    return backendId != null && !backendId.isBlank();
   }
 
   private ServerTreeTypingIndicatorStyle typingStyle() {

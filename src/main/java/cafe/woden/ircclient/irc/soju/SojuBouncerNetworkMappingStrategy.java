@@ -5,6 +5,7 @@ import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.bouncer.ResolvedBouncerNetwork;
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /** Soju-specific naming and login shaping strategy for bouncer discovery. */
@@ -12,10 +13,27 @@ import org.springframework.stereotype.Component;
 public class SojuBouncerNetworkMappingStrategy implements BouncerNetworkMappingStrategy {
 
   public static final String BACKEND_ID = "soju";
+  public static final String NETWORKS_GROUP_LABEL = "Soju Networks";
+  public static final String DISCOVERY_CAPABILITY = "soju.im/bouncer-networks";
 
   @Override
   public String backendId() {
     return BACKEND_ID;
+  }
+
+  @Override
+  public String ephemeralIdPrefix() {
+    return SojuEphemeralNaming.EPHEMERAL_ID_PREFIX;
+  }
+
+  @Override
+  public String networksGroupLabel() {
+    return NETWORKS_GROUP_LABEL;
+  }
+
+  @Override
+  public Set<String> capabilityHints() {
+    return Set.of(DISCOVERY_CAPABILITY);
   }
 
   @Override

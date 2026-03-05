@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
@@ -17,9 +19,7 @@ public final class ServerTreeStatusLabelManager {
 
   private final String statusLabel;
   private final String bouncerControlLabel;
-  private final Set<String> sojuBouncerControlServerIds;
-  private final Set<String> zncBouncerControlServerIds;
-  private final Set<String> genericBouncerControlServerIds;
+  private final Map<String, Set<String>> bouncerControlServerIdsByBackendId;
   private final Map<TargetRef, DefaultMutableTreeNode> leaves;
   private final Context context;
 
@@ -31,14 +31,28 @@ public final class ServerTreeStatusLabelManager {
       Set<String> genericBouncerControlServerIds,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
       Context context) {
+    this(
+        statusLabel,
+        bouncerControlLabel,
+        bouncerControlStateByBackend(
+            sojuBouncerControlServerIds,
+            zncBouncerControlServerIds,
+            genericBouncerControlServerIds),
+        leaves,
+        context);
+  }
+
+  public ServerTreeStatusLabelManager(
+      String statusLabel,
+      String bouncerControlLabel,
+      Map<String, Set<String>> bouncerControlServerIdsByBackendId,
+      Map<TargetRef, DefaultMutableTreeNode> leaves,
+      Context context) {
     this.statusLabel = Objects.toString(statusLabel, "Server");
     this.bouncerControlLabel = Objects.toString(bouncerControlLabel, "Bouncer Control");
-    this.sojuBouncerControlServerIds =
-        Objects.requireNonNull(sojuBouncerControlServerIds, "sojuBouncerControlServerIds");
-    this.zncBouncerControlServerIds =
-        Objects.requireNonNull(zncBouncerControlServerIds, "zncBouncerControlServerIds");
-    this.genericBouncerControlServerIds =
-        Objects.requireNonNull(genericBouncerControlServerIds, "genericBouncerControlServerIds");
+    this.bouncerControlServerIdsByBackendId =
+        Objects.requireNonNull(
+            bouncerControlServerIdsByBackendId, "bouncerControlServerIdsByBackendId");
     this.leaves = Objects.requireNonNull(leaves, "leaves");
     this.context = Objects.requireNonNull(context, "context");
   }
@@ -46,36 +60,57 @@ public final class ServerTreeStatusLabelManager {
   public String statusLeafLabelForServer(String serverId) {
     String id = normalize(serverId);
     if (id.isEmpty()) return statusLabel;
-    return (sojuBouncerControlServerIds.contains(id)
-            || zncBouncerControlServerIds.contains(id)
-            || genericBouncerControlServerIds.contains(id))
-        ? bouncerControlLabel
-        : statusLabel;
+    return isBouncerControlServer(id) ? bouncerControlLabel : statusLabel;
+  }
+
+  public boolean isBouncerControlServer(String serverId) {
+    String id = normalize(serverId);
+    if (id.isEmpty()) return false;
+    for (Set<String> ids : bouncerControlServerIdsByBackendId.values()) {
+      if (ids != null && ids.contains(id)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public void updateBouncerControlLabels(
       Set<String> nextSojuBouncerControl,
       Set<String> nextZncBouncerControl,
       Set<String> nextGenericBouncerControl) {
-    Set<String> nextSoju = nextSojuBouncerControl == null ? Set.of() : nextSojuBouncerControl;
-    Set<String> nextZnc = nextZncBouncerControl == null ? Set.of() : nextZncBouncerControl;
-    Set<String> nextGeneric =
-        nextGenericBouncerControl == null ? Set.of() : nextGenericBouncerControl;
+    Map<String, Set<String>> nextByBackendId = new HashMap<>();
+    nextByBackendId.put(ServerTreeBouncerBackends.SOJU, nextSojuBouncerControl);
+    nextByBackendId.put(ServerTreeBouncerBackends.ZNC, nextZncBouncerControl);
+    nextByBackendId.put(ServerTreeBouncerBackends.GENERIC, nextGenericBouncerControl);
+    updateBouncerControlLabels(nextByBackendId);
+  }
 
-    Set<String> prevUnion = new HashSet<>(sojuBouncerControlServerIds);
-    prevUnion.addAll(zncBouncerControlServerIds);
-    prevUnion.addAll(genericBouncerControlServerIds);
+  public void updateBouncerControlLabels(Map<String, Set<String>> nextBouncerControlByBackendId) {
+    Set<String> prevUnion = unionOfControlServerIds();
 
-    sojuBouncerControlServerIds.clear();
-    sojuBouncerControlServerIds.addAll(nextSoju);
-    zncBouncerControlServerIds.clear();
-    zncBouncerControlServerIds.addAll(nextZnc);
-    genericBouncerControlServerIds.clear();
-    genericBouncerControlServerIds.addAll(nextGeneric);
+    for (Set<String> ids : bouncerControlServerIdsByBackendId.values()) {
+      if (ids != null) {
+        ids.clear();
+      }
+    }
+    if (nextBouncerControlByBackendId != null) {
+      for (Map.Entry<String, Set<String>> entry : nextBouncerControlByBackendId.entrySet()) {
+        String backendId = normalize(entry.getKey());
+        if (backendId.isEmpty()) {
+          continue;
+        }
+        Set<String> target =
+            bouncerControlServerIdsByBackendId.computeIfAbsent(
+                backendId, ignored -> new HashSet<>());
+        Set<String> nextIds = entry.getValue();
+        if (nextIds == null || nextIds.isEmpty()) {
+          continue;
+        }
+        target.addAll(nextIds);
+      }
+    }
 
-    Set<String> nextUnion = new HashSet<>(nextSoju);
-    nextUnion.addAll(nextZnc);
-    nextUnion.addAll(nextGeneric);
+    Set<String> nextUnion = unionOfControlServerIds();
 
     Set<String> all = new HashSet<>(prevUnion);
     all.addAll(nextUnion);
@@ -103,6 +138,34 @@ public final class ServerTreeStatusLabelManager {
       node.setUserObject(next);
       context.nodeChanged(node);
     }
+  }
+
+  private Set<String> unionOfControlServerIds() {
+    Set<String> union = new HashSet<>();
+    for (Set<String> ids : bouncerControlServerIdsByBackendId.values()) {
+      if (ids == null || ids.isEmpty()) {
+        continue;
+      }
+      union.addAll(ids);
+    }
+    return union;
+  }
+
+  private static Map<String, Set<String>> bouncerControlStateByBackend(
+      Set<String> sojuBouncerControlServerIds,
+      Set<String> zncBouncerControlServerIds,
+      Set<String> genericBouncerControlServerIds) {
+    Map<String, Set<String>> state = new HashMap<>();
+    state.put(
+        ServerTreeBouncerBackends.SOJU,
+        Objects.requireNonNull(sojuBouncerControlServerIds, "sojuBouncerControlServerIds"));
+    state.put(
+        ServerTreeBouncerBackends.ZNC,
+        Objects.requireNonNull(zncBouncerControlServerIds, "zncBouncerControlServerIds"));
+    state.put(
+        ServerTreeBouncerBackends.GENERIC,
+        Objects.requireNonNull(genericBouncerControlServerIds, "genericBouncerControlServerIds"));
+    return state;
   }
 
   private static String normalize(String value) {

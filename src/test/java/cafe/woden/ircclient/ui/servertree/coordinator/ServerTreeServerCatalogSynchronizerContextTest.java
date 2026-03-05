@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import java.util.Map;
 import java.util.Set;
@@ -37,9 +38,8 @@ class ServerTreeServerCatalogSynchronizerContextTest {
     AtomicBoolean startupSelectionCompleted = new AtomicBoolean(false);
     AtomicReference<String> addedServer = new AtomicReference<>();
     AtomicReference<String> removedServer = new AtomicReference<>();
-    AtomicReference<Set<String>> sojuBouncerControl = new AtomicReference<>(Set.of());
-    AtomicReference<Set<String>> zncBouncerControl = new AtomicReference<>(Set.of());
-    AtomicReference<Set<String>> genericBouncerControl = new AtomicReference<>(Set.of());
+    AtomicReference<Map<String, Set<String>>> bouncerControlByBackend =
+        new AtomicReference<>(Map.of());
     AtomicReference<Set<TreePath>> restoredPaths = new AtomicReference<>(Set.of());
     AtomicReference<TargetRef> selectedTarget = new AtomicReference<>();
     AtomicReference<String> startupDefaultServer = new AtomicReference<>();
@@ -62,11 +62,7 @@ class ServerTreeServerCatalogSynchronizerContextTest {
             () -> leafRef,
             addedServer::set,
             removedServer::set,
-            (soju, znc, generic) -> {
-              sojuBouncerControl.set(soju);
-              zncBouncerControl.set(znc);
-              genericBouncerControl.set(generic);
-            },
+            bouncerControlByBackend::set,
             () -> Set.of(expandedPath),
             restoredPaths::set,
             hasValidSelection::get,
@@ -94,10 +90,16 @@ class ServerTreeServerCatalogSynchronizerContextTest {
     assertEquals("oftc", addedServer.get());
     assertEquals("oftc", removedServer.get());
 
-    context.updateBouncerControlLabels(Set.of("s1"), Set.of("z1"), Set.of("g1"));
-    assertEquals(Set.of("s1"), sojuBouncerControl.get());
-    assertEquals(Set.of("z1"), zncBouncerControl.get());
-    assertEquals(Set.of("g1"), genericBouncerControl.get());
+    Map<String, Set<String>> nextBouncerControlByBackend =
+        Map.of(
+            ServerTreeBouncerBackends.SOJU,
+            Set.of("s1"),
+            ServerTreeBouncerBackends.ZNC,
+            Set.of("z1"),
+            ServerTreeBouncerBackends.GENERIC,
+            Set.of("g1"));
+    context.updateBouncerControlLabels(nextBouncerControlByBackend);
+    assertEquals(nextBouncerControlByBackend, bouncerControlByBackend.get());
 
     assertEquals(Set.of(expandedPath), context.snapshotExpandedTreePaths());
     context.restoreExpandedTreePaths(Set.of(defaultPath));

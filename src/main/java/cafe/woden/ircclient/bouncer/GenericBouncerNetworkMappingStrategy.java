@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /** Generic fallback mapping strategy for bouncer protocols exposing standard discovery events. */
@@ -14,7 +15,8 @@ public class GenericBouncerNetworkMappingStrategy implements BouncerNetworkMappi
 
   public static final String BACKEND_ID = "generic";
   public static final String DEFAULT_LOGIN_TEMPLATE = "{base}/{network}";
-  private static final String EPHEMERAL_ID_PREFIX = "bouncer:";
+  public static final String EPHEMERAL_ID_PREFIX = "bouncer:";
+  public static final String NETWORKS_GROUP_LABEL = "Bouncer Networks";
   private static final boolean DEFAULT_PREFER_LOGIN_HINT = true;
 
   private final RuntimeConfigStore runtimeConfig;
@@ -26,6 +28,21 @@ public class GenericBouncerNetworkMappingStrategy implements BouncerNetworkMappi
   @Override
   public String backendId() {
     return BACKEND_ID;
+  }
+
+  @Override
+  public String ephemeralIdPrefix() {
+    return EPHEMERAL_ID_PREFIX;
+  }
+
+  @Override
+  public String networksGroupLabel() {
+    return NETWORKS_GROUP_LABEL;
+  }
+
+  @Override
+  public Set<String> capabilityHints() {
+    return Set.of();
   }
 
   @Override
@@ -75,7 +92,7 @@ public class GenericBouncerNetworkMappingStrategy implements BouncerNetworkMappi
       throw new IllegalArgumentException("generic bouncer mapping requires a login user");
     }
 
-    String serverId = EPHEMERAL_ID_PREFIX + originId + ":" + networkId;
+    String serverId = ephemeralIdPrefix() + originId + ":" + networkId;
     return new ResolvedBouncerNetwork(serverId, loginUser, displayName, autoConnectName);
   }
 

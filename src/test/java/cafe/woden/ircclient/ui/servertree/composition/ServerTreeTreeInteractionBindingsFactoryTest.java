@@ -35,6 +35,7 @@ class ServerTreeTreeInteractionBindingsFactoryTest {
                 ref -> false,
                 node -> null,
                 node -> "",
+                node -> "",
                 ref -> false,
                 ref -> {},
                 ref -> {},

@@ -17,7 +17,6 @@ import cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 import java.util.HashMap;
-import java.util.HashSet;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -42,10 +41,6 @@ class ServerTreeViewInteractionCollaboratorsFactoryTest {
                 mock(ServerTreeNodeClassifier.class),
                 mock(ServerTreeRuntimeState.class),
                 mock(ServerTreeServerLabelPolicy.class),
-                new HashMap<>(),
-                new HashSet<>(),
-                new HashSet<>(),
-                new HashSet<>(),
                 new HashMap<>(),
                 new HashMap<>(),
                 new HashMap<>(),

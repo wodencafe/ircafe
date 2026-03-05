@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -25,11 +26,7 @@ public final class ServerTreeServerLifecycleFacade {
     return serverRootLifecycleManager.addServerRoot(serverId);
   }
 
-  public void updateBouncerControlLabels(
-      Set<String> nextSojuBouncerControl,
-      Set<String> nextZncBouncerControl,
-      Set<String> nextGenericBouncerControl) {
-    statusLabelManager.updateBouncerControlLabels(
-        nextSojuBouncerControl, nextZncBouncerControl, nextGenericBouncerControl);
+  public void updateBouncerControlLabels(Map<String, Set<String>> nextBouncerControlByBackendId) {
+    statusLabelManager.updateBouncerControlLabels(nextBouncerControlByBackendId);
   }
 }

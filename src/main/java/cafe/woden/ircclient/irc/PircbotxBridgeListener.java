@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc;
 
+import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.bouncer.GenericBouncerNetworkMappingStrategy;
@@ -66,6 +67,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final boolean zncDiscoveryEnabled;
 
   private final BouncerDiscoveryEventPort bouncerDiscoveryEvents;
+  private final BouncerBackendRegistry bouncerBackends;
   private final SojuBouncerDiscoveryAdapter sojuDiscoveryAdapter =
       new SojuBouncerDiscoveryAdapter();
   private final ZncBouncerDiscoveryAdapter zncDiscoveryAdapter = new ZncBouncerDiscoveryAdapter();
@@ -702,6 +704,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       boolean disconnectOnSaslFailure,
       boolean sojuDiscoveryEnabled,
       boolean zncDiscoveryEnabled,
+      BouncerBackendRegistry bouncerBackends,
       BouncerDiscoveryEventPort bouncerDiscoveryEvents,
       PlaybackCursorProvider playbackCursorProvider) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
@@ -714,6 +717,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     this.sojuDiscoveryEnabled = sojuDiscoveryEnabled;
     this.zncDiscoveryEnabled = zncDiscoveryEnabled;
     this.unknownLineDiscoveryAdapters = buildUnknownLineDiscoveryAdapters(sojuDiscoveryEnabled);
+    this.bouncerBackends = Objects.requireNonNull(bouncerBackends, "bouncerBackends");
     this.bouncerDiscoveryEvents =
         (bouncerDiscoveryEvents == null)
             ? BouncerDiscoveryEventPort.noOp()
@@ -998,9 +1002,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       heartbeatStopper.accept(conn);
     }
 
-    notifyOriginDisconnected(SojuBouncerNetworkMappingStrategy.BACKEND_ID);
-    notifyOriginDisconnected(ZncBouncerNetworkMappingStrategy.BACKEND_ID);
-    notifyOriginDisconnected(GenericBouncerNetworkMappingStrategy.BACKEND_ID);
+    for (String backendId : bouncerBackends.backendIds()) {
+      notifyOriginDisconnected(backendId);
+    }
 
     try {
       conn.sojuNetworksByNetId.clear();

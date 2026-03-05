@@ -9,6 +9,7 @@ import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import cafe.woden.ircclient.ui.servertree.ServerTreeUiHooks;
 import cafe.woden.ircclient.ui.servertree.actions.ServerTreeInterceptorActions;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
@@ -31,6 +32,7 @@ import cafe.woden.ircclient.ui.servertree.view.ServerTreeTooltipResolver;
 import java.awt.Component;
 import java.awt.GraphicsEnvironment;
 import java.awt.Window;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -74,10 +76,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             Objects.requireNonNull(in.uiHooks(), "uiHooks")::serverPathForId,
             Objects.requireNonNull(in.nodeAccess(), "nodeAccess")::isIrcRootNode,
             in.nodeAccess()::isApplicationRootNode,
-            Objects.requireNonNull(in.networkGroupManager(), "networkGroupManager")
-                ::isSojuNetworksGroupNode,
-            in.networkGroupManager()::isZncNetworksGroupNode,
-            in.networkGroupManager()::isGenericNetworksGroupNode,
+            node -> backendIdForNetworksGroupNode(in, node),
             Objects.requireNonNull(in.nodeClassifier(), "nodeClassifier")::isInterceptorsGroupNode,
             in.nodeClassifier()::isMonitorGroupNode,
             in.nodeClassifier()::isOtherGroupNode,
@@ -85,22 +84,13 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             in.uiHooks()::connectionStateForServer,
             Objects.requireNonNull(in.runtimeState(), "runtimeState")::desiredOnlineForServer,
             in.runtimeState()::connectionDiagnosticsTipForServer,
-            Objects.requireNonNull(in.serverLabelPolicy(), "serverLabelPolicy")
-                ::isSojuEphemeralServer,
-            in.serverLabelPolicy()::isZncEphemeralServer,
-            in.serverLabelPolicy()::isGenericEphemeralServer,
-            in.sojuOriginByServerId()::get,
-            in.zncOriginByServerId()::get,
-            serverId -> genericOriginForServer(in, serverId),
+            serverId -> backendIdForEphemeralServer(in, serverId),
+            (backendId, serverId) -> originForServer(in, backendId, serverId),
             serverId ->
                 Objects.requireNonNull(in.serverDisplayNames(), "serverDisplayNames")
                     .getOrDefault(serverId, serverId),
-            (originId, networkKey) ->
-                isSojuAutoConnectEnabled(in.sojuAutoConnect(), originId, networkKey),
-            (originId, networkKey) ->
-                isZncAutoConnectEnabled(in.zncAutoConnect(), originId, networkKey),
-            (originId, networkKey) ->
-                isGenericAutoConnectEnabled(in.genericAutoConnect(), originId, networkKey),
+            (backendId, originId, networkKey) ->
+                isAutoConnectEnabled(in, backendId, originId, networkKey),
             Objects.requireNonNull(in.isApplicationJfrActive(), "isApplicationJfrActive"),
             nodeData -> isBouncerControlStatusNode(nodeData, in)));
   }
@@ -138,28 +128,14 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             readServerAutoConnectOnStart(in.runtimeConfig(), serverId, defaultValue),
         (serverId, enabled) ->
             rememberServerAutoConnectOnStart(in.runtimeConfig(), serverId, enabled),
-        in.serverLabelPolicy()::isSojuEphemeralServer,
-        in.serverLabelPolicy()::isZncEphemeralServer,
-        in.serverLabelPolicy()::isGenericEphemeralServer,
-        in.sojuOriginByServerId()::get,
-        in.zncOriginByServerId()::get,
-        serverId -> genericOriginForServer(in, serverId),
+        serverId -> backendIdForEphemeralServer(in, serverId),
+        (backendId, serverId) -> originForServer(in, backendId, serverId),
+        (backendId, originId, networkKey) ->
+            isAutoConnectEnabled(in, backendId, originId, networkKey),
         serverId -> in.serverDisplayNames().getOrDefault(serverId, serverId),
-        (originId, networkKey) ->
-            isSojuAutoConnectEnabled(in.sojuAutoConnect(), originId, networkKey),
-        (originId, networkKey) ->
-            isZncAutoConnectEnabled(in.zncAutoConnect(), originId, networkKey),
-        (originId, networkKey) ->
-            isGenericAutoConnectEnabled(in.genericAutoConnect(), originId, networkKey),
-        (originId, networkKey, enabled) ->
-            setSojuAutoConnectEnabled(in.sojuAutoConnect(), originId, networkKey, enabled),
-        (originId, networkKey, enabled) ->
-            setZncAutoConnectEnabled(in.zncAutoConnect(), originId, networkKey, enabled),
-        (originId, networkKey, enabled) ->
-            setGenericAutoConnectEnabled(in.genericAutoConnect(), originId, networkKey, enabled),
-        in.nodeBadgeUpdater()::refreshSojuAutoConnectBadges,
-        in.nodeBadgeUpdater()::refreshZncAutoConnectBadges,
-        in.nodeBadgeUpdater()::refreshGenericAutoConnectBadges,
+        (backendId, originId, networkKey, enabled) ->
+            setAutoConnectEnabled(in, backendId, originId, networkKey, enabled),
+        backendId -> refreshAutoConnectBadges(in, backendId),
         in.nodeClassifier()::owningServerIdForNode);
   }
 
@@ -260,16 +236,101 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
     store.setEnabled(originId, networkKey, enabled);
   }
 
-  private static String genericOriginFromServerId(String serverId) {
-    return ServerTreeNetworkGroupManager.parseOriginFromCompoundServerId(serverId, "bouncer:");
+  private static String originFromServerId(String backendId, String serverId) {
+    String prefix = ServerTreeBouncerBackends.prefixFor(backendId);
+    if (prefix == null || prefix.isBlank()) return null;
+    return ServerTreeNetworkGroupManager.parseOriginFromCompoundServerId(serverId, prefix);
   }
 
-  private static String genericOriginForServer(Inputs inputs, String serverId) {
-    if (inputs == null || inputs.genericOriginByServerId() == null) {
-      return genericOriginFromServerId(serverId);
+  private static String originForServer(Inputs inputs, String backendId, String serverId) {
+    if (inputs == null) {
+      return originFromServerId(backendId, serverId);
     }
-    String mapped = inputs.genericOriginByServerId().get(serverId);
-    return mapped == null || mapped.isBlank() ? genericOriginFromServerId(serverId) : mapped;
+    if (inputs.serverLabelPolicy() != null) {
+      String resolved = inputs.serverLabelPolicy().originForServer(backendId, serverId);
+      if (resolved != null && !resolved.isBlank()) {
+        return resolved;
+      }
+    }
+    Map<String, String> originsByServerId = originMapForBackend(inputs, backendId);
+    String mapped = originsByServerId.get(serverId);
+    return mapped == null || mapped.isBlank() ? originFromServerId(backendId, serverId) : mapped;
+  }
+
+  private static String backendIdForNetworksGroupNode(
+      Inputs inputs, javax.swing.tree.DefaultMutableTreeNode node) {
+    if (inputs == null || inputs.networkGroupManager() == null || node == null) {
+      return null;
+    }
+    for (String backendId : orderedBackendIds(inputs)) {
+      if (inputs.networkGroupManager().isNetworksGroupNode(backendId, node)) {
+        return backendId;
+      }
+    }
+    return null;
+  }
+
+  private static String backendIdForEphemeralServer(Inputs inputs, String serverId) {
+    if (inputs == null || inputs.serverLabelPolicy() == null) {
+      return null;
+    }
+    return inputs.serverLabelPolicy().backendIdForEphemeralServer(serverId);
+  }
+
+  private static boolean isAutoConnectEnabled(
+      Inputs inputs, String backendId, String originId, String networkKey) {
+    if (inputs != null && inputs.serverLabelPolicy() != null) {
+      return inputs.serverLabelPolicy().isAutoConnectEnabled(backendId, originId, networkKey);
+    }
+    String backend = normalizeBackendId(backendId);
+    if (backend.isEmpty()) return false;
+    if (ServerTreeBouncerBackends.SOJU.equals(backend)) {
+      return isSojuAutoConnectEnabled(inputs.sojuAutoConnect(), originId, networkKey);
+    }
+    if (ServerTreeBouncerBackends.ZNC.equals(backend)) {
+      return isZncAutoConnectEnabled(inputs.zncAutoConnect(), originId, networkKey);
+    }
+    if (ServerTreeBouncerBackends.GENERIC.equals(backend)) {
+      return isGenericAutoConnectEnabled(inputs.genericAutoConnect(), originId, networkKey);
+    }
+    return false;
+  }
+
+  private static void setAutoConnectEnabled(
+      Inputs inputs, String backendId, String originId, String networkKey, boolean enabled) {
+    String backend = normalizeBackendId(backendId);
+    if (backend.isEmpty()) return;
+    if (ServerTreeBouncerBackends.SOJU.equals(backend)) {
+      setSojuAutoConnectEnabled(inputs.sojuAutoConnect(), originId, networkKey, enabled);
+      return;
+    }
+    if (ServerTreeBouncerBackends.ZNC.equals(backend)) {
+      setZncAutoConnectEnabled(inputs.zncAutoConnect(), originId, networkKey, enabled);
+      return;
+    }
+    if (ServerTreeBouncerBackends.GENERIC.equals(backend)) {
+      setGenericAutoConnectEnabled(inputs.genericAutoConnect(), originId, networkKey, enabled);
+    }
+  }
+
+  private static void refreshAutoConnectBadges(Inputs inputs, String backendId) {
+    if (inputs == null || inputs.nodeBadgeUpdater() == null) return;
+    inputs.nodeBadgeUpdater().refreshAutoConnectBadges(backendId);
+  }
+
+  private static Set<String> orderedBackendIds(Inputs inputs) {
+    LinkedHashSet<String> backendIds = new LinkedHashSet<>(ServerTreeBouncerBackends.orderedIds());
+    if (inputs != null && inputs.bouncerControlServerIdsByBackendId() != null) {
+      backendIds.addAll(inputs.bouncerControlServerIdsByBackendId().keySet());
+    }
+    if (inputs != null && inputs.originByServerIdByBackendId() != null) {
+      backendIds.addAll(inputs.originByServerIdByBackendId().keySet());
+    }
+    return backendIds;
+  }
+
+  private static String normalizeBackendId(String backendId) {
+    return Objects.toString(backendId, "").trim().toLowerCase(java.util.Locale.ROOT);
   }
 
   private static void promptAndRequestChannelModeSet(
@@ -303,9 +364,28 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       return false;
     }
     String serverId = nodeData.ref.serverId();
-    return inputs.sojuBouncerControlServerIds().contains(serverId)
-        || inputs.zncBouncerControlServerIds().contains(serverId)
-        || inputs.genericBouncerControlServerIds().contains(serverId);
+    return isBouncerControlServer(inputs, serverId);
+  }
+
+  private static boolean isBouncerControlServer(Inputs inputs, String serverId) {
+    if (inputs == null || inputs.bouncerControlServerIdsByBackendId() == null) {
+      return false;
+    }
+    for (Set<String> serverIds : inputs.bouncerControlServerIdsByBackendId().values()) {
+      if (serverIds != null && serverIds.contains(serverId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static Map<String, String> originMapForBackend(Inputs inputs, String backendId) {
+    if (inputs == null || inputs.originByServerIdByBackendId() == null) {
+      return Map.of();
+    }
+    Map<String, String> origins =
+        inputs.originByServerIdByBackendId().getOrDefault(backendId, Map.of());
+    return origins == null ? Map.of() : origins;
   }
 
   private static InterceptorDefinition interceptorDefinition(
@@ -327,12 +407,8 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerTreeRuntimeState runtimeState,
       ServerTreeServerLabelPolicy serverLabelPolicy,
       Map<String, String> serverDisplayNames,
-      Set<String> sojuBouncerControlServerIds,
-      Set<String> zncBouncerControlServerIds,
-      Set<String> genericBouncerControlServerIds,
-      Map<String, String> sojuOriginByServerId,
-      Map<String, String> zncOriginByServerId,
-      Map<String, String> genericOriginByServerId,
+      Map<String, Set<String>> bouncerControlServerIdsByBackendId,
+      Map<String, Map<String, String>> originByServerIdByBackendId,
       SojuAutoConnectStore sojuAutoConnect,
       ZncAutoConnectStore zncAutoConnect,
       GenericBouncerAutoConnectStore genericAutoConnect,

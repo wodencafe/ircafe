@@ -7,8 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -41,15 +41,10 @@ class ServerTreeServerNodeMenuBuilderContextTest {
     AtomicReference<String> editedServer = new AtomicReference<>();
     AtomicReference<String> rememberedAutoConnectServer = new AtomicReference<>();
     AtomicReference<Boolean> rememberedAutoConnectEnabled = new AtomicReference<>();
-    AtomicReference<String> sojuAutoConnectOrigin = new AtomicReference<>();
-    AtomicReference<String> zncAutoConnectOrigin = new AtomicReference<>();
-    AtomicReference<String> genericAutoConnectOrigin = new AtomicReference<>();
-    AtomicReference<Boolean> sojuAutoConnectEnabled = new AtomicReference<>();
-    AtomicReference<Boolean> zncAutoConnectEnabled = new AtomicReference<>();
-    AtomicReference<Boolean> genericAutoConnectEnabled = new AtomicReference<>();
-    AtomicBoolean refreshedSojuBadges = new AtomicBoolean(false);
-    AtomicBoolean refreshedZncBadges = new AtomicBoolean(false);
-    AtomicBoolean refreshedGenericBadges = new AtomicBoolean(false);
+    AtomicReference<String> refreshedBackendId = new AtomicReference<>();
+    AtomicReference<String> autoConnectBackendId = new AtomicReference<>();
+    AtomicReference<String> autoConnectOrigin = new AtomicReference<>();
+    AtomicReference<Boolean> autoConnectEnabled = new AtomicReference<>();
 
     ServerTreeServerNodeMenuBuilder.Context context =
         ServerTreeServerNodeMenuBuilder.context(
@@ -76,31 +71,21 @@ class ServerTreeServerNodeMenuBuilderContextTest {
               rememberedAutoConnectServer.set(serverId);
               rememberedAutoConnectEnabled.set(enabledValue);
             },
-            serverId -> true,
-            serverId -> false,
-            serverId -> false,
-            serverId -> "soju-origin",
-            serverId -> "znc-origin",
-            serverId -> "generic-origin",
+            serverId -> ServerTreeBouncerBackends.SOJU,
+            (backendId, serverId) ->
+                ServerTreeBouncerBackends.SOJU.equals(backendId)
+                    ? "soju-origin"
+                    : ServerTreeBouncerBackends.ZNC.equals(backendId)
+                        ? "znc-origin"
+                        : "generic-origin",
+            (backendId, originId, networkKey) -> ServerTreeBouncerBackends.SOJU.equals(backendId),
             serverId -> "display-" + serverId,
-            (originId, networkKey) -> true,
-            (originId, networkKey) -> false,
-            (originId, networkKey) -> false,
-            (originId, networkKey, enabledValue) -> {
-              sojuAutoConnectOrigin.set(originId);
-              sojuAutoConnectEnabled.set(enabledValue);
+            (backendId, originId, networkKey, enabledValue) -> {
+              autoConnectBackendId.set(backendId);
+              autoConnectOrigin.set(originId);
+              autoConnectEnabled.set(enabledValue);
             },
-            (originId, networkKey, enabledValue) -> {
-              zncAutoConnectOrigin.set(originId);
-              zncAutoConnectEnabled.set(enabledValue);
-            },
-            (originId, networkKey, enabledValue) -> {
-              genericAutoConnectOrigin.set(originId);
-              genericAutoConnectEnabled.set(enabledValue);
-            },
-            () -> refreshedSojuBadges.set(true),
-            () -> refreshedZncBadges.set(true),
-            () -> refreshedGenericBadges.set(true),
+            refreshedBackendId::set,
             value -> "libera");
 
     assertTrue(context.isRootServerNode(node));
@@ -137,31 +122,22 @@ class ServerTreeServerNodeMenuBuilderContextTest {
     assertEquals("libera", rememberedAutoConnectServer.get());
     assertFalse(rememberedAutoConnectEnabled.get());
 
-    assertTrue(context.isSojuEphemeralServer("libera"));
-    assertFalse(context.isZncEphemeralServer("libera"));
-    assertFalse(context.isGenericEphemeralServer("libera"));
-    assertEquals("soju-origin", context.sojuOriginForServer("libera"));
-    assertEquals("znc-origin", context.zncOriginForServer("libera"));
-    assertEquals("generic-origin", context.genericOriginForServer("libera"));
+    assertEquals(ServerTreeBouncerBackends.SOJU, context.backendIdForEphemeralServer("libera"));
+    assertEquals("soju-origin", context.originForServer(ServerTreeBouncerBackends.SOJU, "libera"));
+    assertEquals("znc-origin", context.originForServer(ServerTreeBouncerBackends.ZNC, "libera"));
+    assertEquals(
+        "generic-origin", context.originForServer(ServerTreeBouncerBackends.GENERIC, "libera"));
     assertEquals("display-libera", context.serverDisplayNameOrDefault("libera"));
-    assertTrue(context.isSojuAutoConnectEnabled("o", "n"));
-    assertFalse(context.isZncAutoConnectEnabled("o", "n"));
-    assertFalse(context.isGenericAutoConnectEnabled("o", "n"));
-    context.setSojuAutoConnectEnabled("soju-origin", "display-libera", true);
-    context.setZncAutoConnectEnabled("znc-origin", "display-libera", false);
-    context.setGenericAutoConnectEnabled("generic-origin", "display-libera", true);
-    context.refreshSojuAutoConnectBadges();
-    context.refreshZncAutoConnectBadges();
-    context.refreshGenericAutoConnectBadges();
-    assertEquals("soju-origin", sojuAutoConnectOrigin.get());
-    assertEquals("znc-origin", zncAutoConnectOrigin.get());
-    assertEquals("generic-origin", genericAutoConnectOrigin.get());
-    assertTrue(sojuAutoConnectEnabled.get());
-    assertFalse(zncAutoConnectEnabled.get());
-    assertTrue(genericAutoConnectEnabled.get());
-    assertTrue(refreshedSojuBadges.get());
-    assertTrue(refreshedZncBadges.get());
-    assertTrue(refreshedGenericBadges.get());
+    assertTrue(context.isAutoConnectEnabled(ServerTreeBouncerBackends.SOJU, "o", "n"));
+    assertFalse(context.isAutoConnectEnabled(ServerTreeBouncerBackends.ZNC, "o", "n"));
+    assertFalse(context.isAutoConnectEnabled(ServerTreeBouncerBackends.GENERIC, "o", "n"));
+    context.setAutoConnectEnabled(
+        ServerTreeBouncerBackends.SOJU, "soju-origin", "display-libera", true);
+    context.refreshAutoConnectBadges(ServerTreeBouncerBackends.SOJU);
+    assertEquals(ServerTreeBouncerBackends.SOJU, autoConnectBackendId.get());
+    assertEquals("soju-origin", autoConnectOrigin.get());
+    assertTrue(autoConnectEnabled.get());
+    assertEquals(ServerTreeBouncerBackends.SOJU, refreshedBackendId.get());
 
     assertEquals("libera", context.owningServerIdForNode(node));
   }

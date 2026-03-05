@@ -44,9 +44,7 @@ class ServerTreeCellRendererContextTest {
             value -> value == node,
             value -> false,
             value -> true,
-            value -> false,
-            value -> true,
-            value -> false);
+            value -> value == node ? "znc" : "");
 
     assertTrue(context.serverTreeNotificationBadgesEnabled());
     assertEquals(125, context.unreadBadgeScalePercent());
@@ -70,8 +68,6 @@ class ServerTreeCellRendererContextTest {
     assertTrue(context.isIrcRootNode(node));
     assertFalse(context.isApplicationRootNode(node));
     assertTrue(context.isPrivateMessagesGroupNode(node));
-    assertFalse(context.isSojuNetworksGroupNode(node));
-    assertTrue(context.isZncNetworksGroupNode(node));
-    assertFalse(context.isGenericNetworksGroupNode(node));
+    assertEquals("znc", context.backendIdForNetworksGroupNode(node));
   }
 }

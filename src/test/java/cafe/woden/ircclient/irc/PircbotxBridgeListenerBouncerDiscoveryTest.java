@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
+import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
+import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
 import com.google.common.collect.ImmutableMap;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -92,6 +94,7 @@ class PircbotxBridgeListenerBouncerDiscoveryTest {
         false,
         sojuDiscoveryEnabled,
         zncDiscoveryEnabled,
+        new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
         bouncerEvents,
         new NoOpPlaybackCursorProvider());
   }

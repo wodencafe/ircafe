@@ -1,14 +1,12 @@
 package cafe.woden.ircclient.irc;
 
+import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
-import cafe.woden.ircclient.bouncer.GenericBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
-import cafe.woden.ircclient.irc.soju.SojuBouncerNetworkMappingStrategy;
-import cafe.woden.ircclient.irc.znc.ZncBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.znc.ZncLoginParts;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
@@ -56,6 +54,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
   private final PircbotxBotFactory botFactory;
   private final PircbotxConnectionTimersRx timers;
   private final BouncerDiscoveryEventPort bouncerDiscoveryEvents;
+  private final BouncerBackendRegistry bouncerBackends;
   private final SojuProperties sojuProps;
   private final ZncProperties zncProps;
   private final RuntimeConfigStore runtimeConfig;
@@ -72,6 +71,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
       ZncProperties zncProps,
       RuntimeConfigStore runtimeConfig,
       Ircv3StsPolicyService stsPolicies,
+      BouncerBackendRegistry bouncerBackends,
       BouncerDiscoveryEventPort bouncerDiscoveryEvents,
       PircbotxConnectionTimersRx timers,
       ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider) {
@@ -83,6 +83,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
     this.zncProps = zncProps;
     this.runtimeConfig = runtimeConfig;
     this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
+    this.bouncerBackends = Objects.requireNonNull(bouncerBackends, "bouncerBackends");
     this.bouncerDiscoveryEvents =
         Objects.requireNonNull(bouncerDiscoveryEvents, "bouncerDiscoveryEvents");
     this.timers = timers;
@@ -199,6 +200,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
                       disconnectOnSaslFailure,
                       sojuProps.discovery().enabled(),
                       zncProps.discovery().enabled(),
+                      bouncerBackends,
                       bouncerDiscoveryEvents,
                       playbackCursorProvider);
 
@@ -248,20 +250,11 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
 
               // If this server was acting as a bouncer origin, drop any discovered ephemeral
               // networks.
-              try {
-                bouncerDiscoveryEvents.onOriginDisconnected(
-                    SojuBouncerNetworkMappingStrategy.BACKEND_ID, serverId);
-              } catch (Exception ignored) {
-              }
-              try {
-                bouncerDiscoveryEvents.onOriginDisconnected(
-                    ZncBouncerNetworkMappingStrategy.BACKEND_ID, serverId);
-              } catch (Exception ignored) {
-              }
-              try {
-                bouncerDiscoveryEvents.onOriginDisconnected(
-                    GenericBouncerNetworkMappingStrategy.BACKEND_ID, serverId);
-              } catch (Exception ignored) {
+              for (String backendId : bouncerBackends.backendIds()) {
+                try {
+                  bouncerDiscoveryEvents.onOriginDisconnected(backendId, serverId);
+                } catch (Exception ignored) {
+                }
               }
 
               PircBotX bot = c.botRef.getAndSet(null);

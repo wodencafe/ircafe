@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
+import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
@@ -25,9 +26,7 @@ class ServerTreeTooltipProviderContextTest {
             serverId -> path,
             value -> value == node,
             value -> false,
-            value -> false,
-            value -> true,
-            value -> false,
+            value -> value == node ? ServerTreeBouncerBackends.ZNC : null,
             value -> false,
             value -> true,
             value -> false,
@@ -35,16 +34,18 @@ class ServerTreeTooltipProviderContextTest {
             serverId -> ConnectionState.CONNECTED,
             serverId -> true,
             serverId -> " diagnostic",
-            serverId -> "soju".equals(serverId),
-            serverId -> "znc".equals(serverId),
-            serverId -> "bouncer".equals(serverId),
-            serverId -> "origin-a",
-            serverId -> "origin-b",
-            serverId -> "origin-c",
+            serverId ->
+                "soju".equals(serverId)
+                    ? ServerTreeBouncerBackends.SOJU
+                    : "znc".equals(serverId)
+                        ? ServerTreeBouncerBackends.ZNC
+                        : "bouncer".equals(serverId) ? ServerTreeBouncerBackends.GENERIC : null,
+            (backendId, serverId) ->
+                ServerTreeBouncerBackends.SOJU.equals(backendId)
+                    ? "origin-a"
+                    : ServerTreeBouncerBackends.ZNC.equals(backendId) ? "origin-b" : "origin-c",
             serverId -> "Libera",
-            (originId, networkKey) -> true,
-            (originId, networkKey) -> false,
-            (originId, networkKey) -> false,
+            (backendId, originId, networkKey) -> ServerTreeBouncerBackends.SOJU.equals(backendId),
             () -> true,
             value -> value == nodeData);
 
@@ -52,9 +53,7 @@ class ServerTreeTooltipProviderContextTest {
     assertSame(path, context.serverPathForId("libera"));
     assertTrue(context.isIrcRootNode(node));
     assertFalse(context.isApplicationRootNode(node));
-    assertFalse(context.isSojuNetworksGroupNode(node));
-    assertTrue(context.isZncNetworksGroupNode(node));
-    assertFalse(context.isGenericNetworksGroupNode(node));
+    assertEquals(ServerTreeBouncerBackends.ZNC, context.backendIdForNetworksGroupNode(node));
     assertFalse(context.isInterceptorsGroupNode(node));
     assertTrue(context.isMonitorGroupNode(node));
     assertFalse(context.isOtherGroupNode(node));
@@ -62,16 +61,17 @@ class ServerTreeTooltipProviderContextTest {
     assertEquals(ConnectionState.CONNECTED, context.connectionStateForServer("libera"));
     assertTrue(context.desiredOnlineForServer("libera"));
     assertEquals(" diagnostic", context.connectionDiagnosticsTipForServer("libera"));
-    assertTrue(context.isSojuEphemeralServer("soju"));
-    assertTrue(context.isZncEphemeralServer("znc"));
-    assertTrue(context.isGenericEphemeralServer("bouncer"));
-    assertEquals("origin-a", context.sojuOriginByServerId("libera"));
-    assertEquals("origin-b", context.zncOriginByServerId("libera"));
-    assertEquals("origin-c", context.genericOriginByServerId("libera"));
+    assertEquals(ServerTreeBouncerBackends.SOJU, context.backendIdForEphemeralServer("soju"));
+    assertEquals(ServerTreeBouncerBackends.ZNC, context.backendIdForEphemeralServer("znc"));
+    assertEquals(ServerTreeBouncerBackends.GENERIC, context.backendIdForEphemeralServer("bouncer"));
+    assertEquals("origin-a", context.originByServerId(ServerTreeBouncerBackends.SOJU, "libera"));
+    assertEquals("origin-b", context.originByServerId(ServerTreeBouncerBackends.ZNC, "libera"));
+    assertEquals("origin-c", context.originByServerId(ServerTreeBouncerBackends.GENERIC, "libera"));
     assertEquals("Libera", context.serverDisplayName("libera"));
-    assertTrue(context.isSojuAutoConnectEnabled("origin-a", "Libera"));
-    assertFalse(context.isZncAutoConnectEnabled("origin-b", "Libera"));
-    assertFalse(context.isGenericAutoConnectEnabled("origin-c", "Libera"));
+    assertTrue(context.isAutoConnectEnabled(ServerTreeBouncerBackends.SOJU, "origin-a", "Libera"));
+    assertFalse(context.isAutoConnectEnabled(ServerTreeBouncerBackends.ZNC, "origin-b", "Libera"));
+    assertFalse(
+        context.isAutoConnectEnabled(ServerTreeBouncerBackends.GENERIC, "origin-c", "Libera"));
     assertTrue(context.isApplicationJfrActive());
     assertTrue(context.isBouncerControlStatusNode(nodeData));
   }

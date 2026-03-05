@@ -114,6 +114,7 @@ import java.awt.event.MouseEvent;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -152,9 +153,6 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private static final String BOUNCER_CONTROL_LABEL = "Bouncer Control";
   private static final String IRC_ROOT_LABEL = "IRC";
   private static final String APPLICATION_ROOT_LABEL = "Application";
-  private static final String SOJU_NETWORKS_GROUP_LABEL = "Soju Networks";
-  private static final String ZNC_NETWORKS_GROUP_LABEL = "ZNC Networks";
-  private static final String BOUNCER_NETWORKS_GROUP_LABEL = "Bouncer Networks";
   private static final int SERVER_ACTION_BUTTON_SIZE = 16;
   private static final int SERVER_ACTION_BUTTON_ICON_SIZE = 12;
   private static final int SERVER_ACTION_BUTTON_MARGIN = 6;
@@ -270,15 +268,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final Map<String, String> serverDisplayNames = new HashMap<>();
   private final Set<String> ephemeralServerIds = new HashSet<>();
-  private final Set<String> sojuBouncerControlServerIds = new HashSet<>();
-  private final Set<String> zncBouncerControlServerIds = new HashSet<>();
-  private final Set<String> genericBouncerControlServerIds = new HashSet<>();
-  private final Map<String, String> sojuOriginByServerId = new HashMap<>();
-  private final Map<String, String> zncOriginByServerId = new HashMap<>();
-  private final Map<String, String> genericOriginByServerId = new HashMap<>();
-  private final Map<String, DefaultMutableTreeNode> sojuNetworksGroupByOrigin = new HashMap<>();
-  private final Map<String, DefaultMutableTreeNode> zncNetworksGroupByOrigin = new HashMap<>();
-  private final Map<String, DefaultMutableTreeNode> genericNetworksGroupByOrigin = new HashMap<>();
+  private final Map<String, Set<String>> bouncerControlServerIdsByBackendId =
+      createBouncerControlServerIdsByBackendId();
+  private final Map<String, Map<String, String>> originByServerIdByBackendId =
+      createOriginByServerIdByBackendId();
+  private final Map<String, Map<String, DefaultMutableTreeNode>> networksGroupByOriginByBackendId =
+      createNetworksGroupByOriginByBackendId();
+  private final Map<String, String> networksGroupLabelByBackendId =
+      createNetworksGroupLabelByBackendId();
   private final ServerTreeNodeClassifier nodeClassifier;
 
   private final InterceptorStore interceptorStore;
@@ -537,9 +534,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeServerLabelPolicy(
             serverDisplayNames,
             ephemeralServerIds,
-            sojuOriginByServerId,
-            zncOriginByServerId,
-            genericOriginByServerId,
+            originByServerIdForBackend(ServerTreeBouncerBackends.SOJU),
+            originByServerIdForBackend(ServerTreeBouncerBackends.ZNC),
+            originByServerIdForBackend(ServerTreeBouncerBackends.GENERIC),
             genericAutoConnect,
             sojuAutoConnect,
             zncAutoConnect);
@@ -571,12 +568,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeServerCatalogSynchronizer(
             serverDisplayNames,
             ephemeralServerIds,
-            sojuBouncerControlServerIds,
-            zncBouncerControlServerIds,
-            genericBouncerControlServerIds,
-            sojuOriginByServerId,
-            zncOriginByServerId,
-            genericOriginByServerId,
+            bouncerControlServerIdsByBackendId,
+            originByServerIdByBackendId,
             ServerTreeServerCatalogSynchronizer.context(
                 tree,
                 servers,
@@ -600,19 +593,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeStatusLabelManager(
             STATUS_LABEL,
             BOUNCER_CONTROL_LABEL,
-            sojuBouncerControlServerIds,
-            zncBouncerControlServerIds,
-            genericBouncerControlServerIds,
+            bouncerControlServerIdsByBackendId,
             leaves,
             model::nodeChanged);
     this.networkGroupManager =
         new ServerTreeNetworkGroupManager(
-            SOJU_NETWORKS_GROUP_LABEL,
-            ZNC_NETWORKS_GROUP_LABEL,
-            BOUNCER_NETWORKS_GROUP_LABEL,
-            sojuNetworksGroupByOrigin,
-            zncNetworksGroupByOrigin,
-            genericNetworksGroupByOrigin,
+            networksGroupLabelByBackendId,
+            networksGroupByOriginByBackendId,
             ServerTreeNetworkGroupManager.context(
                 serverNodeResolver::serverNodeForServer,
                 serverNodeResolver::privateMessagesNodeForServer));
@@ -625,9 +612,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             nodeAccess::isChannelListLeafNode,
             this::builtInLayoutNodeKindForNode,
             this::rootSiblingNodeKindForNode,
-            networkGroupManager::isSojuNetworksGroupNode,
-            networkGroupManager::isZncNetworksGroupNode,
-            networkGroupManager::isGenericNetworksGroupNode);
+            networkGroupManager::backendIdForNetworksGroupNode);
     ServerTreeStateInteractionCollaborators stateInteractionCollaborators =
         ServerTreeStateInteractionCollaboratorsFactory.create(
             new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
@@ -667,24 +652,18 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.serverNodeBuilder = new ServerTreeServerNodeBuilder();
     this.serverParentResolver =
         new ServerTreeServerParentResolver(
-            sojuOriginByServerId,
-            zncOriginByServerId,
-            genericOriginByServerId,
+            originByServerIdByBackendId,
             ServerTreeServerParentResolver.context(
                 serverNodeResolver::hasServer,
                 this::addServerRoot,
                 () -> ircRoot,
-                networkGroupManager::getOrCreateSojuNetworksGroupNode,
-                networkGroupManager::getOrCreateZncNetworksGroupNode,
-                networkGroupManager::getOrCreateGenericNetworksGroupNode));
+                networkGroupManager::getOrCreateNetworksGroupNode));
     this.bouncerDetachPolicy =
         new ServerTreeBouncerDetachPolicy(
-            sojuBouncerControlServerIds,
-            zncBouncerControlServerIds,
+            bouncerControlServerIdsByBackendId,
             ServerTreeBouncerDetachPolicy.context(
                 uiHooks::connectionStateForServer,
-                serverLabelPolicy::isSojuEphemeralServer,
-                serverLabelPolicy::isZncEphemeralServer,
+                serverLabelPolicy::backendIdForEphemeralServer,
                 (serverId, capability) -> {
                   String sid = normalizeServerId(serverId);
                   if (sid.isBlank()) return false;
@@ -712,9 +691,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             nodeBadgeUpdater::refreshNotificationsCount,
             interceptorActions::refreshInterceptorNodeLabel,
             interceptorActions::refreshInterceptorGroupCount,
-            nodeBadgeUpdater::refreshSojuAutoConnectBadges,
-            nodeBadgeUpdater::refreshZncAutoConnectBadges,
-            nodeBadgeUpdater::refreshGenericAutoConnectBadges);
+            nodeBadgeUpdater::refreshAutoConnectBadges);
     this.selectionFallbackPolicy =
         new ServerTreeSelectionFallbackPolicy(
             ServerTreeSelectionFallbackPolicy.context(
@@ -851,12 +828,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 runtimeState,
                 serverLabelPolicy,
                 serverDisplayNames,
-                sojuBouncerControlServerIds,
-                zncBouncerControlServerIds,
-                genericBouncerControlServerIds,
-                sojuOriginByServerId,
-                zncOriginByServerId,
-                genericOriginByServerId,
+                bouncerControlServerIdsByBackendId,
+                originByServerIdByBackendId,
                 sojuAutoConnect,
                 zncAutoConnect,
                 genericAutoConnect,
@@ -1005,9 +978,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 nodeAccess::isIrcRootNode,
                 nodeAccess::isApplicationRootNode,
                 nodeClassifier::isPrivateMessagesGroupNode,
-                networkGroupManager::isSojuNetworksGroupNode,
-                networkGroupManager::isZncNetworksGroupNode,
-                networkGroupManager::isGenericNetworksGroupNode));
+                networkGroupManager::backendIdForNetworksGroupNode));
     this.uiRefreshCoordinator =
         new ServerTreeUiRefreshCoordinator(
             tree,
@@ -1078,6 +1049,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::isChannelPinned,
                 nodeAccess::targetRefForNode,
                 nodeAccess::nodeLabelForNode,
+                networkGroupManager::backendIdForNetworksGroupNode,
                 this::isChannelDisconnected,
                 requestEmitter::emitDisconnectChannel,
                 requestEmitter::emitCloseTarget,
@@ -1795,6 +1767,59 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     tree.repaint(dirty.x, dirty.y, dirty.width, dirty.height);
   }
 
+  private Set<String> bouncerControlServerIdsForBackend(String backendId) {
+    String normalized = normalizeBackendId(backendId);
+    return bouncerControlServerIdsByBackendId.computeIfAbsent(
+        normalized, ignored -> new HashSet<>());
+  }
+
+  private Map<String, String> originByServerIdForBackend(String backendId) {
+    String normalized = normalizeBackendId(backendId);
+    return originByServerIdByBackendId.computeIfAbsent(normalized, ignored -> new HashMap<>());
+  }
+
+  private Map<String, DefaultMutableTreeNode> networksGroupByOriginForBackend(String backendId) {
+    String normalized = normalizeBackendId(backendId);
+    return networksGroupByOriginByBackendId.computeIfAbsent(normalized, ignored -> new HashMap<>());
+  }
+
+  private static Map<String, Set<String>> createBouncerControlServerIdsByBackendId() {
+    Map<String, Set<String>> state = new LinkedHashMap<>();
+    for (String backendId : ServerTreeBouncerBackends.orderedIds()) {
+      state.put(backendId, new HashSet<>());
+    }
+    return state;
+  }
+
+  private static Map<String, Map<String, String>> createOriginByServerIdByBackendId() {
+    Map<String, Map<String, String>> state = new LinkedHashMap<>();
+    for (String backendId : ServerTreeBouncerBackends.orderedIds()) {
+      state.put(backendId, new HashMap<>());
+    }
+    return state;
+  }
+
+  private static Map<String, Map<String, DefaultMutableTreeNode>>
+      createNetworksGroupByOriginByBackendId() {
+    Map<String, Map<String, DefaultMutableTreeNode>> state = new LinkedHashMap<>();
+    for (String backendId : ServerTreeBouncerBackends.orderedIds()) {
+      state.put(backendId, new HashMap<>());
+    }
+    return state;
+  }
+
+  private static Map<String, String> createNetworksGroupLabelByBackendId() {
+    Map<String, String> labels = new LinkedHashMap<>();
+    for (String backendId : ServerTreeBouncerBackends.orderedIds()) {
+      labels.put(backendId, ServerTreeBouncerBackends.defaultNetworksGroupLabel(backendId));
+    }
+    return labels;
+  }
+
+  private static String normalizeBackendId(String backendId) {
+    return Objects.toString(backendId, "").trim().toLowerCase(java.util.Locale.ROOT);
+  }
+
   private boolean shouldPersistPrivateMessageList() {
     return runtimeConfig != null
         && logProps != null
@@ -1809,12 +1834,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return serverLifecycleFacade.addServerRoot(serverId);
   }
 
-  private void updateBouncerControlLabels(
-      Set<String> nextSojuBouncerControl,
-      Set<String> nextZncBouncerControl,
-      Set<String> nextGenericBouncerControl) {
-    serverLifecycleFacade.updateBouncerControlLabels(
-        nextSojuBouncerControl, nextZncBouncerControl, nextGenericBouncerControl);
+  private void updateBouncerControlLabels(Map<String, Set<String>> nextBouncerControlByBackendId) {
+    serverLifecycleFacade.updateBouncerControlLabels(nextBouncerControlByBackendId);
   }
 
   private void refreshTreeLayoutAfterUiChange() {

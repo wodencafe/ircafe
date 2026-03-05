@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -15,6 +16,7 @@ import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
@@ -68,8 +70,10 @@ class PircbotxIrcClientServiceLagProbeTest {
     PircbotxBotFactory botFactory = mock(PircbotxBotFactory.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     Ircv3StsPolicyService stsPolicies = mock(Ircv3StsPolicyService.class);
+    BouncerBackendRegistry bouncerBackends = mock(BouncerBackendRegistry.class);
     BouncerDiscoveryEventPort bouncerDiscoveryEvents = mock(BouncerDiscoveryEventPort.class);
     PircbotxConnectionTimersRx timers = mock(PircbotxConnectionTimersRx.class);
+    when(bouncerBackends.backendIds()).thenReturn(Set.of());
 
     ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider =
         new StaticListableBeanFactory().getBeanProvider(PlaybackCursorProvider.class);
@@ -83,6 +87,7 @@ class PircbotxIrcClientServiceLagProbeTest {
         new ZncProperties(null, null),
         runtimeConfig,
         stsPolicies,
+        bouncerBackends,
         bouncerDiscoveryEvents,
         timers,
         playbackCursorProviderProvider);

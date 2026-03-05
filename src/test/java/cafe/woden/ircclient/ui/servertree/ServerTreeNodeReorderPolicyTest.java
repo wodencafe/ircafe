@@ -231,6 +231,19 @@ class ServerTreeNodeReorderPolicyTest {
           if (uo instanceof ServerTreeNodeData nd) return nd.label;
           if (uo instanceof String s) return s;
           return "";
+        },
+        node -> {
+          if (node == null) return "";
+          Object uo = node.getUserObject();
+          if (!(uo instanceof String nodeLabel)) return "";
+          String normalized = nodeLabel.trim();
+          for (String backendId : ServerTreeBouncerBackends.orderedIds()) {
+            if (normalized.equalsIgnoreCase(
+                ServerTreeBouncerBackends.defaultNetworksGroupLabel(backendId))) {
+              return backendId;
+            }
+          }
+          return "";
         });
   }
 

@@ -41,6 +41,8 @@ public final class ServerTreeTreeInteractionBindingsFactory {
                     Objects.requireNonNull(in.isChannelPinned(), "isChannelPinned"),
                     Objects.requireNonNull(in.targetRefForNode(), "targetRefForNode"),
                     Objects.requireNonNull(in.nodeLabelForNode(), "nodeLabelForNode"),
+                    Objects.requireNonNull(
+                        in.backendIdForNetworksGroupNode(), "backendIdForNetworksGroupNode"),
                     Objects.requireNonNull(in.isChannelDisconnected(), "isChannelDisconnected"),
                     Objects.requireNonNull(in.emitDisconnectChannel(), "emitDisconnectChannel"),
                     Objects.requireNonNull(in.emitCloseTarget(), "emitCloseTarget"),
@@ -74,6 +76,7 @@ public final class ServerTreeTreeInteractionBindingsFactory {
       Predicate<TargetRef> isChannelPinned,
       Function<DefaultMutableTreeNode, TargetRef> targetRefForNode,
       Function<DefaultMutableTreeNode, String> nodeLabelForNode,
+      Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode,
       Predicate<TargetRef> isChannelDisconnected,
       Consumer<TargetRef> emitDisconnectChannel,
       Consumer<TargetRef> emitCloseTarget,

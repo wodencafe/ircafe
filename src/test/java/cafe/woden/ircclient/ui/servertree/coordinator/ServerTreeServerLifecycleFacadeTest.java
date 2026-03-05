@@ -6,7 +6,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
+import java.util.Map;
 import java.util.Set;
 import javax.swing.tree.DefaultMutableTreeNode;
 import org.junit.jupiter.api.Test;
@@ -27,14 +29,19 @@ class ServerTreeServerLifecycleFacadeTest {
     assertSame(nodes, facade.addServerRoot("libera"));
     facade.removeServerRoot("libera");
 
-    Set<String> soju = Set.of("soju-origin");
-    Set<String> znc = Set.of("znc-origin");
-    Set<String> generic = Set.of("bouncer-origin");
-    facade.updateBouncerControlLabels(soju, znc, generic);
+    Map<String, Set<String>> bouncerControlByBackend =
+        Map.of(
+            ServerTreeBouncerBackends.SOJU,
+            Set.of("soju-origin"),
+            ServerTreeBouncerBackends.ZNC,
+            Set.of("znc-origin"),
+            ServerTreeBouncerBackends.GENERIC,
+            Set.of("bouncer-origin"));
+    facade.updateBouncerControlLabels(bouncerControlByBackend);
 
     verify(rootLifecycleManager).addServerRoot("libera");
     verify(rootLifecycleManager).removeServerRoot("libera");
-    verify(statusLabelManager).updateBouncerControlLabels(soju, znc, generic);
+    verify(statusLabelManager).updateBouncerControlLabels(bouncerControlByBackend);
   }
 
   private static ServerNodes serverNodes(String serverId) {

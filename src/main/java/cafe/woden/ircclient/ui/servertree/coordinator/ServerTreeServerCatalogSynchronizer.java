@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.servertree.coordinator;
 
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,11 +22,6 @@ import javax.swing.tree.TreePath;
 /** Synchronizes the server tree structure with the latest server catalog snapshot. */
 public final class ServerTreeServerCatalogSynchronizer {
 
-  @FunctionalInterface
-  public interface TripleSetConsumer {
-    void accept(Set<String> first, Set<String> second, Set<String> third);
-  }
-
   public interface Context {
     boolean treeHasSelectionPath();
 
@@ -43,10 +39,7 @@ public final class ServerTreeServerCatalogSynchronizer {
 
     void removeServerRoot(String serverId);
 
-    void updateBouncerControlLabels(
-        Set<String> nextSojuBouncerControl,
-        Set<String> nextZncBouncerControl,
-        Set<String> nextGenericBouncerControl);
+    void updateBouncerControlLabels(Map<String, Set<String>> nextBouncerControlByBackendId);
 
     void nodeChangedForServer(String serverId);
 
@@ -82,7 +75,7 @@ public final class ServerTreeServerCatalogSynchronizer {
       Supplier<TargetRef> selectedTargetRef,
       Consumer<String> addServerRoot,
       Consumer<String> removeServerRoot,
-      TripleSetConsumer updateBouncerControlLabels,
+      Consumer<Map<String, Set<String>>> updateBouncerControlLabels,
       Supplier<Set<TreePath>> snapshotExpandedTreePaths,
       Consumer<Set<TreePath>> restoreExpandedTreePaths,
       BooleanSupplier hasValidTreeSelection,
@@ -151,11 +144,8 @@ public final class ServerTreeServerCatalogSynchronizer {
 
       @Override
       public void updateBouncerControlLabels(
-          Set<String> nextSojuBouncerControl,
-          Set<String> nextZncBouncerControl,
-          Set<String> nextGenericBouncerControl) {
-        updateBouncerControlLabels.accept(
-            nextSojuBouncerControl, nextZncBouncerControl, nextGenericBouncerControl);
+          Map<String, Set<String>> nextBouncerControlByBackendId) {
+        updateBouncerControlLabels.accept(nextBouncerControlByBackendId);
       }
 
       @Override
@@ -220,37 +210,23 @@ public final class ServerTreeServerCatalogSynchronizer {
 
   private final Map<String, String> serverDisplayNames;
   private final Set<String> ephemeralServerIds;
-  private final Set<String> sojuBouncerControlServerIds;
-  private final Set<String> zncBouncerControlServerIds;
-  private final Set<String> genericBouncerControlServerIds;
-  private final Map<String, String> sojuOriginByServerId;
-  private final Map<String, String> zncOriginByServerId;
-  private final Map<String, String> genericOriginByServerId;
+  private final Map<String, Set<String>> bouncerControlServerIdsByBackendId;
+  private final Map<String, Map<String, String>> originByServerIdByBackendId;
   private final Context context;
 
   public ServerTreeServerCatalogSynchronizer(
       Map<String, String> serverDisplayNames,
       Set<String> ephemeralServerIds,
-      Set<String> sojuBouncerControlServerIds,
-      Set<String> zncBouncerControlServerIds,
-      Set<String> genericBouncerControlServerIds,
-      Map<String, String> sojuOriginByServerId,
-      Map<String, String> zncOriginByServerId,
-      Map<String, String> genericOriginByServerId,
+      Map<String, Set<String>> bouncerControlServerIdsByBackendId,
+      Map<String, Map<String, String>> originByServerIdByBackendId,
       Context context) {
     this.serverDisplayNames = Objects.requireNonNull(serverDisplayNames, "serverDisplayNames");
     this.ephemeralServerIds = Objects.requireNonNull(ephemeralServerIds, "ephemeralServerIds");
-    this.sojuBouncerControlServerIds =
-        Objects.requireNonNull(sojuBouncerControlServerIds, "sojuBouncerControlServerIds");
-    this.zncBouncerControlServerIds =
-        Objects.requireNonNull(zncBouncerControlServerIds, "zncBouncerControlServerIds");
-    this.genericBouncerControlServerIds =
-        Objects.requireNonNull(genericBouncerControlServerIds, "genericBouncerControlServerIds");
-    this.sojuOriginByServerId =
-        Objects.requireNonNull(sojuOriginByServerId, "sojuOriginByServerId");
-    this.zncOriginByServerId = Objects.requireNonNull(zncOriginByServerId, "zncOriginByServerId");
-    this.genericOriginByServerId =
-        Objects.requireNonNull(genericOriginByServerId, "genericOriginByServerId");
+    this.bouncerControlServerIdsByBackendId =
+        Objects.requireNonNull(
+            bouncerControlServerIdsByBackendId, "bouncerControlServerIdsByBackendId");
+    this.originByServerIdByBackendId =
+        Objects.requireNonNull(originByServerIdByBackendId, "originByServerIdByBackendId");
     this.context = Objects.requireNonNull(context, "context");
   }
 
@@ -263,12 +239,12 @@ public final class ServerTreeServerCatalogSynchronizer {
     Set<String> newIds = new HashSet<>();
     Map<String, String> nextDisplay = new HashMap<>();
     Set<String> nextEphemeral = new HashSet<>();
-    Set<String> nextSojuBouncerControl = new HashSet<>();
-    Map<String, String> nextSojuOrigins = new HashMap<>();
-    Set<String> nextZncBouncerControl = new HashSet<>();
-    Map<String, String> nextZncOrigins = new HashMap<>();
-    Set<String> nextGenericBouncerControl = new HashSet<>();
-    Map<String, String> nextGenericOrigins = new HashMap<>();
+    Map<String, Set<String>> nextBouncerControlByBackendId = new HashMap<>();
+    Map<String, Map<String, String>> nextOriginByServerIdByBackendId = new HashMap<>();
+    for (String backendId : ServerTreeBouncerBackends.orderedIds()) {
+      nextBouncerControlByBackendId.put(backendId, new HashSet<>());
+      nextOriginByServerIdByBackendId.put(backendId, new HashMap<>());
+    }
 
     if (latest != null) {
       for (ServerEntry entry : latest) {
@@ -280,50 +256,39 @@ public final class ServerTreeServerCatalogSynchronizer {
         nextDisplay.put(id, computeServerDisplayName(entry));
         if (entry.ephemeral()) nextEphemeral.add(id);
 
-        if (id.startsWith("soju:")) {
+        String backendId = ServerTreeBouncerBackends.backendIdForServerId(id);
+        if (backendId != null) {
+          String prefix = ServerTreeBouncerBackends.prefixFor(backendId);
           String origin = normalize(entry.originId());
           if (origin.isEmpty()) {
-            origin = parseOriginFromCompoundServerId(id, "soju:");
+            origin = parseOriginFromCompoundServerId(id, prefix);
           }
           if (!origin.isBlank()) {
-            nextSojuBouncerControl.add(origin);
-            nextSojuOrigins.put(id, origin);
-          }
-        }
-
-        if (id.startsWith("znc:")) {
-          String origin = normalize(entry.originId());
-          if (origin.isEmpty()) {
-            origin = parseOriginFromCompoundServerId(id, "znc:");
-          }
-          if (!origin.isBlank()) {
-            nextZncBouncerControl.add(origin);
-            nextZncOrigins.put(id, origin);
-          }
-        }
-
-        if (id.startsWith("bouncer:")) {
-          String origin = normalize(entry.originId());
-          if (origin.isEmpty()) {
-            origin = parseOriginFromCompoundServerId(id, "bouncer:");
-          }
-          if (!origin.isBlank()) {
-            nextGenericBouncerControl.add(origin);
-            nextGenericOrigins.put(id, origin);
+            nextBouncerControlByBackendId
+                .computeIfAbsent(backendId, ignored -> new HashSet<>())
+                .add(origin);
+            nextOriginByServerIdByBackendId
+                .computeIfAbsent(backendId, ignored -> new HashMap<>())
+                .put(id, origin);
           }
         }
       }
     }
 
-    sojuOriginByServerId.clear();
-    sojuOriginByServerId.putAll(nextSojuOrigins);
-    zncOriginByServerId.clear();
-    zncOriginByServerId.putAll(nextZncOrigins);
-    genericOriginByServerId.clear();
-    genericOriginByServerId.putAll(nextGenericOrigins);
+    for (Map<String, String> originsByServerId : originByServerIdByBackendId.values()) {
+      if (originsByServerId != null) {
+        originsByServerId.clear();
+      }
+    }
+    for (Map.Entry<String, Map<String, String>> entry :
+        nextOriginByServerIdByBackendId.entrySet()) {
+      Map<String, String> target =
+          originByServerIdByBackendId.computeIfAbsent(entry.getKey(), ignored -> new HashMap<>());
+      target.putAll(entry.getValue());
+    }
 
     for (String id : newIds) {
-      if (id.startsWith("soju:") || id.startsWith("znc:") || id.startsWith("bouncer:")) continue;
+      if (ServerTreeBouncerBackends.isBouncerServerId(id)) continue;
       if (!context.hasServer(id)) {
         context.addServerRoot(id);
       }
@@ -339,14 +304,15 @@ public final class ServerTreeServerCatalogSynchronizer {
         context.removeServerRoot(existing);
         serverDisplayNames.remove(existing);
         ephemeralServerIds.remove(existing);
-        sojuBouncerControlServerIds.remove(existing);
-        zncBouncerControlServerIds.remove(existing);
-        genericBouncerControlServerIds.remove(existing);
+        for (Set<String> controlServerIds : bouncerControlServerIdsByBackendId.values()) {
+          if (controlServerIds != null) {
+            controlServerIds.remove(existing);
+          }
+        }
       }
     }
 
-    context.updateBouncerControlLabels(
-        nextSojuBouncerControl, nextZncBouncerControl, nextGenericBouncerControl);
+    context.updateBouncerControlLabels(nextBouncerControlByBackendId);
 
     for (String id : newIds) {
       String next = nextDisplay.getOrDefault(id, id);

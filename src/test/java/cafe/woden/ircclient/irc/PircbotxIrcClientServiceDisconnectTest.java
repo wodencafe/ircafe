@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.bouncer.GenericBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.config.IrcProperties;
@@ -19,6 +20,7 @@ import cafe.woden.ircclient.irc.znc.ZncBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -39,8 +41,15 @@ class PircbotxIrcClientServiceDisconnectTest {
     PircbotxBotFactory botFactory = mock(PircbotxBotFactory.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     Ircv3StsPolicyService stsPolicies = mock(Ircv3StsPolicyService.class);
+    BouncerBackendRegistry bouncerBackends = mock(BouncerBackendRegistry.class);
     BouncerDiscoveryEventPort bouncerDiscoveryEvents = mock(BouncerDiscoveryEventPort.class);
     PircbotxConnectionTimersRx timers = mock(PircbotxConnectionTimersRx.class);
+    org.mockito.Mockito.when(bouncerBackends.backendIds())
+        .thenReturn(
+            Set.of(
+                SojuBouncerNetworkMappingStrategy.BACKEND_ID,
+                ZncBouncerNetworkMappingStrategy.BACKEND_ID,
+                GenericBouncerNetworkMappingStrategy.BACKEND_ID));
 
     ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider =
         new StaticListableBeanFactory().getBeanProvider(PlaybackCursorProvider.class);
@@ -55,6 +64,7 @@ class PircbotxIrcClientServiceDisconnectTest {
             new ZncProperties(null, null),
             runtimeConfig,
             stsPolicies,
+            bouncerBackends,
             bouncerDiscoveryEvents,
             timers,
             playbackCursorProviderProvider);
