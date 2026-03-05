@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.composition;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeKeyBindingsInstaller;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeNodeActionsFactory;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;

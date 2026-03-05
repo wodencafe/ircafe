@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.Locale;
 import java.util.Objects;
 

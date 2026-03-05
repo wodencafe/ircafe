@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.request;
 
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.util.Objects;
 

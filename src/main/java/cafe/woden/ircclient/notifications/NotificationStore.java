@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.notifications;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
+import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;

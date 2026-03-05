@@ -8,13 +8,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.state.CtcpRoutingState;
-import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.CtcpRoutingPort;
+import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import org.junit.jupiter.api.AfterEach;
@@ -26,8 +26,8 @@ class OutboundCtcpWhoisCommandServiceTest {
   private final IrcClientService irc = mock(IrcClientService.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
-  private final CtcpRoutingState ctcpRoutingState = mock(CtcpRoutingState.class);
-  private final WhoisRoutingState whoisRoutingState = mock(WhoisRoutingState.class);
+  private final CtcpRoutingPort ctcpRoutingState = mock(CtcpRoutingPort.class);
+  private final WhoisRoutingPort whoisRoutingState = mock(WhoisRoutingPort.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundCtcpWhoisCommandService service =

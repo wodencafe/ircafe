@@ -3,7 +3,7 @@ package cafe.woden.ircclient.ui.servertree.state;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import java.util.HashMap;
 import java.util.Map;

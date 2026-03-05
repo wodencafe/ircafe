@@ -1,12 +1,12 @@
 package cafe.woden.ircclient.logging.history;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.model.LogLine;
+import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
 import java.awt.Point;
 import java.awt.Rectangle;

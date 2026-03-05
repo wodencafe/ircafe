@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.interaction;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 import io.github.andrewauclair.moderndocking.Dockable;

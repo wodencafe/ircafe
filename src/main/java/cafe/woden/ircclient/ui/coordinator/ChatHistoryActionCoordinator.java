@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui.coordinator;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;

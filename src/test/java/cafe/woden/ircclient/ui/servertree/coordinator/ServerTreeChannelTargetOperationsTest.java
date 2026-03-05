@@ -7,7 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.ServerTreeEdtExecutor;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestEmitter;
 import java.util.concurrent.atomic.AtomicBoolean;

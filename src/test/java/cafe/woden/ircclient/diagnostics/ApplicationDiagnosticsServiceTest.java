@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.model.TargetRef;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;

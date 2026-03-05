@@ -1,6 +1,7 @@
-package cafe.woden.ircclient.app.state;
+package cafe.woden.ircclient.state;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
@@ -12,31 +13,10 @@ import org.springframework.stereotype.Component;
 /** Tracks explicit user-triggered CHATHISTORY requests so arriving batches can be rendered live. */
 @Component
 @ApplicationLayer
-public class ChatHistoryRequestRoutingState {
+public class ChatHistoryRequestRoutingState implements ChatHistoryRequestRoutingPort {
 
-  public enum QueryMode {
-    BEFORE,
-    LATEST,
-    BETWEEN,
-    AROUND
-  }
-
-  public record PendingRequest(
-      TargetRef originTarget,
-      Instant requestedAt,
-      int limit,
-      String selector,
-      QueryMode queryMode) {
-    public PendingRequest {
-      requestedAt = (requestedAt == null) ? Instant.now() : requestedAt;
-      selector = Objects.toString(selector, "").trim();
-      if (limit < 0) limit = 0;
-      queryMode = (queryMode == null) ? QueryMode.BEFORE : queryMode;
-    }
-  }
-
-  private final ConcurrentHashMap<RequestKey, PendingRequest> pendingByTarget =
-      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<RequestKey, ChatHistoryRequestRoutingPort.PendingRequest>
+      pendingByTarget = new ConcurrentHashMap<>();
 
   public void remember(
       String serverId,
@@ -45,7 +25,14 @@ public class ChatHistoryRequestRoutingState {
       int limit,
       String selector,
       Instant requestedAt) {
-    remember(serverId, target, originTarget, limit, selector, requestedAt, QueryMode.BEFORE);
+    remember(
+        serverId,
+        target,
+        originTarget,
+        limit,
+        selector,
+        requestedAt,
+        ChatHistoryRequestRoutingPort.QueryMode.BEFORE);
   }
 
   public void remember(
@@ -55,7 +42,7 @@ public class ChatHistoryRequestRoutingState {
       int limit,
       String selector,
       Instant requestedAt,
-      QueryMode queryMode) {
+      ChatHistoryRequestRoutingPort.QueryMode queryMode) {
     String sid = normalizeServer(serverId);
     String tgt = normalizeTarget(target);
     if (sid.isEmpty() || tgt.isEmpty() || originTarget == null) return;
@@ -63,7 +50,8 @@ public class ChatHistoryRequestRoutingState {
 
     pendingByTarget.put(
         new RequestKey(sid, tgt),
-        new PendingRequest(originTarget, requestedAt, limit, selector, queryMode));
+        new ChatHistoryRequestRoutingPort.PendingRequest(
+            originTarget, requestedAt, limit, selector, queryMode));
   }
 
   /**
@@ -71,9 +59,10 @@ public class ChatHistoryRequestRoutingState {
    *
    * <p>Returns {@code null} when none exists or it is stale.
    */
-  public PendingRequest consumeIfFresh(String serverId, String target, Duration maxAge) {
+  public ChatHistoryRequestRoutingPort.PendingRequest consumeIfFresh(
+      String serverId, String target, Duration maxAge) {
     RequestKey key = new RequestKey(serverId, target);
-    PendingRequest pending = pendingByTarget.remove(key);
+    ChatHistoryRequestRoutingPort.PendingRequest pending = pendingByTarget.remove(key);
     if (pending == null) return null;
 
     Duration age = (maxAge == null || maxAge.isNegative()) ? Duration.ZERO : maxAge;

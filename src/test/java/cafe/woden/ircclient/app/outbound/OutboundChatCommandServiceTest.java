@@ -52,7 +52,8 @@ class OutboundChatCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
-  private final ChatCommandRuntimeConfigPort runtimeConfig = mock(ChatCommandRuntimeConfigPort.class);
+  private final ChatCommandRuntimeConfigPort runtimeConfig =
+      mock(ChatCommandRuntimeConfigPort.class);
   private final AwayRoutingPort awayRoutingState = mock(AwayRoutingPort.class);
   private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState =
       mock(ChatHistoryRequestRoutingPort.class);

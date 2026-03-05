@@ -3,7 +3,7 @@ package cafe.woden.ircclient.ui.servertree.request;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable.ChannelModeSetRequest;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import org.junit.jupiter.api.Test;

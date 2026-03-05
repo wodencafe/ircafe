@@ -1,10 +1,11 @@
-package cafe.woden.ircclient.app.state;
+package cafe.woden.ircclient.state;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
 import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -18,16 +19,16 @@ class ChatHistoryRequestRoutingStateTest {
     TargetRef origin = new TargetRef("libera", "#ircafe");
     state.remember("libera", "#ircafe", origin, 50, "timestamp=now", Instant.now());
 
-    ChatHistoryRequestRoutingState.PendingRequest first =
+    ChatHistoryRequestRoutingPort.PendingRequest first =
         state.consumeIfFresh("libera", "#IRCAFE", Duration.ofMinutes(5));
-    ChatHistoryRequestRoutingState.PendingRequest second =
+    ChatHistoryRequestRoutingPort.PendingRequest second =
         state.consumeIfFresh("libera", "#ircafe", Duration.ofMinutes(5));
 
     assertNotNull(first);
     assertEquals(origin, first.originTarget());
     assertEquals(50, first.limit());
     assertEquals("timestamp=now", first.selector());
-    assertEquals(ChatHistoryRequestRoutingState.QueryMode.BEFORE, first.queryMode());
+    assertEquals(ChatHistoryRequestRoutingPort.QueryMode.BEFORE, first.queryMode());
     assertNull(second);
   }
 
@@ -41,13 +42,13 @@ class ChatHistoryRequestRoutingStateTest {
         40,
         "msgid=abc",
         Instant.now(),
-        ChatHistoryRequestRoutingState.QueryMode.LATEST);
+        ChatHistoryRequestRoutingPort.QueryMode.LATEST);
 
-    ChatHistoryRequestRoutingState.PendingRequest pending =
+    ChatHistoryRequestRoutingPort.PendingRequest pending =
         state.consumeIfFresh("libera", "#ircafe", Duration.ofMinutes(1));
 
     assertNotNull(pending);
-    assertEquals(ChatHistoryRequestRoutingState.QueryMode.LATEST, pending.queryMode());
+    assertEquals(ChatHistoryRequestRoutingPort.QueryMode.LATEST, pending.queryMode());
   }
 
   @Test
@@ -56,7 +57,7 @@ class ChatHistoryRequestRoutingStateTest {
     Instant old = Instant.now().minus(Duration.ofMinutes(10));
     state.remember("libera", "#ircafe", origin, 25, "msgid=abc", old);
 
-    ChatHistoryRequestRoutingState.PendingRequest pending =
+    ChatHistoryRequestRoutingPort.PendingRequest pending =
         state.consumeIfFresh("libera", "#ircafe", Duration.ofSeconds(5));
 
     assertNull(pending);

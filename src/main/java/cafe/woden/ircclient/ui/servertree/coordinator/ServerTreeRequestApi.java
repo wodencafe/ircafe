@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinator;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;

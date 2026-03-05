@@ -7,8 +7,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.interceptors.InterceptorPanel;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;

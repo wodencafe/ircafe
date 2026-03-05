@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.policy;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 
 /** Encapsulates target-type policy and leaf-label resolution for server tree nodes. */

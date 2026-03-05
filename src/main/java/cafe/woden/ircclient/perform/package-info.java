@@ -1,6 +1,6 @@
 @ApplicationModule(
     displayName = "Perform Automation",
-    allowedDependencies = {"app::api", "app::commands", "config", "irc"})
+    allowedDependencies = {"app::api", "app::commands", "config", "irc", "model"})
 package cafe.woden.ircclient.perform;
 
 import org.springframework.modulith.ApplicationModule;

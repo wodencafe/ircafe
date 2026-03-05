@@ -112,12 +112,12 @@ class ServerTreeMiddleDragReorderHandlerContextTest {
         otherNode,
         monitorNode,
         interceptorsNode,
-        new cafe.woden.ircclient.app.api.TargetRef(serverId, "status"),
-        cafe.woden.ircclient.app.api.TargetRef.notifications(serverId),
-        cafe.woden.ircclient.app.api.TargetRef.logViewer(serverId),
-        cafe.woden.ircclient.app.api.TargetRef.channelList(serverId),
-        cafe.woden.ircclient.app.api.TargetRef.weechatFilters(serverId),
-        cafe.woden.ircclient.app.api.TargetRef.ignores(serverId),
-        cafe.woden.ircclient.app.api.TargetRef.dccTransfers(serverId));
+        new cafe.woden.ircclient.model.TargetRef(serverId, "status"),
+        cafe.woden.ircclient.model.TargetRef.notifications(serverId),
+        cafe.woden.ircclient.model.TargetRef.logViewer(serverId),
+        cafe.woden.ircclient.model.TargetRef.channelList(serverId),
+        cafe.woden.ircclient.model.TargetRef.weechatFilters(serverId),
+        cafe.woden.ircclient.model.TargetRef.ignores(serverId),
+        cafe.woden.ircclient.model.TargetRef.dccTransfers(serverId));
   }
 }

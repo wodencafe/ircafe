@@ -3,7 +3,7 @@ package cafe.woden.ircclient.ui.servertree.policy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.HashSet;
 import java.util.Set;
 import javax.swing.tree.DefaultMutableTreeNode;

@@ -1,13 +1,13 @@
 package cafe.woden.ircclient.ui.interceptors;
 
 import cafe.woden.ircclient.app.api.InterceptorEventType;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.interceptors.InterceptorHit;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.BuiltInSound;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;
 import cafe.woden.ircclient.model.InterceptorRuleMode;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import cafe.woden.ircclient.util.VirtualThreads;

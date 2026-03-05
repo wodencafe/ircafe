@@ -18,7 +18,6 @@ import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
@@ -34,15 +33,6 @@ import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
-import cafe.woden.ircclient.app.state.AwayRoutingState;
-import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
-import cafe.woden.ircclient.app.state.CtcpRoutingState;
-import cafe.woden.ircclient.app.state.JoinRoutingState;
-import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
-import cafe.woden.ircclient.app.state.ModeRoutingState;
-import cafe.woden.ircclient.app.state.PendingEchoMessageState;
-import cafe.woden.ircclient.app.state.PendingInviteState;
-import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
@@ -52,6 +42,16 @@ import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.AwayRoutingPort;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
+import cafe.woden.ircclient.state.api.CtcpRoutingPort;
+import cafe.woden.ircclient.state.api.JoinRoutingPort;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
+import cafe.woden.ircclient.state.api.PendingInvitePort;
+import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.lang.reflect.Method;
@@ -93,18 +93,17 @@ class IrcMediatorMockVerifyTest {
   private final UserInfoEnrichmentService userInfoEnrichmentService =
       mock(UserInfoEnrichmentService.class);
   private final UserListStore userListStore = mock(UserListStore.class);
-  private final WhoisRoutingState whoisRoutingState = mock(WhoisRoutingState.class);
-  private final CtcpRoutingState ctcpRoutingState = mock(CtcpRoutingState.class);
-  private final ModeRoutingState modeRoutingState = mock(ModeRoutingState.class);
-  private final AwayRoutingState awayRoutingState = mock(AwayRoutingState.class);
-  private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState =
-      mock(ChatHistoryRequestRoutingState.class);
-  private final JoinRoutingState joinRoutingState = mock(JoinRoutingState.class);
-  private final LabeledResponseRoutingState labeledResponseRoutingState =
-      mock(LabeledResponseRoutingState.class);
-  private final PendingEchoMessageState pendingEchoMessageState =
-      mock(PendingEchoMessageState.class);
-  private final PendingInviteState pendingInviteState = mock(PendingInviteState.class);
+  private final WhoisRoutingPort whoisRoutingState = mock(WhoisRoutingPort.class);
+  private final CtcpRoutingPort ctcpRoutingState = mock(CtcpRoutingPort.class);
+  private final ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
+  private final AwayRoutingPort awayRoutingState = mock(AwayRoutingPort.class);
+  private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState =
+      mock(ChatHistoryRequestRoutingPort.class);
+  private final JoinRoutingPort joinRoutingState = mock(JoinRoutingPort.class);
+  private final LabeledResponseRoutingPort labeledResponseRoutingState =
+      mock(LabeledResponseRoutingPort.class);
+  private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
+  private final PendingInvitePort pendingInviteState = mock(PendingInvitePort.class);
   private final InboundModeEventHandler inboundModeEventHandler =
       mock(InboundModeEventHandler.class);
   private final IrcEventNotifierPort ircEventNotifierPort = mock(IrcEventNotifierPort.class);
@@ -627,8 +626,8 @@ class IrcMediatorMockVerifyTest {
   void noSuchNickServerResponseFailsMatchingPendingPmAndAppendsPmError() throws Exception {
     TargetRef pm = new TargetRef("libera", "ghost");
     Instant at = Instant.parse("2026-03-02T18:53:57Z");
-    PendingEchoMessageState.PendingOutboundChat pending =
-        new PendingEchoMessageState.PendingOutboundChat("pending-1", pm, "Birbasaurus", "pie", at);
+    PendingEchoMessagePort.PendingOutboundChat pending =
+        new PendingEchoMessagePort.PendingOutboundChat("pending-1", pm, "Birbasaurus", "pie", at);
     when(pendingEchoMessageState.consumeOldestByTarget(eq(pm))).thenReturn(Optional.of(pending));
 
     invokeOnServerIrcEvent(

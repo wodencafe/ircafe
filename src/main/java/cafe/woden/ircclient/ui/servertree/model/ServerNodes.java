@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.model;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 public final class ServerNodes {

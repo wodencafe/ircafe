@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.coordinator;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import java.awt.Component;
 import java.util.Objects;

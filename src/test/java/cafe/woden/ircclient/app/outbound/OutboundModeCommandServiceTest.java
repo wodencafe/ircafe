@@ -8,13 +8,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
-import cafe.woden.ircclient.app.state.ModeRoutingState;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
@@ -28,9 +28,9 @@ class OutboundModeCommandServiceTest {
   private final UiPort ui = mock(UiPort.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
-  private final ModeRoutingState modeRoutingState = mock(ModeRoutingState.class);
-  private final LabeledResponseRoutingState labeledResponseRoutingState =
-      mock(LabeledResponseRoutingState.class);
+  private final ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
+  private final LabeledResponseRoutingPort labeledResponseRoutingState =
+      mock(LabeledResponseRoutingPort.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundModeCommandService service =
@@ -66,8 +66,8 @@ class OutboundModeCommandServiceTest {
   void opUsesPreparedLabeledRawLineAndRemembersCorrelation() {
     TargetRef status = new TargetRef("libera", "status");
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    LabeledResponseRoutingState.PreparedRawLine prepared =
-        new LabeledResponseRoutingState.PreparedRawLine(
+    LabeledResponseRoutingPort.PreparedRawLine prepared =
+        new LabeledResponseRoutingPort.PreparedRawLine(
             "@label=req-1 MODE #ircafe +o alice", "req-1", true);
 
     when(targetCoordinator.getActiveTarget()).thenReturn(status);

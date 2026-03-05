@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.model;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 
 /** Tree-node user object for target identity, counters, and transient typing metadata. */

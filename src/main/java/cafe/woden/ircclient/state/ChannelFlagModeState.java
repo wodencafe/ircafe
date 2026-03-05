@@ -1,5 +1,6 @@
-package cafe.woden.ircclient.app.state;
+package cafe.woden.ircclient.state;
 
+import cafe.woden.ircclient.state.api.ChannelFlagModeStatePort;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
-public class ChannelFlagModeState {
+public class ChannelFlagModeState implements ChannelFlagModeStatePort {
 
   private final ConcurrentHashMap<ModeKey, Set<Character>> channelFlags = new ConcurrentHashMap<>();
 

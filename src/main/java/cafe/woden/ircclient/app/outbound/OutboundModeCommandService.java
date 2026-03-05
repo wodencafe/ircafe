@@ -1,12 +1,12 @@
 package cafe.woden.ircclient.app.outbound;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
-import cafe.woden.ircclient.app.state.ModeRoutingState;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
 import java.util.List;
@@ -26,16 +26,16 @@ public class OutboundModeCommandService {
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
-  private final ModeRoutingState modeRoutingState;
-  private final LabeledResponseRoutingState labeledResponseRoutingState;
+  private final ModeRoutingPort modeRoutingState;
+  private final LabeledResponseRoutingPort labeledResponseRoutingState;
 
   public OutboundModeCommandService(
       IrcClientService irc,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
-      ModeRoutingState modeRoutingState,
-      LabeledResponseRoutingState labeledResponseRoutingState) {
+      ModeRoutingPort modeRoutingState,
+      LabeledResponseRoutingPort labeledResponseRoutingState) {
     this.irc = irc;
     this.ui = ui;
     this.connectionCoordinator = connectionCoordinator;
@@ -249,7 +249,7 @@ public class OutboundModeCommandService {
     if (line.isEmpty() || origin == null) return new PreparedRawLine(line, "");
     if (!irc.isLabeledResponseAvailable(origin.serverId())) return new PreparedRawLine(line, "");
 
-    LabeledResponseRoutingState.PreparedRawLine prepared =
+    LabeledResponseRoutingPort.PreparedRawLine prepared =
         labeledResponseRoutingState.prepareOutgoingRaw(origin.serverId(), line);
     String sendLine =
         (prepared == null || prepared.line() == null || prepared.line().isBlank())

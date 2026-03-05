@@ -1,6 +1,7 @@
-package cafe.woden.ircclient.app.state;
+package cafe.woden.ircclient.state;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.CtcpRoutingPort;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -9,9 +10,10 @@ import org.springframework.stereotype.Component;
 
 @Component
 @ApplicationLayer
-public class CtcpRoutingState {
+public class CtcpRoutingState implements CtcpRoutingPort {
 
-  private final ConcurrentHashMap<CtcpKey, PendingCtcp> pending = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<CtcpKey, CtcpRoutingPort.PendingCtcp> pending =
+      new ConcurrentHashMap<>();
 
   /**
    * Record a pending CTCP for {@code nick}/{@code command}, routing the reply to {@code target}.
@@ -20,16 +22,18 @@ public class CtcpRoutingState {
     if (target == null) return;
     pending.put(
         new CtcpKey(serverId, nick, command, token),
-        new PendingCtcp(target, System.currentTimeMillis()));
+        new CtcpRoutingPort.PendingCtcp(target, System.currentTimeMillis()));
   }
 
   /** Remove and return the pending CTCP routing state, or {@code null} if none. */
-  public PendingCtcp remove(String serverId, String nick, String command, String token) {
+  public CtcpRoutingPort.PendingCtcp remove(
+      String serverId, String nick, String command, String token) {
     return pending.remove(new CtcpKey(serverId, nick, command, token));
   }
 
   /** Peek the pending CTCP routing state, or {@code null} if none. */
-  public PendingCtcp get(String serverId, String nick, String command, String token) {
+  public CtcpRoutingPort.PendingCtcp get(
+      String serverId, String nick, String command, String token) {
     return pending.get(new CtcpKey(serverId, nick, command, token));
   }
 
@@ -37,8 +41,6 @@ public class CtcpRoutingState {
     String sid = normalizeServer(serverId);
     pending.keySet().removeIf(k -> Objects.equals(k.serverId, sid));
   }
-
-  public record PendingCtcp(TargetRef target, long startedMs) {}
 
   private static String normalizeServer(String serverId) {
     return (serverId == null) ? "" : serverId.trim();

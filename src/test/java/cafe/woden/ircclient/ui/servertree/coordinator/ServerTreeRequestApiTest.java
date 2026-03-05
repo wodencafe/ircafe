@@ -3,7 +3,7 @@ package cafe.woden.ircclient.ui.servertree.coordinator;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.interaction.ServerTreeInteractionSetupCoordinator;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import io.github.andrewauclair.moderndocking.Dockable;

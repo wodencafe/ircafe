@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.servertree;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreePath;
 

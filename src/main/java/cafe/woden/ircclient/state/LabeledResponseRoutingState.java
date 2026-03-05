@@ -1,6 +1,7 @@
-package cafe.woden.ircclient.app.state;
+package cafe.woden.ircclient.state;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
@@ -17,64 +18,11 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
-public class LabeledResponseRoutingState {
+public class LabeledResponseRoutingState implements LabeledResponseRoutingPort {
   private static final Duration STALE_RETENTION = Duration.ofMinutes(10);
 
-  public enum Outcome {
-    PENDING,
-    SUCCESS,
-    FAILURE,
-    TIMEOUT
-  }
-
-  public record PreparedRawLine(String line, String label, boolean injected) {
-    public PreparedRawLine {
-      line = Objects.toString(line, "").trim();
-      label = normalizeLabel(label);
-    }
-  }
-
-  public record PendingLabeledRequest(
-      TargetRef originTarget,
-      String requestPreview,
-      Instant startedAt,
-      Outcome outcome,
-      Instant outcomeAt) {
-    public PendingLabeledRequest {
-      requestPreview = normalizePreview(requestPreview);
-      startedAt = (startedAt == null) ? Instant.now() : startedAt;
-      outcome = (outcome == null) ? Outcome.PENDING : outcome;
-      if (outcome == Outcome.PENDING) outcomeAt = null;
-      else outcomeAt = (outcomeAt == null) ? Instant.now() : outcomeAt;
-    }
-
-    public PendingLabeledRequest(TargetRef originTarget, String requestPreview, Instant startedAt) {
-      this(originTarget, requestPreview, startedAt, Outcome.PENDING, null);
-    }
-
-    public boolean terminal() {
-      return outcome != Outcome.PENDING;
-    }
-
-    public PendingLabeledRequest withOutcome(Outcome nextOutcome, Instant at) {
-      Outcome normalized = (nextOutcome == null) ? Outcome.PENDING : nextOutcome;
-      if (normalized == Outcome.PENDING) return this;
-      Instant ts = (at == null) ? Instant.now() : at;
-      return new PendingLabeledRequest(originTarget, requestPreview, startedAt, normalized, ts);
-    }
-  }
-
-  public record TimedOutLabeledRequest(
-      String serverId, String label, PendingLabeledRequest request, Instant timedOutAt) {
-    public TimedOutLabeledRequest {
-      serverId = normalizeServer(serverId);
-      label = normalizeLabel(label);
-      timedOutAt = (timedOutAt == null) ? Instant.now() : timedOutAt;
-    }
-  }
-
-  private final ConcurrentHashMap<LabelKey, PendingLabeledRequest> pendingByLabel =
-      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<LabelKey, LabeledResponseRoutingPort.PendingLabeledRequest>
+      pendingByLabel = new ConcurrentHashMap<>();
 
   private final AtomicLong labelSequence = new AtomicLong(System.currentTimeMillis());
 
@@ -83,25 +31,29 @@ public class LabeledResponseRoutingState {
    *
    * <p>If the line already has a label tag, that label is preserved and returned.
    */
-  public PreparedRawLine prepareOutgoingRaw(String serverId, String rawLine) {
+  public LabeledResponseRoutingPort.PreparedRawLine prepareOutgoingRaw(
+      String serverId, String rawLine) {
     String line = Objects.toString(rawLine, "").trim();
-    if (line.isEmpty()) return new PreparedRawLine("", "", false);
+    if (line.isEmpty()) return new LabeledResponseRoutingPort.PreparedRawLine("", "", false);
 
     if (line.charAt(0) != '@') {
       String label = nextClientLabel(serverId);
-      return new PreparedRawLine("@label=" + escapeTagValue(label) + " " + line, label, true);
+      return new LabeledResponseRoutingPort.PreparedRawLine(
+          "@label=" + escapeTagValue(label) + " " + line, label, true);
     }
 
     int sp = line.indexOf(' ');
-    if (sp <= 1) return new PreparedRawLine(line, "", false);
+    if (sp <= 1) return new LabeledResponseRoutingPort.PreparedRawLine(line, "", false);
 
     String tagSection = line.substring(1, sp);
     String existingLabel = extractLabelFromTagSection(tagSection);
-    if (!existingLabel.isEmpty()) return new PreparedRawLine(line, existingLabel, false);
+    if (!existingLabel.isEmpty()) {
+      return new LabeledResponseRoutingPort.PreparedRawLine(line, existingLabel, false);
+    }
 
     String label = nextClientLabel(serverId);
     String withLabel = "@" + tagSection + ";label=" + escapeTagValue(label) + line.substring(sp);
-    return new PreparedRawLine(withLabel, label, true);
+    return new LabeledResponseRoutingPort.PreparedRawLine(withLabel, label, true);
   }
 
   /** Build a client-generated label token for this connection/server. */
@@ -140,7 +92,8 @@ public class LabeledResponseRoutingState {
     pruneStaleEntriesForServer(sid, at.minus(STALE_RETENTION));
 
     pendingByLabel.put(
-        new LabelKey(sid, lbl), new PendingLabeledRequest(normalizedTarget, requestPreview, at));
+        new LabelKey(sid, lbl),
+        new LabeledResponseRoutingPort.PendingLabeledRequest(normalizedTarget, requestPreview, at));
   }
 
   /**
@@ -149,13 +102,14 @@ public class LabeledResponseRoutingState {
    * <p>Entries are not removed on read so multi-line responses with the same label continue to
    * correlate for the lifetime window.
    */
-  public PendingLabeledRequest findIfFresh(String serverId, String label, Duration maxAge) {
+  public LabeledResponseRoutingPort.PendingLabeledRequest findIfFresh(
+      String serverId, String label, Duration maxAge) {
     String sid = normalizeServer(serverId);
     String lbl = normalizeLabel(label);
     if (sid.isEmpty() || lbl.isEmpty()) return null;
 
     LabelKey key = new LabelKey(sid, lbl);
-    PendingLabeledRequest entry = pendingByLabel.get(key);
+    LabeledResponseRoutingPort.PendingLabeledRequest entry = pendingByLabel.get(key);
     if (entry == null) return null;
 
     Duration age = (maxAge == null || maxAge.isNegative()) ? Duration.ZERO : maxAge;
@@ -175,31 +129,34 @@ public class LabeledResponseRoutingState {
    *
    * @return updated entry only when this call changed state from pending to terminal.
    */
-  public PendingLabeledRequest markOutcomeIfPending(
-      String serverId, String label, Outcome outcome, Instant at) {
+  public LabeledResponseRoutingPort.PendingLabeledRequest markOutcomeIfPending(
+      String serverId, String label, LabeledResponseRoutingPort.Outcome outcome, Instant at) {
     String sid = normalizeServer(serverId);
     String lbl = normalizeLabel(label);
     if (sid.isEmpty() || lbl.isEmpty()) return null;
-    Outcome next = (outcome == null) ? Outcome.PENDING : outcome;
-    if (next == Outcome.PENDING) return null;
+    LabeledResponseRoutingPort.Outcome next =
+        (outcome == null) ? LabeledResponseRoutingPort.Outcome.PENDING : outcome;
+    if (next == LabeledResponseRoutingPort.Outcome.PENDING) return null;
 
     LabelKey key = new LabelKey(sid, lbl);
-    java.util.concurrent.atomic.AtomicReference<PendingLabeledRequest> transitioned =
-        new java.util.concurrent.atomic.AtomicReference<>();
+    java.util.concurrent.atomic.AtomicReference<LabeledResponseRoutingPort.PendingLabeledRequest>
+        transitioned = new java.util.concurrent.atomic.AtomicReference<>();
 
     pendingByLabel.computeIfPresent(
         key,
         (k, cur) -> {
           if (cur == null) return null;
-          Outcome current = cur.outcome();
+          LabeledResponseRoutingPort.Outcome current = cur.outcome();
           boolean shouldTransition;
-          if (current == Outcome.PENDING) {
+          if (current == LabeledResponseRoutingPort.Outcome.PENDING) {
             shouldTransition = true;
           } else {
-            shouldTransition = (next == Outcome.FAILURE && current != Outcome.FAILURE);
+            shouldTransition =
+                (next == LabeledResponseRoutingPort.Outcome.FAILURE
+                    && current != LabeledResponseRoutingPort.Outcome.FAILURE);
           }
           if (!shouldTransition) return cur;
-          PendingLabeledRequest updated = cur.withOutcome(next, at);
+          LabeledResponseRoutingPort.PendingLabeledRequest updated = cur.withOutcome(next, at);
           transitioned.set(updated);
           return updated;
         });
@@ -209,10 +166,11 @@ public class LabeledResponseRoutingState {
   /**
    * Collect and mark pending requests that timed out.
    *
-   * <p>Returned entries are transitioned to {@link Outcome#TIMEOUT}; they remain in the map for
-   * short-term correlation visibility until stale retention prunes them.
+   * <p>Returned entries are transitioned to {@link LabeledResponseRoutingPort.Outcome#TIMEOUT};
+   * they remain in the map for short-term correlation visibility until stale retention prunes them.
    */
-  public java.util.List<TimedOutLabeledRequest> collectTimedOut(Duration timeout, int maxCount) {
+  public java.util.List<LabeledResponseRoutingPort.TimedOutLabeledRequest> collectTimedOut(
+      Duration timeout, int maxCount) {
     Duration to =
         (timeout == null || timeout.isNegative() || timeout.isZero())
             ? Duration.ofSeconds(30)
@@ -220,21 +178,26 @@ public class LabeledResponseRoutingState {
     int cap = Math.max(1, maxCount);
     Instant now = Instant.now();
     Instant cutoff = now.minus(to);
-    java.util.ArrayList<TimedOutLabeledRequest> out = new java.util.ArrayList<>();
+    java.util.ArrayList<LabeledResponseRoutingPort.TimedOutLabeledRequest> out =
+        new java.util.ArrayList<>();
 
-    for (Map.Entry<LabelKey, PendingLabeledRequest> e : pendingByLabel.entrySet()) {
+    for (Map.Entry<LabelKey, LabeledResponseRoutingPort.PendingLabeledRequest> e :
+        pendingByLabel.entrySet()) {
       if (out.size() >= cap) break;
       LabelKey key = e.getKey();
-      PendingLabeledRequest cur = e.getValue();
+      LabeledResponseRoutingPort.PendingLabeledRequest cur = e.getValue();
       if (key == null || cur == null) continue;
       if (cur.terminal()) continue;
       Instant started = (cur.startedAt() == null) ? Instant.EPOCH : cur.startedAt();
       if (!started.isBefore(cutoff)) continue;
 
-      PendingLabeledRequest marked =
-          markOutcomeIfPending(key.serverId, key.label, Outcome.TIMEOUT, now);
+      LabeledResponseRoutingPort.PendingLabeledRequest marked =
+          markOutcomeIfPending(
+              key.serverId, key.label, LabeledResponseRoutingPort.Outcome.TIMEOUT, now);
       if (marked != null) {
-        out.add(new TimedOutLabeledRequest(key.serverId, key.label, marked, now));
+        out.add(
+            new LabeledResponseRoutingPort.TimedOutLabeledRequest(
+                key.serverId, key.label, marked, now));
       }
     }
 
@@ -304,22 +267,11 @@ public class LabeledResponseRoutingState {
   }
 
   private static String normalizeServer(String serverId) {
-    return Objects.toString(serverId, "").trim();
+    return LabeledResponseRoutingPort.normalizeServer(serverId);
   }
 
   private static String normalizeLabel(String label) {
-    return Objects.toString(label, "").trim();
-  }
-
-  private static String normalizePreview(String preview) {
-    String p = Objects.toString(preview, "").trim();
-    if (p.isEmpty()) return "";
-    p = p.replaceAll("\\s+", " ");
-    int max = 220;
-    if (p.length() > max) {
-      p = p.substring(0, max - 1) + "...";
-    }
-    return p;
+    return LabeledResponseRoutingPort.normalizeLabel(label);
   }
 
   private static String unescapeTagValue(String raw) {

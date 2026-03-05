@@ -1,6 +1,7 @@
-package cafe.woden.ircclient.app.state;
+package cafe.woden.ircclient.state;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
-public class JoinRoutingState {
+public class JoinRoutingState implements JoinRoutingPort {
 
   private record Key(String serverId, String channelLower) {}
 

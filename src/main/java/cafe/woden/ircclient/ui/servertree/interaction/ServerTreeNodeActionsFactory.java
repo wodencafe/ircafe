@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.interaction;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeNodeReorderPolicy;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;

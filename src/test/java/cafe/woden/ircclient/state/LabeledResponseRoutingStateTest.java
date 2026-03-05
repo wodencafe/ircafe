@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.state;
+package cafe.woden.ircclient.state;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -6,7 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -86,15 +87,15 @@ class LabeledResponseRoutingStateTest {
 
     var first =
         state.markOutcomeIfPending(
-            "libera", "req-1", LabeledResponseRoutingState.Outcome.SUCCESS, Instant.now());
+            "libera", "req-1", LabeledResponseRoutingPort.Outcome.SUCCESS, Instant.now());
     assertNotNull(first);
-    assertEquals(LabeledResponseRoutingState.Outcome.SUCCESS, first.outcome());
+    assertEquals(LabeledResponseRoutingPort.Outcome.SUCCESS, first.outcome());
 
     var second =
         state.markOutcomeIfPending(
-            "libera", "req-1", LabeledResponseRoutingState.Outcome.FAILURE, Instant.now());
+            "libera", "req-1", LabeledResponseRoutingPort.Outcome.FAILURE, Instant.now());
     assertNotNull(second);
-    assertEquals(LabeledResponseRoutingState.Outcome.FAILURE, second.outcome());
+    assertEquals(LabeledResponseRoutingPort.Outcome.FAILURE, second.outcome());
   }
 
   @Test
@@ -106,6 +107,6 @@ class LabeledResponseRoutingStateTest {
     var timedOut = state.collectTimedOut(Duration.ofSeconds(10), 10);
     assertEquals(1, timedOut.size());
     assertEquals("req-timeout", timedOut.get(0).label());
-    assertEquals(LabeledResponseRoutingState.Outcome.TIMEOUT, timedOut.get(0).request().outcome());
+    assertEquals(LabeledResponseRoutingPort.Outcome.TIMEOUT, timedOut.get(0).request().outcome());
   }
 }

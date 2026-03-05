@@ -1,10 +1,10 @@
-package cafe.woden.ircclient.app.state;
+package cafe.woden.ircclient.state;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 

@@ -1,5 +1,6 @@
-package cafe.woden.ircclient.app.state;
+package cafe.woden.ircclient.state;
 
+import cafe.woden.ircclient.state.api.RecentStatusModePort;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
-public class RecentStatusModeState {
+public class RecentStatusModeState implements RecentStatusModePort {
 
   private final ConcurrentHashMap<ModeKey, Long> lastStatusModeMs = new ConcurrentHashMap<>();
 

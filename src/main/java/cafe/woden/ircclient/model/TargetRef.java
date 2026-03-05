@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.api;
+package cafe.woden.ircclient.model;
 
 import java.util.Locale;
 import java.util.Objects;

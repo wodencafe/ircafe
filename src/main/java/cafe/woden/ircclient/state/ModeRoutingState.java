@@ -1,6 +1,7 @@
-package cafe.woden.ircclient.app.state;
+package cafe.woden.ircclient.state;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
-public class ModeRoutingState {
+public class ModeRoutingState implements ModeRoutingPort {
 
   private final ConcurrentHashMap<ModeKey, TargetRef> pendingModeTargets =
       new ConcurrentHashMap<>();

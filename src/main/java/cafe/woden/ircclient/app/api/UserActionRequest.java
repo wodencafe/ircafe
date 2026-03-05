@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.api;
 
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import org.jmolecules.ddd.annotation.ValueObject;
 

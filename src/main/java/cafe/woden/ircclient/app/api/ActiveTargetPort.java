@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.api;
 
+import cafe.woden.ircclient.model.TargetRef;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** App-owned read access to the currently active chat target context. */

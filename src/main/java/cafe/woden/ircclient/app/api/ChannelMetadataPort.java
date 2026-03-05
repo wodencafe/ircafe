@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.app.api;
 
+import cafe.woden.ircclient.model.TargetRef;
+
 /** Port for persisting and reading last-known channel metadata snapshots. */
 public interface ChannelMetadataPort {
 

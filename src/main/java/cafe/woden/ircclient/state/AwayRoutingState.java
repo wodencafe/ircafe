@@ -1,6 +1,7 @@
-package cafe.woden.ircclient.app.state;
+package cafe.woden.ircclient.state;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.AwayRoutingPort;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
@@ -10,7 +11,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @ApplicationLayer
-public class AwayRoutingState {
+public class AwayRoutingState implements AwayRoutingPort {
 
   // Away state tracking (per server) so bare `/away` can toggle between set/clear.
   private final ConcurrentHashMap<String, Boolean> awayByServer = new ConcurrentHashMap<>();

@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.policy;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
