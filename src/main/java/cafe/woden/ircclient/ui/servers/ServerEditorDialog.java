@@ -1514,6 +1514,7 @@ public class ServerEditorDialog extends JDialog {
     return switch (backend) {
       case IRC -> "IRC";
       case QUASSEL_CORE -> "Quassel Core";
+      case MATRIX -> "Matrix";
     };
   }
 

@@ -56,6 +56,7 @@ public class OutboundChatCommandService {
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
   private final ServerCatalog serverCatalog;
+  private final CommandTargetPolicy commandTargetPolicy;
   private final ChatCommandRuntimeConfigPort runtimeConfig;
   private final AwayRoutingPort awayRoutingState;
   private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState;
@@ -72,6 +73,7 @@ public class OutboundChatCommandService {
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       ServerCatalog serverCatalog,
+      CommandTargetPolicy commandTargetPolicy,
       ChatCommandRuntimeConfigPort runtimeConfig,
       AwayRoutingPort awayRoutingState,
       ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState,
@@ -86,6 +88,7 @@ public class OutboundChatCommandService {
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
     this.serverCatalog = serverCatalog;
+    this.commandTargetPolicy = commandTargetPolicy;
     this.runtimeConfig = runtimeConfig;
     this.awayRoutingState = awayRoutingState;
     this.chatHistoryRequestRoutingState = chatHistoryRequestRoutingState;
@@ -136,6 +139,10 @@ public class OutboundChatCommandService {
     }
 
     if (!joinKey.isEmpty()) {
+      TargetRef status = new TargetRef(at.serverId(), "status");
+      if (!ensureIrcRawCommandSupported(at.serverId(), status, "(join)", "join with a key")) {
+        return;
+      }
       String line = "JOIN " + chan + " " + joinKey;
       disposables.add(
           irc.sendRaw(at.serverId(), line)
@@ -173,7 +180,7 @@ public class OutboundChatCommandService {
     // If no explicit channel was provided, we can only /part if the active target is a channel.
     TargetRef target;
     if (chan.isEmpty()) {
-      if (!at.isChannel()) {
+      if (!commandTargetPolicy.isChannelLikeTarget(at)) {
         ui.appendStatus(
             at, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
         return;
@@ -181,13 +188,32 @@ public class OutboundChatCommandService {
       target = at;
     } else {
       target = new TargetRef(at.serverId(), chan);
-      if (!target.isChannel()) {
+      if (!commandTargetPolicy.isChannelLikeTargetForServer(at.serverId(), target.target())) {
         ui.appendStatus(at, "(part)", "Usage: /part [#channel] [reason]");
         return;
       }
     }
 
-    targetCoordinator.disconnectChannel(target, msg);
+    if (target.isChannel()) {
+      targetCoordinator.disconnectChannel(target, msg);
+      return;
+    }
+
+    TargetRef status = new TargetRef(target.serverId(), "status");
+    if (!connectionCoordinator.isConnected(target.serverId())) {
+      ui.appendStatus(status, "(conn)", "Not connected");
+      return;
+    }
+    if (containsCrlf(target.target()) || containsCrlf(msg)) {
+      ui.appendStatus(status, "(part)", "Refusing to send multi-line /part input.");
+      return;
+    }
+
+    disposables.add(
+        irc.partChannel(target.serverId(), target.target(), msg.isEmpty() ? null : msg)
+            .subscribe(
+                () -> ui.appendStatus(status, "(part)", "Requested leave for " + target.target()),
+                err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
   }
 
   public void handleConnect(String target) {
@@ -739,7 +765,32 @@ public class OutboundChatCommandService {
         statusTag,
         "Server '"
             + sid
-            + "' uses the regular IRC backend. Quassel actions are only available on Quassel Core servers.");
+            + "' does not use the Quassel Core backend. Quassel actions are only available on Quassel Core servers.");
+    return false;
+  }
+
+  private boolean ensureIrcRawCommandSupported(
+      String serverId, TargetRef out, String statusTag, String commandLabel) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) {
+      return true;
+    }
+    IrcProperties.Server.Backend backend = commandTargetPolicy.backendForServer(sid);
+    if (backend != IrcProperties.Server.Backend.MATRIX) {
+      return true;
+    }
+    String label = Objects.toString(commandLabel, "").trim();
+    if (label.isEmpty()) {
+      label = "command";
+    }
+    ui.appendStatus(
+        out,
+        statusTag,
+        "Server '"
+            + sid
+            + "' uses the Matrix backend. IRC-specific "
+            + label
+            + " behavior is not available yet.");
     return false;
   }
 
@@ -998,7 +1049,7 @@ public class OutboundChatCommandService {
     String topicText = "";
     boolean settingTopic;
 
-    if (f.startsWith("#") || f.startsWith("&")) {
+    if (commandTargetPolicy.isChannelLikeTargetForServer(at.serverId(), f)) {
       channel = f;
       topicText = r;
       settingTopic = !topicText.isEmpty();
@@ -1014,6 +1065,10 @@ public class OutboundChatCommandService {
 
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+    if (!ensureIrcRawCommandSupported(
+        at.serverId(), new TargetRef(at.serverId(), "status"), "(topic)", "/topic")) {
       return;
     }
 
@@ -1060,6 +1115,10 @@ public class OutboundChatCommandService {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
       return;
     }
+    if (!ensureIrcRawCommandSupported(
+        at.serverId(), new TargetRef(at.serverId(), "status"), "(kick)", "/kick")) {
+      return;
+    }
 
     if (containsCrlf(ch) || containsCrlf(n) || containsCrlf(rsn)) {
       ui.appendStatus(
@@ -1100,6 +1159,10 @@ public class OutboundChatCommandService {
 
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+    if (!ensureIrcRawCommandSupported(
+        at.serverId(), new TargetRef(at.serverId(), "status"), "(invite)", "/invite")) {
       return;
     }
 
@@ -1319,6 +1382,10 @@ public class OutboundChatCommandService {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
       return;
     }
+    if (!ensureIrcRawCommandSupported(
+        at.serverId(), new TargetRef(at.serverId(), "status"), "(names)", "/names")) {
+      return;
+    }
 
     if (containsCrlf(ch)) {
       ui.appendStatus(
@@ -1361,6 +1428,10 @@ public class OutboundChatCommandService {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
       return;
     }
+    if (!ensureIrcRawCommandSupported(
+        at.serverId(), new TargetRef(at.serverId(), "status"), "(who)", "/who")) {
+      return;
+    }
 
     if (containsCrlf(a)) {
       ui.appendStatus(
@@ -1376,7 +1447,7 @@ public class OutboundChatCommandService {
     if (sp >= 0) firstToken = firstToken.substring(0, sp).trim();
 
     TargetRef out =
-        (firstToken.startsWith("#") || firstToken.startsWith("&"))
+        commandTargetPolicy.isChannelLikeTargetForServer(at.serverId(), firstToken)
             ? new TargetRef(at.serverId(), firstToken)
             : new TargetRef(at.serverId(), "status");
     TargetRef status = new TargetRef(at.serverId(), "status");
@@ -1400,6 +1471,10 @@ public class OutboundChatCommandService {
     String a = args == null ? "" : args.trim();
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+    if (!ensureIrcRawCommandSupported(
+        at.serverId(), new TargetRef(at.serverId(), "status"), "(list)", "/list")) {
       return;
     }
 
@@ -1749,6 +1824,9 @@ public class OutboundChatCommandService {
       ui.appendStatus(status, "(conn)", "Not connected");
       return;
     }
+    if (!ensureIrcRawCommandSupported(sid, status, "(raw)", "/raw")) {
+      return;
+    }
 
     PreparedRawLine prepared = prepareCorrelatedRawLine(status, line);
 
@@ -1978,6 +2056,9 @@ public class OutboundChatCommandService {
 
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(status, "(conn)", "Not connected");
+      return;
+    }
+    if (!ensureIrcRawCommandSupported(at.serverId(), status, "(quote)", "/quote")) {
       return;
     }
 
@@ -2561,13 +2642,14 @@ public class OutboundChatCommandService {
 
   private record ConnectionCommandTarget(boolean all, String serverId) {}
 
-  private static String resolveChannelOrNull(TargetRef active, String explicitChannel) {
+  private String resolveChannelOrNull(TargetRef active, String explicitChannel) {
     String ch = explicitChannel == null ? "" : explicitChannel.trim();
     if (!ch.isEmpty()) {
-      if (ch.startsWith("#") || ch.startsWith("&")) return ch;
+      String sid = active == null ? "" : active.serverId();
+      if (commandTargetPolicy.isChannelLikeTargetForServer(sid, ch)) return ch;
       return null;
     }
-    if (active != null && active.isChannel()) return active.target();
+    if (commandTargetPolicy.isChannelLikeTarget(active)) return active.target();
     return null;
   }
 

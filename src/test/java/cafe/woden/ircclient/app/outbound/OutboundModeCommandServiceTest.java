@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app.outbound;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -11,6 +12,8 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
@@ -19,6 +22,7 @@ import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -28,6 +32,8 @@ class OutboundModeCommandServiceTest {
   private final UiPort ui = mock(UiPort.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
+  private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
+  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
   private final ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
@@ -39,6 +45,7 @@ class OutboundModeCommandServiceTest {
           ui,
           connectionCoordinator,
           targetCoordinator,
+          commandTargetPolicy,
           modeRoutingState,
           labeledResponseRoutingState);
 
@@ -117,5 +124,40 @@ class OutboundModeCommandServiceTest {
 
     verify(ui).appendStatus(new TargetRef("libera", "status"), "(conn)", "Not connected");
     verify(irc, never()).sendRaw(anyString(), anyString());
+  }
+
+  @Test
+  void modeOnMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+    TargetRef channel = new TargetRef("matrix", "#room:example.org");
+    when(targetCoordinator.getActiveTarget()).thenReturn(channel);
+    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+
+    service.handleMode(disposables, "#room:example.org", "+m");
+
+    verify(ui)
+        .appendStatus(
+            eq(new TargetRef("matrix", "status")), eq("(mode)"), contains("Matrix backend"));
+    verify(irc, never()).sendRaw(anyString(), anyString());
+  }
+
+  private static IrcProperties.Server serverWithBackend(
+      String id, IrcProperties.Server.Backend backend) {
+    return new IrcProperties.Server(
+        id,
+        "core.example.net",
+        4242,
+        false,
+        "",
+        "ircafe",
+        "ircafe",
+        "IRCafe User",
+        null,
+        null,
+        List.of(),
+        List.of(),
+        null,
+        backend);
   }
 }

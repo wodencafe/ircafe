@@ -48,6 +48,24 @@ class CommandParserTest {
   }
 
   @Test
+  void parsesPartWithMatrixRoomIdAsExplicitTarget() {
+    ParsedInput in = parser.parse("/part !abc123:matrix.org later");
+    assertTrue(in instanceof ParsedInput.Part);
+    ParsedInput.Part part = (ParsedInput.Part) in;
+    assertEquals("!abc123:matrix.org", part.channel());
+    assertEquals("later", part.reason());
+  }
+
+  @Test
+  void parsesPartReasonStartingWithBangAsReasonWhenNotMatrixRoomId() {
+    ParsedInput in = parser.parse("/part !brb");
+    assertTrue(in instanceof ParsedInput.Part);
+    ParsedInput.Part part = (ParsedInput.Part) in;
+    assertEquals("", part.channel());
+    assertEquals("!brb", part.reason());
+  }
+
+  @Test
   void parsesQuasselSetupCommandAndAlias() {
     ParsedInput setup = parser.parse("/quasselsetup quassel");
     assertTrue(setup instanceof ParsedInput.QuasselSetup);

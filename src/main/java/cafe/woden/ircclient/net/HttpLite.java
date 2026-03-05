@@ -2,6 +2,7 @@ package cafe.woden.ircclient.net;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.Proxy;
 import java.net.URI;
@@ -12,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.zip.GZIPInputStream;
@@ -143,6 +145,104 @@ public final class HttpLite {
     }
     Charset charset = charsetFromContentType(r.headers().firstValue("Content-Type").orElse(null));
     return new Response<>(r.statusCode(), r.headers(), new String(bytes, charset));
+  }
+
+  public static Response<String> postString(
+      URI uri,
+      Map<String, String> requestHeaders,
+      String requestBody,
+      Proxy proxy,
+      int connectTimeoutMs,
+      int readTimeoutMs)
+      throws IOException {
+    HttpURLConnection conn = open(uri, proxy, connectTimeoutMs, readTimeoutMs);
+    conn.setInstanceFollowRedirects(false);
+    conn.setRequestMethod("POST");
+    conn.setDoOutput(true);
+
+    if (requestHeaders != null) {
+      for (Map.Entry<String, String> e : requestHeaders.entrySet()) {
+        if (e.getKey() != null && e.getValue() != null) {
+          conn.setRequestProperty(e.getKey(), e.getValue());
+        }
+      }
+    }
+
+    byte[] payload = Objects.toString(requestBody, "").getBytes(StandardCharsets.UTF_8);
+    if (conn.getRequestProperty("Content-Type") == null) {
+      conn.setRequestProperty("Content-Type", "text/plain; charset=UTF-8");
+    }
+    conn.setRequestProperty("Content-Length", Integer.toString(payload.length));
+
+    try (OutputStream out = conn.getOutputStream()) {
+      out.write(payload);
+    }
+
+    int code = conn.getResponseCode();
+    InputStream body = (code >= 400) ? conn.getErrorStream() : conn.getInputStream();
+    if (body == null) body = InputStream.nullInputStream();
+
+    String encoding = conn.getHeaderField("Content-Encoding");
+    if (encoding != null && encoding.toLowerCase(Locale.ROOT).contains("gzip")) {
+      body = new GZIPInputStream(body);
+    }
+
+    byte[] bytes;
+    try (InputStream in = body) {
+      bytes = in.readAllBytes();
+    }
+    Headers headers = new Headers(conn.getHeaderFields());
+    Charset charset = charsetFromContentType(headers.firstValue("Content-Type").orElse(null));
+    return new Response<>(code, headers, new String(bytes, charset));
+  }
+
+  public static Response<String> putString(
+      URI uri,
+      Map<String, String> requestHeaders,
+      String requestBody,
+      Proxy proxy,
+      int connectTimeoutMs,
+      int readTimeoutMs)
+      throws IOException {
+    HttpURLConnection conn = open(uri, proxy, connectTimeoutMs, readTimeoutMs);
+    conn.setInstanceFollowRedirects(false);
+    conn.setRequestMethod("PUT");
+    conn.setDoOutput(true);
+
+    if (requestHeaders != null) {
+      for (Map.Entry<String, String> e : requestHeaders.entrySet()) {
+        if (e.getKey() != null && e.getValue() != null) {
+          conn.setRequestProperty(e.getKey(), e.getValue());
+        }
+      }
+    }
+
+    byte[] payload = Objects.toString(requestBody, "").getBytes(StandardCharsets.UTF_8);
+    if (conn.getRequestProperty("Content-Type") == null) {
+      conn.setRequestProperty("Content-Type", "text/plain; charset=UTF-8");
+    }
+    conn.setRequestProperty("Content-Length", Integer.toString(payload.length));
+
+    try (OutputStream out = conn.getOutputStream()) {
+      out.write(payload);
+    }
+
+    int code = conn.getResponseCode();
+    InputStream body = (code >= 400) ? conn.getErrorStream() : conn.getInputStream();
+    if (body == null) body = InputStream.nullInputStream();
+
+    String encoding = conn.getHeaderField("Content-Encoding");
+    if (encoding != null && encoding.toLowerCase(Locale.ROOT).contains("gzip")) {
+      body = new GZIPInputStream(body);
+    }
+
+    byte[] bytes;
+    try (InputStream in = body) {
+      bytes = in.readAllBytes();
+    }
+    Headers headers = new Headers(conn.getHeaderFields());
+    Charset charset = charsetFromContentType(headers.firstValue("Content-Type").orElse(null));
+    return new Response<>(code, headers, new String(bytes, charset));
   }
 
   private static Charset charsetFromContentType(String contentType) {

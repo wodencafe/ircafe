@@ -50,6 +50,58 @@ class BackendRoutingIrcClientServiceTest {
   }
 
   @Test
+  void routesCallsByConfiguredMatrixBackend() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+    IrcBackendClientService matrixBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(matrixBackend.backend()).thenReturn(IrcProperties.Server.Backend.MATRIX);
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(matrixBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(server("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(matrixBackend.connect("matrix")).thenReturn(Completable.complete());
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, matrixBackend));
+
+    service.connect("matrix").blockingAwait();
+
+    verify(matrixBackend).connect("matrix");
+    verify(ircBackend, never()).connect("matrix");
+  }
+
+  @Test
+  void routesMatrixRoomMessagesToChannelPath() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+    IrcBackendClientService matrixBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(matrixBackend.backend()).thenReturn(IrcProperties.Server.Backend.MATRIX);
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(matrixBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(server("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(matrixBackend.sendToChannel("matrix", "!room:matrix.example.org", "hello"))
+        .thenReturn(Completable.complete());
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, matrixBackend));
+
+    service.sendMessage("matrix", "!room:matrix.example.org", "hello").blockingAwait();
+
+    verify(matrixBackend).sendToChannel("matrix", "!room:matrix.example.org", "hello");
+    verify(matrixBackend, never())
+        .sendPrivateMessage("matrix", "!room:matrix.example.org", "hello");
+  }
+
+  @Test
   void routesRegularIrcOperationsToQuasselBackendWhenServerUsesQuassel() {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);

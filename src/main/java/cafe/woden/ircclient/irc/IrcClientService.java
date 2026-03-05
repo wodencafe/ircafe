@@ -509,14 +509,21 @@ public interface IrcClientService {
   /**
    * Convenience method used by the app layer.
    *
-   * <p>If {@code target} looks like a channel (# or &), we send to the channel. Otherwise we treat
-   * it as a nick and send a private message.
+   * <p>If {@code target} looks like a channel (# or &) or Matrix room id ({@code !room:server}), we
+   * send to the channel path. Otherwise we treat it as a nick and send a private message.
    */
   default Completable sendMessage(String serverId, String target, String message) {
     String t = target == null ? "" : target.trim();
-    if (t.startsWith("#") || t.startsWith("&")) {
+    if (t.startsWith("#") || t.startsWith("&") || looksLikeMatrixRoomId(t)) {
       return sendToChannel(serverId, t, message);
     }
     return sendPrivateMessage(serverId, t, message);
+  }
+
+  private static boolean looksLikeMatrixRoomId(String token) {
+    String value = token == null ? "" : token.trim();
+    if (!value.startsWith("!")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
   }
 }

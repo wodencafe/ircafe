@@ -52,6 +52,7 @@ class OutboundChatCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
+  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
   private final ChatCommandRuntimeConfigPort runtimeConfig =
       mock(ChatCommandRuntimeConfigPort.class);
   private final AwayRoutingPort awayRoutingState = mock(AwayRoutingPort.class);
@@ -73,6 +74,7 @@ class OutboundChatCommandServiceTest {
           connectionCoordinator,
           targetCoordinator,
           serverCatalog,
+          commandTargetPolicy,
           runtimeConfig,
           awayRoutingState,
           chatHistoryRequestRoutingState,
@@ -100,6 +102,22 @@ class OutboundChatCommandServiceTest {
     verify(runtimeConfig).rememberJoinedChannel("libera", "#secret");
     verify(joinRoutingState).rememberOrigin("libera", "#secret", status);
     verify(irc).sendRaw("libera", "JOIN #secret hunter2");
+  }
+
+  @Test
+  void joinWithKeyOnMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+    TargetRef status = new TargetRef("matrix", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+
+    service.handleJoin(disposables, "#room:example.org", "hunter2");
+
+    verify(runtimeConfig).rememberJoinedChannel("matrix", "#room:example.org");
+    verify(joinRoutingState).rememberOrigin("matrix", "#room:example.org", status);
+    verify(ui).appendStatus(eq(status), eq("(join)"), contains("Matrix backend"));
+    verify(irc, never()).sendRaw(anyString(), anyString());
   }
 
   @Test
@@ -174,6 +192,31 @@ class OutboundChatCommandServiceTest {
     service.handlePart(disposables, "  #ircafe ", "  later ");
 
     verify(targetCoordinator).disconnectChannel(expected, "later");
+  }
+
+  @Test
+  void partWithMatrixRoomIdDetachesChannelLikeTarget() {
+    TargetRef status = new TargetRef("matrix", "status");
+    TargetRef room = new TargetRef("matrix", "!abc123:matrix.org");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+
+    service.handlePart(disposables, "!abc123:matrix.org", "later");
+
+    verify(targetCoordinator).disconnectChannel(room, "later");
+  }
+
+  @Test
+  void partFromActiveMatrixRoomIdDetachesChannelLikeTarget() {
+    TargetRef room = new TargetRef("matrix", "!abc123:matrix.org");
+    when(targetCoordinator.getActiveTarget()).thenReturn(room);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+
+    service.handlePart(disposables, "", "later");
+
+    verify(targetCoordinator).disconnectChannel(room, "later");
   }
 
   @Test
@@ -289,7 +332,9 @@ class OutboundChatCommandServiceTest {
 
     service.handleQuasselSetup(disposables, "libera");
 
-    verify(ui).appendStatus(eq(status), eq("(qsetup)"), contains("uses the regular IRC backend"));
+    verify(ui)
+        .appendStatus(
+            eq(status), eq("(qsetup)"), contains("does not use the Quassel Core backend"));
     verify(irc, never()).isQuasselCoreSetupPending(anyString());
     verify(irc, never()).submitQuasselCoreSetup(anyString(), any());
   }
@@ -361,7 +406,8 @@ class OutboundChatCommandServiceTest {
 
     service.handleQuasselNetwork(disposables, "libera list");
 
-    verify(ui).appendStatus(eq(status), eq("(qnet)"), contains("uses the regular IRC backend"));
+    verify(ui)
+        .appendStatus(eq(status), eq("(qnet)"), contains("does not use the Quassel Core backend"));
     verify(irc, never()).quasselCoreNetworks(anyString());
   }
 
@@ -575,7 +621,9 @@ class OutboundChatCommandServiceTest {
 
     service.handleQuasselNetworkManager(disposables, "libera");
 
-    verify(ui).appendStatus(eq(status), eq("(qnet-ui)"), contains("uses the regular IRC backend"));
+    verify(ui)
+        .appendStatus(
+            eq(status), eq("(qnet-ui)"), contains("does not use the Quassel Core backend"));
     verify(ui, never()).promptQuasselNetworkManagerAction(anyString(), anyList());
   }
 
@@ -894,6 +942,21 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void listOnMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+    TargetRef status = new TargetRef("matrix", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+
+    service.handleList(disposables, ">10");
+
+    verify(ui).appendStatus(eq(status), eq("(list)"), contains("Matrix backend"));
+    verify(ui, never()).beginChannelList(anyString(), anyString());
+    verify(irc, never()).sendRaw(anyString(), anyString());
+  }
+
+  @Test
   void quoteInjectsLabelWhenLabeledResponseIsAvailable() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     TargetRef status = new TargetRef("libera", "status");
@@ -929,6 +992,35 @@ class OutboundChatCommandServiceTest {
     verify(irc).sendRaw("libera", "MONITOR +nick");
     verify(labeledResponseRoutingState, never()).prepareOutgoingRaw(any(), any());
     verify(labeledResponseRoutingState, never()).remember(any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void quoteOnMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+    TargetRef chan = new TargetRef("matrix", "#room:example.org");
+    TargetRef status = new TargetRef("matrix", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+
+    service.handleQuote(disposables, "MONITOR +nick");
+
+    verify(ui).appendStatus(eq(status), eq("(quote)"), contains("Matrix backend"));
+    verify(irc, never()).sendRaw(anyString(), anyString());
+  }
+
+  @Test
+  void statusRawSendOnMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+    TargetRef status = new TargetRef("matrix", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+
+    service.handleSay(disposables, "WHO #room:example.org");
+
+    verify(ui).appendStatus(eq(status), eq("(raw)"), contains("Matrix backend"));
+    verify(irc, never()).sendRaw(anyString(), anyString());
   }
 
   @Test

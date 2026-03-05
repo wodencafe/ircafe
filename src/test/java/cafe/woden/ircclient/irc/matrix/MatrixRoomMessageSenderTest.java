@@ -1,0 +1,200 @@
+package cafe.woden.ircclient.irc.matrix;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.net.ProxyPlan;
+import cafe.woden.ircclient.net.ServerProxyResolver;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Test;
+
+class MatrixRoomMessageSenderTest {
+
+  private static final ObjectMapper JSON = new ObjectMapper();
+
+  private final ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
+  private final MatrixRoomMessageSender sender = new MatrixRoomMessageSender(proxyResolver);
+
+  @Test
+  void sendRoomMessagePostsJsonBodyAndAuthorizationHeader() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server = TestServer.start(200, "{\"event_id\":\"$abc\"}")) {
+      MatrixRoomMessageSender.SendResult result =
+          sender.sendRoomMessage(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "txn-1",
+              "hello matrix");
+
+      assertTrue(result.accepted());
+      assertEquals("$abc", result.eventId());
+      assertEquals("POST", server.lastMethod().get());
+      assertEquals("Bearer secret-token", server.lastAuthorizationHeader().get());
+      assertEquals(
+          "/_matrix/client/v3/rooms/!room:matrix.example.org/send/m.room.message/txn-1",
+          server.lastPath().get());
+
+      JsonNode body = JSON.readTree(server.lastRequestBody().get());
+      assertEquals("m.text", body.path("msgtype").asText(""));
+      assertEquals("hello matrix", body.path("body").asText(""));
+    }
+  }
+
+  @Test
+  void sendRoomMessageMapsCtcpActionToMatrixEmote() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server = TestServer.start(200, "{\"event_id\":\"$emote\"}")) {
+      MatrixRoomMessageSender.SendResult result =
+          sender.sendRoomMessage(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "txn-2",
+              "\u0001ACTION waves\u0001");
+
+      assertTrue(result.accepted());
+      JsonNode body = JSON.readTree(server.lastRequestBody().get());
+      assertEquals("m.emote", body.path("msgtype").asText(""));
+      assertEquals("waves", body.path("body").asText(""));
+    }
+  }
+
+  @Test
+  void sendRoomNoticeUsesMatrixNoticeMsgtype() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server = TestServer.start(200, "{\"event_id\":\"$notice\"}")) {
+      MatrixRoomMessageSender.SendResult result =
+          sender.sendRoomNotice(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "txn-n1",
+              "maintenance notice");
+
+      assertTrue(result.accepted());
+      assertEquals("$notice", result.eventId());
+      JsonNode body = JSON.readTree(server.lastRequestBody().get());
+      assertEquals("m.notice", body.path("msgtype").asText(""));
+      assertEquals("maintenance notice", body.path("body").asText(""));
+    }
+  }
+
+  @Test
+  void sendRoomMessageReportsHttpErrors() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server = TestServer.start(403, "{\"errcode\":\"M_FORBIDDEN\"}")) {
+      MatrixRoomMessageSender.SendResult result =
+          sender.sendRoomMessage(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "txn-3",
+              "hello matrix");
+
+      assertFalse(result.accepted());
+      assertEquals("HTTP 403 from room send endpoint", result.detail());
+      assertEquals("", result.eventId());
+    }
+  }
+
+  @Test
+  void sendRoomMessageRejectsBlankToken() {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    MatrixRoomMessageSender.SendResult result =
+        sender.sendRoomMessage(
+            "matrix",
+            serverConfig("matrix", "matrix.example.org", 8448, true),
+            "  ",
+            "!room:matrix.example.org",
+            "txn-4",
+            "hello matrix");
+
+    assertFalse(result.accepted());
+    assertEquals("access token is blank", result.detail());
+  }
+
+  private static ProxyPlan directPlan() {
+    IrcProperties.Proxy cfg = new IrcProperties.Proxy(false, "", 0, "", "", true, 3_000, 3_000);
+    return new ProxyPlan(cfg, Proxy.NO_PROXY, 3_000, 3_000);
+  }
+
+  private static IrcProperties.Server serverConfig(String id, String host, int port, boolean tls) {
+    return new IrcProperties.Server(
+        id,
+        host,
+        port,
+        tls,
+        "",
+        "ircafe",
+        "ircafe",
+        "IRCafe User",
+        null,
+        null,
+        List.of(),
+        List.of(),
+        null,
+        IrcProperties.Server.Backend.MATRIX);
+  }
+
+  private record TestServer(
+      HttpServer server,
+      int port,
+      AtomicReference<String> lastMethod,
+      AtomicReference<String> lastPath,
+      AtomicReference<String> lastAuthorizationHeader,
+      AtomicReference<String> lastRequestBody)
+      implements AutoCloseable {
+
+    static TestServer start(int statusCode, String body) throws IOException {
+      HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+      AtomicReference<String> method = new AtomicReference<>("");
+      AtomicReference<String> path = new AtomicReference<>("");
+      AtomicReference<String> auth = new AtomicReference<>("");
+      AtomicReference<String> requestBody = new AtomicReference<>("");
+      byte[] payload = body.getBytes(StandardCharsets.UTF_8);
+      server.createContext(
+          "/_matrix/client/v3/rooms/",
+          exchange -> {
+            method.set(exchange.getRequestMethod());
+            path.set(exchange.getRequestURI().getRawPath());
+            auth.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            requestBody.set(
+                new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            reply(exchange, statusCode, payload);
+          });
+      server.start();
+      return new TestServer(server, server.getAddress().getPort(), method, path, auth, requestBody);
+    }
+
+    @Override
+    public void close() {
+      server.stop(0);
+    }
+
+    private static void reply(HttpExchange exchange, int statusCode, byte[] payload)
+        throws IOException {
+      exchange.getResponseHeaders().add("Content-Type", "application/json");
+      exchange.sendResponseHeaders(statusCode, payload.length);
+      exchange.getResponseBody().write(payload);
+      exchange.close();
+    }
+  }
+}

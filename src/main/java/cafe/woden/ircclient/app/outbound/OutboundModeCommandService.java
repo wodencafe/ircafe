@@ -3,6 +3,7 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
@@ -26,6 +27,7 @@ public class OutboundModeCommandService {
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
+  private final CommandTargetPolicy commandTargetPolicy;
   private final ModeRoutingPort modeRoutingState;
   private final LabeledResponseRoutingPort labeledResponseRoutingState;
 
@@ -34,12 +36,14 @@ public class OutboundModeCommandService {
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
+      CommandTargetPolicy commandTargetPolicy,
       ModeRoutingPort modeRoutingState,
       LabeledResponseRoutingPort labeledResponseRoutingState) {
     this.irc = irc;
     this.ui = ui;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
+    this.commandTargetPolicy = commandTargetPolicy;
     this.modeRoutingState = modeRoutingState;
     this.labeledResponseRoutingState = labeledResponseRoutingState;
   }
@@ -58,10 +62,10 @@ public class OutboundModeCommandService {
     String channel;
     String modeSpec;
 
-    if (f.startsWith("#") || f.startsWith("&")) {
+    if (commandTargetPolicy.isChannelLikeTargetForServer(at.serverId(), f)) {
       channel = f;
       modeSpec = r;
-    } else if (at.isChannel()) {
+    } else if (commandTargetPolicy.isChannelLikeTarget(at)) {
       channel = at.target();
       modeSpec = (f + (r.isEmpty() ? "" : " " + r)).trim();
     } else {
@@ -77,6 +81,10 @@ public class OutboundModeCommandService {
 
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+    if (!ensureIrcRawCommandSupported(
+        at.serverId(), new TargetRef(at.serverId(), "status"), "(mode)", "/mode")) {
       return;
     }
 
@@ -151,6 +159,10 @@ public class OutboundModeCommandService {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
       return;
     }
+    if (!ensureIrcRawCommandSupported(
+        at.serverId(), new TargetRef(at.serverId(), "status"), "(mode)", "/mode")) {
+      return;
+    }
 
     String ch = resolveChannelOrNull(at, channel);
     if (ch == null) {
@@ -196,6 +208,10 @@ public class OutboundModeCommandService {
     }
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+      return;
+    }
+    if (!ensureIrcRawCommandSupported(
+        at.serverId(), new TargetRef(at.serverId(), "status"), "(mode)", "/mode")) {
       return;
     }
 
@@ -276,10 +292,39 @@ public class OutboundModeCommandService {
     return s.indexOf('!') >= 0 || s.indexOf('@') >= 0 || s.indexOf('*') >= 0 || s.indexOf('?') >= 0;
   }
 
-  private static String resolveChannelOrNull(TargetRef active, String explicitChannel) {
+  private boolean ensureIrcRawCommandSupported(
+      String serverId, TargetRef out, String statusTag, String commandLabel) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) {
+      return true;
+    }
+    IrcProperties.Server.Backend backend = commandTargetPolicy.backendForServer(sid);
+    if (backend != IrcProperties.Server.Backend.MATRIX) {
+      return true;
+    }
+    String label = Objects.toString(commandLabel, "").trim();
+    if (label.isEmpty()) {
+      label = "command";
+    }
+    ui.appendStatus(
+        out,
+        statusTag,
+        "Server '"
+            + sid
+            + "' uses the Matrix backend. IRC-specific "
+            + label
+            + " behavior is not available yet.");
+    return false;
+  }
+
+  private String resolveChannelOrNull(TargetRef active, String explicitChannel) {
     String ch = explicitChannel == null ? "" : explicitChannel.trim();
-    if (!ch.isEmpty()) return ch;
-    if (active != null && active.isChannel()) return active.target();
+    if (!ch.isEmpty()) {
+      String sid = active == null ? "" : active.serverId();
+      if (commandTargetPolicy.isChannelLikeTargetForServer(sid, ch)) return ch;
+      return null;
+    }
+    if (commandTargetPolicy.isChannelLikeTarget(active)) return active.target();
     return null;
   }
 }
