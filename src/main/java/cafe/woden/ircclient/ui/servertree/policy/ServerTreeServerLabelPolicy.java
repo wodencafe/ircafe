@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.policy;
 
+import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import java.util.Map;
@@ -13,6 +14,8 @@ public final class ServerTreeServerLabelPolicy {
   private final Set<String> ephemeralServerIds;
   private final Map<String, String> sojuOriginByServerId;
   private final Map<String, String> zncOriginByServerId;
+  private final Map<String, String> genericOriginByServerId;
+  private final GenericBouncerAutoConnectStore genericAutoConnect;
   private final SojuAutoConnectStore sojuAutoConnect;
   private final ZncAutoConnectStore zncAutoConnect;
 
@@ -21,6 +24,8 @@ public final class ServerTreeServerLabelPolicy {
       Set<String> ephemeralServerIds,
       Map<String, String> sojuOriginByServerId,
       Map<String, String> zncOriginByServerId,
+      Map<String, String> genericOriginByServerId,
+      GenericBouncerAutoConnectStore genericAutoConnect,
       SojuAutoConnectStore sojuAutoConnect,
       ZncAutoConnectStore zncAutoConnect) {
     this.serverDisplayNames = Objects.requireNonNull(serverDisplayNames, "serverDisplayNames");
@@ -28,6 +33,9 @@ public final class ServerTreeServerLabelPolicy {
     this.sojuOriginByServerId =
         Objects.requireNonNull(sojuOriginByServerId, "sojuOriginByServerId");
     this.zncOriginByServerId = Objects.requireNonNull(zncOriginByServerId, "zncOriginByServerId");
+    this.genericOriginByServerId =
+        Objects.requireNonNull(genericOriginByServerId, "genericOriginByServerId");
+    this.genericAutoConnect = genericAutoConnect;
     this.sojuAutoConnect = sojuAutoConnect;
     this.zncAutoConnect = zncAutoConnect;
   }
@@ -53,6 +61,19 @@ public final class ServerTreeServerLabelPolicy {
       return display;
     }
 
+    if (isGenericEphemeralServer(id)) {
+      String origin = genericOriginByServerId.get(id);
+      if (origin == null || origin.isBlank()) {
+        origin = parseOrigin(id, "bouncer:");
+      }
+      if (origin != null
+          && genericAutoConnect != null
+          && genericAutoConnect.isEnabled(origin, display)) {
+        return display + " (auto)";
+      }
+      return display;
+    }
+
     return display;
   }
 
@@ -64,6 +85,22 @@ public final class ServerTreeServerLabelPolicy {
   public boolean isZncEphemeralServer(String serverId) {
     String id = normalize(serverId);
     return !id.isEmpty() && id.startsWith("znc:") && ephemeralServerIds.contains(id);
+  }
+
+  public boolean isGenericEphemeralServer(String serverId) {
+    String id = normalize(serverId);
+    return !id.isEmpty() && id.startsWith("bouncer:") && ephemeralServerIds.contains(id);
+  }
+
+  private static String parseOrigin(String serverId, String prefix) {
+    String id = normalize(serverId);
+    String p = normalize(prefix);
+    if (id.isEmpty() || p.isEmpty() || !id.startsWith(p)) return null;
+    int start = p.length();
+    int nextColon = id.indexOf(':', start);
+    if (nextColon <= start) return null;
+    String origin = id.substring(start, nextColon).trim();
+    return origin.isEmpty() ? null : origin;
   }
 
   private static String normalize(String value) {

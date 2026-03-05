@@ -84,6 +84,10 @@ public final class ServerTreeNodeBadgeUpdater {
     refreshAutoConnectBadges("znc:");
   }
 
+  public void refreshGenericAutoConnectBadges() {
+    refreshAutoConnectBadges("bouncer:");
+  }
+
   private void refreshAutoConnectBadges(String serverPrefix) {
     String prefix = normalize(serverPrefix);
     if (prefix.isEmpty()) return;

@@ -33,6 +33,7 @@ public final class ServerTreeDragReorderSupport {
       rootSiblingNodeKindForNode;
   private final Predicate<DefaultMutableTreeNode> isSojuNetworksGroupNode;
   private final Predicate<DefaultMutableTreeNode> isZncNetworksGroupNode;
+  private final Predicate<DefaultMutableTreeNode> isGenericNetworksGroupNode;
 
   private volatile InsertionLine insertionLine;
 
@@ -66,7 +67,8 @@ public final class ServerTreeDragReorderSupport {
       Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeRootSiblingNode>
           rootSiblingNodeKindForNode,
       Predicate<DefaultMutableTreeNode> isSojuNetworksGroupNode,
-      Predicate<DefaultMutableTreeNode> isZncNetworksGroupNode) {
+      Predicate<DefaultMutableTreeNode> isZncNetworksGroupNode,
+      Predicate<DefaultMutableTreeNode> isGenericNetworksGroupNode) {
     this.tree = Objects.requireNonNull(tree, "tree");
     this.servers = Objects.requireNonNull(servers, "servers");
     this.nodeClassifier = Objects.requireNonNull(nodeClassifier, "nodeClassifier");
@@ -81,6 +83,8 @@ public final class ServerTreeDragReorderSupport {
         Objects.requireNonNull(isSojuNetworksGroupNode, "isSojuNetworksGroupNode");
     this.isZncNetworksGroupNode =
         Objects.requireNonNull(isZncNetworksGroupNode, "isZncNetworksGroupNode");
+    this.isGenericNetworksGroupNode =
+        Objects.requireNonNull(isGenericNetworksGroupNode, "isGenericNetworksGroupNode");
   }
 
   public boolean isDraggableChannelNode(DefaultMutableTreeNode node) {
@@ -185,7 +189,8 @@ public final class ServerTreeDragReorderSupport {
   private boolean isReservedServerTailNode(DefaultMutableTreeNode node) {
     return nodeClassifier.isPrivateMessagesGroupNode(node)
         || isSojuNetworksGroupNode.test(node)
-        || isZncNetworksGroupNode.test(node);
+        || isZncNetworksGroupNode.test(node)
+        || isGenericNetworksGroupNode.test(node);
   }
 
   private void setInsertionLine(InsertionLine line) {

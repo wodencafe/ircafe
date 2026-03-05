@@ -149,6 +149,8 @@ public class PreferencesDialog {
   private static final String FLAT_ONLY_TOOLTIP = "Available for FlatLaf-based themes only.";
   private static final String UI_FONT_OVERRIDE_TOOLTIP =
       "Overrides the global Swing UI font family and size for controls, menus, tabs, and dialogs.";
+  private static final String DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE = "{base}/{network}";
+  private static final boolean DEFAULT_GENERIC_BOUNCER_PREFER_LOGIN_HINT = true;
 
   private final UiSettingsBus settingsBus;
   private final EmbedCardStyleBus embedCardStyleBus;
@@ -952,8 +954,11 @@ public class PreferencesDialog {
     UserhostControls userhost = network.userhost;
     UserInfoEnrichmentControls enrichment = network.enrichment;
     HeartbeatControls heartbeat = network.heartbeat;
+    BouncerControls bouncer = network.bouncer;
     JSpinner monitorIsonPollIntervalSeconds = network.monitorIsonPollIntervalSeconds;
     JCheckBox trustAllTlsCertificates = network.trustAllTlsCertificates;
+    JCheckBox genericBouncerPreferLoginHint = bouncer.preferLoginHint;
+    JTextField genericBouncerLoginTemplate = bouncer.loginTemplate;
 
     JPanel networkPanel = network.networkPanel;
     JPanel userLookupsPanel = network.userLookupsPanel;
@@ -1470,6 +1475,9 @@ public class PreferencesDialog {
               ((Number) monitorIsonPollIntervalSeconds.getValue()).intValue();
           if (monitorIsonPollIntervalSecondsV < 5) monitorIsonPollIntervalSecondsV = 5;
           if (monitorIsonPollIntervalSecondsV > 600) monitorIsonPollIntervalSecondsV = 600;
+          boolean genericBouncerPreferLoginHintV = genericBouncerPreferLoginHint.isSelected();
+          String genericBouncerLoginTemplateV =
+              Objects.toString(genericBouncerLoginTemplate.getText(), "").trim();
 
           UiSettings prev = settingsBus.get();
           boolean outgoingColorEnabledV = outgoing.enabled.isSelected();
@@ -2015,6 +2023,8 @@ public class PreferencesDialog {
                 next.userInfoEnrichmentPeriodicRefreshNicksPerTick());
             runtimeConfig.rememberMonitorIsonPollIntervalSeconds(
                 next.monitorIsonFallbackPollIntervalSeconds());
+            runtimeConfig.rememberGenericBouncerPreferLoginHint(genericBouncerPreferLoginHintV);
+            runtimeConfig.rememberGenericBouncerLoginTemplate(genericBouncerLoginTemplateV);
             runtimeConfig.rememberClientProxy(proxyCfg);
             NetProxyContext.configure(proxyCfg);
             runtimeConfig.rememberClientHeartbeat(heartbeatCfg);
@@ -5387,10 +5397,59 @@ public class PreferencesDialog {
     heartbeatTab.add(new JLabel("Timeout (sec):"));
     heartbeatTab.add(heartbeatTimeoutSeconds, "w 110!");
 
+    // ---- Bouncer tab ----
+    JPanel bouncerTab =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
+    bouncerTab.setOpaque(false);
+    JPanel bouncerHeader = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
+    bouncerHeader.setOpaque(false);
+    bouncerHeader.add(sectionTitle("Bouncer discovery defaults"), "growx, wmin 0");
+    bouncerHeader.add(
+        whyHelpButton(
+            "Bouncer discovery defaults",
+            "These defaults are used by the generic bouncer mapping strategy for discovered networks.\n\n"
+                + "Use a login template to shape derived usernames.\n"
+                + "Use hint preference to accept or ignore login user hints sent by the bouncer."),
+        "align right");
+    bouncerTab.add(bouncerHeader, "span 2, growx, wmin 0, wrap");
+
+    JTextArea bouncerBlurb = subtleInfoText();
+    bouncerBlurb.setText(
+        "Controls how generic bouncer-discovered networks map to ephemeral server login users.");
+    bouncerTab.add(bouncerBlurb, "span 2, growx, wmin 0, wrap");
+
+    boolean preferLoginHintDefault =
+        runtimeConfig == null
+            ? DEFAULT_GENERIC_BOUNCER_PREFER_LOGIN_HINT
+            : runtimeConfig.readGenericBouncerPreferLoginHint(
+                DEFAULT_GENERIC_BOUNCER_PREFER_LOGIN_HINT);
+    String loginTemplateDefault =
+        runtimeConfig == null
+            ? DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE
+            : runtimeConfig.readGenericBouncerLoginTemplate(DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE);
+
+    JCheckBox genericBouncerPreferLoginHint = new JCheckBox();
+    genericBouncerPreferLoginHint.setSelected(preferLoginHintDefault);
+    JComponent genericBouncerPreferLoginHintRow =
+        wrapCheckBox(
+            genericBouncerPreferLoginHint, "Prefer login user hint from discovery payloads");
+    bouncerTab.add(genericBouncerPreferLoginHintRow, "span 2, growx, wmin 0, wrap");
+
+    JTextField genericBouncerLoginTemplate = new JTextField(loginTemplateDefault);
+    genericBouncerLoginTemplate.putClientProperty(
+        FlatClientProperties.PLACEHOLDER_TEXT, DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE);
+    JTextArea genericBouncerTemplateHelp = subtleInfoText();
+    genericBouncerTemplateHelp.setText(
+        "Template tokens: {base} and {network}. Example: {base}/{network}");
+    bouncerTab.add(new JLabel("Login template:"));
+    bouncerTab.add(genericBouncerLoginTemplate, "growx, wmin 0");
+    bouncerTab.add(genericBouncerTemplateHelp, "span 2, growx, wmin 0, wrap");
+
     JTabbedPane networkTabs = new JTabbedPane();
     networkTabs.addTab("Proxy", padSubTab(proxyTab));
     networkTabs.addTab("TLS", padSubTab(tlsTab));
     networkTabs.addTab("Heartbeat", padSubTab(heartbeatTab));
+    networkTabs.addTab("Bouncer", padSubTab(bouncerTab));
 
     JPanel networkIntro =
         new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[grow,fill]6[]", "[]"));
@@ -5421,6 +5480,8 @@ public class PreferencesDialog {
     HeartbeatControls heartbeatControls =
         new HeartbeatControls(
             heartbeatEnabled, heartbeatCheckPeriodSeconds, heartbeatTimeoutSeconds);
+    BouncerControls bouncerControls =
+        new BouncerControls(genericBouncerPreferLoginHint, genericBouncerLoginTemplate);
     userLookupsPanel.add(tabTitle("User lookups"), "growx, wrap");
 
     JPanel userLookupsIntro = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
@@ -5949,6 +6010,7 @@ public class PreferencesDialog {
         userhostControls,
         enrichmentControls,
         heartbeatControls,
+        bouncerControls,
         monitorIsonPollIntervalSeconds,
         trustAllTlsCertificates,
         networkPanel,
@@ -11363,11 +11425,14 @@ public class PreferencesDialog {
   private record HeartbeatControls(
       JCheckBox enabled, JSpinner checkPeriodSeconds, JSpinner timeoutSeconds) {}
 
+  private record BouncerControls(JCheckBox preferLoginHint, JTextField loginTemplate) {}
+
   private record NetworkAdvancedControls(
       ProxyControls proxy,
       UserhostControls userhost,
       UserInfoEnrichmentControls enrichment,
       HeartbeatControls heartbeat,
+      BouncerControls bouncer,
       JSpinner monitorIsonPollIntervalSeconds,
       JCheckBox trustAllTlsCertificates,
       JPanel networkPanel,

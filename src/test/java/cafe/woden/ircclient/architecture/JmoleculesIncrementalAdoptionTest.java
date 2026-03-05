@@ -31,6 +31,11 @@ import cafe.woden.ircclient.app.core.MediatorHistoryIngestOrchestrator;
 import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
+import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
+import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
+import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
+import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
+import cafe.woden.ircclient.bouncer.ResolvedBouncerNetwork;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
@@ -51,6 +56,7 @@ import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.interceptors.InterceptorHit;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.irc.BouncerIrcConnectionPortAdapter;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
@@ -166,6 +172,10 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(InviteAutoJoinConfigPort.class, ApplicationLayer.class);
     assertAnnotated(ChatCommandRuntimeConfigPort.class, ApplicationLayer.class);
     assertAnnotated(ConnectionRuntimeConfigPort.class, ApplicationLayer.class);
+    assertAnnotated(BouncerConnectionPort.class, ApplicationLayer.class);
+    assertAnnotated(BouncerAutoConnectStore.class, ApplicationLayer.class);
+    assertAnnotated(AbstractBouncerAutoConnectStore.class, ApplicationLayer.class);
+    assertAnnotated(BouncerNetworkDiscoveryOrchestrator.class, ApplicationLayer.class);
     assertAnnotated(LocalFilterCommandHandler.class, ApplicationLayer.class);
     assertAnnotated(PerformOnConnectService.class, ApplicationLayer.class);
     assertAnnotated(JfrSnapshotSummarizer.class, ApplicationLayer.class);
@@ -182,6 +192,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(InboundIgnorePolicy.class, ApplicationLayer.class);
 
     assertAnnotated(SwingUiPort.class, InterfaceLayer.class);
+    assertAnnotated(BouncerIrcConnectionPortAdapter.class, InfrastructureLayer.class);
     assertAnnotated(PircbotxIrcClientService.class, InfrastructureLayer.class);
 
     assertTrue(UiPort.class.isInterface(), "UiPort should remain an interface");
@@ -251,6 +262,9 @@ class JmoleculesIncrementalAdoptionTest {
     assertTrue(
         ConnectionRuntimeConfigPort.class.isInterface(),
         "ConnectionRuntimeConfigPort should remain an interface");
+    assertTrue(
+        BouncerConnectionPort.class.isInterface(),
+        "BouncerConnectionPort should remain an interface");
   }
 
   @Test
@@ -269,6 +283,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(InterceptorDefinition.class, ValueObject.class);
     assertAnnotated(InterceptorRule.class, ValueObject.class);
     assertAnnotated(InterceptorHit.class, ValueObject.class);
+    assertAnnotated(ResolvedBouncerNetwork.class, ValueObject.class);
   }
 
   @Test

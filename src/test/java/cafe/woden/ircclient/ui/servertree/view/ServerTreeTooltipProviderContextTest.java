@@ -28,6 +28,7 @@ class ServerTreeTooltipProviderContextTest {
             value -> false,
             value -> true,
             value -> false,
+            value -> false,
             value -> true,
             value -> false,
             value -> true,
@@ -36,10 +37,13 @@ class ServerTreeTooltipProviderContextTest {
             serverId -> " diagnostic",
             serverId -> "soju".equals(serverId),
             serverId -> "znc".equals(serverId),
+            serverId -> "bouncer".equals(serverId),
             serverId -> "origin-a",
             serverId -> "origin-b",
+            serverId -> "origin-c",
             serverId -> "Libera",
             (originId, networkKey) -> true,
+            (originId, networkKey) -> false,
             (originId, networkKey) -> false,
             () -> true,
             value -> value == nodeData);
@@ -50,6 +54,7 @@ class ServerTreeTooltipProviderContextTest {
     assertFalse(context.isApplicationRootNode(node));
     assertFalse(context.isSojuNetworksGroupNode(node));
     assertTrue(context.isZncNetworksGroupNode(node));
+    assertFalse(context.isGenericNetworksGroupNode(node));
     assertFalse(context.isInterceptorsGroupNode(node));
     assertTrue(context.isMonitorGroupNode(node));
     assertFalse(context.isOtherGroupNode(node));
@@ -59,11 +64,14 @@ class ServerTreeTooltipProviderContextTest {
     assertEquals(" diagnostic", context.connectionDiagnosticsTipForServer("libera"));
     assertTrue(context.isSojuEphemeralServer("soju"));
     assertTrue(context.isZncEphemeralServer("znc"));
+    assertTrue(context.isGenericEphemeralServer("bouncer"));
     assertEquals("origin-a", context.sojuOriginByServerId("libera"));
     assertEquals("origin-b", context.zncOriginByServerId("libera"));
+    assertEquals("origin-c", context.genericOriginByServerId("libera"));
     assertEquals("Libera", context.serverDisplayName("libera"));
     assertTrue(context.isSojuAutoConnectEnabled("origin-a", "Libera"));
     assertFalse(context.isZncAutoConnectEnabled("origin-b", "Libera"));
+    assertFalse(context.isGenericAutoConnectEnabled("origin-c", "Libera"));
     assertTrue(context.isApplicationJfrActive());
     assertTrue(context.isBouncerControlStatusNode(nodeData));
   }

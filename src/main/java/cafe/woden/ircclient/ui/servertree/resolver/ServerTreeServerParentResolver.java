@@ -23,6 +23,8 @@ public final class ServerTreeServerParentResolver {
     DefaultMutableTreeNode sojuGroupNode(String originServerId);
 
     DefaultMutableTreeNode zncGroupNode(String originServerId);
+
+    DefaultMutableTreeNode genericGroupNode(String originServerId);
   }
 
   public static Context context(
@@ -30,12 +32,14 @@ public final class ServerTreeServerParentResolver {
       Consumer<String> ensureServerRoot,
       Supplier<DefaultMutableTreeNode> ircRoot,
       Function<String, DefaultMutableTreeNode> sojuGroupNode,
-      Function<String, DefaultMutableTreeNode> zncGroupNode) {
+      Function<String, DefaultMutableTreeNode> zncGroupNode,
+      Function<String, DefaultMutableTreeNode> genericGroupNode) {
     Objects.requireNonNull(hasServer, "hasServer");
     Objects.requireNonNull(ensureServerRoot, "ensureServerRoot");
     Objects.requireNonNull(ircRoot, "ircRoot");
     Objects.requireNonNull(sojuGroupNode, "sojuGroupNode");
     Objects.requireNonNull(zncGroupNode, "zncGroupNode");
+    Objects.requireNonNull(genericGroupNode, "genericGroupNode");
     return new Context() {
       @Override
       public boolean hasServer(String serverId) {
@@ -61,20 +65,29 @@ public final class ServerTreeServerParentResolver {
       public DefaultMutableTreeNode zncGroupNode(String originServerId) {
         return zncGroupNode.apply(originServerId);
       }
+
+      @Override
+      public DefaultMutableTreeNode genericGroupNode(String originServerId) {
+        return genericGroupNode.apply(originServerId);
+      }
     };
   }
 
   private final Map<String, String> sojuOriginByServerId;
   private final Map<String, String> zncOriginByServerId;
+  private final Map<String, String> genericOriginByServerId;
   private final Context context;
 
   public ServerTreeServerParentResolver(
       Map<String, String> sojuOriginByServerId,
       Map<String, String> zncOriginByServerId,
+      Map<String, String> genericOriginByServerId,
       Context context) {
     this.sojuOriginByServerId =
         Objects.requireNonNull(sojuOriginByServerId, "sojuOriginByServerId");
     this.zncOriginByServerId = Objects.requireNonNull(zncOriginByServerId, "zncOriginByServerId");
+    this.genericOriginByServerId =
+        Objects.requireNonNull(genericOriginByServerId, "genericOriginByServerId");
     this.context = Objects.requireNonNull(context, "context");
   }
 
@@ -104,6 +117,19 @@ public final class ServerTreeServerParentResolver {
       if (origin != null && !origin.isBlank()) {
         ensureOriginServerExists(origin);
         DefaultMutableTreeNode group = context.zncGroupNode(origin);
+        if (group != null) parent = group;
+      }
+      return parent;
+    }
+
+    if (id.startsWith("bouncer:")) {
+      String origin = genericOriginByServerId.get(id);
+      if (origin == null || origin.isBlank()) {
+        origin = ServerTreeNetworkGroupManager.parseOriginFromCompoundServerId(id, "bouncer:");
+      }
+      if (origin != null && !origin.isBlank()) {
+        ensureOriginServerExists(origin);
+        DefaultMutableTreeNode group = context.genericGroupNode(origin);
         if (group != null) parent = group;
       }
     }

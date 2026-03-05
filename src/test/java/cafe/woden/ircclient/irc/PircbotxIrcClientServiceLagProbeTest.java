@@ -6,13 +6,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
-import cafe.woden.ircclient.irc.soju.SojuEphemeralNetworkImporter;
-import cafe.woden.ircclient.irc.znc.ZncEphemeralNetworkImporter;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -69,8 +68,7 @@ class PircbotxIrcClientServiceLagProbeTest {
     PircbotxBotFactory botFactory = mock(PircbotxBotFactory.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     Ircv3StsPolicyService stsPolicies = mock(Ircv3StsPolicyService.class);
-    SojuEphemeralNetworkImporter sojuImporter = mock(SojuEphemeralNetworkImporter.class);
-    ZncEphemeralNetworkImporter zncImporter = mock(ZncEphemeralNetworkImporter.class);
+    BouncerDiscoveryEventPort bouncerDiscoveryEvents = mock(BouncerDiscoveryEventPort.class);
     PircbotxConnectionTimersRx timers = mock(PircbotxConnectionTimersRx.class);
 
     ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider =
@@ -85,8 +83,7 @@ class PircbotxIrcClientServiceLagProbeTest {
         new ZncProperties(null, null),
         runtimeConfig,
         stsPolicies,
-        sojuImporter,
-        zncImporter,
+        bouncerDiscoveryEvents,
         timers,
         playbackCursorProviderProvider);
   }

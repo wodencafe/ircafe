@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.irc;
 
-import cafe.woden.ircclient.irc.soju.SojuNetwork;
-import cafe.woden.ircclient.irc.znc.ZncNetwork;
+import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.util.Map;
 import java.util.Objects;
@@ -93,7 +92,7 @@ final class PircbotxConnectionState {
   // Captures networks discovered via *status ListNetworks (ZNC multi-network).
   final AtomicBoolean zncListNetworksCaptureActive = new AtomicBoolean(false);
   final AtomicLong zncListNetworksCaptureStartedMs = new AtomicLong(0);
-  final Map<String, ZncNetwork> zncNetworksByNameLower = new ConcurrentHashMap<>();
+  final Map<String, BouncerDiscoveredNetwork> zncNetworksByNameLower = new ConcurrentHashMap<>();
 
   // ZNC (bouncer) detection / username parsing.
   final AtomicBoolean zncDetected = new AtomicBoolean(false);
@@ -163,7 +162,11 @@ final class PircbotxConnectionState {
   final AtomicReference<String> sojuBouncerNetId = new AtomicReference<>("");
 
   // Networks discovered via `BOUNCER LISTNETWORKS` (de-duped by netId).
-  final Map<String, SojuNetwork> sojuNetworksByNetId = new ConcurrentHashMap<>();
+  final Map<String, BouncerDiscoveredNetwork> sojuNetworksByNetId = new ConcurrentHashMap<>();
+
+  // Networks discovered via generic bouncer protocol lines.
+  final Map<String, BouncerDiscoveredNetwork> genericBouncerNetworksById =
+      new ConcurrentHashMap<>();
 
   // IRCv3 server-time support (canonical message timestamps).
   final AtomicBoolean serverTimeCapAcked = new AtomicBoolean(false);

@@ -45,7 +45,8 @@ class ServerTreeCellRendererContextTest {
             value -> false,
             value -> true,
             value -> false,
-            value -> true);
+            value -> true,
+            value -> false);
 
     assertTrue(context.serverTreeNotificationBadgesEnabled());
     assertEquals(125, context.unreadBadgeScalePercent());
@@ -71,5 +72,6 @@ class ServerTreeCellRendererContextTest {
     assertTrue(context.isPrivateMessagesGroupNode(node));
     assertFalse(context.isSojuNetworksGroupNode(node));
     assertTrue(context.isZncNetworksGroupNode(node));
+    assertFalse(context.isGenericNetworksGroupNode(node));
   }
 }

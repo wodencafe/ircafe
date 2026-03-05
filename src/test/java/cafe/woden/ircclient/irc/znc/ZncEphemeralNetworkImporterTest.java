@@ -5,12 +5,12 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.ZncProperties;
-import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,13 +45,19 @@ class ZncEphemeralNetworkImporterTest {
     ZncAutoConnectStore autoConnect =
         new ZncAutoConnectStore(
             new ZncProperties(Map.of(), new ZncProperties.Discovery(true)), runtime);
-    IrcClientService irc = mock(IrcClientService.class);
-    when(irc.connect(anyString())).thenReturn(Completable.complete());
+    BouncerConnectionPort connectionPort = mock(BouncerConnectionPort.class);
+    when(connectionPort.connect(anyString())).thenReturn(Completable.complete());
 
     ZncEphemeralNetworkImporter importer =
-        new ZncEphemeralNetworkImporter(configured, ephemeral, autoConnect, runtime, irc);
+        new ZncEphemeralNetworkImporter(
+            new ZncBouncerNetworkMappingStrategy(),
+            configured,
+            ephemeral,
+            autoConnect,
+            runtime,
+            connectionPort);
 
-    importer.onNetworkDiscovered(new ZncNetwork("znc", "Libera.Chat", true));
+    importer.onZncNetworkDiscovered(new ZncNetwork("znc", "Libera.Chat", true));
 
     assertTrue(ephemeral.containsId("znc:znc:libera.chat"));
     IrcProperties.Server imported = ephemeral.require("znc:znc:libera.chat");
@@ -85,15 +91,21 @@ class ZncEphemeralNetworkImporterTest {
     ZncAutoConnectStore autoConnect =
         new ZncAutoConnectStore(
             new ZncProperties(Map.of(), new ZncProperties.Discovery(true)), runtime);
-    IrcClientService irc = mock(IrcClientService.class);
-    when(irc.connect(anyString())).thenReturn(Completable.complete());
+    BouncerConnectionPort connectionPort = mock(BouncerConnectionPort.class);
+    when(connectionPort.connect(anyString())).thenReturn(Completable.complete());
 
     ZncEphemeralNetworkImporter importer =
-        new ZncEphemeralNetworkImporter(configured, ephemeral, autoConnect, runtime, irc);
+        new ZncEphemeralNetworkImporter(
+            new ZncBouncerNetworkMappingStrategy(),
+            configured,
+            ephemeral,
+            autoConnect,
+            runtime,
+            connectionPort);
     ZncNetwork net = new ZncNetwork("znc", "oftc", false);
 
-    importer.onNetworkDiscovered(net);
-    importer.onNetworkDiscovered(net);
+    importer.onZncNetworkDiscovered(net);
+    importer.onZncNetworkDiscovered(net);
 
     assertEquals(1, ephemeral.serverIds().size());
     assertTrue(ephemeral.containsId("znc:znc:oftc"));
@@ -124,14 +136,20 @@ class ZncEphemeralNetworkImporterTest {
     ZncAutoConnectStore autoConnect =
         new ZncAutoConnectStore(
             new ZncProperties(Map.of(), new ZncProperties.Discovery(true)), runtime);
-    IrcClientService irc = mock(IrcClientService.class);
-    when(irc.connect(anyString())).thenReturn(Completable.complete());
+    BouncerConnectionPort connectionPort = mock(BouncerConnectionPort.class);
+    when(connectionPort.connect(anyString())).thenReturn(Completable.complete());
 
     ZncEphemeralNetworkImporter importer =
-        new ZncEphemeralNetworkImporter(configured, ephemeral, autoConnect, runtime, irc);
+        new ZncEphemeralNetworkImporter(
+            new ZncBouncerNetworkMappingStrategy(),
+            configured,
+            ephemeral,
+            autoConnect,
+            runtime,
+            connectionPort);
 
-    importer.onNetworkDiscovered(new ZncNetwork("znc", "libera", true));
-    importer.onNetworkDiscovered(new ZncNetwork("znc", "oftc", true));
+    importer.onZncNetworkDiscovered(new ZncNetwork("znc", "libera", true));
+    importer.onZncNetworkDiscovered(new ZncNetwork("znc", "oftc", true));
 
     assertEquals(2, ephemeral.serverIds().size());
 
@@ -170,12 +188,18 @@ class ZncEphemeralNetworkImporterTest {
     ZncAutoConnectStore autoConnect =
         new ZncAutoConnectStore(
             new ZncProperties(Map.of(), new ZncProperties.Discovery(true)), runtime);
-    IrcClientService irc = mock(IrcClientService.class);
-    when(irc.connect(anyString())).thenReturn(Completable.complete());
+    BouncerConnectionPort connectionPort = mock(BouncerConnectionPort.class);
+    when(connectionPort.connect(anyString())).thenReturn(Completable.complete());
 
     ZncEphemeralNetworkImporter importer =
-        new ZncEphemeralNetworkImporter(configured, ephemeral, autoConnect, runtime, irc);
-    importer.onNetworkDiscovered(new ZncNetwork("znc", "Libera.Chat", true));
+        new ZncEphemeralNetworkImporter(
+            new ZncBouncerNetworkMappingStrategy(),
+            configured,
+            ephemeral,
+            autoConnect,
+            runtime,
+            connectionPort);
+    importer.onZncNetworkDiscovered(new ZncNetwork("znc", "Libera.Chat", true));
 
     IrcProperties.Server imported = ephemeral.require("znc:znc:libera.chat");
     assertTrue(imported.autoJoin().contains("#ircafe"));

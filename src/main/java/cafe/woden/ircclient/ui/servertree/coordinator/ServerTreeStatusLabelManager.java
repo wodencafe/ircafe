@@ -19,6 +19,7 @@ public final class ServerTreeStatusLabelManager {
   private final String bouncerControlLabel;
   private final Set<String> sojuBouncerControlServerIds;
   private final Set<String> zncBouncerControlServerIds;
+  private final Set<String> genericBouncerControlServerIds;
   private final Map<TargetRef, DefaultMutableTreeNode> leaves;
   private final Context context;
 
@@ -27,6 +28,7 @@ public final class ServerTreeStatusLabelManager {
       String bouncerControlLabel,
       Set<String> sojuBouncerControlServerIds,
       Set<String> zncBouncerControlServerIds,
+      Set<String> genericBouncerControlServerIds,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
       Context context) {
     this.statusLabel = Objects.toString(statusLabel, "Server");
@@ -35,6 +37,8 @@ public final class ServerTreeStatusLabelManager {
         Objects.requireNonNull(sojuBouncerControlServerIds, "sojuBouncerControlServerIds");
     this.zncBouncerControlServerIds =
         Objects.requireNonNull(zncBouncerControlServerIds, "zncBouncerControlServerIds");
+    this.genericBouncerControlServerIds =
+        Objects.requireNonNull(genericBouncerControlServerIds, "genericBouncerControlServerIds");
     this.leaves = Objects.requireNonNull(leaves, "leaves");
     this.context = Objects.requireNonNull(context, "context");
   }
@@ -42,26 +46,36 @@ public final class ServerTreeStatusLabelManager {
   public String statusLeafLabelForServer(String serverId) {
     String id = normalize(serverId);
     if (id.isEmpty()) return statusLabel;
-    return (sojuBouncerControlServerIds.contains(id) || zncBouncerControlServerIds.contains(id))
+    return (sojuBouncerControlServerIds.contains(id)
+            || zncBouncerControlServerIds.contains(id)
+            || genericBouncerControlServerIds.contains(id))
         ? bouncerControlLabel
         : statusLabel;
   }
 
   public void updateBouncerControlLabels(
-      Set<String> nextSojuBouncerControl, Set<String> nextZncBouncerControl) {
+      Set<String> nextSojuBouncerControl,
+      Set<String> nextZncBouncerControl,
+      Set<String> nextGenericBouncerControl) {
     Set<String> nextSoju = nextSojuBouncerControl == null ? Set.of() : nextSojuBouncerControl;
     Set<String> nextZnc = nextZncBouncerControl == null ? Set.of() : nextZncBouncerControl;
+    Set<String> nextGeneric =
+        nextGenericBouncerControl == null ? Set.of() : nextGenericBouncerControl;
 
     Set<String> prevUnion = new HashSet<>(sojuBouncerControlServerIds);
     prevUnion.addAll(zncBouncerControlServerIds);
+    prevUnion.addAll(genericBouncerControlServerIds);
 
     sojuBouncerControlServerIds.clear();
     sojuBouncerControlServerIds.addAll(nextSoju);
     zncBouncerControlServerIds.clear();
     zncBouncerControlServerIds.addAll(nextZnc);
+    genericBouncerControlServerIds.clear();
+    genericBouncerControlServerIds.addAll(nextGeneric);
 
     Set<String> nextUnion = new HashSet<>(nextSoju);
     nextUnion.addAll(nextZnc);
+    nextUnion.addAll(nextGeneric);
 
     Set<String> all = new HashSet<>(prevUnion);
     all.addAll(nextUnion);

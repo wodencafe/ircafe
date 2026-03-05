@@ -50,6 +50,24 @@ class ServerTreeNodeReorderPolicyTest {
   }
 
   @Test
+  void doesNotMoveChannelBelowGenericBouncerNetworksGroup() {
+    DefaultMutableTreeNode server = serverNode("test");
+    DefaultMutableTreeNode ch1 = channelNode("test", "#alpha");
+    DefaultMutableTreeNode ch2 = channelNode("test", "#beta");
+    server.add(statusNode("test"));
+    server.add(notificationsNode("test"));
+    server.add(ch1);
+    server.add(ch2);
+    server.add(new DefaultMutableTreeNode("Bouncer Networks"));
+    server.add(new DefaultMutableTreeNode("Private messages"));
+
+    ServerTreeNodeReorderPolicy policy = policyForServerLabel("test");
+    TreeNodeReorderPolicy.MovePlan plan = policy.planMove(ch2, +1);
+
+    assertNull(plan, "last movable channel should not move below reserved group nodes");
+  }
+
+  @Test
   void allowsMovingChannelWithinChannelRegion() {
     DefaultMutableTreeNode server = serverNode("test");
     DefaultMutableTreeNode ch1 = channelNode("test", "#alpha");

@@ -26,7 +26,10 @@ public final class ServerTreeServerLifecycleFacade {
   }
 
   public void updateBouncerControlLabels(
-      Set<String> nextSojuBouncerControl, Set<String> nextZncBouncerControl) {
-    statusLabelManager.updateBouncerControlLabels(nextSojuBouncerControl, nextZncBouncerControl);
+      Set<String> nextSojuBouncerControl,
+      Set<String> nextZncBouncerControl,
+      Set<String> nextGenericBouncerControl) {
+    statusLabelManager.updateBouncerControlLabels(
+        nextSojuBouncerControl, nextZncBouncerControl, nextGenericBouncerControl);
   }
 }

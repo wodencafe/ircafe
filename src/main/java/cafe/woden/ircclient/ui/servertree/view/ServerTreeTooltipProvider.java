@@ -33,6 +33,8 @@ public final class ServerTreeTooltipProvider {
 
     boolean isZncNetworksGroupNode(DefaultMutableTreeNode node);
 
+    boolean isGenericNetworksGroupNode(DefaultMutableTreeNode node);
+
     boolean isInterceptorsGroupNode(DefaultMutableTreeNode node);
 
     boolean isMonitorGroupNode(DefaultMutableTreeNode node);
@@ -51,15 +53,21 @@ public final class ServerTreeTooltipProvider {
 
     boolean isZncEphemeralServer(String serverId);
 
+    boolean isGenericEphemeralServer(String serverId);
+
     String sojuOriginByServerId(String serverId);
 
     String zncOriginByServerId(String serverId);
+
+    String genericOriginByServerId(String serverId);
 
     String serverDisplayName(String serverId);
 
     boolean isSojuAutoConnectEnabled(String originId, String networkKey);
 
     boolean isZncAutoConnectEnabled(String originId, String networkKey);
+
+    boolean isGenericAutoConnectEnabled(String originId, String networkKey);
 
     boolean isApplicationJfrActive();
 
@@ -73,6 +81,7 @@ public final class ServerTreeTooltipProvider {
       Predicate<DefaultMutableTreeNode> isApplicationRootNode,
       Predicate<DefaultMutableTreeNode> isSojuNetworksGroupNode,
       Predicate<DefaultMutableTreeNode> isZncNetworksGroupNode,
+      Predicate<DefaultMutableTreeNode> isGenericNetworksGroupNode,
       Predicate<DefaultMutableTreeNode> isInterceptorsGroupNode,
       Predicate<DefaultMutableTreeNode> isMonitorGroupNode,
       Predicate<DefaultMutableTreeNode> isOtherGroupNode,
@@ -82,11 +91,14 @@ public final class ServerTreeTooltipProvider {
       Function<String, String> connectionDiagnosticsTipForServer,
       Predicate<String> isSojuEphemeralServer,
       Predicate<String> isZncEphemeralServer,
+      Predicate<String> isGenericEphemeralServer,
       Function<String, String> sojuOriginByServerId,
       Function<String, String> zncOriginByServerId,
+      Function<String, String> genericOriginByServerId,
       Function<String, String> serverDisplayName,
       java.util.function.BiPredicate<String, String> isSojuAutoConnectEnabled,
       java.util.function.BiPredicate<String, String> isZncAutoConnectEnabled,
+      java.util.function.BiPredicate<String, String> isGenericAutoConnectEnabled,
       Supplier<Boolean> isApplicationJfrActive,
       Predicate<ServerTreeNodeData> isBouncerControlStatusNode) {
     Objects.requireNonNull(serverIdAt, "serverIdAt");
@@ -95,6 +107,7 @@ public final class ServerTreeTooltipProvider {
     Objects.requireNonNull(isApplicationRootNode, "isApplicationRootNode");
     Objects.requireNonNull(isSojuNetworksGroupNode, "isSojuNetworksGroupNode");
     Objects.requireNonNull(isZncNetworksGroupNode, "isZncNetworksGroupNode");
+    Objects.requireNonNull(isGenericNetworksGroupNode, "isGenericNetworksGroupNode");
     Objects.requireNonNull(isInterceptorsGroupNode, "isInterceptorsGroupNode");
     Objects.requireNonNull(isMonitorGroupNode, "isMonitorGroupNode");
     Objects.requireNonNull(isOtherGroupNode, "isOtherGroupNode");
@@ -104,11 +117,14 @@ public final class ServerTreeTooltipProvider {
     Objects.requireNonNull(connectionDiagnosticsTipForServer, "connectionDiagnosticsTipForServer");
     Objects.requireNonNull(isSojuEphemeralServer, "isSojuEphemeralServer");
     Objects.requireNonNull(isZncEphemeralServer, "isZncEphemeralServer");
+    Objects.requireNonNull(isGenericEphemeralServer, "isGenericEphemeralServer");
     Objects.requireNonNull(sojuOriginByServerId, "sojuOriginByServerId");
     Objects.requireNonNull(zncOriginByServerId, "zncOriginByServerId");
+    Objects.requireNonNull(genericOriginByServerId, "genericOriginByServerId");
     Objects.requireNonNull(serverDisplayName, "serverDisplayName");
     Objects.requireNonNull(isSojuAutoConnectEnabled, "isSojuAutoConnectEnabled");
     Objects.requireNonNull(isZncAutoConnectEnabled, "isZncAutoConnectEnabled");
+    Objects.requireNonNull(isGenericAutoConnectEnabled, "isGenericAutoConnectEnabled");
     Objects.requireNonNull(isApplicationJfrActive, "isApplicationJfrActive");
     Objects.requireNonNull(isBouncerControlStatusNode, "isBouncerControlStatusNode");
     return new Context() {
@@ -140,6 +156,11 @@ public final class ServerTreeTooltipProvider {
       @Override
       public boolean isZncNetworksGroupNode(DefaultMutableTreeNode node) {
         return isZncNetworksGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isGenericNetworksGroupNode(DefaultMutableTreeNode node) {
+        return isGenericNetworksGroupNode.test(node);
       }
 
       @Override
@@ -188,6 +209,11 @@ public final class ServerTreeTooltipProvider {
       }
 
       @Override
+      public boolean isGenericEphemeralServer(String serverId) {
+        return isGenericEphemeralServer.test(serverId);
+      }
+
+      @Override
       public String sojuOriginByServerId(String serverId) {
         return sojuOriginByServerId.apply(serverId);
       }
@@ -195,6 +221,11 @@ public final class ServerTreeTooltipProvider {
       @Override
       public String zncOriginByServerId(String serverId) {
         return zncOriginByServerId.apply(serverId);
+      }
+
+      @Override
+      public String genericOriginByServerId(String serverId) {
+        return genericOriginByServerId.apply(serverId);
       }
 
       @Override
@@ -210,6 +241,11 @@ public final class ServerTreeTooltipProvider {
       @Override
       public boolean isZncAutoConnectEnabled(String originId, String networkKey) {
         return isZncAutoConnectEnabled.test(originId, networkKey);
+      }
+
+      @Override
+      public boolean isGenericAutoConnectEnabled(String originId, String networkKey) {
+        return isGenericAutoConnectEnabled.test(originId, networkKey);
       }
 
       @Override
@@ -263,6 +299,10 @@ public final class ServerTreeTooltipProvider {
       return "ZNC networks discovered from the bouncer (not saved).";
     }
 
+    if (context.isGenericNetworksGroupNode(node)) {
+      return "Bouncer networks discovered from generic protocol lines (not saved).";
+    }
+
     if (context.isInterceptorsGroupNode(node)) {
       return "Interceptors for this server. Count shows total captured hits.";
     }
@@ -284,13 +324,19 @@ public final class ServerTreeTooltipProvider {
     if (uo instanceof String serverId
         && context.isServerNode(node)
         && context.isSojuEphemeralServer(serverId)) {
-      return ephemeralServerTooltip(serverId, true);
+      return ephemeralServerTooltip(serverId, "soju");
     }
 
     if (uo instanceof String serverId
         && context.isServerNode(node)
         && context.isZncEphemeralServer(serverId)) {
-      return ephemeralServerTooltip(serverId, false);
+      return ephemeralServerTooltip(serverId, "znc");
+    }
+
+    if (uo instanceof String serverId
+        && context.isServerNode(node)
+        && context.isGenericEphemeralServer(serverId)) {
+      return ephemeralServerTooltip(serverId, "generic");
     }
 
     if (uo instanceof String serverId && context.isServerNode(node)) {
@@ -342,7 +388,8 @@ public final class ServerTreeTooltipProvider {
     return null;
   }
 
-  private String ephemeralServerTooltip(String serverId, boolean soju) {
+  private String ephemeralServerTooltip(String serverId, String backendId) {
+    String backend = Objects.toString(backendId, "").trim().toLowerCase(java.util.Locale.ROOT);
     ConnectionState state = context.connectionStateForServer(serverId);
     boolean desired = context.desiredOnlineForServer(serverId);
     String stateTip = "State: " + ServerTreeConnectionStateViewModel.stateLabel(state) + ".";
@@ -353,22 +400,32 @@ public final class ServerTreeTooltipProvider {
 
     String origin =
         Objects.toString(
-                soju
+                "soju".equals(backend)
                     ? context.sojuOriginByServerId(serverId)
-                    : context.zncOriginByServerId(serverId),
+                    : "znc".equals(backend)
+                        ? context.zncOriginByServerId(serverId)
+                        : context.genericOriginByServerId(serverId),
                 "")
             .trim();
     String display = context.serverDisplayName(serverId);
     boolean auto =
         !origin.isEmpty()
-            && (soju
+            && ("soju".equals(backend)
                 ? context.isSojuAutoConnectEnabled(origin, display)
-                : context.isZncAutoConnectEnabled(origin, display));
+                : "znc".equals(backend)
+                    ? context.isZncAutoConnectEnabled(origin, display)
+                    : context.isGenericAutoConnectEnabled(origin, display));
 
     String tip = stateTip + intentTip;
     if (!queueTip.isBlank()) tip += " " + queueTip;
     if (!diagnostics.isBlank()) tip += diagnostics;
-    tip += soju ? " Discovered from soju; not saved." : " Discovered from ZNC; not saved.";
+    if ("soju".equals(backend)) {
+      tip += " Discovered from soju; not saved.";
+    } else if ("znc".equals(backend)) {
+      tip += " Discovered from ZNC; not saved.";
+    } else {
+      tip += " Discovered from generic bouncer protocol; not saved.";
+    }
     if (auto) tip += " Auto-connect enabled.";
     if (!origin.isEmpty()) tip += " Origin: " + origin + ".";
     if (display != null && !display.isBlank()) tip += " Network: " + display + ".";

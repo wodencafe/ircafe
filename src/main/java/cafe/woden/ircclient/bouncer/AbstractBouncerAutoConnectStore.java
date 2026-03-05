@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.bouncer;
+package cafe.woden.ircclient.bouncer;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import io.reactivex.rxjava3.core.Flowable;
@@ -6,8 +6,10 @@ import io.reactivex.rxjava3.processors.BehaviorProcessor;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Shared state/persistence behavior for bouncer auto-connect stores. */
+@ApplicationLayer
 public abstract class AbstractBouncerAutoConnectStore implements BouncerAutoConnectStore {
 
   private final RuntimeConfigStore runtimeConfig;

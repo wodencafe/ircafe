@@ -215,7 +215,8 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
   private boolean isReservedServerTailNode(DefaultMutableTreeNode node) {
     return isPrivateMessagesGroupNode(node)
         || isSojuNetworksGroupNode(node)
-        || isZncNetworksGroupNode(node);
+        || isZncNetworksGroupNode(node)
+        || isGenericBouncerNetworksGroupNode(node);
   }
 
   private boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node) {
@@ -230,6 +231,13 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
     Object uo = node.getUserObject();
     if (!(uo instanceof String s)) return false;
     return s.trim().equalsIgnoreCase("ZNC Networks");
+  }
+
+  private boolean isGenericBouncerNetworksGroupNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    Object uo = node.getUserObject();
+    if (!(uo instanceof String s)) return false;
+    return s.trim().equalsIgnoreCase("Bouncer Networks");
   }
 
   private boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {

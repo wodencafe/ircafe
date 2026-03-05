@@ -69,9 +69,13 @@ public final class ServerTreeServerNodeMenuBuilder {
 
     boolean isZncEphemeralServer(String serverId);
 
+    boolean isGenericEphemeralServer(String serverId);
+
     String sojuOriginForServer(String serverId);
 
     String zncOriginForServer(String serverId);
+
+    String genericOriginForServer(String serverId);
 
     String serverDisplayNameOrDefault(String serverId);
 
@@ -79,13 +83,19 @@ public final class ServerTreeServerNodeMenuBuilder {
 
     boolean isZncAutoConnectEnabled(String originId, String networkKey);
 
+    boolean isGenericAutoConnectEnabled(String originId, String networkKey);
+
     void setSojuAutoConnectEnabled(String originId, String networkKey, boolean enabled);
 
     void setZncAutoConnectEnabled(String originId, String networkKey, boolean enabled);
 
+    void setGenericAutoConnectEnabled(String originId, String networkKey, boolean enabled);
+
     void refreshSojuAutoConnectBadges();
 
     void refreshZncAutoConnectBadges();
+
+    void refreshGenericAutoConnectBadges();
 
     String owningServerIdForNode(DefaultMutableTreeNode node);
   }
@@ -118,15 +128,20 @@ public final class ServerTreeServerNodeMenuBuilder {
       BiConsumer<String, Boolean> rememberServerAutoConnectOnStart,
       Predicate<String> isSojuEphemeralServer,
       Predicate<String> isZncEphemeralServer,
+      Predicate<String> isGenericEphemeralServer,
       Function<String, String> sojuOriginForServer,
       Function<String, String> zncOriginForServer,
+      Function<String, String> genericOriginForServer,
       Function<String, String> serverDisplayNameOrDefault,
       BiPredicate<String, String> isSojuAutoConnectEnabled,
       BiPredicate<String, String> isZncAutoConnectEnabled,
+      BiPredicate<String, String> isGenericAutoConnectEnabled,
       TriConsumer<String, String, Boolean> setSojuAutoConnectEnabled,
       TriConsumer<String, String, Boolean> setZncAutoConnectEnabled,
+      TriConsumer<String, String, Boolean> setGenericAutoConnectEnabled,
       Runnable refreshSojuAutoConnectBadges,
       Runnable refreshZncAutoConnectBadges,
+      Runnable refreshGenericAutoConnectBadges,
       Function<DefaultMutableTreeNode, String> owningServerIdForNode) {
     Objects.requireNonNull(isRootServerNode, "isRootServerNode");
     Objects.requireNonNull(prettyServerLabel, "prettyServerLabel");
@@ -150,15 +165,20 @@ public final class ServerTreeServerNodeMenuBuilder {
     Objects.requireNonNull(rememberServerAutoConnectOnStart, "rememberServerAutoConnectOnStart");
     Objects.requireNonNull(isSojuEphemeralServer, "isSojuEphemeralServer");
     Objects.requireNonNull(isZncEphemeralServer, "isZncEphemeralServer");
+    Objects.requireNonNull(isGenericEphemeralServer, "isGenericEphemeralServer");
     Objects.requireNonNull(sojuOriginForServer, "sojuOriginForServer");
     Objects.requireNonNull(zncOriginForServer, "zncOriginForServer");
+    Objects.requireNonNull(genericOriginForServer, "genericOriginForServer");
     Objects.requireNonNull(serverDisplayNameOrDefault, "serverDisplayNameOrDefault");
     Objects.requireNonNull(isSojuAutoConnectEnabled, "isSojuAutoConnectEnabled");
     Objects.requireNonNull(isZncAutoConnectEnabled, "isZncAutoConnectEnabled");
+    Objects.requireNonNull(isGenericAutoConnectEnabled, "isGenericAutoConnectEnabled");
     Objects.requireNonNull(setSojuAutoConnectEnabled, "setSojuAutoConnectEnabled");
     Objects.requireNonNull(setZncAutoConnectEnabled, "setZncAutoConnectEnabled");
+    Objects.requireNonNull(setGenericAutoConnectEnabled, "setGenericAutoConnectEnabled");
     Objects.requireNonNull(refreshSojuAutoConnectBadges, "refreshSojuAutoConnectBadges");
     Objects.requireNonNull(refreshZncAutoConnectBadges, "refreshZncAutoConnectBadges");
+    Objects.requireNonNull(refreshGenericAutoConnectBadges, "refreshGenericAutoConnectBadges");
     Objects.requireNonNull(owningServerIdForNode, "owningServerIdForNode");
     return new Context() {
       @Override
@@ -272,6 +292,11 @@ public final class ServerTreeServerNodeMenuBuilder {
       }
 
       @Override
+      public boolean isGenericEphemeralServer(String serverId) {
+        return isGenericEphemeralServer.test(serverId);
+      }
+
+      @Override
       public String sojuOriginForServer(String serverId) {
         return sojuOriginForServer.apply(serverId);
       }
@@ -279,6 +304,11 @@ public final class ServerTreeServerNodeMenuBuilder {
       @Override
       public String zncOriginForServer(String serverId) {
         return zncOriginForServer.apply(serverId);
+      }
+
+      @Override
+      public String genericOriginForServer(String serverId) {
+        return genericOriginForServer.apply(serverId);
       }
 
       @Override
@@ -297,6 +327,11 @@ public final class ServerTreeServerNodeMenuBuilder {
       }
 
       @Override
+      public boolean isGenericAutoConnectEnabled(String originId, String networkKey) {
+        return isGenericAutoConnectEnabled.test(originId, networkKey);
+      }
+
+      @Override
       public void setSojuAutoConnectEnabled(String originId, String networkKey, boolean enabled) {
         setSojuAutoConnectEnabled.accept(originId, networkKey, enabled);
       }
@@ -307,6 +342,12 @@ public final class ServerTreeServerNodeMenuBuilder {
       }
 
       @Override
+      public void setGenericAutoConnectEnabled(
+          String originId, String networkKey, boolean enabled) {
+        setGenericAutoConnectEnabled.accept(originId, networkKey, enabled);
+      }
+
+      @Override
       public void refreshSojuAutoConnectBadges() {
         refreshSojuAutoConnectBadges.run();
       }
@@ -314,6 +355,11 @@ public final class ServerTreeServerNodeMenuBuilder {
       @Override
       public void refreshZncAutoConnectBadges() {
         refreshZncAutoConnectBadges.run();
+      }
+
+      @Override
+      public void refreshGenericAutoConnectBadges() {
+        refreshGenericAutoConnectBadges.run();
       }
 
       @Override
@@ -467,6 +513,28 @@ public final class ServerTreeServerNodeMenuBuilder {
             if (originId == null || originId.isBlank()) return;
             context.setZncAutoConnectEnabled(originId, networkKey, auto.isSelected());
             context.refreshZncAutoConnectBadges();
+          });
+      menu.add(auto);
+    }
+
+    if (context.isGenericEphemeralServer(serverId)) {
+      String originId = context.genericOriginForServer(serverId);
+      String networkKey = context.serverDisplayNameOrDefault(serverId);
+      boolean enabled =
+          originId != null
+              && !originId.isBlank()
+              && context.isGenericAutoConnectEnabled(originId, networkKey);
+
+      menu.addSeparator();
+      JCheckBoxMenuItem auto =
+          new JCheckBoxMenuItem("Auto-connect \"" + networkKey + "\" next time");
+      auto.setSelected(enabled);
+      auto.setEnabled(originId != null && !originId.isBlank());
+      auto.addActionListener(
+          ev -> {
+            if (originId == null || originId.isBlank()) return;
+            context.setGenericAutoConnectEnabled(originId, networkKey, auto.isSelected());
+            context.refreshGenericAutoConnectBadges();
           });
       menu.add(auto);
     }

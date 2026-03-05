@@ -276,6 +276,7 @@ class ServerTreeDockableServerAutoConnectMenuTest {
         null,
         null,
         null,
+        null,
         new ConnectButton(),
         new DisconnectButton(),
         null,

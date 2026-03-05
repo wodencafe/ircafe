@@ -6,12 +6,11 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
-import cafe.woden.ircclient.irc.soju.SojuEphemeralNetworkImporter;
-import cafe.woden.ircclient.irc.znc.ZncEphemeralNetworkImporter;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
@@ -975,8 +974,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
     ServerProxyResolver proxyResolver = new ServerProxyResolver(serverCatalog);
     PircbotxBotFactory botFactory = new PircbotxBotFactory(proxyResolver, sojuProps, null);
 
-    SojuEphemeralNetworkImporter sojuImporter = mock(SojuEphemeralNetworkImporter.class);
-    ZncEphemeralNetworkImporter zncImporter = mock(ZncEphemeralNetworkImporter.class);
+    BouncerDiscoveryEventPort bouncerDiscoveryEvents = mock(BouncerDiscoveryEventPort.class);
 
     ScheduledExecutorService heartbeatExec =
         Executors.newSingleThreadScheduledExecutor(namedDaemonFactory("it-pircbotx-heartbeat"));
@@ -998,8 +996,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
             zncProps,
             null,
             stsPolicies,
-            sojuImporter,
-            zncImporter,
+            bouncerDiscoveryEvents,
             timers,
             playbackCursorProviderProvider);
 

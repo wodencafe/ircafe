@@ -95,9 +95,6 @@ class PircbotxBridgeListenerUnknownCtcpTest {
         false,
         false,
         null,
-        null,
-        null,
-        null,
         new NoOpPlaybackCursorProvider());
   }
 }

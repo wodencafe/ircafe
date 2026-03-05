@@ -431,6 +431,8 @@ tasks.named('test') {
     filter {
         // Functional Swing coverage lives in src/functionalTest and runs via the dedicated task.
         excludeTestsMatching '*FunctionalTest'
+        // Integration coverage runs via the dedicated integrationTest task.
+        excludeTestsMatching '*IntegrationTest'
     }
 }
 

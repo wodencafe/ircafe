@@ -1,8 +1,10 @@
-package cafe.woden.ircclient.irc.bouncer;
+package cafe.woden.ircclient.bouncer;
 
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /** Canonical derived data for a discovered bouncer network. */
+@ValueObject
 public record ResolvedBouncerNetwork(
     String serverId, String loginUser, String displayName, String autoConnectName) {
 

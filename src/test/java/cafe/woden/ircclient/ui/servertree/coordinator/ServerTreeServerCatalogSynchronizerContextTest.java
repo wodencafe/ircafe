@@ -39,6 +39,7 @@ class ServerTreeServerCatalogSynchronizerContextTest {
     AtomicReference<String> removedServer = new AtomicReference<>();
     AtomicReference<Set<String>> sojuBouncerControl = new AtomicReference<>(Set.of());
     AtomicReference<Set<String>> zncBouncerControl = new AtomicReference<>(Set.of());
+    AtomicReference<Set<String>> genericBouncerControl = new AtomicReference<>(Set.of());
     AtomicReference<Set<TreePath>> restoredPaths = new AtomicReference<>(Set.of());
     AtomicReference<TargetRef> selectedTarget = new AtomicReference<>();
     AtomicReference<String> startupDefaultServer = new AtomicReference<>();
@@ -61,9 +62,10 @@ class ServerTreeServerCatalogSynchronizerContextTest {
             () -> leafRef,
             addedServer::set,
             removedServer::set,
-            (soju, znc) -> {
+            (soju, znc, generic) -> {
               sojuBouncerControl.set(soju);
               zncBouncerControl.set(znc);
+              genericBouncerControl.set(generic);
             },
             () -> Set.of(expandedPath),
             restoredPaths::set,
@@ -92,9 +94,10 @@ class ServerTreeServerCatalogSynchronizerContextTest {
     assertEquals("oftc", addedServer.get());
     assertEquals("oftc", removedServer.get());
 
-    context.updateBouncerControlLabels(Set.of("s1"), Set.of("z1"));
+    context.updateBouncerControlLabels(Set.of("s1"), Set.of("z1"), Set.of("g1"));
     assertEquals(Set.of("s1"), sojuBouncerControl.get());
     assertEquals(Set.of("z1"), zncBouncerControl.get());
+    assertEquals(Set.of("g1"), genericBouncerControl.get());
 
     assertEquals(Set.of(expandedPath), context.snapshotExpandedTreePaths());
     context.restoreExpandedTreePaths(Set.of(defaultPath));

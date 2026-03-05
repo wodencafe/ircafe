@@ -7,13 +7,15 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
+import cafe.woden.ircclient.bouncer.GenericBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
-import cafe.woden.ircclient.irc.soju.SojuEphemeralNetworkImporter;
-import cafe.woden.ircclient.irc.znc.ZncEphemeralNetworkImporter;
+import cafe.woden.ircclient.irc.soju.SojuBouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.irc.znc.ZncBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.util.List;
@@ -37,8 +39,7 @@ class PircbotxIrcClientServiceDisconnectTest {
     PircbotxBotFactory botFactory = mock(PircbotxBotFactory.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     Ircv3StsPolicyService stsPolicies = mock(Ircv3StsPolicyService.class);
-    SojuEphemeralNetworkImporter sojuImporter = mock(SojuEphemeralNetworkImporter.class);
-    ZncEphemeralNetworkImporter zncImporter = mock(ZncEphemeralNetworkImporter.class);
+    BouncerDiscoveryEventPort bouncerDiscoveryEvents = mock(BouncerDiscoveryEventPort.class);
     PircbotxConnectionTimersRx timers = mock(PircbotxConnectionTimersRx.class);
 
     ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider =
@@ -54,8 +55,7 @@ class PircbotxIrcClientServiceDisconnectTest {
             new ZncProperties(null, null),
             runtimeConfig,
             stsPolicies,
-            sojuImporter,
-            zncImporter,
+            bouncerDiscoveryEvents,
             timers,
             playbackCursorProviderProvider);
 
@@ -73,7 +73,11 @@ class PircbotxIrcClientServiceDisconnectTest {
 
     verify(timers).cancelReconnect(any(PircbotxConnectionState.class));
     verify(timers).stopHeartbeat(any(PircbotxConnectionState.class));
-    verify(sojuImporter).onOriginDisconnected(eq("libera"));
-    verify(zncImporter).onOriginDisconnected(eq("libera"));
+    verify(bouncerDiscoveryEvents)
+        .onOriginDisconnected(eq(SojuBouncerNetworkMappingStrategy.BACKEND_ID), eq("libera"));
+    verify(bouncerDiscoveryEvents)
+        .onOriginDisconnected(eq(ZncBouncerNetworkMappingStrategy.BACKEND_ID), eq("libera"));
+    verify(bouncerDiscoveryEvents)
+        .onOriginDisconnected(eq(GenericBouncerNetworkMappingStrategy.BACKEND_ID), eq("libera"));
   }
 }

@@ -29,11 +29,12 @@ class ServerTreeServerLifecycleFacadeTest {
 
     Set<String> soju = Set.of("soju-origin");
     Set<String> znc = Set.of("znc-origin");
-    facade.updateBouncerControlLabels(soju, znc);
+    Set<String> generic = Set.of("bouncer-origin");
+    facade.updateBouncerControlLabels(soju, znc, generic);
 
     verify(rootLifecycleManager).addServerRoot("libera");
     verify(rootLifecycleManager).removeServerRoot("libera");
-    verify(statusLabelManager).updateBouncerControlLabels(soju, znc);
+    verify(statusLabelManager).updateBouncerControlLabels(soju, znc, generic);
   }
 
   private static ServerNodes serverNodes(String serverId) {

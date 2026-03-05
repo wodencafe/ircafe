@@ -1,8 +1,13 @@
 package cafe.woden.ircclient.irc;
 
+import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
+import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
+import cafe.woden.ircclient.bouncer.GenericBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.soju.PircbotxSojuParsers;
-import cafe.woden.ircclient.irc.soju.SojuNetwork;
-import cafe.woden.ircclient.irc.znc.ZncNetwork;
+import cafe.woden.ircclient.irc.soju.SojuBouncerDiscoveryAdapter;
+import cafe.woden.ircclient.irc.soju.SojuBouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.irc.znc.ZncBouncerDiscoveryAdapter;
+import cafe.woden.ircclient.irc.znc.ZncBouncerNetworkMappingStrategy;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -42,6 +47,13 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     boolean handle(PircBotX bot, String fromNick, String message);
   }
 
+  @FunctionalInterface
+  private interface UnknownLineDiscoveryParser {
+    BouncerDiscoveredNetwork parse(String originServerId, String rawLine);
+  }
+
+  private record UnknownLineDiscoveryAdapter(String adapterId, UnknownLineDiscoveryParser parser) {}
+
   private final String serverId;
   private final PircbotxConnectionState conn;
   private final FlowableProcessor<ServerIrcEvent> bus;
@@ -53,13 +65,13 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final boolean sojuDiscoveryEnabled;
   private final boolean zncDiscoveryEnabled;
 
-  private final Consumer<SojuNetwork> sojuNetworkDiscovered;
-
-  private final Consumer<ZncNetwork> zncNetworkDiscovered;
-
-  private final Consumer<String> sojuOriginDisconnected;
-
-  private final Consumer<String> zncOriginDisconnected;
+  private final BouncerDiscoveryEventPort bouncerDiscoveryEvents;
+  private final SojuBouncerDiscoveryAdapter sojuDiscoveryAdapter =
+      new SojuBouncerDiscoveryAdapter();
+  private final ZncBouncerDiscoveryAdapter zncDiscoveryAdapter = new ZncBouncerDiscoveryAdapter();
+  private final GenericBouncerDiscoveryAdapter genericDiscoveryAdapter =
+      new GenericBouncerDiscoveryAdapter();
+  private final List<UnknownLineDiscoveryAdapter> unknownLineDiscoveryAdapters;
 
   private final Map<String, ChatHistoryBatchBuffer> activeChatHistoryBatches = new HashMap<>();
   private final Set<String> activeBanListChannels = new HashSet<>();
@@ -690,10 +702,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       boolean disconnectOnSaslFailure,
       boolean sojuDiscoveryEnabled,
       boolean zncDiscoveryEnabled,
-      Consumer<ZncNetwork> zncNetworkDiscovered,
-      Consumer<SojuNetwork> sojuNetworkDiscovered,
-      Consumer<String> sojuOriginDisconnected,
-      Consumer<String> zncOriginDisconnected,
+      BouncerDiscoveryEventPort bouncerDiscoveryEvents,
       PlaybackCursorProvider playbackCursorProvider) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.conn = Objects.requireNonNull(conn, "conn");
@@ -704,15 +713,28 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     this.disconnectOnSaslFailure = disconnectOnSaslFailure;
     this.sojuDiscoveryEnabled = sojuDiscoveryEnabled;
     this.zncDiscoveryEnabled = zncDiscoveryEnabled;
-    this.zncNetworkDiscovered = (zncNetworkDiscovered == null) ? (n) -> {} : zncNetworkDiscovered;
-    this.sojuNetworkDiscovered =
-        (sojuNetworkDiscovered == null) ? (n) -> {} : sojuNetworkDiscovered;
-    this.sojuOriginDisconnected =
-        (sojuOriginDisconnected == null) ? (id) -> {} : sojuOriginDisconnected;
-    this.zncOriginDisconnected =
-        (zncOriginDisconnected == null) ? (id) -> {} : zncOriginDisconnected;
+    this.unknownLineDiscoveryAdapters = buildUnknownLineDiscoveryAdapters(sojuDiscoveryEnabled);
+    this.bouncerDiscoveryEvents =
+        (bouncerDiscoveryEvents == null)
+            ? BouncerDiscoveryEventPort.noOp()
+            : bouncerDiscoveryEvents;
     this.playbackCursorProvider =
         java.util.Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
+  }
+
+  private List<UnknownLineDiscoveryAdapter> buildUnknownLineDiscoveryAdapters(boolean sojuEnabled) {
+    ArrayList<UnknownLineDiscoveryAdapter> adapters = new ArrayList<>();
+    if (sojuEnabled) {
+      adapters.add(
+          new UnknownLineDiscoveryAdapter(
+              SojuBouncerNetworkMappingStrategy.BACKEND_ID,
+              sojuDiscoveryAdapter::parseBouncerNetworkLine));
+    }
+    adapters.add(
+        new UnknownLineDiscoveryAdapter(
+            GenericBouncerNetworkMappingStrategy.BACKEND_ID,
+            genericDiscoveryAdapter::parseNetworkLine));
+    return List.copyOf(adapters);
   }
 
   private Instant inboundAt(Object pircbotxEvent) {
@@ -772,36 +794,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     }
 
     try {
-      PircbotxZncParsers.ParsedListNetworksRow row = PircbotxZncParsers.parseListNetworksRow(text);
-      if (row != null) {
-        ZncNetwork network = new ZncNetwork(serverId, row.name, row.onIrc);
-        String key = row.name.toLowerCase(Locale.ROOT);
-        ZncNetwork prev = conn.zncNetworksByNameLower.putIfAbsent(key, network);
-        if (prev == null || !prev.equals(network)) {
-          conn.zncNetworksByNameLower.put(key, network);
-          if (prev == null) {
-            log.info(
-                "[{}] znc: discovered network name={} (onIrc={})",
-                serverId,
-                network.name(),
-                network.onIrc());
-          } else {
-            log.info(
-                "[{}] znc: updated network name={} (onIrc={})",
-                serverId,
-                network.name(),
-                network.onIrc());
-          }
-          try {
-            zncNetworkDiscovered.accept(network);
-          } catch (Exception e) {
-            log.debug("[{}] znc: network discovered handler threw", serverId, e);
-          }
-        }
-        return true;
+      BouncerDiscoveredNetwork network = zncDiscoveryAdapter.parseListNetworksRow(serverId, text);
+      if (network != null) {
+        return upsertDiscoveredNetwork(network, "znc-listnetworks");
       }
 
-      if (PircbotxZncParsers.looksLikeListNetworksDoneLine(text)) {
+      if (zncDiscoveryAdapter.looksLikeListNetworksDoneLine(text)) {
         conn.zncListNetworksCaptureActive.set(false);
         log.info(
             "[{}] znc: finished ListNetworks capture ({} networks)",
@@ -815,6 +813,161 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     } catch (Exception ignored) {
       return false;
     }
+  }
+
+  private boolean maybeCaptureUnknownLineBouncerDiscovery(String rawLine) {
+    if (rawLine == null || rawLine.isBlank()) return false;
+    for (UnknownLineDiscoveryAdapter adapter : unknownLineDiscoveryAdapters) {
+      BouncerDiscoveredNetwork network;
+      try {
+        network = adapter.parser().parse(serverId, rawLine);
+      } catch (Exception e) {
+        log.debug("[{}] bouncer discovery adapter '{}' threw", serverId, adapter.adapterId(), e);
+        continue;
+      }
+      if (network == null) continue;
+      if (upsertDiscoveredNetwork(network, adapter.adapterId())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean upsertDiscoveredNetwork(
+      BouncerDiscoveredNetwork network, String sourceAdapterId) {
+    if (network == null) return false;
+    String backend = normalizeLower(network.backendId());
+    if (backend == null) return false;
+
+    if (SojuBouncerNetworkMappingStrategy.BACKEND_ID.equals(backend)) {
+      if (!sojuDiscoveryEnabled) return false;
+      return upsertSojuDiscoveredNetwork(network, sourceAdapterId);
+    }
+    if (ZncBouncerNetworkMappingStrategy.BACKEND_ID.equals(backend)) {
+      if (!zncDiscoveryEnabled) return false;
+      return upsertZncDiscoveredNetwork(network, sourceAdapterId);
+    }
+    return upsertGenericDiscoveredNetwork(network, sourceAdapterId);
+  }
+
+  private boolean upsertSojuDiscoveredNetwork(BouncerDiscoveredNetwork network, String source) {
+    String netId = normalize(network.networkId());
+    if (netId == null) return false;
+
+    BouncerDiscoveredNetwork prev = conn.sojuNetworksByNetId.putIfAbsent(netId, network);
+    boolean changed = prev == null || !prev.equals(network);
+    if (changed && prev != null) {
+      conn.sojuNetworksByNetId.put(netId, network);
+    }
+    if (prev == null) {
+      log.info(
+          "[{}] soju: discovered network netId={} name={} (via {})",
+          serverId,
+          netId,
+          network.displayName(),
+          source);
+    } else if (changed) {
+      log.info(
+          "[{}] soju: updated network netId={} name={} (via {})",
+          serverId,
+          netId,
+          network.displayName(),
+          source);
+    }
+    if (changed) {
+      emitDiscoveredNetwork(network);
+    }
+    return true;
+  }
+
+  private boolean upsertZncDiscoveredNetwork(BouncerDiscoveredNetwork network, String source) {
+    String key = normalizeLower(network.networkId());
+    if (key == null) {
+      key = normalizeLower(network.displayName());
+    }
+    if (key == null) return false;
+
+    BouncerDiscoveredNetwork prev = conn.zncNetworksByNameLower.putIfAbsent(key, network);
+    boolean changed = prev == null || !prev.equals(network);
+    if (changed && prev != null) {
+      conn.zncNetworksByNameLower.put(key, network);
+    }
+    String onIrc = network.attributes().getOrDefault("onIrc", "");
+    if (prev == null) {
+      log.info(
+          "[{}] znc: discovered network id={} name={} (onIrc={}, via={})",
+          serverId,
+          key,
+          network.displayName(),
+          onIrc,
+          source);
+    } else if (changed) {
+      log.info(
+          "[{}] znc: updated network id={} name={} (onIrc={}, via={})",
+          serverId,
+          key,
+          network.displayName(),
+          onIrc,
+          source);
+    }
+    if (changed) {
+      emitDiscoveredNetwork(network);
+    }
+    return true;
+  }
+
+  private boolean upsertGenericDiscoveredNetwork(BouncerDiscoveredNetwork network, String source) {
+    String key = normalizeLower(network.networkId());
+    if (key == null) return false;
+
+    BouncerDiscoveredNetwork prev = conn.genericBouncerNetworksById.putIfAbsent(key, network);
+    boolean changed = prev == null || !prev.equals(network);
+    if (changed && prev != null) {
+      conn.genericBouncerNetworksById.put(key, network);
+    }
+    if (prev == null) {
+      log.info(
+          "[{}] generic bouncer: discovered network id={} name={} backend={} (via {})",
+          serverId,
+          key,
+          network.displayName(),
+          network.backendId(),
+          source);
+    } else if (changed) {
+      log.info(
+          "[{}] generic bouncer: updated network id={} name={} backend={} (via {})",
+          serverId,
+          key,
+          network.displayName(),
+          network.backendId(),
+          source);
+    }
+    if (changed) {
+      emitDiscoveredNetwork(network);
+    }
+    return true;
+  }
+
+  private void emitDiscoveredNetwork(BouncerDiscoveredNetwork network) {
+    try {
+      bouncerDiscoveryEvents.onNetworkDiscovered(network);
+    } catch (Exception e) {
+      log.debug(
+          "[{}] {}: network discovered handler threw",
+          serverId,
+          Objects.toString(network.backendId(), "bouncer"),
+          e);
+    }
+  }
+
+  private static String normalize(String value) {
+    String v = Objects.toString(value, "").trim();
+    return v.isEmpty() ? null : v;
+  }
+
+  private static String normalizeLower(String value) {
+    String v = normalize(value);
+    return v == null ? null : v.toLowerCase(Locale.ROOT);
   }
 
   @Override
@@ -845,16 +998,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       heartbeatStopper.accept(conn);
     }
 
-    try {
-      sojuOriginDisconnected.accept(serverId);
-    } catch (Exception e2) {
-      log.debug("[{}] soju disconnect cleanup failed: {}", serverId, e2.toString());
-    }
-    try {
-      zncOriginDisconnected.accept(serverId);
-    } catch (Exception e2) {
-      log.debug("[{}] znc disconnect cleanup failed: {}", serverId, e2.toString());
-    }
+    notifyOriginDisconnected(SojuBouncerNetworkMappingStrategy.BACKEND_ID);
+    notifyOriginDisconnected(ZncBouncerNetworkMappingStrategy.BACKEND_ID);
+    notifyOriginDisconnected(GenericBouncerNetworkMappingStrategy.BACKEND_ID);
 
     try {
       conn.sojuNetworksByNetId.clear();
@@ -868,6 +1014,10 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       conn.zncListNetworksRequestedThisSession.set(false);
     } catch (Exception ignored) {
     }
+    try {
+      conn.genericBouncerNetworksById.clear();
+    } catch (Exception ignored) {
+    }
     multilineAccumulator.clear();
     activeChatHistoryBatches.clear();
 
@@ -875,6 +1025,14 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     boolean suppressReconnect = conn.suppressAutoReconnectOnce.getAndSet(false);
     if (!conn.manualDisconnect.get() && !suppressReconnect) {
       reconnectScheduler.accept(conn, reason);
+    }
+  }
+
+  private void notifyOriginDisconnected(String backendId) {
+    try {
+      bouncerDiscoveryEvents.onOriginDisconnected(backendId, serverId);
+    } catch (Exception e2) {
+      log.debug("[{}] {} disconnect cleanup failed: {}", serverId, backendId, e2.toString());
     }
   }
 
@@ -1842,37 +2000,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       return;
     }
 
-    if (sojuDiscoveryEnabled) {
-      // soju bouncer network discovery: parse BOUNCER NETWORK entries.
-      PircbotxSojuParsers.ParsedBouncerNetwork bn =
-          PircbotxSojuParsers.parseBouncerNetworkLine(rawLine);
-      if (bn != null) {
-        SojuNetwork network = new SojuNetwork(serverId, bn.netId(), bn.name(), bn.attrs());
-        SojuNetwork prev = conn.sojuNetworksByNetId.putIfAbsent(bn.netId(), network);
-        if (prev == null) {
-          log.info(
-              "[{}] soju: discovered network netId={} name={}",
-              serverId,
-              network.netId(),
-              network.name());
-        } else if (!prev.equals(network)) {
-          conn.sojuNetworksByNetId.put(bn.netId(), network);
-          log.info(
-              "[{}] soju: updated network netId={} name={} (attrs changed)",
-              serverId,
-              network.netId(),
-              network.name());
-        }
-        boolean changed = (prev == null) || !prev.equals(network);
-        if (changed) {
-          try {
-            sojuNetworkDiscovered.accept(network);
-          } catch (Exception e) {
-            log.debug("[{}] soju: network discovered handler threw", serverId, e);
-          }
-        }
-        return;
-      }
+    if (maybeCaptureUnknownLineBouncerDiscovery(rawLine)) {
+      return;
     }
 
     String maybeSojuNetId = PircbotxSojuParsers.parseRpl005BouncerNetId(rawLine);

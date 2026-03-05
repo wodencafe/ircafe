@@ -23,6 +23,8 @@ import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.IrcMediator;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
+import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
+import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
@@ -118,6 +120,12 @@ class SpringModulithIncrementalAdoptionTest {
         InviteAutoJoinConfigPort.class,
         ChatCommandRuntimeConfigPort.class,
         ConnectionRuntimeConfigPort.class);
+
+    ApplicationModule bouncerModule = moduleFor(modules, AbstractBouncerAutoConnectStore.class);
+    assertThat(bouncerModule).isNotEqualTo(appModule);
+    assertThat(moduleFor(modules, BouncerNetworkDiscoveryOrchestrator.class))
+        .isEqualTo(bouncerModule);
+    assertThat(bouncerModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.bouncer");
 
     ApplicationModule performModule = moduleFor(modules, PerformOnConnectService.class);
     assertThat(performModule).isNotEqualTo(appModule);

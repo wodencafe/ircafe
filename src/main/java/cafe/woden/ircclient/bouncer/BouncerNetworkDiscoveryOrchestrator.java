@@ -1,54 +1,56 @@
-package cafe.woden.ircclient.irc.bouncer;
+package cafe.woden.ircclient.bouncer;
 
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.irc.IrcClientService;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 
 /**
- * Shared importer behavior for bouncer-discovered ephemeral network entries.
+ * Generic orchestrator for discovered bouncer networks.
  *
- * @param <N> network model parsed from a backend-specific discovery protocol
+ * <p>Backend-specific parsing and naming policy are delegated to a mapping strategy.
  */
-public abstract class AbstractBouncerEphemeralNetworkImporter<N> {
+@ApplicationLayer
+public final class BouncerNetworkDiscoveryOrchestrator {
 
   private final Logger log;
-  private final String backendId;
-  private final String ephemeralIdPrefix;
+  private final BouncerNetworkMappingStrategy mappingStrategy;
   private final ServerRegistry serverRegistry;
   private final EphemeralServerRegistry ephemeralServers;
   private final BouncerAutoConnectStore autoConnect;
   private final RuntimeConfigStore runtimeConfig;
-  private final IrcClientService irc;
+  private final BouncerConnectionPort connectionPort;
 
   /** Guard against repeated connect() calls when a bouncer repeats network discovery lines. */
   private final Set<String> autoConnectQueued = ConcurrentHashMap.newKeySet();
 
-  protected AbstractBouncerEphemeralNetworkImporter(
+  public BouncerNetworkDiscoveryOrchestrator(
       Logger log,
-      String backendId,
-      String ephemeralIdPrefix,
+      BouncerNetworkMappingStrategy mappingStrategy,
       ServerRegistry serverRegistry,
       EphemeralServerRegistry ephemeralServers,
       BouncerAutoConnectStore autoConnect,
       RuntimeConfigStore runtimeConfig,
-      IrcClientService irc) {
+      BouncerConnectionPort connectionPort) {
     this.log = Objects.requireNonNull(log, "log");
-    this.backendId = requireNonBlank(backendId, "backendId");
-    this.ephemeralIdPrefix = requireNonBlank(ephemeralIdPrefix, "ephemeralIdPrefix");
+    this.mappingStrategy = Objects.requireNonNull(mappingStrategy, "mappingStrategy");
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
     this.ephemeralServers = Objects.requireNonNull(ephemeralServers, "ephemeralServers");
     this.autoConnect = Objects.requireNonNull(autoConnect, "autoConnect");
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
-    this.irc = Objects.requireNonNull(irc, "irc");
+    this.connectionPort = Objects.requireNonNull(connectionPort, "connectionPort");
+  }
+
+  public String backendId() {
+    return mappingStrategy.backendId();
   }
 
   /**
@@ -56,11 +58,12 @@ public abstract class AbstractBouncerEphemeralNetworkImporter<N> {
    *
    * <p>Safe to call multiple times; entries are de-duplicated by deterministic server id.
    */
-  public final void onNetworkDiscovered(N network) {
+  public void onNetworkDiscovered(BouncerDiscoveredNetwork network) {
     if (network == null) return;
+    if (!isSameBackend(network.backendId())) return;
 
-    String bouncerId = Objects.toString(bouncerServerId(network), "").trim();
-    if (bouncerId.isEmpty()) return;
+    String bouncerId = normalize(network.originServerId());
+    if (bouncerId == null) return;
 
     Optional<IrcProperties.Server> bouncerOpt = serverRegistry.find(bouncerId);
     if (bouncerOpt.isEmpty()) {
@@ -69,9 +72,10 @@ public abstract class AbstractBouncerEphemeralNetworkImporter<N> {
     }
 
     IrcProperties.Server bouncer = bouncerOpt.get();
-    ResolvedBouncerNetwork resolved = resolveNetwork(bouncer, network);
+    ResolvedBouncerNetwork resolved = mappingStrategy.resolveNetwork(bouncer, network);
     IrcProperties.Server server =
-        buildEphemeralServer(bouncer, resolved, autoJoinChannelsFor(resolved.serverId()));
+        mappingStrategy.buildEphemeralServer(
+            bouncer, resolved, autoJoinChannelsFor(resolved.serverId()));
 
     // If the user has chosen to persist this network entry, don't keep an ephemeral duplicate.
     if (serverRegistry.containsId(server.id())) {
@@ -86,7 +90,7 @@ public abstract class AbstractBouncerEphemeralNetworkImporter<N> {
     if (same && sameOrigin) return;
 
     ephemeralServers.upsert(server, bouncerId);
-    logDiscoveredNetwork(resolved, network, server.id());
+    logDiscoveredNetwork(network, resolved, server.id());
 
     maybeAutoConnect(bouncerId, resolved.autoConnectName(), server.id());
   }
@@ -95,64 +99,51 @@ public abstract class AbstractBouncerEphemeralNetworkImporter<N> {
    * Remove all ephemeral servers that were discovered from the given origin (typically the
    * bouncer-control connection).
    */
-  public final void onOriginDisconnected(String originServerId) {
-    String origin = Objects.toString(originServerId, "").trim();
-    if (origin.isEmpty()) return;
+  public void onOriginDisconnected(String originServerId) {
+    String origin = normalize(originServerId);
+    if (origin == null) return;
 
     long count =
         ephemeralServers.entries().stream().filter(e -> origin.equals(e.originId())).count();
     if (count == 0) return;
 
     ephemeralServers.removeByOrigin(origin);
-    log.info("[{}] Cleared {} ephemeral networks for origin '{}'", backendId, count, origin);
+    log.info("[{}] Cleared {} ephemeral networks for origin '{}'", backendId(), count, origin);
 
     // Drop queued-connect guards for this origin so reconnecting the bouncer can re-trigger.
-    String prefix = ephemeralIdPrefix + origin + ":";
-    autoConnectQueued.removeIf(id -> id != null && id.startsWith(prefix));
+    autoConnectQueued.removeIf(id -> originMatchesServerId(id, origin));
   }
-
-  protected abstract String bouncerServerId(N network);
-
-  protected abstract String networkDisplayName(N network);
-
-  protected String networkDebugId(N network) {
-    return "";
-  }
-
-  protected abstract ResolvedBouncerNetwork resolveNetwork(IrcProperties.Server bouncer, N network);
-
-  protected abstract IrcProperties.Server buildEphemeralServer(
-      IrcProperties.Server bouncer, ResolvedBouncerNetwork resolved, List<String> autoJoinChannels);
 
   private void maybeAutoConnect(String bouncerId, String networkName, String serverId) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return;
+    String sid = normalize(serverId);
+    if (sid == null) return;
 
     if (!autoConnect.isEnabled(bouncerId, networkName)) return;
     if (!autoConnectQueued.add(sid)) return;
 
     try {
       var unused =
-          irc.connect(sid)
+          connectionPort
+              .connect(sid)
               .subscribe(
                   () -> {},
                   err ->
                       log.warn(
                           "[{}] Auto-connect failed for '{}' ({}): {}",
-                          backendId,
+                          backendId(),
                           networkName,
                           sid,
                           String.valueOf(err)));
       log.info(
           "[{}] Auto-connect enabled for '{}' on '{}' -> connecting {}",
-          backendId,
+          backendId(),
           networkName,
           bouncerId,
           sid);
     } catch (Exception e) {
       log.warn(
           "[{}] Auto-connect threw for '{}' ({}): {}",
-          backendId,
+          backendId(),
           networkName,
           sid,
           String.valueOf(e));
@@ -165,8 +156,8 @@ public abstract class AbstractBouncerEphemeralNetworkImporter<N> {
 
     ArrayList<String> out = new ArrayList<>();
     for (String channel : channels) {
-      String ch = Objects.toString(channel, "").trim();
-      if (ch.isEmpty()) continue;
+      String ch = normalize(channel);
+      if (ch == null) continue;
       if (!runtimeConfig.readServerTreeChannelAutoReattach(serverId, ch, true)) continue;
       if (containsIgnoreCase(out, ch)) continue;
       out.add(ch);
@@ -174,46 +165,65 @@ public abstract class AbstractBouncerEphemeralNetworkImporter<N> {
     return out.isEmpty() ? List.of() : List.copyOf(out);
   }
 
-  private void logUnknownBouncer(N network, String bouncerId) {
+  private void logUnknownBouncer(BouncerDiscoveredNetwork network, String bouncerId) {
     String debug = debugSuffix(network);
     log.debug(
         "[{}] Ignoring discovered network '{}'{} for unknown bouncer id '{}'",
-        backendId,
-        networkDisplayName(network),
+        backendId(),
+        network.displayName(),
         debug,
         bouncerId);
   }
 
-  private void logDiscoveredNetwork(ResolvedBouncerNetwork resolved, N network, String serverId) {
+  private void logDiscoveredNetwork(
+      BouncerDiscoveredNetwork network, ResolvedBouncerNetwork resolved, String serverId) {
     String debug = debugSuffix(network);
     log.info(
         "[{}] Discovered network '{}'{} -> ephemeral server '{}'",
-        backendId,
+        backendId(),
         resolved.displayName(),
         debug,
         serverId);
   }
 
-  private String debugSuffix(N network) {
-    String debug = Objects.toString(networkDebugId(network), "").trim();
-    return debug.isEmpty() ? "" : " (" + debug + ")";
+  private String debugSuffix(BouncerDiscoveredNetwork network) {
+    String debug = normalize(mappingStrategy.networkDebugId(network));
+    return debug == null ? "" : " (" + debug + ")";
+  }
+
+  private boolean isSameBackend(String discoveredBackendId) {
+    String expected = normalize(backendId());
+    String actual = normalize(discoveredBackendId);
+    if (expected == null || actual == null) return false;
+    return expected.equalsIgnoreCase(actual);
+  }
+
+  private static boolean originMatchesServerId(String serverId, String originServerId) {
+    String server = normalize(serverId);
+    String origin = normalize(originServerId);
+    if (server == null || origin == null) return false;
+
+    int firstColon = server.indexOf(':');
+    if (firstColon <= 0 || firstColon + 1 >= server.length()) return false;
+    int secondColon = server.indexOf(':', firstColon + 1);
+    if (secondColon <= firstColon + 1) return false;
+
+    String parsedOrigin = server.substring(firstColon + 1, secondColon).trim();
+    return origin.equals(parsedOrigin);
   }
 
   private static boolean containsIgnoreCase(List<String> values, String needle) {
     if (values == null || values.isEmpty()) return false;
-    String n = Objects.toString(needle, "").trim();
-    if (n.isEmpty()) return false;
+    String n = normalize(needle);
+    if (n == null) return false;
     for (String value : values) {
       if (value != null && value.equalsIgnoreCase(n)) return true;
     }
     return false;
   }
 
-  private static String requireNonBlank(String value, String field) {
+  private static String normalize(String value) {
     String v = Objects.toString(value, "").trim();
-    if (v.isEmpty()) {
-      throw new IllegalArgumentException(field + " is required");
-    }
-    return v;
+    return v.isEmpty() ? null : v;
   }
 }

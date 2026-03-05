@@ -5,6 +5,10 @@ import static com.tngtech.archunit.core.domain.JavaClass.Predicates.assignableTo
 import static com.tngtech.archunit.core.domain.properties.HasOwner.Predicates.With.owner;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
+import cafe.woden.ircclient.bouncer.BouncerBackendDiscoveryHandler;
+import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
+import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
+import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -45,6 +49,33 @@ class ArchitectureGuardrailsTest {
           String name = input.getName();
           return name.equals("cafe.woden.ircclient.config.RuntimeConfigStore")
               || name.startsWith("cafe.woden.ircclient.config.RuntimeConfigStore$");
+        }
+      };
+
+  private static final DescribedPredicate<JavaClass> BOUNCER_INTERNAL_TYPES =
+      new DescribedPredicate<>("bouncer internal types") {
+        @Override
+        public boolean test(JavaClass input) {
+          String name = input.getName();
+          return name.equals("cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore")
+              || name.startsWith("cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore$")
+              || name.equals("cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator")
+              || name.startsWith(
+                  "cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator$")
+              || name.equals("cafe.woden.ircclient.bouncer.ResolvedBouncerNetwork")
+              || name.startsWith("cafe.woden.ircclient.bouncer.ResolvedBouncerNetwork$");
+        }
+      };
+
+  private static final DescribedPredicate<JavaClass> IRC_PROTOCOL_PARSER_TYPES =
+      new DescribedPredicate<>("irc protocol parser types") {
+        @Override
+        public boolean test(JavaClass input) {
+          String name = input.getName();
+          return name.equals("cafe.woden.ircclient.irc.PircbotxZncParsers")
+              || name.startsWith("cafe.woden.ircclient.irc.PircbotxZncParsers$")
+              || name.equals("cafe.woden.ircclient.irc.soju.PircbotxSojuParsers")
+              || name.startsWith("cafe.woden.ircclient.irc.soju.PircbotxSojuParsers$");
         }
       };
 
@@ -389,6 +420,80 @@ class ArchitectureGuardrailsTest {
               "cafe.woden.ircclient.logging..")
           .because(
               "diagnostics support should stay independent from app internals while integrating only via app::api plus config/model/util/notify seams");
+
+  @ArchTest
+  static final ArchRule bouncer_should_not_depend_on_irc_package_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.bouncer..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.irc..")
+          .because(
+              "bouncer support should remain transport-agnostic and use BouncerConnectionPort for connect operations");
+
+  @ArchTest
+  static final ArchRule only_irc_module_should_implement_bouncer_connection_port =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("cafe.woden.ircclient.irc..")
+          .should()
+          .implement(BouncerConnectionPort.class)
+          .because(
+              "BouncerConnectionPort adapters should stay in the IRC transport module to keep infrastructure ownership explicit");
+
+  @ArchTest
+  static final ArchRule only_bouncer_module_should_implement_bouncer_discovery_event_port =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("cafe.woden.ircclient.bouncer..")
+          .should()
+          .implement(BouncerDiscoveryEventPort.class)
+          .because(
+              "BouncerDiscoveryEventPort dispatch should stay in bouncer module so backend routing is centralized");
+
+  @ArchTest
+  static final ArchRule only_bouncer_or_irc_modules_should_implement_bouncer_backend_handler =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages("cafe.woden.ircclient.bouncer..", "cafe.woden.ircclient.irc..")
+          .should()
+          .implement(BouncerBackendDiscoveryHandler.class)
+          .because(
+              "backend discovery handlers should live in bouncer or irc modules, not app/ui/features");
+
+  @ArchTest
+  static final ArchRule only_bouncer_or_irc_modules_should_implement_mapping_strategy =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages("cafe.woden.ircclient.bouncer..", "cafe.woden.ircclient.irc..")
+          .should()
+          .implement(BouncerNetworkMappingStrategy.class)
+          .because(
+              "bouncer network mapping strategies belong to bouncer core or irc backend adapters");
+
+  @ArchTest
+  static final ArchRule bouncer_should_not_depend_on_irc_protocol_parsers =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.bouncer..")
+          .should()
+          .dependOnClassesThat(IRC_PROTOCOL_PARSER_TYPES)
+          .because(
+              "bouncer core should stay parser-agnostic and receive normalized discovery events only");
+
+  @ArchTest
+  static final ArchRule only_soju_and_znc_should_depend_on_bouncer_internal_types =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages(
+              "cafe.woden.ircclient.bouncer..",
+              "cafe.woden.ircclient.irc.soju..",
+              "cafe.woden.ircclient.irc.znc..")
+          .should()
+          .dependOnClassesThat(BOUNCER_INTERNAL_TYPES)
+          .because(
+              "bouncer internals should remain shared implementation details used only by Soju/ZNC specializations");
 
   @ArchTest
   static final ArchRule only_virtual_threads_factory_should_depend_on_executors =

@@ -35,91 +35,75 @@ public final class ServerTreeNetworkGroupManager {
 
   private final String sojuNetworksGroupLabel;
   private final String zncNetworksGroupLabel;
+  private final String genericNetworksGroupLabel;
   private final Map<String, DefaultMutableTreeNode> sojuNetworksGroupByOrigin;
   private final Map<String, DefaultMutableTreeNode> zncNetworksGroupByOrigin;
+  private final Map<String, DefaultMutableTreeNode> genericNetworksGroupByOrigin;
   private final Context context;
 
   public ServerTreeNetworkGroupManager(
       String sojuNetworksGroupLabel,
       String zncNetworksGroupLabel,
+      String genericNetworksGroupLabel,
       Map<String, DefaultMutableTreeNode> sojuNetworksGroupByOrigin,
       Map<String, DefaultMutableTreeNode> zncNetworksGroupByOrigin,
+      Map<String, DefaultMutableTreeNode> genericNetworksGroupByOrigin,
       Context context) {
     this.sojuNetworksGroupLabel = Objects.toString(sojuNetworksGroupLabel, "Soju Networks");
     this.zncNetworksGroupLabel = Objects.toString(zncNetworksGroupLabel, "ZNC Networks");
+    this.genericNetworksGroupLabel =
+        Objects.toString(genericNetworksGroupLabel, "Bouncer Networks");
     this.sojuNetworksGroupByOrigin =
         Objects.requireNonNull(sojuNetworksGroupByOrigin, "sojuNetworksGroupByOrigin");
     this.zncNetworksGroupByOrigin =
         Objects.requireNonNull(zncNetworksGroupByOrigin, "zncNetworksGroupByOrigin");
+    this.genericNetworksGroupByOrigin =
+        Objects.requireNonNull(genericNetworksGroupByOrigin, "genericNetworksGroupByOrigin");
     this.context = Objects.requireNonNull(context, "context");
   }
 
   public DefaultMutableTreeNode getOrCreateSojuNetworksGroupNode(String originServerId) {
-    String origin = normalize(originServerId);
-    if (origin.isEmpty()) return null;
-
-    DefaultMutableTreeNode existing = sojuNetworksGroupByOrigin.get(origin);
-    if (existing != null) return existing;
-
-    DefaultMutableTreeNode originNode = context.serverNode(origin);
-    DefaultMutableTreeNode pmNode = context.privateMessagesNode(origin);
-    if (originNode == null || pmNode == null) return null;
-
-    DefaultMutableTreeNode group = new DefaultMutableTreeNode(sojuNetworksGroupLabel);
-    originNode.insert(group, insertIndexBeforePrivateMessages(originNode, pmNode));
-    sojuNetworksGroupByOrigin.put(origin, group);
-    return group;
+    return getOrCreateNetworksGroupNode(
+        originServerId, sojuNetworksGroupLabel, sojuNetworksGroupByOrigin);
   }
 
   public DefaultMutableTreeNode getOrCreateZncNetworksGroupNode(String originServerId) {
-    String origin = normalize(originServerId);
-    if (origin.isEmpty()) return null;
+    return getOrCreateNetworksGroupNode(
+        originServerId, zncNetworksGroupLabel, zncNetworksGroupByOrigin);
+  }
 
-    DefaultMutableTreeNode existing = zncNetworksGroupByOrigin.get(origin);
-    if (existing != null) return existing;
-
-    DefaultMutableTreeNode originNode = context.serverNode(origin);
-    DefaultMutableTreeNode pmNode = context.privateMessagesNode(origin);
-    if (originNode == null || pmNode == null) return null;
-
-    DefaultMutableTreeNode group = new DefaultMutableTreeNode(zncNetworksGroupLabel);
-    originNode.insert(group, insertIndexBeforePrivateMessages(originNode, pmNode));
-    zncNetworksGroupByOrigin.put(origin, group);
-    return group;
+  public DefaultMutableTreeNode getOrCreateGenericNetworksGroupNode(String originServerId) {
+    return getOrCreateNetworksGroupNode(
+        originServerId, genericNetworksGroupLabel, genericNetworksGroupByOrigin);
   }
 
   public boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node) {
-    if (node == null) return false;
-    Object userObject = node.getUserObject();
-    if (userObject instanceof String s && sojuNetworksGroupLabel.equals(s)) return true;
-    return sojuNetworksGroupByOrigin.containsValue(node);
+    return isNetworksGroupNode(node, sojuNetworksGroupLabel, sojuNetworksGroupByOrigin);
   }
 
   public boolean isZncNetworksGroupNode(DefaultMutableTreeNode node) {
-    if (node == null) return false;
-    Object userObject = node.getUserObject();
-    if (userObject instanceof String s && zncNetworksGroupLabel.equals(s)) return true;
-    return zncNetworksGroupByOrigin.containsValue(node);
+    return isNetworksGroupNode(node, zncNetworksGroupLabel, zncNetworksGroupByOrigin);
+  }
+
+  public boolean isGenericNetworksGroupNode(DefaultMutableTreeNode node) {
+    return isNetworksGroupNode(node, genericNetworksGroupLabel, genericNetworksGroupByOrigin);
   }
 
   public void removeEmptyGroupIfNeeded(DefaultMutableTreeNode node) {
     if (node == null || node.getChildCount() > 0) return;
 
     if (isSojuNetworksGroupNode(node)) {
-      DefaultMutableTreeNode originNode = (DefaultMutableTreeNode) node.getParent();
-      if (originNode != null) {
-        originNode.remove(node);
-      }
-      sojuNetworksGroupByOrigin.entrySet().removeIf(entry -> entry.getValue() == node);
+      removeGroupNode(node, sojuNetworksGroupByOrigin);
       return;
     }
 
     if (isZncNetworksGroupNode(node)) {
-      DefaultMutableTreeNode originNode = (DefaultMutableTreeNode) node.getParent();
-      if (originNode != null) {
-        originNode.remove(node);
-      }
-      zncNetworksGroupByOrigin.entrySet().removeIf(entry -> entry.getValue() == node);
+      removeGroupNode(node, zncNetworksGroupByOrigin);
+      return;
+    }
+
+    if (isGenericNetworksGroupNode(node)) {
+      removeGroupNode(node, genericNetworksGroupByOrigin);
     }
   }
 
@@ -144,5 +128,44 @@ public final class ServerTreeNetworkGroupManager {
 
   private static String normalize(String value) {
     return ServerTreeConventions.normalize(value);
+  }
+
+  private DefaultMutableTreeNode getOrCreateNetworksGroupNode(
+      String originServerId,
+      String groupLabel,
+      Map<String, DefaultMutableTreeNode> groupsByOrigin) {
+    String origin = normalize(originServerId);
+    if (origin.isEmpty()) return null;
+
+    DefaultMutableTreeNode existing = groupsByOrigin.get(origin);
+    if (existing != null) return existing;
+
+    DefaultMutableTreeNode originNode = context.serverNode(origin);
+    DefaultMutableTreeNode pmNode = context.privateMessagesNode(origin);
+    if (originNode == null || pmNode == null) return null;
+
+    DefaultMutableTreeNode group = new DefaultMutableTreeNode(groupLabel);
+    originNode.insert(group, insertIndexBeforePrivateMessages(originNode, pmNode));
+    groupsByOrigin.put(origin, group);
+    return group;
+  }
+
+  private static boolean isNetworksGroupNode(
+      DefaultMutableTreeNode node,
+      String groupLabel,
+      Map<String, DefaultMutableTreeNode> groupsByOrigin) {
+    if (node == null) return false;
+    Object userObject = node.getUserObject();
+    if (userObject instanceof String s && groupLabel.equals(s)) return true;
+    return groupsByOrigin.containsValue(node);
+  }
+
+  private static void removeGroupNode(
+      DefaultMutableTreeNode node, Map<String, DefaultMutableTreeNode> groupsByOrigin) {
+    DefaultMutableTreeNode originNode = (DefaultMutableTreeNode) node.getParent();
+    if (originNode != null) {
+      originNode.remove(node);
+    }
+    groupsByOrigin.entrySet().removeIf(entry -> entry.getValue() == node);
   }
 }
