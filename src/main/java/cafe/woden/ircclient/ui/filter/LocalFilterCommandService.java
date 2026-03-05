@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.filter;
 
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
@@ -14,6 +13,7 @@ import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.model.RegexFlag;
 import cafe.woden.ircclient.model.RegexSpec;
 import cafe.woden.ircclient.model.TagSpec;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
 import java.util.ArrayList;
 import java.util.Comparator;

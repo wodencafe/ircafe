@@ -4,10 +4,10 @@ import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
@@ -22,6 +22,8 @@ import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.shell.StatusBar;
 import com.formdev.flatlaf.FlatClientProperties;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.processors.FlowableProcessor;
+import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -56,6 +58,8 @@ public class SwingUiPort implements UiPort {
   private final OutboundLineBus outboundBus;
   private final ChatDockManager chatDockManager;
   private final ActiveInputRouter activeInputRouter;
+  private final FlowableProcessor<String> quasselNetworkManagerRequestsFromApp =
+      PublishProcessor.<String>create().toSerialized();
 
   // Avoid rebuilding nick completions on every metadata refresh (away/account/hostmask) by
   // skipping completion updates if the nick *set* hasn't changed.
@@ -266,8 +270,23 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public Flowable<String> quasselSetupRequests() {
+    return serverTree.quasselSetupRequests();
+  }
+
+  @Override
   public Flowable<String> quasselNetworkManagerRequests() {
-    return serverTree.quasselNetworkManagerRequests();
+    return Flowable.mergeArray(
+            serverTree.quasselNetworkManagerRequests(),
+            quasselNetworkManagerRequestsFromApp.onBackpressureLatest())
+        .onBackpressureBuffer();
+  }
+
+  @Override
+  public void openQuasselNetworkManager(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    quasselNetworkManagerRequestsFromApp.onNext(sid);
   }
 
   @Override

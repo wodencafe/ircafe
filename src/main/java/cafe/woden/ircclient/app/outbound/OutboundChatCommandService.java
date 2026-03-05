@@ -1,23 +1,23 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.state.AwayRoutingState;
-import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
-import cafe.woden.ircclient.app.state.JoinRoutingState;
-import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
-import cafe.woden.ircclient.app.state.PendingEchoMessageState;
-import cafe.woden.ircclient.app.state.PendingInviteState;
-import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.AwayRoutingPort;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
+import cafe.woden.ircclient.state.api.JoinRoutingPort;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
+import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
+import cafe.woden.ircclient.state.api.PendingInvitePort;
+import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -56,14 +56,14 @@ public class OutboundChatCommandService {
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
   private final ServerCatalog serverCatalog;
-  private final RuntimeConfigStore runtimeConfig;
-  private final AwayRoutingState awayRoutingState;
-  private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState;
-  private final JoinRoutingState joinRoutingState;
-  private final LabeledResponseRoutingState labeledResponseRoutingState;
-  private final PendingEchoMessageState pendingEchoMessageState;
-  private final PendingInviteState pendingInviteState;
-  private final WhoisRoutingState whoisRoutingState;
+  private final ChatCommandRuntimeConfigPort runtimeConfig;
+  private final AwayRoutingPort awayRoutingState;
+  private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState;
+  private final JoinRoutingPort joinRoutingState;
+  private final LabeledResponseRoutingPort labeledResponseRoutingState;
+  private final PendingEchoMessagePort pendingEchoMessageState;
+  private final PendingInvitePort pendingInviteState;
+  private final WhoisRoutingPort whoisRoutingState;
   private final IgnoreListCommandPort ignoreListService;
 
   public OutboundChatCommandService(
@@ -72,14 +72,14 @@ public class OutboundChatCommandService {
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       ServerCatalog serverCatalog,
-      RuntimeConfigStore runtimeConfig,
-      AwayRoutingState awayRoutingState,
-      ChatHistoryRequestRoutingState chatHistoryRequestRoutingState,
-      JoinRoutingState joinRoutingState,
-      LabeledResponseRoutingState labeledResponseRoutingState,
-      PendingEchoMessageState pendingEchoMessageState,
-      PendingInviteState pendingInviteState,
-      WhoisRoutingState whoisRoutingState,
+      ChatCommandRuntimeConfigPort runtimeConfig,
+      AwayRoutingPort awayRoutingState,
+      ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState,
+      JoinRoutingPort joinRoutingState,
+      LabeledResponseRoutingPort labeledResponseRoutingState,
+      PendingEchoMessagePort pendingEchoMessageState,
+      PendingInvitePort pendingInviteState,
+      WhoisRoutingPort whoisRoutingState,
       IgnoreListCommandPort ignoreListService) {
     this.irc = irc;
     this.ui = ui;
@@ -269,6 +269,7 @@ public class OutboundChatCommandService {
         irc.submitQuasselCoreSetup(sid, maybeRequest.orElseThrow())
             .subscribe(
                 () -> {
+                  connectionCoordinator.markQuasselSetupSubmitted(sid);
                   ui.appendStatus(
                       status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
                   connectionCoordinator.connectOne(sid);
@@ -1135,14 +1136,14 @@ public class OutboundChatCommandService {
     }
 
     TargetRef status = new TargetRef(sid, "status");
-    List<PendingInviteState.PendingInvite> invites = pendingInviteState.listForServer(sid);
+    List<PendingInvitePort.PendingInvite> invites = pendingInviteState.listForServer(sid);
     if (invites.isEmpty()) {
       ui.appendStatus(status, "(invite)", "No pending invites on " + sid + ".");
       return;
     }
 
     ui.appendStatus(status, "(invite)", "Pending invites on " + sid + " (" + invites.size() + "):");
-    for (PendingInviteState.PendingInvite invite : invites) {
+    for (PendingInvitePort.PendingInvite invite : invites) {
       if (invite == null) continue;
       String from = invite.inviterNick().isBlank() ? "server" : invite.inviterNick();
       String invitee = invite.inviteeNick().isBlank() ? "you" : invite.inviteeNick();
@@ -1169,7 +1170,7 @@ public class OutboundChatCommandService {
   public void handleInviteJoin(CompositeDisposable disposables, String inviteToken) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef fallback = at != null ? at : targetCoordinator.safeStatusTarget();
-    PendingInviteState.PendingInvite invite =
+    PendingInvitePort.PendingInvite invite =
         resolveInviteByToken(inviteToken, fallback, "(invite)");
     if (invite == null) return;
 
@@ -1197,7 +1198,7 @@ public class OutboundChatCommandService {
   public void handleInviteIgnore(String inviteToken) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef fallback = at != null ? at : targetCoordinator.safeStatusTarget();
-    PendingInviteState.PendingInvite invite =
+    PendingInvitePort.PendingInvite invite =
         resolveInviteByToken(inviteToken, fallback, "(invite)");
     if (invite == null) return;
 
@@ -1213,7 +1214,7 @@ public class OutboundChatCommandService {
   public void handleInviteWhois(CompositeDisposable disposables, String inviteToken) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef fallback = at != null ? at : targetCoordinator.safeStatusTarget();
-    PendingInviteState.PendingInvite invite =
+    PendingInvitePort.PendingInvite invite =
         resolveInviteByToken(inviteToken, fallback, "(invite)");
     if (invite == null) return;
 
@@ -1240,7 +1241,7 @@ public class OutboundChatCommandService {
   public void handleInviteBlock(String inviteToken) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef fallback = at != null ? at : targetCoordinator.safeStatusTarget();
-    PendingInviteState.PendingInvite invite =
+    PendingInvitePort.PendingInvite invite =
         resolveInviteByToken(inviteToken, fallback, "(invite)");
     if (invite == null) return;
 
@@ -1802,7 +1803,7 @@ public class OutboundChatCommandService {
         limitFinal,
         selectorFinal,
         Instant.now(),
-        ChatHistoryRequestRoutingState.QueryMode.BEFORE);
+        ChatHistoryRequestRoutingPort.QueryMode.BEFORE);
     disposables.add(
         irc.requestChatHistoryBefore(at.serverId(), at.target(), selectorFinal, limitFinal)
             .subscribe(
@@ -1849,7 +1850,7 @@ public class OutboundChatCommandService {
         limitFinal,
         selectorFinal,
         Instant.now(),
-        ChatHistoryRequestRoutingState.QueryMode.LATEST);
+        ChatHistoryRequestRoutingPort.QueryMode.LATEST);
     disposables.add(
         irc.requestChatHistoryLatest(at.serverId(), at.target(), selectorFinal, limitFinal)
             .subscribe(
@@ -1894,7 +1895,7 @@ public class OutboundChatCommandService {
         limitFinal,
         selectorFinal,
         Instant.now(),
-        ChatHistoryRequestRoutingState.QueryMode.AROUND);
+        ChatHistoryRequestRoutingPort.QueryMode.AROUND);
     disposables.add(
         irc.requestChatHistoryAround(at.serverId(), at.target(), selectorFinal, limitFinal)
             .subscribe(
@@ -1943,7 +1944,7 @@ public class OutboundChatCommandService {
         limitFinal,
         startFinal + " .. " + endFinal,
         Instant.now(),
-        ChatHistoryRequestRoutingState.QueryMode.BETWEEN);
+        ChatHistoryRequestRoutingPort.QueryMode.BETWEEN);
     disposables.add(
         irc.requestChatHistoryBetween(at.serverId(), at.target(), startFinal, endFinal, limitFinal)
             .subscribe(
@@ -2024,7 +2025,7 @@ public class OutboundChatCommandService {
 
     boolean useLocalEcho = shouldUseLocalEcho(target.serverId());
     String me = irc.currentNick(target.serverId()).orElse("me");
-    final PendingEchoMessageState.PendingOutboundChat pendingEntry;
+    final PendingEchoMessagePort.PendingOutboundChat pendingEntry;
     if (useLocalEcho) {
       pendingEntry = null;
     } else {
@@ -2075,7 +2076,7 @@ public class OutboundChatCommandService {
 
     String me = irc.currentNick(target.serverId()).orElse("me");
     boolean useLocalEcho = shouldUseLocalEcho(target.serverId());
-    final PendingEchoMessageState.PendingOutboundChat pendingEntry;
+    final PendingEchoMessagePort.PendingOutboundChat pendingEntry;
     if (useLocalEcho) {
       pendingEntry = null;
     } else {
@@ -2428,7 +2429,7 @@ public class OutboundChatCommandService {
     if (line.isEmpty() || origin == null) return new PreparedRawLine(line, "");
     if (!irc.isLabeledResponseAvailable(origin.serverId())) return new PreparedRawLine(line, "");
 
-    LabeledResponseRoutingState.PreparedRawLine prepared =
+    LabeledResponseRoutingPort.PreparedRawLine prepared =
         labeledResponseRoutingState.prepareOutgoingRaw(origin.serverId(), line);
     String sendLine =
         (prepared == null || prepared.line() == null || prepared.line().isBlank())
@@ -2493,12 +2494,12 @@ public class OutboundChatCommandService {
     return s;
   }
 
-  private PendingInviteState.PendingInvite resolveInviteByToken(
+  private PendingInvitePort.PendingInvite resolveInviteByToken(
       String rawToken, TargetRef fallback, String statusTag) {
     TargetRef out = fallback != null ? fallback : targetCoordinator.safeStatusTarget();
     String token = Objects.toString(rawToken, "").trim();
     if (token.isEmpty() || "last".equalsIgnoreCase(token)) {
-      PendingInviteState.PendingInvite invite = null;
+      PendingInvitePort.PendingInvite invite = null;
       String sid = Objects.toString(out.serverId(), "").trim();
       if (!sid.isEmpty()) {
         invite = pendingInviteState.latestForServer(sid);
@@ -2520,7 +2521,7 @@ public class OutboundChatCommandService {
       return null;
     }
 
-    PendingInviteState.PendingInvite invite = pendingInviteState.get(id);
+    PendingInvitePort.PendingInvite invite = pendingInviteState.get(id);
     if (invite == null) {
       ui.appendStatus(out, statusTag, "Invite #" + id + " not found.");
       return null;

@@ -1,12 +1,12 @@
 package cafe.woden.ircclient.app.outbound;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.state.CtcpRoutingState;
-import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.CtcpRoutingPort;
+import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
@@ -24,16 +24,16 @@ public class OutboundCtcpWhoisCommandService {
   private final IrcClientService irc;
   private final TargetCoordinator targetCoordinator;
   private final ConnectionCoordinator connectionCoordinator;
-  private final CtcpRoutingState ctcpRoutingState;
-  private final WhoisRoutingState whoisRoutingState;
+  private final CtcpRoutingPort ctcpRoutingState;
+  private final WhoisRoutingPort whoisRoutingState;
 
   public OutboundCtcpWhoisCommandService(
       UiPort ui,
       IrcClientService irc,
       TargetCoordinator targetCoordinator,
       ConnectionCoordinator connectionCoordinator,
-      CtcpRoutingState ctcpRoutingState,
-      WhoisRoutingState whoisRoutingState) {
+      CtcpRoutingPort ctcpRoutingState,
+      WhoisRoutingPort whoisRoutingState) {
     this.ui = ui;
     this.irc = irc;
     this.targetCoordinator = targetCoordinator;

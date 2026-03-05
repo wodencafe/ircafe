@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app.api;
 
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
 import java.util.List;
@@ -48,10 +49,18 @@ public interface UiPort {
 
   Flowable<String> disconnectServerRequests();
 
+  /** User-initiated request to open Quassel setup flow for a server. */
+  default Flowable<String> quasselSetupRequests() {
+    return Flowable.empty();
+  }
+
   /** User-initiated request to open dialog-driven Quassel network manager for a server. */
   default Flowable<String> quasselNetworkManagerRequests() {
     return Flowable.empty();
   }
+
+  /** Request opening the Quassel network manager flow for a server. */
+  default void openQuasselNetworkManager(String serverId) {}
 
   Flowable<TargetRef> closeTargetRequests();
 

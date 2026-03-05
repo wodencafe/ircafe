@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.request;
 
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 
 /** Base decorator for extending request emission behavior. */
@@ -65,6 +65,11 @@ public abstract class ServerTreeRequestEmitterDecorator implements ServerTreeReq
   @Override
   public void emitOpenPinnedChat(TargetRef ref) {
     delegate.emitOpenPinnedChat(ref);
+  }
+
+  @Override
+  public void emitOpenQuasselSetup(String serverId) {
+    delegate.emitOpenQuasselSetup(serverId);
   }
 
   @Override

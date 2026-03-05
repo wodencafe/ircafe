@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.interaction;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
@@ -12,6 +12,11 @@ import java.awt.event.InputEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import javax.swing.JPopupMenu;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
@@ -64,6 +69,163 @@ public final class ServerTreeInteractionMediator {
     void selectStartupDefaultForServer(String serverId);
 
     TreePath defaultSelectionPath();
+  }
+
+  @FunctionalInterface
+  public interface TreePathLookup {
+    TreePath lookup(int x, int y);
+  }
+
+  public static Context context(
+      Consumer<Boolean> onTreeShowingChanged,
+      BooleanSupplier isSelectionBroadcastSuppressed,
+      Consumer<TargetRef> emitSelection,
+      Predicate<DefaultMutableTreeNode> isMonitorGroupNode,
+      Predicate<DefaultMutableTreeNode> isInterceptorsGroupNode,
+      Function<DefaultMutableTreeNode, String> owningServerIdForNode,
+      Predicate<MouseEvent> maybeHandleDisconnectedWarningClick,
+      Predicate<MouseEvent> maybeSelectRowFromLeftClick,
+      TreePathLookup treePathForRowHit,
+      Consumer<Runnable> withSuppressedSelectionBroadcast,
+      Runnable refreshNodeActionsEnabled,
+      Function<TreePath, JPopupMenu> buildPopupMenu,
+      Consumer<MouseEvent> prepareChannelDockDrag,
+      Runnable clearPreparedChannelDockDrag,
+      Supplier<ServerTreeMiddleDragReorderHandler.Context> middleDragReorderContext,
+      BooleanSupplier startupSelectionCompleted,
+      Runnable markStartupSelectionCompleted,
+      Predicate<TreePath> isPathInCurrentTreeModel,
+      Supplier<String> firstServerId,
+      Consumer<String> selectStartupDefaultForServer,
+      Supplier<TreePath> defaultSelectionPath) {
+    Objects.requireNonNull(onTreeShowingChanged, "onTreeShowingChanged");
+    Objects.requireNonNull(isSelectionBroadcastSuppressed, "isSelectionBroadcastSuppressed");
+    Objects.requireNonNull(emitSelection, "emitSelection");
+    Objects.requireNonNull(isMonitorGroupNode, "isMonitorGroupNode");
+    Objects.requireNonNull(isInterceptorsGroupNode, "isInterceptorsGroupNode");
+    Objects.requireNonNull(owningServerIdForNode, "owningServerIdForNode");
+    Objects.requireNonNull(
+        maybeHandleDisconnectedWarningClick, "maybeHandleDisconnectedWarningClick");
+    Objects.requireNonNull(maybeSelectRowFromLeftClick, "maybeSelectRowFromLeftClick");
+    Objects.requireNonNull(treePathForRowHit, "treePathForRowHit");
+    Objects.requireNonNull(withSuppressedSelectionBroadcast, "withSuppressedSelectionBroadcast");
+    Objects.requireNonNull(refreshNodeActionsEnabled, "refreshNodeActionsEnabled");
+    Objects.requireNonNull(buildPopupMenu, "buildPopupMenu");
+    Objects.requireNonNull(prepareChannelDockDrag, "prepareChannelDockDrag");
+    Objects.requireNonNull(clearPreparedChannelDockDrag, "clearPreparedChannelDockDrag");
+    Objects.requireNonNull(middleDragReorderContext, "middleDragReorderContext");
+    Objects.requireNonNull(startupSelectionCompleted, "startupSelectionCompleted");
+    Objects.requireNonNull(markStartupSelectionCompleted, "markStartupSelectionCompleted");
+    Objects.requireNonNull(isPathInCurrentTreeModel, "isPathInCurrentTreeModel");
+    Objects.requireNonNull(firstServerId, "firstServerId");
+    Objects.requireNonNull(selectStartupDefaultForServer, "selectStartupDefaultForServer");
+    Objects.requireNonNull(defaultSelectionPath, "defaultSelectionPath");
+    return new Context() {
+      @Override
+      public void onTreeShowingChanged(boolean showing) {
+        onTreeShowingChanged.accept(showing);
+      }
+
+      @Override
+      public boolean isSelectionBroadcastSuppressed() {
+        return isSelectionBroadcastSuppressed.getAsBoolean();
+      }
+
+      @Override
+      public void emitSelection(TargetRef ref) {
+        emitSelection.accept(ref);
+      }
+
+      @Override
+      public boolean isMonitorGroupNode(DefaultMutableTreeNode node) {
+        return isMonitorGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isInterceptorsGroupNode(DefaultMutableTreeNode node) {
+        return isInterceptorsGroupNode.test(node);
+      }
+
+      @Override
+      public String owningServerIdForNode(DefaultMutableTreeNode node) {
+        return owningServerIdForNode.apply(node);
+      }
+
+      @Override
+      public boolean maybeHandleDisconnectedWarningClick(MouseEvent event) {
+        return maybeHandleDisconnectedWarningClick.test(event);
+      }
+
+      @Override
+      public boolean maybeSelectRowFromLeftClick(MouseEvent event) {
+        return maybeSelectRowFromLeftClick.test(event);
+      }
+
+      @Override
+      public TreePath treePathForRowHit(int x, int y) {
+        return treePathForRowHit.lookup(x, y);
+      }
+
+      @Override
+      public void withSuppressedSelectionBroadcast(Runnable task) {
+        withSuppressedSelectionBroadcast.accept(task);
+      }
+
+      @Override
+      public void refreshNodeActionsEnabled() {
+        refreshNodeActionsEnabled.run();
+      }
+
+      @Override
+      public JPopupMenu buildPopupMenu(TreePath path) {
+        return buildPopupMenu.apply(path);
+      }
+
+      @Override
+      public void prepareChannelDockDrag(MouseEvent event) {
+        prepareChannelDockDrag.accept(event);
+      }
+
+      @Override
+      public void clearPreparedChannelDockDrag() {
+        clearPreparedChannelDockDrag.run();
+      }
+
+      @Override
+      public ServerTreeMiddleDragReorderHandler.Context middleDragReorderContext() {
+        return middleDragReorderContext.get();
+      }
+
+      @Override
+      public boolean startupSelectionCompleted() {
+        return startupSelectionCompleted.getAsBoolean();
+      }
+
+      @Override
+      public void markStartupSelectionCompleted() {
+        markStartupSelectionCompleted.run();
+      }
+
+      @Override
+      public boolean isPathInCurrentTreeModel(TreePath path) {
+        return isPathInCurrentTreeModel.test(path);
+      }
+
+      @Override
+      public String firstServerId() {
+        return firstServerId.get();
+      }
+
+      @Override
+      public void selectStartupDefaultForServer(String serverId) {
+        selectStartupDefaultForServer.accept(serverId);
+      }
+
+      @Override
+      public TreePath defaultSelectionPath() {
+        return defaultSelectionPath.get();
+      }
+    };
   }
 
   private final JTree tree;

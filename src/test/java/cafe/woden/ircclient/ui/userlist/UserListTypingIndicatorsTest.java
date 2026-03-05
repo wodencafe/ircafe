@@ -38,6 +38,17 @@ class UserListTypingIndicatorsTest {
   }
 
   @Test
+  void doneTypingWithoutPriorStateDoesNotCreateIndicator() {
+    UserListTypingIndicators indicators = new UserListTypingIndicators();
+    String key = UserListTypingIndicators.foldNick("alice");
+
+    indicators.onTyping(key, "done", 1_100L);
+
+    assertTrue(indicators.isEmpty());
+    assertEquals(0f, indicators.alphaForKey(key, 1_100L));
+  }
+
+  @Test
   void pruneRemovesUnknownNickKeys() {
     UserListTypingIndicators indicators = new UserListTypingIndicators();
     String alice = UserListTypingIndicators.foldNick("alice");

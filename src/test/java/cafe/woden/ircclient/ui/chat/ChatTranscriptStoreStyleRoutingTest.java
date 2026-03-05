@@ -3,7 +3,7 @@ package cafe.woden.ircclient.ui.chat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.StyledDocument;

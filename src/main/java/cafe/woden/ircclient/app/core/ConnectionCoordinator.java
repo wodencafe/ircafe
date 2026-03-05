@@ -1,17 +1,17 @@
 package cafe.woden.ircclient.app.core;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -47,7 +48,7 @@ public class ConnectionCoordinator {
   private final UiPort ui;
   private final ServerRegistry serverRegistry;
   private final ServerCatalog serverCatalog;
-  private final RuntimeConfigStore runtimeConfig;
+  private final ConnectionRuntimeConfigPort runtimeConfig;
   private final LogProperties logProps;
   private final TrayNotificationsPort trayNotificationService;
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -67,6 +68,9 @@ public class ConnectionCoordinator {
   /** Last backend feature marker processed for this server (dedupe noisy phase updates). */
   private final Map<String, String> lastFeatureMarkerByServer = new HashMap<>();
 
+  private final Set<String> quasselSetupPendingServers = new HashSet<>();
+  private final Set<String> quasselOpenNetworkManagerOnSyncReady = new HashSet<>();
+
   private final Set<String> configuredServers = new HashSet<>();
   private final Map<String, IrcProperties.Server> configuredServerConfigsById = new HashMap<>();
   private final Map<String, Long> restoreRunByServer = new HashMap<>();
@@ -84,7 +88,7 @@ public class ConnectionCoordinator {
       UiPort ui,
       ServerRegistry serverRegistry,
       ServerCatalog serverCatalog,
-      RuntimeConfigStore runtimeConfig,
+      ConnectionRuntimeConfigPort runtimeConfig,
       LogProperties logProps,
       TrayNotificationsPort trayNotificationService) {
     this.irc = irc;
@@ -274,6 +278,12 @@ public class ConnectionCoordinator {
                 }));
   }
 
+  public void markQuasselSetupSubmitted(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    quasselOpenNetworkManagerOnSyncReady.add(sid);
+  }
+
   private static boolean isStartupAutoConnectEnabled(
       Map<String, Boolean> autoConnectByServer, String serverId) {
     if (autoConnectByServer == null || autoConnectByServer.isEmpty()) return true;
@@ -419,6 +429,8 @@ public class ConnectionCoordinator {
       setDesiredOnline(sid, false);
       clearConnectionDiagnostics(sid);
       restoreRunByServer.remove(sid);
+      quasselSetupPendingServers.remove(sid);
+      quasselOpenNetworkManagerOnSyncReady.remove(sid);
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
         String fallback = current.stream().findFirst().orElse("default");
         TargetRef status = new TargetRef(fallback, "status");
@@ -445,6 +457,8 @@ public class ConnectionCoordinator {
       ui.ensureTargetExists(new TargetRef(sid, "status"));
       setDesiredOnline(sid, false);
       clearConnectionDiagnostics(sid);
+      quasselSetupPendingServers.remove(sid);
+      quasselOpenNetworkManagerOnSyncReady.remove(sid);
       ui.setServerConnectionState(sid, ConnectionState.DISCONNECTED);
     }
 
@@ -714,27 +728,33 @@ public class ConnectionCoordinator {
 
     ui.ensureTargetExists(status);
     String message = "";
+    boolean promptQuasselSetup = false;
     switch (phase) {
       case "transport-connected" -> message = "Quassel transport connected; negotiating protocol…";
       case "protocol-negotiated" ->
           message = "Quassel protocol negotiated; authenticating core session…";
       case "authenticating" -> message = "Authenticating with Quassel Core…";
       case "session-established" -> message = "Quassel session established; waiting for sync…";
-      case "sync-ready" -> message = "Quassel sync complete; connection ready.";
+      case "sync-ready" -> {
+        message = "Quassel sync complete; connection ready.";
+        quasselSetupPendingServers.remove(sid);
+      }
       case "setup-required" -> {
         String reason = detail.isEmpty() ? "Quassel Core setup is required before login." : detail;
         setLastError(sid, reason);
         setDesiredOnline(sid, false);
         setNextRetryAtMs(sid, null);
         setState(sid, ConnectionState.DISCONNECTED);
+        quasselSetupPendingServers.add(sid);
         message = "Quassel Core setup is required before this connection can log in.";
         String notice =
             "Quassel setup required for server '"
                 + sid
-                + "'. Open Status for details, then run /quasselsetup "
+                + "'. Opening setup dialog now. If you close it, run /quasselsetup "
                 + sid
-                + ".";
+                + " or use Run/Complete Quassel Setup... from the server menu.";
         ui.enqueueStatusNotice(notice, status);
+        promptQuasselSetup = true;
       }
       default -> {
         return ConnectivityChange.NONE;
@@ -749,9 +769,61 @@ public class ConnectionCoordinator {
         ui.appendStatusAt(activeTarget, event.at(), "(conn)", message);
       }
     }
+    if (promptQuasselSetup) {
+      maybePromptQuasselSetup(sid, status);
+    }
+    maybeOpenQuasselNetworkManagerAfterSetup(sid, phase, status);
 
     updateConnectionUi();
     return ConnectivityChange.CHANGED;
+  }
+
+  private void maybePromptQuasselSetup(String serverId, TargetRef status) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    if (!irc.isQuasselCoreSetupPending(sid)) return;
+
+    IrcClientService.QuasselCoreSetupPrompt prompt =
+        irc.quasselCoreSetupPrompt(sid)
+            .orElse(
+                new IrcClientService.QuasselCoreSetupPrompt(
+                    sid, "", List.of(), List.of(), Map.of()));
+    Optional<IrcClientService.QuasselCoreSetupRequest> maybeRequest =
+        ui.promptQuasselCoreSetup(sid, prompt);
+    if (maybeRequest == null || maybeRequest.isEmpty()) {
+      return;
+    }
+
+    disposables.add(
+        irc.submitQuasselCoreSetup(sid, maybeRequest.orElseThrow())
+            .subscribe(
+                () -> {
+                  markQuasselSetupSubmitted(sid);
+                  ui.appendStatus(
+                      status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
+                  connectOne(sid);
+                },
+                err -> ui.appendError(status, "(qsetup-error)", String.valueOf(err))));
+  }
+
+  private void maybeOpenQuasselNetworkManagerAfterSetup(
+      String serverId, String phase, TargetRef status) {
+    if (!"sync-ready".equals(phase)) return;
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    if (!quasselOpenNetworkManagerOnSyncReady.remove(sid)) return;
+
+    int networkCount = irc.quasselCoreNetworks(sid).size();
+    if (networkCount <= 0) {
+      ui.appendStatus(
+          status,
+          "(qsetup)",
+          "Quassel setup complete. Opening Quassel Network Manager to add your first network…");
+    } else {
+      ui.appendStatus(
+          status, "(qsetup)", "Quassel setup complete. Opening Quassel Network Manager…");
+    }
+    ui.openQuasselNetworkManager(sid);
   }
 
   private static String quasselFeaturePhase(String source) {
@@ -1029,9 +1101,11 @@ public class ConnectionCoordinator {
     int reconnecting = 0;
     int disconnecting = 0;
     int desired = 0;
+    int setupPending = 0;
 
     for (String sid : ids) {
       if (isDesiredOnline(sid)) desired++;
+      if (quasselSetupPendingServers.contains(sid)) setupPending++;
       ConnectionState st = stateOf(sid);
       switch (st) {
         case CONNECTED -> connected++;
@@ -1061,6 +1135,12 @@ public class ConnectionCoordinator {
       if (reconnecting > 0) text += ", reconnecting…";
     } else {
       text = "Disconnected";
+    }
+    if (setupPending > 0) {
+      text +=
+          setupPending == 1
+              ? " (Quassel setup required)"
+              : (" (Quassel setup required: " + setupPending + ")");
     }
 
     ui.setConnectionStatusText(text);

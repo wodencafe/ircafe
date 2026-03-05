@@ -1,12 +1,10 @@
 package cafe.woden.ircclient.ui.servertree.layout;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -14,37 +12,38 @@ import javax.swing.tree.DefaultMutableTreeNode;
 /** Coordinates per-server root sibling order state and runtime-config persistence. */
 public final class ServerTreeRootSiblingOrderCoordinator {
 
-  private final RuntimeConfigStore runtimeConfig;
-  private final Map<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> byServer =
-      new HashMap<>();
+  private final ServerTreePerServerNormalizedStore<RuntimeConfigStore.ServerTreeRootSiblingOrder>
+      byServer;
 
   public ServerTreeRootSiblingOrderCoordinator(RuntimeConfigStore runtimeConfig) {
-    this.runtimeConfig = runtimeConfig;
-    loadPersisted();
+    byServer =
+        new ServerTreePerServerNormalizedStore<>(
+            runtimeConfig,
+            RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults(),
+            ServerTreeRootSiblingOrderCoordinator::normalizeOrder,
+            new ServerTreePerServerNormalizedStore.Persistence<>() {
+              @Override
+              public Map<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> read(
+                  RuntimeConfigStore config) {
+                return config.readServerTreeRootSiblingOrderByServer();
+              }
+
+              @Override
+              public void write(
+                  RuntimeConfigStore config,
+                  String serverId,
+                  RuntimeConfigStore.ServerTreeRootSiblingOrder value) {
+                config.rememberServerTreeRootSiblingOrder(serverId, value);
+              }
+            });
   }
 
   public RuntimeConfigStore.ServerTreeRootSiblingOrder orderForServer(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults();
-    return byServer.getOrDefault(sid, RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults());
+    return byServer.valueForServer(serverId);
   }
 
   public void rememberOrder(String serverId, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    RuntimeConfigStore.ServerTreeRootSiblingOrder normalized =
-        normalizeOrder(
-            order == null ? RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults() : order);
-    RuntimeConfigStore.ServerTreeRootSiblingOrder defaults =
-        RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults();
-    if (normalized.equals(defaults)) {
-      byServer.remove(sid);
-    } else {
-      byServer.put(sid, normalized);
-    }
-    if (runtimeConfig != null) {
-      runtimeConfig.rememberServerTreeRootSiblingOrder(sid, normalized);
-    }
+    byServer.remember(serverId, order);
   }
 
   public RuntimeConfigStore.ServerTreeRootSiblingNode nodeKindForNode(
@@ -87,30 +86,5 @@ public final class ServerTreeRootSiblingOrderCoordinator {
       normalized.add(node);
     }
     return new RuntimeConfigStore.ServerTreeRootSiblingOrder(List.copyOf(normalized));
-  }
-
-  private void loadPersisted() {
-    if (runtimeConfig == null) return;
-    try {
-      Map<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> persisted =
-          runtimeConfig.readServerTreeRootSiblingOrderByServer();
-      if (persisted == null || persisted.isEmpty()) return;
-      for (Map.Entry<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> entry :
-          persisted.entrySet()) {
-        String sid = normalizeServerId(entry.getKey());
-        if (sid.isEmpty()) continue;
-        RuntimeConfigStore.ServerTreeRootSiblingOrder normalized = normalizeOrder(entry.getValue());
-        if (normalized.equals(RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults())) {
-          byServer.remove(sid);
-        } else {
-          byServer.put(sid, normalized);
-        }
-      }
-    } catch (Exception ignored) {
-    }
-  }
-
-  private static String normalizeServerId(String serverId) {
-    return Objects.toString(serverId, "").trim();
   }
 }

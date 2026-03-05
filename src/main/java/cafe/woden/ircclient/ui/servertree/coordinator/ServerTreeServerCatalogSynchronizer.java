@@ -1,13 +1,22 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
+import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+import javax.swing.JTree;
+import javax.swing.SwingUtilities;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 
 /** Synchronizes the server tree structure with the latest server catalog snapshot. */
@@ -30,8 +39,7 @@ public final class ServerTreeServerCatalogSynchronizer {
 
     void removeServerRoot(String serverId);
 
-    void updateBouncerControlLabels(
-        Set<String> nextSojuBouncerControl, Set<String> nextZncBouncerControl);
+    void updateBouncerControlLabels(Map<String, Set<String>> nextBouncerControlByBackendId);
 
     void nodeChangedForServer(String serverId);
 
@@ -56,31 +64,169 @@ public final class ServerTreeServerCatalogSynchronizer {
     void selectDefaultPath();
   }
 
+  public static Context context(
+      JTree tree,
+      Map<String, ServerNodes> servers,
+      Map<TargetRef, DefaultMutableTreeNode> leaves,
+      DefaultTreeModel model,
+      DefaultMutableTreeNode root,
+      BooleanSupplier startupSelectionCompleted,
+      Runnable markStartupSelectionCompleted,
+      Supplier<TargetRef> selectedTargetRef,
+      Consumer<String> addServerRoot,
+      Consumer<String> removeServerRoot,
+      Consumer<Map<String, Set<String>>> updateBouncerControlLabels,
+      Supplier<Set<TreePath>> snapshotExpandedTreePaths,
+      Consumer<Set<TreePath>> restoreExpandedTreePaths,
+      BooleanSupplier hasValidTreeSelection,
+      Consumer<TargetRef> selectTarget,
+      Supplier<String> firstServerId,
+      Consumer<String> selectStartupDefaultForServer,
+      Supplier<TreePath> defaultSelectionPath) {
+    Objects.requireNonNull(tree, "tree");
+    Objects.requireNonNull(servers, "servers");
+    Objects.requireNonNull(leaves, "leaves");
+    Objects.requireNonNull(model, "model");
+    Objects.requireNonNull(root, "root");
+    Objects.requireNonNull(startupSelectionCompleted, "startupSelectionCompleted");
+    Objects.requireNonNull(markStartupSelectionCompleted, "markStartupSelectionCompleted");
+    Objects.requireNonNull(selectedTargetRef, "selectedTargetRef");
+    Objects.requireNonNull(addServerRoot, "addServerRoot");
+    Objects.requireNonNull(removeServerRoot, "removeServerRoot");
+    Objects.requireNonNull(updateBouncerControlLabels, "updateBouncerControlLabels");
+    Objects.requireNonNull(snapshotExpandedTreePaths, "snapshotExpandedTreePaths");
+    Objects.requireNonNull(restoreExpandedTreePaths, "restoreExpandedTreePaths");
+    Objects.requireNonNull(hasValidTreeSelection, "hasValidTreeSelection");
+    Objects.requireNonNull(selectTarget, "selectTarget");
+    Objects.requireNonNull(firstServerId, "firstServerId");
+    Objects.requireNonNull(selectStartupDefaultForServer, "selectStartupDefaultForServer");
+    Objects.requireNonNull(defaultSelectionPath, "defaultSelectionPath");
+    return new Context() {
+      @Override
+      public boolean treeHasSelectionPath() {
+        return tree.getSelectionPath() != null;
+      }
+
+      @Override
+      public void markStartupSelectionCompleted() {
+        markStartupSelectionCompleted.run();
+      }
+
+      @Override
+      public boolean startupSelectionCompleted() {
+        return startupSelectionCompleted.getAsBoolean();
+      }
+
+      @Override
+      public TargetRef selectedTargetRef() {
+        return selectedTargetRef.get();
+      }
+
+      @Override
+      public boolean hasServer(String serverId) {
+        return servers.containsKey(serverId);
+      }
+
+      @Override
+      public Set<String> currentServerIds() {
+        return servers.keySet();
+      }
+
+      @Override
+      public void addServerRoot(String serverId) {
+        addServerRoot.accept(serverId);
+      }
+
+      @Override
+      public void removeServerRoot(String serverId) {
+        removeServerRoot.accept(serverId);
+      }
+
+      @Override
+      public void updateBouncerControlLabels(
+          Map<String, Set<String>> nextBouncerControlByBackendId) {
+        updateBouncerControlLabels.accept(nextBouncerControlByBackendId);
+      }
+
+      @Override
+      public void nodeChangedForServer(String serverId) {
+        ServerNodes serverNodes = servers.get(serverId);
+        if (serverNodes != null) {
+          model.nodeChanged(serverNodes.serverNode);
+        }
+      }
+
+      @Override
+      public Set<TreePath> snapshotExpandedTreePaths() {
+        return snapshotExpandedTreePaths.get();
+      }
+
+      @Override
+      public void reloadTreeModel() {
+        model.reload(root);
+      }
+
+      @Override
+      public void restoreExpandedTreePaths(Set<TreePath> expanded) {
+        restoreExpandedTreePaths.accept(expanded);
+      }
+
+      @Override
+      public void runLater(Runnable task) {
+        SwingUtilities.invokeLater(task);
+      }
+
+      @Override
+      public boolean hasValidTreeSelection() {
+        return hasValidTreeSelection.getAsBoolean();
+      }
+
+      @Override
+      public boolean hasLeaf(TargetRef ref) {
+        return leaves.containsKey(ref);
+      }
+
+      @Override
+      public void selectTarget(TargetRef ref) {
+        selectTarget.accept(ref);
+      }
+
+      @Override
+      public String firstServerId() {
+        return firstServerId.get();
+      }
+
+      @Override
+      public void selectStartupDefaultForServer(String serverId) {
+        selectStartupDefaultForServer.accept(serverId);
+      }
+
+      @Override
+      public void selectDefaultPath() {
+        tree.setSelectionPath(defaultSelectionPath.get());
+      }
+    };
+  }
+
   private final Map<String, String> serverDisplayNames;
   private final Set<String> ephemeralServerIds;
-  private final Set<String> sojuBouncerControlServerIds;
-  private final Set<String> zncBouncerControlServerIds;
-  private final Map<String, String> sojuOriginByServerId;
-  private final Map<String, String> zncOriginByServerId;
+  private final Map<String, Set<String>> bouncerControlServerIdsByBackendId;
+  private final Map<String, Map<String, String>> originByServerIdByBackendId;
   private final Context context;
 
   public ServerTreeServerCatalogSynchronizer(
       Map<String, String> serverDisplayNames,
       Set<String> ephemeralServerIds,
-      Set<String> sojuBouncerControlServerIds,
-      Set<String> zncBouncerControlServerIds,
-      Map<String, String> sojuOriginByServerId,
-      Map<String, String> zncOriginByServerId,
+      Map<String, Set<String>> bouncerControlServerIdsByBackendId,
+      Map<String, Map<String, String>> originByServerIdByBackendId,
       Context context) {
     this.serverDisplayNames = Objects.requireNonNull(serverDisplayNames, "serverDisplayNames");
     this.ephemeralServerIds = Objects.requireNonNull(ephemeralServerIds, "ephemeralServerIds");
-    this.sojuBouncerControlServerIds =
-        Objects.requireNonNull(sojuBouncerControlServerIds, "sojuBouncerControlServerIds");
-    this.zncBouncerControlServerIds =
-        Objects.requireNonNull(zncBouncerControlServerIds, "zncBouncerControlServerIds");
-    this.sojuOriginByServerId =
-        Objects.requireNonNull(sojuOriginByServerId, "sojuOriginByServerId");
-    this.zncOriginByServerId = Objects.requireNonNull(zncOriginByServerId, "zncOriginByServerId");
+    this.bouncerControlServerIdsByBackendId =
+        Objects.requireNonNull(
+            bouncerControlServerIdsByBackendId, "bouncerControlServerIdsByBackendId");
+    this.originByServerIdByBackendId =
+        Objects.requireNonNull(originByServerIdByBackendId, "originByServerIdByBackendId");
     this.context = Objects.requireNonNull(context, "context");
   }
 
@@ -93,10 +239,12 @@ public final class ServerTreeServerCatalogSynchronizer {
     Set<String> newIds = new HashSet<>();
     Map<String, String> nextDisplay = new HashMap<>();
     Set<String> nextEphemeral = new HashSet<>();
-    Set<String> nextSojuBouncerControl = new HashSet<>();
-    Map<String, String> nextSojuOrigins = new HashMap<>();
-    Set<String> nextZncBouncerControl = new HashSet<>();
-    Map<String, String> nextZncOrigins = new HashMap<>();
+    Map<String, Set<String>> nextBouncerControlByBackendId = new HashMap<>();
+    Map<String, Map<String, String>> nextOriginByServerIdByBackendId = new HashMap<>();
+    for (String backendId : ServerTreeBouncerBackends.orderedIds()) {
+      nextBouncerControlByBackendId.put(backendId, new HashSet<>());
+      nextOriginByServerIdByBackendId.put(backendId, new HashMap<>());
+    }
 
     if (latest != null) {
       for (ServerEntry entry : latest) {
@@ -108,37 +256,39 @@ public final class ServerTreeServerCatalogSynchronizer {
         nextDisplay.put(id, computeServerDisplayName(entry));
         if (entry.ephemeral()) nextEphemeral.add(id);
 
-        if (id.startsWith("soju:")) {
+        String backendId = ServerTreeBouncerBackends.backendIdForServerId(id);
+        if (backendId != null) {
+          String prefix = ServerTreeBouncerBackends.prefixFor(backendId);
           String origin = normalize(entry.originId());
           if (origin.isEmpty()) {
-            origin = parseOriginFromCompoundServerId(id, "soju:");
+            origin = parseOriginFromCompoundServerId(id, prefix);
           }
           if (!origin.isBlank()) {
-            nextSojuBouncerControl.add(origin);
-            nextSojuOrigins.put(id, origin);
-          }
-        }
-
-        if (id.startsWith("znc:")) {
-          String origin = normalize(entry.originId());
-          if (origin.isEmpty()) {
-            origin = parseOriginFromCompoundServerId(id, "znc:");
-          }
-          if (!origin.isBlank()) {
-            nextZncBouncerControl.add(origin);
-            nextZncOrigins.put(id, origin);
+            nextBouncerControlByBackendId
+                .computeIfAbsent(backendId, ignored -> new HashSet<>())
+                .add(origin);
+            nextOriginByServerIdByBackendId
+                .computeIfAbsent(backendId, ignored -> new HashMap<>())
+                .put(id, origin);
           }
         }
       }
     }
 
-    sojuOriginByServerId.clear();
-    sojuOriginByServerId.putAll(nextSojuOrigins);
-    zncOriginByServerId.clear();
-    zncOriginByServerId.putAll(nextZncOrigins);
+    for (Map<String, String> originsByServerId : originByServerIdByBackendId.values()) {
+      if (originsByServerId != null) {
+        originsByServerId.clear();
+      }
+    }
+    for (Map.Entry<String, Map<String, String>> entry :
+        nextOriginByServerIdByBackendId.entrySet()) {
+      Map<String, String> target =
+          originByServerIdByBackendId.computeIfAbsent(entry.getKey(), ignored -> new HashMap<>());
+      target.putAll(entry.getValue());
+    }
 
     for (String id : newIds) {
-      if (id.startsWith("soju:") || id.startsWith("znc:")) continue;
+      if (ServerTreeBouncerBackends.isBouncerServerId(id)) continue;
       if (!context.hasServer(id)) {
         context.addServerRoot(id);
       }
@@ -154,12 +304,15 @@ public final class ServerTreeServerCatalogSynchronizer {
         context.removeServerRoot(existing);
         serverDisplayNames.remove(existing);
         ephemeralServerIds.remove(existing);
-        sojuBouncerControlServerIds.remove(existing);
-        zncBouncerControlServerIds.remove(existing);
+        for (Set<String> controlServerIds : bouncerControlServerIdsByBackendId.values()) {
+          if (controlServerIds != null) {
+            controlServerIds.remove(existing);
+          }
+        }
       }
     }
 
-    context.updateBouncerControlLabels(nextSojuBouncerControl, nextZncBouncerControl);
+    context.updateBouncerControlLabels(nextBouncerControlByBackendId);
 
     for (String id : newIds) {
       String next = nextDisplay.getOrDefault(id, id);

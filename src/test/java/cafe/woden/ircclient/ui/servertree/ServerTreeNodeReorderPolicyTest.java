@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeNodeReorderPolicy;
 import cafe.woden.ircclient.ui.util.TreeNodeReorderPolicy;
@@ -41,6 +41,24 @@ class ServerTreeNodeReorderPolicyTest {
     server.add(ch1);
     server.add(ch2);
     server.add(new DefaultMutableTreeNode("Soju Networks"));
+    server.add(new DefaultMutableTreeNode("Private messages"));
+
+    ServerTreeNodeReorderPolicy policy = policyForServerLabel("test");
+    TreeNodeReorderPolicy.MovePlan plan = policy.planMove(ch2, +1);
+
+    assertNull(plan, "last movable channel should not move below reserved group nodes");
+  }
+
+  @Test
+  void doesNotMoveChannelBelowGenericBouncerNetworksGroup() {
+    DefaultMutableTreeNode server = serverNode("test");
+    DefaultMutableTreeNode ch1 = channelNode("test", "#alpha");
+    DefaultMutableTreeNode ch2 = channelNode("test", "#beta");
+    server.add(statusNode("test"));
+    server.add(notificationsNode("test"));
+    server.add(ch1);
+    server.add(ch2);
+    server.add(new DefaultMutableTreeNode("Bouncer Networks"));
     server.add(new DefaultMutableTreeNode("Private messages"));
 
     ServerTreeNodeReorderPolicy policy = policyForServerLabel("test");
@@ -212,6 +230,19 @@ class ServerTreeNodeReorderPolicyTest {
           Object uo = node.getUserObject();
           if (uo instanceof ServerTreeNodeData nd) return nd.label;
           if (uo instanceof String s) return s;
+          return "";
+        },
+        node -> {
+          if (node == null) return "";
+          Object uo = node.getUserObject();
+          if (!(uo instanceof String nodeLabel)) return "";
+          String normalized = nodeLabel.trim();
+          for (String backendId : ServerTreeBouncerBackends.orderedIds()) {
+            if (normalized.equalsIgnoreCase(
+                ServerTreeBouncerBackends.defaultNetworksGroupLabel(backendId))) {
+              return backendId;
+            }
+          }
           return "";
         });
   }

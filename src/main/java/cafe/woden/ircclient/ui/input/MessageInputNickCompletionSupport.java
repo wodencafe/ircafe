@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -220,12 +221,21 @@ final class MessageInputNickCompletionSupport {
     if (token == null || token.isBlank()) return null;
     List<String> nicks = nickSnapshot;
     if (nicks == null || nicks.isEmpty()) return null;
-    String t = token.toLowerCase(Locale.ROOT);
+    String t = token.trim();
+    if (t.isEmpty()) return null;
+    String tLower = t.toLowerCase(Locale.ROOT);
+    String best = null;
+    NickMatchRank bestRank = null;
     for (String n : nicks) {
       if (n == null) continue;
-      if (n.toLowerCase(Locale.ROOT).startsWith(t)) return n;
+      NickMatchRank rank = NickMatchRank.forCandidate(n, t, tLower);
+      if (!rank.isMatch()) continue;
+      if (bestRank == null || rank.compareTo(bestRank) < 0) {
+        bestRank = rank;
+        best = n;
+      }
     }
-    return null;
+    return best;
   }
 
   String firstCompletionHint(String token) {
@@ -672,6 +682,75 @@ final class MessageInputNickCompletionSupport {
     return i;
   }
 
+  /**
+   * Lightweight nick-likelihood rank used to prioritize the most probable nick when the completion
+   * popup opens.
+   */
+  private static final class NickMatchRank implements Comparable<NickMatchRank> {
+    private static final int BUCKET_NON_MATCH = 4;
+
+    private final int bucket;
+    private final int sharedPrefixLength;
+    private final int lengthDelta;
+    private final String lower;
+    private final String original;
+
+    private NickMatchRank(
+        int bucket, int sharedPrefixLength, int lengthDelta, String lower, String original) {
+      this.bucket = bucket;
+      this.sharedPrefixLength = sharedPrefixLength;
+      this.lengthDelta = lengthDelta;
+      this.lower = lower;
+      this.original = original;
+    }
+
+    static NickMatchRank forCandidate(String candidate, String token, String tokenLower) {
+      String text = Objects.toString(candidate, "").trim();
+      String lower = text.toLowerCase(Locale.ROOT);
+      int bucket = bucketFor(text, lower, token, tokenLower);
+      int sharedPrefixLength = sharedPrefixLength(lower, tokenLower);
+      int lengthDelta = Math.abs(text.length() - token.length());
+      return new NickMatchRank(bucket, sharedPrefixLength, lengthDelta, lower, text);
+    }
+
+    boolean isMatch() {
+      return bucket < BUCKET_NON_MATCH;
+    }
+
+    @Override
+    public int compareTo(NickMatchRank other) {
+      int byBucket = Integer.compare(this.bucket, other.bucket);
+      if (byBucket != 0) return byBucket;
+
+      int bySharedPrefix = Integer.compare(other.sharedPrefixLength, this.sharedPrefixLength);
+      if (bySharedPrefix != 0) return bySharedPrefix;
+
+      int byLengthDelta = Integer.compare(this.lengthDelta, other.lengthDelta);
+      if (byLengthDelta != 0) return byLengthDelta;
+
+      int byLower = this.lower.compareTo(other.lower);
+      if (byLower != 0) return byLower;
+      return this.original.compareTo(other.original);
+    }
+
+    private static int bucketFor(String text, String lower, String token, String tokenLower) {
+      if (text.equals(token)) return 0;
+      if (text.equalsIgnoreCase(token)) return 1;
+      if (text.startsWith(token)) return 2;
+      if (lower.startsWith(tokenLower)) return 3;
+      return BUCKET_NON_MATCH;
+    }
+
+    private static int sharedPrefixLength(String leftLower, String rightLower) {
+      int limit = Math.min(leftLower.length(), rightLower.length());
+      int i = 0;
+      while (i < limit && leftLower.charAt(i) == rightLower.charAt(i)) {
+        i++;
+      }
+      return i;
+    }
+  }
+
   private record SlashCommand(String command, String summary) {}
 
   private void installAutoCompletionUiRefreshOnLafChange() {
@@ -874,11 +953,21 @@ final class MessageInputNickCompletionSupport {
     @Override
     public List<Completion> getCompletions(JTextComponent comp) {
       List<Completion> base = super.getCompletions(comp);
-      if (dynamicCompletionSource == null) return base;
-
       String token = getAlreadyEnteredText(comp);
+      if (dynamicCompletionSource == null) {
+        if (base.size() < 2) return base;
+        ArrayList<Completion> ranked = new ArrayList<>(base);
+        sortByRelevanceAndNickLikelihood(ranked, token);
+        return ranked;
+      }
+
       List<Completion> dynamic = dynamicCompletionSource.lookup(comp, token);
-      if (dynamic == null || dynamic.isEmpty()) return base;
+      if (dynamic == null || dynamic.isEmpty()) {
+        if (base.size() < 2) return base;
+        ArrayList<Completion> ranked = new ArrayList<>(base);
+        sortByRelevanceAndNickLikelihood(ranked, token);
+        return ranked;
+      }
 
       ArrayList<Completion> merged = new ArrayList<>(base.size() + dynamic.size());
       merged.addAll(base);
@@ -900,8 +989,55 @@ final class MessageInputNickCompletionSupport {
         merged.add(c);
       }
 
-      merged.sort(RELEVANCE_SORT);
+      sortByRelevanceAndNickLikelihood(merged, token);
       return merged;
+    }
+
+    private static void sortByRelevanceAndNickLikelihood(
+        List<Completion> completions, String token) {
+      if (completions == null || completions.size() < 2) return;
+
+      String normalizedToken = token == null ? "" : token.trim();
+      if (!normalizedToken.isEmpty()) {
+        filterNickCompletionsToPrefix(completions, normalizedToken);
+        if (completions.size() < 2) return;
+      }
+      String tokenLower = normalizedToken.toLowerCase(Locale.ROOT);
+      IdentityHashMap<Completion, NickMatchRank> nickRanks = new IdentityHashMap<>();
+      if (!normalizedToken.isEmpty()) {
+        for (Completion completion : completions) {
+          if (completion == null || completion.getRelevance() != RELEVANCE_NICK) continue;
+          String text = completion.getReplacementText();
+          if (text == null || text.isBlank()) continue;
+          nickRanks.put(completion, NickMatchRank.forCandidate(text, normalizedToken, tokenLower));
+        }
+      }
+
+      completions.sort(
+          (left, right) -> {
+            int relevance = Integer.compare(right.getRelevance(), left.getRelevance());
+            if (relevance != 0) return relevance;
+
+            NickMatchRank leftRank = nickRanks.get(left);
+            NickMatchRank rightRank = nickRanks.get(right);
+            if (leftRank != null && rightRank != null) {
+              int rank = leftRank.compareTo(rightRank);
+              if (rank != 0) return rank;
+            }
+
+            return RELEVANCE_SORT.compare(left, right);
+          });
+    }
+
+    private static void filterNickCompletionsToPrefix(List<Completion> completions, String token) {
+      String tokenLower = token.toLowerCase(Locale.ROOT);
+      completions.removeIf(
+          completion -> {
+            if (completion == null || completion.getRelevance() != RELEVANCE_NICK) return false;
+            String text = completion.getReplacementText();
+            if (text == null || text.isBlank()) return true;
+            return !text.toLowerCase(Locale.ROOT).startsWith(tokenLower);
+          });
     }
 
     @Override

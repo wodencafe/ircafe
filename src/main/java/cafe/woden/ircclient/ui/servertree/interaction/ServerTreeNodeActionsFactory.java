@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.interaction;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeNodeReorderPolicy;
 import cafe.woden.ircclient.ui.util.TreeNodeActions;
@@ -23,6 +23,7 @@ public final class ServerTreeNodeActionsFactory {
       Predicate<TargetRef> isChannelPinned,
       Function<DefaultMutableTreeNode, TargetRef> targetRefForNode,
       Function<DefaultMutableTreeNode, String> nodeLabelForNode,
+      Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode,
       Predicate<TargetRef> isChannelDisconnected,
       Consumer<TargetRef> requestDisconnectChannel,
       Consumer<TargetRef> requestCloseTarget,
@@ -43,7 +44,9 @@ public final class ServerTreeNodeActionsFactory {
             Objects.requireNonNull(in.isChannelListLeafNode(), "isChannelListLeafNode"),
             Objects.requireNonNull(in.isChannelPinned(), "isChannelPinned"),
             Objects.requireNonNull(in.targetRefForNode(), "targetRefForNode"),
-            Objects.requireNonNull(in.nodeLabelForNode(), "nodeLabelForNode")),
+            Objects.requireNonNull(in.nodeLabelForNode(), "nodeLabelForNode"),
+            Objects.requireNonNull(
+                in.backendIdForNetworksGroupNode(), "backendIdForNetworksGroupNode")),
         n -> {
           Object userObject = n.getUserObject();
           if (userObject instanceof ServerTreeNodeData nodeData) return nodeData.ref;

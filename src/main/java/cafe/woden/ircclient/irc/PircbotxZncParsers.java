@@ -5,11 +5,11 @@ import java.util.List;
 import java.util.Locale;
 
 /** Utility parsers for ZNC-related heuristics. */
-final class PircbotxZncParsers {
+public final class PircbotxZncParsers {
 
   private PircbotxZncParsers() {}
 
-  static boolean seemsZncCap(String cap) {
+  public static boolean seemsZncCap(String cap) {
     if (cap == null) return false;
     String c = cap.trim().toLowerCase(Locale.ROOT);
     // CAP ACK can include cap removals (prefixed with '-'); ignore those.
@@ -21,7 +21,7 @@ final class PircbotxZncParsers {
    * Heuristic detection: RPL_MYINFO (004) on ZNC typically includes a version token containing
    * "ZNC".
    */
-  static boolean seemsRpl004Znc(String rawLine) {
+  public static boolean seemsRpl004Znc(String rawLine) {
     if (rawLine == null) return false;
     String line = rawLine.trim();
     if (line.isEmpty()) return false;
@@ -47,9 +47,9 @@ final class PircbotxZncParsers {
   }
 
   /** Parsed row for {@code *status ListNetworks}. */
-  static final class ParsedListNetworksRow {
-    final String name;
-    final Boolean onIrc;
+  public static final class ParsedListNetworksRow {
+    public final String name;
+    public final Boolean onIrc;
 
     ParsedListNetworksRow(String name, Boolean onIrc) {
       this.name = name;
@@ -64,7 +64,7 @@ final class PircbotxZncParsers {
    * this parser intentionally tolerant: extract the first column as the network name, and
    * (optionally) infer the second column as a yes/no "On IRC" flag.
    */
-  static ParsedListNetworksRow parseListNetworksRow(String messageText) {
+  public static ParsedListNetworksRow parseListNetworksRow(String messageText) {
     if (messageText == null) return null;
     String s = messageText.trim();
     if (s.isEmpty()) return null;
@@ -117,7 +117,7 @@ final class PircbotxZncParsers {
     return null;
   }
 
-  static boolean looksLikeListNetworksDoneLine(String messageText) {
+  public static boolean looksLikeListNetworksDoneLine(String messageText) {
     if (messageText == null) return false;
     String s = messageText.trim().toLowerCase(Locale.ROOT);
     if (s.isEmpty()) return false;

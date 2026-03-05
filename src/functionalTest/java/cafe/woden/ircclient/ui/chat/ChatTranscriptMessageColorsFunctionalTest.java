@@ -3,7 +3,7 @@ package cafe.woden.ircclient.ui.chat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.settings.ChatThemeSettings;
 import cafe.woden.ircclient.ui.settings.ChatThemeSettingsBus;

@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.policy;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import cafe.woden.ircclient.ui.util.TreeNodeReorderPolicy;
 import java.util.Objects;
 import java.util.function.Function;
@@ -24,18 +25,22 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
   private final Predicate<TargetRef> isChannelPinned;
   private final Function<DefaultMutableTreeNode, TargetRef> targetRefForNode;
   private final Function<DefaultMutableTreeNode, String> nodeLabelForNode;
+  private final Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode;
 
   public ServerTreeNodeReorderPolicy(
       Predicate<DefaultMutableTreeNode> isServerNode,
       Predicate<DefaultMutableTreeNode> isChannelListNode,
       Predicate<TargetRef> isChannelPinned,
       Function<DefaultMutableTreeNode, TargetRef> targetRefForNode,
-      Function<DefaultMutableTreeNode, String> nodeLabelForNode) {
+      Function<DefaultMutableTreeNode, String> nodeLabelForNode,
+      Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode) {
     this.isServerNode = Objects.requireNonNull(isServerNode, "isServerNode");
     this.isChannelListNode = Objects.requireNonNull(isChannelListNode, "isChannelListNode");
     this.isChannelPinned = Objects.requireNonNull(isChannelPinned, "isChannelPinned");
     this.targetRefForNode = Objects.requireNonNull(targetRefForNode, "targetRefForNode");
     this.nodeLabelForNode = Objects.requireNonNull(nodeLabelForNode, "nodeLabelForNode");
+    this.backendIdForNetworksGroupNode =
+        Objects.requireNonNull(backendIdForNetworksGroupNode, "backendIdForNetworksGroupNode");
   }
 
   @Override
@@ -213,23 +218,25 @@ public final class ServerTreeNodeReorderPolicy implements TreeNodeReorderPolicy 
   }
 
   private boolean isReservedServerTailNode(DefaultMutableTreeNode node) {
-    return isPrivateMessagesGroupNode(node)
-        || isSojuNetworksGroupNode(node)
-        || isZncNetworksGroupNode(node);
-  }
-
-  private boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node) {
-    if (node == null) return false;
-    Object uo = node.getUserObject();
-    if (!(uo instanceof String s)) return false;
-    return s.trim().equalsIgnoreCase("Soju Networks");
-  }
-
-  private boolean isZncNetworksGroupNode(DefaultMutableTreeNode node) {
-    if (node == null) return false;
-    Object uo = node.getUserObject();
-    if (!(uo instanceof String s)) return false;
-    return s.trim().equalsIgnoreCase("ZNC Networks");
+    if (isPrivateMessagesGroupNode(node)) {
+      return true;
+    }
+    String backendId = normalizeLabel(backendIdForNetworksGroupNode.apply(node));
+    if (!backendId.isBlank()) {
+      return true;
+    }
+    Object userObject = node == null ? null : node.getUserObject();
+    if (!(userObject instanceof String label)) {
+      return false;
+    }
+    String normalizedLabel = normalizeLabel(label);
+    for (String knownBackendId : ServerTreeBouncerBackends.orderedIds()) {
+      if (normalizedLabel.equalsIgnoreCase(
+          ServerTreeBouncerBackends.defaultNetworksGroupLabel(knownBackendId))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {

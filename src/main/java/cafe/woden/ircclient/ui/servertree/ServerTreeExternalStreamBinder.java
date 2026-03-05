@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.servertree;
 
+import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
@@ -24,8 +25,7 @@ public final class ServerTreeExternalStreamBinder {
   private final Consumer<String> refreshNotificationsCount;
   private final BiConsumer<String, String> refreshInterceptorNodeLabel;
   private final Consumer<String> refreshInterceptorGroupCount;
-  private final Runnable refreshSojuAutoConnectBadges;
-  private final Runnable refreshZncAutoConnectBadges;
+  private final Consumer<String> refreshAutoConnectBadges;
 
   public ServerTreeExternalStreamBinder(
       CompositeDisposable disposables,
@@ -33,8 +33,7 @@ public final class ServerTreeExternalStreamBinder {
       Consumer<String> refreshNotificationsCount,
       BiConsumer<String, String> refreshInterceptorNodeLabel,
       Consumer<String> refreshInterceptorGroupCount,
-      Runnable refreshSojuAutoConnectBadges,
-      Runnable refreshZncAutoConnectBadges) {
+      Consumer<String> refreshAutoConnectBadges) {
     this.disposables = Objects.requireNonNull(disposables, "disposables");
     this.syncServers = Objects.requireNonNull(syncServers, "syncServers");
     this.refreshNotificationsCount =
@@ -43,10 +42,8 @@ public final class ServerTreeExternalStreamBinder {
         Objects.requireNonNull(refreshInterceptorNodeLabel, "refreshInterceptorNodeLabel");
     this.refreshInterceptorGroupCount =
         Objects.requireNonNull(refreshInterceptorGroupCount, "refreshInterceptorGroupCount");
-    this.refreshSojuAutoConnectBadges =
-        Objects.requireNonNull(refreshSojuAutoConnectBadges, "refreshSojuAutoConnectBadges");
-    this.refreshZncAutoConnectBadges =
-        Objects.requireNonNull(refreshZncAutoConnectBadges, "refreshZncAutoConnectBadges");
+    this.refreshAutoConnectBadges =
+        Objects.requireNonNull(refreshAutoConnectBadges, "refreshAutoConnectBadges");
   }
 
   public void bind(
@@ -54,7 +51,8 @@ public final class ServerTreeExternalStreamBinder {
       NotificationStore notificationStore,
       InterceptorStore interceptorStore,
       SojuAutoConnectStore sojuAutoConnect,
-      ZncAutoConnectStore zncAutoConnect) {
+      ZncAutoConnectStore zncAutoConnect,
+      GenericBouncerAutoConnectStore genericAutoConnect) {
     if (serverCatalog != null) {
       syncServers.accept(serverCatalog.entries());
       disposables.add(
@@ -95,7 +93,7 @@ public final class ServerTreeExternalStreamBinder {
               .updates()
               .observeOn(SwingEdt.scheduler())
               .subscribe(
-                  __ -> refreshSojuAutoConnectBadges.run(),
+                  __ -> refreshAutoConnectBadges.accept(ServerTreeBouncerBackends.SOJU),
                   err -> log.error("[ircafe] soju auto-connect store stream error", err)));
     }
 
@@ -105,8 +103,19 @@ public final class ServerTreeExternalStreamBinder {
               .updates()
               .observeOn(SwingEdt.scheduler())
               .subscribe(
-                  __ -> refreshZncAutoConnectBadges.run(),
+                  __ -> refreshAutoConnectBadges.accept(ServerTreeBouncerBackends.ZNC),
                   err -> log.error("[ircafe] znc auto-connect store stream error", err)));
+    }
+
+    if (genericAutoConnect != null) {
+      disposables.add(
+          genericAutoConnect
+              .updates()
+              .observeOn(SwingEdt.scheduler())
+              .subscribe(
+                  __ -> refreshAutoConnectBadges.accept(ServerTreeBouncerBackends.GENERIC),
+                  err ->
+                      log.error("[ircafe] generic bouncer auto-connect store stream error", err)));
     }
   }
 }

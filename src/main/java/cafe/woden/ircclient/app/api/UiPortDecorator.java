@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app.api;
 
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
 import java.util.List;
@@ -70,8 +71,18 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public Flowable<String> quasselSetupRequests() {
+    return delegate.quasselSetupRequests();
+  }
+
+  @Override
   public Flowable<String> quasselNetworkManagerRequests() {
     return delegate.quasselNetworkManagerRequests();
+  }
+
+  @Override
+  public void openQuasselNetworkManager(String serverId) {
+    delegate.openQuasselNetworkManager(serverId);
   }
 
   @Override

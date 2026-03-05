@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.logging.history;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.ChatLogRepository;
@@ -8,6 +7,7 @@ import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.model.LogLine;
 import cafe.woden.ircclient.model.LogRow;
+import cafe.woden.ircclient.model.TargetRef;
 import java.awt.Component;
 import java.awt.Point;
 import java.awt.Rectangle;

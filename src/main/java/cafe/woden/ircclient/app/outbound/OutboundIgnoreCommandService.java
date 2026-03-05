@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.app.outbound;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.ignore.api.IgnoreAddMaskResult;
@@ -9,6 +8,7 @@ import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer;
 import cafe.woden.ircclient.ignore.api.IgnoreTextPatternMode;
+import cafe.woden.ircclient.model.TargetRef;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;

@@ -1,16 +1,16 @@
 package cafe.woden.ircclient.irc.znc;
 
+import cafe.woden.ircclient.bouncer.BouncerBackendDiscoveryHandler;
+import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
+import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
+import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
-import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.bouncer.AbstractBouncerEphemeralNetworkImporter;
-import cafe.woden.ircclient.irc.bouncer.ResolvedBouncerNetwork;
-import java.util.List;
+import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,76 +20,53 @@ import org.springframework.stereotype.Component;
  * bouncer control session.
  */
 @Component
-public class ZncEphemeralNetworkImporter
-    extends AbstractBouncerEphemeralNetworkImporter<ZncNetwork> {
+@ApplicationLayer
+public class ZncEphemeralNetworkImporter implements BouncerBackendDiscoveryHandler {
 
   private static final Logger log = LoggerFactory.getLogger(ZncEphemeralNetworkImporter.class);
 
+  private final BouncerNetworkDiscoveryOrchestrator orchestrator;
+  private final ZncBouncerDiscoveryAdapter discoveryAdapter = new ZncBouncerDiscoveryAdapter();
+
   public ZncEphemeralNetworkImporter(
+      ZncBouncerNetworkMappingStrategy mappingStrategy,
       ServerRegistry serverRegistry,
       EphemeralServerRegistry ephemeralServers,
       ZncAutoConnectStore autoConnect,
       RuntimeConfigStore runtimeConfig,
-      @Lazy IrcClientService irc) {
-    super(
-        log,
-        "znc",
-        ZncEphemeralNaming.EPHEMERAL_ID_PREFIX,
-        serverRegistry,
-        ephemeralServers,
-        autoConnect,
-        runtimeConfig,
-        irc);
+      BouncerConnectionPort connectionPort) {
+    this.orchestrator =
+        new BouncerNetworkDiscoveryOrchestrator(
+            log,
+            Objects.requireNonNull(mappingStrategy, "mappingStrategy"),
+            serverRegistry,
+            ephemeralServers,
+            autoConnect,
+            runtimeConfig,
+            connectionPort);
   }
 
   @Override
-  protected String bouncerServerId(ZncNetwork network) {
-    return network.bouncerServerId();
+  public String backendId() {
+    return orchestrator.backendId();
   }
 
   @Override
-  protected String networkDisplayName(ZncNetwork network) {
-    return network.name();
+  public void onNetworkDiscovered(BouncerDiscoveredNetwork network) {
+    orchestrator.onNetworkDiscovered(network);
   }
 
   @Override
-  protected ResolvedBouncerNetwork resolveNetwork(
-      IrcProperties.Server bouncer, ZncNetwork network) {
-    ZncEphemeralNaming.Derived d = ZncEphemeralNaming.derive(bouncer, network);
-    return new ResolvedBouncerNetwork(d.serverId(), d.loginUser(), network.name(), network.name());
+  public void onOriginDisconnected(String originServerId) {
+    orchestrator.onOriginDisconnected(originServerId);
   }
 
-  @Override
-  protected IrcProperties.Server buildEphemeralServer(
-      IrcProperties.Server bouncer,
-      ResolvedBouncerNetwork resolved,
-      List<String> autoJoinChannels) {
-    IrcProperties.Server.Sasl sasl = bouncer.sasl();
+  public void onZncNetworkDiscovered(ZncNetwork network) {
+    BouncerDiscoveredNetwork discovered = discoveryAdapter.fromZncNetwork(network);
+    onNetworkDiscovered(discovered);
+  }
 
-    // Always set the derived username variant (even if SASL is disabled) so later toggles
-    // don't require re-importing.
-    IrcProperties.Server.Sasl updatedSasl =
-        new IrcProperties.Server.Sasl(
-            sasl.enabled(),
-            resolved.loginUser(),
-            sasl.password(),
-            sasl.mechanism(),
-            sasl.disconnectOnFailure());
-
-    return new IrcProperties.Server(
-        resolved.serverId(),
-        bouncer.host(),
-        bouncer.port(),
-        bouncer.tls(),
-        bouncer.serverPassword(),
-        bouncer.nick(),
-        resolved.loginUser(),
-        bouncer.realName(),
-        updatedSasl,
-        bouncer.nickserv(),
-        autoJoinChannels == null ? List.of() : List.copyOf(autoJoinChannels),
-        List.of(),
-        bouncer.proxy(),
-        bouncer.backend());
+  public void onZncOriginDisconnected(String originServerId) {
+    onOriginDisconnected(originServerId);
   }
 }

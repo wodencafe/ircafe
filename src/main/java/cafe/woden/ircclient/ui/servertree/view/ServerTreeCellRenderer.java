@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.view;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
@@ -17,6 +17,10 @@ import java.awt.Graphics2D;
 import java.awt.Polygon;
 import java.awt.RenderingHints;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.function.IntSupplier;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import javax.swing.Icon;
 import javax.swing.JTree;
 import javax.swing.UIManager;
@@ -71,9 +75,173 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
 
     boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node);
 
-    boolean isSojuNetworksGroupNode(DefaultMutableTreeNode node);
+    String backendIdForNetworksGroupNode(DefaultMutableTreeNode node);
+  }
 
-    boolean isZncNetworksGroupNode(DefaultMutableTreeNode node);
+  public static Context context(
+      Supplier<Boolean> serverTreeNotificationBadgesEnabled,
+      IntSupplier unreadBadgeScalePercent,
+      Supplier<ServerTreeTypingIndicatorStyle> typingIndicatorStyle,
+      Supplier<Boolean> typingIndicatorsTreeEnabled,
+      Predicate<TargetRef> isPrivateMessageTarget,
+      Predicate<TargetRef> isPrivateMessageOnline,
+      Predicate<TargetRef> isChannelPinned,
+      Predicate<TargetRef> isChannelMuted,
+      Supplier<Color> unreadChannelTextColor,
+      Supplier<Color> highlightChannelTextColor,
+      Supplier<Boolean> isApplicationJfrActive,
+      Predicate<TargetRef> isInterceptorEnabled,
+      Predicate<DefaultMutableTreeNode> isMonitorGroupNode,
+      Predicate<DefaultMutableTreeNode> isInterceptorsGroupNode,
+      Predicate<DefaultMutableTreeNode> isOtherGroupNode,
+      Predicate<DefaultMutableTreeNode> isServerNode,
+      Function<String, String> serverNodeDisplayLabel,
+      Predicate<String> isEphemeralServer,
+      Function<String, ConnectionState> connectionStateForServer,
+      Predicate<DefaultMutableTreeNode> isIrcRootNode,
+      Predicate<DefaultMutableTreeNode> isApplicationRootNode,
+      Predicate<DefaultMutableTreeNode> isPrivateMessagesGroupNode,
+      Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode) {
+    Objects.requireNonNull(
+        serverTreeNotificationBadgesEnabled, "serverTreeNotificationBadgesEnabled");
+    Objects.requireNonNull(unreadBadgeScalePercent, "unreadBadgeScalePercent");
+    Objects.requireNonNull(typingIndicatorStyle, "typingIndicatorStyle");
+    Objects.requireNonNull(typingIndicatorsTreeEnabled, "typingIndicatorsTreeEnabled");
+    Objects.requireNonNull(isPrivateMessageTarget, "isPrivateMessageTarget");
+    Objects.requireNonNull(isPrivateMessageOnline, "isPrivateMessageOnline");
+    Objects.requireNonNull(isChannelPinned, "isChannelPinned");
+    Objects.requireNonNull(isChannelMuted, "isChannelMuted");
+    Objects.requireNonNull(unreadChannelTextColor, "unreadChannelTextColor");
+    Objects.requireNonNull(highlightChannelTextColor, "highlightChannelTextColor");
+    Objects.requireNonNull(isApplicationJfrActive, "isApplicationJfrActive");
+    Objects.requireNonNull(isInterceptorEnabled, "isInterceptorEnabled");
+    Objects.requireNonNull(isMonitorGroupNode, "isMonitorGroupNode");
+    Objects.requireNonNull(isInterceptorsGroupNode, "isInterceptorsGroupNode");
+    Objects.requireNonNull(isOtherGroupNode, "isOtherGroupNode");
+    Objects.requireNonNull(isServerNode, "isServerNode");
+    Objects.requireNonNull(serverNodeDisplayLabel, "serverNodeDisplayLabel");
+    Objects.requireNonNull(isEphemeralServer, "isEphemeralServer");
+    Objects.requireNonNull(connectionStateForServer, "connectionStateForServer");
+    Objects.requireNonNull(isIrcRootNode, "isIrcRootNode");
+    Objects.requireNonNull(isApplicationRootNode, "isApplicationRootNode");
+    Objects.requireNonNull(isPrivateMessagesGroupNode, "isPrivateMessagesGroupNode");
+    Objects.requireNonNull(backendIdForNetworksGroupNode, "backendIdForNetworksGroupNode");
+    return new Context() {
+      @Override
+      public boolean serverTreeNotificationBadgesEnabled() {
+        return serverTreeNotificationBadgesEnabled.get();
+      }
+
+      @Override
+      public int unreadBadgeScalePercent() {
+        return unreadBadgeScalePercent.getAsInt();
+      }
+
+      @Override
+      public ServerTreeTypingIndicatorStyle typingIndicatorStyle() {
+        return typingIndicatorStyle.get();
+      }
+
+      @Override
+      public boolean typingIndicatorsTreeEnabled() {
+        return typingIndicatorsTreeEnabled.get();
+      }
+
+      @Override
+      public boolean isPrivateMessageTarget(TargetRef ref) {
+        return isPrivateMessageTarget.test(ref);
+      }
+
+      @Override
+      public boolean isPrivateMessageOnline(TargetRef ref) {
+        return isPrivateMessageOnline.test(ref);
+      }
+
+      @Override
+      public boolean isChannelPinned(TargetRef ref) {
+        return isChannelPinned.test(ref);
+      }
+
+      @Override
+      public boolean isChannelMuted(TargetRef ref) {
+        return isChannelMuted.test(ref);
+      }
+
+      @Override
+      public Color unreadChannelTextColor() {
+        return unreadChannelTextColor.get();
+      }
+
+      @Override
+      public Color highlightChannelTextColor() {
+        return highlightChannelTextColor.get();
+      }
+
+      @Override
+      public boolean isApplicationJfrActive() {
+        return isApplicationJfrActive.get();
+      }
+
+      @Override
+      public boolean isInterceptorEnabled(TargetRef ref) {
+        return isInterceptorEnabled.test(ref);
+      }
+
+      @Override
+      public boolean isMonitorGroupNode(DefaultMutableTreeNode node) {
+        return isMonitorGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isInterceptorsGroupNode(DefaultMutableTreeNode node) {
+        return isInterceptorsGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isOtherGroupNode(DefaultMutableTreeNode node) {
+        return isOtherGroupNode.test(node);
+      }
+
+      @Override
+      public boolean isServerNode(DefaultMutableTreeNode node) {
+        return isServerNode.test(node);
+      }
+
+      @Override
+      public String serverNodeDisplayLabel(String serverId) {
+        return serverNodeDisplayLabel.apply(serverId);
+      }
+
+      @Override
+      public boolean isEphemeralServer(String serverId) {
+        return isEphemeralServer.test(serverId);
+      }
+
+      @Override
+      public ConnectionState connectionStateForServer(String serverId) {
+        return connectionStateForServer.apply(serverId);
+      }
+
+      @Override
+      public boolean isIrcRootNode(DefaultMutableTreeNode node) {
+        return isIrcRootNode.test(node);
+      }
+
+      @Override
+      public boolean isApplicationRootNode(DefaultMutableTreeNode node) {
+        return isApplicationRootNode.test(node);
+      }
+
+      @Override
+      public boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node) {
+        return isPrivateMessagesGroupNode.test(node);
+      }
+
+      @Override
+      public String backendIdForNetworksGroupNode(DefaultMutableTreeNode node) {
+        return backendIdForNetworksGroupNode.apply(node);
+      }
+    };
   }
 
   private static final int TREE_NODE_ICON_SIZE = 13;
@@ -281,7 +449,7 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       } else if (context.isOtherGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("settings");
-      } else if (context.isSojuNetworksGroupNode(node) || context.isZncNetworksGroupNode(node)) {
+      } else if (isNetworksGroupNode(node)) {
         setFont(base.deriveFont(Font.PLAIN));
         setTreeIcon("dock-left");
       } else {
@@ -362,6 +530,11 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     Icon disabled = SvgIcons.icon(name, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED);
     setIcon(icon);
     setDisabledIcon(disabled);
+  }
+
+  private boolean isNetworksGroupNode(DefaultMutableTreeNode node) {
+    String backendId = context.backendIdForNetworksGroupNode(node);
+    return backendId != null && !backendId.isBlank();
   }
 
   private ServerTreeTypingIndicatorStyle typingStyle() {

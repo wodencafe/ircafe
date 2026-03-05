@@ -17,14 +17,14 @@ import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.app.core.MediatorHistoryIngestOrchestrator;
-import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -41,8 +41,8 @@ class MediatorHistoryIngestOrchestratorTest {
       mock(ChatHistoryIngestEventsPort.class);
   private final ChatHistoryBatchEventsPort batchEventsPort = mock(ChatHistoryBatchEventsPort.class);
   private final ZncPlaybackEventsPort playbackEventsPort = mock(ZncPlaybackEventsPort.class);
-  private final ChatHistoryRequestRoutingState routingState =
-      mock(ChatHistoryRequestRoutingState.class);
+  private final ChatHistoryRequestRoutingPort routingState =
+      mock(ChatHistoryRequestRoutingPort.class);
   private final ChatTranscriptHistoryPort transcripts = mock(ChatTranscriptHistoryPort.class);
   private final IrcClientService irc = mock(IrcClientService.class);
 
@@ -78,12 +78,12 @@ class MediatorHistoryIngestOrchestratorTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(routingState.consumeIfFresh(eq("libera"), eq("#ircafe"), any(Duration.class)))
         .thenReturn(
-            new ChatHistoryRequestRoutingState.PendingRequest(
+            new ChatHistoryRequestRoutingPort.PendingRequest(
                 chan,
                 Instant.now(),
                 40,
                 "timestamp=now",
-                ChatHistoryRequestRoutingState.QueryMode.BEFORE));
+                ChatHistoryRequestRoutingPort.QueryMode.BEFORE));
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(transcripts.loadOlderInsertOffset(chan)).thenReturn(0);
 
@@ -126,8 +126,8 @@ class MediatorHistoryIngestOrchestratorTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(routingState.consumeIfFresh(eq("libera"), eq("#ircafe"), any(Duration.class)))
         .thenReturn(
-            new ChatHistoryRequestRoutingState.PendingRequest(
-                chan, Instant.now(), 20, "*", ChatHistoryRequestRoutingState.QueryMode.LATEST));
+            new ChatHistoryRequestRoutingPort.PendingRequest(
+                chan, Instant.now(), 20, "*", ChatHistoryRequestRoutingPort.QueryMode.LATEST));
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
 
     Instant t1 = Instant.parse("2026-02-16T01:00:01Z");
@@ -225,9 +225,9 @@ class MediatorHistoryIngestOrchestratorTest {
   @Test
   void skipsRenderingRecentDuplicateHistoryLinesAcrossBatches() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
-    ChatHistoryRequestRoutingState.PendingRequest pending =
-        new ChatHistoryRequestRoutingState.PendingRequest(
-            chan, Instant.now(), 20, "*", ChatHistoryRequestRoutingState.QueryMode.LATEST);
+    ChatHistoryRequestRoutingPort.PendingRequest pending =
+        new ChatHistoryRequestRoutingPort.PendingRequest(
+            chan, Instant.now(), 20, "*", ChatHistoryRequestRoutingPort.QueryMode.LATEST);
     when(routingState.consumeIfFresh(eq("libera"), eq("#ircafe"), any(Duration.class)))
         .thenReturn(pending, pending);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
@@ -253,8 +253,8 @@ class MediatorHistoryIngestOrchestratorTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(routingState.consumeIfFresh(eq("libera"), eq("#ircafe"), any(Duration.class)))
         .thenReturn(
-            new ChatHistoryRequestRoutingState.PendingRequest(
-                chan, Instant.now(), 20, "*", ChatHistoryRequestRoutingState.QueryMode.LATEST));
+            new ChatHistoryRequestRoutingPort.PendingRequest(
+                chan, Instant.now(), 20, "*", ChatHistoryRequestRoutingPort.QueryMode.LATEST));
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
 
     String msgId = "history-msgid-1";

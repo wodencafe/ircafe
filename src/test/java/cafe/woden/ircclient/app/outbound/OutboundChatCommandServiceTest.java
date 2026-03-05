@@ -18,23 +18,23 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.state.AwayRoutingState;
-import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
-import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState.QueryMode;
-import cafe.woden.ircclient.app.state.JoinRoutingState;
-import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
-import cafe.woden.ircclient.app.state.PendingEchoMessageState;
-import cafe.woden.ircclient.app.state.PendingInviteState;
-import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.AwayRoutingPort;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort.QueryMode;
+import cafe.woden.ircclient.state.api.JoinRoutingPort;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
+import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
+import cafe.woden.ircclient.state.api.PendingInvitePort;
+import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
@@ -52,17 +52,17 @@ class OutboundChatCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
-  private final RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
-  private final AwayRoutingState awayRoutingState = mock(AwayRoutingState.class);
-  private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState =
-      mock(ChatHistoryRequestRoutingState.class);
-  private final JoinRoutingState joinRoutingState = mock(JoinRoutingState.class);
-  private final LabeledResponseRoutingState labeledResponseRoutingState =
-      mock(LabeledResponseRoutingState.class);
-  private final PendingEchoMessageState pendingEchoMessageState =
-      mock(PendingEchoMessageState.class);
-  private final PendingInviteState pendingInviteState = mock(PendingInviteState.class);
-  private final WhoisRoutingState whoisRoutingState = mock(WhoisRoutingState.class);
+  private final ChatCommandRuntimeConfigPort runtimeConfig =
+      mock(ChatCommandRuntimeConfigPort.class);
+  private final AwayRoutingPort awayRoutingState = mock(AwayRoutingPort.class);
+  private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState =
+      mock(ChatHistoryRequestRoutingPort.class);
+  private final JoinRoutingPort joinRoutingState = mock(JoinRoutingPort.class);
+  private final LabeledResponseRoutingPort labeledResponseRoutingState =
+      mock(LabeledResponseRoutingPort.class);
+  private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
+  private final PendingInvitePort pendingInviteState = mock(PendingInvitePort.class);
+  private final WhoisRoutingPort whoisRoutingState = mock(WhoisRoutingPort.class);
   private final IgnoreListCommandPort ignoreListService = mock(IgnoreListCommandPort.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
@@ -236,6 +236,7 @@ class OutboundChatCommandServiceTest {
 
     verify(ui).promptQuasselCoreSetup("quassel", prompt);
     verify(irc).submitQuasselCoreSetup("quassel", request);
+    verify(connectionCoordinator).markQuasselSetupSubmitted("quassel");
     verify(ui).appendStatus(status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
     verify(connectionCoordinator).connectOne("quassel");
   }
@@ -652,9 +653,8 @@ class OutboundChatCommandServiceTest {
   void suppressesLocalEchoWhenEchoMessageIsAvailable() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     Instant createdAt = Instant.parse("2026-02-16T00:00:00Z");
-    PendingEchoMessageState.PendingOutboundChat pending =
-        new PendingEchoMessageState.PendingOutboundChat(
-            "pending-1", chan, "me", "hello", createdAt);
+    PendingEchoMessagePort.PendingOutboundChat pending =
+        new PendingEchoMessagePort.PendingOutboundChat("pending-1", chan, "me", "hello", createdAt);
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.sendMessage("libera", "#ircafe", "hello")).thenReturn(Completable.complete());
@@ -770,9 +770,8 @@ class OutboundChatCommandServiceTest {
   void marksPendingMessageFailedWhenSendErrors() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     Instant createdAt = Instant.parse("2026-02-16T00:00:00Z");
-    PendingEchoMessageState.PendingOutboundChat pending =
-        new PendingEchoMessageState.PendingOutboundChat(
-            "pending-2", chan, "me", "hello", createdAt);
+    PendingEchoMessagePort.PendingOutboundChat pending =
+        new PendingEchoMessagePort.PendingOutboundChat("pending-2", chan, "me", "hello", createdAt);
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.sendMessage("libera", "#ircafe", "hello"))
@@ -903,7 +902,7 @@ class OutboundChatCommandServiceTest {
     when(irc.isLabeledResponseAvailable("libera")).thenReturn(true);
     when(labeledResponseRoutingState.prepareOutgoingRaw("libera", "MONITOR +nick"))
         .thenReturn(
-            new LabeledResponseRoutingState.PreparedRawLine(
+            new LabeledResponseRoutingPort.PreparedRawLine(
                 "@label=req-1 MONITOR +nick", "req-1", true));
     when(irc.sendRaw("libera", "@label=req-1 MONITOR +nick")).thenReturn(Completable.complete());
 
@@ -940,7 +939,7 @@ class OutboundChatCommandServiceTest {
     when(irc.isLabeledResponseAvailable("libera")).thenReturn(true);
     when(labeledResponseRoutingState.prepareOutgoingRaw("libera", "WHO #ircafe"))
         .thenReturn(
-            new LabeledResponseRoutingState.PreparedRawLine(
+            new LabeledResponseRoutingPort.PreparedRawLine(
                 "@label=req-2 WHO #ircafe", "req-2", true));
     when(irc.sendRaw("libera", "@label=req-2 WHO #ircafe")).thenReturn(Completable.complete());
 
@@ -975,8 +974,8 @@ class OutboundChatCommandServiceTest {
   void replyCommandUsesPendingStateWhenEchoMessageAvailable() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     Instant createdAt = Instant.parse("2026-02-16T00:00:00Z");
-    PendingEchoMessageState.PendingOutboundChat pending =
-        new PendingEchoMessageState.PendingOutboundChat(
+    PendingEchoMessagePort.PendingOutboundChat pending =
+        new PendingEchoMessagePort.PendingOutboundChat(
             "pending-reply", chan, "me", "hello", createdAt);
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
@@ -1303,8 +1302,8 @@ class OutboundChatCommandServiceTest {
   @Test
   void inviteBlockAddsMaskAndRemovesInviteWhenNickIsPresent() {
     TargetRef status = new TargetRef("libera", "status");
-    PendingInviteState.PendingInvite invite =
-        new PendingInviteState.PendingInvite(
+    PendingInvitePort.PendingInvite invite =
+        new PendingInvitePort.PendingInvite(
             12L,
             Instant.parse("2026-02-16T00:00:00Z"),
             Instant.parse("2026-02-16T00:00:00Z"),
@@ -1329,8 +1328,8 @@ class OutboundChatCommandServiceTest {
   @Test
   void inviteBlockReportsAlreadyBlockingWhenMaskAlreadyExists() {
     TargetRef status = new TargetRef("libera", "status");
-    PendingInviteState.PendingInvite invite =
-        new PendingInviteState.PendingInvite(
+    PendingInvitePort.PendingInvite invite =
+        new PendingInvitePort.PendingInvite(
             27L,
             Instant.parse("2026-02-16T00:00:00Z"),
             Instant.parse("2026-02-16T00:00:00Z"),
@@ -1355,8 +1354,8 @@ class OutboundChatCommandServiceTest {
   @Test
   void inviteBlockRejectsServerInviteWithoutNick() {
     TargetRef status = new TargetRef("libera", "status");
-    PendingInviteState.PendingInvite invite =
-        new PendingInviteState.PendingInvite(
+    PendingInvitePort.PendingInvite invite =
+        new PendingInvitePort.PendingInvite(
             31L,
             Instant.parse("2026-02-16T00:00:00Z"),
             Instant.parse("2026-02-16T00:00:00Z"),

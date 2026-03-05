@@ -51,9 +51,21 @@ class ObservedOutboundCommandDispatcherTest {
     assertEquals("quassel", delegate.lastQuasselServerId);
   }
 
+  @Test
+  void delegatesQuasselSetupOpenRequest() {
+    StubDispatcher delegate = new StubDispatcher();
+    ObservedOutboundCommandDispatcher observed = new ObservedOutboundCommandDispatcher(delegate);
+
+    observed.openQuasselSetup(disposables, "quassel");
+
+    assertEquals(1, delegate.openQuasselSetupCalls);
+    assertEquals("quassel", delegate.lastQuasselServerId);
+  }
+
   private static final class StubDispatcher implements OutboundCommandDispatcher {
     int calls = 0;
     boolean throwOnDispatch = false;
+    int openQuasselSetupCalls = 0;
     int openQuasselNetworkManagerCalls = 0;
     String lastQuasselServerId = "";
 
@@ -66,6 +78,12 @@ class ObservedOutboundCommandDispatcherTest {
     @Override
     public void openQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
       openQuasselNetworkManagerCalls++;
+      lastQuasselServerId = serverId;
+    }
+
+    @Override
+    public void openQuasselSetup(CompositeDisposable disposables, String serverId) {
+      openQuasselSetupCalls++;
       lastQuasselServerId = serverId;
     }
   }

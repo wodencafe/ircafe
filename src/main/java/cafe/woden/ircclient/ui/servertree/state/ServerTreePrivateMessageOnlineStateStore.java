@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.state;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;

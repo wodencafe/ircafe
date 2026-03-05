@@ -19,7 +19,6 @@ import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
@@ -32,17 +31,14 @@ import cafe.woden.ircclient.app.core.MediatorHistoryIngestOrchestrator;
 import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
-import cafe.woden.ircclient.app.state.AwayRoutingState;
-import cafe.woden.ircclient.app.state.ChannelFlagModeState;
-import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
-import cafe.woden.ircclient.app.state.CtcpRoutingState;
-import cafe.woden.ircclient.app.state.JoinRoutingState;
-import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
-import cafe.woden.ircclient.app.state.ModeRoutingState;
-import cafe.woden.ircclient.app.state.PendingEchoMessageState;
-import cafe.woden.ircclient.app.state.PendingInviteState;
-import cafe.woden.ircclient.app.state.RecentStatusModeState;
-import cafe.woden.ircclient.app.state.WhoisRoutingState;
+import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
+import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
+import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
+import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
+import cafe.woden.ircclient.bouncer.ResolvedBouncerNetwork;
+import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.AssertjSwingDiagnosticsService;
@@ -60,6 +56,7 @@ import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.interceptors.InterceptorHit;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.irc.BouncerIrcConnectionPortAdapter;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
@@ -68,6 +65,7 @@ import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.LogLine;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.model.UserCommandAlias;
 import cafe.woden.ircclient.monitor.MonitorIsonFallbackService;
 import cafe.woden.ircclient.monitor.MonitorListService;
@@ -77,6 +75,28 @@ import cafe.woden.ircclient.notifications.IrcEventNotificationService;
 import cafe.woden.ircclient.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.perform.PerformOnConnectService;
+import cafe.woden.ircclient.state.AwayRoutingState;
+import cafe.woden.ircclient.state.ChannelFlagModeState;
+import cafe.woden.ircclient.state.ChatHistoryRequestRoutingState;
+import cafe.woden.ircclient.state.CtcpRoutingState;
+import cafe.woden.ircclient.state.JoinRoutingState;
+import cafe.woden.ircclient.state.LabeledResponseRoutingState;
+import cafe.woden.ircclient.state.ModeRoutingState;
+import cafe.woden.ircclient.state.PendingEchoMessageState;
+import cafe.woden.ircclient.state.PendingInviteState;
+import cafe.woden.ircclient.state.RecentStatusModeState;
+import cafe.woden.ircclient.state.WhoisRoutingState;
+import cafe.woden.ircclient.state.api.AwayRoutingPort;
+import cafe.woden.ircclient.state.api.ChannelFlagModeStatePort;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
+import cafe.woden.ircclient.state.api.CtcpRoutingPort;
+import cafe.woden.ircclient.state.api.JoinRoutingPort;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
+import cafe.woden.ircclient.state.api.PendingInvitePort;
+import cafe.woden.ircclient.state.api.RecentStatusModePort;
+import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import java.lang.annotation.Annotation;
 import org.jmolecules.architecture.layered.ApplicationLayer;
@@ -138,6 +158,24 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(NotificationRuleMatcherPort.class, ApplicationLayer.class);
     assertAnnotated(MonitorFallbackPort.class, ApplicationLayer.class);
     assertAnnotated(MonitorRosterPort.class, ApplicationLayer.class);
+    assertAnnotated(AwayRoutingPort.class, ApplicationLayer.class);
+    assertAnnotated(CtcpRoutingPort.class, ApplicationLayer.class);
+    assertAnnotated(ChatHistoryRequestRoutingPort.class, ApplicationLayer.class);
+    assertAnnotated(JoinRoutingPort.class, ApplicationLayer.class);
+    assertAnnotated(LabeledResponseRoutingPort.class, ApplicationLayer.class);
+    assertAnnotated(ModeRoutingPort.class, ApplicationLayer.class);
+    assertAnnotated(PendingEchoMessagePort.class, ApplicationLayer.class);
+    assertAnnotated(PendingInvitePort.class, ApplicationLayer.class);
+    assertAnnotated(WhoisRoutingPort.class, ApplicationLayer.class);
+    assertAnnotated(ChannelFlagModeStatePort.class, ApplicationLayer.class);
+    assertAnnotated(RecentStatusModePort.class, ApplicationLayer.class);
+    assertAnnotated(InviteAutoJoinConfigPort.class, ApplicationLayer.class);
+    assertAnnotated(ChatCommandRuntimeConfigPort.class, ApplicationLayer.class);
+    assertAnnotated(ConnectionRuntimeConfigPort.class, ApplicationLayer.class);
+    assertAnnotated(BouncerConnectionPort.class, ApplicationLayer.class);
+    assertAnnotated(BouncerAutoConnectStore.class, ApplicationLayer.class);
+    assertAnnotated(AbstractBouncerAutoConnectStore.class, ApplicationLayer.class);
+    assertAnnotated(BouncerNetworkDiscoveryOrchestrator.class, ApplicationLayer.class);
     assertAnnotated(LocalFilterCommandHandler.class, ApplicationLayer.class);
     assertAnnotated(PerformOnConnectService.class, ApplicationLayer.class);
     assertAnnotated(JfrSnapshotSummarizer.class, ApplicationLayer.class);
@@ -154,6 +192,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(InboundIgnorePolicy.class, ApplicationLayer.class);
 
     assertAnnotated(SwingUiPort.class, InterfaceLayer.class);
+    assertAnnotated(BouncerIrcConnectionPortAdapter.class, InfrastructureLayer.class);
     assertAnnotated(PircbotxIrcClientService.class, InfrastructureLayer.class);
 
     assertTrue(UiPort.class.isInterface(), "UiPort should remain an interface");
@@ -192,6 +231,40 @@ class JmoleculesIncrementalAdoptionTest {
     assertTrue(
         IgnoreListCommandPort.class.isInterface(),
         "IgnoreListCommandPort should remain an interface");
+    assertTrue(AwayRoutingPort.class.isInterface(), "AwayRoutingPort should remain an interface");
+    assertTrue(CtcpRoutingPort.class.isInterface(), "CtcpRoutingPort should remain an interface");
+    assertTrue(
+        ChatHistoryRequestRoutingPort.class.isInterface(),
+        "ChatHistoryRequestRoutingPort should remain an interface");
+    assertTrue(JoinRoutingPort.class.isInterface(), "JoinRoutingPort should remain an interface");
+    assertTrue(
+        LabeledResponseRoutingPort.class.isInterface(),
+        "LabeledResponseRoutingPort should remain an interface");
+    assertTrue(ModeRoutingPort.class.isInterface(), "ModeRoutingPort should remain an interface");
+    assertTrue(
+        PendingEchoMessagePort.class.isInterface(),
+        "PendingEchoMessagePort should remain an interface");
+    assertTrue(
+        PendingInvitePort.class.isInterface(), "PendingInvitePort should remain an interface");
+    assertTrue(WhoisRoutingPort.class.isInterface(), "WhoisRoutingPort should remain an interface");
+    assertTrue(
+        ChannelFlagModeStatePort.class.isInterface(),
+        "ChannelFlagModeStatePort should remain an interface");
+    assertTrue(
+        RecentStatusModePort.class.isInterface(),
+        "RecentStatusModePort should remain an interface");
+    assertTrue(
+        InviteAutoJoinConfigPort.class.isInterface(),
+        "InviteAutoJoinConfigPort should remain an interface");
+    assertTrue(
+        ChatCommandRuntimeConfigPort.class.isInterface(),
+        "ChatCommandRuntimeConfigPort should remain an interface");
+    assertTrue(
+        ConnectionRuntimeConfigPort.class.isInterface(),
+        "ConnectionRuntimeConfigPort should remain an interface");
+    assertTrue(
+        BouncerConnectionPort.class.isInterface(),
+        "BouncerConnectionPort should remain an interface");
   }
 
   @Test
@@ -210,6 +283,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(InterceptorDefinition.class, ValueObject.class);
     assertAnnotated(InterceptorRule.class, ValueObject.class);
     assertAnnotated(InterceptorHit.class, ValueObject.class);
+    assertAnnotated(ResolvedBouncerNetwork.class, ValueObject.class);
   }
 
   @Test
@@ -221,7 +295,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertComponentPackageAnnotated("cafe.woden.ircclient.notifications", ApplicationLayer.class);
     assertComponentPackageAnnotated("cafe.woden.ircclient.dcc", ApplicationLayer.class);
     assertComponentPackageAnnotated("cafe.woden.ircclient.ignore", ApplicationLayer.class);
-    assertComponentPackageAnnotated("cafe.woden.ircclient.app.state", ApplicationLayer.class);
+    assertComponentPackageAnnotated("cafe.woden.ircclient.state", ApplicationLayer.class);
   }
 
   private static void assertComponentPackageAnnotated(

@@ -18,7 +18,6 @@ import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
@@ -31,7 +30,19 @@ import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.modulith.AbstractApplicationModuleIntegrationTest;
+import cafe.woden.ircclient.state.api.AwayRoutingPort;
+import cafe.woden.ircclient.state.api.ChannelFlagModeStatePort;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
+import cafe.woden.ircclient.state.api.CtcpRoutingPort;
+import cafe.woden.ircclient.state.api.JoinRoutingPort;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
+import cafe.woden.ircclient.state.api.PendingInvitePort;
+import cafe.woden.ircclient.state.api.RecentStatusModePort;
+import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
 import java.lang.reflect.Method;
 import java.time.Instant;
@@ -59,6 +70,28 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
   @MockitoBean TargetLogMaintenancePort targetLogMaintenancePort;
 
   @MockitoBean DccTransferStore dccTransferStore;
+
+  @MockitoBean ModeRoutingPort modeRoutingPort;
+
+  @MockitoBean ChannelFlagModeStatePort channelFlagModeStatePort;
+
+  @MockitoBean RecentStatusModePort recentStatusModePort;
+
+  @MockitoBean AwayRoutingPort awayRoutingPort;
+
+  @MockitoBean ChatHistoryRequestRoutingPort chatHistoryRequestRoutingPort;
+
+  @MockitoBean CtcpRoutingPort ctcpRoutingPort;
+
+  @MockitoBean JoinRoutingPort joinRoutingPort;
+
+  @MockitoBean LabeledResponseRoutingPort labeledResponseRoutingPort;
+
+  @MockitoBean PendingEchoMessagePort pendingEchoMessagePort;
+
+  @MockitoBean PendingInvitePort pendingInvitePort;
+
+  @MockitoBean WhoisRoutingPort whoisRoutingPort;
 
   private final IrcMediator mediator;
   private final TargetCoordinator targetCoordinator;

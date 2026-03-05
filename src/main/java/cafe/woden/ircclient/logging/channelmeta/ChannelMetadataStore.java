@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.logging.channelmeta;
 
 import cafe.woden.ircclient.app.api.ChannelMetadataPort;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.model.TargetRef;
 import jakarta.annotation.PostConstruct;
 import java.util.List;
 import java.util.Map;

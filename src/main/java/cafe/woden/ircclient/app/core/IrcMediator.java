@@ -12,7 +12,6 @@ import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
@@ -21,16 +20,6 @@ import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
-import cafe.woden.ircclient.app.state.AwayRoutingState;
-import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
-import cafe.woden.ircclient.app.state.CtcpRoutingState;
-import cafe.woden.ircclient.app.state.CtcpRoutingState.PendingCtcp;
-import cafe.woden.ircclient.app.state.JoinRoutingState;
-import cafe.woden.ircclient.app.state.LabeledResponseRoutingState;
-import cafe.woden.ircclient.app.state.ModeRoutingState;
-import cafe.woden.ircclient.app.state.PendingEchoMessageState;
-import cafe.woden.ircclient.app.state.PendingInviteState;
-import cafe.woden.ircclient.app.state.WhoisRoutingState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
@@ -40,6 +29,17 @@ import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.AwayRoutingPort;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
+import cafe.woden.ircclient.state.api.CtcpRoutingPort;
+import cafe.woden.ircclient.state.api.CtcpRoutingPort.PendingCtcp;
+import cafe.woden.ircclient.state.api.JoinRoutingPort;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
+import cafe.woden.ircclient.state.api.PendingInvitePort;
+import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.reactivex.rxjava3.core.Flowable;
@@ -102,15 +102,15 @@ public class IrcMediator implements MediatorControlPort {
   private final InboundIgnorePolicyPort inboundIgnorePolicy;
   private final ApplicationEventPublisher applicationEventPublisher;
   private final CompositeDisposable disposables = new CompositeDisposable();
-  private final WhoisRoutingState whoisRoutingState;
-  private final CtcpRoutingState ctcpRoutingState;
-  private final ModeRoutingState modeRoutingState;
-  private final AwayRoutingState awayRoutingState;
-  private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState;
-  private final JoinRoutingState joinRoutingState;
-  private final LabeledResponseRoutingState labeledResponseRoutingState;
-  private final PendingEchoMessageState pendingEchoMessageState;
-  private final PendingInviteState pendingInviteState;
+  private final WhoisRoutingPort whoisRoutingState;
+  private final CtcpRoutingPort ctcpRoutingState;
+  private final ModeRoutingPort modeRoutingState;
+  private final AwayRoutingPort awayRoutingState;
+  private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState;
+  private final JoinRoutingPort joinRoutingState;
+  private final LabeledResponseRoutingPort labeledResponseRoutingState;
+  private final PendingEchoMessagePort pendingEchoMessageState;
+  private final PendingInvitePort pendingInviteState;
   private final InboundModeEventHandler inboundModeEventHandler;
   private final IrcEventNotifierPort ircEventNotifierPort;
   private final InterceptorIngestPort interceptorIngestPort;
@@ -189,15 +189,15 @@ public class IrcMediator implements MediatorControlPort {
       NotificationRuleMatcherPort notificationRuleMatcherPort,
       UserInfoEnrichmentService userInfoEnrichmentService,
       UserListStore userListStore,
-      WhoisRoutingState whoisRoutingState,
-      CtcpRoutingState ctcpRoutingState,
-      ModeRoutingState modeRoutingState,
-      AwayRoutingState awayRoutingState,
-      ChatHistoryRequestRoutingState chatHistoryRequestRoutingState,
-      JoinRoutingState joinRoutingState,
-      LabeledResponseRoutingState labeledResponseRoutingState,
-      PendingEchoMessageState pendingEchoMessageState,
-      PendingInviteState pendingInviteState,
+      WhoisRoutingPort whoisRoutingState,
+      CtcpRoutingPort ctcpRoutingState,
+      ModeRoutingPort modeRoutingState,
+      AwayRoutingPort awayRoutingState,
+      ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState,
+      JoinRoutingPort joinRoutingState,
+      LabeledResponseRoutingPort labeledResponseRoutingState,
+      PendingEchoMessagePort pendingEchoMessageState,
+      PendingInvitePort pendingInviteState,
       InboundModeEventHandler inboundModeEventHandler,
       IrcEventNotifierPort ircEventNotifierPort,
       InterceptorIngestPort interceptorIngestPort,
@@ -251,6 +251,7 @@ public class IrcMediator implements MediatorControlPort {
         disposables,
         this::handleUserActionRequest,
         this::handleOutgoingLine,
+        this::handleQuasselSetupRequest,
         this::handleQuasselNetworkManagerRequest);
     bindIrcEventSubscriptions();
     bindLabeledResponseTimeoutTicker();
@@ -606,6 +607,10 @@ public class IrcMediator implements MediatorControlPort {
     outboundCommandDispatcher.openQuasselNetworkManager(disposables, serverId);
   }
 
+  private void handleQuasselSetupRequest(String serverId) {
+    outboundCommandDispatcher.openQuasselSetup(disposables, serverId);
+  }
+
   private TargetRef activeTargetForServerOrStatus(String sid, TargetRef status) {
     TargetRef active = targetCoordinator.getActiveTarget();
     if (active != null && Objects.equals(active.serverId(), sid)) {
@@ -688,6 +693,8 @@ public class IrcMediator implements MediatorControlPort {
           return;
         }
 
+        clearRemoteTypingIndicatorsForSender(chan, ev.from());
+
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           postTo(
               chan,
@@ -756,6 +763,8 @@ public class IrcMediator implements MediatorControlPort {
             sid, chan, "channel-action", ev.messageId(), ev.ircv3Tags())) {
           return;
         }
+
+        clearRemoteTypingIndicatorsForSender(chan, ev.from());
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           postTo(
@@ -914,6 +923,10 @@ public class IrcMediator implements MediatorControlPort {
           return;
         }
 
+        if (!fromSelf) {
+          clearRemoteTypingIndicatorsForSender(pm, ev.from());
+        }
+
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           if (allowAutoOpen) {
             postTo(
@@ -1005,6 +1018,10 @@ public class IrcMediator implements MediatorControlPort {
         if (shouldSuppressInboundDuplicateByMsgId(
             sid, pm, "private-action", ev.messageId(), ev.ircv3Tags())) {
           return;
+        }
+
+        if (!fromSelf) {
+          clearRemoteTypingIndicatorsForSender(pm, ev.from());
         }
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
@@ -1234,7 +1251,6 @@ public class IrcMediator implements MediatorControlPort {
         mediatorHistoryIngestOrchestrator.onZncPlaybackBatchReceived(sid, ev);
       }
       case IrcEvent.CtcpRequestReceived ev -> {
-        markPrivateMessagePeerOnline(sid, ev.from());
         String command = Objects.toString(ev.command(), "").trim();
         String argument = Objects.toString(ev.argument(), "").trim();
         String ctcpText = command + (argument.isBlank() ? "" : (" " + argument));
@@ -1254,6 +1270,7 @@ public class IrcMediator implements MediatorControlPort {
             dest = status != null ? status : safeStatusTarget();
           }
         }
+        maybeMarkPrivateMessagePeerOnlineForCtcp(sid, ev, dest);
 
         StringBuilder sb =
             new StringBuilder()
@@ -1370,10 +1387,10 @@ public class IrcMediator implements MediatorControlPort {
                 rendered,
                 InterceptorEventType.INVITE);
           } else {
-            PendingInviteState.RecordResult recorded =
+            PendingInvitePort.RecordResult recorded =
                 pendingInviteState.record(
                     ev.at(), sid, channel, inviter, invitee, ev.reason(), ev.inviteNotify());
-            PendingInviteState.PendingInvite invite = recorded.invite();
+            PendingInvitePort.PendingInvite invite = recorded.invite();
             TargetRef inviteStatus = new TargetRef(sid, "status");
 
             if (recorded.collapsed()) {
@@ -2498,7 +2515,7 @@ public class IrcMediator implements MediatorControlPort {
   private void failPendingEchoesForServer(String sid, String reason) {
     if (sid == null || sid.isBlank()) return;
     Instant now = Instant.now();
-    for (PendingEchoMessageState.PendingOutboundChat pending :
+    for (PendingEchoMessagePort.PendingOutboundChat pending :
         pendingEchoMessageState.drainServer(sid)) {
       TargetRef target = pending.target();
       if (target == null) continue;
@@ -2527,7 +2544,7 @@ public class IrcMediator implements MediatorControlPort {
     }
     if (pmTarget.isChannel() || pmTarget.isUiOnly() || pmTarget.isStatus()) return;
 
-    PendingEchoMessageState.PendingOutboundChat pending =
+    PendingEchoMessagePort.PendingOutboundChat pending =
         pendingEchoMessageState.consumeOldestByTarget(pmTarget).orElse(null);
     if (pending == null) return;
 
@@ -2677,13 +2694,13 @@ public class IrcMediator implements MediatorControlPort {
     }
     String label = Objects.toString(ev.ircv3Tags().get("label"), "").trim();
     if (!label.isBlank()) {
-      LabeledResponseRoutingState.PendingLabeledRequest pending =
+      LabeledResponseRoutingPort.PendingLabeledRequest pending =
           labeledResponseRoutingState.findIfFresh(sid, label, LABELED_RESPONSE_CORRELATION_WINDOW);
       if (pending != null && pending.originTarget() != null) {
         TargetRef dest = normalizeLabeledDestination(sid, status, pending.originTarget());
-        LabeledResponseRoutingState.PendingLabeledRequest transitioned =
+        LabeledResponseRoutingPort.PendingLabeledRequest transitioned =
             labeledResponseRoutingState.markOutcomeIfPending(
-                sid, label, LabeledResponseRoutingState.Outcome.SUCCESS, ev.at());
+                sid, label, LabeledResponseRoutingPort.Outcome.SUCCESS, ev.at());
         if (transitioned != null) {
           appendLabeledOutcome(
               dest,
@@ -2735,15 +2752,15 @@ public class IrcMediator implements MediatorControlPort {
     String rendered = renderStandardReply(ev);
     String label = Objects.toString(ev.ircv3Tags().get("label"), "").trim();
     if (!label.isBlank()) {
-      LabeledResponseRoutingState.PendingLabeledRequest pending =
+      LabeledResponseRoutingPort.PendingLabeledRequest pending =
           labeledResponseRoutingState.findIfFresh(sid, label, LABELED_RESPONSE_CORRELATION_WINDOW);
       if (pending != null && pending.originTarget() != null) {
         TargetRef dest = normalizeLabeledDestination(sid, status, pending.originTarget());
-        LabeledResponseRoutingState.Outcome outcome =
+        LabeledResponseRoutingPort.Outcome outcome =
             (ev.kind() == IrcEvent.StandardReplyKind.FAIL)
-                ? LabeledResponseRoutingState.Outcome.FAILURE
-                : LabeledResponseRoutingState.Outcome.SUCCESS;
-        LabeledResponseRoutingState.PendingLabeledRequest transitioned =
+                ? LabeledResponseRoutingPort.Outcome.FAILURE
+                : LabeledResponseRoutingPort.Outcome.SUCCESS;
+        LabeledResponseRoutingPort.PendingLabeledRequest transitioned =
             labeledResponseRoutingState.markOutcomeIfPending(sid, label, outcome, ev.at());
         if (transitioned != null) {
           appendLabeledOutcome(
@@ -2773,10 +2790,10 @@ public class IrcMediator implements MediatorControlPort {
   }
 
   private void handleLabeledRequestTimeouts() {
-    List<LabeledResponseRoutingState.TimedOutLabeledRequest> timedOut =
+    List<LabeledResponseRoutingPort.TimedOutLabeledRequest> timedOut =
         labeledResponseRoutingState.collectTimedOut(LABELED_RESPONSE_TIMEOUT, 32);
     if (timedOut == null || timedOut.isEmpty()) return;
-    for (LabeledResponseRoutingState.TimedOutLabeledRequest timeout : timedOut) {
+    for (LabeledResponseRoutingPort.TimedOutLabeledRequest timeout : timedOut) {
       if (timeout == null || timeout.request() == null) continue;
       TargetRef status = new TargetRef(timeout.serverId(), "status");
       TargetRef dest =
@@ -2786,21 +2803,21 @@ public class IrcMediator implements MediatorControlPort {
           timeout.timedOutAt(),
           timeout.label(),
           timeout.request().requestPreview(),
-          LabeledResponseRoutingState.Outcome.TIMEOUT,
+          LabeledResponseRoutingPort.Outcome.TIMEOUT,
           "no reply within " + LABELED_RESPONSE_TIMEOUT.toSeconds() + "s");
     }
   }
 
   private void handlePendingEchoTimeouts() {
     Instant now = Instant.now();
-    List<PendingEchoMessageState.PendingOutboundChat> timedOut =
+    List<PendingEchoMessagePort.PendingOutboundChat> timedOut =
         pendingEchoMessageState.collectTimedOut(
             PENDING_ECHO_TIMEOUT, PENDING_ECHO_TIMEOUT_BATCH_MAX, now);
     if (timedOut == null || timedOut.isEmpty()) return;
 
     String reason =
         "Timed out waiting for server echo after " + PENDING_ECHO_TIMEOUT.toSeconds() + "s";
-    for (PendingEchoMessageState.PendingOutboundChat pending : timedOut) {
+    for (PendingEchoMessagePort.PendingOutboundChat pending : timedOut) {
       if (pending == null || pending.target() == null) continue;
       ui.failPendingOutgoingChat(
           pending.target(), pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
@@ -2827,7 +2844,7 @@ public class IrcMediator implements MediatorControlPort {
       Instant at,
       String label,
       String requestPreview,
-      LabeledResponseRoutingState.Outcome outcome,
+      LabeledResponseRoutingPort.Outcome outcome,
       String detail) {
     String lbl = Objects.toString(label, "").trim();
     if (lbl.isEmpty()) return;
@@ -2880,6 +2897,21 @@ public class IrcMediator implements MediatorControlPort {
     if (nick.isEmpty()) return;
     if (isFromSelf(serverId, nick)) return;
     ui.setPrivateMessageOnlineState(serverId, nick, true);
+  }
+
+  private void maybeMarkPrivateMessagePeerOnlineForCtcp(
+      String serverId, IrcEvent.CtcpRequestReceived event, TargetRef destination) {
+    if (event == null || destination == null) return;
+    if (event.channel() != null && !event.channel().isBlank()) return;
+
+    String from = normalizePrivateMessagePeer(event.from());
+    if (from.isEmpty()) return;
+
+    String destinationPeer = normalizePrivateMessagePeer(destination.target());
+    if (destinationPeer.isEmpty()) return;
+    if (!from.equalsIgnoreCase(destinationPeer)) return;
+
+    markPrivateMessagePeerOnline(serverId, from);
   }
 
   private void markPrivateMessagePeerOffline(String serverId, String rawNick) {
@@ -3176,6 +3208,18 @@ public class IrcMediator implements MediatorControlPort {
 
   private void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
     postTo(dest, targetCoordinator.getActiveTarget(), markUnreadIfNotActive, write);
+  }
+
+  private void clearRemoteTypingIndicatorsForSender(TargetRef target, String fromNick) {
+    if (target == null) return;
+    String nick = Objects.toString(fromNick, "").trim();
+    if (nick.isEmpty()) return;
+
+    ui.showTypingIndicator(target, nick, "done");
+    if (!target.isChannel()) return;
+
+    ui.showTypingActivity(target, "done");
+    ui.showUsersTypingIndicator(target, nick, "done");
   }
 
   /** Prefer the active target for {@code sid}, otherwise fall back to {@code status}. */

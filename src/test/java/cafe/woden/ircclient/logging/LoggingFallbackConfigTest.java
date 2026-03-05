@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.irc.PlaybackCursorProvider;
 import cafe.woden.ircclient.irc.PlaybackCursorProviderConfig;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestResult;
@@ -19,6 +18,7 @@ import cafe.woden.ircclient.logging.history.LogCursor;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerResult;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerServiceConfig;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.List;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicReference;

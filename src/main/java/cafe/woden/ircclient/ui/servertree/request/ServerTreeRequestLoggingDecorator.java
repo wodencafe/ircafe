@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.request;
 
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,6 +73,12 @@ public final class ServerTreeRequestLoggingDecorator extends ServerTreeRequestEm
   public void emitOpenPinnedChat(TargetRef ref) {
     logRequest("openPinnedChat", ref);
     super.emitOpenPinnedChat(ref);
+  }
+
+  @Override
+  public void emitOpenQuasselSetup(String serverId) {
+    logRequest("openQuasselSetup", serverId);
+    super.emitOpenQuasselSetup(serverId);
   }
 
   @Override

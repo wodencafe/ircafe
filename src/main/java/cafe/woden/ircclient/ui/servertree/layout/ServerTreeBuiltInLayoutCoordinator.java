@@ -1,12 +1,10 @@
 package cafe.woden.ircclient.ui.servertree.layout;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -14,36 +12,38 @@ import javax.swing.tree.DefaultMutableTreeNode;
 /** Coordinates per-server built-in node layout state and runtime-config persistence. */
 public final class ServerTreeBuiltInLayoutCoordinator {
 
-  private final RuntimeConfigStore runtimeConfig;
-  private final Map<String, RuntimeConfigStore.ServerTreeBuiltInLayout> byServer = new HashMap<>();
+  private final ServerTreePerServerNormalizedStore<RuntimeConfigStore.ServerTreeBuiltInLayout>
+      byServer;
 
   public ServerTreeBuiltInLayoutCoordinator(RuntimeConfigStore runtimeConfig) {
-    this.runtimeConfig = runtimeConfig;
-    loadPersisted();
+    byServer =
+        new ServerTreePerServerNormalizedStore<>(
+            runtimeConfig,
+            RuntimeConfigStore.ServerTreeBuiltInLayout.defaults(),
+            ServerTreeBuiltInLayoutCoordinator::normalizeLayout,
+            new ServerTreePerServerNormalizedStore.Persistence<>() {
+              @Override
+              public Map<String, RuntimeConfigStore.ServerTreeBuiltInLayout> read(
+                  RuntimeConfigStore config) {
+                return config.readServerTreeBuiltInLayoutByServer();
+              }
+
+              @Override
+              public void write(
+                  RuntimeConfigStore config,
+                  String serverId,
+                  RuntimeConfigStore.ServerTreeBuiltInLayout value) {
+                config.rememberServerTreeBuiltInLayout(serverId, value);
+              }
+            });
   }
 
   public RuntimeConfigStore.ServerTreeBuiltInLayout layoutForServer(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return RuntimeConfigStore.ServerTreeBuiltInLayout.defaults();
-    return byServer.getOrDefault(sid, RuntimeConfigStore.ServerTreeBuiltInLayout.defaults());
+    return byServer.valueForServer(serverId);
   }
 
   public void rememberLayout(String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
-    RuntimeConfigStore.ServerTreeBuiltInLayout normalized =
-        normalizeLayout(
-            layout == null ? RuntimeConfigStore.ServerTreeBuiltInLayout.defaults() : layout);
-    RuntimeConfigStore.ServerTreeBuiltInLayout defaults =
-        RuntimeConfigStore.ServerTreeBuiltInLayout.defaults();
-    if (normalized.equals(defaults)) {
-      byServer.remove(sid);
-    } else {
-      byServer.put(sid, normalized);
-    }
-    if (runtimeConfig != null) {
-      runtimeConfig.rememberServerTreeBuiltInLayout(sid, normalized);
-    }
+    byServer.remember(serverId, layout);
   }
 
   public RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKindForNode(
@@ -105,30 +105,5 @@ public final class ServerTreeBuiltInLayoutCoordinator {
     }
 
     return new RuntimeConfigStore.ServerTreeBuiltInLayout(List.copyOf(root), List.copyOf(other));
-  }
-
-  private void loadPersisted() {
-    if (runtimeConfig == null) return;
-    try {
-      Map<String, RuntimeConfigStore.ServerTreeBuiltInLayout> persisted =
-          runtimeConfig.readServerTreeBuiltInLayoutByServer();
-      if (persisted == null || persisted.isEmpty()) return;
-      for (Map.Entry<String, RuntimeConfigStore.ServerTreeBuiltInLayout> entry :
-          persisted.entrySet()) {
-        String sid = normalizeServerId(entry.getKey());
-        if (sid.isEmpty()) continue;
-        RuntimeConfigStore.ServerTreeBuiltInLayout normalized = normalizeLayout(entry.getValue());
-        if (normalized.equals(RuntimeConfigStore.ServerTreeBuiltInLayout.defaults())) {
-          byServer.remove(sid);
-        } else {
-          byServer.put(sid, normalized);
-        }
-      }
-    } catch (Exception ignored) {
-    }
-  }
-
-  private static String normalizeServerId(String serverId) {
-    return Objects.toString(serverId, "").trim();
   }
 }

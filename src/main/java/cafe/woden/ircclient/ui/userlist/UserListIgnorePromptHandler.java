@@ -1,10 +1,10 @@
 package cafe.woden.ircclient.ui.userlist;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreMaskMatcher;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.model.TargetRef;
 import java.awt.Window;
 import java.util.Objects;
 import javax.swing.JOptionPane;

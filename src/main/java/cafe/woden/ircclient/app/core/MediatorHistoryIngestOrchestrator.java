@@ -4,14 +4,14 @@ import cafe.woden.ircclient.app.api.ChatHistoryBatchEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestEventsPort;
 import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
-import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState;
-import cafe.woden.ircclient.app.state.ChatHistoryRequestRoutingState.QueryMode;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort.QueryMode;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.time.Duration;
@@ -41,7 +41,7 @@ public class MediatorHistoryIngestOrchestrator {
   private final ChatHistoryIngestEventsPort chatHistoryIngestEventsPort;
   private final ChatHistoryBatchEventsPort chatHistoryBatchEventsPort;
   private final ZncPlaybackEventsPort zncPlaybackEventsPort;
-  private final ChatHistoryRequestRoutingState chatHistoryRequestRoutingState;
+  private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState;
   private final ChatTranscriptHistoryPort transcripts;
   private final IrcClientService irc;
   private final Cache<HistoryRenderKey, Boolean> recentRenderedHistory =
@@ -56,7 +56,7 @@ public class MediatorHistoryIngestOrchestrator {
       ChatHistoryIngestEventsPort chatHistoryIngestEventsPort,
       ChatHistoryBatchEventsPort chatHistoryBatchEventsPort,
       ZncPlaybackEventsPort zncPlaybackEventsPort,
-      ChatHistoryRequestRoutingState chatHistoryRequestRoutingState,
+      ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState,
       ChatTranscriptHistoryPort transcripts,
       IrcClientService irc) {
     this.ui = ui;
@@ -230,7 +230,7 @@ public class MediatorHistoryIngestOrchestrator {
       String normalizedTarget,
       TargetRef fallbackTarget,
       List<ChatHistoryEntry> entries) {
-    ChatHistoryRequestRoutingState.PendingRequest pending =
+    ChatHistoryRequestRoutingPort.PendingRequest pending =
         chatHistoryRequestRoutingState.consumeIfFresh(sid, normalizedTarget, LIVE_REQUEST_MAX_AGE);
     if (pending == null || pending.originTarget() == null) {
       return new LiveRenderResult(fallbackTarget, 0);

@@ -5,11 +5,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -42,6 +42,7 @@ class MediatorUiSubscriptionBinderTest {
     when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
     when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
     when(ui.outboundLines()).thenReturn(Flowable.never());
+    when(ui.quasselSetupRequests()).thenReturn(Flowable.never());
     when(ui.quasselNetworkManagerRequests()).thenReturn(Flowable.never());
     when(ui.closeTargetRequests()).thenReturn(Flowable.never());
     when(ui.joinChannelRequests()).thenReturn(joinRequests);
@@ -51,7 +52,7 @@ class MediatorUiSubscriptionBinderTest {
     when(ui.clearLogRequests()).thenReturn(Flowable.never());
 
     MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
-    binder.bind(ui, targetCoordinator, disposables, req -> {}, line -> {}, serverId -> {});
+    binder.bind(ui, targetCoordinator, disposables, req -> {}, line -> {}, sid -> {}, sid -> {});
 
     TargetRef channel = new TargetRef("libera", "#ircafe");
     joinRequests.onNext(channel);
@@ -79,6 +80,7 @@ class MediatorUiSubscriptionBinderTest {
     when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
     when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
     when(ui.outboundLines()).thenReturn(Flowable.never());
+    when(ui.quasselSetupRequests()).thenReturn(Flowable.never());
     when(ui.quasselNetworkManagerRequests()).thenReturn(quasselNetworkManagerRequests);
     when(ui.closeTargetRequests()).thenReturn(Flowable.never());
     when(ui.joinChannelRequests()).thenReturn(Flowable.never());
@@ -89,7 +91,13 @@ class MediatorUiSubscriptionBinderTest {
 
     MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
     binder.bind(
-        ui, targetCoordinator, disposables, req -> {}, line -> {}, onQuasselNetworkManagerRequest);
+        ui,
+        targetCoordinator,
+        disposables,
+        req -> {},
+        line -> {},
+        sid -> {},
+        onQuasselNetworkManagerRequest);
 
     quasselNetworkManagerRequests.onNext("quassel");
 
@@ -107,6 +115,7 @@ class MediatorUiSubscriptionBinderTest {
     when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
     when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
     when(ui.outboundLines()).thenReturn(Flowable.never());
+    when(ui.quasselSetupRequests()).thenReturn(Flowable.never());
     when(ui.quasselNetworkManagerRequests())
         .thenReturn(Flowable.error(new IllegalStateException("boom")));
     when(ui.closeTargetRequests()).thenReturn(Flowable.never());
@@ -118,9 +127,47 @@ class MediatorUiSubscriptionBinderTest {
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
 
     MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
-    binder.bind(ui, targetCoordinator, disposables, req -> {}, line -> {}, sid -> {});
+    binder.bind(ui, targetCoordinator, disposables, req -> {}, line -> {}, sid -> {}, sid -> {});
 
     verify(ui, timeout(1_000))
         .appendError(status, "(ui-error)", "java.lang.IllegalStateException: boom");
+  }
+
+  @Test
+  void quasselSetupRequestsRouteToProvidedHandler() {
+    UiPort ui = Mockito.mock(UiPort.class);
+    TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
+    @SuppressWarnings("unchecked")
+    Consumer<String> onQuasselSetupRequest = Mockito.mock(Consumer.class);
+
+    PublishProcessor<String> quasselSetupRequests = PublishProcessor.create();
+
+    when(ui.targetSelections()).thenReturn(Flowable.never());
+    when(ui.targetActivations()).thenReturn(Flowable.never());
+    when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
+    when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
+    when(ui.outboundLines()).thenReturn(Flowable.never());
+    when(ui.quasselSetupRequests()).thenReturn(quasselSetupRequests);
+    when(ui.quasselNetworkManagerRequests()).thenReturn(Flowable.never());
+    when(ui.closeTargetRequests()).thenReturn(Flowable.never());
+    when(ui.joinChannelRequests()).thenReturn(Flowable.never());
+    when(ui.disconnectChannelRequests()).thenReturn(Flowable.never());
+    when(ui.bouncerDetachChannelRequests()).thenReturn(Flowable.never());
+    when(ui.closeChannelRequests()).thenReturn(Flowable.never());
+    when(ui.clearLogRequests()).thenReturn(Flowable.never());
+
+    MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
+    binder.bind(
+        ui,
+        targetCoordinator,
+        disposables,
+        req -> {},
+        line -> {},
+        onQuasselSetupRequest,
+        sid -> {});
+
+    quasselSetupRequests.onNext("quassel");
+
+    verify(onQuasselSetupRequest, timeout(1_000)).accept("quassel");
   }
 }

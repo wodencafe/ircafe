@@ -1,7 +1,8 @@
 package cafe.woden.ircclient.ui.servertree.state;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import java.util.Map;
@@ -77,15 +78,19 @@ public final class ServerTreeNodeBadgeUpdater {
   }
 
   public void refreshSojuAutoConnectBadges() {
-    refreshAutoConnectBadges("soju:");
+    refreshAutoConnectBadges(ServerTreeBouncerBackends.SOJU);
   }
 
   public void refreshZncAutoConnectBadges() {
-    refreshAutoConnectBadges("znc:");
+    refreshAutoConnectBadges(ServerTreeBouncerBackends.ZNC);
   }
 
-  private void refreshAutoConnectBadges(String serverPrefix) {
-    String prefix = normalize(serverPrefix);
+  public void refreshGenericAutoConnectBadges() {
+    refreshAutoConnectBadges(ServerTreeBouncerBackends.GENERIC);
+  }
+
+  public void refreshAutoConnectBadges(String backendId) {
+    String prefix = normalize(ServerTreeBouncerBackends.prefixFor(backendId));
     if (prefix.isEmpty()) return;
 
     for (String id : ephemeralServerIds) {

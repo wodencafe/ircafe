@@ -12,6 +12,11 @@ public abstract class OutboundCommandDispatcherDecorator implements OutboundComm
   }
 
   @Override
+  public void openQuasselSetup(CompositeDisposable disposables, String serverId) {
+    delegate.openQuasselSetup(disposables, serverId);
+  }
+
+  @Override
   public void openQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
     delegate.openQuasselNetworkManager(disposables, serverId);
   }

@@ -31,8 +31,7 @@ public final class ServerTreeDragReorderSupport {
       builtInLayoutNodeKindForNode;
   private final Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeRootSiblingNode>
       rootSiblingNodeKindForNode;
-  private final Predicate<DefaultMutableTreeNode> isSojuNetworksGroupNode;
-  private final Predicate<DefaultMutableTreeNode> isZncNetworksGroupNode;
+  private final Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode;
 
   private volatile InsertionLine insertionLine;
 
@@ -65,8 +64,7 @@ public final class ServerTreeDragReorderSupport {
           builtInLayoutNodeKindForNode,
       Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeRootSiblingNode>
           rootSiblingNodeKindForNode,
-      Predicate<DefaultMutableTreeNode> isSojuNetworksGroupNode,
-      Predicate<DefaultMutableTreeNode> isZncNetworksGroupNode) {
+      Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode) {
     this.tree = Objects.requireNonNull(tree, "tree");
     this.servers = Objects.requireNonNull(servers, "servers");
     this.nodeClassifier = Objects.requireNonNull(nodeClassifier, "nodeClassifier");
@@ -77,10 +75,8 @@ public final class ServerTreeDragReorderSupport {
         Objects.requireNonNull(builtInLayoutNodeKindForNode, "builtInLayoutNodeKindForNode");
     this.rootSiblingNodeKindForNode =
         Objects.requireNonNull(rootSiblingNodeKindForNode, "rootSiblingNodeKindForNode");
-    this.isSojuNetworksGroupNode =
-        Objects.requireNonNull(isSojuNetworksGroupNode, "isSojuNetworksGroupNode");
-    this.isZncNetworksGroupNode =
-        Objects.requireNonNull(isZncNetworksGroupNode, "isZncNetworksGroupNode");
+    this.backendIdForNetworksGroupNode =
+        Objects.requireNonNull(backendIdForNetworksGroupNode, "backendIdForNetworksGroupNode");
   }
 
   public boolean isDraggableChannelNode(DefaultMutableTreeNode node) {
@@ -183,9 +179,9 @@ public final class ServerTreeDragReorderSupport {
   }
 
   private boolean isReservedServerTailNode(DefaultMutableTreeNode node) {
+    String backendId = backendIdForNetworksGroupNode.apply(node);
     return nodeClassifier.isPrivateMessagesGroupNode(node)
-        || isSojuNetworksGroupNode.test(node)
-        || isZncNetworksGroupNode.test(node);
+        || (backendId != null && !backendId.isBlank());
   }
 
   private void setInsertionLine(InsertionLine line) {

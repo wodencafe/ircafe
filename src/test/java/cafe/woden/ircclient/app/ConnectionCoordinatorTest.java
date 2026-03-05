@@ -12,18 +12,18 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
 import java.time.Instant;
 import java.util.List;
@@ -43,7 +43,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
@@ -80,7 +80,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera", "oftc"));
@@ -118,7 +118,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera", "oftc", "snoonet"));
@@ -149,7 +149,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("hybrid"));
@@ -196,7 +196,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
@@ -237,7 +237,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
@@ -268,7 +268,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
@@ -298,7 +298,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
@@ -329,7 +329,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
@@ -355,7 +355,6 @@ class ConnectionCoordinatorTest {
     verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#ircafe"));
     verify(ui, timeout(2_000).atLeastOnce())
         .setChannelDisconnected(new TargetRef("libera", "#ircafe"), true);
-    verify(runtimeConfig, never()).rememberNick(anyString(), anyString());
   }
 
   @Test
@@ -364,7 +363,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
@@ -386,7 +385,6 @@ class ConnectionCoordinatorTest {
         null);
 
     verify(ui).setChatCurrentNick("libera", "preferredNick1");
-    verify(runtimeConfig, never()).rememberNick(anyString(), anyString());
   }
 
   @Test
@@ -395,7 +393,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
@@ -437,7 +435,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
@@ -479,6 +477,68 @@ class ConnectionCoordinatorTest {
             any(Instant.class),
             eq("(conn)"),
             eq("Quassel Core setup is required before this connection can log in."));
+    verify(ui, atLeastOnce())
+        .setConnectionStatusText(
+            argThat(text -> text != null && text.contains("Quassel setup required")));
+  }
+
+  @Test
+  void connectionFeaturesSetupRequiredAutoPromptsAndSubmitsSetup() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
+    when(serverCatalog.containsId("quassel")).thenReturn(true);
+    when(irc.connect("quassel")).thenReturn(Completable.never());
+    when(irc.isQuasselCoreSetupPending("quassel")).thenReturn(true);
+    IrcClientService.QuasselCoreSetupPrompt prompt =
+        new IrcClientService.QuasselCoreSetupPrompt(
+            "quassel", "setup required", List.of("SQLite"), List.of("Database"), Map.of());
+    IrcClientService.QuasselCoreSetupRequest request =
+        new IrcClientService.QuasselCoreSetupRequest(
+            "admin", "secret", "SQLite", "Database", Map.of(), Map.of());
+    when(irc.quasselCoreSetupPrompt("quassel")).thenReturn(Optional.of(prompt));
+    when(ui.promptQuasselCoreSetup("quassel", prompt)).thenReturn(Optional.of(request));
+    when(irc.submitQuasselCoreSetup("quassel", request)).thenReturn(Completable.complete());
+    when(irc.quasselCoreNetworks("quassel")).thenReturn(List.of());
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    coordinator.connectOne("quassel");
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(
+            Instant.now(),
+            "quassel-phase=setup-required;detail=Quassel Core setup is required before login"),
+        null);
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(Instant.now(), "quassel-phase=sync-ready"),
+        null);
+
+    TargetRef status = new TargetRef("quassel", "status");
+    verify(ui).promptQuasselCoreSetup("quassel", prompt);
+    verify(irc).submitQuasselCoreSetup("quassel", request);
+    verify(ui).appendStatus(status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
+    verify(ui)
+        .appendStatus(
+            eq(status),
+            eq("(qsetup)"),
+            argThat(text -> text != null && text.contains("Opening Quassel Network Manager")));
+    verify(ui).openQuasselNetworkManager("quassel");
+    verify(irc, times(2)).connect("quassel");
   }
 
   @Test
@@ -487,7 +547,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
@@ -523,7 +583,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
@@ -566,7 +626,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
@@ -644,7 +704,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
@@ -686,7 +746,7 @@ class ConnectionCoordinatorTest {
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));

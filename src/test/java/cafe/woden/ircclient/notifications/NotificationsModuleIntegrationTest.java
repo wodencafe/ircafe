@@ -10,11 +10,11 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
 import java.util.List;
 import org.junit.jupiter.api.Test;

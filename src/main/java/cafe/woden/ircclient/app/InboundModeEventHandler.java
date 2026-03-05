@@ -1,11 +1,11 @@
 package cafe.woden.ircclient.app;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.state.ChannelFlagModeState;
-import cafe.woden.ircclient.app.state.ModeRoutingState;
-import cafe.woden.ircclient.app.state.RecentStatusModeState;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.ChannelFlagModeStatePort;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.RecentStatusModePort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -18,19 +18,19 @@ import org.springframework.stereotype.Component;
 public class InboundModeEventHandler {
   private static final Logger log = LoggerFactory.getLogger(InboundModeEventHandler.class);
   private final UiPort ui;
-  private final ModeRoutingState modeRoutingState;
+  private final ModeRoutingPort modeRoutingState;
   private final JoinModeBurstService joinModeBurstService;
   private final ModeFormattingService modeFormattingService;
-  private final ChannelFlagModeState channelFlagModeState;
-  private final RecentStatusModeState recentStatusModeState;
+  private final ChannelFlagModeStatePort channelFlagModeState;
+  private final RecentStatusModePort recentStatusModeState;
 
   public InboundModeEventHandler(
       UiPort ui,
-      ModeRoutingState modeRoutingState,
+      ModeRoutingPort modeRoutingState,
       JoinModeBurstService joinModeBurstService,
       ModeFormattingService modeFormattingService,
-      ChannelFlagModeState channelFlagModeState,
-      RecentStatusModeState recentStatusModeState) {
+      ChannelFlagModeStatePort channelFlagModeState,
+      RecentStatusModePort recentStatusModeState) {
     this.ui = ui;
     this.modeRoutingState = modeRoutingState;
     this.joinModeBurstService = joinModeBurstService;

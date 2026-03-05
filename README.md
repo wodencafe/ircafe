@@ -212,6 +212,13 @@ Targeted suites:
 ./gradlew functionalTest
 ```
 
+Quassel support integration matrix:
+
+- `QuasselCoreRealServerIntegrationTest`: validate against an already-running Quassel Core.
+- `QuasselCoreContainerIntegrationTest`: validate containerized Quassel bootstrap/connect/sync.
+- `QuasselCoreContainerNetworkE2eIntegrationTest`: validate Quassel + real ircd network flow.
+- All Quassel integration tests are opt-in and gated by `quassel.it.*` properties.
+
 Real Quassel Core integration (opt-in):
 
 ```bash
@@ -255,6 +262,18 @@ Optional knobs: `quassel.it.container.e2e.quassel-image`,
 `quassel.it.container.e2e.password`.
 Note: this test skips when the selected Quassel image does not expose runtime
 network creation to remote clients.
+
+Direct IRC backend E2E (Pircbotx + local ngIRCd, no Quassel):
+
+```bash
+# Validates direct IRC backend connect/ready/join/inbound+outbound messages/reconnect.
+./gradlew integrationTest --tests 'cafe.woden.ircclient.irc.PircbotxContainerNetworkE2eIntegrationTest' \
+  -Dirc.it.container.e2e.enabled=true
+```
+
+Optional knobs: `irc.it.container.e2e.irc-image`, `irc.it.container.e2e.channel`,
+`irc.it.container.e2e.bot-message`, `irc.it.container.e2e.app-message`,
+`irc.it.container.e2e.nick`, `irc.it.container.e2e.login`.
 
 When to run which tests:
 

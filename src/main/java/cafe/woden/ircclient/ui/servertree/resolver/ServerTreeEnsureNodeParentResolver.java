@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.resolver;
 
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import java.util.function.Supplier;
 import javax.swing.tree.DefaultMutableTreeNode;

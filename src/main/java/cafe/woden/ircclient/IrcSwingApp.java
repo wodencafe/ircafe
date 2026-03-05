@@ -1,7 +1,6 @@
 package cafe.woden.ircclient;
 
 import cafe.woden.ircclient.app.api.MediatorControlPort;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.IgnoreProperties;
 import cafe.woden.ircclient.config.IrcProperties;
@@ -11,6 +10,7 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.ZncProperties;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.settings.ThemeIdUtils;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;

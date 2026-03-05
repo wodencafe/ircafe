@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.coordinator;
 
-import cafe.woden.ircclient.app.api.TargetRef;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.NickContextMenuFactory;
 import java.awt.Component;
 import java.io.File;
