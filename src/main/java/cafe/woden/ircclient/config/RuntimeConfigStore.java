@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.config;
 
+import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
 import cafe.woden.ircclient.model.FilterRule;
 import cafe.woden.ircclient.model.FilterScopeOverride;
 import cafe.woden.ircclient.model.InterceptorDefinition;
@@ -32,7 +34,8 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 @Component
-public class RuntimeConfigStore {
+public class RuntimeConfigStore
+    implements ChatCommandRuntimeConfigPort, InviteAutoJoinConfigPort {
 
   private static final Logger log = LoggerFactory.getLogger(RuntimeConfigStore.class);
   private static final java.util.Set<String> KNOWN_IGNORE_LEVELS =
@@ -451,6 +454,7 @@ public class RuntimeConfigStore {
    *
    * <p>Returns {@code defaultValue} when the key is missing or invalid.
    */
+  @Override
   public synchronized boolean readInviteAutoJoinEnabled(boolean defaultValue) {
     try {
       if (file.toString().isBlank()) return defaultValue;
@@ -699,6 +703,7 @@ public class RuntimeConfigStore {
     }
   }
 
+  @Override
   public synchronized void rememberJoinedChannel(String serverId, String channel) {
     rememberServerTreeChannel(serverId, channel);
   }
@@ -1446,6 +1451,7 @@ public class RuntimeConfigStore {
     return List.of();
   }
 
+  @Override
   public synchronized void rememberNick(String serverId, String nick) {
     updateServer(
         serverId,
@@ -2534,6 +2540,7 @@ public class RuntimeConfigStore {
     }
   }
 
+  @Override
   public synchronized void rememberInviteAutoJoinEnabled(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;

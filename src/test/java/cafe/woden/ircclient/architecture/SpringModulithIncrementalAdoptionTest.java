@@ -16,7 +16,6 @@ import cafe.woden.ircclient.app.api.MonitorRosterPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
@@ -24,8 +23,9 @@ import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.IrcMediator;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
-import cafe.woden.ircclient.app.state.ModeRoutingState;
-import cafe.woden.ircclient.app.state.PendingInviteState;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.AssertjSwingDiagnosticsService;
@@ -42,6 +42,7 @@ import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.logging.LoggingTargetLogMaintenancePortAdapter;
 import cafe.woden.ircclient.logging.history.LoggingAppHistoryPortsAdapter;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.monitor.MonitorIsonFallbackService;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.monitor.MonitorSyncService;
@@ -50,6 +51,19 @@ import cafe.woden.ircclient.notifications.IrcEventNotificationService;
 import cafe.woden.ircclient.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.perform.PerformOnConnectService;
+import cafe.woden.ircclient.state.ModeRoutingState;
+import cafe.woden.ircclient.state.PendingInviteState;
+import cafe.woden.ircclient.state.api.AwayRoutingPort;
+import cafe.woden.ircclient.state.api.ChannelFlagModeStatePort;
+import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
+import cafe.woden.ircclient.state.api.CtcpRoutingPort;
+import cafe.woden.ircclient.state.api.JoinRoutingPort;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
+import cafe.woden.ircclient.state.api.PendingInvitePort;
+import cafe.woden.ircclient.state.api.RecentStatusModePort;
+import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModule;
@@ -70,6 +84,35 @@ class SpringModulithIncrementalAdoptionTest {
     ApplicationModule appModule = moduleFor(modules, IrcMediator.class);
     assertThat(appModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.app");
     assertAppNamedInterfaces(appModule);
+
+    ApplicationModule modelModule = moduleFor(modules, TargetRef.class);
+    assertThat(modelModule).isNotEqualTo(appModule);
+    assertThat(modelModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.model");
+
+    ApplicationModule stateModule = moduleFor(modules, ModeRoutingState.class);
+    assertThat(stateModule).isNotEqualTo(appModule);
+    assertThat(moduleFor(modules, PendingInviteState.class)).isEqualTo(stateModule);
+    assertThat(stateModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.state");
+    assertNamedInterfaceContains(
+        stateModule,
+        "api",
+        AwayRoutingPort.class,
+        CtcpRoutingPort.class,
+        ChatHistoryRequestRoutingPort.class,
+        JoinRoutingPort.class,
+        ModeRoutingPort.class,
+        WhoisRoutingPort.class,
+        LabeledResponseRoutingPort.class,
+        PendingEchoMessagePort.class,
+        PendingInvitePort.class,
+        ChannelFlagModeStatePort.class,
+        RecentStatusModePort.class);
+
+    ApplicationModule configModule = moduleFor(modules, RuntimeConfigStore.class);
+    assertThat(configModule).isNotEqualTo(appModule);
+    assertThat(configModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.config");
+    assertNamedInterfaceContains(
+        configModule, "api", InviteAutoJoinConfigPort.class, ChatCommandRuntimeConfigPort.class);
 
     ApplicationModule performModule = moduleFor(modules, PerformOnConnectService.class);
     assertThat(performModule).isNotEqualTo(appModule);
@@ -167,13 +210,10 @@ class SpringModulithIncrementalAdoptionTest {
         NotificationRuleMatcherPort.class,
         MonitorFallbackPort.class,
         MonitorRosterPort.class,
-        TargetRef.class,
         TrayNotificationsPort.class);
     assertNamedInterfaceContains(
         appModule, "commands", UserCommandAliasesBus.class, FilterCommand.class);
     assertNamedInterfaceContains(appModule, "outbound", LocalFilterCommandHandler.class);
-    assertNamedInterfaceContains(
-        appModule, "state", ModeRoutingState.class, PendingInviteState.class);
   }
 
   private static void assertNamedInterfaceContains(
