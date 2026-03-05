@@ -324,6 +324,32 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void channelMessageFromSenderClearsTypingIndicatorsAsDone() throws Exception {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera", new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "hello")));
+
+    verify(ui).showTypingIndicator(chan, "alice", "done");
+    verify(ui).showTypingActivity(chan, "done");
+    verify(ui).showUsersTypingIndicator(chan, "alice", "done");
+  }
+
+  @Test
+  void privateMessageFromPeerClearsTypingIndicatorAsDone() throws Exception {
+    TargetRef pm = new TargetRef("libera", "alice");
+    when(targetCoordinator.allowPrivateAutoOpenFromInbound(eq(pm), eq(false))).thenReturn(false);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent("libera", new IrcEvent.PrivateMessage(Instant.now(), "alice", "hello")));
+
+    verify(ui).showTypingIndicator(pm, "alice", "done");
+    verify(ui, never()).showTypingActivity(any(), anyString());
+    verify(ui, never()).showUsersTypingIndicator(any(), anyString(), anyString());
+  }
+
+  @Test
   void connectionReadyEventIsForwardedToConnectivityCoordinator() throws Exception {
     TargetRef active = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(active);

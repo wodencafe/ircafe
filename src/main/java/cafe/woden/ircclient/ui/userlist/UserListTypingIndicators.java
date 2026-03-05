@@ -51,8 +51,14 @@ public final class UserListTypingIndicators {
 
   public void onTyping(String key, String rawState, long now) {
     if (key == null || key.isBlank()) return;
-    TypingIndicatorState indicator =
-        typingByNick.computeIfAbsent(key, __ -> new TypingIndicatorState());
+    String state = normalizeTypingState(rawState);
+    TypingIndicatorState indicator;
+    if ("done".equals(state)) {
+      indicator = typingByNick.get(key);
+      if (indicator == null) return;
+    } else {
+      indicator = typingByNick.computeIfAbsent(key, __ -> new TypingIndicatorState());
+    }
     indicator.apply(rawState, now);
     indicator.expireIfNeeded(now);
     if (indicator.isFinished(now)) {

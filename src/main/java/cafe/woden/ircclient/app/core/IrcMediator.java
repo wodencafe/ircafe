@@ -693,6 +693,8 @@ public class IrcMediator implements MediatorControlPort {
           return;
         }
 
+        clearRemoteTypingIndicatorsForSender(chan, ev.from());
+
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           postTo(
               chan,
@@ -761,6 +763,8 @@ public class IrcMediator implements MediatorControlPort {
             sid, chan, "channel-action", ev.messageId(), ev.ircv3Tags())) {
           return;
         }
+
+        clearRemoteTypingIndicatorsForSender(chan, ev.from());
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           postTo(
@@ -919,6 +923,10 @@ public class IrcMediator implements MediatorControlPort {
           return;
         }
 
+        if (!fromSelf) {
+          clearRemoteTypingIndicatorsForSender(pm, ev.from());
+        }
+
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
           if (allowAutoOpen) {
             postTo(
@@ -1010,6 +1018,10 @@ public class IrcMediator implements MediatorControlPort {
         if (shouldSuppressInboundDuplicateByMsgId(
             sid, pm, "private-action", ev.messageId(), ev.ircv3Tags())) {
           return;
+        }
+
+        if (!fromSelf) {
+          clearRemoteTypingIndicatorsForSender(pm, ev.from());
         }
 
         if (decision == InboundIgnorePolicyPort.Decision.SOFT_SPOILER) {
@@ -3181,6 +3193,18 @@ public class IrcMediator implements MediatorControlPort {
 
   private void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
     postTo(dest, targetCoordinator.getActiveTarget(), markUnreadIfNotActive, write);
+  }
+
+  private void clearRemoteTypingIndicatorsForSender(TargetRef target, String fromNick) {
+    if (target == null) return;
+    String nick = Objects.toString(fromNick, "").trim();
+    if (nick.isEmpty()) return;
+
+    ui.showTypingIndicator(target, nick, "done");
+    if (!target.isChannel()) return;
+
+    ui.showTypingActivity(target, "done");
+    ui.showUsersTypingIndicator(target, nick, "done");
   }
 
   /** Prefer the active target for {@code sid}, otherwise fall back to {@code status}. */
