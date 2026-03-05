@@ -71,7 +71,7 @@ class MessageInputNickCompletionSupportTest {
   }
 
   @Test
-  void completionPopupRanksNicksAboveWordsAndKeepsWordLikelihoodOrder() throws Exception {
+  void completionPopupShowsNickSuggestionsBeforeWordsWhenNickPrefixMatchesExist() throws Exception {
     JTextField input = new JTextField();
     MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
     MessageInputNickCompletionSupport support =
@@ -93,6 +93,57 @@ class MessageInputNickCompletionSupportTest {
     assertTrue(replacements.indexOf("alice") < replacements.indexOf("almost"));
     assertTrue(replacements.indexOf("alina") < replacements.indexOf("almost"));
     assertTrue(replacements.indexOf("almost") < replacements.indexOf("almond"));
+  }
+
+  @Test
+  void completionPopupRanksClosestNickFirstWithinNickSuggestions() throws Exception {
+    JTextField input = new JTextField();
+    MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(new JPanel(), input, undoSupport);
+    support.setNickCompletions(List.of("aardvark", "al", "alice"));
+
+    input.setText("a");
+    input.setCaretPosition(1);
+
+    List<String> replacements = replacementTextsForCurrentToken(support, input);
+    assertEquals("al", replacements.getFirst());
+    assertTrue(replacements.indexOf("al") < replacements.indexOf("alice"));
+    assertTrue(replacements.indexOf("alice") < replacements.indexOf("aardvark"));
+  }
+
+  @Test
+  void completionPopupIncludesOnlyNickPrefixMatches() throws Exception {
+    JTextField input = new JTextField();
+    MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(new JPanel(), input, undoSupport);
+    support.setNickCompletions(List.of("otr", "otrbot", "xxotr", "other"));
+
+    input.setText("otr");
+    input.setCaretPosition(3);
+
+    List<String> replacements = replacementTextsForCurrentToken(support, input);
+    assertEquals(List.of("otr", "otrbot"), replacements);
+  }
+
+  @Test
+  void completionPopupShowsWordSuggestionsWhenNoNickPrefixMatchesExist() throws Exception {
+    JTextField input = new JTextField();
+    MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(
+            new JPanel(), input, undoSupport, (token, maxSuggestions) -> List.of("hello", "help"));
+    support.setNickCompletions(List.of("alice", "alina"));
+
+    input.setText("hel");
+    input.setCaretPosition(3);
+
+    List<String> replacements = replacementTextsForCurrentToken(support, input);
+    assertTrue(replacements.contains("hello"));
+    assertTrue(replacements.contains("help"));
+    assertFalse(replacements.contains("alice"));
+    assertFalse(replacements.contains("alina"));
   }
 
   @Test

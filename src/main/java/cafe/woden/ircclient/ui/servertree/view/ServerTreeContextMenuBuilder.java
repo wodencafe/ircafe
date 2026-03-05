@@ -53,8 +53,10 @@ public final class ServerTreeContextMenuBuilder {
       ServerTreeServerNodeMenuBuilder serverNodeMenuBuilder,
       ServerTreeTargetNodeMenuBuilder targetNodeMenuBuilder) {
     this.routingContext = Objects.requireNonNull(routingContext, "routingContext");
-    this.serverNodeMenuBuilder = Objects.requireNonNull(serverNodeMenuBuilder, "serverNodeMenuBuilder");
-    this.targetNodeMenuBuilder = Objects.requireNonNull(targetNodeMenuBuilder, "targetNodeMenuBuilder");
+    this.serverNodeMenuBuilder =
+        Objects.requireNonNull(serverNodeMenuBuilder, "serverNodeMenuBuilder");
+    this.targetNodeMenuBuilder =
+        Objects.requireNonNull(targetNodeMenuBuilder, "targetNodeMenuBuilder");
   }
 
   public JPopupMenu build(TreePath path) {

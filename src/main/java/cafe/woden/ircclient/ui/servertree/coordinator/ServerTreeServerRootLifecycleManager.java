@@ -13,8 +13,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.swing.JTree;
-import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 
 /** Handles server-root add/remove lifecycle and associated state synchronization. */
@@ -76,7 +76,8 @@ public final class ServerTreeServerRootLifecycleManager {
 
   @FunctionalInterface
   public interface BiLayoutConsumer {
-    void accept(ServerNodes serverNodes, RuntimeConfigStore.ServerTreeBuiltInLayout requestedLayout);
+    void accept(
+        ServerNodes serverNodes, RuntimeConfigStore.ServerTreeBuiltInLayout requestedLayout);
   }
 
   @FunctionalInterface

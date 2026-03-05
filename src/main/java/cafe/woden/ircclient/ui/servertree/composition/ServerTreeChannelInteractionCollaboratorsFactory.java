@@ -71,7 +71,8 @@ public final class ServerTreeChannelInteractionCollaboratorsFactory {
                       Objects.requireNonNull(in.serverNodesForServer(), "serverNodesForServer")
                           .apply(serverId);
                   if (nodes == null || node == null) return false;
-                  return node.getParent() == nodes.serverNode || node.getParent() == nodes.otherNode;
+                  return node.getParent() == nodes.serverNode
+                      || node.getParent() == nodes.otherNode;
                 },
                 Objects.requireNonNull(in.leafForTarget(), "leafForTarget"),
                 node -> {

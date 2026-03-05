@@ -87,5 +87,4 @@ public final class ServerTreeRootSiblingOrderCoordinator {
     }
     return new RuntimeConfigStore.ServerTreeRootSiblingOrder(List.copyOf(normalized));
   }
-
 }

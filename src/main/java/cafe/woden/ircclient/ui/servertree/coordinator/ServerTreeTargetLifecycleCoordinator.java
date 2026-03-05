@@ -91,12 +91,14 @@ public final class ServerTreeTargetLifecycleCoordinator {
       Consumer<Boolean> setDccTransfersNodesVisible,
       Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility,
       Function<String, ServerNodes> addServerRoot,
-      Function<TargetRef, RuntimeConfigStore.ServerTreeBuiltInLayoutNode> builtInLayoutNodeKindForRef,
+      Function<TargetRef, RuntimeConfigStore.ServerTreeBuiltInLayoutNode>
+          builtInLayoutNodeKindForRef,
       Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayout,
       Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> rootSiblingOrder,
       Function<ServerNodes, DefaultMutableTreeNode> ensureChannelListNode,
       BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeBuiltInLayout> applyBuiltInLayoutToTree,
-      BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder> applyRootSiblingOrderToTree,
+      BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder>
+          applyRootSiblingOrderToTree,
       Consumer<String> persistBuiltInLayoutFromTree,
       Predicate<TargetRef> isPrivateMessageTarget,
       Supplier<Boolean> shouldPersistPrivateMessageList,
@@ -111,7 +113,8 @@ public final class ServerTreeTargetLifecycleCoordinator {
     Objects.requireNonNull(setApplicationRootVisible, "setApplicationRootVisible");
     Objects.requireNonNull(applicationLeafLabel, "applicationLeafLabel");
     Objects.requireNonNull(addApplicationLeaf, "addApplicationLeaf");
-    Objects.requireNonNull(nodeStructureChangedForApplicationRoot, "nodeStructureChangedForApplicationRoot");
+    Objects.requireNonNull(
+        nodeStructureChangedForApplicationRoot, "nodeStructureChangedForApplicationRoot");
     Objects.requireNonNull(dccTransfersNodesVisible, "dccTransfersNodesVisible");
     Objects.requireNonNull(setDccTransfersNodesVisible, "setDccTransfersNodesVisible");
     Objects.requireNonNull(builtInNodesVisibility, "builtInNodesVisibility");

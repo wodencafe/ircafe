@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.servertree.coordinator;
 
 import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -17,7 +18,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
-import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 
 /** Synchronizes the server tree structure with the latest server catalog snapshot. */
 public final class ServerTreeServerCatalogSynchronizer {

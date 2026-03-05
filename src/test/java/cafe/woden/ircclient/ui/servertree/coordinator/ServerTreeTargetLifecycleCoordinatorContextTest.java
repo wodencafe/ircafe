@@ -68,7 +68,10 @@ class ServerTreeTargetLifecycleCoordinatorContextTest {
             ref -> RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
             id -> builtInLayout,
             id -> rootSiblingOrder,
-            serverNodes -> serverNodes.channelListRef == null ? null : new DefaultMutableTreeNode("Channel List"),
+            serverNodes ->
+                serverNodes.channelListRef == null
+                    ? null
+                    : new DefaultMutableTreeNode("Channel List"),
             (serverNodes, layout) -> {
               appliedBuiltInLayoutServer.set(serverNodes);
               appliedBuiltInLayout.set(layout);
@@ -113,8 +116,7 @@ class ServerTreeTargetLifecycleCoordinatorContextTest {
         context.builtInLayoutNodeKindForRef(channelRef));
     assertSame(builtInLayout, context.builtInLayout(serverId));
     assertSame(rootSiblingOrder, context.rootSiblingOrder(serverId));
-    assertEquals(
-        "Channel List", context.ensureChannelListNode(nodes).getUserObject().toString());
+    assertEquals("Channel List", context.ensureChannelListNode(nodes).getUserObject().toString());
 
     context.applyBuiltInLayoutToTree(nodes, builtInLayout);
     context.applyRootSiblingOrderToTree(nodes, rootSiblingOrder);

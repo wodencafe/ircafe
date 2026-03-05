@@ -58,7 +58,8 @@ public final class ServerTreeLayoutPersistenceCoordinator {
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeRootSiblingOrder currentRootSiblingOrder(String serverId) {
+      public RuntimeConfigStore.ServerTreeRootSiblingOrder currentRootSiblingOrder(
+          String serverId) {
         return currentRootSiblingOrder.apply(serverId);
       }
 

@@ -91,8 +91,10 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             serverId ->
                 Objects.requireNonNull(in.serverDisplayNames(), "serverDisplayNames")
                     .getOrDefault(serverId, serverId),
-            (originId, networkKey) -> isSojuAutoConnectEnabled(in.sojuAutoConnect(), originId, networkKey),
-            (originId, networkKey) -> isZncAutoConnectEnabled(in.zncAutoConnect(), originId, networkKey),
+            (originId, networkKey) ->
+                isSojuAutoConnectEnabled(in.sojuAutoConnect(), originId, networkKey),
+            (originId, networkKey) ->
+                isZncAutoConnectEnabled(in.zncAutoConnect(), originId, networkKey),
             Objects.requireNonNull(in.isApplicationJfrActive(), "isApplicationJfrActive"),
             nodeData -> isBouncerControlStatusNode(nodeData, in)));
   }
@@ -101,8 +103,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       Inputs in, ServerTreeRequestStreams requestStreams) {
     return new ServerTreeContextMenuBuilder(
         ServerTreeContextMenuBuilder.routingContext(
-            in.uiHooks()::isServerNode,
-            in.nodeClassifier()::isInterceptorsGroupNode),
+            in.uiHooks()::isServerNode, in.nodeClassifier()::isInterceptorsGroupNode),
         createServerNodeMenuContext(in),
         createTargetNodeMenuContext(in, requestStreams));
   }
@@ -127,17 +128,23 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         serverId -> openSaveEphemeralServer(in, serverId),
         serverId -> openEditServer(in, serverId),
         () -> in.runtimeConfig() != null,
-        (serverId, defaultValue) -> readServerAutoConnectOnStart(in.runtimeConfig(), serverId, defaultValue),
-        (serverId, enabled) -> rememberServerAutoConnectOnStart(in.runtimeConfig(), serverId, enabled),
+        (serverId, defaultValue) ->
+            readServerAutoConnectOnStart(in.runtimeConfig(), serverId, defaultValue),
+        (serverId, enabled) ->
+            rememberServerAutoConnectOnStart(in.runtimeConfig(), serverId, enabled),
         in.serverLabelPolicy()::isSojuEphemeralServer,
         in.serverLabelPolicy()::isZncEphemeralServer,
         in.sojuOriginByServerId()::get,
         in.zncOriginByServerId()::get,
         serverId -> in.serverDisplayNames().getOrDefault(serverId, serverId),
-        (originId, networkKey) -> isSojuAutoConnectEnabled(in.sojuAutoConnect(), originId, networkKey),
-        (originId, networkKey) -> isZncAutoConnectEnabled(in.zncAutoConnect(), originId, networkKey),
-        (originId, networkKey, enabled) -> setSojuAutoConnectEnabled(in.sojuAutoConnect(), originId, networkKey, enabled),
-        (originId, networkKey, enabled) -> setZncAutoConnectEnabled(in.zncAutoConnect(), originId, networkKey, enabled),
+        (originId, networkKey) ->
+            isSojuAutoConnectEnabled(in.sojuAutoConnect(), originId, networkKey),
+        (originId, networkKey) ->
+            isZncAutoConnectEnabled(in.zncAutoConnect(), originId, networkKey),
+        (originId, networkKey, enabled) ->
+            setSojuAutoConnectEnabled(in.sojuAutoConnect(), originId, networkKey, enabled),
+        (originId, networkKey, enabled) ->
+            setZncAutoConnectEnabled(in.zncAutoConnect(), originId, networkKey, enabled),
         in.nodeBadgeUpdater()::refreshSojuAutoConnectBadges,
         in.nodeBadgeUpdater()::refreshZncAutoConnectBadges,
         in.nodeClassifier()::owningServerIdForNode);
@@ -244,9 +251,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         Objects.toString(
                 JOptionPane.showInputDialog(
                     owner,
-                    "Enter channel mode changes for "
-                        + pretty
-                        + " (examples: +m, -m, +o nick):",
+                    "Enter channel mode changes for " + pretty + " (examples: +m, -m, +o nick):",
                     ""),
                 "")
             .trim();

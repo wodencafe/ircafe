@@ -21,9 +21,7 @@ class ServerTreeRequestApiTest {
         mock(ServerTreeInteractionSetupCoordinator.class);
     ServerTreeRequestApi api =
         new ServerTreeRequestApi(
-            selectionBroadcastCoordinator,
-            requestStreams,
-            interactionSetupCoordinator);
+            selectionBroadcastCoordinator, requestStreams, interactionSetupCoordinator);
 
     Function<TargetRef, Dockable> provider = __ -> null;
 

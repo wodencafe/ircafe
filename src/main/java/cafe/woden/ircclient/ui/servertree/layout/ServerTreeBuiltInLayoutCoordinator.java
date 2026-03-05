@@ -106,5 +106,4 @@ public final class ServerTreeBuiltInLayoutCoordinator {
 
     return new RuntimeConfigStore.ServerTreeBuiltInLayout(List.copyOf(root), List.copyOf(other));
   }
-
 }

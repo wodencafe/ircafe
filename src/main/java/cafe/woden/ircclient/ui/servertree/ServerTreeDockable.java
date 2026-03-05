@@ -1092,9 +1092,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     this.interactionSetupCoordinator.install();
     this.requestApi =
         new ServerTreeRequestApi(
-            selectionBroadcastCoordinator,
-            requestStreams,
-            interactionSetupCoordinator);
+            selectionBroadcastCoordinator, requestStreams, interactionSetupCoordinator);
   }
 
   @Override

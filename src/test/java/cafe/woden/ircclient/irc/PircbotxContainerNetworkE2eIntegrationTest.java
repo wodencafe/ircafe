@@ -121,13 +121,13 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           int readyCount = countEvents(events, sid, IrcEvent.ConnectionReady.class);
           service.connect(sid).blockingAwait();
           awaitNextEvent(events, sid, IrcEvent.ConnectionReady.class, readyCount, CONNECT_TIMEOUT);
-          assertTrue(service.currentNick(sid).isPresent(), "currentNick should be set after connect");
+          assertTrue(
+              service.currentNick(sid).isPresent(), "currentNick should be set after connect");
 
           int joinedCount = countEvents(events, sid, IrcEvent.JoinedChannel.class);
           service.joinChannel(sid, cfg.channel()).blockingAwait();
           IrcEvent.JoinedChannel joined =
-              awaitNextEvent(
-                  events, sid, IrcEvent.JoinedChannel.class, joinedCount, JOIN_TIMEOUT);
+              awaitNextEvent(events, sid, IrcEvent.JoinedChannel.class, joinedCount, JOIN_TIMEOUT);
           assertEquals(cfg.channel(), joined.channel());
 
           bot.join(cfg.channel(), JOIN_TIMEOUT);
@@ -155,20 +155,12 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           int disconnectedCount = countEvents(events, sid, IrcEvent.Disconnected.class);
           service.disconnect(sid, "container ircd e2e disconnect").blockingAwait();
           awaitNextEvent(
-              events,
-              sid,
-              IrcEvent.Disconnected.class,
-              disconnectedCount,
-              CONNECT_TIMEOUT);
+              events, sid, IrcEvent.Disconnected.class, disconnectedCount, CONNECT_TIMEOUT);
 
           int reconnectReadyCount = countEvents(events, sid, IrcEvent.ConnectionReady.class);
           service.connect(sid).blockingAwait();
           awaitNextEvent(
-              events,
-              sid,
-              IrcEvent.ConnectionReady.class,
-              reconnectReadyCount,
-              CONNECT_TIMEOUT);
+              events, sid, IrcEvent.ConnectionReady.class, reconnectReadyCount, CONNECT_TIMEOUT);
 
           int rejoinCount = countEvents(events, sid, IrcEvent.JoinedChannel.class);
           service.joinChannel(sid, cfg.channel()).blockingAwait();
@@ -332,7 +324,9 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           assertTrue(!combined.isBlank(), "disconnect reason should not be blank");
         } finally {
           try {
-            service.disconnect(wrongCfg.serverId(), "container ircd auth failure shutdown").blockingAwait();
+            service
+                .disconnect(wrongCfg.serverId(), "container ircd auth failure shutdown")
+                .blockingAwait();
           } catch (Exception ignored) {
           }
           try {
@@ -369,7 +363,8 @@ class PircbotxContainerNetworkE2eIntegrationTest {
         PircbotxIrcClientService service = fixture.service();
         TestSubscriber<ServerIrcEvent> events = service.events().test();
         try {
-          int readyCount = countEvents(events, runtimeCfg.serverId(), IrcEvent.ConnectionReady.class);
+          int readyCount =
+              countEvents(events, runtimeCfg.serverId(), IrcEvent.ConnectionReady.class);
           service.connect(runtimeCfg.serverId()).blockingAwait();
           awaitNextEvent(
               events,
@@ -434,7 +429,8 @@ class PircbotxContainerNetworkE2eIntegrationTest {
         try {
           opBot.join(cfg.channel(), JOIN_TIMEOUT);
 
-          int readyCount = countEvents(events, runtimeCfg.serverId(), IrcEvent.ConnectionReady.class);
+          int readyCount =
+              countEvents(events, runtimeCfg.serverId(), IrcEvent.ConnectionReady.class);
           service.connect(runtimeCfg.serverId()).blockingAwait();
           awaitNextEvent(
               events,
@@ -443,10 +439,15 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               readyCount,
               CONNECT_TIMEOUT);
 
-          int joinedCount = countEvents(events, runtimeCfg.serverId(), IrcEvent.JoinedChannel.class);
+          int joinedCount =
+              countEvents(events, runtimeCfg.serverId(), IrcEvent.JoinedChannel.class);
           service.joinChannel(runtimeCfg.serverId(), cfg.channel()).blockingAwait();
           awaitNextEvent(
-              events, runtimeCfg.serverId(), IrcEvent.JoinedChannel.class, joinedCount, JOIN_TIMEOUT);
+              events,
+              runtimeCfg.serverId(),
+              IrcEvent.JoinedChannel.class,
+              joinedCount,
+              JOIN_TIMEOUT);
 
           partBot.join(cfg.channel(), JOIN_TIMEOUT);
           int partCount =
@@ -607,8 +608,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
           botTwo.join(channelTwo, JOIN_TIMEOUT);
 
           int oneBefore = countChannelMessages(events, sidOne, channelOne, "bota", inboundOne);
-          int twoBeforeOnOne =
-              countChannelMessages(events, sidTwo, channelOne, "bota", inboundOne);
+          int twoBeforeOnOne = countChannelMessages(events, sidTwo, channelOne, "bota", inboundOne);
           botOne.privmsg(channelOne, inboundOne);
           awaitChannelMessage(
               events, sidOne, channelOne, "bota", inboundOne, oneBefore, MESSAGE_TIMEOUT);
@@ -620,8 +620,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               "server two should not receive channel message from server one");
 
           int twoBefore = countChannelMessages(events, sidTwo, channelTwo, "botb", inboundTwo);
-          int oneBeforeOnTwo =
-              countChannelMessages(events, sidOne, channelTwo, "botb", inboundTwo);
+          int oneBeforeOnTwo = countChannelMessages(events, sidOne, channelTwo, "botb", inboundTwo);
           botTwo.privmsg(channelTwo, inboundTwo);
           awaitChannelMessage(
               events, sidTwo, channelTwo, "botb", inboundTwo, twoBefore, MESSAGE_TIMEOUT);
@@ -967,7 +966,8 @@ class PircbotxContainerNetworkE2eIntegrationTest {
             List.copyOf(serversById.values()));
 
     Ircv3StsPolicyService stsPolicies = new Ircv3StsPolicyService();
-    PircbotxInputParserHookInstaller hookInstaller = new PircbotxInputParserHookInstaller(stsPolicies);
+    PircbotxInputParserHookInstaller hookInstaller =
+        new PircbotxInputParserHookInstaller(stsPolicies);
 
     SojuProperties sojuProps = new SojuProperties(Map.of(), new SojuProperties.Discovery(false));
     ZncProperties zncProps = new ZncProperties(Map.of(), new ZncProperties.Discovery(false));
@@ -1326,8 +1326,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
     }
 
     RuntimeIrcConfig withServerPassword(String nextServerPassword) {
-      return new RuntimeIrcConfig(
-          serverId, host, port, nextServerPassword, nick, login, realName);
+      return new RuntimeIrcConfig(serverId, host, port, nextServerPassword, nick, login, realName);
     }
 
     RuntimeIrcConfig withNickAndLogin(String nextNick, String nextLogin) {
@@ -1374,10 +1373,12 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               DEFAULT_STARTUP_TIMEOUT_SECONDS);
       String serverId =
           readString(
-              "irc.it.container.e2e.server-id", "IRC_IT_CONTAINER_E2E_SERVER_ID", DEFAULT_SERVER_ID);
-      String nick = readString("irc.it.container.e2e.nick", "IRC_IT_CONTAINER_E2E_NICK", DEFAULT_NICK);
-      String login =
-          readString("irc.it.container.e2e.login", "IRC_IT_CONTAINER_E2E_LOGIN", nick);
+              "irc.it.container.e2e.server-id",
+              "IRC_IT_CONTAINER_E2E_SERVER_ID",
+              DEFAULT_SERVER_ID);
+      String nick =
+          readString("irc.it.container.e2e.nick", "IRC_IT_CONTAINER_E2E_NICK", DEFAULT_NICK);
+      String login = readString("irc.it.container.e2e.login", "IRC_IT_CONTAINER_E2E_LOGIN", nick);
       String realName =
           readString(
               "irc.it.container.e2e.real-name",
@@ -1385,9 +1386,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
               DEFAULT_REAL_NAME);
       String botNick =
           readString(
-              "irc.it.container.e2e.bot-nick",
-              "IRC_IT_CONTAINER_E2E_BOT_NICK",
-              DEFAULT_BOT_NICK);
+              "irc.it.container.e2e.bot-nick", "IRC_IT_CONTAINER_E2E_BOT_NICK", DEFAULT_BOT_NICK);
       String channel =
           readString(
               "irc.it.container.e2e.channel", "IRC_IT_CONTAINER_E2E_CHANNEL", DEFAULT_CHANNEL);

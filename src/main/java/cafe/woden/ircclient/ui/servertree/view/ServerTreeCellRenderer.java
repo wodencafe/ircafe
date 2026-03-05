@@ -105,7 +105,8 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       Predicate<DefaultMutableTreeNode> isPrivateMessagesGroupNode,
       Predicate<DefaultMutableTreeNode> isSojuNetworksGroupNode,
       Predicate<DefaultMutableTreeNode> isZncNetworksGroupNode) {
-    Objects.requireNonNull(serverTreeNotificationBadgesEnabled, "serverTreeNotificationBadgesEnabled");
+    Objects.requireNonNull(
+        serverTreeNotificationBadgesEnabled, "serverTreeNotificationBadgesEnabled");
     Objects.requireNonNull(unreadBadgeScalePercent, "unreadBadgeScalePercent");
     Objects.requireNonNull(typingIndicatorStyle, "typingIndicatorStyle");
     Objects.requireNonNull(typingIndicatorsTreeEnabled, "typingIndicatorsTreeEnabled");
