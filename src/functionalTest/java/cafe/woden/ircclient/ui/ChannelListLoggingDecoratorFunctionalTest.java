@@ -7,7 +7,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.ChannelMetadataPort;
-import cafe.woden.ircclient.app.api.TargetRef;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
 import cafe.woden.ircclient.config.IrcProperties;
@@ -28,6 +27,7 @@ import cafe.woden.ircclient.logging.LogLineFactory;
 import cafe.woden.ircclient.logging.LoggingUiPortDecorator;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
