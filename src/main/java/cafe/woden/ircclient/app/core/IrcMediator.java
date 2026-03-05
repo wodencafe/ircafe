@@ -1251,7 +1251,6 @@ public class IrcMediator implements MediatorControlPort {
         mediatorHistoryIngestOrchestrator.onZncPlaybackBatchReceived(sid, ev);
       }
       case IrcEvent.CtcpRequestReceived ev -> {
-        markPrivateMessagePeerOnline(sid, ev.from());
         String command = Objects.toString(ev.command(), "").trim();
         String argument = Objects.toString(ev.argument(), "").trim();
         String ctcpText = command + (argument.isBlank() ? "" : (" " + argument));
@@ -1271,6 +1270,7 @@ public class IrcMediator implements MediatorControlPort {
             dest = status != null ? status : safeStatusTarget();
           }
         }
+        maybeMarkPrivateMessagePeerOnlineForCtcp(sid, ev, dest);
 
         StringBuilder sb =
             new StringBuilder()
@@ -2897,6 +2897,21 @@ public class IrcMediator implements MediatorControlPort {
     if (nick.isEmpty()) return;
     if (isFromSelf(serverId, nick)) return;
     ui.setPrivateMessageOnlineState(serverId, nick, true);
+  }
+
+  private void maybeMarkPrivateMessagePeerOnlineForCtcp(
+      String serverId, IrcEvent.CtcpRequestReceived event, TargetRef destination) {
+    if (event == null || destination == null) return;
+    if (event.channel() != null && !event.channel().isBlank()) return;
+
+    String from = normalizePrivateMessagePeer(event.from());
+    if (from.isEmpty()) return;
+
+    String destinationPeer = normalizePrivateMessagePeer(destination.target());
+    if (destinationPeer.isEmpty()) return;
+    if (!from.equalsIgnoreCase(destinationPeer)) return;
+
+    markPrivateMessagePeerOnline(serverId, from);
   }
 
   private void markPrivateMessagePeerOffline(String serverId, String rawNick) {

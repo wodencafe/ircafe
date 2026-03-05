@@ -505,6 +505,37 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void ctcpReceiveInActiveTargetModeDoesNotCreatePrivateMessagePeer() throws Exception {
+    TargetRef status = new TargetRef("libera", "status");
+    TargetRef active = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    when(uiSettingsPort.get()).thenReturn(UiSettingsSnapshot.defaults());
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera", new IrcEvent.CtcpRequestReceived(Instant.now(), "title", "TITLE", "", null)));
+
+    verify(ui, never()).setPrivateMessageOnlineState("libera", "title", true);
+  }
+
+  @Test
+  void ctcpReceiveWhenRoutedToPmMarksPrivateMessagePeerOnline() throws Exception {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(uiSettingsPort.get())
+        .thenReturn(new UiSettingsSnapshot(List.of(), 15, 30, false, true, true, true, true));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.CtcpRequestReceived(Instant.now(), "alice", "VERSION", "", null)));
+
+    verify(ui).setPrivateMessageOnlineState("libera", "alice", true);
+  }
+
+  @Test
   void ctcpReceivePassesCommandAndValueToIrcEventNotifier() throws Exception {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
