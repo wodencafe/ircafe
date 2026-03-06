@@ -21,8 +21,13 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.io.File;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
@@ -31,8 +36,27 @@ import org.slf4j.LoggerFactory;
 
 public class MessageInputPanel extends JPanel {
   private static final Logger log = LoggerFactory.getLogger(MessageInputPanel.class);
+  private static final Set<String> MATRIX_IMAGE_EXTENSIONS =
+      Set.of(
+          "png",
+          "jpg",
+          "jpeg",
+          "gif",
+          "webp",
+          "bmp",
+          "svg",
+          "heic",
+          "heif",
+          "avif",
+          "tif",
+          "tiff");
+  private static final Set<String> MATRIX_VIDEO_EXTENSIONS =
+      Set.of("mp4", "m4v", "mov", "mkv", "webm", "avi", "wmv", "flv", "mpeg", "mpg", "3gp", "ogv");
+  private static final Set<String> MATRIX_AUDIO_EXTENSIONS =
+      Set.of("mp3", "m4a", "aac", "wav", "flac", "ogg", "oga", "opus", "weba", "amr");
   public static final String ID = "input";
   private final JTextField input = new JTextField();
+  private final JButton attach = new JButton();
   private final JButton send = new JButton();
 
   private final JPanel typingBanner = new JPanel(new BorderLayout());
@@ -144,6 +168,7 @@ public class MessageInputPanel extends JPanel {
     installInputSurface();
     installDraftListeners();
     installSendActions();
+    installUploadActions();
     installActivationListeners();
     installEscapeHandler();
 
@@ -162,10 +187,16 @@ public class MessageInputPanel extends JPanel {
     sendOverlay.add(send);
     sendOverlay.add(typingSignalIndicator);
 
+    JPanel actionRow = new JPanel();
+    actionRow.setOpaque(false);
+    actionRow.setLayout(new BoxLayout(actionRow, BoxLayout.X_AXIS));
+    actionRow.add(attach);
+    actionRow.add(sendOverlay);
+
     JPanel inputRow = new JPanel(new BorderLayout(0, 0));
     inputRow.setOpaque(false);
     inputRow.add(input, BorderLayout.CENTER);
-    inputRow.add(sendOverlay, BorderLayout.EAST);
+    inputRow.add(actionRow, BorderLayout.EAST);
 
     JPanel center = new JPanel(new BorderLayout(0, 2));
     center.setOpaque(false);
@@ -209,6 +240,19 @@ public class MessageInputPanel extends JPanel {
   private void configureInputShell() {
     input.setOpaque(false);
     input.setBorder(BorderFactory.createEmptyBorder(5, 6, 5, 6));
+
+    attach.setName("messageAttachButton");
+    attach.setText("+");
+    attach.setToolTipText("Attach file (Matrix upload)");
+    if (attach.getAccessibleContext() != null) {
+      attach.getAccessibleContext().setAccessibleName("Attach file");
+      attach.getAccessibleContext().setAccessibleDescription("Choose files for Matrix upload");
+    }
+    attach.setOpaque(false);
+    attach.setContentAreaFilled(false);
+    attach.setFocusPainted(false);
+    attach.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+    attach.setPreferredSize(new Dimension(34, 30));
 
     send.setName("messageSendButton");
     send.setText("");
@@ -290,6 +334,16 @@ public class MessageInputPanel extends JPanel {
     send.addActionListener(e -> emit());
   }
 
+  private void installUploadActions() {
+    attach.addActionListener(e -> openUploadFileChooser());
+    MatrixUploadTransferHandler sharedDropHandler = new MatrixUploadTransferHandler(null);
+    setTransferHandler(sharedDropHandler);
+    attach.setTransferHandler(sharedDropHandler);
+    send.setTransferHandler(sharedDropHandler);
+    TransferHandler defaultInputTransferHandler = input.getTransferHandler();
+    input.setTransferHandler(new MatrixUploadTransferHandler(defaultInputTransferHandler));
+  }
+
   private void installActivationListeners() {
     // Mark this input surface as "active" when the user interacts with it.
     FocusAdapter focusAdapter =
@@ -310,6 +364,7 @@ public class MessageInputPanel extends JPanel {
           }
         };
     input.addFocusListener(focusAdapter);
+    attach.addFocusListener(focusAdapter);
     send.addFocusListener(focusAdapter);
 
     MouseAdapter mouseAdapter =
@@ -321,6 +376,7 @@ public class MessageInputPanel extends JPanel {
           }
         };
     input.addMouseListener(mouseAdapter);
+    attach.addMouseListener(mouseAdapter);
     send.addMouseListener(mouseAdapter);
     addMouseListener(mouseAdapter);
   }
@@ -487,6 +543,7 @@ public class MessageInputPanel extends JPanel {
     try {
       Font f = new Font(s.chatFontFamily(), Font.PLAIN, s.chatFontSize());
       input.setFont(f);
+      attach.setFont(f);
       send.setFont(f);
       typingBannerLabel.setFont(f.deriveFont(Math.max(10f, f.getSize2D() - 2f)));
       typingDotsIndicator.setFont(typingBannerLabel.getFont());
@@ -551,6 +608,160 @@ public class MessageInputPanel extends JPanel {
 
     if (consumeReplyCompose) {
       composeSupport.clearReplyComposeInternal(false, false);
+    }
+  }
+
+  private void openUploadFileChooser() {
+    if (!isInputEditable()) return;
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Upload files to Matrix");
+    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+    chooser.setMultiSelectionEnabled(true);
+    int result = chooser.showOpenDialog(this);
+    if (result != JFileChooser.APPROVE_OPTION) return;
+
+    List<File> files = new ArrayList<>();
+    File[] selected = chooser.getSelectedFiles();
+    if (selected != null && selected.length > 0) {
+      for (File file : selected) {
+        if (file != null) files.add(file);
+      }
+    } else {
+      File one = chooser.getSelectedFile();
+      if (one != null) files.add(one);
+    }
+    emitMatrixUploadCommands(files);
+  }
+
+  private void emitMatrixUploadCommands(List<File> files) {
+    if (!isInputEditable()) return;
+    List<File> normalized = normalizeUploadFiles(files);
+    if (normalized.isEmpty()) return;
+
+    String draftCaption = consumeDraftCaptionForUpload();
+    boolean first = true;
+    for (File file : normalized) {
+      String path = normalizeUploadPath(file);
+      if (path.isEmpty()) continue;
+      String line =
+          buildMatrixUploadCommand(
+              inferMatrixUploadMsgType(path), path, first ? draftCaption : "");
+      if (!line.isBlank()) {
+        outbound.onNext(line);
+        first = false;
+      }
+    }
+  }
+
+  private List<File> normalizeUploadFiles(List<File> files) {
+    if (files == null || files.isEmpty()) return List.of();
+    ArrayList<File> out = new ArrayList<>(files.size());
+    for (File file : files) {
+      if (file != null) out.add(file);
+    }
+    if (out.isEmpty()) return List.of();
+    return List.copyOf(out);
+  }
+
+  private String consumeDraftCaptionForUpload() {
+    String caption = input.getText().trim();
+    if (caption.isEmpty()) {
+      return "";
+    }
+    flushTypingDone();
+    historySupport.clearBrowseState();
+    runProgrammaticEdit(() -> input.setText(""));
+    undoSupport.discardAllEdits();
+    return caption;
+  }
+
+  private static String normalizeUploadPath(File file) {
+    if (file == null) return "";
+    String path = Objects.toString(file.getAbsolutePath(), "").trim();
+    if (path.isEmpty()) return "";
+    if (path.indexOf('\n') >= 0 || path.indexOf('\r') >= 0) return "";
+    return path;
+  }
+
+  private static String inferMatrixUploadMsgType(String path) {
+    String ext = extensionForPath(path);
+    if (MATRIX_IMAGE_EXTENSIONS.contains(ext)) return "m.image";
+    if (MATRIX_VIDEO_EXTENSIONS.contains(ext)) return "m.video";
+    if (MATRIX_AUDIO_EXTENSIONS.contains(ext)) return "m.audio";
+    return "m.file";
+  }
+
+  private static String extensionForPath(String path) {
+    String rawPath = Objects.toString(path, "").trim();
+    if (rawPath.isEmpty()) return "";
+    try {
+      Path fileName = Path.of(rawPath).getFileName();
+      String name = fileName == null ? rawPath : Objects.toString(fileName.toString(), "");
+      int dot = name.lastIndexOf('.');
+      if (dot < 0 || dot == name.length() - 1) return "";
+      return name.substring(dot + 1).trim().toLowerCase(Locale.ROOT);
+    } catch (Exception ignored) {
+      return "";
+    }
+  }
+
+  private static String buildMatrixUploadCommand(String msgType, String path, String caption) {
+    String type = Objects.toString(msgType, "").trim();
+    String filePath = Objects.toString(path, "").trim();
+    if (type.isEmpty() || filePath.isEmpty()) return "";
+    StringBuilder line = new StringBuilder();
+    line.append("/mupload ").append(type).append(" ").append(quoteMuploadPath(filePath));
+    String text = Objects.toString(caption, "").trim();
+    if (!text.isEmpty()) {
+      line.append(" ").append(text);
+    }
+    return line.toString();
+  }
+
+  private static String quoteMuploadPath(String path) {
+    String escaped = Objects.toString(path, "").replace("\\", "\\\\").replace("\"", "\\\"");
+    return "\"" + escaped + "\"";
+  }
+
+  private final class MatrixUploadTransferHandler extends TransferHandler {
+    private final TransferHandler fallback;
+
+    private MatrixUploadTransferHandler(TransferHandler fallback) {
+      this.fallback = fallback;
+    }
+
+    @Override
+    public boolean canImport(TransferSupport support) {
+      if (support != null && support.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+        return true;
+      }
+      return support != null && fallback != null && fallback.canImport(support);
+    }
+
+    @Override
+    public boolean importData(TransferSupport support) {
+      if (support != null && support.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+        try {
+          Transferable transferable = support.getTransferable();
+          Object payload = transferable.getTransferData(DataFlavor.javaFileListFlavor);
+          if (!(payload instanceof List<?> rawFiles) || rawFiles.isEmpty()) {
+            return false;
+          }
+          ArrayList<File> files = new ArrayList<>(rawFiles.size());
+          for (Object raw : rawFiles) {
+            if (raw instanceof File file) {
+              files.add(file);
+            }
+          }
+          if (files.isEmpty()) return false;
+          emitMatrixUploadCommands(files);
+          return true;
+        } catch (Exception ex) {
+          log.debug("[MessageInputPanel] file drop import failed", ex);
+          return false;
+        }
+      }
+      return support != null && fallback != null && fallback.importData(support);
     }
   }
 
@@ -697,6 +908,7 @@ public class MessageInputPanel extends JPanel {
   public void setInputEnabled(boolean enabled) {
     input.setEditable(enabled);
     input.setEnabled(enabled);
+    attach.setEnabled(enabled);
     send.setEnabled(enabled);
     if (!enabled) {
       flushTypingDone();

@@ -54,6 +54,7 @@ public sealed interface ParsedInput
         ParsedInput.MarkRead,
         ParsedInput.Monitor,
         ParsedInput.Help,
+        ParsedInput.MatrixUpload,
         ParsedInput.ReplyMessage,
         ParsedInput.ReactMessage,
         ParsedInput.UnreactMessage,
@@ -246,6 +247,13 @@ public sealed interface ParsedInput
    * <p>Local help output for common slash commands.
    */
   record Help(String topic) implements ParsedInput {}
+
+  /**
+   * /mupload <msgtype> <path> [caption]
+   *
+   * <p>Matrix-specific helper that uploads a local file and sends a Matrix media event.
+   */
+  record MatrixUpload(String msgType, String path, String caption) implements ParsedInput {}
 
   /**
    * /reply <msgid> <message>

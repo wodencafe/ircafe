@@ -390,6 +390,14 @@ public class CommandParser {
       return new ParsedInput.Help(topic);
     }
 
+    if (matchesCommand(line, "/mupload") || matchesCommand(line, "/matrixupload")) {
+      String args =
+          matchesCommand(line, "/mupload")
+              ? argAfter(line, "/mupload")
+              : argAfter(line, "/matrixupload");
+      return parseMatrixUploadInput(args);
+    }
+
     // IRCv3 compose helpers (used by first-class reply/reaction input UX).
     if (matchesCommand(line, "/reply")) {
       return parseReplyInput(argAfter(line, "/reply"));
@@ -504,6 +512,64 @@ public class CommandParser {
     String nick = rest2.substring(0, sp2).trim();
     String arg = rest2.substring(sp2 + 1).trim();
     return new ParsedInput.Dcc(sub, nick, arg);
+  }
+
+  private static ParsedInput parseMatrixUploadInput(String rest) {
+    String raw = rest == null ? "" : rest.trim();
+    if (raw.isEmpty()) return new ParsedInput.MatrixUpload("", "", "");
+
+    int firstSpace = raw.indexOf(' ');
+    if (firstSpace <= 0) {
+      return new ParsedInput.MatrixUpload(raw.trim(), "", "");
+    }
+
+    String msgType = raw.substring(0, firstSpace).trim();
+    String remaining = raw.substring(firstSpace + 1).trim();
+    if (remaining.isEmpty()) {
+      return new ParsedInput.MatrixUpload(msgType, "", "");
+    }
+
+    ParsedPathToken pathToken = parsePathToken(remaining);
+    return new ParsedInput.MatrixUpload(
+        msgType, pathToken.path(), pathToken.remainder() == null ? "" : pathToken.remainder());
+  }
+
+  private static ParsedPathToken parsePathToken(String raw) {
+    String input = raw == null ? "" : raw.trim();
+    if (input.isEmpty()) {
+      return new ParsedPathToken("", "");
+    }
+
+    if (!input.startsWith("\"")) {
+      int sp = input.indexOf(' ');
+      if (sp < 0) {
+        return new ParsedPathToken(input, "");
+      }
+      return new ParsedPathToken(input.substring(0, sp).trim(), input.substring(sp + 1).trim());
+    }
+
+    StringBuilder token = new StringBuilder();
+    boolean escaped = false;
+    for (int i = 1; i < input.length(); i++) {
+      char ch = input.charAt(i);
+      if (escaped) {
+        token.append(ch);
+        escaped = false;
+        continue;
+      }
+      if (ch == '\\') {
+        escaped = true;
+        continue;
+      }
+      if (ch == '"') {
+        String remainder = i + 1 < input.length() ? input.substring(i + 1).trim() : "";
+        return new ParsedPathToken(token.toString(), remainder);
+      }
+      token.append(ch);
+    }
+
+    // Unterminated quote.
+    return new ParsedPathToken("", "");
   }
 
   private static ParsedInput parseReplyInput(String rest) {
@@ -726,6 +792,8 @@ public class CommandParser {
   private record ParsedTargetList(String channel, java.util.List<String> items) {}
 
   private record ParsedKick(String channel, String nick, String reason) {}
+
+  private record ParsedPathToken(String path, String remainder) {}
 
   private static ParsedTargetList parseTargetList(String rest) {
     String r = rest == null ? "" : rest.trim();

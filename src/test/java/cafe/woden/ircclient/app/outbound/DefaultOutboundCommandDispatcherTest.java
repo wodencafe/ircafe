@@ -234,6 +234,14 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
+  void dispatchMatrixUploadRoutesToChatService() {
+    dispatcher.dispatch(
+        disposables, new ParsedInput.MatrixUpload("m.image", "/tmp/photo.png", "photo"));
+
+    verify(chat).handleMatrixUpload(disposables, "m.image", "/tmp/photo.png", "photo");
+  }
+
+  @Test
   void dispatchUnknownShowsSystemMessageOnSafeTarget() {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(null);

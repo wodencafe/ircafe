@@ -1046,6 +1046,72 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
+  void matrixUploadSendsTaggedPrivmsgOnMatrixBackend() {
+    TargetRef room = new TargetRef("matrix", "!room:example.org");
+    when(targetCoordinator.getActiveTarget()).thenReturn(room);
+    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(irc.sendRaw(
+            "matrix",
+            "@+matrix/msgtype=m.image;+matrix/upload_path=/tmp/photo.png PRIVMSG !room:example.org :hello image"))
+        .thenReturn(Completable.complete());
+
+    service.handleMatrixUpload(disposables, "image", "/tmp/photo.png", "hello image");
+
+    verify(irc)
+        .sendRaw(
+            "matrix",
+            "@+matrix/msgtype=m.image;+matrix/upload_path=/tmp/photo.png PRIVMSG !room:example.org :hello image");
+  }
+
+  @Test
+  void matrixUploadDefaultsCaptionToFileNameWhenCaptionBlank() {
+    TargetRef room = new TargetRef("matrix", "!room:example.org");
+    when(targetCoordinator.getActiveTarget()).thenReturn(room);
+    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(irc.sendRaw(
+            "matrix",
+            "@+matrix/msgtype=m.file;+matrix/upload_path=/tmp/My\\sFile.txt PRIVMSG !room:example.org :My File.txt"))
+        .thenReturn(Completable.complete());
+
+    service.handleMatrixUpload(disposables, "m.file", "/tmp/My File.txt", "");
+
+    verify(irc)
+        .sendRaw(
+            "matrix",
+            "@+matrix/msgtype=m.file;+matrix/upload_path=/tmp/My\\sFile.txt PRIVMSG !room:example.org :My File.txt");
+  }
+
+  @Test
+  void matrixUploadOnNonMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(serverCatalog.find("libera"))
+        .thenReturn(Optional.of(serverWithBackend("libera", IrcProperties.Server.Backend.IRC)));
+
+    service.handleMatrixUpload(disposables, "m.image", "/tmp/photo.png", "hello");
+
+    verify(ui).appendStatus(eq(status), eq("(mupload)"), contains("does not use the Matrix backend"));
+    verify(irc, never()).sendRaw(anyString(), anyString());
+  }
+
+  @Test
+  void matrixUploadWithInvalidMsgTypeShowsUsage() {
+    TargetRef room = new TargetRef("matrix", "!room:example.org");
+    when(targetCoordinator.getActiveTarget()).thenReturn(room);
+
+    service.handleMatrixUpload(disposables, "m.bad", "/tmp/photo.png", "");
+
+    verify(ui).appendStatus(room, "(mupload)", "Usage: /mupload <msgtype> <path> [caption]");
+    verify(irc, never()).sendRaw(anyString(), anyString());
+  }
+
+  @Test
   void replyCommandSendsTaggedPrivmsgWithoutQuotePrefill() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
@@ -1389,6 +1455,20 @@ class OutboundChatCommandServiceTest {
         .appendStatus(chan, "(help)", "/dcc msg <nick> <text>  (alias: /dccmsg <nick> <text>)");
     verify(ui).appendStatus(chan, "(help)", "/dcc close <nick>  /dcc list  /dcc panel");
     verify(ui).appendStatus(chan, "(help)", "UI: right-click a nick and use the DCC submenu.");
+  }
+
+  @Test
+  void helpMuploadShowsFocusedUploadHelp() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+
+    service.handleHelp("mupload");
+
+    verify(ui)
+        .appendStatus(
+            chan,
+            "(help)",
+            "/mupload <m.image|m.file|m.video|m.audio> <path> [caption]  (aliases: image|file|video|audio)");
   }
 
   @Test

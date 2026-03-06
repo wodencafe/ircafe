@@ -19,6 +19,8 @@ import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -29,13 +31,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
  * <p>Includes: /join, /part, /connect, /disconnect, /reconnect, /quit, /nick, /away, /query, /msg,
- * /notice, /me, /topic, /kick, /invite, /names, /who, /list, /say, /quote.
+ * /notice, /me, /topic, /kick, /invite, /names, /who, /list, /say, /quote, /mupload.
  *
  * <p>Behavior is intended to be preserved.
  */
@@ -50,6 +53,8 @@ public class OutboundChatCommandService {
 
   private static final DateTimeFormatter CHATHISTORY_TS_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
+  private static final Set<String> MATRIX_UPLOAD_MSGTYPES =
+      Set.of("m.image", "m.file", "m.video", "m.audio");
 
   private final IrcClientService irc;
   private final UiPort ui;
@@ -791,6 +796,25 @@ public class OutboundChatCommandService {
             + "' uses the Matrix backend. IRC-specific "
             + label
             + " behavior is not available yet.");
+    return false;
+  }
+
+  private boolean ensureMatrixServerBackend(String serverId, TargetRef out, String statusTag) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) {
+      ui.appendStatus(out, statusTag, "Select a Matrix server first.");
+      return false;
+    }
+    IrcProperties.Server.Backend backend = commandTargetPolicy.backendForServer(sid);
+    if (backend == IrcProperties.Server.Backend.MATRIX) {
+      return true;
+    }
+    ui.appendStatus(
+        out,
+        statusTag,
+        "Server '"
+            + sid
+            + "' does not use the Matrix backend. /mupload is only available on Matrix-backed servers.");
     return false;
   }
 
@@ -1565,6 +1589,10 @@ public class OutboundChatCommandService {
           appendMarkReadHelp(out);
           return;
         }
+        case "mupload", "matrixupload" -> {
+          appendMatrixUploadHelp(out);
+          return;
+        }
         default ->
             ui.appendStatus(
                 out, "(help)", "No dedicated help for '" + t + "'. Showing common commands.");
@@ -1580,6 +1608,7 @@ public class OutboundChatCommandService {
         out,
         "(help)",
         "Invites: /invites /invjoin (/join -i) /invignore /invwhois /invblock /inviteautojoin (/ajinvite)");
+    appendMatrixUploadHelp(out);
     ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
     ui.appendStatus(
         out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
@@ -1595,7 +1624,70 @@ public class OutboundChatCommandService {
         "/quasselnet [serverId] list|connect|disconnect|remove|add|edit ... (manage Quassel networks)");
     ui.appendStatus(out, "(help)", "Tip: /help dcc for direct-chat/file-transfer commands.");
     ui.appendStatus(
-        out, "(help)", "Tip: /help edit, /help redact, or /help markread for focused details.");
+        out,
+        "(help)",
+        "Tip: /help edit, /help redact, /help markread, or /help mupload for focused details.");
+  }
+
+  public void handleMatrixUpload(
+      CompositeDisposable disposables, String msgType, String path, String caption) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(
+          targetCoordinator.safeStatusTarget(), "(mupload)", "Select a Matrix target first.");
+      return;
+    }
+
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    if (at.isStatus() || at.isUiOnly()) {
+      ui.appendStatus(status, "(mupload)", "Select a channel or PM first.");
+      return;
+    }
+
+    String normalizedType = normalizeMatrixUploadMsgType(msgType);
+    String sourcePath = normalizeMatrixUploadPath(path);
+    String body = Objects.toString(caption, "").trim();
+    if (normalizedType.isEmpty() || sourcePath.isEmpty()) {
+      appendMatrixUploadUsage(at);
+      return;
+    }
+
+    if (containsCrlf(normalizedType) || containsCrlf(sourcePath) || containsCrlf(body)) {
+      ui.appendStatus(status, "(mupload)", "Refusing to send multi-line /mupload input.");
+      return;
+    }
+
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(status, "(conn)", "Not connected");
+      return;
+    }
+
+    if (!ensureMatrixServerBackend(at.serverId(), status, "(mupload)")) {
+      return;
+    }
+
+    String displayBody = body.isEmpty() ? defaultMatrixUploadCaption(sourcePath) : body;
+    String line =
+        "@+matrix/msgtype="
+            + escapeIrcv3TagValue(normalizedType)
+            + ";+matrix/upload_path="
+            + escapeIrcv3TagValue(sourcePath)
+            + " PRIVMSG "
+            + at.target();
+    if (!displayBody.isEmpty()) {
+      line += " :" + displayBody;
+    }
+    PreparedRawLine prepared = prepareCorrelatedRawLine(at, line);
+
+    disposables.add(
+        irc.sendRaw(at.serverId(), prepared.line())
+            .subscribe(
+                () -> {},
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(mupload-error)",
+                        String.valueOf(err))));
   }
 
   private void appendDccHelp(TargetRef out) {
@@ -1606,6 +1698,13 @@ public class OutboundChatCommandService {
     ui.appendStatus(out, "(help)", "/dcc msg <nick> <text>  (alias: /dccmsg <nick> <text>)");
     ui.appendStatus(out, "(help)", "/dcc close <nick>  /dcc list  /dcc panel");
     ui.appendStatus(out, "(help)", "UI: right-click a nick and use the DCC submenu.");
+  }
+
+  private void appendMatrixUploadHelp(TargetRef out) {
+    ui.appendStatus(
+        out,
+        "(help)",
+        "/mupload <m.image|m.file|m.video|m.audio> <path> [caption]  (aliases: image|file|video|audio)");
   }
 
   public void handleSay(CompositeDisposable disposables, String msg) {
@@ -2655,6 +2754,49 @@ public class OutboundChatCommandService {
 
   private static boolean containsCrlf(String s) {
     return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);
+  }
+
+  private void appendMatrixUploadUsage(TargetRef out) {
+    ui.appendStatus(out, "(mupload)", "Usage: /mupload <msgtype> <path> [caption]");
+    ui.appendStatus(
+        out,
+        "(mupload)",
+        "msgtype: m.image | m.file | m.video | m.audio (aliases: image|file|video|audio)");
+  }
+
+  private static String normalizeMatrixUploadMsgType(String raw) {
+    String token = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
+    if (token.isEmpty()) return "";
+    return switch (token) {
+      case "image" -> "m.image";
+      case "file" -> "m.file";
+      case "video" -> "m.video";
+      case "audio" -> "m.audio";
+      default -> MATRIX_UPLOAD_MSGTYPES.contains(token) ? token : "";
+    };
+  }
+
+  private static String normalizeMatrixUploadPath(String raw) {
+    return Objects.toString(raw, "").trim();
+  }
+
+  private static String defaultMatrixUploadCaption(String path) {
+    String rawPath = Objects.toString(path, "").trim();
+    if (rawPath.isEmpty()) return "";
+    try {
+      Path fileName = Path.of(rawPath).getFileName();
+      if (fileName != null) {
+        String fromPath = Objects.toString(fileName.toString(), "").trim();
+        if (!fromPath.isEmpty()) return fromPath;
+      }
+    } catch (InvalidPathException ignored) {
+      // Fall back to simple slash-segment extraction below.
+    }
+    int slash = Math.max(rawPath.lastIndexOf('/'), rawPath.lastIndexOf('\\'));
+    if (slash >= 0 && slash + 1 < rawPath.length()) {
+      return rawPath.substring(slash + 1).trim();
+    }
+    return rawPath;
   }
 
   private static String normalizeChatHistorySelector(String raw) {

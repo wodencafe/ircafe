@@ -249,6 +249,36 @@ class CommandParserTest {
   }
 
   @Test
+  void parsesMatrixUploadWithExplicitCaption() {
+    ParsedInput in = parser.parse("/mupload image /tmp/photo.png hello matrix");
+    assertTrue(in instanceof ParsedInput.MatrixUpload);
+    ParsedInput.MatrixUpload upload = (ParsedInput.MatrixUpload) in;
+    assertEquals("image", upload.msgType());
+    assertEquals("/tmp/photo.png", upload.path());
+    assertEquals("hello matrix", upload.caption());
+  }
+
+  @Test
+  void parsesMatrixUploadWithQuotedPathAndAlias() {
+    ParsedInput in = parser.parse("/matrixupload m.file \"/tmp/my file.txt\" with caption");
+    assertTrue(in instanceof ParsedInput.MatrixUpload);
+    ParsedInput.MatrixUpload upload = (ParsedInput.MatrixUpload) in;
+    assertEquals("m.file", upload.msgType());
+    assertEquals("/tmp/my file.txt", upload.path());
+    assertEquals("with caption", upload.caption());
+  }
+
+  @Test
+  void parsesMatrixUploadWithOnlyMsgType() {
+    ParsedInput in = parser.parse("/mupload m.image");
+    assertTrue(in instanceof ParsedInput.MatrixUpload);
+    ParsedInput.MatrixUpload upload = (ParsedInput.MatrixUpload) in;
+    assertEquals("m.image", upload.msgType());
+    assertEquals("", upload.path());
+    assertEquals("", upload.caption());
+  }
+
+  @Test
   void parsesDccMsgAlias() {
     ParsedInput in = parser.parse("/dccmsg alice hi there");
     assertTrue(in instanceof ParsedInput.Dcc);
