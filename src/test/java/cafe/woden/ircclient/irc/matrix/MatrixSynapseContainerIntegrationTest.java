@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import com.sun.security.auth.module.UnixSystem;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.DockerClientFactory;
@@ -237,14 +239,19 @@ class MatrixSynapseContainerIntegrationTest {
 
         registerUser(synapse, cfg, ALICE, ALICE_PASSWORD);
         registerUser(synapse, cfg, BOB, BOB_PASSWORD);
+        String charlie = "charlie";
+        String charliePassword = "charlie-password";
+        registerUser(synapse, cfg, charlie, charliePassword);
 
         LoginResult aliceLogin = login(server, ALICE, ALICE_PASSWORD);
         LoginResult bobLogin = login(server, BOB, BOB_PASSWORD);
+        LoginResult charlieLogin = login(server, charlie, charliePassword);
 
         MatrixRoomDirectoryClient roomDirectoryClient = new MatrixRoomDirectoryClient(proxyResolver);
         MatrixRoomStateClient roomStateClient = new MatrixRoomStateClient(proxyResolver);
         MatrixRoomMembershipClient roomMembershipClient =
             new MatrixRoomMembershipClient(proxyResolver);
+        MatrixRoomRosterClient roomRosterClient = new MatrixRoomRosterClient(proxyResolver);
 
         String aliasLocalPart = "matrixit" + System.currentTimeMillis();
         String roomId = createPublicRoom(server, aliceLogin.accessToken(), aliasLocalPart);
@@ -290,6 +297,52 @@ class MatrixSynapseContainerIntegrationTest {
             userPowerLevel(updatedState.content(), bobLogin.userId(), usersDefault),
             "bob should be promoted to +o-equivalent power level");
 
+        String topic = "matrix-it-admin-topic-" + System.currentTimeMillis();
+        MatrixRoomStateClient.UpdateResult topicUpdate =
+            roomStateClient.updateRoomTopic(
+                SERVER_ID, server, aliceLogin.accessToken(), roomId, topic);
+        assertTrue(topicUpdate.updated(), "topic update should succeed: " + topicUpdate.detail());
+        MatrixRoomStateClient.TopicResult topicState =
+            roomStateClient.fetchRoomTopic(SERVER_ID, server, aliceLogin.accessToken(), roomId);
+        assertTrue(topicState.success(), "topic fetch should succeed: " + topicState.detail());
+        assertEquals(topic, topicState.topic(), "room topic should match updated text");
+
+        MatrixRoomMembershipClient.ActionResult invite =
+            roomMembershipClient.inviteUser(
+                SERVER_ID, server, aliceLogin.accessToken(), roomId, charlieLogin.userId());
+        assertTrue(invite.success(), "invite request should succeed: " + invite.detail());
+        joinRoom(server, charlieLogin.accessToken(), roomId);
+
+        MatrixRoomRosterClient.RosterResult rosterAfterInvite =
+            roomRosterClient.fetchJoinedMembers(
+                SERVER_ID, server, aliceLogin.accessToken(), roomId);
+        assertTrue(
+            rosterAfterInvite.success(),
+            "joined members fetch should succeed: " + rosterAfterInvite.detail());
+        assertTrue(
+            rosterHasUser(rosterAfterInvite.members(), charlieLogin.userId()),
+            "invited user should appear in joined roster");
+
+        MatrixRoomMembershipClient.ActionResult kick =
+            roomMembershipClient.kickUser(
+                SERVER_ID,
+                server,
+                aliceLogin.accessToken(),
+                roomId,
+                charlieLogin.userId(),
+                "matrix-it-kick");
+        assertTrue(kick.success(), "kick request should succeed: " + kick.detail());
+
+        MatrixRoomRosterClient.RosterResult rosterAfterKick =
+            roomRosterClient.fetchJoinedMembers(
+                SERVER_ID, server, aliceLogin.accessToken(), roomId);
+        assertTrue(
+            rosterAfterKick.success(),
+            "joined members fetch should succeed after kick: " + rosterAfterKick.detail());
+        assertFalse(
+            rosterHasUser(rosterAfterKick.members(), charlieLogin.userId()),
+            "kicked user should not remain in joined roster");
+
         MatrixRoomMembershipClient.ActionResult ban =
             roomMembershipClient.banUser(
                 SERVER_ID,
@@ -304,6 +357,60 @@ class MatrixSynapseContainerIntegrationTest {
             roomMembershipClient.unbanUser(
                 SERVER_ID, server, aliceLogin.accessToken(), roomId, bobLogin.userId());
         assertTrue(unban.success(), "unban request should succeed: " + unban.detail());
+      }
+    } finally {
+      deleteRecursively(dataDir);
+    }
+  }
+
+  @Test
+  void containerizedSynapseMatrixServiceReportsMonitorUnavailableWhenConnected() throws Exception {
+    ContainerConfig cfg = ContainerConfig.fromSystem();
+    Assumptions.assumeTrue(
+        cfg.enabled(),
+        "Matrix Synapse container integration test disabled."
+            + " Set -Dmatrix.it.container.enabled=true.");
+    Assumptions.assumeTrue(
+        DockerClientFactory.instance().isDockerAvailable(),
+        "Docker is not available on this machine.");
+
+    DockerImageName image = DockerImageName.parse(cfg.image());
+    Path dataDir = Files.createTempDirectory("matrix-synapse-it-monitor-");
+    try {
+      Path homeserverYaml = generateSynapseConfig(image, cfg, dataDir);
+      configureRegistrationSharedSecret(homeserverYaml, cfg.registrationSecret());
+
+      try (GenericContainer<?> synapse = newSynapseContainer(image, cfg, dataDir)) {
+        synapse.start();
+
+        IrcProperties.Server probeServer =
+            serverConfig(SERVER_ID, synapse.getHost(), synapse.getMappedPort(cfg.httpPort()), false);
+        ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
+        when(proxyResolver.planForServer(SERVER_ID)).thenReturn(directPlan());
+
+        registerUser(synapse, cfg, ALICE, ALICE_PASSWORD);
+        LoginResult aliceLogin = login(probeServer, ALICE, ALICE_PASSWORD);
+
+        IrcProperties.Server serviceServer =
+            serverConfigWithAccessToken(
+                SERVER_ID,
+                synapse.getHost(),
+                synapse.getMappedPort(cfg.httpPort()),
+                false,
+                aliceLogin.accessToken());
+        ServerCatalog serverCatalog = mock(ServerCatalog.class);
+        when(serverCatalog.require(SERVER_ID)).thenReturn(serviceServer);
+        when(serverCatalog.find(SERVER_ID)).thenReturn(Optional.of(serviceServer));
+
+        MatrixIrcClientService service = buildMatrixService(serverCatalog, proxyResolver);
+        try {
+          service.connect(SERVER_ID).blockingAwait();
+          assertTrue(service.isMultilineAvailable(SERVER_ID));
+          assertFalse(service.isMonitorAvailable(SERVER_ID));
+          assertEquals(0, service.negotiatedMonitorLimit(SERVER_ID));
+        } finally {
+          service.shutdownNow();
+        }
       }
     } finally {
       deleteRecursively(dataDir);
@@ -611,6 +718,21 @@ class MatrixSynapseContainerIntegrationTest {
     return false;
   }
 
+  private static boolean rosterHasUser(
+      List<MatrixRoomRosterClient.JoinedMember> members, String userId) {
+    if (members == null || members.isEmpty()) {
+      return false;
+    }
+    String expected = normalize(userId);
+    for (MatrixRoomRosterClient.JoinedMember member : members) {
+      if (member == null) continue;
+      if (expected.equals(normalize(member.userId()))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private static long usersDefaultLevel(Map<String, Object> state) {
     if (state == null || state.isEmpty()) {
       return 0L;
@@ -798,6 +920,46 @@ class MatrixSynapseContainerIntegrationTest {
         List.of(),
         null,
         IrcProperties.Server.Backend.MATRIX);
+  }
+
+  private static IrcProperties.Server serverConfigWithAccessToken(
+      String id, String host, int port, boolean tls, String accessToken) {
+    return new IrcProperties.Server(
+        id,
+        host,
+        port,
+        tls,
+        normalize(accessToken),
+        "ircafe",
+        "ircafe",
+        "IRCafe User",
+        null,
+        null,
+        List.of(),
+        List.of(),
+        null,
+        IrcProperties.Server.Backend.MATRIX);
+  }
+
+  private static MatrixIrcClientService buildMatrixService(
+      ServerCatalog serverCatalog, ServerProxyResolver proxyResolver) {
+    return new MatrixIrcClientService(
+        serverCatalog,
+        new MatrixHomeserverProbe(proxyResolver),
+        new MatrixDisplayNameClient(proxyResolver),
+        new MatrixUserProfileClient(proxyResolver),
+        new MatrixPresenceClient(proxyResolver),
+        new MatrixReadMarkerClient(proxyResolver),
+        new MatrixRoomMembershipClient(proxyResolver),
+        new MatrixRoomStateClient(proxyResolver),
+        new MatrixRoomDirectoryClient(proxyResolver),
+        new MatrixRoomRosterClient(proxyResolver),
+        new MatrixRoomHistoryClient(proxyResolver),
+        new MatrixRoomTypingClient(proxyResolver),
+        new MatrixDirectRoomResolver(proxyResolver),
+        new MatrixMediaUploadClient(proxyResolver),
+        new MatrixRoomMessageSender(proxyResolver),
+        new MatrixSyncClient(proxyResolver));
   }
 
   private static void deleteRecursively(Path root) {
