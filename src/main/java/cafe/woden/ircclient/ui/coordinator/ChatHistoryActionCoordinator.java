@@ -19,7 +19,7 @@ public final class ChatHistoryActionCoordinator {
     void begin(String target, String messageId, String previewText, Runnable jumpAction);
   }
 
-  private final IrcClientService irc;
+  private final MessageActionCapabilityPolicy capabilityPolicy;
   private final ChatHistoryService chatHistoryService;
   private final Supplier<TargetRef> activeTargetSupplier;
   private final Consumer<TargetRef> activateTarget;
@@ -55,7 +55,46 @@ public final class ChatHistoryActionCoordinator {
       BiFunction<TargetRef, String, Integer> messageOffsetLookup,
       Runnable disableFollowTail,
       IntConsumer scrollToTranscriptOffset) {
-    this.irc = irc;
+    this(
+        new IrcMessageActionCapabilityPolicy(irc),
+        chatHistoryService,
+        activeTargetSupplier,
+        activateTarget,
+        activateInputSurface,
+        focusInput,
+        armTailPinOnNextAppendIfAtBottom,
+        outboundEmitter,
+        beginReplyCompose,
+        openQuickReactionPicker,
+        setDraftText,
+        historyLatestCommandSupplier,
+        historyAroundByMessageIdCommandBuilder,
+        messagePreviewLookup,
+        messageOffsetLookup,
+        disableFollowTail,
+        scrollToTranscriptOffset);
+  }
+
+  public ChatHistoryActionCoordinator(
+      MessageActionCapabilityPolicy capabilityPolicy,
+      ChatHistoryService chatHistoryService,
+      Supplier<TargetRef> activeTargetSupplier,
+      Consumer<TargetRef> activateTarget,
+      Runnable activateInputSurface,
+      Runnable focusInput,
+      Runnable armTailPinOnNextAppendIfAtBottom,
+      Consumer<String> outboundEmitter,
+      ReplyComposeStarter beginReplyCompose,
+      BiConsumer<String, String> openQuickReactionPicker,
+      Consumer<String> setDraftText,
+      Supplier<String> historyLatestCommandSupplier,
+      Function<String, String> historyAroundByMessageIdCommandBuilder,
+      BiFunction<TargetRef, String, String> messagePreviewLookup,
+      BiFunction<TargetRef, String, Integer> messageOffsetLookup,
+      Runnable disableFollowTail,
+      IntConsumer scrollToTranscriptOffset) {
+    this.capabilityPolicy =
+        Objects.requireNonNull(capabilityPolicy, "messageActionCapabilityPolicy");
     this.chatHistoryService = chatHistoryService;
     this.activeTargetSupplier =
         Objects.requireNonNull(activeTargetSupplier, "activeTargetSupplier");
@@ -86,33 +125,20 @@ public final class ChatHistoryActionCoordinator {
 
   public boolean replyContextActionVisible() {
     TargetRef target = activeMessageTarget();
-    if (target == null || irc == null) return false;
-    try {
-      return irc.isDraftReplyAvailable(target.serverId());
-    } catch (Exception ignored) {
-      return false;
-    }
+    if (target == null) return false;
+    return capabilityPolicy.canReply(target.serverId());
   }
 
   public boolean reactContextActionVisible() {
     TargetRef target = activeMessageTarget();
-    if (target == null || irc == null) return false;
-    try {
-      return irc.isDraftReactAvailable(target.serverId());
-    } catch (Exception ignored) {
-      return false;
-    }
+    if (target == null) return false;
+    return capabilityPolicy.canReact(target.serverId());
   }
 
   public boolean unreactContextActionVisible() {
     TargetRef target = activeMessageTarget();
-    if (target == null || irc == null) return false;
-    try {
-      return irc.isDraftReplyAvailable(target.serverId())
-          && irc.isDraftUnreactAvailable(target.serverId());
-    } catch (Exception ignored) {
-      return false;
-    }
+    if (target == null) return false;
+    return capabilityPolicy.canUnreact(target.serverId());
   }
 
   public boolean editContextActionVisible() {
@@ -257,42 +283,18 @@ public final class ChatHistoryActionCoordinator {
   }
 
   private boolean isMessageEditSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isMessageEditAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return capabilityPolicy.canEdit(serverId);
   }
 
   private boolean isMessageRedactionSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isMessageRedactionAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return capabilityPolicy.canRedact(serverId);
   }
 
   private boolean isLoadNewerHistorySupportedForServer(String serverId) {
-    return isChatHistorySupportedForServer(serverId) || isZncPlaybackSupportedForServer(serverId);
+    return capabilityPolicy.canLoadNewerHistory(serverId);
   }
 
   private boolean isChatHistorySupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isChatHistoryAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private boolean isZncPlaybackSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isZncPlaybackAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return capabilityPolicy.canLoadAroundMessage(serverId);
   }
 }

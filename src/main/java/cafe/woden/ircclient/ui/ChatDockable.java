@@ -24,6 +24,7 @@ import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.application.InboundDedupDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
+import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
@@ -44,6 +45,7 @@ import cafe.woden.ircclient.ui.coordinator.ChatTopicCoordinator;
 import cafe.woden.ircclient.ui.coordinator.ChatTranscriptInteractionCoordinator;
 import cafe.woden.ircclient.ui.coordinator.ChatTypingCoordinator;
 import cafe.woden.ircclient.ui.coordinator.DccActionCoordinator;
+import cafe.woden.ircclient.ui.coordinator.IrcMessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
@@ -284,7 +286,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     // Input panel is embedded in the main chat dock so input is always coupled with the transcript.
     this.inputPanel =
         new MessageInputPanel(settingsBus, commandHistoryStore, spellcheckSettingsBus);
-    this.inputPanel.setIsMatrixServer(irc == null ? sid -> false : irc::isMatrixBackendServer);
+    this.inputPanel.setBackendUiContext(BackendUiContext.fromIrcClientService(irc));
     add(inputPanel, BorderLayout.SOUTH);
     configureTranscriptContextMenuActions(transcripts, chatHistoryService);
     configureInputActivation(activationBus);
@@ -524,7 +526,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       UserListStore userListStore,
       UserListDockable usersDock,
       IrcClientService irc) {
-    channelListPanel.setIsMatrixServer(irc::isMatrixBackendServer);
+    channelListPanel.setBackendUiContext(BackendUiContext.fromIrcClientService(irc));
     return new ChatChannelListCoordinator(
         channelListPanel,
         serverTree,
@@ -624,7 +626,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus) {
     return new ChatHistoryActionCoordinator(
-        irc,
+        new IrcMessageActionCapabilityPolicy(irc),
         chatHistoryService,
         () -> activeTarget,
         activationBus::activate,

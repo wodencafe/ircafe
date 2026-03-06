@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import java.awt.Cursor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -61,7 +62,9 @@ class ChannelListPanelManagedOrderTest {
 
     onEdt(
         () -> {
-          panel.setIsMatrixServer(sid -> "matrix".equalsIgnoreCase(sid));
+          panel.setBackendUiContext(
+              BackendUiContext.fromMatrixServerPredicate(
+                  sid -> "matrix".equalsIgnoreCase(sid)));
           panel.setServerId("matrix");
           panel.setOnRunAlisRequest(command::set);
           panel.beginList("matrix", "Loading channel list (rust limit 30)...");
@@ -75,6 +78,50 @@ class ChannelListPanelManagedOrderTest {
     onEdt(nextPageButton::doClick);
     assertEquals("/list rust since nxt-42 limit 30", command.get());
     onEdt(() -> assertFalse(nextPageButton.isEnabled()));
+  }
+
+  @Test
+  void matrixSpecificListControlsOnlyShowForMatrixServers() throws Exception {
+    ChannelListPanel panel = new ChannelListPanel();
+
+    JButton runAlisButton = field(panel, "runAlisButton", JButton.class);
+    JButton runMatrixNextButton = field(panel, "runMatrixNextButton", JButton.class);
+
+    onEdt(
+        () -> {
+          panel.setBackendUiContext(
+              BackendUiContext.fromMatrixServerPredicate(
+                  sid -> "matrix".equalsIgnoreCase(sid)));
+          panel.setServerId("libera");
+          assertFalse(runMatrixNextButton.isVisible());
+          assertTrue(
+              runAlisButton
+                  .getToolTipText()
+                  .toLowerCase(Locale.ROOT)
+                  .contains("alis"));
+        });
+
+    onEdt(
+        () -> {
+          panel.setServerId("matrix");
+          assertTrue(runMatrixNextButton.isVisible());
+          assertTrue(
+              runAlisButton
+                  .getToolTipText()
+                  .toLowerCase(Locale.ROOT)
+                  .contains("matrix"));
+        });
+
+    onEdt(
+        () -> {
+          panel.setServerId("libera");
+          assertFalse(runMatrixNextButton.isVisible());
+          assertTrue(
+              runAlisButton
+                  .getToolTipText()
+                  .toLowerCase(Locale.ROOT)
+                  .contains("alis"));
+        });
   }
 
   @Test

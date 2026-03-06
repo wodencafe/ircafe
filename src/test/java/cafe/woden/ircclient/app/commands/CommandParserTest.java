@@ -249,30 +249,30 @@ class CommandParserTest {
   }
 
   @Test
-  void parsesMatrixUploadWithExplicitCaption() {
-    ParsedInput in = parser.parse("/mupload image /tmp/photo.png hello matrix");
-    assertTrue(in instanceof ParsedInput.MatrixUpload);
-    ParsedInput.MatrixUpload upload = (ParsedInput.MatrixUpload) in;
+  void parsesUploadWithExplicitCaption() {
+    ParsedInput in = parser.parse("/upload image /tmp/photo.png hello matrix");
+    assertTrue(in instanceof ParsedInput.Upload);
+    ParsedInput.Upload upload = (ParsedInput.Upload) in;
     assertEquals("image", upload.msgType());
     assertEquals("/tmp/photo.png", upload.path());
     assertEquals("hello matrix", upload.caption());
   }
 
   @Test
-  void parsesMatrixUploadWithQuotedPathAndAlias() {
+  void parsesUploadWithQuotedPathAndAlias() {
     ParsedInput in = parser.parse("/matrixupload m.file \"/tmp/my file.txt\" with caption");
-    assertTrue(in instanceof ParsedInput.MatrixUpload);
-    ParsedInput.MatrixUpload upload = (ParsedInput.MatrixUpload) in;
+    assertTrue(in instanceof ParsedInput.Upload);
+    ParsedInput.Upload upload = (ParsedInput.Upload) in;
     assertEquals("m.file", upload.msgType());
     assertEquals("/tmp/my file.txt", upload.path());
     assertEquals("with caption", upload.caption());
   }
 
   @Test
-  void parsesMatrixUploadWithOnlyMsgType() {
+  void parsesUploadAliasWithOnlyMsgType() {
     ParsedInput in = parser.parse("/mupload m.image");
-    assertTrue(in instanceof ParsedInput.MatrixUpload);
-    ParsedInput.MatrixUpload upload = (ParsedInput.MatrixUpload) in;
+    assertTrue(in instanceof ParsedInput.Upload);
+    ParsedInput.Upload upload = (ParsedInput.Upload) in;
     assertEquals("m.image", upload.msgType());
     assertEquals("", upload.path());
     assertEquals("", upload.caption());

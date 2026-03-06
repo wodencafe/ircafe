@@ -35,7 +35,7 @@ import org.springframework.stereotype.Component;
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
  * <p>Includes: /join, /part, /connect, /disconnect, /reconnect, /quit, /nick, /away, /query, /msg,
- * /notice, /me, /topic, /kick, /invite, /names, /who, /list, /say, /quote, /mupload.
+ * /notice, /me, /topic, /kick, /invite, /names, /who, /list, /say, /quote, /upload.
  *
  * <p>Behavior is intended to be preserved.
  */
@@ -68,6 +68,8 @@ public class OutboundChatCommandService {
   private final IgnoreListCommandPort ignoreListService;
   private final MatrixOutboundCommandSupport matrixCommandSupport;
   private final QuasselOutboundCommandSupport quasselCommandSupport;
+  private final Map<IrcProperties.Server.Backend, UploadCommandTranslationHandler>
+      uploadCommandTranslationHandlers;
 
   public OutboundChatCommandService(
       IrcClientService irc,
@@ -100,8 +102,12 @@ public class OutboundChatCommandService {
     this.pendingInviteState = pendingInviteState;
     this.whoisRoutingState = whoisRoutingState;
     this.ignoreListService = ignoreListService;
-    this.matrixCommandSupport = new MatrixOutboundCommandSupport(commandTargetPolicy);
+    this.matrixCommandSupport = new MatrixOutboundCommandSupport();
     this.quasselCommandSupport = new QuasselOutboundCommandSupport(serverCatalog);
+    UploadCommandTranslationHandler matrixUploadTranslationHandler =
+        new MatrixUploadCommandTranslationHandler(this.matrixCommandSupport);
+    this.uploadCommandTranslationHandlers =
+        Map.of(matrixUploadTranslationHandler.backend(), matrixUploadTranslationHandler);
   }
 
   public void handleJoin(CompositeDisposable disposables, String channel, String key) {
@@ -721,10 +727,6 @@ public class OutboundChatCommandService {
 
   private boolean ensureQuasselServerBackend(String serverId, TargetRef out, String statusTag) {
     return quasselCommandSupport.ensureQuasselServerBackend(serverId, out, statusTag, ui);
-  }
-
-  private boolean ensureMatrixServerBackend(String serverId, TargetRef out, String statusTag) {
-    return matrixCommandSupport.ensureMatrixServerBackend(serverId, out, statusTag, ui);
   }
 
   private String renderQuasselNetworkSummary(
@@ -1457,7 +1459,7 @@ public class OutboundChatCommandService {
           appendMarkReadHelp(out);
           return;
         }
-        case "mupload", "matrixupload" -> {
+        case "upload", "mupload", "matrixupload" -> {
           appendMatrixUploadHelp(out);
           return;
         }
@@ -1494,15 +1496,14 @@ public class OutboundChatCommandService {
     ui.appendStatus(
         out,
         "(help)",
-        "Tip: /help edit, /help redact, /help markread, or /help mupload for focused details.");
+        "Tip: /help edit, /help redact, /help markread, or /help upload for focused details.");
   }
 
-  public void handleMatrixUpload(
+  public void handleUpload(
       CompositeDisposable disposables, String msgType, String path, String caption) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
-      ui.appendStatus(
-          targetCoordinator.safeStatusTarget(), "(mupload)", "Select a Matrix target first.");
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(mupload)", "Select a target first.");
       return;
     }
 
@@ -1530,14 +1531,21 @@ public class OutboundChatCommandService {
       return;
     }
 
-    if (!ensureMatrixServerBackend(at.serverId(), status, "(mupload)")) {
+    IrcProperties.Server.Backend backend = commandTargetPolicy.backendForServer(at.serverId());
+    UploadCommandTranslationHandler translationHandler = uploadCommandTranslationHandlers.get(backend);
+    if (translationHandler == null) {
+      ui.appendStatus(
+          status,
+          "(mupload)",
+          "Server '"
+              + at.serverId()
+              + "' does not use the Matrix backend. /upload is only available on Matrix-backed servers.");
       return;
     }
 
     String displayBody = body.isEmpty() ? defaultMatrixUploadCaption(sourcePath) : body;
     String line =
-        matrixCommandSupport.buildUploadPrivmsg(
-            at.target(), normalizedType, sourcePath, displayBody);
+        translationHandler.translateUpload(at.target(), normalizedType, sourcePath, displayBody);
     if (line.isBlank()) {
       appendMatrixUploadUsage(at);
       return;
@@ -1553,6 +1561,11 @@ public class OutboundChatCommandService {
                         targetCoordinator.safeStatusTarget(),
                         "(mupload-error)",
                         String.valueOf(err))));
+  }
+
+  public void handleMatrixUpload(
+      CompositeDisposable disposables, String msgType, String path, String caption) {
+    handleUpload(disposables, msgType, path, caption);
   }
 
   private void appendDccHelp(TargetRef out) {

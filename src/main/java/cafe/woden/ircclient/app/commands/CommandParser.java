@@ -390,12 +390,18 @@ public class CommandParser {
       return new ParsedInput.Help(topic);
     }
 
-    if (matchesCommand(line, "/mupload") || matchesCommand(line, "/matrixupload")) {
-      String args =
-          matchesCommand(line, "/mupload")
-              ? argAfter(line, "/mupload")
-              : argAfter(line, "/matrixupload");
-      return parseMatrixUploadInput(args);
+    if (matchesCommand(line, "/upload")
+        || matchesCommand(line, "/mupload")
+        || matchesCommand(line, "/matrixupload")) {
+      String args;
+      if (matchesCommand(line, "/upload")) {
+        args = argAfter(line, "/upload");
+      } else if (matchesCommand(line, "/mupload")) {
+        args = argAfter(line, "/mupload");
+      } else {
+        args = argAfter(line, "/matrixupload");
+      }
+      return parseUploadInput(args);
     }
 
     // IRCv3 compose helpers (used by first-class reply/reaction input UX).
@@ -514,23 +520,23 @@ public class CommandParser {
     return new ParsedInput.Dcc(sub, nick, arg);
   }
 
-  private static ParsedInput parseMatrixUploadInput(String rest) {
+  private static ParsedInput parseUploadInput(String rest) {
     String raw = rest == null ? "" : rest.trim();
-    if (raw.isEmpty()) return new ParsedInput.MatrixUpload("", "", "");
+    if (raw.isEmpty()) return new ParsedInput.Upload("", "", "");
 
     int firstSpace = raw.indexOf(' ');
     if (firstSpace <= 0) {
-      return new ParsedInput.MatrixUpload(raw.trim(), "", "");
+      return new ParsedInput.Upload(raw.trim(), "", "");
     }
 
     String msgType = raw.substring(0, firstSpace).trim();
     String remaining = raw.substring(firstSpace + 1).trim();
     if (remaining.isEmpty()) {
-      return new ParsedInput.MatrixUpload(msgType, "", "");
+      return new ParsedInput.Upload(msgType, "", "");
     }
 
     ParsedPathToken pathToken = parsePathToken(remaining);
-    return new ParsedInput.MatrixUpload(
+    return new ParsedInput.Upload(
         msgType, pathToken.path(), pathToken.remainder() == null ? "" : pathToken.remainder());
   }
 

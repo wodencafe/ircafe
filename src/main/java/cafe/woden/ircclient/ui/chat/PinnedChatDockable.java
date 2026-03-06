@@ -4,6 +4,7 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
@@ -150,7 +151,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     // Input panel embedded in the pinned view.
     this.inputPanel = new MessageInputPanel(settingsBus, historyStore, spellcheckSettingsBus);
-    this.inputPanel.setIsMatrixServer(irc == null ? sid -> false : irc::isMatrixBackendServer);
+    this.inputPanel.setBackendUiContext(BackendUiContext.fromIrcClientService(irc));
     this.inputPanel.setActiveServerId(target.serverId());
     add(inputPanel, BorderLayout.SOUTH);
 

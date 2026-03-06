@@ -234,11 +234,10 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
-  void dispatchMatrixUploadRoutesToChatService() {
-    dispatcher.dispatch(
-        disposables, new ParsedInput.MatrixUpload("m.image", "/tmp/photo.png", "photo"));
+  void dispatchUploadRoutesToChatService() {
+    dispatcher.dispatch(disposables, new ParsedInput.Upload("m.image", "/tmp/photo.png", "photo"));
 
-    verify(chat).handleMatrixUpload(disposables, "m.image", "/tmp/photo.png", "photo");
+    verify(chat).handleUpload(disposables, "m.image", "/tmp/photo.png", "photo");
   }
 
   @Test

@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.model.TargetRef;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -13,40 +12,17 @@ final class MatrixOutboundCommandSupport {
   private static final Set<String> MATRIX_UPLOAD_MSGTYPES =
       Set.of("m.image", "m.file", "m.video", "m.audio");
 
-  private final CommandTargetPolicy commandTargetPolicy;
-
-  MatrixOutboundCommandSupport(CommandTargetPolicy commandTargetPolicy) {
-    this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
-  }
-
-  boolean ensureMatrixServerBackend(String serverId, TargetRef out, String statusTag, UiPort ui) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) {
-      ui.appendStatus(out, statusTag, "Select a Matrix server first.");
-      return false;
-    }
-    IrcProperties.Server.Backend backend = commandTargetPolicy.backendForServer(sid);
-    if (backend == IrcProperties.Server.Backend.MATRIX) {
-      return true;
-    }
-    ui.appendStatus(
-        out,
-        statusTag,
-        "Server '"
-            + sid
-            + "' does not use the Matrix backend. /mupload is only available on Matrix-backed servers.");
-    return false;
-  }
+  MatrixOutboundCommandSupport() {}
 
   void appendUploadHelp(UiPort ui, TargetRef out) {
     ui.appendStatus(
         out,
         "(help)",
-        "/mupload <m.image|m.file|m.video|m.audio> <path> [caption]  (aliases: image|file|video|audio)");
+        "/upload <m.image|m.file|m.video|m.audio> <path> [caption]  (aliases: /mupload /matrixupload and image|file|video|audio msgtypes)");
   }
 
   void appendUploadUsage(UiPort ui, TargetRef out) {
-    ui.appendStatus(out, "(mupload)", "Usage: /mupload <msgtype> <path> [caption]");
+    ui.appendStatus(out, "(mupload)", "Usage: /upload <msgtype> <path> [caption]");
     ui.appendStatus(
         out,
         "(mupload)",

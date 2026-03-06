@@ -1123,7 +1123,7 @@ class OutboundChatCommandServiceTest {
 
     service.handleMatrixUpload(disposables, "m.bad", "/tmp/photo.png", "");
 
-    verify(ui).appendStatus(room, "(mupload)", "Usage: /mupload <msgtype> <path> [caption]");
+    verify(ui).appendStatus(room, "(mupload)", "Usage: /upload <msgtype> <path> [caption]");
     verify(irc, never()).sendRaw(anyString(), anyString());
   }
 
@@ -1484,7 +1484,7 @@ class OutboundChatCommandServiceTest {
         .appendStatus(
             chan,
             "(help)",
-            "/mupload <m.image|m.file|m.video|m.audio> <path> [caption]  (aliases: image|file|video|audio)");
+            "/upload <m.image|m.file|m.video|m.audio> <path> [caption]  (aliases: /mupload /matrixupload and image|file|video|audio msgtypes)");
   }
 
   @Test

@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.input;
 
 import cafe.woden.ircclient.irc.Ircv3DraftNormalizer;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettings;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettings;
@@ -26,7 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
 import org.slf4j.Logger;
@@ -58,7 +58,7 @@ public class MessageInputPanel extends JPanel {
       PublishProcessor.<String>create().toSerialized();
   private volatile Runnable onActivated = () -> {};
   private volatile Consumer<String> onDraftChanged = t -> {};
-  private volatile Predicate<String> isMatrixServer = sid -> false;
+  private volatile BackendUiContext backendUiContext = BackendUiContext.ircOnly();
   private volatile String activeServerId = "";
   private final MessageInputTypingSupport typingSupport;
   private final UiSettingsBus settingsBus;
@@ -657,10 +657,10 @@ public class MessageInputPanel extends JPanel {
   private boolean isMatrixServer(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
-    Predicate<String> predicate = isMatrixServer;
-    if (predicate == null) return false;
+    BackendUiContext context = backendUiContext;
+    if (context == null) return false;
     try {
-      return predicate.test(sid);
+      return context.isMatrixServer(sid);
     } catch (Exception ignored) {
       return false;
     }
@@ -764,9 +764,14 @@ public class MessageInputPanel extends JPanel {
     composeSupport.openQuickReactionPicker(ircTarget, messageId);
   }
 
-  public void setIsMatrixServer(Predicate<String> isMatrixServer) {
-    this.isMatrixServer = isMatrixServer == null ? sid -> false : isMatrixServer;
+  public void setBackendUiContext(BackendUiContext backendUiContext) {
+    this.backendUiContext =
+        backendUiContext == null ? BackendUiContext.ircOnly() : backendUiContext;
     refreshUploadUxStateOnEdt();
+  }
+
+  public void setIsMatrixServer(java.util.function.Predicate<String> isMatrixServer) {
+    setBackendUiContext(BackendUiContext.fromMatrixServerPredicate(isMatrixServer));
   }
 
   public void setActiveServerId(String serverId) {
