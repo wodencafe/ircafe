@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -70,6 +71,8 @@ public class OutboundChatCommandService {
   private final QuasselOutboundCommandSupport quasselCommandSupport;
   private final Map<IrcProperties.Server.Backend, UploadCommandTranslationHandler>
       uploadCommandTranslationHandlers;
+  private final Map<String, HelpTopicHandler> helpTopicHandlers;
+  private final Map<String, QuasselNetworkVerbHandler> quasselNetworkVerbHandlers;
 
   public OutboundChatCommandService(
       IrcClientService irc,
@@ -108,6 +111,8 @@ public class OutboundChatCommandService {
         new MatrixUploadCommandTranslationHandler(this.matrixCommandSupport);
     this.uploadCommandTranslationHandlers =
         Map.of(matrixUploadTranslationHandler.backend(), matrixUploadTranslationHandler);
+    this.helpTopicHandlers = buildHelpTopicHandlers();
+    this.quasselNetworkVerbHandlers = buildQuasselNetworkVerbHandlers();
   }
 
   public void handleJoin(CompositeDisposable disposables, String channel, String key) {
@@ -345,180 +350,12 @@ public class OutboundChatCommandService {
       return;
     }
 
-    if ("list".equals(verb) || "ls".equals(verb)) {
-      if (cursor < tokens.size()) {
-        ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-        return;
-      }
-      List<IrcClientService.QuasselCoreNetworkSummary> networks = irc.quasselCoreNetworks(sid);
-      if (networks.isEmpty()) {
-        ui.appendStatus(
-            status,
-            "(qnet)",
-            "No Quassel networks are known yet. Connect first or add one with /quasselnet add.");
-        return;
-      }
-      ui.appendStatus(status, "(qnet)", "Quassel networks:");
-      for (IrcClientService.QuasselCoreNetworkSummary network : networks) {
-        ui.appendStatus(status, "(qnet)", renderQuasselNetworkSummary(network));
-      }
+    QuasselNetworkVerbHandler handler = quasselNetworkVerbHandlers.get(verb);
+    if (handler == null) {
+      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
       return;
     }
-
-    if ("connect".equals(verb)
-        || "disconnect".equals(verb)
-        || "remove".equals(verb)
-        || "rm".equals(verb)) {
-      if ((tokens.size() - cursor) != 1) {
-        ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-        return;
-      }
-      String network = tokens.get(cursor);
-      if ("connect".equals(verb)) {
-        disposables.add(
-            irc.quasselCoreConnectNetwork(sid, network)
-                .subscribe(
-                    () ->
-                        ui.appendStatus(
-                            status,
-                            "(qnet)",
-                            "Requested connect for Quassel network '" + network + "'."),
-                    err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
-        return;
-      }
-      if ("disconnect".equals(verb)) {
-        disposables.add(
-            irc.quasselCoreDisconnectNetwork(sid, network)
-                .subscribe(
-                    () ->
-                        ui.appendStatus(
-                            status,
-                            "(qnet)",
-                            "Requested disconnect for Quassel network '" + network + "'."),
-                    err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
-        return;
-      }
-      disposables.add(
-          irc.quasselCoreRemoveNetwork(sid, network)
-              .subscribe(
-                  () ->
-                      ui.appendStatus(
-                          status,
-                          "(qnet)",
-                          "Requested removal of Quassel network '" + network + "'."),
-                  err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
-      return;
-    }
-
-    if ("add".equals(verb) || "create".equals(verb)) {
-      if ((tokens.size() - cursor) < 2) {
-        ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-        return;
-      }
-      String networkName = tokens.get(cursor++);
-      String serverHost = tokens.get(cursor++);
-      Integer explicitPort = null;
-      boolean useTls = true;
-
-      if (cursor < tokens.size()) {
-        explicitPort = tryParseInt(tokens.get(cursor));
-        if (explicitPort != null) {
-          cursor++;
-        }
-      }
-      if (cursor < tokens.size()) {
-        Boolean tls = parseTlsToken(tokens.get(cursor));
-        if (tls == null) {
-          ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-          return;
-        }
-        useTls = tls.booleanValue();
-        cursor++;
-      }
-      if (cursor < tokens.size()) {
-        ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-        return;
-      }
-
-      int port = explicitPort != null ? explicitPort.intValue() : (useTls ? 6697 : 6667);
-      final int requestedPort = port;
-      final boolean requestedTls = useTls;
-      IrcClientService.QuasselCoreNetworkCreateRequest request =
-          new IrcClientService.QuasselCoreNetworkCreateRequest(
-              networkName, serverHost, requestedPort, requestedTls, "", true, null, List.of());
-      disposables.add(
-          irc.quasselCoreCreateNetwork(sid, request)
-              .subscribe(
-                  () ->
-                      ui.appendStatus(
-                          status,
-                          "(qnet)",
-                          "Requested Quassel network create: "
-                              + networkName
-                              + " -> "
-                              + serverHost
-                              + ":"
-                              + requestedPort
-                              + (requestedTls ? " (tls)" : " (plain)")),
-                  err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
-      return;
-    }
-
-    if ("edit".equals(verb) || "update".equals(verb) || "set".equals(verb)) {
-      if ((tokens.size() - cursor) < 2) {
-        ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-        return;
-      }
-      String network = tokens.get(cursor++);
-      String serverHost = tokens.get(cursor++);
-      Integer explicitPort = null;
-      boolean useTls = true;
-
-      if (cursor < tokens.size()) {
-        explicitPort = tryParseInt(tokens.get(cursor));
-        if (explicitPort != null) {
-          cursor++;
-        }
-      }
-      if (cursor < tokens.size()) {
-        Boolean tls = parseTlsToken(tokens.get(cursor));
-        if (tls == null) {
-          ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-          return;
-        }
-        useTls = tls.booleanValue();
-        cursor++;
-      }
-      if (cursor < tokens.size()) {
-        ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-        return;
-      }
-
-      int port = explicitPort != null ? explicitPort.intValue() : (useTls ? 6697 : 6667);
-      final int requestedPort = port;
-      final boolean requestedTls = useTls;
-      IrcClientService.QuasselCoreNetworkUpdateRequest request =
-          new IrcClientService.QuasselCoreNetworkUpdateRequest(
-              "", serverHost, requestedPort, requestedTls, "", true, null, null);
-      disposables.add(
-          irc.quasselCoreUpdateNetwork(sid, network, request)
-              .subscribe(
-                  () ->
-                      ui.appendStatus(
-                          status,
-                          "(qnet)",
-                          "Requested update for Quassel network '"
-                              + network
-                              + "': "
-                              + serverHost
-                              + ":"
-                              + requestedPort
-                              + (requestedTls ? " (tls)" : " (plain)")),
-                  err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
-      return;
-    }
-
-    ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
+    handler.handle(disposables, sid, status, tokens, cursor, verb);
   }
 
   public void handleQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
@@ -1441,31 +1278,12 @@ public class OutboundChatCommandService {
     TargetRef out = (at != null) ? at : targetCoordinator.safeStatusTarget();
     String t = normalizeHelpTopic(topic);
     if (!t.isEmpty()) {
-      switch (t) {
-        case "edit" -> {
-          appendEditHelp(out);
-          return;
-        }
-        case "redact", "delete" -> {
-          appendRedactHelp(out);
-          return;
-        }
-        case "dcc" -> {
-          appendDccHelp(out);
-          return;
-        }
-        case "markread" -> {
-          appendMarkReadHelp(out);
-          return;
-        }
-        case "upload" -> {
-          appendMatrixUploadHelp(out);
-          return;
-        }
-        default ->
-            ui.appendStatus(
-                out, "(help)", "No dedicated help for '" + t + "'. Showing common commands.");
+      HelpTopicHandler handler = helpTopicHandlers.get(t);
+      if (handler != null) {
+        handler.handle(out);
+        return;
       }
+      ui.appendStatus(out, "(help)", "No dedicated help for '" + t + "'. Showing common commands.");
     }
 
     ui.appendStatus(
@@ -1496,6 +1314,255 @@ public class OutboundChatCommandService {
         out,
         "(help)",
         "Tip: /help edit, /help redact, /help markread, or /help upload for focused details.");
+  }
+
+  private Map<String, HelpTopicHandler> buildHelpTopicHandlers() {
+    LinkedHashMap<String, HelpTopicHandler> handlers = new LinkedHashMap<>();
+    registerHelpTopicHandler(handlers, this::appendEditHelp, "edit");
+    registerHelpTopicHandler(handlers, this::appendRedactHelp, "redact", "delete");
+    registerHelpTopicHandler(handlers, this::appendDccHelp, "dcc");
+    registerHelpTopicHandler(handlers, this::appendMarkReadHelp, "markread");
+    registerHelpTopicHandler(handlers, this::appendMatrixUploadHelp, "upload");
+    return Map.copyOf(handlers);
+  }
+
+  private Map<String, QuasselNetworkVerbHandler> buildQuasselNetworkVerbHandlers() {
+    LinkedHashMap<String, QuasselNetworkVerbHandler> handlers = new LinkedHashMap<>();
+    registerQuasselNetworkVerbHandler(
+        handlers, this::handleQuasselNetworkListVerb, "list", "ls");
+    registerQuasselNetworkVerbHandler(
+        handlers, this::handleQuasselNetworkConnectLikeVerb, "connect", "disconnect", "remove", "rm");
+    registerQuasselNetworkVerbHandler(
+        handlers, this::handleQuasselNetworkAddVerb, "add", "create");
+    registerQuasselNetworkVerbHandler(
+        handlers, this::handleQuasselNetworkEditVerb, "edit", "update", "set");
+    return Map.copyOf(handlers);
+  }
+
+  private void handleQuasselNetworkListVerb(
+      CompositeDisposable disposables,
+      String serverId,
+      TargetRef status,
+      List<String> tokens,
+      int cursor,
+      String verb) {
+    if (cursor < tokens.size()) {
+      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
+      return;
+    }
+    List<IrcClientService.QuasselCoreNetworkSummary> networks = irc.quasselCoreNetworks(serverId);
+    if (networks.isEmpty()) {
+      ui.appendStatus(
+          status,
+          "(qnet)",
+          "No Quassel networks are known yet. Connect first or add one with /quasselnet add.");
+      return;
+    }
+    ui.appendStatus(status, "(qnet)", "Quassel networks:");
+    for (IrcClientService.QuasselCoreNetworkSummary network : networks) {
+      ui.appendStatus(status, "(qnet)", renderQuasselNetworkSummary(network));
+    }
+  }
+
+  private void handleQuasselNetworkConnectLikeVerb(
+      CompositeDisposable disposables,
+      String serverId,
+      TargetRef status,
+      List<String> tokens,
+      int cursor,
+      String verb) {
+    if ((tokens.size() - cursor) != 1) {
+      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
+      return;
+    }
+    String network = tokens.get(cursor);
+    if ("connect".equals(verb)) {
+      disposables.add(
+          irc.quasselCoreConnectNetwork(serverId, network)
+              .subscribe(
+                  () ->
+                      ui.appendStatus(
+                          status, "(qnet)", "Requested connect for Quassel network '" + network + "'."),
+                  err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
+      return;
+    }
+    if ("disconnect".equals(verb)) {
+      disposables.add(
+          irc.quasselCoreDisconnectNetwork(serverId, network)
+              .subscribe(
+                  () ->
+                      ui.appendStatus(
+                          status,
+                          "(qnet)",
+                          "Requested disconnect for Quassel network '" + network + "'."),
+                  err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
+      return;
+    }
+    disposables.add(
+        irc.quasselCoreRemoveNetwork(serverId, network)
+            .subscribe(
+                () ->
+                    ui.appendStatus(
+                        status, "(qnet)", "Requested removal of Quassel network '" + network + "'."),
+                err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
+  }
+
+  private void handleQuasselNetworkAddVerb(
+      CompositeDisposable disposables,
+      String serverId,
+      TargetRef status,
+      List<String> tokens,
+      int cursor,
+      String verb) {
+    if ((tokens.size() - cursor) < 2) {
+      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
+      return;
+    }
+    String networkName = tokens.get(cursor++);
+    String serverHost = tokens.get(cursor++);
+    Integer explicitPort = null;
+    boolean useTls = true;
+
+    if (cursor < tokens.size()) {
+      explicitPort = tryParseInt(tokens.get(cursor));
+      if (explicitPort != null) {
+        cursor++;
+      }
+    }
+    if (cursor < tokens.size()) {
+      Boolean tls = parseTlsToken(tokens.get(cursor));
+      if (tls == null) {
+        ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
+        return;
+      }
+      useTls = tls.booleanValue();
+      cursor++;
+    }
+    if (cursor < tokens.size()) {
+      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
+      return;
+    }
+
+    int port = explicitPort != null ? explicitPort.intValue() : (useTls ? 6697 : 6667);
+    final int requestedPort = port;
+    final boolean requestedTls = useTls;
+    IrcClientService.QuasselCoreNetworkCreateRequest request =
+        new IrcClientService.QuasselCoreNetworkCreateRequest(
+            networkName, serverHost, requestedPort, requestedTls, "", true, null, List.of());
+    disposables.add(
+        irc.quasselCoreCreateNetwork(serverId, request)
+            .subscribe(
+                () ->
+                    ui.appendStatus(
+                        status,
+                        "(qnet)",
+                        "Requested Quassel network create: "
+                            + networkName
+                            + " -> "
+                            + serverHost
+                            + ":"
+                            + requestedPort
+                            + (requestedTls ? " (tls)" : " (plain)")),
+                err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
+  }
+
+  private void handleQuasselNetworkEditVerb(
+      CompositeDisposable disposables,
+      String serverId,
+      TargetRef status,
+      List<String> tokens,
+      int cursor,
+      String verb) {
+    if ((tokens.size() - cursor) < 2) {
+      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
+      return;
+    }
+    String network = tokens.get(cursor++);
+    String serverHost = tokens.get(cursor++);
+    Integer explicitPort = null;
+    boolean useTls = true;
+
+    if (cursor < tokens.size()) {
+      explicitPort = tryParseInt(tokens.get(cursor));
+      if (explicitPort != null) {
+        cursor++;
+      }
+    }
+    if (cursor < tokens.size()) {
+      Boolean tls = parseTlsToken(tokens.get(cursor));
+      if (tls == null) {
+        ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
+        return;
+      }
+      useTls = tls.booleanValue();
+      cursor++;
+    }
+    if (cursor < tokens.size()) {
+      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
+      return;
+    }
+
+    int port = explicitPort != null ? explicitPort.intValue() : (useTls ? 6697 : 6667);
+    final int requestedPort = port;
+    final boolean requestedTls = useTls;
+    IrcClientService.QuasselCoreNetworkUpdateRequest request =
+        new IrcClientService.QuasselCoreNetworkUpdateRequest(
+            "", serverHost, requestedPort, requestedTls, "", true, null, null);
+    disposables.add(
+        irc.quasselCoreUpdateNetwork(serverId, network, request)
+            .subscribe(
+                () ->
+                    ui.appendStatus(
+                        status,
+                        "(qnet)",
+                        "Requested update for Quassel network '"
+                            + network
+                            + "': "
+                            + serverHost
+                            + ":"
+                            + requestedPort
+                            + (requestedTls ? " (tls)" : " (plain)")),
+                err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
+  }
+
+  private static void registerHelpTopicHandler(
+      Map<String, HelpTopicHandler> handlers, HelpTopicHandler handler, String... topics) {
+    if (handlers == null || handler == null || topics == null) return;
+    for (String rawTopic : topics) {
+      String topic = normalizeHelpTopic(rawTopic);
+      if (!topic.isEmpty()) {
+        handlers.put(topic, handler);
+      }
+    }
+  }
+
+  private static void registerQuasselNetworkVerbHandler(
+      Map<String, QuasselNetworkVerbHandler> handlers,
+      QuasselNetworkVerbHandler handler,
+      String... verbs) {
+    if (handlers == null || handler == null || verbs == null) return;
+    for (String rawVerb : verbs) {
+      String verb = Objects.toString(rawVerb, "").trim().toLowerCase(Locale.ROOT);
+      if (!verb.isEmpty()) {
+        handlers.put(verb, handler);
+      }
+    }
+  }
+
+  @FunctionalInterface
+  private interface HelpTopicHandler {
+    void handle(TargetRef out);
+  }
+
+  @FunctionalInterface
+  private interface QuasselNetworkVerbHandler {
+    void handle(
+        CompositeDisposable disposables,
+        String serverId,
+        TargetRef status,
+        List<String> tokens,
+        int cursor,
+        String verb);
   }
 
   public void handleUpload(
