@@ -19,8 +19,6 @@ import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -31,7 +29,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
@@ -53,8 +50,6 @@ public class OutboundChatCommandService {
 
   private static final DateTimeFormatter CHATHISTORY_TS_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
-  private static final Set<String> MATRIX_UPLOAD_MSGTYPES =
-      Set.of("m.image", "m.file", "m.video", "m.audio");
 
   private final IrcClientService irc;
   private final UiPort ui;
@@ -71,6 +66,8 @@ public class OutboundChatCommandService {
   private final PendingInvitePort pendingInviteState;
   private final WhoisRoutingPort whoisRoutingState;
   private final IgnoreListCommandPort ignoreListService;
+  private final MatrixOutboundCommandSupport matrixCommandSupport;
+  private final QuasselOutboundCommandSupport quasselCommandSupport;
 
   public OutboundChatCommandService(
       IrcClientService irc,
@@ -103,6 +100,8 @@ public class OutboundChatCommandService {
     this.pendingInviteState = pendingInviteState;
     this.whoisRoutingState = whoisRoutingState;
     this.ignoreListService = ignoreListService;
+    this.matrixCommandSupport = new MatrixOutboundCommandSupport(commandTargetPolicy);
+    this.quasselCommandSupport = new QuasselOutboundCommandSupport(serverCatalog);
   }
 
   public void handleJoin(CompositeDisposable disposables, String channel, String key) {
@@ -692,19 +691,8 @@ public class OutboundChatCommandService {
     return safe == null ? "" : Objects.toString(safe.serverId(), "").trim();
   }
 
-  private static boolean isQuasselNetworkVerb(String token) {
-    String normalized = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
-    return normalized.equals("list")
-        || normalized.equals("ls")
-        || normalized.equals("connect")
-        || normalized.equals("disconnect")
-        || normalized.equals("add")
-        || normalized.equals("create")
-        || normalized.equals("edit")
-        || normalized.equals("update")
-        || normalized.equals("set")
-        || normalized.equals("remove")
-        || normalized.equals("rm");
+  private boolean isQuasselNetworkVerb(String token) {
+    return quasselCommandSupport.isNetworkVerb(token);
   }
 
   private static List<String> tokenizeWhitespaceArgs(String raw) {
@@ -719,96 +707,29 @@ public class OutboundChatCommandService {
     return out.isEmpty() ? List.of() : List.copyOf(out);
   }
 
-  private static Integer tryParseInt(String value) {
-    String token = Objects.toString(value, "").trim();
-    if (token.isEmpty()) return null;
-    try {
-      return Integer.parseInt(token);
-    } catch (NumberFormatException ignored) {
-      return null;
-    }
+  private Integer tryParseInt(String value) {
+    return quasselCommandSupport.tryParseInt(value);
   }
 
-  private static Boolean parseTlsToken(String raw) {
-    String token = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
-    if (token.isEmpty()) return null;
-    return switch (token) {
-      case "1", "true", "yes", "on", "tls", "ssl" -> Boolean.TRUE;
-      case "0", "false", "no", "off", "plain", "notls" -> Boolean.FALSE;
-      default -> null;
-    };
+  private Boolean parseTlsToken(String raw) {
+    return quasselCommandSupport.parseTlsToken(raw);
   }
 
-  private static String quasselNetworkUsage() {
-    return "Usage: /quasselnet [serverId] list | connect <network> | disconnect <network> | remove <network> | add <name> <host> [port] [tls|plain] | edit <network> <host> [port] [tls|plain]";
+  private String quasselNetworkUsage() {
+    return quasselCommandSupport.networkUsage();
   }
 
   private boolean ensureQuasselServerBackend(String serverId, TargetRef out, String statusTag) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) {
-      ui.appendStatus(out, statusTag, "Select a Quassel server first.");
-      return false;
-    }
-    if (serverCatalog == null) {
-      return true;
-    }
-    Optional<IrcProperties.Server> server = serverCatalog.find(sid);
-    if (server.isEmpty()) {
-      ui.appendStatus(out, statusTag, "Unknown server '" + sid + "'.");
-      return false;
-    }
-    IrcProperties.Server.Backend backend = server.orElseThrow().backend();
-    if (backend == IrcProperties.Server.Backend.QUASSEL_CORE) {
-      return true;
-    }
-    ui.appendStatus(
-        out,
-        statusTag,
-        "Server '"
-            + sid
-            + "' does not use the Quassel Core backend. Quassel actions are only available on Quassel Core servers.");
-    return false;
+    return quasselCommandSupport.ensureQuasselServerBackend(serverId, out, statusTag, ui);
   }
 
   private boolean ensureMatrixServerBackend(String serverId, TargetRef out, String statusTag) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) {
-      ui.appendStatus(out, statusTag, "Select a Matrix server first.");
-      return false;
-    }
-    IrcProperties.Server.Backend backend = commandTargetPolicy.backendForServer(sid);
-    if (backend == IrcProperties.Server.Backend.MATRIX) {
-      return true;
-    }
-    ui.appendStatus(
-        out,
-        statusTag,
-        "Server '"
-            + sid
-            + "' does not use the Matrix backend. /mupload is only available on Matrix-backed servers.");
-    return false;
+    return matrixCommandSupport.ensureMatrixServerBackend(serverId, out, statusTag, ui);
   }
 
-  private static String renderQuasselNetworkSummary(
+  private String renderQuasselNetworkSummary(
       IrcClientService.QuasselCoreNetworkSummary network) {
-    if (network == null) return "(unknown network)";
-    String name = Objects.toString(network.networkName(), "").trim();
-    if (name.isBlank()) name = "network-" + network.networkId();
-    String host = Objects.toString(network.serverHost(), "").trim();
-    int port = network.serverPort();
-
-    StringBuilder line = new StringBuilder();
-    line.append("[").append(network.networkId()).append("] ").append(name).append(" - ");
-    line.append(network.connected() ? "connected" : "disconnected");
-    if (!network.enabled()) line.append(", disabled");
-    if (!host.isBlank() && port > 0) {
-      line.append(" @ ").append(host).append(":").append(port);
-      line.append(network.useTls() ? " tls" : " plain");
-    }
-    if (network.identityId() >= 0) {
-      line.append(" identity=").append(network.identityId());
-    }
-    return line.toString();
+    return quasselCommandSupport.renderNetworkSummary(network);
   }
 
   public void handleQuit(String reason) {
@@ -1615,14 +1536,11 @@ public class OutboundChatCommandService {
 
     String displayBody = body.isEmpty() ? defaultMatrixUploadCaption(sourcePath) : body;
     String line =
-        "@+matrix/msgtype="
-            + escapeIrcv3TagValue(normalizedType)
-            + ";+matrix/upload_path="
-            + escapeIrcv3TagValue(sourcePath)
-            + " PRIVMSG "
-            + at.target();
-    if (!displayBody.isEmpty()) {
-      line += " :" + displayBody;
+        matrixCommandSupport.buildUploadPrivmsg(
+            at.target(), normalizedType, sourcePath, displayBody);
+    if (line.isBlank()) {
+      appendMatrixUploadUsage(at);
+      return;
     }
     PreparedRawLine prepared = prepareCorrelatedRawLine(at, line);
 
@@ -1648,10 +1566,7 @@ public class OutboundChatCommandService {
   }
 
   private void appendMatrixUploadHelp(TargetRef out) {
-    ui.appendStatus(
-        out,
-        "(help)",
-        "/mupload <m.image|m.file|m.video|m.audio> <path> [caption]  (aliases: image|file|video|audio)");
+    matrixCommandSupport.appendUploadHelp(ui, out);
   }
 
   public void handleSay(CompositeDisposable disposables, String msg) {
@@ -2698,46 +2613,19 @@ public class OutboundChatCommandService {
   }
 
   private void appendMatrixUploadUsage(TargetRef out) {
-    ui.appendStatus(out, "(mupload)", "Usage: /mupload <msgtype> <path> [caption]");
-    ui.appendStatus(
-        out,
-        "(mupload)",
-        "msgtype: m.image | m.file | m.video | m.audio (aliases: image|file|video|audio)");
+    matrixCommandSupport.appendUploadUsage(ui, out);
   }
 
-  private static String normalizeMatrixUploadMsgType(String raw) {
-    String token = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
-    if (token.isEmpty()) return "";
-    return switch (token) {
-      case "image" -> "m.image";
-      case "file" -> "m.file";
-      case "video" -> "m.video";
-      case "audio" -> "m.audio";
-      default -> MATRIX_UPLOAD_MSGTYPES.contains(token) ? token : "";
-    };
+  private String normalizeMatrixUploadMsgType(String raw) {
+    return matrixCommandSupport.normalizeUploadMsgType(raw);
   }
 
-  private static String normalizeMatrixUploadPath(String raw) {
-    return Objects.toString(raw, "").trim();
+  private String normalizeMatrixUploadPath(String raw) {
+    return matrixCommandSupport.normalizeUploadPath(raw);
   }
 
-  private static String defaultMatrixUploadCaption(String path) {
-    String rawPath = Objects.toString(path, "").trim();
-    if (rawPath.isEmpty()) return "";
-    try {
-      Path fileName = Path.of(rawPath).getFileName();
-      if (fileName != null) {
-        String fromPath = Objects.toString(fileName.toString(), "").trim();
-        if (!fromPath.isEmpty()) return fromPath;
-      }
-    } catch (InvalidPathException ignored) {
-      // Fall back to simple slash-segment extraction below.
-    }
-    int slash = Math.max(rawPath.lastIndexOf('/'), rawPath.lastIndexOf('\\'));
-    if (slash >= 0 && slash + 1 < rawPath.length()) {
-      return rawPath.substring(slash + 1).trim();
-    }
-    return rawPath;
+  private String defaultMatrixUploadCaption(String path) {
+    return matrixCommandSupport.defaultUploadCaption(path);
   }
 
   private static String normalizeChatHistorySelector(String raw) {

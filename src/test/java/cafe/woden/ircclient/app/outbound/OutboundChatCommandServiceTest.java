@@ -111,7 +111,8 @@ class OutboundChatCommandServiceTest {
     when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
     when(serverCatalog.find("matrix"))
         .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
-    when(irc.sendRaw("matrix", "JOIN #room:example.org hunter2")).thenReturn(Completable.complete());
+    when(irc.sendRaw("matrix", "JOIN #room:example.org hunter2"))
+        .thenReturn(Completable.complete());
 
     service.handleJoin(disposables, "#room:example.org", "hunter2");
 
@@ -1110,7 +1111,8 @@ class OutboundChatCommandServiceTest {
 
     service.handleMatrixUpload(disposables, "m.image", "/tmp/photo.png", "hello");
 
-    verify(ui).appendStatus(eq(status), eq("(mupload)"), contains("does not use the Matrix backend"));
+    verify(ui)
+        .appendStatus(eq(status), eq("(mupload)"), contains("does not use the Matrix backend"));
     verify(irc, never()).sendRaw(anyString(), anyString());
   }
 
