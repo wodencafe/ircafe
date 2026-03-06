@@ -156,9 +156,6 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       case ParsedInput.Upload cmd ->
           outboundChatCommandService.handleUpload(
               disposables, cmd.msgType(), cmd.path(), cmd.caption());
-      case ParsedInput.MatrixUpload cmd ->
-          outboundChatCommandService.handleUpload(
-              disposables, cmd.msgType(), cmd.path(), cmd.caption());
       case ParsedInput.ReplyMessage cmd ->
           outboundChatCommandService.handleReplyMessage(disposables, cmd.messageId(), cmd.body());
       case ParsedInput.ReactMessage cmd ->

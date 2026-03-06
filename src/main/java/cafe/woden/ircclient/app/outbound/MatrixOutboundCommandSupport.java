@@ -18,15 +18,15 @@ final class MatrixOutboundCommandSupport {
     ui.appendStatus(
         out,
         "(help)",
-        "/upload <m.image|m.file|m.video|m.audio> <path> [caption]  (aliases: /mupload /matrixupload and image|file|video|audio msgtypes)");
+        "/upload <m.image|m.file|m.video|m.audio> <path> [caption]  (msgtype shortcuts: image|file|video|audio)");
   }
 
   void appendUploadUsage(UiPort ui, TargetRef out) {
-    ui.appendStatus(out, "(mupload)", "Usage: /upload <msgtype> <path> [caption]");
+    ui.appendStatus(out, "(upload)", "Usage: /upload <msgtype> <path> [caption]");
     ui.appendStatus(
         out,
-        "(mupload)",
-        "msgtype: m.image | m.file | m.video | m.audio (aliases: image|file|video|audio)");
+        "(upload)",
+        "msgtype: m.image | m.file | m.video | m.audio (shortcuts: image|file|video|audio)");
   }
 
   String normalizeUploadMsgType(String raw) {

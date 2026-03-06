@@ -172,7 +172,7 @@ class MessageInputPanelFunctionalTest {
 
   private static String expectedUpload(String msgType, File file, String caption) {
     String path = file.getAbsolutePath().replace("\\", "\\\\").replace("\"", "\\\"");
-    String line = "/mupload " + msgType + " \"" + path + "\"";
+    String line = "/upload " + msgType + " \"" + path + "\"";
     String text = caption == null ? "" : caption.trim();
     if (!text.isEmpty()) {
       line += " " + text;

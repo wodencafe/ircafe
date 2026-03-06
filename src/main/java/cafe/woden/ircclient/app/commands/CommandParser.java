@@ -390,18 +390,8 @@ public class CommandParser {
       return new ParsedInput.Help(topic);
     }
 
-    if (matchesCommand(line, "/upload")
-        || matchesCommand(line, "/mupload")
-        || matchesCommand(line, "/matrixupload")) {
-      String args;
-      if (matchesCommand(line, "/upload")) {
-        args = argAfter(line, "/upload");
-      } else if (matchesCommand(line, "/mupload")) {
-        args = argAfter(line, "/mupload");
-      } else {
-        args = argAfter(line, "/matrixupload");
-      }
-      return parseUploadInput(args);
+    if (matchesCommand(line, "/upload")) {
+      return parseUploadInput(argAfter(line, "/upload"));
     }
 
     // IRCv3 compose helpers (used by first-class reply/reaction input UX).

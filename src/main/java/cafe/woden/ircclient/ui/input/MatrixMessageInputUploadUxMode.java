@@ -111,7 +111,7 @@ final class MatrixMessageInputUploadUxMode implements MessageInputUploadUxMode {
     String filePath = Objects.toString(path, "").trim();
     if (type.isEmpty() || filePath.isEmpty()) return "";
     StringBuilder line = new StringBuilder();
-    line.append("/mupload ").append(type).append(" ").append(quoteMuploadPath(filePath));
+    line.append("/upload ").append(type).append(" ").append(quoteUploadPath(filePath));
     String text = Objects.toString(caption, "").trim();
     if (!text.isEmpty()) {
       line.append(" ").append(text);
@@ -119,7 +119,7 @@ final class MatrixMessageInputUploadUxMode implements MessageInputUploadUxMode {
     return line.toString();
   }
 
-  private static String quoteMuploadPath(String path) {
+  private static String quoteUploadPath(String path) {
     String escaped = Objects.toString(path, "").replace("\\", "\\\\").replace("\"", "\\\"");
     return "\"" + escaped + "\"";
   }

@@ -1459,7 +1459,7 @@ public class OutboundChatCommandService {
           appendMarkReadHelp(out);
           return;
         }
-        case "upload", "mupload", "matrixupload" -> {
+        case "upload" -> {
           appendMatrixUploadHelp(out);
           return;
         }
@@ -1503,13 +1503,13 @@ public class OutboundChatCommandService {
       CompositeDisposable disposables, String msgType, String path, String caption) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(mupload)", "Select a target first.");
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(upload)", "Select a target first.");
       return;
     }
 
     TargetRef status = new TargetRef(at.serverId(), "status");
     if (at.isStatus() || at.isUiOnly()) {
-      ui.appendStatus(status, "(mupload)", "Select a channel or PM first.");
+      ui.appendStatus(status, "(upload)", "Select a channel or PM first.");
       return;
     }
 
@@ -1522,7 +1522,7 @@ public class OutboundChatCommandService {
     }
 
     if (containsCrlf(normalizedType) || containsCrlf(sourcePath) || containsCrlf(body)) {
-      ui.appendStatus(status, "(mupload)", "Refusing to send multi-line /mupload input.");
+      ui.appendStatus(status, "(upload)", "Refusing to send multi-line /upload input.");
       return;
     }
 
@@ -1536,7 +1536,7 @@ public class OutboundChatCommandService {
     if (translationHandler == null) {
       ui.appendStatus(
           status,
-          "(mupload)",
+          "(upload)",
           "Server '"
               + at.serverId()
               + "' does not use the Matrix backend. /upload is only available on Matrix-backed servers.");
@@ -1559,13 +1559,8 @@ public class OutboundChatCommandService {
                 err ->
                     ui.appendError(
                         targetCoordinator.safeStatusTarget(),
-                        "(mupload-error)",
+                        "(upload-error)",
                         String.valueOf(err))));
-  }
-
-  public void handleMatrixUpload(
-      CompositeDisposable disposables, String msgType, String path, String caption) {
-    handleUpload(disposables, msgType, path, caption);
   }
 
   private void appendDccHelp(TargetRef out) {

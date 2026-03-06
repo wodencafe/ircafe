@@ -55,7 +55,6 @@ public sealed interface ParsedInput
         ParsedInput.Monitor,
         ParsedInput.Help,
         ParsedInput.Upload,
-        ParsedInput.MatrixUpload,
         ParsedInput.ReplyMessage,
         ParsedInput.ReactMessage,
         ParsedInput.UnreactMessage,
@@ -252,17 +251,9 @@ public sealed interface ParsedInput
   /**
    * /upload <msgtype> <path> [caption]
    *
-   * <p>Semantic media-upload command. Backend aliases (for example /mupload) should parse to this
-   * command.
+   * <p>Semantic media-upload command.
    */
   record Upload(String msgType, String path, String caption) implements ParsedInput {}
-
-  /**
-   * /mupload <msgtype> <path> [caption]
-   *
-   * <p>Legacy Matrix upload alias retained for compatibility.
-   */
-  record MatrixUpload(String msgType, String path, String caption) implements ParsedInput {}
 
   /**
    * /reply <msgid> <message>

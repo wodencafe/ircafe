@@ -1061,7 +1061,7 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void matrixUploadSendsTaggedPrivmsgOnMatrixBackend() {
+  void uploadSendsTaggedPrivmsgOnMatrixBackend() {
     TargetRef room = new TargetRef("matrix", "!room:example.org");
     when(targetCoordinator.getActiveTarget()).thenReturn(room);
     when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
@@ -1072,7 +1072,7 @@ class OutboundChatCommandServiceTest {
             "@+matrix/msgtype=m.image;+matrix/upload_path=/tmp/photo.png PRIVMSG !room:example.org :hello image"))
         .thenReturn(Completable.complete());
 
-    service.handleMatrixUpload(disposables, "image", "/tmp/photo.png", "hello image");
+    service.handleUpload(disposables, "image", "/tmp/photo.png", "hello image");
 
     verify(irc)
         .sendRaw(
@@ -1081,7 +1081,7 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void matrixUploadDefaultsCaptionToFileNameWhenCaptionBlank() {
+  void uploadDefaultsCaptionToFileNameWhenCaptionBlank() {
     TargetRef room = new TargetRef("matrix", "!room:example.org");
     when(targetCoordinator.getActiveTarget()).thenReturn(room);
     when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
@@ -1092,7 +1092,7 @@ class OutboundChatCommandServiceTest {
             "@+matrix/msgtype=m.file;+matrix/upload_path=/tmp/My\\sFile.txt PRIVMSG !room:example.org :My File.txt"))
         .thenReturn(Completable.complete());
 
-    service.handleMatrixUpload(disposables, "m.file", "/tmp/My File.txt", "");
+    service.handleUpload(disposables, "m.file", "/tmp/My File.txt", "");
 
     verify(irc)
         .sendRaw(
@@ -1101,7 +1101,7 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void matrixUploadOnNonMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+  void uploadOnNonMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
@@ -1109,21 +1109,21 @@ class OutboundChatCommandServiceTest {
     when(serverCatalog.find("libera"))
         .thenReturn(Optional.of(serverWithBackend("libera", IrcProperties.Server.Backend.IRC)));
 
-    service.handleMatrixUpload(disposables, "m.image", "/tmp/photo.png", "hello");
+    service.handleUpload(disposables, "m.image", "/tmp/photo.png", "hello");
 
     verify(ui)
-        .appendStatus(eq(status), eq("(mupload)"), contains("does not use the Matrix backend"));
+        .appendStatus(eq(status), eq("(upload)"), contains("does not use the Matrix backend"));
     verify(irc, never()).sendRaw(anyString(), anyString());
   }
 
   @Test
-  void matrixUploadWithInvalidMsgTypeShowsUsage() {
+  void uploadWithInvalidMsgTypeShowsUsage() {
     TargetRef room = new TargetRef("matrix", "!room:example.org");
     when(targetCoordinator.getActiveTarget()).thenReturn(room);
 
-    service.handleMatrixUpload(disposables, "m.bad", "/tmp/photo.png", "");
+    service.handleUpload(disposables, "m.bad", "/tmp/photo.png", "");
 
-    verify(ui).appendStatus(room, "(mupload)", "Usage: /upload <msgtype> <path> [caption]");
+    verify(ui).appendStatus(room, "(upload)", "Usage: /upload <msgtype> <path> [caption]");
     verify(irc, never()).sendRaw(anyString(), anyString());
   }
 
@@ -1474,17 +1474,17 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void helpMuploadShowsFocusedUploadHelp() {
+  void helpUploadShowsFocusedUploadHelp() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
 
-    service.handleHelp("mupload");
+    service.handleHelp("upload");
 
     verify(ui)
         .appendStatus(
             chan,
             "(help)",
-            "/upload <m.image|m.file|m.video|m.audio> <path> [caption]  (aliases: /mupload /matrixupload and image|file|video|audio msgtypes)");
+            "/upload <m.image|m.file|m.video|m.audio> <path> [caption]  (msgtype shortcuts: image|file|video|audio)");
   }
 
   @Test

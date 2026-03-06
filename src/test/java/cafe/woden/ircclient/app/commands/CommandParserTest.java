@@ -259,8 +259,8 @@ class CommandParserTest {
   }
 
   @Test
-  void parsesUploadWithQuotedPathAndAlias() {
-    ParsedInput in = parser.parse("/matrixupload m.file \"/tmp/my file.txt\" with caption");
+  void parsesUploadWithQuotedPath() {
+    ParsedInput in = parser.parse("/upload m.file \"/tmp/my file.txt\" with caption");
     assertTrue(in instanceof ParsedInput.Upload);
     ParsedInput.Upload upload = (ParsedInput.Upload) in;
     assertEquals("m.file", upload.msgType());
@@ -269,13 +269,12 @@ class CommandParserTest {
   }
 
   @Test
-  void parsesUploadAliasWithOnlyMsgType() {
-    ParsedInput in = parser.parse("/mupload m.image");
-    assertTrue(in instanceof ParsedInput.Upload);
-    ParsedInput.Upload upload = (ParsedInput.Upload) in;
-    assertEquals("m.image", upload.msgType());
-    assertEquals("", upload.path());
-    assertEquals("", upload.caption());
+  void legacyUploadAliasesAreUnknownCommands() {
+    ParsedInput legacyShort = parser.parse("/mupload m.image");
+    assertTrue(legacyShort instanceof ParsedInput.Unknown);
+
+    ParsedInput legacyLong = parser.parse("/matrixupload m.image");
+    assertTrue(legacyLong instanceof ParsedInput.Unknown);
   }
 
   @Test
