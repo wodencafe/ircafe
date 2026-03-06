@@ -15,6 +15,8 @@ import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.irc.IrcBackendModePort;
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -207,6 +209,8 @@ class ChatDockableWiringSmokeTest {
     TargetActivationBus activationBus = new TargetActivationBus();
     OutboundLineBus outboundBus = new OutboundLineBus();
     IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendModePort backendModePort = mock(IrcBackendModePort.class);
+    IrcBouncerPlaybackPort bouncerPlayback = mock(IrcBouncerPlaybackPort.class);
     ActiveInputRouter activeInputRouter = new ActiveInputRouter();
     IgnoreListService ignoreListService = mock(IgnoreListService.class);
     IgnoreStatusService ignoreStatusService = mock(IgnoreStatusService.class);
@@ -242,6 +246,8 @@ class ChatDockableWiringSmokeTest {
                     activationBus,
                     outboundBus,
                     irc,
+                    backendModePort,
+                    bouncerPlayback,
                     activeInputRouter,
                     ignoreListService,
                     ignoreStatusService,

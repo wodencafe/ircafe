@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.SwingUtilities;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -89,21 +90,24 @@ public class ConnectionCoordinator {
 
   public ConnectionCoordinator(
       IrcClientService irc,
+      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
+      @Qualifier("ircClientService") QuasselCoreControlPort quasselControl,
       UiPort ui,
       ServerRegistry serverRegistry,
       ServerCatalog serverCatalog,
       ConnectionRuntimeConfigPort runtimeConfig,
       LogProperties logProps,
       TrayNotificationsPort trayNotificationService) {
-    this.irc = irc;
-    this.backendAvailability = IrcBackendAvailabilityPort.from(irc);
-    this.quasselControl = QuasselCoreControlPort.from(irc);
-    this.ui = ui;
-    this.serverRegistry = serverRegistry;
-    this.serverCatalog = serverCatalog;
-    this.runtimeConfig = runtimeConfig;
-    this.logProps = logProps;
-    this.trayNotificationService = trayNotificationService;
+    this.irc = Objects.requireNonNull(irc, "irc");
+    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
+    this.quasselControl = Objects.requireNonNull(quasselControl, "quasselControl");
+    this.ui = Objects.requireNonNull(ui, "ui");
+    this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
+    this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
+    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
+    this.logProps = Objects.requireNonNull(logProps, "logProps");
+    this.trayNotificationService =
+        Objects.requireNonNull(trayNotificationService, "trayNotificationService");
 
     configuredServers.addAll(serverRegistry.serverIds());
     List<IrcProperties.Server> initialServers = serverRegistry.servers();

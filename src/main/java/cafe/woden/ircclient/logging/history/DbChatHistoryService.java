@@ -80,14 +80,15 @@ public final class DbChatHistoryService implements ChatHistoryService {
       LogProperties props,
       ChatHistoryTranscriptPort transcripts,
       IrcClientService irc,
+      IrcBouncerPlaybackPort bouncerPlayback,
       ChatHistoryIngestBus ingestBus,
       ExecutorService exec) {
     this.repo = repo;
     this.props = props;
     this.transcripts = transcripts;
-    this.irc = irc;
-    this.bouncerPlayback = IrcBouncerPlaybackPort.from(irc);
-    this.ingestBus = ingestBus;
+    this.irc = Objects.requireNonNull(irc, "irc");
+    this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
+    this.ingestBus = Objects.requireNonNull(ingestBus, "ingestBus");
     this.exec = Objects.requireNonNull(exec, "exec");
   }
 

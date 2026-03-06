@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.ui.chat;
 
+import cafe.woden.ircclient.irc.IrcBackendModePort;
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -27,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.SwingUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -45,6 +48,8 @@ public class ChatDockManager {
   private final SpellcheckSettingsBus spellcheckSettingsBus;
   private final OutboundLineBus outboundBus;
   private final IrcClientService irc;
+  private final IrcBouncerPlaybackPort bouncerPlayback;
+  private final IrcBackendModePort backendModePort;
   private final ActiveInputRouter activeInputRouter;
   private final CommandHistoryStore commandHistoryStore;
   private final ChatHistoryService chatHistoryService;
@@ -78,6 +83,8 @@ public class ChatDockManager {
       SpellcheckSettingsBus spellcheckSettingsBus,
       OutboundLineBus outboundBus,
       IrcClientService irc,
+      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
+      @Qualifier("ircClientService") IrcBackendModePort backendModePort,
       ActiveInputRouter activeInputRouter,
       ChatHistoryService chatHistoryService,
       CommandHistoryStore commandHistoryStore) {
@@ -89,6 +96,8 @@ public class ChatDockManager {
     this.spellcheckSettingsBus = spellcheckSettingsBus;
     this.outboundBus = outboundBus;
     this.irc = irc;
+    this.bouncerPlayback = bouncerPlayback;
+    this.backendModePort = backendModePort;
     this.activeInputRouter = activeInputRouter;
     this.chatHistoryService = chatHistoryService;
     this.commandHistoryStore = commandHistoryStore;
@@ -376,6 +385,8 @@ public class ChatDockManager {
             activationBus::activate,
             outboundBus,
             irc,
+            bouncerPlayback,
+            backendModePort,
             activeInputRouter,
             (t, draft) -> {
               if (t == null) return;

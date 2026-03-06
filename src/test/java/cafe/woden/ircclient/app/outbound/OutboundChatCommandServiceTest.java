@@ -71,6 +71,8 @@ class OutboundChatCommandServiceTest {
   private final OutboundChatCommandService service =
       new OutboundChatCommandService(
           irc,
+          irc,
+          irc,
           ui,
           connectionCoordinator,
           targetCoordinator,

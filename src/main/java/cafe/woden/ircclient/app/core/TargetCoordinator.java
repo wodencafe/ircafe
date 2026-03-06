@@ -77,6 +77,7 @@ public class TargetCoordinator implements ActiveTargetPort {
       UiPort ui,
       UserListStore userListStore,
       IrcClientService irc,
+      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
       ServerRegistry serverRegistry,
       RuntimeConfigStore runtimeConfig,
       ConnectionCoordinator connectionCoordinator,
@@ -89,20 +90,25 @@ public class TargetCoordinator implements ActiveTargetPort {
           ExecutorService maintenanceExec,
       @Qualifier(ExecutorConfig.TARGET_COORDINATOR_USERS_REFRESH_SCHEDULER)
           ScheduledExecutorService usersRefreshExec) {
-    this.ui = ui;
-    this.userListStore = userListStore;
-    this.irc = irc;
-    this.bouncerPlayback = IrcBouncerPlaybackPort.from(irc);
-    this.serverRegistry = serverRegistry;
-    this.runtimeConfig = runtimeConfig;
-    this.connectionCoordinator = connectionCoordinator;
-    this.ignoreList = ignoreList;
-    this.userhostQueryService = userhostQueryService;
-    this.userInfoEnrichmentService = userInfoEnrichmentService;
-    this.targetChatHistoryPort = targetChatHistoryPort;
-    this.targetLogMaintenancePort = targetLogMaintenancePort;
-    this.maintenanceExec = maintenanceExec;
-    this.usersRefreshExec = usersRefreshExec;
+    this.ui = Objects.requireNonNull(ui, "ui");
+    this.userListStore = Objects.requireNonNull(userListStore, "userListStore");
+    this.irc = Objects.requireNonNull(irc, "irc");
+    this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
+    this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
+    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
+    this.connectionCoordinator =
+        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
+    this.ignoreList = Objects.requireNonNull(ignoreList, "ignoreList");
+    this.userhostQueryService =
+        Objects.requireNonNull(userhostQueryService, "userhostQueryService");
+    this.userInfoEnrichmentService =
+        Objects.requireNonNull(userInfoEnrichmentService, "userInfoEnrichmentService");
+    this.targetChatHistoryPort =
+        Objects.requireNonNull(targetChatHistoryPort, "targetChatHistoryPort");
+    this.targetLogMaintenancePort =
+        Objects.requireNonNull(targetLogMaintenancePort, "targetLogMaintenancePort");
+    this.maintenanceExec = Objects.requireNonNull(maintenanceExec, "maintenanceExec");
+    this.usersRefreshExec = Objects.requireNonNull(usersRefreshExec, "usersRefreshExec");
   }
 
   @PreDestroy

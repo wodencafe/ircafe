@@ -7,6 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.irc.IrcBackendModePort;
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -40,6 +42,8 @@ class ChatDockManagerTest {
     SpellcheckSettingsBus spellcheckSettingsBus = mock(SpellcheckSettingsBus.class);
     OutboundLineBus outboundBus = mock(OutboundLineBus.class);
     IrcClientService irc = mock(IrcClientService.class);
+    IrcBouncerPlaybackPort bouncerPlayback = mock(IrcBouncerPlaybackPort.class);
+    IrcBackendModePort backendModePort = mock(IrcBackendModePort.class);
     ActiveInputRouter activeInputRouter = mock(ActiveInputRouter.class);
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
@@ -53,6 +57,8 @@ class ChatDockManagerTest {
             spellcheckSettingsBus,
             outboundBus,
             irc,
+            bouncerPlayback,
+            backendModePort,
             activeInputRouter,
             chatHistoryService,
             commandHistoryStore);
@@ -94,6 +100,8 @@ class ChatDockManagerTest {
             mock(SpellcheckSettingsBus.class),
             mock(OutboundLineBus.class),
             mock(IrcClientService.class),
+            mock(IrcBouncerPlaybackPort.class),
+            mock(IrcBackendModePort.class),
             mock(ActiveInputRouter.class),
             mock(ChatHistoryService.class),
             mock(CommandHistoryStore.class));

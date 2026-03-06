@@ -76,12 +76,13 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
   public RemoteOnlyChatHistoryService(
       IrcClientService irc,
+      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
       ChatHistoryBatchBus batchBus,
       ZncPlaybackBus zncPlaybackBus,
       ChatHistoryTranscriptPort transcripts,
       @Qualifier(ExecutorConfig.REMOTE_CHAT_HISTORY_EXECUTOR) ExecutorService exec) {
     this.irc = Objects.requireNonNull(irc, "irc");
-    this.bouncerPlayback = IrcBouncerPlaybackPort.from(irc);
+    this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
     this.batchBus = Objects.requireNonNull(batchBus, "batchBus");
     this.zncPlaybackBus = zncPlaybackBus;
     this.transcripts = Objects.requireNonNull(transcripts, "transcripts");

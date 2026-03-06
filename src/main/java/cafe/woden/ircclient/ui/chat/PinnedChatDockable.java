@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.chat;
 
+import cafe.woden.ircclient.irc.IrcBackendModePort;
 import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -92,6 +93,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       Consumer<TargetRef> activate,
       OutboundLineBus outboundBus,
       IrcClientService irc,
+      IrcBouncerPlaybackPort bouncerPlayback,
+      IrcBackendModePort backendModePort,
       ActiveInputRouter activeInputRouter,
       BiConsumer<TargetRef, String> onDraftChanged,
       BiConsumer<TargetRef, String> onClosed) {
@@ -101,8 +104,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.chatHistoryService = chatHistoryService;
     this.activate = activate;
     this.outboundBus = outboundBus;
-    this.irc = irc;
-    this.bouncerPlayback = IrcBouncerPlaybackPort.from(irc);
+    this.irc = Objects.requireNonNull(irc, "irc");
+    this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
     this.activeInputRouter = activeInputRouter;
     this.onDraftChanged = onDraftChanged;
     this.onClosed = onClosed;
@@ -154,7 +157,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     // Input panel embedded in the pinned view.
     this.inputPanel = new MessageInputPanel(settingsBus, historyStore, spellcheckSettingsBus);
-    this.inputPanel.setBackendUiContext(BackendUiContext.fromIrcClientService(irc));
+    this.inputPanel.setBackendUiContext(BackendUiContext.fromBackendModePort(backendModePort));
     this.inputPanel.setActiveServerId(target.serverId());
     add(inputPanel, BorderLayout.SOUTH);
 

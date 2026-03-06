@@ -318,6 +318,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
         ui,
         mock(UserListStore.class),
         irc,
+        irc,
         mock(ServerRegistry.class),
         runtimeConfig,
         connectionCoordinator,

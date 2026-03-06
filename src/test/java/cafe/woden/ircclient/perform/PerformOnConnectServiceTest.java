@@ -48,7 +48,7 @@ class PerformOnConnectServiceTest {
     events = PublishProcessor.create();
     when(irc.events()).thenReturn(events);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    service = new PerformOnConnectService(irc, serverCatalog, commandParser, ui);
+    service = new PerformOnConnectService(irc, irc, serverCatalog, commandParser, ui);
   }
 
   @AfterEach

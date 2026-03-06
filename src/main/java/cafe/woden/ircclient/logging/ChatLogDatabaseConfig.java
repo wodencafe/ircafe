@@ -3,6 +3,7 @@ package cafe.woden.ircclient.logging;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -245,9 +246,11 @@ public class ChatLogDatabaseConfig {
       LogProperties props,
       ChatHistoryTranscriptPort transcripts,
       IrcClientService irc,
+      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
       ChatHistoryIngestBus ingestBus,
       @Qualifier(ExecutorConfig.DB_CHAT_HISTORY_EXECUTOR) ExecutorService chatHistoryExecutor) {
-    return new DbChatHistoryService(repo, props, transcripts, irc, ingestBus, chatHistoryExecutor);
+    return new DbChatHistoryService(
+        repo, props, transcripts, irc, bouncerPlayback, ingestBus, chatHistoryExecutor);
   }
 
   @Bean

@@ -12,6 +12,8 @@ import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.irc.IrcBackendModePort;
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -194,6 +196,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
       IrcClientService irc,
+      @Qualifier("ircClientService") IrcBackendModePort backendModePort,
+      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
       ActiveInputRouter activeInputRouter,
       IgnoreListService ignoreListService,
       IgnoreStatusService ignoreStatusService,
@@ -263,6 +267,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             serverTree,
             outboundBus,
             irc,
+            backendModePort,
             userListStore,
             usersDock,
             ignoreListDialog,
@@ -286,13 +291,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     // Input panel is embedded in the main chat dock so input is always coupled with the transcript.
     this.inputPanel =
         new MessageInputPanel(settingsBus, commandHistoryStore, spellcheckSettingsBus);
-    this.inputPanel.setBackendUiContext(BackendUiContext.fromIrcClientService(irc));
+    this.inputPanel.setBackendUiContext(BackendUiContext.fromBackendModePort(backendModePort));
     add(inputPanel, BorderLayout.SOUTH);
     configureTranscriptContextMenuActions(transcripts, chatHistoryService);
     configureInputActivation(activationBus);
     InputCoordinatorBundle inputBundle =
         createInputCoordinatorBundle(
-            transcripts, irc, chatHistoryService, activationBus, outboundBus);
+            transcripts, irc, bouncerPlayback, chatHistoryService, activationBus, outboundBus);
     this.typingCoordinator = inputBundle.typingCoordinator();
     this.historyActionCoordinator = inputBundle.historyActionCoordinator();
     this.transcriptInteractionCoordinator = inputBundle.transcriptInteractionCoordinator();
@@ -475,6 +480,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       ServerTreeDockable serverTree,
       OutboundLineBus outboundBus,
       IrcClientService irc,
+      IrcBackendModePort backendModePort,
       UserListStore userListStore,
       UserListDockable usersDock,
       IgnoreListDialog ignoreListDialog,
@@ -486,7 +492,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       ExecutorService interceptorRefreshExecutor) {
     NotificationsPanel notificationsPanel = createNotificationsPanel(notificationStore);
     ChatChannelListCoordinator channelListCoordinator =
-        createChannelListCoordinator(serverTree, outboundBus, userListStore, usersDock, irc);
+        createChannelListCoordinator(
+            serverTree, outboundBus, backendModePort, userListStore, usersDock, irc);
     channelListCoordinator.bind(disposables);
     ChatMonitorCoordinator monitorCoordinator =
         new ChatMonitorCoordinator(monitorPanel, monitorListService, () -> activeTarget);
@@ -523,10 +530,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private ChatChannelListCoordinator createChannelListCoordinator(
       ServerTreeDockable serverTree,
       OutboundLineBus outboundBus,
+      IrcBackendModePort backendModePort,
       UserListStore userListStore,
       UserListDockable usersDock,
       IrcClientService irc) {
-    channelListPanel.setBackendUiContext(BackendUiContext.fromIrcClientService(irc));
+    channelListPanel.setBackendUiContext(BackendUiContext.fromBackendModePort(backendModePort));
     return new ChatChannelListCoordinator(
         channelListPanel,
         serverTree,
@@ -585,12 +593,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private InputCoordinatorBundle createInputCoordinatorBundle(
       ChatTranscriptStore transcripts,
       IrcClientService irc,
+      IrcBouncerPlaybackPort bouncerPlayback,
       ChatHistoryService chatHistoryService,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus) {
     ChatTypingCoordinator typingCoordinator = createTypingCoordinator(irc);
     ChatHistoryActionCoordinator historyActionCoordinator =
-        createHistoryActionCoordinator(irc, chatHistoryService, activationBus, outboundBus);
+        createHistoryActionCoordinator(
+            irc, bouncerPlayback, chatHistoryService, activationBus, outboundBus);
     ChatTranscriptInteractionCoordinator transcriptInteractionCoordinator =
         createTranscriptInteractionCoordinator(
             activationBus, outboundBus, transcripts, historyActionCoordinator);
@@ -622,11 +632,12 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private ChatHistoryActionCoordinator createHistoryActionCoordinator(
       IrcClientService irc,
+      IrcBouncerPlaybackPort bouncerPlayback,
       ChatHistoryService chatHistoryService,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus) {
     return new ChatHistoryActionCoordinator(
-        new IrcMessageActionCapabilityPolicy(irc),
+        new IrcMessageActionCapabilityPolicy(irc, bouncerPlayback),
         chatHistoryService,
         () -> activeTarget,
         activationBus::activate,

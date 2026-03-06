@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -58,9 +59,13 @@ public class PerformOnConnectService {
   private final Disposable eventsSub;
 
   public PerformOnConnectService(
-      IrcClientService irc, ServerCatalog serverCatalog, CommandParser commandParser, UiPort ui) {
+      IrcClientService irc,
+      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
+      ServerCatalog serverCatalog,
+      CommandParser commandParser,
+      UiPort ui) {
     this.irc = Objects.requireNonNull(irc, "irc");
-    this.backendAvailability = IrcBackendAvailabilityPort.from(irc);
+    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     this.commandParser = Objects.requireNonNull(commandParser, "commandParser");
     this.ui = Objects.requireNonNull(ui, "ui");

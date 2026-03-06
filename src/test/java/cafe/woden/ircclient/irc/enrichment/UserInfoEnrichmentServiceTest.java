@@ -139,7 +139,7 @@ class UserInfoEnrichmentServiceTest {
         .schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
 
     UserInfoEnrichmentService service =
-        new UserInfoEnrichmentService(irc, settingsProvider, planner, exec);
+        new UserInfoEnrichmentService(irc, irc, settingsProvider, planner, exec);
     return new Fixture(service, irc, planner, events);
   }
 

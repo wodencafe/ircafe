@@ -26,6 +26,7 @@ class ChatHistoryActionCoordinatorTest {
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
             irc,
+            irc,
             null,
             () -> channel,
             target -> {},
@@ -60,6 +61,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
+            irc,
             irc,
             null,
             () -> channel,
@@ -102,6 +104,7 @@ class ChatHistoryActionCoordinatorTest {
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
             irc,
+            irc,
             null,
             () -> channel,
             target -> {},
@@ -137,6 +140,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
+            irc,
             irc,
             null,
             () -> channel,
@@ -177,6 +181,7 @@ class ChatHistoryActionCoordinatorTest {
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
             irc,
+            irc,
             chatHistoryService,
             () -> channel,
             activatedTarget::set,
@@ -215,6 +220,7 @@ class ChatHistoryActionCoordinatorTest {
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
             irc,
+            irc,
             chatHistoryService,
             () -> channel,
             target -> {},
@@ -246,6 +252,7 @@ class ChatHistoryActionCoordinatorTest {
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
             irc,
+            irc,
             null,
             () -> channel,
             target -> {},
@@ -275,6 +282,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
+            irc,
             irc,
             null,
             () -> channel,

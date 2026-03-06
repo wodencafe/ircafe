@@ -29,7 +29,7 @@ class IrcMessageActionCapabilityPolicyTest {
     when(irc.isChatHistoryAvailable("irc")).thenReturn(false);
     when(irc.isZncPlaybackAvailable("irc")).thenReturn(true);
 
-    IrcMessageActionCapabilityPolicy policy = new IrcMessageActionCapabilityPolicy(irc);
+    IrcMessageActionCapabilityPolicy policy = new IrcMessageActionCapabilityPolicy(irc, irc);
 
     assertTrue(policy.canReply("matrix"));
     assertTrue(policy.canReact("matrix"));
@@ -55,7 +55,7 @@ class IrcMessageActionCapabilityPolicyTest {
     when(irc.isChatHistoryAvailable("broken")).thenThrow(new RuntimeException("boom"));
     when(irc.isZncPlaybackAvailable("broken")).thenThrow(new RuntimeException("boom"));
 
-    IrcMessageActionCapabilityPolicy policy = new IrcMessageActionCapabilityPolicy(irc);
+    IrcMessageActionCapabilityPolicy policy = new IrcMessageActionCapabilityPolicy(irc, irc);
 
     assertFalse(policy.canReply("broken"));
     assertFalse(policy.canLoadAroundMessage("broken"));
@@ -64,7 +64,7 @@ class IrcMessageActionCapabilityPolicyTest {
 
   @Test
   void nullIrcServiceDisablesAllCapabilities() {
-    IrcMessageActionCapabilityPolicy policy = new IrcMessageActionCapabilityPolicy(null);
+    IrcMessageActionCapabilityPolicy policy = new IrcMessageActionCapabilityPolicy(null, null);
 
     assertFalse(policy.canReply("any"));
     assertFalse(policy.canReact("any"));

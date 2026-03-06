@@ -32,6 +32,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -80,6 +81,8 @@ public class OutboundChatCommandService {
 
   public OutboundChatCommandService(
       IrcClientService irc,
+      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
+      @Qualifier("ircClientService") QuasselCoreControlPort quasselControl,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
@@ -94,23 +97,27 @@ public class OutboundChatCommandService {
       PendingInvitePort pendingInviteState,
       WhoisRoutingPort whoisRoutingState,
       IgnoreListCommandPort ignoreListService) {
-    this.irc = irc;
-    this.backendAvailability = IrcBackendAvailabilityPort.from(irc);
-    this.quasselControl = QuasselCoreControlPort.from(irc);
-    this.ui = ui;
-    this.connectionCoordinator = connectionCoordinator;
-    this.targetCoordinator = targetCoordinator;
+    this.irc = Objects.requireNonNull(irc, "irc");
+    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
+    this.quasselControl = Objects.requireNonNull(quasselControl, "quasselControl");
+    this.ui = Objects.requireNonNull(ui, "ui");
+    this.connectionCoordinator =
+        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
+    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
 
-    this.commandTargetPolicy = commandTargetPolicy;
-    this.runtimeConfig = runtimeConfig;
-    this.awayRoutingState = awayRoutingState;
-    this.chatHistoryRequestRoutingState = chatHistoryRequestRoutingState;
-    this.joinRoutingState = joinRoutingState;
-    this.labeledResponseRoutingState = labeledResponseRoutingState;
-    this.pendingEchoMessageState = pendingEchoMessageState;
-    this.pendingInviteState = pendingInviteState;
-    this.whoisRoutingState = whoisRoutingState;
-    this.ignoreListService = ignoreListService;
+    this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
+    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
+    this.awayRoutingState = Objects.requireNonNull(awayRoutingState, "awayRoutingState");
+    this.chatHistoryRequestRoutingState =
+        Objects.requireNonNull(chatHistoryRequestRoutingState, "chatHistoryRequestRoutingState");
+    this.joinRoutingState = Objects.requireNonNull(joinRoutingState, "joinRoutingState");
+    this.labeledResponseRoutingState =
+        Objects.requireNonNull(labeledResponseRoutingState, "labeledResponseRoutingState");
+    this.pendingEchoMessageState =
+        Objects.requireNonNull(pendingEchoMessageState, "pendingEchoMessageState");
+    this.pendingInviteState = Objects.requireNonNull(pendingInviteState, "pendingInviteState");
+    this.whoisRoutingState = Objects.requireNonNull(whoisRoutingState, "whoisRoutingState");
+    this.ignoreListService = Objects.requireNonNull(ignoreListService, "ignoreListService");
     this.matrixCommandSupport = new MatrixOutboundCommandSupport();
     this.quasselCommandSupport = new QuasselOutboundCommandSupport(serverCatalog);
     UploadCommandTranslationHandler matrixUploadTranslationHandler =

@@ -55,6 +55,8 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             irc,
+            irc,
+            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -91,6 +93,8 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
+            irc,
+            irc,
             irc,
             ui,
             serverRegistry,
@@ -130,6 +134,8 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             irc,
+            irc,
+            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -166,6 +172,8 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
+            irc,
+            irc,
             irc,
             ui,
             serverRegistry,
@@ -214,6 +222,8 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             irc,
+            irc,
+            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -247,6 +257,8 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             irc,
+            irc,
+            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -277,6 +289,8 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
+            irc,
+            irc,
             irc,
             ui,
             serverRegistry,
@@ -309,6 +323,8 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             irc,
+            irc,
+            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -340,6 +356,8 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
+            irc,
+            irc,
             irc,
             ui,
             serverRegistry,
@@ -375,6 +393,8 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             irc,
+            irc,
+            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -403,6 +423,8 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
+            irc,
+            irc,
             irc,
             ui,
             serverRegistry,
@@ -438,6 +460,8 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
+            irc,
+            irc,
             irc,
             ui,
             serverRegistry,
@@ -476,6 +500,8 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
+            irc,
+            irc,
             irc,
             ui,
             serverRegistry,
@@ -541,6 +567,8 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             irc,
+            irc,
+            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -588,6 +616,8 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             irc,
+            irc,
+            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -623,6 +653,8 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
+            irc,
+            irc,
             irc,
             ui,
             serverRegistry,
@@ -666,6 +698,8 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
+            irc,
+            irc,
             irc,
             ui,
             serverRegistry,
@@ -745,6 +779,8 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             irc,
+            irc,
+            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -785,7 +821,15 @@ class ConnectionCoordinatorTest {
     when(runtimeConfig.readKnownChannels("libera")).thenReturn(List.of("#ircafe", "#java"));
 
     new ConnectionCoordinator(
-        irc, ui, serverRegistry, serverCatalog, runtimeConfig, LOG_PROPS, trayNotificationService);
+        irc,
+        irc,
+        irc,
+        ui,
+        serverRegistry,
+        serverCatalog,
+        runtimeConfig,
+        LOG_PROPS,
+        trayNotificationService);
 
     verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#ircafe"));
     verify(ui, atLeastOnce()).setChannelDisconnected(new TargetRef("libera", "#ircafe"), true);

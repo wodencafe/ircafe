@@ -10,9 +10,10 @@ public final class IrcMessageActionCapabilityPolicy implements MessageActionCapa
   private final IrcClientService irc;
   private final IrcBouncerPlaybackPort bouncerPlayback;
 
-  public IrcMessageActionCapabilityPolicy(IrcClientService irc) {
+  public IrcMessageActionCapabilityPolicy(
+      IrcClientService irc, IrcBouncerPlaybackPort bouncerPlayback) {
     this.irc = irc;
-    this.bouncerPlayback = IrcBouncerPlaybackPort.from(irc);
+    this.bouncerPlayback = bouncerPlayback;
   }
 
   @Override
@@ -50,7 +51,7 @@ public final class IrcMessageActionCapabilityPolicy implements MessageActionCapa
   @Override
   public boolean canLoadNewerHistory(String serverId) {
     String sid = normalizeServerId(serverId);
-    if (sid.isEmpty() || irc == null) return false;
+    if (sid.isEmpty() || irc == null || bouncerPlayback == null) return false;
     return safe(
         () -> irc.isChatHistoryAvailable(sid) || bouncerPlayback.isZncPlaybackAvailable(sid));
   }

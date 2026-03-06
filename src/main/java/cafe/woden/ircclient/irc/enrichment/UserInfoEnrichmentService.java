@@ -93,11 +93,12 @@ public class UserInfoEnrichmentService {
 
   public UserInfoEnrichmentService(
       IrcClientService irc,
+      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
       ObjectProvider<IrcRuntimeSettingsProvider> settingsProvider,
       UserInfoEnrichmentPlanner planner,
       @Qualifier(ExecutorConfig.USER_INFO_ENRICHMENT_SCHEDULER) ScheduledExecutorService exec) {
     this.irc = Objects.requireNonNull(irc, "irc");
-    this.backendAvailability = IrcBackendAvailabilityPort.from(irc);
+    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
     this.settingsProvider = Objects.requireNonNull(settingsProvider, "settingsProvider");
     this.planner = Objects.requireNonNull(planner, "planner");
     this.exec = Objects.requireNonNull(exec, "exec");
