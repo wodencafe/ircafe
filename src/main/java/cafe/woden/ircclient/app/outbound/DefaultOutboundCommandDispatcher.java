@@ -6,6 +6,10 @@ import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /** Default outbound dispatcher backed by the concrete outbound command services. */
@@ -22,6 +26,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final TargetCoordinator targetCoordinator;
   private final UiPort ui;
   private final UserCommandAliasesBus userCommandAliasesBus;
+  private final Map<Class<? extends ParsedInput>, CommandHandler<? extends ParsedInput>> handlers;
 
   public DefaultOutboundCommandDispatcher(
       OutboundModeCommandService outboundModeCommandService,
@@ -44,147 +49,336 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.targetCoordinator = targetCoordinator;
     this.ui = ui;
     this.userCommandAliasesBus = userCommandAliasesBus;
+    this.handlers = buildHandlers();
   }
 
   @Override
   public void dispatch(CompositeDisposable disposables, ParsedInput in) {
     if (in == null) return;
 
-    switch (in) {
-      case ParsedInput.Join cmd ->
-          outboundChatCommandService.handleJoin(disposables, cmd.channel(), cmd.key());
-      case ParsedInput.Part cmd ->
-          outboundChatCommandService.handlePart(disposables, cmd.channel(), cmd.reason());
-      case ParsedInput.Connect cmd -> outboundChatCommandService.handleConnect(cmd.target());
-      case ParsedInput.Disconnect cmd -> outboundChatCommandService.handleDisconnect(cmd.target());
-      case ParsedInput.Reconnect cmd -> outboundChatCommandService.handleReconnect(cmd.target());
-      case ParsedInput.QuasselSetup cmd ->
-          outboundChatCommandService.handleQuasselSetup(disposables, cmd.serverId());
-      case ParsedInput.QuasselNetwork cmd ->
-          outboundChatCommandService.handleQuasselNetwork(disposables, cmd.args());
-      case ParsedInput.Quit cmd -> outboundChatCommandService.handleQuit(cmd.reason());
-      case ParsedInput.Nick cmd ->
-          outboundChatCommandService.handleNick(disposables, cmd.newNick());
-      case ParsedInput.Away cmd ->
-          outboundChatCommandService.handleAway(disposables, cmd.message());
-      case ParsedInput.Query cmd -> outboundChatCommandService.handleQuery(cmd.nick());
-      case ParsedInput.Whois cmd ->
-          outboundCtcpWhoisCommandService.handleWhois(disposables, cmd.nick());
-      case ParsedInput.Whowas cmd ->
-          outboundCtcpWhoisCommandService.handleWhowas(disposables, cmd.nick(), cmd.count());
-      case ParsedInput.Msg cmd ->
-          outboundChatCommandService.handleMsg(disposables, cmd.nick(), cmd.body());
-      case ParsedInput.Notice cmd ->
-          outboundChatCommandService.handleNotice(disposables, cmd.target(), cmd.body());
-      case ParsedInput.Me cmd -> outboundChatCommandService.handleMe(disposables, cmd.action());
-      case ParsedInput.Topic cmd ->
-          outboundChatCommandService.handleTopic(disposables, cmd.first(), cmd.rest());
-      case ParsedInput.Kick cmd ->
-          outboundChatCommandService.handleKick(
-              disposables, cmd.channel(), cmd.nick(), cmd.reason());
-      case ParsedInput.Invite cmd ->
-          outboundChatCommandService.handleInvite(disposables, cmd.nick(), cmd.channel());
-      case ParsedInput.InviteList cmd ->
-          outboundChatCommandService.handleInviteList(cmd.serverId());
-      case ParsedInput.InviteJoin cmd ->
-          outboundChatCommandService.handleInviteJoin(disposables, cmd.inviteToken());
-      case ParsedInput.InviteIgnore cmd ->
-          outboundChatCommandService.handleInviteIgnore(cmd.inviteToken());
-      case ParsedInput.InviteWhois cmd ->
-          outboundChatCommandService.handleInviteWhois(disposables, cmd.inviteToken());
-      case ParsedInput.InviteBlock cmd ->
-          outboundChatCommandService.handleInviteBlock(cmd.inviteToken());
-      case ParsedInput.InviteAutoJoin cmd ->
-          outboundChatCommandService.handleInviteAutoJoin(cmd.mode());
-      case ParsedInput.Names cmd ->
-          outboundChatCommandService.handleNames(disposables, cmd.channel());
-      case ParsedInput.Who cmd -> outboundChatCommandService.handleWho(disposables, cmd.args());
-      case ParsedInput.ListCmd cmd ->
-          outboundChatCommandService.handleList(disposables, cmd.args());
-      case ParsedInput.Monitor cmd ->
-          outboundMonitorCommandService.handleMonitor(disposables, cmd.args());
-      case ParsedInput.Mode cmd ->
-          outboundModeCommandService.handleMode(disposables, cmd.first(), cmd.rest());
-      case ParsedInput.Op cmd ->
-          outboundModeCommandService.handleOp(disposables, cmd.channel(), cmd.nicks());
-      case ParsedInput.Deop cmd ->
-          outboundModeCommandService.handleDeop(disposables, cmd.channel(), cmd.nicks());
-      case ParsedInput.Voice cmd ->
-          outboundModeCommandService.handleVoice(disposables, cmd.channel(), cmd.nicks());
-      case ParsedInput.Devoice cmd ->
-          outboundModeCommandService.handleDevoice(disposables, cmd.channel(), cmd.nicks());
-      case ParsedInput.Ban cmd ->
-          outboundModeCommandService.handleBan(disposables, cmd.channel(), cmd.masksOrNicks());
-      case ParsedInput.Unban cmd ->
-          outboundModeCommandService.handleUnban(disposables, cmd.channel(), cmd.masksOrNicks());
-      case ParsedInput.Ignore cmd -> outboundIgnoreCommandService.handleIgnore(cmd.maskOrNick());
-      case ParsedInput.Unignore cmd ->
-          outboundIgnoreCommandService.handleUnignore(cmd.maskOrNick());
-      case ParsedInput.IgnoreList cmd -> outboundIgnoreCommandService.handleIgnoreList();
-      case ParsedInput.SoftIgnore cmd ->
-          outboundIgnoreCommandService.handleSoftIgnore(cmd.maskOrNick());
-      case ParsedInput.UnsoftIgnore cmd ->
-          outboundIgnoreCommandService.handleUnsoftIgnore(cmd.maskOrNick());
-      case ParsedInput.SoftIgnoreList cmd -> outboundIgnoreCommandService.handleSoftIgnoreList();
-      case ParsedInput.Filter cmd -> localFilterCommandService.handle(cmd.command());
-      case ParsedInput.CtcpVersion cmd ->
-          outboundCtcpWhoisCommandService.handleCtcpVersion(disposables, cmd.nick());
-      case ParsedInput.CtcpPing cmd ->
-          outboundCtcpWhoisCommandService.handleCtcpPing(disposables, cmd.nick());
-      case ParsedInput.CtcpTime cmd ->
-          outboundCtcpWhoisCommandService.handleCtcpTime(disposables, cmd.nick());
-      case ParsedInput.Ctcp cmd ->
-          outboundCtcpWhoisCommandService.handleCtcp(
-              disposables, cmd.nick(), cmd.command(), cmd.args());
-      case ParsedInput.Dcc cmd ->
-          outboundDccCommandService.handleDcc(
-              disposables, cmd.subcommand(), cmd.nick(), cmd.argument());
-      case ParsedInput.ChatHistoryBefore cmd ->
-          outboundChatCommandService.handleChatHistoryBefore(
-              disposables, cmd.limit(), cmd.selector());
-      case ParsedInput.ChatHistoryLatest cmd ->
-          outboundChatCommandService.handleChatHistoryLatest(
-              disposables, cmd.limit(), cmd.selector());
-      case ParsedInput.ChatHistoryBetween cmd ->
-          outboundChatCommandService.handleChatHistoryBetween(
-              disposables, cmd.startSelector(), cmd.endSelector(), cmd.limit());
-      case ParsedInput.ChatHistoryAround cmd ->
-          outboundChatCommandService.handleChatHistoryAround(
-              disposables, cmd.selector(), cmd.limit());
-      case ParsedInput.MarkRead cmd -> outboundChatCommandService.handleMarkRead(disposables);
-      case ParsedInput.Help cmd -> outboundChatCommandService.handleHelp(cmd.topic());
-      case ParsedInput.Upload cmd ->
-          outboundChatCommandService.handleUpload(
-              disposables, cmd.msgType(), cmd.path(), cmd.caption());
-      case ParsedInput.ReplyMessage cmd ->
-          outboundChatCommandService.handleReplyMessage(disposables, cmd.messageId(), cmd.body());
-      case ParsedInput.ReactMessage cmd ->
-          outboundChatCommandService.handleReactMessage(
-              disposables, cmd.messageId(), cmd.reaction());
-      case ParsedInput.UnreactMessage cmd ->
-          outboundChatCommandService.handleUnreactMessage(
-              disposables, cmd.messageId(), cmd.reaction());
-      case ParsedInput.EditMessage cmd ->
-          outboundChatCommandService.handleEditMessage(disposables, cmd.messageId(), cmd.body());
-      case ParsedInput.RedactMessage cmd ->
-          outboundChatCommandService.handleRedactMessage(
-              disposables, cmd.messageId(), cmd.reason());
-      case ParsedInput.Quote cmd ->
-          outboundChatCommandService.handleQuote(disposables, cmd.rawLine());
-      case ParsedInput.Say cmd -> outboundChatCommandService.handleSay(disposables, cmd.text());
-      case ParsedInput.Unknown cmd -> {
-        if (userCommandAliasesBus != null && userCommandAliasesBus.unknownCommandAsRawEnabled()) {
-          String rawLine = unknownCommandAsRawLine(cmd.raw());
-          if (!rawLine.isBlank()) {
-            outboundChatCommandService.handleQuote(disposables, rawLine);
-            break;
-          }
-        }
-        TargetRef at = targetCoordinator.getActiveTarget();
-        TargetRef tgt = (at != null) ? at : targetCoordinator.safeStatusTarget();
-        ui.appendStatus(tgt, "(system)", "Unknown command: " + cmd.raw());
+    CommandHandler<? extends ParsedInput> handler = handlers.get(in.getClass());
+    if (handler == null) {
+      throw new IllegalStateException(
+          "No outbound command handler registered for " + in.getClass().getName());
+    }
+    dispatchTo(handler, disposables, in);
+  }
+
+  private Map<Class<? extends ParsedInput>, CommandHandler<? extends ParsedInput>> buildHandlers() {
+    LinkedHashMap<Class<? extends ParsedInput>, CommandHandler<? extends ParsedInput>> map =
+        new LinkedHashMap<>();
+
+    register(
+        map,
+        ParsedInput.Join.class,
+        (d, cmd) -> outboundChatCommandService.handleJoin(d, cmd.channel(), cmd.key()));
+    register(
+        map,
+        ParsedInput.Part.class,
+        (d, cmd) -> outboundChatCommandService.handlePart(d, cmd.channel(), cmd.reason()));
+    register(
+        map,
+        ParsedInput.Connect.class,
+        (d, cmd) -> outboundChatCommandService.handleConnect(cmd.target()));
+    register(
+        map,
+        ParsedInput.Disconnect.class,
+        (d, cmd) -> outboundChatCommandService.handleDisconnect(cmd.target()));
+    register(
+        map,
+        ParsedInput.Reconnect.class,
+        (d, cmd) -> outboundChatCommandService.handleReconnect(cmd.target()));
+    register(
+        map,
+        ParsedInput.QuasselSetup.class,
+        (d, cmd) -> outboundChatCommandService.handleQuasselSetup(d, cmd.serverId()));
+    register(
+        map,
+        ParsedInput.QuasselNetwork.class,
+        (d, cmd) -> outboundChatCommandService.handleQuasselNetwork(d, cmd.args()));
+    register(
+        map,
+        ParsedInput.Quit.class,
+        (d, cmd) -> outboundChatCommandService.handleQuit(cmd.reason()));
+    register(
+        map,
+        ParsedInput.Nick.class,
+        (d, cmd) -> outboundChatCommandService.handleNick(d, cmd.newNick()));
+    register(
+        map,
+        ParsedInput.Away.class,
+        (d, cmd) -> outboundChatCommandService.handleAway(d, cmd.message()));
+    register(
+        map,
+        ParsedInput.Query.class,
+        (d, cmd) -> outboundChatCommandService.handleQuery(cmd.nick()));
+    register(
+        map,
+        ParsedInput.Whois.class,
+        (d, cmd) -> outboundCtcpWhoisCommandService.handleWhois(d, cmd.nick()));
+    register(
+        map,
+        ParsedInput.Whowas.class,
+        (d, cmd) -> outboundCtcpWhoisCommandService.handleWhowas(d, cmd.nick(), cmd.count()));
+    register(
+        map,
+        ParsedInput.Msg.class,
+        (d, cmd) -> outboundChatCommandService.handleMsg(d, cmd.nick(), cmd.body()));
+    register(
+        map,
+        ParsedInput.Notice.class,
+        (d, cmd) -> outboundChatCommandService.handleNotice(d, cmd.target(), cmd.body()));
+    register(
+        map,
+        ParsedInput.Me.class,
+        (d, cmd) -> outboundChatCommandService.handleMe(d, cmd.action()));
+    register(
+        map,
+        ParsedInput.Topic.class,
+        (d, cmd) -> outboundChatCommandService.handleTopic(d, cmd.first(), cmd.rest()));
+    register(
+        map,
+        ParsedInput.Kick.class,
+        (d, cmd) ->
+            outboundChatCommandService.handleKick(d, cmd.channel(), cmd.nick(), cmd.reason()));
+    register(
+        map,
+        ParsedInput.Invite.class,
+        (d, cmd) -> outboundChatCommandService.handleInvite(d, cmd.nick(), cmd.channel()));
+    register(
+        map,
+        ParsedInput.InviteList.class,
+        (d, cmd) -> outboundChatCommandService.handleInviteList(cmd.serverId()));
+    register(
+        map,
+        ParsedInput.InviteJoin.class,
+        (d, cmd) -> outboundChatCommandService.handleInviteJoin(d, cmd.inviteToken()));
+    register(
+        map,
+        ParsedInput.InviteIgnore.class,
+        (d, cmd) -> outboundChatCommandService.handleInviteIgnore(cmd.inviteToken()));
+    register(
+        map,
+        ParsedInput.InviteWhois.class,
+        (d, cmd) -> outboundChatCommandService.handleInviteWhois(d, cmd.inviteToken()));
+    register(
+        map,
+        ParsedInput.InviteBlock.class,
+        (d, cmd) -> outboundChatCommandService.handleInviteBlock(cmd.inviteToken()));
+    register(
+        map,
+        ParsedInput.InviteAutoJoin.class,
+        (d, cmd) -> outboundChatCommandService.handleInviteAutoJoin(cmd.mode()));
+    register(
+        map,
+        ParsedInput.Names.class,
+        (d, cmd) -> outboundChatCommandService.handleNames(d, cmd.channel()));
+    register(
+        map,
+        ParsedInput.Who.class,
+        (d, cmd) -> outboundChatCommandService.handleWho(d, cmd.args()));
+    register(
+        map,
+        ParsedInput.ListCmd.class,
+        (d, cmd) -> outboundChatCommandService.handleList(d, cmd.args()));
+    register(
+        map,
+        ParsedInput.Monitor.class,
+        (d, cmd) -> outboundMonitorCommandService.handleMonitor(d, cmd.args()));
+    register(
+        map,
+        ParsedInput.Mode.class,
+        (d, cmd) -> outboundModeCommandService.handleMode(d, cmd.first(), cmd.rest()));
+    register(
+        map,
+        ParsedInput.Op.class,
+        (d, cmd) -> outboundModeCommandService.handleOp(d, cmd.channel(), cmd.nicks()));
+    register(
+        map,
+        ParsedInput.Deop.class,
+        (d, cmd) -> outboundModeCommandService.handleDeop(d, cmd.channel(), cmd.nicks()));
+    register(
+        map,
+        ParsedInput.Voice.class,
+        (d, cmd) -> outboundModeCommandService.handleVoice(d, cmd.channel(), cmd.nicks()));
+    register(
+        map,
+        ParsedInput.Devoice.class,
+        (d, cmd) -> outboundModeCommandService.handleDevoice(d, cmd.channel(), cmd.nicks()));
+    register(
+        map,
+        ParsedInput.Ban.class,
+        (d, cmd) -> outboundModeCommandService.handleBan(d, cmd.channel(), cmd.masksOrNicks()));
+    register(
+        map,
+        ParsedInput.Unban.class,
+        (d, cmd) -> outboundModeCommandService.handleUnban(d, cmd.channel(), cmd.masksOrNicks()));
+    register(
+        map,
+        ParsedInput.Ignore.class,
+        (d, cmd) -> outboundIgnoreCommandService.handleIgnore(cmd.maskOrNick()));
+    register(
+        map,
+        ParsedInput.Unignore.class,
+        (d, cmd) -> outboundIgnoreCommandService.handleUnignore(cmd.maskOrNick()));
+    register(
+        map,
+        ParsedInput.IgnoreList.class,
+        (d, cmd) -> outboundIgnoreCommandService.handleIgnoreList());
+    register(
+        map,
+        ParsedInput.SoftIgnore.class,
+        (d, cmd) -> outboundIgnoreCommandService.handleSoftIgnore(cmd.maskOrNick()));
+    register(
+        map,
+        ParsedInput.UnsoftIgnore.class,
+        (d, cmd) -> outboundIgnoreCommandService.handleUnsoftIgnore(cmd.maskOrNick()));
+    register(
+        map,
+        ParsedInput.SoftIgnoreList.class,
+        (d, cmd) -> outboundIgnoreCommandService.handleSoftIgnoreList());
+    register(
+        map, ParsedInput.Filter.class, (d, cmd) -> localFilterCommandService.handle(cmd.command()));
+    register(
+        map,
+        ParsedInput.CtcpVersion.class,
+        (d, cmd) -> outboundCtcpWhoisCommandService.handleCtcpVersion(d, cmd.nick()));
+    register(
+        map,
+        ParsedInput.CtcpPing.class,
+        (d, cmd) -> outboundCtcpWhoisCommandService.handleCtcpPing(d, cmd.nick()));
+    register(
+        map,
+        ParsedInput.CtcpTime.class,
+        (d, cmd) -> outboundCtcpWhoisCommandService.handleCtcpTime(d, cmd.nick()));
+    register(
+        map,
+        ParsedInput.Ctcp.class,
+        (d, cmd) ->
+            outboundCtcpWhoisCommandService.handleCtcp(d, cmd.nick(), cmd.command(), cmd.args()));
+    register(
+        map,
+        ParsedInput.Dcc.class,
+        (d, cmd) ->
+            outboundDccCommandService.handleDcc(d, cmd.subcommand(), cmd.nick(), cmd.argument()));
+    register(
+        map,
+        ParsedInput.ChatHistoryBefore.class,
+        (d, cmd) ->
+            outboundChatCommandService.handleChatHistoryBefore(d, cmd.limit(), cmd.selector()));
+    register(
+        map,
+        ParsedInput.ChatHistoryLatest.class,
+        (d, cmd) ->
+            outboundChatCommandService.handleChatHistoryLatest(d, cmd.limit(), cmd.selector()));
+    register(
+        map,
+        ParsedInput.ChatHistoryBetween.class,
+        (d, cmd) ->
+            outboundChatCommandService.handleChatHistoryBetween(
+                d, cmd.startSelector(), cmd.endSelector(), cmd.limit()));
+    register(
+        map,
+        ParsedInput.ChatHistoryAround.class,
+        (d, cmd) ->
+            outboundChatCommandService.handleChatHistoryAround(d, cmd.selector(), cmd.limit()));
+    register(
+        map, ParsedInput.MarkRead.class, (d, cmd) -> outboundChatCommandService.handleMarkRead(d));
+    register(
+        map,
+        ParsedInput.Help.class,
+        (d, cmd) -> outboundChatCommandService.handleHelp(cmd.topic()));
+    register(
+        map,
+        ParsedInput.Upload.class,
+        (d, cmd) ->
+            outboundChatCommandService.handleUpload(d, cmd.msgType(), cmd.path(), cmd.caption()));
+    register(
+        map,
+        ParsedInput.ReplyMessage.class,
+        (d, cmd) -> outboundChatCommandService.handleReplyMessage(d, cmd.messageId(), cmd.body()));
+    register(
+        map,
+        ParsedInput.ReactMessage.class,
+        (d, cmd) ->
+            outboundChatCommandService.handleReactMessage(d, cmd.messageId(), cmd.reaction()));
+    register(
+        map,
+        ParsedInput.UnreactMessage.class,
+        (d, cmd) ->
+            outboundChatCommandService.handleUnreactMessage(d, cmd.messageId(), cmd.reaction()));
+    register(
+        map,
+        ParsedInput.EditMessage.class,
+        (d, cmd) -> outboundChatCommandService.handleEditMessage(d, cmd.messageId(), cmd.body()));
+    register(
+        map,
+        ParsedInput.RedactMessage.class,
+        (d, cmd) ->
+            outboundChatCommandService.handleRedactMessage(d, cmd.messageId(), cmd.reason()));
+    register(
+        map,
+        ParsedInput.Quote.class,
+        (d, cmd) -> outboundChatCommandService.handleQuote(d, cmd.rawLine()));
+    register(
+        map,
+        ParsedInput.Say.class,
+        (d, cmd) -> outboundChatCommandService.handleSay(d, cmd.text()));
+    register(map, ParsedInput.Unknown.class, this::handleUnknown);
+
+    validateHandlerCoverage(map);
+    return Map.copyOf(map);
+  }
+
+  private void validateHandlerCoverage(
+      Map<Class<? extends ParsedInput>, CommandHandler<? extends ParsedInput>> map) {
+    Class<?>[] permitted = ParsedInput.class.getPermittedSubclasses();
+    if (permitted == null || permitted.length == 0) {
+      return;
+    }
+
+    LinkedHashSet<Class<?>> expected = new LinkedHashSet<>(Arrays.asList(permitted));
+    LinkedHashSet<Class<?>> registered = new LinkedHashSet<>(map.keySet());
+
+    LinkedHashSet<Class<?>> missing = new LinkedHashSet<>(expected);
+    missing.removeAll(registered);
+
+    LinkedHashSet<Class<?>> extra = new LinkedHashSet<>(registered);
+    extra.removeAll(expected);
+
+    if (!missing.isEmpty() || !extra.isEmpty()) {
+      throw new IllegalStateException(
+          "Outbound command handler registry mismatch. missing=" + missing + ", extra=" + extra);
+    }
+  }
+
+  private void handleUnknown(CompositeDisposable disposables, ParsedInput.Unknown cmd) {
+    if (userCommandAliasesBus != null && userCommandAliasesBus.unknownCommandAsRawEnabled()) {
+      String rawLine = unknownCommandAsRawLine(cmd.raw());
+      if (!rawLine.isBlank()) {
+        outboundChatCommandService.handleQuote(disposables, rawLine);
+        return;
       }
     }
+    TargetRef at = targetCoordinator.getActiveTarget();
+    TargetRef tgt = (at != null) ? at : targetCoordinator.safeStatusTarget();
+    ui.appendStatus(tgt, "(system)", "Unknown command: " + cmd.raw());
+  }
+
+  @SuppressWarnings("unchecked")
+  private static <T extends ParsedInput> void dispatchTo(
+      CommandHandler<? extends ParsedInput> handler,
+      CompositeDisposable disposables,
+      ParsedInput input) {
+    CommandHandler<T> typedHandler = (CommandHandler<T>) handler;
+    typedHandler.handle(disposables, (T) input);
+  }
+
+  private static <T extends ParsedInput> void register(
+      Map<Class<? extends ParsedInput>, CommandHandler<? extends ParsedInput>> map,
+      Class<T> commandType,
+      CommandHandler<T> handler) {
+    map.put(commandType, handler);
   }
 
   private static String unknownCommandAsRawLine(String rawUnknown) {
@@ -201,5 +395,10 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   @Override
   public void openQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
     outboundChatCommandService.handleQuasselNetworkManager(disposables, serverId);
+  }
+
+  @FunctionalInterface
+  private interface CommandHandler<T extends ParsedInput> {
+    void handle(CompositeDisposable disposables, T input);
   }
 }
