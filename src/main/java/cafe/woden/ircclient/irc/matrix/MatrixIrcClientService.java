@@ -1699,11 +1699,120 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       return "";
     }
 
-    String cursor = fromToken;
+    String reactionEventId =
+        findReactionEventIdByScanningHistoryBackward(
+            sid, server, session, rid, fromToken, targetId, key, from);
+    if (!reactionEventId.isEmpty()) {
+      return reactionEventId;
+    }
+
+    long targetTimestampMs = session.roomEventTimestampMs(rid, targetId);
+    if (targetTimestampMs <= 0L) {
+      try {
+        targetTimestampMs =
+            lookupMessageTimestampByScanningHistory(sid, server, session, rid, targetId, "unreact");
+      } catch (RuntimeException ignored) {
+        return "";
+      }
+    }
+    if (targetTimestampMs <= 0L) {
+      return "";
+    }
+
+    String cursorNearTarget;
+    try {
+      cursorNearTarget =
+          resolveForwardCursorForTimestamp(sid, server, session, rid, targetTimestampMs);
+    } catch (RuntimeException ignored) {
+      return "";
+    }
+    if (cursorNearTarget.isEmpty()) {
+      return "";
+    }
+
+    return findReactionEventIdByScanningHistoryForward(
+        sid, server, session, rid, cursorNearTarget, targetId, key, from);
+  }
+
+  private String findReactionEventIdByScanningHistoryBackward(
+      String serverId,
+      IrcProperties.Server server,
+      MatrixSession session,
+      String roomId,
+      String fromToken,
+      String targetEventId,
+      String reaction,
+      String sender) {
+    String sid = normalize(serverId);
+    String rid = normalize(roomId);
+    String cursor = normalize(fromToken);
+    String targetId = normalize(targetEventId);
+    String key = normalize(reaction);
+    String from = normalize(sender);
+    if (session == null
+        || sid.isEmpty()
+        || rid.isEmpty()
+        || cursor.isEmpty()
+        || targetId.isEmpty()
+        || key.isEmpty()
+        || from.isEmpty()) {
+      return "";
+    }
+
     Set<String> redactedReactionIds = new LinkedHashSet<>();
     for (int page = 0; page < UNREACT_LOOKUP_MAX_PAGES; page++) {
       MatrixRoomHistoryClient.HistoryResult result =
           roomHistoryClient.fetchMessagesBefore(
+              sid, server, session.accessToken, rid, cursor, UNREACT_LOOKUP_HISTORY_PAGE_LIMIT);
+      if (result == null || !result.success()) {
+        return "";
+      }
+      session.rememberHistoryEvents(rid, result.events());
+      rememberHistoryReactionMutations(
+          session, rid, result.reactionEvents(), result.redactionEvents(), redactedReactionIds);
+      String reactionEventId = session.findReactionEventId(rid, targetId, key, from);
+      if (!reactionEventId.isEmpty()) {
+        return reactionEventId;
+      }
+
+      String nextToken = normalize(result.endToken());
+      if (nextToken.isEmpty() || nextToken.equals(cursor)) {
+        return "";
+      }
+      cursor = nextToken;
+    }
+    return "";
+  }
+
+  private String findReactionEventIdByScanningHistoryForward(
+      String serverId,
+      IrcProperties.Server server,
+      MatrixSession session,
+      String roomId,
+      String fromToken,
+      String targetEventId,
+      String reaction,
+      String sender) {
+    String sid = normalize(serverId);
+    String rid = normalize(roomId);
+    String cursor = normalize(fromToken);
+    String targetId = normalize(targetEventId);
+    String key = normalize(reaction);
+    String from = normalize(sender);
+    if (session == null
+        || sid.isEmpty()
+        || rid.isEmpty()
+        || cursor.isEmpty()
+        || targetId.isEmpty()
+        || key.isEmpty()
+        || from.isEmpty()) {
+      return "";
+    }
+
+    Set<String> redactedReactionIds = new LinkedHashSet<>();
+    for (int page = 0; page < UNREACT_LOOKUP_MAX_PAGES; page++) {
+      MatrixRoomHistoryClient.HistoryResult result =
+          roomHistoryClient.fetchMessagesAfter(
               sid, server, session.accessToken, rid, cursor, UNREACT_LOOKUP_HISTORY_PAGE_LIMIT);
       if (result == null || !result.success()) {
         return "";
