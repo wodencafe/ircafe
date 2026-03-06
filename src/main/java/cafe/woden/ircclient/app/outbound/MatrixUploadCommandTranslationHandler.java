@@ -7,7 +7,8 @@ final class MatrixUploadCommandTranslationHandler implements UploadCommandTransl
   private final MatrixOutboundCommandSupport matrixCommandSupport;
 
   MatrixUploadCommandTranslationHandler(MatrixOutboundCommandSupport matrixCommandSupport) {
-    this.matrixCommandSupport = Objects.requireNonNull(matrixCommandSupport, "matrixCommandSupport");
+    this.matrixCommandSupport =
+        Objects.requireNonNull(matrixCommandSupport, "matrixCommandSupport");
   }
 
   @Override
@@ -16,7 +17,8 @@ final class MatrixUploadCommandTranslationHandler implements UploadCommandTransl
   }
 
   @Override
-  public String translateUpload(String target, String msgType, String sourcePath, String displayBody) {
+  public String translateUpload(
+      String target, String msgType, String sourcePath, String displayBody) {
     return matrixCommandSupport.buildUploadPrivmsg(target, msgType, sourcePath, displayBody);
   }
 }

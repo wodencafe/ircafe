@@ -9,10 +9,8 @@ import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -50,7 +48,8 @@ final class MatrixRawRoomAdminCommandHandler {
       Function<String, String> backendAvailabilityReasonLookup,
       Consumer<ServerIrcEvent> eventEmitter) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
-    this.roomMembershipClient = Objects.requireNonNull(roomMembershipClient, "roomMembershipClient");
+    this.roomMembershipClient =
+        Objects.requireNonNull(roomMembershipClient, "roomMembershipClient");
     this.roomStateClient = Objects.requireNonNull(roomStateClient, "roomStateClient");
     this.roomDirectoryClient = Objects.requireNonNull(roomDirectoryClient, "roomDirectoryClient");
     this.sessionLookup = Objects.requireNonNull(sessionLookup, "sessionLookup");
@@ -88,7 +87,8 @@ final class MatrixRawRoomAdminCommandHandler {
               }
 
               MatrixRoomStateClient.UpdateResult update =
-                  roomStateClient.updateRoomTopic(sid, server, session.accessToken(), roomId, topic);
+                  roomStateClient.updateRoomTopic(
+                      sid, server, session.accessToken(), roomId, topic);
               if (!update.updated()) {
                 throw new IllegalStateException(
                     "Matrix topic update failed at " + update.endpoint() + ": " + update.detail());

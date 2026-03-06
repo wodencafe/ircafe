@@ -55,7 +55,7 @@ public class OutboundChatCommandService {
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
-  private final ServerCatalog serverCatalog;
+
   private final CommandTargetPolicy commandTargetPolicy;
   private final ChatCommandRuntimeConfigPort runtimeConfig;
   private final AwayRoutingPort awayRoutingState;
@@ -91,7 +91,7 @@ public class OutboundChatCommandService {
     this.ui = ui;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
-    this.serverCatalog = serverCatalog;
+
     this.commandTargetPolicy = commandTargetPolicy;
     this.runtimeConfig = runtimeConfig;
     this.awayRoutingState = awayRoutingState;
@@ -729,8 +729,7 @@ public class OutboundChatCommandService {
     return quasselCommandSupport.ensureQuasselServerBackend(serverId, out, statusTag, ui);
   }
 
-  private String renderQuasselNetworkSummary(
-      IrcClientService.QuasselCoreNetworkSummary network) {
+  private String renderQuasselNetworkSummary(IrcClientService.QuasselCoreNetworkSummary network) {
     return quasselCommandSupport.renderNetworkSummary(network);
   }
 
@@ -1532,7 +1531,8 @@ public class OutboundChatCommandService {
     }
 
     IrcProperties.Server.Backend backend = commandTargetPolicy.backendForServer(at.serverId());
-    UploadCommandTranslationHandler translationHandler = uploadCommandTranslationHandlers.get(backend);
+    UploadCommandTranslationHandler translationHandler =
+        uploadCommandTranslationHandlers.get(backend);
     if (translationHandler == null) {
       ui.appendStatus(
           status,

@@ -45,7 +45,8 @@ final class MatrixRawModeCommandHandler {
       Function<String, String> backendAvailabilityReasonLookup,
       Consumer<ServerIrcEvent> eventEmitter) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
-    this.roomMembershipClient = Objects.requireNonNull(roomMembershipClient, "roomMembershipClient");
+    this.roomMembershipClient =
+        Objects.requireNonNull(roomMembershipClient, "roomMembershipClient");
     this.roomStateClient = Objects.requireNonNull(roomStateClient, "roomStateClient");
     this.roomDirectoryClient = Objects.requireNonNull(roomDirectoryClient, "roomDirectoryClient");
     this.sessionLookup = Objects.requireNonNull(sessionLookup, "sessionLookup");
@@ -63,7 +64,8 @@ final class MatrixRawModeCommandHandler {
     if (modeSpec.isEmpty()) {
       return handleModeQuery(serverId, target);
     }
-    List<String> modeArgs = arguments.size() > 2 ? arguments.subList(2, arguments.size()) : List.of();
+    List<String> modeArgs =
+        arguments.size() > 2 ? arguments.subList(2, arguments.size()) : List.of();
     return handleModeMutation(serverId, target, modeSpec, modeArgs);
   }
 

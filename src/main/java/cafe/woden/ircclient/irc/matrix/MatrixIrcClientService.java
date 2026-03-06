@@ -41,11 +41,10 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private static final String UNSUPPORTED_OPERATION_REASON = "operation is not implemented yet";
   private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
   private static final String TAG_MATRIX_MSGTYPE = "matrix.msgtype";
-  private static final String TAG_MATRIX_MEDIA_URL = "matrix.media_url";
+
   private static final String TAG_MATRIX_UPLOAD_PATH = "matrix.upload_path";
   private static final String TAG_MATRIX_ROOM_ID = "matrix.room_id";
-  private static final String TAG_DRAFT_REPLY = "draft/reply";
-  private static final String TAG_DRAFT_EDIT = "draft/edit";
+
   private static final String RAW_TAG_MATRIX_MSGTYPE = "matrix/msgtype";
   private static final String RAW_TAG_MATRIX_MEDIA_URL = "matrix/media_url";
   private static final String RAW_TAG_MATRIX_UPLOAD_PATH = "matrix/upload_path";
@@ -586,12 +585,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
               }
 
               localEchoEmitter.emitPrivateMessage(
-                  sid,
-                  localEchoSessionView(session),
-                  peerUserId,
-                  roomId,
-                  text,
-                  result.eventId());
+                  sid, localEchoSessionView(session), peerUserId, roomId, text, result.eventId());
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -994,7 +988,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                     backendAvailabilityReason(sid));
               }
 
-              MatrixHistoryCursorCoordinator.SessionView historySession = historySessionView(session);
+              MatrixHistoryCursorCoordinator.SessionView historySession =
+                  historySessionView(session);
               int requestedLimit = historyCursorCoordinator.normalizeHistoryLimit(limit);
               IrcProperties.Server server = serverCatalog.require(sid);
               String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
@@ -1066,7 +1061,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                     backendAvailabilityReason(sid));
               }
 
-              MatrixHistoryCursorCoordinator.SessionView historySession = historySessionView(session);
+              MatrixHistoryCursorCoordinator.SessionView historySession =
+                  historySessionView(session);
               int requestedLimit = historyCursorCoordinator.normalizeHistoryLimit(limit);
               IrcProperties.Server server = serverCatalog.require(sid);
               String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
@@ -1146,7 +1142,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                     backendAvailabilityReason(sid));
               }
 
-              MatrixHistoryCursorCoordinator.SessionView historySession = historySessionView(session);
+              MatrixHistoryCursorCoordinator.SessionView historySession =
+                  historySessionView(session);
               int requestedLimit = historyCursorCoordinator.normalizeHistoryLimit(limit);
               IrcProperties.Server server = serverCatalog.require(sid);
               String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
@@ -1404,14 +1401,19 @@ public class MatrixIrcClientService implements IrcBackendClientService {
 
       @Override
       public void rememberReactionEvent(
-          String roomId, String reactionEventId, String targetEventId, String reaction, String sender) {
+          String roomId,
+          String reactionEventId,
+          String targetEventId,
+          String reaction,
+          String sender) {
         session.rememberReactionEvent(roomId, reactionEventId, targetEventId, reaction, sender);
       }
 
       @Override
       public MatrixSyncMutationEventProjector.ReactionIndexEntry consumeReactionEvent(
           String roomId, String reactionEventId) {
-        MatrixSession.ReactionIndexEntry entry = session.consumeReactionEvent(roomId, reactionEventId);
+        MatrixSession.ReactionIndexEntry entry =
+            session.consumeReactionEvent(roomId, reactionEventId);
         if (entry == null) return null;
         return new MatrixSyncMutationEventProjector.ReactionIndexEntry(
             entry.targetEventId(), entry.reaction(), entry.sender());
@@ -1553,12 +1555,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
           String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
           Instant marker =
               historyCursorCoordinator.resolveHistoryMessageIdInstant(
-                  sid,
-                  server,
-                  historySessionView(session),
-                  roomId,
-                  messageId,
-                  operation);
+                  sid, server, historySessionView(session), roomId, messageId, operation);
           return requestChatHistoryBefore(sid, requestedTarget, marker, limit);
         });
   }
@@ -1790,12 +1787,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
               IrcProperties.Server server = serverCatalog.require(sid);
               String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
               historyCursorCoordinator.resolveHistoryMessageIdInstant(
-                  sid,
-                  server,
-                  historySessionView(session),
-                  roomId,
-                  markerMessageId,
-                  "markread");
+                  sid, server, historySessionView(session), roomId, markerMessageId, "markread");
               sendReadMarkerForEventId(sid, server, session, roomId, markerMessageId);
             })
         .subscribeOn(RxVirtualSchedulers.io());
@@ -2969,7 +2961,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
 
   private void emitSyncTimelineEvents(
       String serverId, MatrixSession session, List<MatrixSyncClient.RoomTimelineEvent> events) {
-    syncTimelineEventProjector.emitTimelineEvents(serverId, syncTimelineSessionView(session), events);
+    syncTimelineEventProjector.emitTimelineEvents(
+        serverId, syncTimelineSessionView(session), events);
   }
 
   private void emitSyncMutationEvents(

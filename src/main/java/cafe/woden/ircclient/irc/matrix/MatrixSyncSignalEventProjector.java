@@ -30,7 +30,9 @@ final class MatrixSyncSignalEventProjector {
   }
 
   void emitMembershipEvents(
-      String serverId, SessionView session, List<MatrixSyncClient.RoomMembershipEvent> membershipEvents) {
+      String serverId,
+      SessionView session,
+      List<MatrixSyncClient.RoomMembershipEvent> membershipEvents) {
     if (session == null || membershipEvents == null || membershipEvents.isEmpty()) return;
     String sid = normalize(serverId);
     if (sid.isEmpty()) return;
@@ -111,9 +113,7 @@ final class MatrixSyncSignalEventProjector {
   }
 
   private void emitReadMarkerEvents(
-      String serverId,
-      SessionView session,
-      List<MatrixSyncClient.ReadReceiptEvent> readReceipts) {
+      String serverId, SessionView session, List<MatrixSyncClient.ReadReceiptEvent> readReceipts) {
     if (session == null || readReceipts == null || readReceipts.isEmpty()) return;
     String sid = normalize(serverId);
     if (sid.isEmpty()) return;

@@ -23,7 +23,11 @@ final class MatrixSyncMutationEventProjector {
     void rememberRoomEvent(String roomId, String eventId, long timestampMs);
 
     void rememberReactionEvent(
-        String roomId, String reactionEventId, String targetEventId, String reaction, String sender);
+        String roomId,
+        String reactionEventId,
+        String targetEventId,
+        String reaction,
+        String sender);
 
     ReactionIndexEntry consumeReactionEvent(String roomId, String reactionEventId);
   }
@@ -96,13 +100,16 @@ final class MatrixSyncMutationEventProjector {
                 sender,
                 body,
                 messageId,
-                withTag(Map.of(TAG_MATRIX_MSGTYPE, normalizedType), TAG_DRAFT_EDIT, targetMessageId)));
+                withTag(
+                    Map.of(TAG_MATRIX_MSGTYPE, normalizedType), TAG_DRAFT_EDIT, targetMessageId)));
       }
     }
   }
 
   private void emitReactionEvents(
-      String serverId, SessionView session, List<MatrixSyncClient.RoomReactionEvent> reactionEvents) {
+      String serverId,
+      SessionView session,
+      List<MatrixSyncClient.RoomReactionEvent> reactionEvents) {
     if (session == null || reactionEvents == null || reactionEvents.isEmpty()) return;
     String sid = normalize(serverId);
     if (sid.isEmpty()) return;
@@ -129,7 +136,9 @@ final class MatrixSyncMutationEventProjector {
   }
 
   private void emitRedactionEvents(
-      String serverId, SessionView session, List<MatrixSyncClient.RoomRedactionEvent> redactionEvents) {
+      String serverId,
+      SessionView session,
+      List<MatrixSyncClient.RoomRedactionEvent> redactionEvents) {
     if (session == null || redactionEvents == null || redactionEvents.isEmpty()) return;
     String sid = normalize(serverId);
     if (sid.isEmpty()) return;

@@ -18,8 +18,7 @@ final class MatrixMessageInputUploadUxMode implements MessageInputUploadUxMode {
   private static final Set<String> MATRIX_AUDIO_EXTENSIONS =
       Set.of("mp3", "m4a", "aac", "wav", "flac", "ogg", "oga", "opus", "weba", "amr");
   private static final ActionPresentation PRESENTATION =
-      new ActionPresentation(
-          true, "Attach file (Matrix upload)", "Choose files for Matrix upload");
+      new ActionPresentation(true, "Attach file (Matrix upload)", "Choose files for Matrix upload");
 
   @Override
   public ActionPresentation presentation() {

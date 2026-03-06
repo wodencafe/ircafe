@@ -52,7 +52,8 @@ public class MessageInputPanel extends JPanel {
   private final MessageInputComposeSupport composeSupport;
   private final MessageInputUploadUxMode ircUploadUxMode = new IrcMessageInputUploadUxMode();
   private final MessageInputUploadUxMode matrixUploadUxMode = new MatrixMessageInputUploadUxMode();
-  private final MessageInputUploadUxMode.Context uploadUxContext = new MessageInputUploadUxContext();
+  private final MessageInputUploadUxMode.Context uploadUxContext =
+      new MessageInputUploadUxContext();
   private boolean programmaticEdit;
   private final FlowableProcessor<String> outbound =
       PublishProcessor.<String>create().toSerialized();
@@ -643,7 +644,8 @@ public class MessageInputPanel extends JPanel {
     repaint();
   }
 
-  private void applyUploadActionPresentation(MessageInputUploadUxMode.ActionPresentation presentation) {
+  private void applyUploadActionPresentation(
+      MessageInputUploadUxMode.ActionPresentation presentation) {
     if (presentation == null) return;
     attach.setVisible(presentation.attachVisible());
     attach.setToolTipText(presentation.attachTooltip());

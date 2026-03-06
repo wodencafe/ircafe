@@ -116,11 +116,7 @@ final class MatrixSession {
   }
 
   void rememberReactionEvent(
-      String roomId,
-      String reactionEventId,
-      String targetEventId,
-      String reaction,
-      String sender) {
+      String roomId, String reactionEventId, String targetEventId, String reaction, String sender) {
     String rid = normalize(roomId);
     String reactionId = normalize(reactionEventId);
     String targetId = normalize(targetEventId);

@@ -40,7 +40,8 @@ final class MatrixHistoryCursorCoordinator {
 
     void rememberHistoryCursor(String roomId, String nextToken, long beforeEpochMs);
 
-    void rememberHistoryEvents(String roomId, List<MatrixRoomHistoryClient.RoomHistoryEvent> events);
+    void rememberHistoryEvents(
+        String roomId, List<MatrixRoomHistoryClient.RoomHistoryEvent> events);
 
     long roomEventTimestampMs(String roomId, String eventId);
   }
@@ -77,7 +78,8 @@ final class MatrixHistoryCursorCoordinator {
     }
     String messageId = parseHistoryMessageIdSelector(token);
     if (!messageId.isEmpty()) {
-      return resolveHistoryMessageIdInstant(serverId, server, session, roomId, messageId, operation);
+      return resolveHistoryMessageIdInstant(
+          serverId, server, session, roomId, messageId, operation);
     }
     throw new IllegalArgumentException(selectorName + " must be '*', msgid=..., or timestamp=...");
   }
@@ -89,10 +91,12 @@ final class MatrixHistoryCursorCoordinator {
       String roomId,
       String messageId,
       String operation) {
-    long timestampMs = session == null ? 0L : session.roomEventTimestampMs(roomId, normalize(messageId));
+    long timestampMs =
+        session == null ? 0L : session.roomEventTimestampMs(roomId, normalize(messageId));
     if (timestampMs <= 0L) {
       timestampMs =
-          lookupMessageTimestampByScanningHistory(serverId, server, session, roomId, messageId, operation);
+          lookupMessageTimestampByScanningHistory(
+              serverId, server, session, roomId, messageId, operation);
     }
     if (timestampMs <= 0L) {
       throw new BackendNotAvailableException(
@@ -266,14 +270,12 @@ final class MatrixHistoryCursorCoordinator {
       }
       if (!result.success()) {
         throw new IllegalStateException(
-            "Matrix history forward fetch failed at "
-                + result.endpoint()
-                + ": "
-                + result.detail());
+            "Matrix history forward fetch failed at " + result.endpoint() + ": " + result.detail());
       }
 
       session.rememberHistoryEvents(roomId, result.events());
-      List<ChatHistoryEntry> pageEntries = toHistoryEntries(requestedTarget, roomId, result.events());
+      List<ChatHistoryEntry> pageEntries =
+          toHistoryEntries(requestedTarget, roomId, result.events());
       for (ChatHistoryEntry entry : pageEntries) {
         if (entry == null) continue;
         Instant at = entry.at();
@@ -340,7 +342,8 @@ final class MatrixHistoryCursorCoordinator {
       }
 
       session.rememberHistoryEvents(roomId, result.events());
-      List<ChatHistoryEntry> pageEntries = toHistoryEntries(requestedTarget, roomId, result.events());
+      List<ChatHistoryEntry> pageEntries =
+          toHistoryEntries(requestedTarget, roomId, result.events());
       for (ChatHistoryEntry entry : pageEntries) {
         if (entry == null) continue;
         Instant at = entry.at();

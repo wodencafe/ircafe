@@ -63,8 +63,7 @@ class ChannelListPanelManagedOrderTest {
     onEdt(
         () -> {
           panel.setBackendUiContext(
-              BackendUiContext.fromMatrixServerPredicate(
-                  sid -> "matrix".equalsIgnoreCase(sid)));
+              BackendUiContext.fromMatrixServerPredicate(sid -> "matrix".equalsIgnoreCase(sid)));
           panel.setServerId("matrix");
           panel.setOnRunAlisRequest(command::set);
           panel.beginList("matrix", "Loading channel list (rust limit 30)...");
@@ -90,37 +89,24 @@ class ChannelListPanelManagedOrderTest {
     onEdt(
         () -> {
           panel.setBackendUiContext(
-              BackendUiContext.fromMatrixServerPredicate(
-                  sid -> "matrix".equalsIgnoreCase(sid)));
+              BackendUiContext.fromMatrixServerPredicate(sid -> "matrix".equalsIgnoreCase(sid)));
           panel.setServerId("libera");
           assertFalse(runMatrixNextButton.isVisible());
-          assertTrue(
-              runAlisButton
-                  .getToolTipText()
-                  .toLowerCase(Locale.ROOT)
-                  .contains("alis"));
+          assertTrue(runAlisButton.getToolTipText().toLowerCase(Locale.ROOT).contains("alis"));
         });
 
     onEdt(
         () -> {
           panel.setServerId("matrix");
           assertTrue(runMatrixNextButton.isVisible());
-          assertTrue(
-              runAlisButton
-                  .getToolTipText()
-                  .toLowerCase(Locale.ROOT)
-                  .contains("matrix"));
+          assertTrue(runAlisButton.getToolTipText().toLowerCase(Locale.ROOT).contains("matrix"));
         });
 
     onEdt(
         () -> {
           panel.setServerId("libera");
           assertFalse(runMatrixNextButton.isVisible());
-          assertTrue(
-              runAlisButton
-                  .getToolTipText()
-                  .toLowerCase(Locale.ROOT)
-                  .contains("alis"));
+          assertTrue(runAlisButton.getToolTipText().toLowerCase(Locale.ROOT).contains("alis"));
         });
   }
 
