@@ -88,6 +88,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private final MatrixRoomMessageSender roomMessageSender;
   private final MatrixRawRoomAdminCommandHandler rawRoomAdminCommandHandler;
   private final MatrixRawModeCommandHandler rawModeCommandHandler;
+  private final MatrixRawLookupCommandHandler rawLookupCommandHandler;
   private final MatrixSyncClient syncClient;
   private final Map<String, String> availabilityReasonByServer = new ConcurrentHashMap<>();
   private final Map<String, MatrixSession> sessionsByServer = new ConcurrentHashMap<>();
@@ -144,6 +145,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
             this::rawModeSessionView,
             this::backendAvailabilityReason,
             bus::onNext);
+    this.rawLookupCommandHandler =
+        new MatrixRawLookupCommandHandler(this::whois, this::requestNames, this::whowas);
     this.syncClient = Objects.requireNonNull(syncClient, "syncClient");
   }
 
@@ -1624,18 +1627,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   }
 
   private Completable sendRawWhowas(String serverId, RawCommand raw) {
-    String target = argOrBlank(raw, 0, "WHOWAS requires a target");
-    int count = 0;
-    if (raw.arguments().size() >= 2) {
-      String token = normalize(raw.arguments().get(1));
-      if (!token.isEmpty()) {
-        if (!looksLikeInteger(token)) {
-          throw new IllegalArgumentException("WHOWAS count must be a positive integer");
-        }
-        count = parseRawChatHistoryLimit(token);
-      }
-    }
-    return whowas(serverId, target, count);
+    return rawLookupCommandHandler.handleWhowas(serverId, raw.arguments());
   }
 
   private Completable sendRawTopic(String serverId, RawCommand raw) {
@@ -1651,16 +1643,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   }
 
   private Completable sendRawWho(String serverId, RawCommand raw) {
-    String token = argOrBlank(raw, 0, "WHO requires a target");
-    if (looksLikeMatrixUserId(token)) {
-      return whois(serverId, token);
-    }
-    if (looksLikeMatrixRoomId(token)
-        || looksLikeMatrixRoomAlias(token)
-        || (token.startsWith("#") && token.indexOf(':') < 0)) {
-      return requestNames(serverId, token);
-    }
-    throw new IllegalArgumentException("WHO supports Matrix user ids and room targets only");
+    return rawLookupCommandHandler.handleWho(serverId, raw.arguments());
   }
 
   private Completable sendRawList(String serverId, RawCommand raw) {
