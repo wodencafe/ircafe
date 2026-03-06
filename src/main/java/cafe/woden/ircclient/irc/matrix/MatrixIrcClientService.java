@@ -68,9 +68,6 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private static final int TIMESTAMP_CURSOR_MAX_PAGES = 20;
   private static final int UNREACT_LOOKUP_HISTORY_PAGE_LIMIT = 200;
   private static final int UNREACT_LOOKUP_MAX_PAGES = 10;
-  private static final int MATRIX_LIST_DEFAULT_LIMIT = 100;
-  private static final int MATRIX_LIST_MAX_LIMIT = 200;
-
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
 
@@ -89,6 +86,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private final MatrixDirectRoomResolver directRoomResolver;
   private final MatrixMediaUploadClient mediaUploadClient;
   private final MatrixRoomMessageSender roomMessageSender;
+  private final MatrixRawRoomAdminCommandHandler rawRoomAdminCommandHandler;
   private final MatrixSyncClient syncClient;
   private final Map<String, String> availabilityReasonByServer = new ConcurrentHashMap<>();
   private final Map<String, MatrixSession> sessionsByServer = new ConcurrentHashMap<>();
@@ -127,6 +125,15 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     this.directRoomResolver = Objects.requireNonNull(directRoomResolver, "directRoomResolver");
     this.mediaUploadClient = Objects.requireNonNull(mediaUploadClient, "mediaUploadClient");
     this.roomMessageSender = Objects.requireNonNull(roomMessageSender, "roomMessageSender");
+    this.rawRoomAdminCommandHandler =
+        new MatrixRawRoomAdminCommandHandler(
+            this.serverCatalog,
+            this.roomMembershipClient,
+            this.roomStateClient,
+            this.roomDirectoryClient,
+            this::rawAdminSessionView,
+            this::backendAvailabilityReason,
+            bus::onNext);
     this.syncClient = Objects.requireNonNull(syncClient, "syncClient");
   }
 
@@ -1230,6 +1237,37 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     return normalize(serverId);
   }
 
+  private MatrixRawRoomAdminCommandHandler.SessionView rawAdminSessionView(String serverId) {
+    MatrixSession session = sessionsByServer.get(normalizeServerId(serverId));
+    if (session == null) return null;
+    return new MatrixRawRoomAdminCommandHandler.SessionView() {
+      @Override
+      public String userId() {
+        return session.userId;
+      }
+
+      @Override
+      public String accessToken() {
+        return session.accessToken;
+      }
+
+      @Override
+      public String roomForAlias(String roomAlias) {
+        return session.roomForAlias(roomAlias);
+      }
+
+      @Override
+      public void rememberJoinedAlias(String roomAlias, String roomId) {
+        session.rememberJoinedAlias(roomAlias, roomId);
+      }
+
+      @Override
+      public void forgetJoinedRoom(String roomId) {
+        session.forgetJoinedRoom(roomId);
+      }
+    };
+  }
+
   private Completable unsupportedChatHistoryMode(String operation, String serverId, String detail) {
     String sid = normalizeServerId(serverId);
     String message = normalize(detail);
@@ -1565,139 +1603,15 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   }
 
   private Completable sendRawTopic(String serverId, RawCommand raw) {
-    String target = argOrBlank(raw, 0, "TOPIC requires a room target");
-    String topic = joinArgs(raw.arguments(), 1);
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException("server id is blank");
-              }
-
-              MatrixSession session = sessionsByServer.get(sid);
-              if (session == null) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    "topic",
-                    sid,
-                    backendAvailabilityReason(sid));
-              }
-              IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveAliasOrRoomId(sid, target, server, session);
-
-              if (topic.isEmpty()) {
-                MatrixRoomStateClient.TopicResult result =
-                    roomStateClient.fetchRoomTopic(sid, server, session.accessToken, roomId);
-                if (!result.success()) {
-                  throw new IllegalStateException(
-                      "Matrix topic fetch failed at " + result.endpoint() + ": " + result.detail());
-                }
-                bus.onNext(
-                    new ServerIrcEvent(
-                        sid,
-                        new IrcEvent.ChannelTopicUpdated(
-                            Instant.now(), roomId, Objects.toString(result.topic(), ""))));
-                return;
-              }
-
-              MatrixRoomStateClient.UpdateResult update =
-                  roomStateClient.updateRoomTopic(sid, server, session.accessToken, roomId, topic);
-              if (!update.updated()) {
-                throw new IllegalStateException(
-                    "Matrix topic update failed at " + update.endpoint() + ": " + update.detail());
-              }
-              bus.onNext(
-                  new ServerIrcEvent(
-                      sid, new IrcEvent.ChannelTopicUpdated(Instant.now(), roomId, topic)));
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return rawRoomAdminCommandHandler.handleTopic(serverId, raw.arguments());
   }
 
   private Completable sendRawKick(String serverId, RawCommand raw) {
-    String target = argOrBlank(raw, 0, "KICK requires <room> <userId> [reason]");
-    String userId = argOrBlank(raw, 1, "KICK requires <room> <userId> [reason]");
-    String reason = joinArgs(raw.arguments(), 2);
-    if (!looksLikeMatrixUserId(userId)) {
-      throw new IllegalArgumentException("KICK target must be a Matrix user id");
-    }
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException("server id is blank");
-              }
-
-              MatrixSession session = sessionsByServer.get(sid);
-              if (session == null) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    "kick",
-                    sid,
-                    backendAvailabilityReason(sid));
-              }
-              IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveAliasOrRoomId(sid, target, server, session);
-              MatrixRoomMembershipClient.ActionResult result =
-                  roomMembershipClient.kickUser(
-                      sid, server, session.accessToken, roomId, userId, reason);
-              if (!result.success()) {
-                throw new IllegalStateException(
-                    "Matrix kick failed at " + result.endpoint() + ": " + result.detail());
-              }
-
-              Instant now = Instant.now();
-              String by = normalize(session.userId);
-              if (userId.equals(by)) {
-                session.forgetJoinedRoom(roomId);
-                bus.onNext(
-                    new ServerIrcEvent(
-                        sid, new IrcEvent.KickedFromChannel(now, roomId, by, reason)));
-              } else {
-                bus.onNext(
-                    new ServerIrcEvent(
-                        sid, new IrcEvent.UserKickedFromChannel(now, roomId, userId, by, reason)));
-              }
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return rawRoomAdminCommandHandler.handleKick(serverId, raw.arguments());
   }
 
   private Completable sendRawInvite(String serverId, RawCommand raw) {
-    String invitee = argOrBlank(raw, 0, "INVITE requires <userId> <room>");
-    String target = argOrBlank(raw, 1, "INVITE requires <userId> <room>");
-    if (!looksLikeMatrixUserId(invitee)) {
-      throw new IllegalArgumentException("INVITE target must be a Matrix user id");
-    }
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException("server id is blank");
-              }
-
-              MatrixSession session = sessionsByServer.get(sid);
-              if (session == null) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    "invite",
-                    sid,
-                    backendAvailabilityReason(sid));
-              }
-              IrcProperties.Server server = serverCatalog.require(sid);
-              String roomId = resolveAliasOrRoomId(sid, target, server, session);
-              MatrixRoomMembershipClient.ActionResult result =
-                  roomMembershipClient.inviteUser(
-                      sid, server, session.accessToken, roomId, invitee);
-              if (!result.success()) {
-                throw new IllegalStateException(
-                    "Matrix invite failed at " + result.endpoint() + ": " + result.detail());
-              }
-              bus.onNext(
-                  new ServerIrcEvent(
-                      sid,
-                      new IrcEvent.InvitedToChannel(
-                          Instant.now(), roomId, session.userId, invitee, "", false)));
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
+    return rawRoomAdminCommandHandler.handleInvite(serverId, raw.arguments());
   }
 
   private Completable sendRawWho(String serverId, RawCommand raw) {
@@ -1714,197 +1628,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   }
 
   private Completable sendRawList(String serverId, RawCommand raw) {
-    RawListQuery query = parseRawListQuery(raw.arguments());
-    return Completable.fromAction(
-            () -> {
-              String sid = normalizeServerId(serverId);
-              if (sid.isEmpty()) {
-                throw new IllegalArgumentException("server id is blank");
-              }
-
-              MatrixSession session = sessionsByServer.get(sid);
-              if (session == null) {
-                throw new BackendNotAvailableException(
-                    IrcProperties.Server.Backend.MATRIX,
-                    "list",
-                    sid,
-                    backendAvailabilityReason(sid));
-              }
-              IrcProperties.Server server = serverCatalog.require(sid);
-              MatrixRoomDirectoryClient.PublicRoomsResult result =
-                  roomDirectoryClient.fetchPublicRooms(
-                      sid,
-                      server,
-                      session.accessToken,
-                      query.searchTerm(),
-                      query.sinceToken(),
-                      query.limit());
-              if (!result.success()) {
-                throw new IllegalStateException(
-                    "Matrix list failed at " + result.endpoint() + ": " + result.detail());
-              }
-
-              Instant now = Instant.now();
-              String searchTerm = normalize(query.searchTerm());
-              String banner =
-                  searchTerm.isEmpty()
-                      ? "Matrix public rooms"
-                      : ("Matrix public rooms (search: " + searchTerm + ")");
-              bus.onNext(new ServerIrcEvent(sid, new IrcEvent.ChannelListStarted(now, banner)));
-              int listed = 0;
-              List<MatrixRoomDirectoryClient.PublicRoom> rooms = result.rooms();
-              if (rooms != null) {
-                for (MatrixRoomDirectoryClient.PublicRoom room : rooms) {
-                  if (room == null) continue;
-                  String channel = matrixListChannelName(room);
-                  if (channel.isEmpty()) continue;
-                  int visibleUsers = Math.max(0, room.joinedMembers());
-                  String topic = matrixListTopic(room);
-                  bus.onNext(
-                      new ServerIrcEvent(
-                          sid, new IrcEvent.ChannelListEntry(now, channel, visibleUsers, topic)));
-                  listed++;
-                }
-              }
-              String nextBatch = normalize(result.nextBatch());
-              String summary =
-                  nextBatch.isEmpty()
-                      ? ("Listed " + listed + " Matrix room(s).")
-                      : ("Listed " + listed + " Matrix room(s). next_batch=" + nextBatch);
-              bus.onNext(new ServerIrcEvent(sid, new IrcEvent.ChannelListEnded(now, summary)));
-            })
-        .subscribeOn(RxVirtualSchedulers.io());
-  }
-
-  private static RawListQuery parseRawListQuery(List<String> rawArgs) {
-    List<String> args = rawArgs == null ? List.of() : rawArgs;
-    java.util.ArrayList<String> freeTokens = new java.util.ArrayList<>();
-    String searchTerm = "";
-    String sinceToken = "";
-    int limit = MATRIX_LIST_DEFAULT_LIMIT;
-
-    for (int i = 0; i < args.size(); i++) {
-      String token = normalize(args.get(i));
-      if (token.isEmpty()) continue;
-      String lower = token.toLowerCase(Locale.ROOT);
-
-      String sinceInline = listOptionValue(lower, token, "since");
-      if (!sinceInline.isEmpty()) {
-        sinceToken = sinceInline;
-        continue;
-      }
-      if ("since".equals(lower) || "--since".equals(lower) || "-since".equals(lower)) {
-        if (i + 1 < args.size()) {
-          sinceToken = normalize(args.get(++i));
-        }
-        continue;
-      }
-
-      String searchInline = listOptionValue(lower, token, "search");
-      if (searchInline.isEmpty()) {
-        searchInline = listOptionValue(lower, token, "q");
-      }
-      if (!searchInline.isEmpty()) {
-        searchTerm = searchInline;
-        continue;
-      }
-      if ("search".equals(lower)
-          || "--search".equals(lower)
-          || "-search".equals(lower)
-          || "q".equals(lower)
-          || "--q".equals(lower)
-          || "-q".equals(lower)) {
-        if (i + 1 < args.size()) {
-          searchTerm = normalize(args.get(++i));
-        }
-        continue;
-      }
-
-      String limitInline = listOptionValue(lower, token, "limit");
-      if (limitInline.isEmpty()) {
-        limitInline = listOptionValue(lower, token, "max");
-      }
-      if (!limitInline.isEmpty()) {
-        Integer parsed = parsePositiveIntToken(limitInline);
-        if (parsed != null) {
-          limit = parsed.intValue();
-        }
-        continue;
-      }
-      if ("limit".equals(lower)
-          || "--limit".equals(lower)
-          || "-limit".equals(lower)
-          || "max".equals(lower)
-          || "--max".equals(lower)
-          || "-max".equals(lower)) {
-        if (i + 1 < args.size()) {
-          Integer parsed = parsePositiveIntToken(args.get(++i));
-          if (parsed != null) {
-            limit = parsed.intValue();
-          }
-        }
-        continue;
-      }
-
-      freeTokens.add(token);
-    }
-
-    if (searchTerm.isEmpty() && !freeTokens.isEmpty()) {
-      searchTerm = normalize(String.join(" ", freeTokens));
-    }
-
-    return new RawListQuery(searchTerm, sinceToken, limit);
-  }
-
-  private static String listOptionValue(String tokenLower, String tokenRaw, String optionName) {
-    String opt = normalize(optionName).toLowerCase(Locale.ROOT);
-    if (opt.isEmpty()) return "";
-    String value = "";
-    if (tokenLower.startsWith(opt + "=")) {
-      value = tokenRaw.substring(opt.length() + 1);
-    } else if (tokenLower.startsWith("--" + opt + "=")) {
-      value = tokenRaw.substring(opt.length() + 3);
-    } else if (tokenLower.startsWith("-" + opt + "=")) {
-      value = tokenRaw.substring(opt.length() + 2);
-    }
-    return normalize(value);
-  }
-
-  private static Integer parsePositiveIntToken(String token) {
-    String value = normalize(token);
-    if (value.isEmpty()) return null;
-    try {
-      int parsed = Integer.parseInt(value);
-      if (parsed <= 0) {
-        return null;
-      }
-      return Integer.valueOf(parsed);
-    } catch (NumberFormatException ignored) {
-      return null;
-    }
-  }
-
-  private static int normalizeMatrixListLimit(int limit) {
-    int requested = limit <= 0 ? MATRIX_LIST_DEFAULT_LIMIT : limit;
-    return Math.max(1, Math.min(requested, MATRIX_LIST_MAX_LIMIT));
-  }
-
-  private static String matrixListChannelName(MatrixRoomDirectoryClient.PublicRoom room) {
-    if (room == null) return "";
-    String alias = normalize(room.canonicalAlias());
-    if (!alias.isEmpty()) {
-      return alias;
-    }
-    return normalize(room.roomId());
-  }
-
-  private static String matrixListTopic(MatrixRoomDirectoryClient.PublicRoom room) {
-    if (room == null) return "";
-    String topic = normalize(room.topic());
-    if (!topic.isEmpty()) {
-      return topic;
-    }
-    return normalize(room.name());
+    return rawRoomAdminCommandHandler.handleList(serverId, raw.arguments());
   }
 
   private Completable sendRawMode(String serverId, RawCommand raw) {
@@ -4681,14 +4405,6 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     private record ReactionIndexEntry(String targetEventId, String reaction, String sender) {}
 
     private record HistoryCursor(String nextToken, long beforeEpochMs) {}
-  }
-
-  private record RawListQuery(String searchTerm, String sinceToken, int limit) {
-    private RawListQuery {
-      searchTerm = normalize(searchTerm);
-      sinceToken = normalize(sinceToken);
-      limit = normalizeMatrixListLimit(limit);
-    }
   }
 
   private record RawCommand(String command, List<String> arguments) {
