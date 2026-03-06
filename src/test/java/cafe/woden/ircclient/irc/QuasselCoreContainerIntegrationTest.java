@@ -241,7 +241,7 @@ class QuasselCoreContainerIntegrationTest {
             "Fresh container core should require initial setup");
         assertTrue(service.isQuasselCoreSetupPending(sid));
 
-        IrcClientService.QuasselCoreSetupPrompt prompt =
+        QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
             service
                 .quasselCoreSetupPrompt(sid)
                 .orElseThrow(
@@ -249,8 +249,8 @@ class QuasselCoreContainerIntegrationTest {
         assertFalse(prompt.storageBackends().isEmpty(), "storage backend options should exist");
         assertFalse(prompt.authenticators().isEmpty(), "authenticator options should exist");
 
-        IrcClientService.QuasselCoreSetupRequest setup =
-            new IrcClientService.QuasselCoreSetupRequest(
+        QuasselCoreControlPort.QuasselCoreSetupRequest setup =
+            new QuasselCoreControlPort.QuasselCoreSetupRequest(
                 runtimeCfg.login(),
                 runtimeCfg.password(),
                 firstNonBlank(prompt.storageBackends(), "SQLite"),
@@ -388,13 +388,13 @@ class QuasselCoreContainerIntegrationTest {
       return;
     }
 
-    IrcClientService.QuasselCoreSetupPrompt prompt =
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
         service
             .quasselCoreSetupPrompt(sid)
             .orElseThrow(
                 () -> new IllegalStateException("setup pending but no setup prompt found"));
-    IrcClientService.QuasselCoreSetupRequest setup =
-        new IrcClientService.QuasselCoreSetupRequest(
+    QuasselCoreControlPort.QuasselCoreSetupRequest setup =
+        new QuasselCoreControlPort.QuasselCoreSetupRequest(
             runtimeCfg.login(),
             runtimeCfg.password(),
             firstNonBlank(prompt.storageBackends(), "SQLite"),

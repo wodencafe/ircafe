@@ -9,7 +9,9 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer;
+import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
@@ -53,6 +55,8 @@ public class OutboundChatCommandService {
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
   private final IrcClientService irc;
+  private final IrcBackendAvailabilityPort backendAvailability;
+  private final QuasselCoreControlPort quasselControl;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
@@ -91,6 +95,8 @@ public class OutboundChatCommandService {
       WhoisRoutingPort whoisRoutingState,
       IgnoreListCommandPort ignoreListService) {
     this.irc = irc;
+    this.backendAvailability = IrcBackendAvailabilityPort.from(irc);
+    this.quasselControl = QuasselCoreControlPort.from(irc);
     this.ui = ui;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
@@ -284,18 +290,19 @@ public class OutboundChatCommandService {
     if (!ensureQuasselServerBackend(sid, status, "(qsetup)")) {
       return;
     }
-    if (!irc.isQuasselCoreSetupPending(sid)) {
+    if (!quasselControl.isQuasselCoreSetupPending(sid)) {
       ui.appendStatus(status, "(qsetup)", "No pending Quassel Core setup for this server.");
       return;
     }
 
-    IrcClientService.QuasselCoreSetupPrompt prompt =
-        irc.quasselCoreSetupPrompt(sid)
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
+        quasselControl
+            .quasselCoreSetupPrompt(sid)
             .orElse(
-                new IrcClientService.QuasselCoreSetupPrompt(
+                new QuasselCoreControlPort.QuasselCoreSetupPrompt(
                     sid, "", List.of(), List.of(), Map.of()));
 
-    Optional<IrcClientService.QuasselCoreSetupRequest> maybeRequest =
+    Optional<QuasselCoreControlPort.QuasselCoreSetupRequest> maybeRequest =
         ui.promptQuasselCoreSetup(sid, prompt);
     if (maybeRequest.isEmpty()) {
       ui.appendStatus(status, "(qsetup)", "Quassel Core setup canceled.");
@@ -303,7 +310,8 @@ public class OutboundChatCommandService {
     }
 
     disposables.add(
-        irc.submitQuasselCoreSetup(sid, maybeRequest.orElseThrow())
+        quasselControl
+            .submitQuasselCoreSetup(sid, maybeRequest.orElseThrow())
             .subscribe(
                 () -> {
                   connectionCoordinator.markQuasselSetupSubmitted(sid);
@@ -375,7 +383,8 @@ public class OutboundChatCommandService {
 
   private void openQuasselNetworkManagerPrompt(
       CompositeDisposable disposables, String serverId, TargetRef status) {
-    List<IrcClientService.QuasselCoreNetworkSummary> networks = irc.quasselCoreNetworks(serverId);
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
+        quasselControl.quasselCoreNetworks(serverId);
     Optional<QuasselNetworkManagerAction> maybeAction =
         ui.promptQuasselNetworkManagerAction(serverId, networks);
     if (maybeAction.isEmpty()) {
@@ -405,7 +414,8 @@ public class OutboundChatCommandService {
           return;
         }
         disposables.add(
-            irc.quasselCoreConnectNetwork(serverId, network)
+            quasselControl
+                .quasselCoreConnectNetwork(serverId, network)
                 .subscribe(
                     () -> {
                       ui.appendStatus(
@@ -427,7 +437,8 @@ public class OutboundChatCommandService {
           return;
         }
         disposables.add(
-            irc.quasselCoreDisconnectNetwork(serverId, network)
+            quasselControl
+                .quasselCoreDisconnectNetwork(serverId, network)
                 .subscribe(
                     () -> {
                       ui.appendStatus(
@@ -449,7 +460,8 @@ public class OutboundChatCommandService {
           return;
         }
         disposables.add(
-            irc.quasselCoreRemoveNetwork(serverId, network)
+            quasselControl
+                .quasselCoreRemoveNetwork(serverId, network)
                 .subscribe(
                     () -> {
                       ui.appendStatus(
@@ -464,13 +476,14 @@ public class OutboundChatCommandService {
                     }));
       }
       case ADD -> {
-        IrcClientService.QuasselCoreNetworkCreateRequest request = action.createRequest();
+        QuasselCoreControlPort.QuasselCoreNetworkCreateRequest request = action.createRequest();
         if (request == null) {
           openQuasselNetworkManagerPrompt(disposables, serverId, status);
           return;
         }
         disposables.add(
-            irc.quasselCoreCreateNetwork(serverId, request)
+            quasselControl
+                .quasselCoreCreateNetwork(serverId, request)
                 .subscribe(
                     () -> {
                       ui.appendStatus(
@@ -492,14 +505,15 @@ public class OutboundChatCommandService {
       }
       case EDIT -> {
         String network = Objects.toString(action.networkIdOrName(), "").trim();
-        IrcClientService.QuasselCoreNetworkUpdateRequest request = action.updateRequest();
+        QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest request = action.updateRequest();
         if (network.isEmpty() || request == null) {
           ui.appendStatus(status, "(qnet-ui)", "Select a network first.");
           openQuasselNetworkManagerPrompt(disposables, serverId, status);
           return;
         }
         disposables.add(
-            irc.quasselCoreUpdateNetwork(serverId, network, request)
+            quasselControl
+                .quasselCoreUpdateNetwork(serverId, network, request)
                 .subscribe(
                     () -> {
                       ui.appendStatus(
@@ -566,7 +580,8 @@ public class OutboundChatCommandService {
     return quasselCommandSupport.ensureQuasselServerBackend(serverId, out, statusTag, ui);
   }
 
-  private String renderQuasselNetworkSummary(IrcClientService.QuasselCoreNetworkSummary network) {
+  private String renderQuasselNetworkSummary(
+      QuasselCoreControlPort.QuasselCoreNetworkSummary network) {
     return quasselCommandSupport.renderNetworkSummary(network);
   }
 
@@ -1328,12 +1343,15 @@ public class OutboundChatCommandService {
 
   private Map<String, QuasselNetworkVerbHandler> buildQuasselNetworkVerbHandlers() {
     LinkedHashMap<String, QuasselNetworkVerbHandler> handlers = new LinkedHashMap<>();
+    registerQuasselNetworkVerbHandler(handlers, this::handleQuasselNetworkListVerb, "list", "ls");
     registerQuasselNetworkVerbHandler(
-        handlers, this::handleQuasselNetworkListVerb, "list", "ls");
-    registerQuasselNetworkVerbHandler(
-        handlers, this::handleQuasselNetworkConnectLikeVerb, "connect", "disconnect", "remove", "rm");
-    registerQuasselNetworkVerbHandler(
-        handlers, this::handleQuasselNetworkAddVerb, "add", "create");
+        handlers,
+        this::handleQuasselNetworkConnectLikeVerb,
+        "connect",
+        "disconnect",
+        "remove",
+        "rm");
+    registerQuasselNetworkVerbHandler(handlers, this::handleQuasselNetworkAddVerb, "add", "create");
     registerQuasselNetworkVerbHandler(
         handlers, this::handleQuasselNetworkEditVerb, "edit", "update", "set");
     return Map.copyOf(handlers);
@@ -1350,7 +1368,8 @@ public class OutboundChatCommandService {
       ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
       return;
     }
-    List<IrcClientService.QuasselCoreNetworkSummary> networks = irc.quasselCoreNetworks(serverId);
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
+        quasselControl.quasselCoreNetworks(serverId);
     if (networks.isEmpty()) {
       ui.appendStatus(
           status,
@@ -1359,7 +1378,7 @@ public class OutboundChatCommandService {
       return;
     }
     ui.appendStatus(status, "(qnet)", "Quassel networks:");
-    for (IrcClientService.QuasselCoreNetworkSummary network : networks) {
+    for (QuasselCoreControlPort.QuasselCoreNetworkSummary network : networks) {
       ui.appendStatus(status, "(qnet)", renderQuasselNetworkSummary(network));
     }
   }
@@ -1378,17 +1397,21 @@ public class OutboundChatCommandService {
     String network = tokens.get(cursor);
     if ("connect".equals(verb)) {
       disposables.add(
-          irc.quasselCoreConnectNetwork(serverId, network)
+          quasselControl
+              .quasselCoreConnectNetwork(serverId, network)
               .subscribe(
                   () ->
                       ui.appendStatus(
-                          status, "(qnet)", "Requested connect for Quassel network '" + network + "'."),
+                          status,
+                          "(qnet)",
+                          "Requested connect for Quassel network '" + network + "'."),
                   err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
       return;
     }
     if ("disconnect".equals(verb)) {
       disposables.add(
-          irc.quasselCoreDisconnectNetwork(serverId, network)
+          quasselControl
+              .quasselCoreDisconnectNetwork(serverId, network)
               .subscribe(
                   () ->
                       ui.appendStatus(
@@ -1399,11 +1422,14 @@ public class OutboundChatCommandService {
       return;
     }
     disposables.add(
-        irc.quasselCoreRemoveNetwork(serverId, network)
+        quasselControl
+            .quasselCoreRemoveNetwork(serverId, network)
             .subscribe(
                 () ->
                     ui.appendStatus(
-                        status, "(qnet)", "Requested removal of Quassel network '" + network + "'."),
+                        status,
+                        "(qnet)",
+                        "Requested removal of Quassel network '" + network + "'."),
                 err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
   }
 
@@ -1446,11 +1472,12 @@ public class OutboundChatCommandService {
     int port = explicitPort != null ? explicitPort.intValue() : (useTls ? 6697 : 6667);
     final int requestedPort = port;
     final boolean requestedTls = useTls;
-    IrcClientService.QuasselCoreNetworkCreateRequest request =
-        new IrcClientService.QuasselCoreNetworkCreateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkCreateRequest request =
+        new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
             networkName, serverHost, requestedPort, requestedTls, "", true, null, List.of());
     disposables.add(
-        irc.quasselCoreCreateNetwork(serverId, request)
+        quasselControl
+            .quasselCoreCreateNetwork(serverId, request)
             .subscribe(
                 () ->
                     ui.appendStatus(
@@ -1505,11 +1532,12 @@ public class OutboundChatCommandService {
     int port = explicitPort != null ? explicitPort.intValue() : (useTls ? 6697 : 6667);
     final int requestedPort = port;
     final boolean requestedTls = useTls;
-    IrcClientService.QuasselCoreNetworkUpdateRequest request =
-        new IrcClientService.QuasselCoreNetworkUpdateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest request =
+        new QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest(
             "", serverHost, requestedPort, requestedTls, "", true, null, null);
     disposables.add(
-        irc.quasselCoreUpdateNetwork(serverId, network, request)
+        quasselControl
+            .quasselCoreUpdateNetwork(serverId, network, request)
             .subscribe(
                 () ->
                     ui.appendStatus(
@@ -2863,7 +2891,7 @@ public class OutboundChatCommandService {
 
   private String normalizedBackendAvailabilityReason(String serverId) {
     try {
-      return Objects.toString(irc.backendAvailabilityReason(serverId), "").trim();
+      return Objects.toString(backendAvailability.backendAvailabilityReason(serverId), "").trim();
     } catch (Exception ignored) {
       return "";
     }

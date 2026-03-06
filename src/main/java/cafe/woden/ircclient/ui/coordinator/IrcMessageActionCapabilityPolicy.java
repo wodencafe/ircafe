@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.coordinator;
 
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
@@ -7,9 +8,11 @@ import java.util.function.BooleanSupplier;
 /** IrcClientService-backed capability policy for transcript message actions. */
 public final class IrcMessageActionCapabilityPolicy implements MessageActionCapabilityPolicy {
   private final IrcClientService irc;
+  private final IrcBouncerPlaybackPort bouncerPlayback;
 
   public IrcMessageActionCapabilityPolicy(IrcClientService irc) {
     this.irc = irc;
+    this.bouncerPlayback = IrcBouncerPlaybackPort.from(irc);
   }
 
   @Override
@@ -48,7 +51,8 @@ public final class IrcMessageActionCapabilityPolicy implements MessageActionCapa
   public boolean canLoadNewerHistory(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty() || irc == null) return false;
-    return safe(() -> irc.isChatHistoryAvailable(sid) || irc.isZncPlaybackAvailable(sid));
+    return safe(
+        () -> irc.isChatHistoryAvailable(sid) || bouncerPlayback.isZncPlaybackAvailable(sid));
   }
 
   private static String normalizeServerId(String serverId) {

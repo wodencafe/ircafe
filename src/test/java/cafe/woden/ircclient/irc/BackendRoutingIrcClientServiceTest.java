@@ -227,20 +227,20 @@ class BackendRoutingIrcClientServiceTest {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
     IrcBackendClientService quasselBackend = mock(IrcBackendClientService.class);
-    IrcClientService.QuasselCoreSetupPrompt prompt =
-        new IrcClientService.QuasselCoreSetupPrompt(
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
+        new QuasselCoreControlPort.QuasselCoreSetupPrompt(
             "quassel", "setup required", List.of("SQLite"), List.of("Database"), Map.of());
-    IrcClientService.QuasselCoreSetupRequest request =
-        new IrcClientService.QuasselCoreSetupRequest(
+    QuasselCoreControlPort.QuasselCoreSetupRequest request =
+        new QuasselCoreControlPort.QuasselCoreSetupRequest(
             "admin", "secret", "SQLite", "Database", Map.of(), Map.of());
-    IrcClientService.QuasselCoreNetworkSummary network =
-        new IrcClientService.QuasselCoreNetworkSummary(
+    QuasselCoreControlPort.QuasselCoreNetworkSummary network =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
             1, "libera", true, true, 1, "irc.libera.chat", 6697, true, Map.of());
-    IrcClientService.QuasselCoreNetworkCreateRequest createRequest =
-        new IrcClientService.QuasselCoreNetworkCreateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkCreateRequest createRequest =
+        new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
             "libera", "irc.libera.chat", 6697, true, "", true, 1, List.of());
-    IrcClientService.QuasselCoreNetworkUpdateRequest updateRequest =
-        new IrcClientService.QuasselCoreNetworkUpdateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest updateRequest =
+        new QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest(
             "", "irc2.libera.chat", 6667, false, "", true, null, null);
 
     when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);

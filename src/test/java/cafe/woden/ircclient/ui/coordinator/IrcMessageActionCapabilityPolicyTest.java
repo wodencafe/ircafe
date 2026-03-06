@@ -5,14 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcBackendClientService;
 import org.junit.jupiter.api.Test;
 
 class IrcMessageActionCapabilityPolicyTest {
 
   @Test
   void delegatesCapabilitiesPerServer() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     when(irc.isDraftReplyAvailable("matrix")).thenReturn(true);
     when(irc.isDraftReactAvailable("matrix")).thenReturn(true);
     when(irc.isDraftUnreactAvailable("matrix")).thenReturn(true);
@@ -50,7 +50,7 @@ class IrcMessageActionCapabilityPolicyTest {
 
   @Test
   void returnsFalseWhenBackendCapabilityLookupThrows() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     when(irc.isDraftReplyAvailable("broken")).thenThrow(new RuntimeException("boom"));
     when(irc.isChatHistoryAvailable("broken")).thenThrow(new RuntimeException("boom"));
     when(irc.isZncPlaybackAvailable("broken")).thenThrow(new RuntimeException("boom"));

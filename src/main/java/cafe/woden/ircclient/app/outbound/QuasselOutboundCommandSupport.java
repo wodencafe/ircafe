@@ -3,7 +3,7 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Locale;
 import java.util.Objects;
@@ -82,7 +82,7 @@ final class QuasselOutboundCommandSupport {
     };
   }
 
-  String renderNetworkSummary(IrcClientService.QuasselCoreNetworkSummary network) {
+  String renderNetworkSummary(QuasselCoreControlPort.QuasselCoreNetworkSummary network) {
     if (network == null) return "(unknown network)";
     String name = Objects.toString(network.networkName(), "").trim();
     if (name.isBlank()) name = "network-" + network.networkId();

@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.backend;
 
+import cafe.woden.ircclient.irc.IrcBackendModePort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import java.util.Objects;
 import java.util.function.Predicate;
@@ -32,8 +33,13 @@ public interface BackendUiContext {
             : BackendMode.IRC;
   }
 
+  static BackendUiContext fromBackendModePort(IrcBackendModePort backendMode) {
+    if (backendMode == null) return ircOnly();
+    return fromMatrixServerPredicate(backendMode::isMatrixBackendServer);
+  }
+
   static BackendUiContext fromIrcClientService(IrcClientService irc) {
     if (irc == null) return ircOnly();
-    return fromMatrixServerPredicate(irc::isMatrixBackendServer);
+    return fromBackendModePort(IrcBackendModePort.from(irc));
   }
 }

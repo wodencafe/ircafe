@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc.enrichment;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.IrcRuntimeSettings;
@@ -51,6 +52,7 @@ public class UserInfoEnrichmentService {
   private static final long NO_WAKE_NEEDED_MS = Long.MAX_VALUE;
 
   private final IrcClientService irc;
+  private final IrcBackendAvailabilityPort backendAvailability;
   private final ObjectProvider<IrcRuntimeSettingsProvider> settingsProvider;
 
   private final UserInfoEnrichmentPlanner planner;
@@ -95,6 +97,7 @@ public class UserInfoEnrichmentService {
       UserInfoEnrichmentPlanner planner,
       @Qualifier(ExecutorConfig.USER_INFO_ENRICHMENT_SCHEDULER) ScheduledExecutorService exec) {
     this.irc = Objects.requireNonNull(irc, "irc");
+    this.backendAvailability = IrcBackendAvailabilityPort.from(irc);
     this.settingsProvider = Objects.requireNonNull(settingsProvider, "settingsProvider");
     this.planner = Objects.requireNonNull(planner, "planner");
     this.exec = Objects.requireNonNull(exec, "exec");
@@ -456,7 +459,8 @@ public class UserInfoEnrichmentService {
   }
 
   private boolean isConnected(String serverId) {
-    String backendReason = Objects.toString(irc.backendAvailabilityReason(serverId), "").trim();
+    String backendReason =
+        Objects.toString(backendAvailability.backendAvailabilityReason(serverId), "").trim();
     if (!backendReason.isEmpty()) return false;
     return irc.currentNick(serverId).isPresent();
   }

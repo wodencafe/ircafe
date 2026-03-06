@@ -9,6 +9,7 @@ import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
@@ -43,6 +44,7 @@ public class TargetCoordinator implements ActiveTargetPort {
   private final UiPort ui;
   private final UserListStore userListStore;
   private final IrcClientService irc;
+  private final IrcBouncerPlaybackPort bouncerPlayback;
   private final ServerRegistry serverRegistry;
   private final RuntimeConfigStore runtimeConfig;
   private final ConnectionCoordinator connectionCoordinator;
@@ -90,6 +92,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     this.ui = ui;
     this.userListStore = userListStore;
     this.irc = irc;
+    this.bouncerPlayback = IrcBouncerPlaybackPort.from(irc);
     this.serverRegistry = serverRegistry;
     this.runtimeConfig = runtimeConfig;
     this.connectionCoordinator = connectionCoordinator;
@@ -662,7 +665,7 @@ public class TargetCoordinator implements ActiveTargetPort {
   private boolean supportsBouncerDetach(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
-    return irc.isSojuBouncerAvailable(sid) || irc.isZncBouncerDetected(sid);
+    return bouncerPlayback.isSojuBouncerAvailable(sid) || bouncerPlayback.isZncBouncerDetected(sid);
   }
 
   private Completable bouncerDetach(String serverId, String channel) {
@@ -671,10 +674,10 @@ public class TargetCoordinator implements ActiveTargetPort {
     if (sid.isEmpty() || ch.isEmpty()) {
       return Completable.error(new IllegalArgumentException("serverId/channel is blank"));
     }
-    if (irc.isSojuBouncerAvailable(sid)) {
+    if (bouncerPlayback.isSojuBouncerAvailable(sid)) {
       return irc.partChannel(sid, ch, "detach");
     }
-    if (irc.isZncBouncerDetected(sid)) {
+    if (bouncerPlayback.isZncBouncerDetected(sid)) {
       return irc.sendRaw(sid, "DETACH " + ch);
     }
     return irc.partChannel(sid, ch, null);

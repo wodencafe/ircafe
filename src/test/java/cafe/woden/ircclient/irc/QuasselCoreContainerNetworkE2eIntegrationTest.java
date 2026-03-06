@@ -97,12 +97,12 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
         assertEquals("", service.backendAvailabilityReason(sid));
 
         String networkName = "it-net-" + Long.toHexString(System.currentTimeMillis());
-        IrcClientService.QuasselCoreNetworkCreateRequest create =
-            new IrcClientService.QuasselCoreNetworkCreateRequest(
+        QuasselCoreControlPort.QuasselCoreNetworkCreateRequest create =
+            new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
                 networkName, cfg.ircAlias(), cfg.ircPort(), false, "", true, null, List.of());
         service.quasselCoreCreateNetwork(sid, create).blockingAwait();
 
-        IrcClientService.QuasselCoreNetworkSummary createdNetwork =
+        QuasselCoreControlPort.QuasselCoreNetworkSummary createdNetwork =
             tryAwaitNetworkObserved(service, sid, networkName, Duration.ofSeconds(20));
         if (createdNetwork == null) {
           reconnectAndAwaitReady(service, events, sid);
@@ -195,13 +195,13 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
       return;
     }
 
-    IrcClientService.QuasselCoreSetupPrompt prompt =
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
         service
             .quasselCoreSetupPrompt(sid)
             .orElseThrow(
                 () -> new IllegalStateException("setup pending but no setup prompt found"));
-    IrcClientService.QuasselCoreSetupRequest setup =
-        new IrcClientService.QuasselCoreSetupRequest(
+    QuasselCoreControlPort.QuasselCoreSetupRequest setup =
+        new QuasselCoreControlPort.QuasselCoreSetupRequest(
             runtimeCfg.login(),
             runtimeCfg.password(),
             firstNonBlank(prompt.storageBackends(), "SQLite"),
@@ -216,14 +216,14 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
         events, sid, IrcEvent.ConnectionReady.class, reconnectReadyCount, CONNECT_TIMEOUT);
   }
 
-  private static IrcClientService.QuasselCoreNetworkSummary tryAwaitNetworkObserved(
+  private static QuasselCoreControlPort.QuasselCoreNetworkSummary tryAwaitNetworkObserved(
       QuasselCoreIrcClientService service, String serverId, String networkName, Duration timeout)
       throws InterruptedException {
     long deadlineNs = System.nanoTime() + timeout.toNanos();
     while (System.nanoTime() < deadlineNs) {
-      List<IrcClientService.QuasselCoreNetworkSummary> networks =
+      List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
           service.quasselCoreNetworks(serverId);
-      for (IrcClientService.QuasselCoreNetworkSummary summary : networks) {
+      for (QuasselCoreControlPort.QuasselCoreNetworkSummary summary : networks) {
         if (summary == null) continue;
         if (!networkName.equalsIgnoreCase(Objects.toString(summary.networkName(), "").trim()))
           continue;
@@ -234,12 +234,12 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
     return null;
   }
 
-  private static IrcClientService.QuasselCoreNetworkSummary awaitAnyNetworkObserved(
+  private static QuasselCoreControlPort.QuasselCoreNetworkSummary awaitAnyNetworkObserved(
       QuasselCoreIrcClientService service, String serverId, Duration timeout)
       throws InterruptedException {
     long deadlineNs = System.nanoTime() + timeout.toNanos();
     while (System.nanoTime() < deadlineNs) {
-      List<IrcClientService.QuasselCoreNetworkSummary> networks =
+      List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
           service.quasselCoreNetworks(serverId);
       if (!networks.isEmpty()) {
         return networks.get(0);
@@ -254,9 +254,9 @@ class QuasselCoreContainerNetworkE2eIntegrationTest {
       throws InterruptedException {
     long deadlineNs = System.nanoTime() + timeout.toNanos();
     while (System.nanoTime() < deadlineNs) {
-      List<IrcClientService.QuasselCoreNetworkSummary> networks =
+      List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
           service.quasselCoreNetworks(serverId);
-      for (IrcClientService.QuasselCoreNetworkSummary summary : networks) {
+      for (QuasselCoreControlPort.QuasselCoreNetworkSummary summary : networks) {
         if (summary == null) continue;
         if (summary.networkId() != networkId) continue;
         if (summary.connected()) return;

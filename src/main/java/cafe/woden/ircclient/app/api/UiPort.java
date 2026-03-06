@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.app.api;
 
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
@@ -213,8 +213,8 @@ public interface UiPort {
    *
    * <p>Returns empty when canceled or unsupported in the current UI implementation.
    */
-  default Optional<IrcClientService.QuasselCoreSetupRequest> promptQuasselCoreSetup(
-      String serverId, IrcClientService.QuasselCoreSetupPrompt prompt) {
+  default Optional<QuasselCoreControlPort.QuasselCoreSetupRequest> promptQuasselCoreSetup(
+      String serverId, QuasselCoreControlPort.QuasselCoreSetupPrompt prompt) {
     return Optional.empty();
   }
 
@@ -224,7 +224,7 @@ public interface UiPort {
    * <p>Returns empty when the dialog is canceled/closed.
    */
   default Optional<QuasselNetworkManagerAction> promptQuasselNetworkManagerAction(
-      String serverId, List<IrcClientService.QuasselCoreNetworkSummary> networks) {
+      String serverId, List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {
     return Optional.empty();
   }
 

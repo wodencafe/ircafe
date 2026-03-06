@@ -28,7 +28,12 @@ import org.springframework.stereotype.Service;
 @Primary
 @InfrastructureLayer
 public class BackendRoutingIrcClientService
-    implements IrcClientService, IrcHeartbeatMaintenanceService {
+    implements IrcClientService,
+        IrcHeartbeatMaintenanceService,
+        IrcBackendAvailabilityPort,
+        IrcBackendModePort,
+        QuasselCoreControlPort,
+        IrcBouncerPlaybackPort {
   private static final Logger log = LoggerFactory.getLogger(BackendRoutingIrcClientService.class);
 
   private final ServerCatalog serverCatalog;
@@ -241,6 +246,11 @@ public class BackendRoutingIrcClientService
   @Override
   public String backendAvailabilityReason(String serverId) {
     return routeActiveOrConfigured(serverId).backendAvailabilityReason(serverId);
+  }
+
+  @Override
+  public IrcProperties.Server.Backend backendForServer(String serverId) {
+    return effectiveBackendForServer(serverId);
   }
 
   @Override

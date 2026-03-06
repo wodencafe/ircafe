@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.chat;
 
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -63,6 +64,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private final Consumer<TargetRef> activate;
   private final OutboundLineBus outboundBus;
   private final IrcClientService irc;
+  private final IrcBouncerPlaybackPort bouncerPlayback;
   private final BiConsumer<TargetRef, String> onDraftChanged;
   private final BiConsumer<TargetRef, String> onClosed;
 
@@ -100,6 +102,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.activate = activate;
     this.outboundBus = outboundBus;
     this.irc = irc;
+    this.bouncerPlayback = IrcBouncerPlaybackPort.from(irc);
     this.activeInputRouter = activeInputRouter;
     this.onDraftChanged = onDraftChanged;
     this.onClosed = onClosed;
@@ -737,7 +740,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private boolean isZncPlaybackSupportedForServer(String serverId) {
     if (irc == null) return false;
     try {
-      return irc.isZncPlaybackAvailable(serverId);
+      return bouncerPlayback.isZncPlaybackAvailable(serverId);
     } catch (Exception ignored) {
       return false;
     }

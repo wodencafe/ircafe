@@ -21,8 +21,9 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.BackendNotAvailableException;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
 import java.time.Instant;
@@ -39,7 +40,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void queuedConnectDuringDisconnectReconnectsAfterDisconnectedEvent() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -76,7 +77,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void globalControlsReflectDesiredIntentAcrossServers() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -114,7 +115,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void startupConnectSkipsServersWithAutoConnectDisabled() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -145,7 +146,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void onServersUpdatedTriggersControlledReconnectWhenBackendChanges() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -192,7 +193,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void connectFailureFromUnavailableBackendClearsDesiredIntent() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -233,7 +234,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void externalConnectingEventPromotesDesiredIntentInsteadOfForcingDisconnect() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -264,7 +265,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void externalReconnectingEventPromotesDesiredIntentInsteadOfForcingDisconnect() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -294,7 +295,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void reconnectingEventPublishesRetryDiagnostics() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -325,7 +326,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void connectedEventRestoresSavedPrivateMessageTargets() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -359,7 +360,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void connectedEventSkipsKnownCorruptPersistedPrivateMessageTargets() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -390,7 +391,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void connectedEventWithFallbackNickDoesNotPersistNickToConfig() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -420,7 +421,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void connectedEventDefersUntilConnectionReadyWhenBackendIsNotReady() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -462,7 +463,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void connectionFeaturesSetupRequiredShowsNoticeAndTurnsServerOffline() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -515,7 +516,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void connectionFeaturesSetupRequiredAutoPromptsAndSubmitsSetup() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -526,11 +527,11 @@ class ConnectionCoordinatorTest {
     when(serverCatalog.containsId("quassel")).thenReturn(true);
     when(irc.connect("quassel")).thenReturn(Completable.never());
     when(irc.isQuasselCoreSetupPending("quassel")).thenReturn(true);
-    IrcClientService.QuasselCoreSetupPrompt prompt =
-        new IrcClientService.QuasselCoreSetupPrompt(
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
+        new QuasselCoreControlPort.QuasselCoreSetupPrompt(
             "quassel", "setup required", List.of("SQLite"), List.of("Database"), Map.of());
-    IrcClientService.QuasselCoreSetupRequest request =
-        new IrcClientService.QuasselCoreSetupRequest(
+    QuasselCoreControlPort.QuasselCoreSetupRequest request =
+        new QuasselCoreControlPort.QuasselCoreSetupRequest(
             "admin", "secret", "SQLite", "Database", Map.of(), Map.of());
     when(irc.quasselCoreSetupPrompt("quassel")).thenReturn(Optional.of(prompt));
     when(ui.promptQuasselCoreSetup("quassel", prompt)).thenReturn(Optional.of(request));
@@ -574,7 +575,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void connectionFeaturesProtocolNegotiatedAppendsProgressStatus() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -610,7 +611,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void connectionFeaturesSyncReadyAppendsProgressStatusToStatusAndActiveTarget() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -653,7 +654,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void connectionFeaturesPhaseProgressionAppendsAllUserVisibleStatusMessages() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -731,7 +732,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void reconnectingAndDisconnectedEventsAppendClearStatusMessages() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
@@ -773,7 +774,7 @@ class ConnectionCoordinatorTest {
 
   @Test
   void constructorRestoresJoinedChannelsAsDetached() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
     ServerRegistry serverRegistry = mock(ServerRegistry.class);
     ServerCatalog serverCatalog = mock(ServerCatalog.class);

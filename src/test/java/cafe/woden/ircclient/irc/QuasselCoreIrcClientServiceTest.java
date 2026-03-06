@@ -676,7 +676,7 @@ class QuasselCoreIrcClientServiceTest {
                     List.of(Map.of("server", "irc.libera.chat", "port", 6697, "useSSL", true))))));
 
     long deadline = System.currentTimeMillis() + 2_000L;
-    List<IrcClientService.QuasselCoreNetworkSummary> networks = List.of();
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks = List.of();
     while (System.currentTimeMillis() < deadline) {
       networks = service.quasselCoreNetworks("quassel");
       if (networks.stream().anyMatch(n -> n.networkId() == 2 && "libera".equals(n.networkName()))) {
@@ -685,7 +685,7 @@ class QuasselCoreIrcClientServiceTest {
       Thread.sleep(10L);
     }
 
-    IrcClientService.QuasselCoreNetworkSummary libera =
+    QuasselCoreControlPort.QuasselCoreNetworkSummary libera =
         networks.stream().filter(n -> n.networkId() == 2).findFirst().orElseThrow();
     assertEquals("libera", libera.networkName());
     assertTrue(libera.connected());
@@ -791,11 +791,11 @@ class QuasselCoreIrcClientServiceTest {
       Thread.sleep(10L);
     }
 
-    IrcClientService.QuasselCoreNetworkCreateRequest createRequest =
-        new IrcClientService.QuasselCoreNetworkCreateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkCreateRequest createRequest =
+        new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
             "libera", "irc.libera.chat", 6697, true, "", true, null, List.of("#ircafe"));
-    IrcClientService.QuasselCoreNetworkUpdateRequest updateRequest =
-        new IrcClientService.QuasselCoreNetworkUpdateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest updateRequest =
+        new QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest(
             "", "irc2.libera.chat", 6667, false, "", true, null, null);
     service.quasselCoreCreateNetwork("quassel", createRequest).blockingAwait();
     service.quasselCoreUpdateNetwork("quassel", "1", updateRequest).blockingAwait();
@@ -2681,13 +2681,13 @@ class QuasselCoreIrcClientServiceTest {
     events.awaitCount(3);
 
     assertTrue(service.isQuasselCoreSetupPending("quassel"));
-    IrcClientService.QuasselCoreSetupPrompt prompt =
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
         service.quasselCoreSetupPrompt("quassel").orElseThrow();
     assertTrue(prompt.storageBackends().contains("SQLite"));
     assertTrue(prompt.authenticators().contains("Database"));
 
-    IrcClientService.QuasselCoreSetupRequest request =
-        new IrcClientService.QuasselCoreSetupRequest(
+    QuasselCoreControlPort.QuasselCoreSetupRequest request =
+        new QuasselCoreControlPort.QuasselCoreSetupRequest(
             "admin", "secret", "SQLite", "Database", Map.of(), Map.of());
     service.submitQuasselCoreSetup("quassel", request).blockingAwait();
 

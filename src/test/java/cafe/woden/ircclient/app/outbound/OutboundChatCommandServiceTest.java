@@ -25,7 +25,8 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
@@ -47,7 +48,7 @@ import org.mockito.ArgumentCaptor;
 
 class OutboundChatCommandServiceTest {
 
-  private final IrcClientService irc = mock(IrcClientService.class);
+  private final IrcBackendClientService irc = mock(IrcBackendClientService.class);
   private final UiPort ui = mock(UiPort.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
@@ -260,11 +261,11 @@ class OutboundChatCommandServiceTest {
   @Test
   void quasselSetupRequestsPromptThenSubmitsAndReconnects() {
     TargetRef status = new TargetRef("quassel", "status");
-    IrcClientService.QuasselCoreSetupPrompt prompt =
-        new IrcClientService.QuasselCoreSetupPrompt(
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
+        new QuasselCoreControlPort.QuasselCoreSetupPrompt(
             "quassel", "setup required", List.of("SQLite"), List.of("Database"), Map.of());
-    IrcClientService.QuasselCoreSetupRequest request =
-        new IrcClientService.QuasselCoreSetupRequest(
+    QuasselCoreControlPort.QuasselCoreSetupRequest request =
+        new QuasselCoreControlPort.QuasselCoreSetupRequest(
             "admin", "secret", "SQLite", "Database", Map.of(), Map.of());
 
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
@@ -288,8 +289,8 @@ class OutboundChatCommandServiceTest {
   @Test
   void quasselSetupCancelReportsStatusAndDoesNotSubmitOrReconnect() {
     TargetRef status = new TargetRef("quassel", "status");
-    IrcClientService.QuasselCoreSetupPrompt prompt =
-        new IrcClientService.QuasselCoreSetupPrompt(
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
+        new QuasselCoreControlPort.QuasselCoreSetupPrompt(
             "quassel", "setup required", List.of("SQLite"), List.of("Database"), Map.of());
 
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
@@ -343,8 +344,8 @@ class OutboundChatCommandServiceTest {
   @Test
   void quasselNetworkListPrintsObservedNetworks() {
     TargetRef status = new TargetRef("quassel", "status");
-    IrcClientService.QuasselCoreNetworkSummary summary =
-        new IrcClientService.QuasselCoreNetworkSummary(
+    QuasselCoreControlPort.QuasselCoreNetworkSummary summary =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
             2, "libera", true, true, 1, "irc.libera.chat", 6697, true, Map.of());
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
     when(serverCatalog.find("quassel"))
@@ -369,8 +370,8 @@ class OutboundChatCommandServiceTest {
 
     service.handleQuasselNetwork(disposables, "quassel add libera irc.libera.chat 6697 tls");
 
-    ArgumentCaptor<IrcClientService.QuasselCoreNetworkCreateRequest> requestCaptor =
-        ArgumentCaptor.forClass(IrcClientService.QuasselCoreNetworkCreateRequest.class);
+    ArgumentCaptor<QuasselCoreControlPort.QuasselCoreNetworkCreateRequest> requestCaptor =
+        ArgumentCaptor.forClass(QuasselCoreControlPort.QuasselCoreNetworkCreateRequest.class);
     verify(irc).quasselCoreCreateNetwork(eq("quassel"), requestCaptor.capture());
     assertEquals("libera", requestCaptor.getValue().networkName());
     assertEquals("irc.libera.chat", requestCaptor.getValue().serverHost());
@@ -390,8 +391,8 @@ class OutboundChatCommandServiceTest {
 
     service.handleQuasselNetwork(disposables, "quassel edit libera irc2.libera.chat 6667 plain");
 
-    ArgumentCaptor<IrcClientService.QuasselCoreNetworkUpdateRequest> requestCaptor =
-        ArgumentCaptor.forClass(IrcClientService.QuasselCoreNetworkUpdateRequest.class);
+    ArgumentCaptor<QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest> requestCaptor =
+        ArgumentCaptor.forClass(QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest.class);
     verify(irc).quasselCoreUpdateNetwork(eq("quassel"), eq("libera"), requestCaptor.capture());
     assertEquals("irc2.libera.chat", requestCaptor.getValue().serverHost());
     assertEquals(6667, requestCaptor.getValue().serverPort());
@@ -415,8 +416,8 @@ class OutboundChatCommandServiceTest {
   @Test
   void quasselNetworkManagerConnectActionInvokesBackendAndReopensPrompt() {
     TargetRef status = new TargetRef("quassel", "status");
-    IrcClientService.QuasselCoreNetworkSummary summary =
-        new IrcClientService.QuasselCoreNetworkSummary(
+    QuasselCoreControlPort.QuasselCoreNetworkSummary summary =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
             2, "libera", false, true, 1, "irc.libera.chat", 6697, true, Map.of());
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
     when(serverCatalog.find("quassel"))
@@ -437,8 +438,8 @@ class OutboundChatCommandServiceTest {
   @Test
   void quasselNetworkManagerConnectErrorAppendsUiErrorAndReopensPrompt() {
     TargetRef status = new TargetRef("quassel", "status");
-    IrcClientService.QuasselCoreNetworkSummary summary =
-        new IrcClientService.QuasselCoreNetworkSummary(
+    QuasselCoreControlPort.QuasselCoreNetworkSummary summary =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
             2, "libera", false, true, 1, "irc.libera.chat", 6697, true, Map.of());
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
     when(serverCatalog.find("quassel"))
@@ -461,8 +462,8 @@ class OutboundChatCommandServiceTest {
   @Test
   void quasselNetworkManagerDisconnectErrorAppendsUiErrorAndReopensPrompt() {
     TargetRef status = new TargetRef("quassel", "status");
-    IrcClientService.QuasselCoreNetworkSummary summary =
-        new IrcClientService.QuasselCoreNetworkSummary(
+    QuasselCoreControlPort.QuasselCoreNetworkSummary summary =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
             2, "libera", true, true, 1, "irc.libera.chat", 6697, true, Map.of());
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
     when(serverCatalog.find("quassel"))
@@ -485,8 +486,8 @@ class OutboundChatCommandServiceTest {
   @Test
   void quasselNetworkManagerRemoveErrorAppendsUiErrorAndReopensPrompt() {
     TargetRef status = new TargetRef("quassel", "status");
-    IrcClientService.QuasselCoreNetworkSummary summary =
-        new IrcClientService.QuasselCoreNetworkSummary(
+    QuasselCoreControlPort.QuasselCoreNetworkSummary summary =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
             2, "libera", true, true, 1, "irc.libera.chat", 6697, true, Map.of());
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
     when(serverCatalog.find("quassel"))
@@ -509,11 +510,11 @@ class OutboundChatCommandServiceTest {
   @Test
   void quasselNetworkManagerAddErrorAppendsUiErrorAndReopensPrompt() {
     TargetRef status = new TargetRef("quassel", "status");
-    IrcClientService.QuasselCoreNetworkSummary summary =
-        new IrcClientService.QuasselCoreNetworkSummary(
+    QuasselCoreControlPort.QuasselCoreNetworkSummary summary =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
             2, "libera", false, true, 1, "irc.libera.chat", 6697, true, Map.of());
-    IrcClientService.QuasselCoreNetworkCreateRequest request =
-        new IrcClientService.QuasselCoreNetworkCreateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkCreateRequest request =
+        new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
             "libera", "irc.libera.chat", 6697, true, "", true, null, List.of());
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
     when(serverCatalog.find("quassel"))
@@ -536,11 +537,11 @@ class OutboundChatCommandServiceTest {
   @Test
   void quasselNetworkManagerEditErrorAppendsUiErrorAndReopensPrompt() {
     TargetRef status = new TargetRef("quassel", "status");
-    IrcClientService.QuasselCoreNetworkSummary summary =
-        new IrcClientService.QuasselCoreNetworkSummary(
+    QuasselCoreControlPort.QuasselCoreNetworkSummary summary =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
             2, "libera", false, true, 1, "irc.libera.chat", 6697, true, Map.of());
-    IrcClientService.QuasselCoreNetworkUpdateRequest request =
-        new IrcClientService.QuasselCoreNetworkUpdateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest request =
+        new QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest(
             "", "irc2.libera.chat", 6667, false, "", true, null, null);
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
     when(serverCatalog.find("quassel"))
@@ -563,8 +564,8 @@ class OutboundChatCommandServiceTest {
   @Test
   void quasselNetworkManagerRefreshActionReopensPromptWithoutNetworkMutation() {
     TargetRef status = new TargetRef("quassel", "status");
-    IrcClientService.QuasselCoreNetworkSummary summary =
-        new IrcClientService.QuasselCoreNetworkSummary(
+    QuasselCoreControlPort.QuasselCoreNetworkSummary summary =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
             2, "libera", false, true, 1, "irc.libera.chat", 6697, true, Map.of());
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
     when(serverCatalog.find("quassel"))
@@ -589,11 +590,11 @@ class OutboundChatCommandServiceTest {
   @Test
   void quasselNetworkManagerAddActionCreatesNetworkAndReopensPrompt() {
     TargetRef status = new TargetRef("quassel", "status");
-    IrcClientService.QuasselCoreNetworkSummary summary =
-        new IrcClientService.QuasselCoreNetworkSummary(
+    QuasselCoreControlPort.QuasselCoreNetworkSummary summary =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
             2, "libera", false, true, 1, "irc.libera.chat", 6697, true, Map.of());
-    IrcClientService.QuasselCoreNetworkCreateRequest request =
-        new IrcClientService.QuasselCoreNetworkCreateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkCreateRequest request =
+        new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
             "libera", "irc.libera.chat", 6697, true, "", true, null, List.of());
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
     when(serverCatalog.find("quassel"))

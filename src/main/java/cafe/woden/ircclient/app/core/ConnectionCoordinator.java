@@ -9,8 +9,10 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.BackendNotAvailableException;
+import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -45,6 +47,8 @@ public class ConnectionCoordinator {
   }
 
   private final IrcClientService irc;
+  private final IrcBackendAvailabilityPort backendAvailability;
+  private final QuasselCoreControlPort quasselControl;
   private final UiPort ui;
   private final ServerRegistry serverRegistry;
   private final ServerCatalog serverCatalog;
@@ -92,6 +96,8 @@ public class ConnectionCoordinator {
       LogProperties logProps,
       TrayNotificationsPort trayNotificationService) {
     this.irc = irc;
+    this.backendAvailability = IrcBackendAvailabilityPort.from(irc);
+    this.quasselControl = QuasselCoreControlPort.from(irc);
     this.ui = ui;
     this.serverRegistry = serverRegistry;
     this.serverCatalog = serverCatalog;
@@ -528,7 +534,8 @@ public class ConnectionCoordinator {
           setDesiredOnline(id, true);
         }
 
-        String backendReason = Objects.toString(irc.backendAvailabilityReason(id), "").trim();
+        String backendReason =
+            Objects.toString(backendAvailability.backendAvailabilityReason(id), "").trim();
         if (!backendReason.isEmpty()) {
           setState(id, ConnectionState.CONNECTING);
           ui.ensureTargetExists(status);
@@ -781,21 +788,23 @@ public class ConnectionCoordinator {
   private void maybePromptQuasselSetup(String serverId, TargetRef status) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
-    if (!irc.isQuasselCoreSetupPending(sid)) return;
+    if (!quasselControl.isQuasselCoreSetupPending(sid)) return;
 
-    IrcClientService.QuasselCoreSetupPrompt prompt =
-        irc.quasselCoreSetupPrompt(sid)
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
+        quasselControl
+            .quasselCoreSetupPrompt(sid)
             .orElse(
-                new IrcClientService.QuasselCoreSetupPrompt(
+                new QuasselCoreControlPort.QuasselCoreSetupPrompt(
                     sid, "", List.of(), List.of(), Map.of()));
-    Optional<IrcClientService.QuasselCoreSetupRequest> maybeRequest =
+    Optional<QuasselCoreControlPort.QuasselCoreSetupRequest> maybeRequest =
         ui.promptQuasselCoreSetup(sid, prompt);
     if (maybeRequest == null || maybeRequest.isEmpty()) {
       return;
     }
 
     disposables.add(
-        irc.submitQuasselCoreSetup(sid, maybeRequest.orElseThrow())
+        quasselControl
+            .submitQuasselCoreSetup(sid, maybeRequest.orElseThrow())
             .subscribe(
                 () -> {
                   markQuasselSetupSubmitted(sid);
@@ -813,7 +822,7 @@ public class ConnectionCoordinator {
     if (sid.isEmpty()) return;
     if (!quasselOpenNetworkManagerOnSyncReady.remove(sid)) return;
 
-    int networkCount = irc.quasselCoreNetworks(sid).size();
+    int networkCount = quasselControl.quasselCoreNetworks(sid).size();
     if (networkCount <= 0) {
       ui.appendStatus(
           status,
