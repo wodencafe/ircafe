@@ -894,6 +894,15 @@ public class ConnectionCoordinator {
         privateTargets = List.of();
       }
     }
+    if (!privateTargets.isEmpty()) {
+      List<String> filtered = new ArrayList<>(privateTargets.size());
+      for (String target : privateTargets) {
+        String normalized = Objects.toString(target, "").trim();
+        if (normalized.isEmpty()) continue;
+        if (shouldRestorePersistedPrivateTarget(normalized)) filtered.add(normalized);
+      }
+      privateTargets = filtered.isEmpty() ? List.of() : List.copyOf(filtered);
+    }
 
     List<String> joinedChannels;
     try {
@@ -991,6 +1000,14 @@ public class ConnectionCoordinator {
       out.add(t);
     }
     return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private static boolean shouldRestorePersistedPrivateTarget(String target) {
+    String normalized = Objects.toString(target, "").trim();
+    if (normalized.isEmpty()) return false;
+    // Compatibility cleanup: previous notice-routing bugs could persist "title" as a pseudo PM.
+    if ("title".equalsIgnoreCase(normalized)) return false;
+    return true;
   }
 
   private boolean observedChannelJoin(String serverId, String channel) {

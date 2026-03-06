@@ -536,6 +536,42 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void serverNoticeWithoutTargetRoutesToStatusEvenWhenPrivateTargetIsActive() throws Exception {
+    TargetRef status = new TargetRef("libera", "status");
+    TargetRef activePrivate = new TargetRef("libera", "title");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(targetCoordinator.getActiveTarget()).thenReturn(activePrivate);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.Notice(
+                Instant.now(),
+                "server",
+                "",
+                "Last login from services",
+                "",
+                Map.of())));
+
+    verify(ui)
+        .appendNoticeAt(
+            eq(status),
+            any(),
+            eq("(notice) server"),
+            eq("Last login from services"),
+            eq(""),
+            eq(Map.of()));
+    verify(ui, never())
+        .appendNoticeAt(
+            eq(activePrivate),
+            any(),
+            anyString(),
+            anyString(),
+            anyString(),
+            org.mockito.ArgumentMatchers.<Map<String, String>>any());
+  }
+
+  @Test
   void ctcpReceivePassesCommandAndValueToIrcEventNotifier() throws Exception {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);

@@ -2262,6 +2262,113 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
+  void statusBufferNoticeUsesCanonicalStatusTarget() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec datastreamCodec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    QuasselCoreProtocolProbe.ProbeSelection probeSelection =
+        new QuasselCoreProtocolProbe.ProbeSelection(
+            0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0);
+    QuasselCoreDatastreamCodec.BufferInfoValue statusWithUnexpectedName =
+        new QuasselCoreDatastreamCodec.BufferInfoValue(3, 1, 0x01, -1, "title");
+
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket)).thenReturn(probeSelection);
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 1, List.of(1), Map.of(3, statusWithUnexpectedName)));
+
+    QuasselCoreIrcClientService service =
+        new QuasselCoreIrcClientService(
+            serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+
+    service.connect("quassel").blockingAwait();
+    events.awaitCount(3);
+
+    socket.writeInbound(
+        encodeRpcCall(
+            datastreamCodec,
+            "2displayMsg(Message)",
+            List.of(
+                new QuasselCoreDatastreamCodec.MessageValue(
+                    902L,
+                    TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis()),
+                    0x0002,
+                    0,
+                    statusWithUnexpectedName,
+                    "server",
+                    "Last login from: user@host"))));
+
+    events.awaitCount(4);
+    IrcEvent.Notice notice =
+        assertInstanceOf(IrcEvent.Notice.class, events.values().get(3).event());
+    assertEquals("status", notice.target());
+    assertEquals("server", notice.from());
+  }
+
+  @Test
+  void backlogStatusBufferNoticeUsesCanonicalStatusTarget() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec datastreamCodec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    QuasselCoreProtocolProbe.ProbeSelection probeSelection =
+        new QuasselCoreProtocolProbe.ProbeSelection(
+            0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0);
+    QuasselCoreDatastreamCodec.BufferInfoValue statusWithUnexpectedName =
+        new QuasselCoreDatastreamCodec.BufferInfoValue(3, 1, 0x01, -1, "title");
+
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket)).thenReturn(probeSelection);
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 1, List.of(1), Map.of(3, statusWithUnexpectedName)));
+
+    QuasselCoreIrcClientService service =
+        new QuasselCoreIrcClientService(
+            serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+
+    service.connect("quassel").blockingAwait();
+    events.awaitCount(3);
+
+    socket.writeInbound(
+        encodeRpcCall(
+            datastreamCodec,
+            "2displayMsg(Message)",
+            List.of(
+                new QuasselCoreDatastreamCodec.MessageValue(
+                    903L,
+                    TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis()),
+                    0x0002,
+                    0x80,
+                    statusWithUnexpectedName,
+                    "server",
+                    "Last login from: user@host"))));
+
+    events.awaitCount(4);
+    IrcEvent.ChatHistoryBatchReceived batch =
+        assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, events.values().get(3).event());
+    assertEquals("status", batch.target());
+    assertEquals(1, batch.entries().size());
+    assertEquals(ChatHistoryEntry.Kind.NOTICE, batch.entries().get(0).kind());
+    assertEquals("status", batch.entries().get(0).target());
+    assertEquals("server", batch.entries().get(0).from());
+  }
+
+  @Test
   void connectFailureEmitsErrorAndDisconnectedEvents() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);

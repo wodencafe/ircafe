@@ -1110,7 +1110,19 @@ public class IrcMediator implements MediatorControlPort {
 
         TargetRef dest = null;
         String t = ev.target();
-        if (t != null && !t.isBlank()) {
+        String from = Objects.toString(ev.from(), "").trim();
+        boolean serverNotice = from.isEmpty() || "server".equalsIgnoreCase(from);
+        if (serverNotice) {
+          if (t != null && !t.isBlank()) {
+            TargetRef noticeTarget = new TargetRef(sid, t);
+            if (noticeTarget.isChannel()) {
+              dest = noticeTarget;
+            }
+          }
+          if (dest == null) {
+            dest = status != null ? status : safeStatusTarget();
+          }
+        } else if (t != null && !t.isBlank()) {
           TargetRef noticeTarget = new TargetRef(sid, t);
           if (noticeTarget.isChannel()) {
             dest = noticeTarget;

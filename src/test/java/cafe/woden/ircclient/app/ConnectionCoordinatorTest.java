@@ -358,6 +358,38 @@ class ConnectionCoordinatorTest {
   }
 
   @Test
+  void connectedEventSkipsKnownCorruptPersistedPrivateMessageTargets() {
+    IrcClientService irc = mock(IrcClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
+    when(serverCatalog.containsId("libera")).thenReturn(true);
+    when(runtimeConfig.readPrivateMessageTargets("libera"))
+        .thenReturn(List.of("title", "Alice"));
+    when(runtimeConfig.readKnownChannels("libera")).thenReturn(List.of());
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    coordinator.handleConnectivityEvent(
+        "libera", new IrcEvent.Connected(Instant.now(), "irc.libera.chat", 6697, "alice-me"), null);
+
+    verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("libera", "Alice"));
+    verify(ui, never()).ensureTargetExists(new TargetRef("libera", "title"));
+  }
+
+  @Test
   void connectedEventWithFallbackNickDoesNotPersistNickToConfig() {
     IrcClientService irc = mock(IrcClientService.class);
     UiPort ui = mock(UiPort.class);
