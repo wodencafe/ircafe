@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.input;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -9,11 +10,11 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.disposables.Disposable;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
-import java.awt.Component;
-import java.awt.Container;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -23,11 +24,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BooleanSupplier;
-import javax.swing.JComponent;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JTextField;
-import javax.swing.TransferHandler;
 import javax.swing.SwingUtilities;
+import javax.swing.TransferHandler;
 import org.junit.jupiter.api.Test;
 
 class MessageInputPanelFunctionalTest {
@@ -64,6 +65,30 @@ class MessageInputPanelFunctionalTest {
   }
 
   @Test
+  void matrixUploadControlsOnlyShowForMatrixServers() throws Exception {
+    UiSettingsBus settingsBus = mock(UiSettingsBus.class);
+    when(settingsBus.get()).thenReturn(null);
+    CommandHistoryStore historyStore = mock(CommandHistoryStore.class);
+
+    MessageInputPanel panel = new MessageInputPanel(settingsBus, historyStore);
+    JButton attach = findNamedButton(panel, "messageAttachButton");
+    assertNotNull(attach, "attach button should be present");
+
+    onEdt(
+        () -> {
+          panel.setIsMatrixServer(sid -> "matrix".equalsIgnoreCase(sid));
+          panel.setActiveServerId("libera");
+          assertFalse(attach.isVisible(), "attach should hide on IRC servers");
+        });
+
+    onEdt(
+        () -> {
+          panel.setActiveServerId("matrix");
+          assertTrue(attach.isVisible(), "attach should show on Matrix servers");
+        });
+  }
+
+  @Test
   void droppingImagePublishesMuploadAndUsesDraftAsCaption() throws Exception {
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(null);
@@ -77,6 +102,7 @@ class MessageInputPanelFunctionalTest {
     try {
       JTextField input = findFirst(panel, JTextField.class);
       assertNotNull(input, "message input field should be present");
+      onEdt(() -> enableMatrixUploads(panel));
 
       onEdt(() -> input.setText("caption from draft"));
       flushEdt();
@@ -87,7 +113,8 @@ class MessageInputPanelFunctionalTest {
       waitFor(() -> outbound.size() == 1, Duration.ofSeconds(3));
       assertEquals(
           expectedUpload("m.image", image.toFile(), "caption from draft"), outbound.getFirst());
-      onEdt(() -> assertTrue(input.getText().isEmpty(), "input should clear after caption consume"));
+      onEdt(
+          () -> assertTrue(input.getText().isEmpty(), "input should clear after caption consume"));
     } finally {
       subscription.dispose();
       Files.deleteIfExists(image);
@@ -110,6 +137,7 @@ class MessageInputPanelFunctionalTest {
     try {
       JTextField input = findFirst(panel, JTextField.class);
       assertNotNull(input, "message input field should be present");
+      onEdt(() -> enableMatrixUploads(panel));
 
       onEdt(() -> input.setText("first caption"));
       flushEdt();
@@ -124,7 +152,8 @@ class MessageInputPanelFunctionalTest {
       waitFor(() -> outbound.size() == 2, Duration.ofSeconds(3));
       assertEquals(expectedUpload("m.image", image.toFile(), "first caption"), outbound.get(0));
       assertEquals(expectedUpload("m.audio", audio.toFile(), ""), outbound.get(1));
-      onEdt(() -> assertTrue(input.getText().isEmpty(), "input should clear after caption consume"));
+      onEdt(
+          () -> assertTrue(input.getText().isEmpty(), "input should clear after caption consume"));
     } finally {
       subscription.dispose();
       Files.deleteIfExists(image);
@@ -149,6 +178,11 @@ class MessageInputPanelFunctionalTest {
       line += " " + text;
     }
     return line;
+  }
+
+  private static void enableMatrixUploads(MessageInputPanel panel) {
+    panel.setIsMatrixServer(sid -> "matrix".equalsIgnoreCase(sid));
+    panel.setActiveServerId("matrix");
   }
 
   private static JButton findNamedButton(Component root, String name) {
@@ -229,7 +263,8 @@ class MessageInputPanelFunctionalTest {
     }
 
     @Override
-    public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException {
+    public Object getTransferData(DataFlavor flavor)
+        throws UnsupportedFlavorException, IOException {
       if (!isDataFlavorSupported(flavor)) {
         throw new UnsupportedFlavorException(flavor);
       }

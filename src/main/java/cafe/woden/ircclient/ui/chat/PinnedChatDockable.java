@@ -150,6 +150,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     // Input panel embedded in the pinned view.
     this.inputPanel = new MessageInputPanel(settingsBus, historyStore, spellcheckSettingsBus);
+    this.inputPanel.setIsMatrixServer(irc == null ? sid -> false : irc::isMatrixBackendServer);
+    this.inputPanel.setActiveServerId(target.serverId());
     add(inputPanel, BorderLayout.SOUTH);
 
     // Persist draft text continuously so closing/undocking doesn't lose the latest draft.

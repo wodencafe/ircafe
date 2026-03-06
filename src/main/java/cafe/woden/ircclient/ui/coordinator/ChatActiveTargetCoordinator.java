@@ -90,6 +90,7 @@ public final class ChatActiveTargetCoordinator {
     }
 
     activeTargetSetter.accept(target);
+    inputPanel.setActiveServerId(target.serverId());
     dockTitleUpdater.run();
     typingAvailabilityRefresher.run();
     setInputPanelVisibleForTarget(target);

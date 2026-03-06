@@ -22,13 +22,11 @@ import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
 import org.slf4j.Logger;
@@ -36,24 +34,6 @@ import org.slf4j.LoggerFactory;
 
 public class MessageInputPanel extends JPanel {
   private static final Logger log = LoggerFactory.getLogger(MessageInputPanel.class);
-  private static final Set<String> MATRIX_IMAGE_EXTENSIONS =
-      Set.of(
-          "png",
-          "jpg",
-          "jpeg",
-          "gif",
-          "webp",
-          "bmp",
-          "svg",
-          "heic",
-          "heif",
-          "avif",
-          "tif",
-          "tiff");
-  private static final Set<String> MATRIX_VIDEO_EXTENSIONS =
-      Set.of("mp4", "m4v", "mov", "mkv", "webm", "avi", "wmv", "flv", "mpeg", "mpg", "3gp", "ogv");
-  private static final Set<String> MATRIX_AUDIO_EXTENSIONS =
-      Set.of("mp3", "m4a", "aac", "wav", "flac", "ogg", "oga", "opus", "weba", "amr");
   public static final String ID = "input";
   private final JTextField input = new JTextField();
   private final JButton attach = new JButton();
@@ -70,11 +50,16 @@ public class MessageInputPanel extends JPanel {
   private final MessageInputHintPopupSupport hintPopupSupport;
   private final MessageInputContextMenuSupport contextMenuSupport;
   private final MessageInputComposeSupport composeSupport;
+  private final MessageInputUploadUxMode ircUploadUxMode = new IrcMessageInputUploadUxMode();
+  private final MessageInputUploadUxMode matrixUploadUxMode = new MatrixMessageInputUploadUxMode();
+  private final MessageInputUploadUxMode.Context uploadUxContext = new MessageInputUploadUxContext();
   private boolean programmaticEdit;
   private final FlowableProcessor<String> outbound =
       PublishProcessor.<String>create().toSerialized();
   private volatile Runnable onActivated = () -> {};
   private volatile Consumer<String> onDraftChanged = t -> {};
+  private volatile Predicate<String> isMatrixServer = sid -> false;
+  private volatile String activeServerId = "";
   private final MessageInputTypingSupport typingSupport;
   private final UiSettingsBus settingsBus;
   private final SpellcheckSettingsBus spellcheckSettingsBus;
@@ -174,6 +159,7 @@ public class MessageInputPanel extends JPanel {
 
     UiSettings initial = settingsBus.get();
     applySettings(initial);
+    refreshUploadUxState();
   }
 
   private void buildLayout() {
@@ -243,10 +229,10 @@ public class MessageInputPanel extends JPanel {
 
     attach.setName("messageAttachButton");
     attach.setText("+");
-    attach.setToolTipText("Attach file (Matrix upload)");
+    attach.setToolTipText("Attach file");
     if (attach.getAccessibleContext() != null) {
       attach.getAccessibleContext().setAccessibleName("Attach file");
-      attach.getAccessibleContext().setAccessibleDescription("Choose files for Matrix upload");
+      attach.getAccessibleContext().setAccessibleDescription("Attach files");
     }
     attach.setOpaque(false);
     attach.setContentAreaFilled(false);
@@ -335,13 +321,17 @@ public class MessageInputPanel extends JPanel {
   }
 
   private void installUploadActions() {
-    attach.addActionListener(e -> openUploadFileChooser());
-    MatrixUploadTransferHandler sharedDropHandler = new MatrixUploadTransferHandler(null);
+    attach.addActionListener(e -> runAttachRequested());
+    UploadTransferHandler sharedDropHandler = new UploadTransferHandler(null);
     setTransferHandler(sharedDropHandler);
     attach.setTransferHandler(sharedDropHandler);
     send.setTransferHandler(sharedDropHandler);
     TransferHandler defaultInputTransferHandler = input.getTransferHandler();
-    input.setTransferHandler(new MatrixUploadTransferHandler(defaultInputTransferHandler));
+    input.setTransferHandler(new UploadTransferHandler(defaultInputTransferHandler));
+  }
+
+  private void runAttachRequested() {
+    uploadUxModeForActiveServer().runAttachAction(uploadUxContext);
   }
 
   private void installActivationListeners() {
@@ -611,48 +601,6 @@ public class MessageInputPanel extends JPanel {
     }
   }
 
-  private void openUploadFileChooser() {
-    if (!isInputEditable()) return;
-    JFileChooser chooser = new JFileChooser();
-    chooser.setDialogTitle("Upload files to Matrix");
-    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-    chooser.setMultiSelectionEnabled(true);
-    int result = chooser.showOpenDialog(this);
-    if (result != JFileChooser.APPROVE_OPTION) return;
-
-    List<File> files = new ArrayList<>();
-    File[] selected = chooser.getSelectedFiles();
-    if (selected != null && selected.length > 0) {
-      for (File file : selected) {
-        if (file != null) files.add(file);
-      }
-    } else {
-      File one = chooser.getSelectedFile();
-      if (one != null) files.add(one);
-    }
-    emitMatrixUploadCommands(files);
-  }
-
-  private void emitMatrixUploadCommands(List<File> files) {
-    if (!isInputEditable()) return;
-    List<File> normalized = normalizeUploadFiles(files);
-    if (normalized.isEmpty()) return;
-
-    String draftCaption = consumeDraftCaptionForUpload();
-    boolean first = true;
-    for (File file : normalized) {
-      String path = normalizeUploadPath(file);
-      if (path.isEmpty()) continue;
-      String line =
-          buildMatrixUploadCommand(
-              inferMatrixUploadMsgType(path), path, first ? draftCaption : "");
-      if (!line.isBlank()) {
-        outbound.onNext(line);
-        first = false;
-      }
-    }
-  }
-
   private List<File> normalizeUploadFiles(List<File> files) {
     if (files == null || files.isEmpty()) return List.of();
     ArrayList<File> out = new ArrayList<>(files.size());
@@ -675,64 +623,71 @@ public class MessageInputPanel extends JPanel {
     return caption;
   }
 
-  private static String normalizeUploadPath(File file) {
-    if (file == null) return "";
-    String path = Objects.toString(file.getAbsolutePath(), "").trim();
-    if (path.isEmpty()) return "";
-    if (path.indexOf('\n') >= 0 || path.indexOf('\r') >= 0) return "";
-    return path;
+  private void emitOutboundLine(String line) {
+    String outboundLine = Objects.toString(line, "").trim();
+    if (outboundLine.isEmpty()) return;
+    outbound.onNext(outboundLine);
   }
 
-  private static String inferMatrixUploadMsgType(String path) {
-    String ext = extensionForPath(path);
-    if (MATRIX_IMAGE_EXTENSIONS.contains(ext)) return "m.image";
-    if (MATRIX_VIDEO_EXTENSIONS.contains(ext)) return "m.video";
-    if (MATRIX_AUDIO_EXTENSIONS.contains(ext)) return "m.audio";
-    return "m.file";
+  private void refreshUploadUxStateOnEdt() {
+    if (SwingUtilities.isEventDispatchThread()) {
+      refreshUploadUxState();
+      return;
+    }
+    SwingUtilities.invokeLater(this::refreshUploadUxState);
   }
 
-  private static String extensionForPath(String path) {
-    String rawPath = Objects.toString(path, "").trim();
-    if (rawPath.isEmpty()) return "";
+  private void refreshUploadUxState() {
+    applyUploadActionPresentation(uploadUxModeForActiveServer().presentation());
+    revalidate();
+    repaint();
+  }
+
+  private void applyUploadActionPresentation(MessageInputUploadUxMode.ActionPresentation presentation) {
+    if (presentation == null) return;
+    attach.setVisible(presentation.attachVisible());
+    attach.setToolTipText(presentation.attachTooltip());
+    if (attach.getAccessibleContext() != null) {
+      attach
+          .getAccessibleContext()
+          .setAccessibleDescription(presentation.attachAccessibleDescription());
+    }
+  }
+
+  private boolean isMatrixServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+    Predicate<String> predicate = isMatrixServer;
+    if (predicate == null) return false;
     try {
-      Path fileName = Path.of(rawPath).getFileName();
-      String name = fileName == null ? rawPath : Objects.toString(fileName.toString(), "");
-      int dot = name.lastIndexOf('.');
-      if (dot < 0 || dot == name.length() - 1) return "";
-      return name.substring(dot + 1).trim().toLowerCase(Locale.ROOT);
+      return predicate.test(sid);
     } catch (Exception ignored) {
-      return "";
+      return false;
     }
   }
 
-  private static String buildMatrixUploadCommand(String msgType, String path, String caption) {
-    String type = Objects.toString(msgType, "").trim();
-    String filePath = Objects.toString(path, "").trim();
-    if (type.isEmpty() || filePath.isEmpty()) return "";
-    StringBuilder line = new StringBuilder();
-    line.append("/mupload ").append(type).append(" ").append(quoteMuploadPath(filePath));
-    String text = Objects.toString(caption, "").trim();
-    if (!text.isEmpty()) {
-      line.append(" ").append(text);
-    }
-    return line.toString();
+  private MessageInputUploadUxMode uploadUxModeForActiveServer() {
+    return isMatrixServer(activeServerId) ? matrixUploadUxMode : ircUploadUxMode;
   }
 
-  private static String quoteMuploadPath(String path) {
-    String escaped = Objects.toString(path, "").replace("\\", "\\\\").replace("\"", "\\\"");
-    return "\"" + escaped + "\"";
+  private static String normalizeServerId(String serverId) {
+    return Objects.toString(serverId, "").trim();
   }
 
-  private final class MatrixUploadTransferHandler extends TransferHandler {
+  private final class UploadTransferHandler extends TransferHandler {
     private final TransferHandler fallback;
 
-    private MatrixUploadTransferHandler(TransferHandler fallback) {
+    private UploadTransferHandler(TransferHandler fallback) {
       this.fallback = fallback;
     }
 
     @Override
     public boolean canImport(TransferSupport support) {
       if (support != null && support.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+        MessageInputUploadUxMode mode = uploadUxModeForActiveServer();
+        if (!mode.canImportFileDrop(uploadUxContext)) {
+          return support != null && fallback != null && fallback.canImport(support);
+        }
         return true;
       }
       return support != null && fallback != null && fallback.canImport(support);
@@ -754,14 +709,41 @@ public class MessageInputPanel extends JPanel {
             }
           }
           if (files.isEmpty()) return false;
-          emitMatrixUploadCommands(files);
-          return true;
+          MessageInputUploadUxMode mode = uploadUxModeForActiveServer();
+          return mode.importFileDrop(uploadUxContext, files);
         } catch (Exception ex) {
           log.debug("[MessageInputPanel] file drop import failed", ex);
           return false;
         }
       }
       return support != null && fallback != null && fallback.importData(support);
+    }
+  }
+
+  private final class MessageInputUploadUxContext implements MessageInputUploadUxMode.Context {
+    @Override
+    public JComponent ownerComponent() {
+      return MessageInputPanel.this;
+    }
+
+    @Override
+    public boolean isInputEditable() {
+      return MessageInputPanel.this.isInputEditable();
+    }
+
+    @Override
+    public List<File> normalizeUploadFiles(List<File> files) {
+      return MessageInputPanel.this.normalizeUploadFiles(files);
+    }
+
+    @Override
+    public String consumeDraftCaptionForUpload() {
+      return MessageInputPanel.this.consumeDraftCaptionForUpload();
+    }
+
+    @Override
+    public void emitOutboundLine(String line) {
+      MessageInputPanel.this.emitOutboundLine(line);
     }
   }
 
@@ -780,6 +762,16 @@ public class MessageInputPanel extends JPanel {
 
   public void openQuickReactionPicker(String ircTarget, String messageId) {
     composeSupport.openQuickReactionPicker(ircTarget, messageId);
+  }
+
+  public void setIsMatrixServer(Predicate<String> isMatrixServer) {
+    this.isMatrixServer = isMatrixServer == null ? sid -> false : isMatrixServer;
+    refreshUploadUxStateOnEdt();
+  }
+
+  public void setActiveServerId(String serverId) {
+    this.activeServerId = normalizeServerId(serverId);
+    refreshUploadUxStateOnEdt();
   }
 
   /** Called when this input becomes the active typing surface (focus or click). */

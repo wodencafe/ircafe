@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -120,6 +121,7 @@ class ChatActiveTargetCoordinatorTest {
     assertEquals(1, repaints.get());
     verify(inputPanel).clearRemoteTypingIndicator();
     verify(inputPanel).flushTypingForBufferSwitch();
+    verify(inputPanel).setActiveServerId(uiOnly.serverId());
     verify(inputPanel).setVisible(false);
     verify(inputPanel).setDraftText("");
     verify(inputPanel, never()).focusInput();
@@ -173,6 +175,7 @@ class ChatActiveTargetCoordinatorTest {
     assertEquals(next, activeTarget.get());
     assertEquals(doc, setDocumentValue.get());
     verify(inputPanel).setVisible(true);
+    verify(inputPanel).setActiveServerId(next.serverId());
     verify(inputPanel).setDraftText("restored draft");
     verify(inputPanel).focusInput();
     verify(transcripts).ensureTargetExists(next);
@@ -226,6 +229,7 @@ class ChatActiveTargetCoordinatorTest {
     assertEquals("channel draft", drafts.get(channel));
     verify(inputPanel).setVisible(false);
     verify(inputPanel).setVisible(true);
+    verify(inputPanel, times(2)).setActiveServerId(ignores.serverId());
     verify(inputPanel).setDraftText("");
     verify(inputPanel).setDraftText("channel draft");
     verify(inputPanel).focusInput();

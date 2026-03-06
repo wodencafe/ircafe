@@ -284,6 +284,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     // Input panel is embedded in the main chat dock so input is always coupled with the transcript.
     this.inputPanel =
         new MessageInputPanel(settingsBus, commandHistoryStore, spellcheckSettingsBus);
+    this.inputPanel.setIsMatrixServer(irc == null ? sid -> false : irc::isMatrixBackendServer);
     add(inputPanel, BorderLayout.SOUTH);
     configureTranscriptContextMenuActions(transcripts, chatHistoryService);
     configureInputActivation(activationBus);
