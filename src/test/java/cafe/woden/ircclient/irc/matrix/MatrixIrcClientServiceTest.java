@@ -4012,6 +4012,57 @@ class MatrixIrcClientServiceTest {
   }
 
   @Test
+  void rawModeOwnerSetsHigherPowerLevel() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomStateClient.fetchRoomPowerLevels(
+            "matrix", server, "secret-token", "!room:matrix.example.org"))
+        .thenReturn(
+            MatrixRoomStateClient.PowerLevelsResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/%21room%3Amatrix.example.org/state/m.room.power_levels"),
+                Map.of("users_default", 0L, "users", Map.of())));
+    when(roomStateClient.updateRoomPowerLevels(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            argThat(
+                map -> {
+                  if (map == null) return false;
+                  Object usersObj = map.get("users");
+                  if (!(usersObj instanceof Map<?, ?> usersMap)) return false;
+                  return Long.valueOf(100L).equals(usersMap.get("@bob:matrix.example.org"))
+                      || Integer.valueOf(100).equals(usersMap.get("@bob:matrix.example.org"));
+                })))
+        .thenReturn(
+            MatrixRoomStateClient.UpdateResult.updated(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/%21room%3Amatrix.example.org/state/m.room.power_levels")));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service.sendRaw("matrix", "MODE !room:matrix.example.org +q @bob:matrix.example.org").blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.ChannelModeObserved mode =
+        assertInstanceOf(IrcEvent.ChannelModeObserved.class, events.values().get(3).event());
+    assertEquals("+q @bob:matrix.example.org", mode.details());
+  }
+
+  @Test
   void rawAwayDelegatesToSetAway() {
     IrcProperties.Server server =
         server("matrix", "matrix.example.org", 8448, true, "secret-token");

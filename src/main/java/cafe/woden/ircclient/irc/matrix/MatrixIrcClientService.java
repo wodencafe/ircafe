@@ -1818,7 +1818,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                   continue;
                 }
 
-                if (c == 'o' || c == 'v') {
+                if (isMatrixRoleMode(c)) {
                   if (argIndex >= modeArgs.size()) {
                     throw new IllegalArgumentException("MODE " + modeSpec + " is missing nick arguments");
                   }
@@ -1830,12 +1830,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                     powerLevels = fetchOrDefaultPowerLevels(sid, server, session.accessToken, roomId);
                   }
                   int usersDefault = matrixUsersDefault(powerLevels);
-                  int level =
-                      switch (c) {
-                        case 'o' -> adding ? 50 : usersDefault;
-                        case 'v' -> adding ? 10 : usersDefault;
-                        default -> usersDefault;
-                      };
+                  int level = adding ? matrixRolePowerLevel(c) : usersDefault;
                   setMatrixUserPowerLevel(powerLevels, userId, level);
                   powerLevelsChanged = true;
                   applied.add((adding ? "+" : "-") + c + " " + userId);
@@ -1994,6 +1989,21 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     } catch (NumberFormatException ignored) {
       return fallback;
     }
+  }
+
+  private static boolean isMatrixRoleMode(char mode) {
+    return mode == 'v' || mode == 'h' || mode == 'o' || mode == 'a' || mode == 'q';
+  }
+
+  private static int matrixRolePowerLevel(char mode) {
+    return switch (mode) {
+      case 'v' -> 10;
+      case 'h' -> 25;
+      case 'o' -> 50;
+      case 'a' -> 75;
+      case 'q' -> 100;
+      default -> 0;
+    };
   }
 
   private static String renderMatrixPowerLevelSummary(Map<String, Object> powerLevels) {
