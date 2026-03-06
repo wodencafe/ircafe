@@ -89,6 +89,13 @@ class MatrixIrcClientServiceTest {
     assertFalse(service.isDraftUnreactAvailable("matrix"));
     assertFalse(service.isMessageEditAvailable("matrix"));
     assertFalse(service.isMessageRedactionAvailable("matrix"));
+    assertFalse(service.isMultilineAvailable("matrix"));
+    assertEquals(0, service.negotiatedMultilineMaxLines("matrix"));
+    assertEquals(0L, service.negotiatedMultilineMaxBytes("matrix"));
+    assertFalse(service.isLabeledResponseAvailable("matrix"));
+    assertFalse(service.isStandardRepliesAvailable("matrix"));
+    assertFalse(service.isMonitorAvailable("matrix"));
+    assertEquals(0, service.negotiatedMonitorLimit("matrix"));
   }
 
   @Test
@@ -132,6 +139,13 @@ class MatrixIrcClientServiceTest {
     assertTrue(service.isDraftUnreactAvailable("matrix"));
     assertTrue(service.isMessageEditAvailable("matrix"));
     assertTrue(service.isMessageRedactionAvailable("matrix"));
+    assertTrue(service.isMultilineAvailable("matrix"));
+    assertEquals(0, service.negotiatedMultilineMaxLines("matrix"));
+    assertEquals(0L, service.negotiatedMultilineMaxBytes("matrix"));
+    assertFalse(service.isLabeledResponseAvailable("matrix"));
+    assertFalse(service.isStandardRepliesAvailable("matrix"));
+    assertFalse(service.isMonitorAvailable("matrix"));
+    assertEquals(0, service.negotiatedMonitorLimit("matrix"));
   }
 
   @Test
@@ -3927,7 +3941,7 @@ class MatrixIrcClientServiceTest {
   }
 
   @Test
-  void rawListEmitsChannelListEventsFromJoinedRooms() {
+  void rawListEmitsChannelListEventsFromPublicRooms() {
     IrcProperties.Server server =
         server("matrix", "matrix.example.org", 8448, true, "secret-token");
     when(serverCatalog.require("matrix")).thenReturn(server);
@@ -3941,11 +3955,20 @@ class MatrixIrcClientServiceTest {
                 URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
                 "@alice:matrix.example.org",
                 "DEV1"));
-    when(joinedRoomsClient.fetchJoinedRooms("matrix", server, "secret-token"))
+    when(roomDirectoryClient.fetchPublicRooms("matrix", server, "secret-token", "", "", 100))
         .thenReturn(
-            MatrixJoinedRoomsClient.JoinedRoomsResult.success(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/joined_rooms"),
-                List.of("!a:matrix.example.org", "!b:matrix.example.org")));
+            MatrixRoomDirectoryClient.PublicRoomsResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/publicRooms"),
+                List.of(
+                    new MatrixRoomDirectoryClient.PublicRoom(
+                        "!a:matrix.example.org",
+                        "#a:matrix.example.org",
+                        "Room A",
+                        "Topic A",
+                        42),
+                    new MatrixRoomDirectoryClient.PublicRoom(
+                        "!b:matrix.example.org", "", "Room B", "", 8)),
+                "s-page-2"));
     var events = service.events().test();
     service.connect("matrix").blockingAwait();
     events.awaitCount(3);
@@ -3953,10 +3976,55 @@ class MatrixIrcClientServiceTest {
     service.sendRaw("matrix", "LIST").blockingAwait();
     events.awaitCount(7);
 
-    assertInstanceOf(IrcEvent.ChannelListStarted.class, events.values().get(3).event());
-    assertInstanceOf(IrcEvent.ChannelListEntry.class, events.values().get(4).event());
-    assertInstanceOf(IrcEvent.ChannelListEntry.class, events.values().get(5).event());
-    assertInstanceOf(IrcEvent.ChannelListEnded.class, events.values().get(6).event());
+    IrcEvent.ChannelListStarted started =
+        assertInstanceOf(IrcEvent.ChannelListStarted.class, events.values().get(3).event());
+    IrcEvent.ChannelListEntry first =
+        assertInstanceOf(IrcEvent.ChannelListEntry.class, events.values().get(4).event());
+    IrcEvent.ChannelListEntry second =
+        assertInstanceOf(IrcEvent.ChannelListEntry.class, events.values().get(5).event());
+    IrcEvent.ChannelListEnded ended =
+        assertInstanceOf(IrcEvent.ChannelListEnded.class, events.values().get(6).event());
+
+    assertEquals("Matrix public rooms", started.banner());
+    assertEquals("#a:matrix.example.org", first.channel());
+    assertEquals(42, first.visibleUsers());
+    assertEquals("Topic A", first.topic());
+    assertEquals("!b:matrix.example.org", second.channel());
+    assertEquals(8, second.visibleUsers());
+    assertEquals("Room B", second.topic());
+    assertTrue(ended.summary().contains("next_batch=s-page-2"));
+  }
+
+  @Test
+  void rawListParsesSearchLimitAndSinceOptions() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomDirectoryClient.fetchPublicRooms("matrix", server, "secret-token", "linux", "s-token", 30))
+        .thenReturn(
+            MatrixRoomDirectoryClient.PublicRoomsResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/publicRooms"),
+                List.of(),
+                ""));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service.sendRaw("matrix", "LIST search=linux limit=30 since=s-token").blockingAwait();
+    events.awaitCount(5);
+
+    verify(roomDirectoryClient)
+        .fetchPublicRooms("matrix", server, "secret-token", "linux", "s-token", 30);
   }
 
   @Test

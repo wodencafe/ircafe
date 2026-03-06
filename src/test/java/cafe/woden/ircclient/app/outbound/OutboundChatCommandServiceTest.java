@@ -1014,32 +1014,27 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void quoteOnMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+  void quoteOnMatrixBackendForwardsRawToBackend() {
     TargetRef chan = new TargetRef("matrix", "#room:example.org");
-    TargetRef status = new TargetRef("matrix", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
-    when(serverCatalog.find("matrix"))
-        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(irc.sendRaw("matrix", "MONITOR +nick")).thenReturn(Completable.complete());
 
     service.handleQuote(disposables, "MONITOR +nick");
 
-    verify(ui).appendStatus(eq(status), eq("(quote)"), contains("Matrix backend"));
-    verify(irc, never()).sendRaw(anyString(), anyString());
+    verify(irc).sendRaw("matrix", "MONITOR +nick");
   }
 
   @Test
-  void statusRawSendOnMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+  void statusRawSendOnMatrixBackendForwardsRawToBackend() {
     TargetRef status = new TargetRef("matrix", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);
     when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
-    when(serverCatalog.find("matrix"))
-        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(irc.sendRaw("matrix", "WHO #room:example.org")).thenReturn(Completable.complete());
 
     service.handleSay(disposables, "WHO #room:example.org");
 
-    verify(ui).appendStatus(eq(status), eq("(raw)"), contains("Matrix backend"));
-    verify(irc, never()).sendRaw(anyString(), anyString());
+    verify(irc).sendRaw("matrix", "WHO #room:example.org");
   }
 
   @Test

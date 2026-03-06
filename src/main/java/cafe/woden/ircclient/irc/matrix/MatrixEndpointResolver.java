@@ -160,6 +160,12 @@ final class MatrixEndpointResolver {
     return rebuild(apiBase, path);
   }
 
+  public static URI publicRoomsUri(IrcProperties.Server server) {
+    URI apiBase = clientApiBaseUri(server);
+    String path = appendPath(apiBase.getPath(), "publicRooms");
+    return rebuild(apiBase, path);
+  }
+
   public static URI roomJoinedMembersUri(IrcProperties.Server server, String roomId) {
     URI apiBase = clientApiBaseUri(server);
     String rid = validatePathSegment(roomId, "roomId");

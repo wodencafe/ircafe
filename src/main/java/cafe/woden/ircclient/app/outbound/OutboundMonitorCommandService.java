@@ -208,6 +208,15 @@ public class OutboundMonitorCommandService {
       return;
     }
 
+    if (!irc.isMonitorAvailable(sid)) {
+      if (monitorFallbackPort.isFallbackActive(sid)) {
+        requestFallbackRefresh(sid, status, false);
+      } else {
+        ui.appendStatus(status, "(monitor)", "MONITOR capability is unavailable on this server.");
+      }
+      return;
+    }
+
     ui.appendStatus(monitorTarget, "(monitor)", "→ " + rawLine);
     disposables.add(
         irc.sendRaw(sid, rawLine)

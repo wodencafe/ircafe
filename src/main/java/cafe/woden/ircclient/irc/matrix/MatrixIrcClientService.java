@@ -68,6 +68,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private static final int TIMESTAMP_CURSOR_MAX_PAGES = 20;
   private static final int UNREACT_LOOKUP_HISTORY_PAGE_LIMIT = 200;
   private static final int UNREACT_LOOKUP_MAX_PAGES = 10;
+  private static final int MATRIX_LIST_DEFAULT_LIMIT = 100;
+  private static final int MATRIX_LIST_MAX_LIMIT = 200;
 
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
@@ -753,6 +755,42 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   public boolean isMessageRedactionAvailable(String serverId) {
     String sid = normalizeServerId(serverId);
     return !sid.isEmpty() && sessionsByServer.containsKey(sid);
+  }
+
+  @Override
+  public boolean isMultilineAvailable(String serverId) {
+    String sid = normalizeServerId(serverId);
+    return !sid.isEmpty() && sessionsByServer.containsKey(sid);
+  }
+
+  @Override
+  public long negotiatedMultilineMaxBytes(String serverId) {
+    return 0L;
+  }
+
+  @Override
+  public int negotiatedMultilineMaxLines(String serverId) {
+    return 0;
+  }
+
+  @Override
+  public boolean isLabeledResponseAvailable(String serverId) {
+    return false;
+  }
+
+  @Override
+  public boolean isStandardRepliesAvailable(String serverId) {
+    return false;
+  }
+
+  @Override
+  public boolean isMonitorAvailable(String serverId) {
+    return false;
+  }
+
+  @Override
+  public int negotiatedMonitorLimit(String serverId) {
+    return 0;
   }
 
   @Override
@@ -1677,6 +1715,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   }
 
   private Completable sendRawList(String serverId, RawCommand raw) {
+    RawListQuery query = parseRawListQuery(raw.arguments());
     return Completable.fromAction(
             () -> {
               String sid = normalizeServerId(serverId);
@@ -1693,29 +1732,181 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                     backendAvailabilityReason(sid));
               }
               IrcProperties.Server server = serverCatalog.require(sid);
-              MatrixJoinedRoomsClient.JoinedRoomsResult result =
-                  joinedRoomsClient.fetchJoinedRooms(sid, server, session.accessToken);
+              MatrixRoomDirectoryClient.PublicRoomsResult result =
+                  roomDirectoryClient.fetchPublicRooms(
+                      sid,
+                      server,
+                      session.accessToken,
+                      query.searchTerm(),
+                      query.sinceToken(),
+                      query.limit());
               if (!result.success()) {
                 throw new IllegalStateException(
                     "Matrix list failed at " + result.endpoint() + ": " + result.detail());
               }
 
               Instant now = Instant.now();
-              bus.onNext(new ServerIrcEvent(sid, new IrcEvent.ChannelListStarted(now, "Matrix rooms")));
-              List<String> roomIds = result.roomIds();
-              if (roomIds != null) {
-                for (String roomId : roomIds) {
-                  String rid = normalize(roomId);
-                  if (rid.isEmpty()) continue;
-                  bus.onNext(new ServerIrcEvent(sid, new IrcEvent.ChannelListEntry(now, rid, 0, "")));
+              String searchTerm = normalize(query.searchTerm());
+              String banner =
+                  searchTerm.isEmpty()
+                      ? "Matrix public rooms"
+                      : ("Matrix public rooms (search: " + searchTerm + ")");
+              bus.onNext(new ServerIrcEvent(sid, new IrcEvent.ChannelListStarted(now, banner)));
+              int listed = 0;
+              List<MatrixRoomDirectoryClient.PublicRoom> rooms = result.rooms();
+              if (rooms != null) {
+                for (MatrixRoomDirectoryClient.PublicRoom room : rooms) {
+                  if (room == null) continue;
+                  String channel = matrixListChannelName(room);
+                  if (channel.isEmpty()) continue;
+                  int visibleUsers = Math.max(0, room.joinedMembers());
+                  String topic = matrixListTopic(room);
+                  bus.onNext(
+                      new ServerIrcEvent(
+                          sid, new IrcEvent.ChannelListEntry(now, channel, visibleUsers, topic)));
+                  listed++;
                 }
               }
-              int listed = roomIds == null ? 0 : roomIds.size();
+              String nextBatch = normalize(result.nextBatch());
+              String summary =
+                  nextBatch.isEmpty()
+                      ? ("Listed " + listed + " Matrix room(s).")
+                      : ("Listed " + listed + " Matrix room(s). next_batch=" + nextBatch);
               bus.onNext(
-                  new ServerIrcEvent(
-                      sid, new IrcEvent.ChannelListEnded(now, "Listed " + listed + " Matrix room(s).")));
+                  new ServerIrcEvent(sid, new IrcEvent.ChannelListEnded(now, summary)));
             })
         .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private static RawListQuery parseRawListQuery(List<String> rawArgs) {
+    List<String> args = rawArgs == null ? List.of() : rawArgs;
+    java.util.ArrayList<String> freeTokens = new java.util.ArrayList<>();
+    String searchTerm = "";
+    String sinceToken = "";
+    int limit = MATRIX_LIST_DEFAULT_LIMIT;
+
+    for (int i = 0; i < args.size(); i++) {
+      String token = normalize(args.get(i));
+      if (token.isEmpty()) continue;
+      String lower = token.toLowerCase(Locale.ROOT);
+
+      String sinceInline = listOptionValue(lower, token, "since");
+      if (!sinceInline.isEmpty()) {
+        sinceToken = sinceInline;
+        continue;
+      }
+      if ("since".equals(lower) || "--since".equals(lower) || "-since".equals(lower)) {
+        if (i + 1 < args.size()) {
+          sinceToken = normalize(args.get(++i));
+        }
+        continue;
+      }
+
+      String searchInline = listOptionValue(lower, token, "search");
+      if (searchInline.isEmpty()) {
+        searchInline = listOptionValue(lower, token, "q");
+      }
+      if (!searchInline.isEmpty()) {
+        searchTerm = searchInline;
+        continue;
+      }
+      if ("search".equals(lower)
+          || "--search".equals(lower)
+          || "-search".equals(lower)
+          || "q".equals(lower)
+          || "--q".equals(lower)
+          || "-q".equals(lower)) {
+        if (i + 1 < args.size()) {
+          searchTerm = normalize(args.get(++i));
+        }
+        continue;
+      }
+
+      String limitInline = listOptionValue(lower, token, "limit");
+      if (limitInline.isEmpty()) {
+        limitInline = listOptionValue(lower, token, "max");
+      }
+      if (!limitInline.isEmpty()) {
+        Integer parsed = parsePositiveIntToken(limitInline);
+        if (parsed != null) {
+          limit = parsed.intValue();
+        }
+        continue;
+      }
+      if ("limit".equals(lower)
+          || "--limit".equals(lower)
+          || "-limit".equals(lower)
+          || "max".equals(lower)
+          || "--max".equals(lower)
+          || "-max".equals(lower)) {
+        if (i + 1 < args.size()) {
+          Integer parsed = parsePositiveIntToken(args.get(++i));
+          if (parsed != null) {
+            limit = parsed.intValue();
+          }
+        }
+        continue;
+      }
+
+      freeTokens.add(token);
+    }
+
+    if (searchTerm.isEmpty() && !freeTokens.isEmpty()) {
+      searchTerm = normalize(String.join(" ", freeTokens));
+    }
+
+    return new RawListQuery(searchTerm, sinceToken, limit);
+  }
+
+  private static String listOptionValue(String tokenLower, String tokenRaw, String optionName) {
+    String opt = normalize(optionName).toLowerCase(Locale.ROOT);
+    if (opt.isEmpty()) return "";
+    String value = "";
+    if (tokenLower.startsWith(opt + "=")) {
+      value = tokenRaw.substring(opt.length() + 1);
+    } else if (tokenLower.startsWith("--" + opt + "=")) {
+      value = tokenRaw.substring(opt.length() + 3);
+    } else if (tokenLower.startsWith("-" + opt + "=")) {
+      value = tokenRaw.substring(opt.length() + 2);
+    }
+    return normalize(value);
+  }
+
+  private static Integer parsePositiveIntToken(String token) {
+    String value = normalize(token);
+    if (value.isEmpty()) return null;
+    try {
+      int parsed = Integer.parseInt(value);
+      if (parsed <= 0) {
+        return null;
+      }
+      return Integer.valueOf(parsed);
+    } catch (NumberFormatException ignored) {
+      return null;
+    }
+  }
+
+  private static int normalizeMatrixListLimit(int limit) {
+    int requested = limit <= 0 ? MATRIX_LIST_DEFAULT_LIMIT : limit;
+    return Math.max(1, Math.min(requested, MATRIX_LIST_MAX_LIMIT));
+  }
+
+  private static String matrixListChannelName(MatrixRoomDirectoryClient.PublicRoom room) {
+    if (room == null) return "";
+    String alias = normalize(room.canonicalAlias());
+    if (!alias.isEmpty()) {
+      return alias;
+    }
+    return normalize(room.roomId());
+  }
+
+  private static String matrixListTopic(MatrixRoomDirectoryClient.PublicRoom room) {
+    if (room == null) return "";
+    String topic = normalize(room.topic());
+    if (!topic.isEmpty()) {
+      return topic;
+    }
+    return normalize(room.name());
   }
 
   private Completable sendRawMode(String serverId, RawCommand raw) {
@@ -4489,6 +4680,14 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     private record ReactionIndexEntry(String targetEventId, String reaction, String sender) {}
 
     private record HistoryCursor(String nextToken, long beforeEpochMs) {}
+  }
+
+  private record RawListQuery(String searchTerm, String sinceToken, int limit) {
+    private RawListQuery {
+      searchTerm = normalize(searchTerm);
+      sinceToken = normalize(sinceToken);
+      limit = normalizeMatrixListLimit(limit);
+    }
   }
 
   private record RawCommand(String command, List<String> arguments) {

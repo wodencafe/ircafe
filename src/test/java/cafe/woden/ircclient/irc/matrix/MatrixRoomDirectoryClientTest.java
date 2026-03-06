@@ -28,7 +28,11 @@ class MatrixRoomDirectoryClientTest {
   @Test
   void resolveRoomAliasParsesRoomIdFromDirectoryResponse() throws Exception {
     when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
-    try (TestServer server = TestServer.start(200, "{\"room_id\":\"!room:matrix.example.org\"}")) {
+    try (TestServer server =
+        TestServer.start(
+            "/_matrix/client/v3/directory/room/",
+            200,
+            "{\"room_id\":\"!room:matrix.example.org\"}")) {
       MatrixRoomDirectoryClient.ResolveResult result =
           directoryClient.resolveRoomAlias(
               "matrix",
@@ -48,7 +52,8 @@ class MatrixRoomDirectoryClientTest {
   @Test
   void resolveRoomAliasReportsHttpFailure() throws Exception {
     when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
-    try (TestServer server = TestServer.start(404, "{\"errcode\":\"M_NOT_FOUND\"}")) {
+    try (TestServer server =
+        TestServer.start("/_matrix/client/v3/directory/room/", 404, "{\"errcode\":\"M_NOT_FOUND\"}")) {
       MatrixRoomDirectoryClient.ResolveResult result =
           directoryClient.resolveRoomAlias(
               "matrix",
@@ -73,6 +78,62 @@ class MatrixRoomDirectoryClientTest {
             "#ircafe:matrix.example.org");
 
     assertFalse(result.resolved());
+    assertEquals("access token is blank", result.detail());
+  }
+
+  @Test
+  void fetchPublicRoomsParsesChunkAndPagination() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    String body =
+        """
+        {
+          "chunk":[
+            {"room_id":"!a:matrix.example.org","canonical_alias":"#a:matrix.example.org","topic":"Topic A","num_joined_members":42},
+            {"room_id":"!b:matrix.example.org","name":"Room B","num_joined_members":8}
+          ],
+          "next_batch":"s-next"
+        }
+        """;
+    try (TestServer server = TestServer.start("/_matrix/client/v3/publicRooms", 200, body)) {
+      MatrixRoomDirectoryClient.PublicRoomsResult result =
+          directoryClient.fetchPublicRooms(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "irc",
+              "s-prev",
+              25);
+
+      assertTrue(result.success());
+      assertEquals("s-next", result.nextBatch());
+      assertEquals(2, result.rooms().size());
+      assertEquals("#a:matrix.example.org", result.rooms().get(0).canonicalAlias());
+      assertEquals("Topic A", result.rooms().get(0).topic());
+      assertEquals(42, result.rooms().get(0).joinedMembers());
+      assertEquals("!b:matrix.example.org", result.rooms().get(1).roomId());
+      assertEquals("Room B", result.rooms().get(1).name());
+      assertEquals("Bearer secret-token", server.lastAuthorizationHeader().get());
+      assertEquals("/_matrix/client/v3/publicRooms", server.lastPath().get());
+      assertTrue(server.lastRequestBody().get().contains("\"generic_search_term\":\"irc\""));
+      assertTrue(server.lastRequestBody().get().contains("\"since\":\"s-prev\""));
+      assertTrue(server.lastRequestBody().get().contains("\"limit\":25"));
+    }
+  }
+
+  @Test
+  void fetchPublicRoomsRejectsBlankToken() {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+
+    MatrixRoomDirectoryClient.PublicRoomsResult result =
+        directoryClient.fetchPublicRooms(
+            "matrix",
+            serverConfig("matrix", "matrix.example.org", 8448, true),
+            " ",
+            "irc",
+            "",
+            100);
+
+    assertFalse(result.success());
     assertEquals("access token is blank", result.detail());
   }
 
@@ -103,23 +164,26 @@ class MatrixRoomDirectoryClientTest {
       HttpServer server,
       int port,
       AtomicReference<String> lastPath,
-      AtomicReference<String> lastAuthorizationHeader)
+      AtomicReference<String> lastAuthorizationHeader,
+      AtomicReference<String> lastRequestBody)
       implements AutoCloseable {
 
-    static TestServer start(int statusCode, String body) throws IOException {
+    static TestServer start(String contextPath, int statusCode, String body) throws IOException {
       HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
       AtomicReference<String> path = new AtomicReference<>("");
       AtomicReference<String> auth = new AtomicReference<>("");
+      AtomicReference<String> requestBody = new AtomicReference<>("");
       byte[] payload = body.getBytes(StandardCharsets.UTF_8);
       server.createContext(
-          "/_matrix/client/v3/directory/room/",
+          contextPath,
           exchange -> {
             path.set(exchange.getRequestURI().getRawPath());
             auth.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             reply(exchange, statusCode, payload);
           });
       server.start();
-      return new TestServer(server, server.getAddress().getPort(), path, auth);
+      return new TestServer(server, server.getAddress().getPort(), path, auth, requestBody);
     }
 
     @Override

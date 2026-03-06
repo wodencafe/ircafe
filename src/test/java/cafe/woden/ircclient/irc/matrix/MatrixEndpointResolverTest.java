@@ -240,6 +240,15 @@ class MatrixEndpointResolverTest {
   }
 
   @Test
+  void publicRoomsUriBuildsPublicRoomsPath() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri = MatrixEndpointResolver.publicRoomsUri(server);
+
+    assertEquals("https://example.org:443/matrix/_matrix/client/v3/publicRooms", uri.toString());
+  }
+
+  @Test
   void mediaUploadUriBuildsMediaPathAndFilenameQuery() {
     IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
 

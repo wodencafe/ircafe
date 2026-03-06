@@ -53,6 +53,7 @@ class OutboundMonitorCommandServiceTest {
         .thenReturn(java.util.List.of("alice", "bob"));
     when(monitorRosterPort.addNicks(eq("libera"), eq(java.util.List.of("alice", "bob"))))
         .thenReturn(2);
+    when(irc.isMonitorAvailable("libera")).thenReturn(true);
     when(irc.negotiatedMonitorLimit("libera")).thenReturn(100);
     when(irc.sendRaw("libera", "MONITOR +alice,bob")).thenReturn(Completable.complete());
 
@@ -87,5 +88,23 @@ class OutboundMonitorCommandServiceTest {
 
     verify(monitorFallbackPort).requestImmediateRefresh("libera");
     verify(irc, never()).sendRaw(eq("libera"), any());
+  }
+
+  @Test
+  void addShowsUnavailableMessageWhenMonitorCapabilityMissing() {
+    TargetRef active = new TargetRef("matrix", "#room:example.org");
+    TargetRef status = new TargetRef("matrix", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
+    when(monitorRosterPort.parseNickInput("alice"))
+        .thenReturn(java.util.List.of("alice"));
+    when(monitorRosterPort.addNicks(eq("matrix"), eq(java.util.List.of("alice")))).thenReturn(1);
+    when(irc.isMonitorAvailable("matrix")).thenReturn(false);
+    when(monitorFallbackPort.isFallbackActive("matrix")).thenReturn(false);
+
+    service.handleMonitor(disposables, "+alice");
+
+    verify(ui).appendStatus(status, "(monitor)", "MONITOR capability is unavailable on this server.");
+    verify(irc, never()).sendRaw(eq("matrix"), any());
   }
 }

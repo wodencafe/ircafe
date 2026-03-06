@@ -770,31 +770,6 @@ public class OutboundChatCommandService {
     return false;
   }
 
-  private boolean ensureIrcRawCommandSupported(
-      String serverId, TargetRef out, String statusTag, String commandLabel) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) {
-      return true;
-    }
-    IrcProperties.Server.Backend backend = commandTargetPolicy.backendForServer(sid);
-    if (backend != IrcProperties.Server.Backend.MATRIX) {
-      return true;
-    }
-    String label = Objects.toString(commandLabel, "").trim();
-    if (label.isEmpty()) {
-      label = "command";
-    }
-    ui.appendStatus(
-        out,
-        statusTag,
-        "Server '"
-            + sid
-            + "' uses the Matrix backend. IRC-specific "
-            + label
-            + " behavior is not available yet.");
-    return false;
-  }
-
   private boolean ensureMatrixServerBackend(String serverId, TargetRef out, String statusTag) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) {
@@ -1895,9 +1870,6 @@ public class OutboundChatCommandService {
       ui.appendStatus(status, "(conn)", "Not connected");
       return;
     }
-    if (!ensureIrcRawCommandSupported(sid, status, "(raw)", "/raw")) {
-      return;
-    }
 
     PreparedRawLine prepared = prepareCorrelatedRawLine(status, line);
 
@@ -2127,9 +2099,6 @@ public class OutboundChatCommandService {
 
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-    if (!ensureIrcRawCommandSupported(at.serverId(), status, "(quote)", "/quote")) {
       return;
     }
 
