@@ -41,8 +41,6 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private static final String DEFAULT_UNAVAILABLE_REASON = "not connected";
   private static final String CONNECTING_REASON = "Matrix transport is connecting";
   private static final String UNSUPPORTED_OPERATION_REASON = "operation is not implemented yet";
-  private static final String CTCP_ACTION_PREFIX = "\u0001ACTION ";
-  private static final String CTCP_SUFFIX = "\u0001";
   private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
   private static final String TAG_MATRIX_MSGTYPE = "matrix.msgtype";
   private static final String TAG_MATRIX_MEDIA_URL = "matrix.media_url";
@@ -92,6 +90,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private final MatrixSyncTimelineEventProjector syncTimelineEventProjector;
   private final MatrixSyncSignalEventProjector syncSignalEventProjector;
   private final MatrixSyncMutationEventProjector syncMutationEventProjector;
+  private final MatrixLocalEchoEmitter localEchoEmitter;
   private final MatrixSyncClient syncClient;
   private final Map<String, String> availabilityReasonByServer = new ConcurrentHashMap<>();
   private final Map<String, MatrixSession> sessionsByServer = new ConcurrentHashMap<>();
@@ -153,6 +152,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     this.syncTimelineEventProjector = new MatrixSyncTimelineEventProjector(bus::onNext);
     this.syncSignalEventProjector = new MatrixSyncSignalEventProjector(bus::onNext);
     this.syncMutationEventProjector = new MatrixSyncMutationEventProjector(bus::onNext);
+    this.localEchoEmitter = new MatrixLocalEchoEmitter(bus::onNext);
     this.syncClient = Objects.requireNonNull(syncClient, "syncClient");
   }
 
@@ -544,7 +544,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                     "Matrix room send failed at " + result.endpoint() + ": " + result.detail());
               }
 
-              emitLocalEchoEvent(sid, session, roomId, text, result.eventId());
+              localEchoEmitter.emitChannelMessage(
+                  sid, localEchoSessionView(session), roomId, text, result.eventId());
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -589,7 +590,13 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                     "Matrix private send failed at " + result.endpoint() + ": " + result.detail());
               }
 
-              emitPrivateLocalEchoEvent(sid, session, peerUserId, roomId, text, result.eventId());
+              localEchoEmitter.emitPrivateMessage(
+                  sid,
+                  localEchoSessionView(session),
+                  peerUserId,
+                  roomId,
+                  text,
+                  result.eventId());
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -627,9 +634,9 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                     "Matrix room notice failed at " + result.endpoint() + ": " + result.detail());
               }
 
-              emitLocalNoticeEvent(
+              localEchoEmitter.emitNotice(
                   sid,
-                  session,
+                  localEchoSessionView(session),
                   roomId,
                   text,
                   result.eventId(),
@@ -681,9 +688,9 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                         + result.detail());
               }
 
-              emitLocalNoticeEvent(
+              localEchoEmitter.emitNotice(
                   sid,
-                  session,
+                  localEchoSessionView(session),
                   peerUserId,
                   text,
                   result.eventId(),
@@ -1400,6 +1407,21 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     };
   }
 
+  private MatrixLocalEchoEmitter.SessionView localEchoSessionView(MatrixSession session) {
+    if (session == null) return null;
+    return new MatrixLocalEchoEmitter.SessionView() {
+      @Override
+      public String userId() {
+        return session.userId;
+      }
+
+      @Override
+      public void rememberLatestRoomEvent(String roomId, String eventId) {
+        session.rememberLatestRoomEvent(roomId, eventId);
+      }
+    };
+  }
+
   private Completable unsupportedChatHistoryMode(String operation, String serverId, String detail) {
     String sid = normalizeServerId(serverId);
     String message = normalize(detail);
@@ -1697,8 +1719,15 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                           + ": "
                           + result.detail());
                 }
-                emitPrivateLocalMediaEchoEvent(
-                    sid, session, rawTarget, roomId, text, result.eventId(), mediaType, mediaRef);
+                localEchoEmitter.emitPrivateMediaMessage(
+                    sid,
+                    localEchoSessionView(session),
+                    rawTarget,
+                    roomId,
+                    text,
+                    result.eventId(),
+                    mediaType,
+                    mediaRef);
                 return;
               }
 
@@ -1713,8 +1742,14 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                         + ": "
                         + result.detail());
               }
-              emitLocalMediaEchoEvent(
-                  sid, session, roomId, text, result.eventId(), mediaType, mediaRef);
+              localEchoEmitter.emitChannelMediaMessage(
+                  sid,
+                  localEchoSessionView(session),
+                  roomId,
+                  text,
+                  result.eventId(),
+                  mediaType,
+                  mediaRef);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -3324,173 +3359,6 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     }
     session.rememberDirectRoom(peer, roomId);
     return roomId;
-  }
-
-  private void emitLocalEchoEvent(
-      String serverId, MatrixSession session, String roomId, String text, String eventId) {
-    if (session == null) return;
-    String sid = normalize(serverId);
-    String sender = normalize(session.userId);
-    String rid = normalize(roomId);
-    if (sid.isEmpty() || sender.isEmpty() || rid.isEmpty()) return;
-
-    String raw = Objects.toString(text, "");
-    Instant now = Instant.now();
-    String mid = normalize(eventId);
-    session.rememberLatestRoomEvent(rid, mid);
-
-    if (isCtcpAction(raw)) {
-      String action = extractCtcpAction(raw);
-      bus.onNext(
-          new ServerIrcEvent(
-              sid,
-              new IrcEvent.ChannelAction(
-                  now, rid, sender, action, mid, Map.of(TAG_MATRIX_MSGTYPE, "m.emote"))));
-      return;
-    }
-
-    bus.onNext(
-        new ServerIrcEvent(
-            sid,
-            new IrcEvent.ChannelMessage(
-                now, rid, sender, raw, mid, Map.of(TAG_MATRIX_MSGTYPE, "m.text"))));
-  }
-
-  private void emitPrivateLocalEchoEvent(
-      String serverId,
-      MatrixSession session,
-      String peerUserId,
-      String roomId,
-      String text,
-      String eventId) {
-    if (session == null) return;
-    String sid = normalize(serverId);
-    String sender = normalize(session.userId);
-    String peer = normalize(peerUserId);
-    String rid = normalize(roomId);
-    if (sid.isEmpty() || sender.isEmpty() || peer.isEmpty() || rid.isEmpty()) return;
-
-    String raw = Objects.toString(text, "");
-    Instant now = Instant.now();
-    String mid = normalize(eventId);
-    session.rememberLatestRoomEvent(rid, mid);
-
-    if (isCtcpAction(raw)) {
-      String action = extractCtcpAction(raw);
-      bus.onNext(
-          new ServerIrcEvent(
-              sid,
-              new IrcEvent.PrivateAction(
-                  now, sender, action, mid, privateMessageTags(peer, rid, "m.emote"))));
-      return;
-    }
-
-    bus.onNext(
-        new ServerIrcEvent(
-            sid,
-            new IrcEvent.PrivateMessage(
-                now, sender, raw, mid, privateMessageTags(peer, rid, "m.text"))));
-  }
-
-  private void emitLocalMediaEchoEvent(
-      String serverId,
-      MatrixSession session,
-      String roomId,
-      String text,
-      String eventId,
-      String msgType,
-      String mediaUrl) {
-    if (session == null) return;
-    String sid = normalize(serverId);
-    String sender = normalize(session.userId);
-    String rid = normalize(roomId);
-    String type = normalize(msgType);
-    String mediaRef = normalize(mediaUrl);
-    if (sid.isEmpty() || sender.isEmpty() || rid.isEmpty() || type.isEmpty()) return;
-
-    String raw = Objects.toString(text, "");
-    String rendered = raw.trim().isEmpty() ? mediaRef : raw;
-    Instant now = Instant.now();
-    String mid = normalize(eventId);
-    session.rememberLatestRoomEvent(rid, mid);
-
-    Map<String, String> tags =
-        withTag(Map.of(TAG_MATRIX_MSGTYPE, type), TAG_MATRIX_MEDIA_URL, mediaRef);
-    bus.onNext(
-        new ServerIrcEvent(
-            sid, new IrcEvent.ChannelMessage(now, rid, sender, rendered, mid, tags)));
-  }
-
-  private void emitPrivateLocalMediaEchoEvent(
-      String serverId,
-      MatrixSession session,
-      String peerUserId,
-      String roomId,
-      String text,
-      String eventId,
-      String msgType,
-      String mediaUrl) {
-    if (session == null) return;
-    String sid = normalize(serverId);
-    String sender = normalize(session.userId);
-    String peer = normalize(peerUserId);
-    String rid = normalize(roomId);
-    String type = normalize(msgType);
-    String mediaRef = normalize(mediaUrl);
-    if (sid.isEmpty() || sender.isEmpty() || peer.isEmpty() || rid.isEmpty() || type.isEmpty())
-      return;
-
-    String raw = Objects.toString(text, "");
-    String rendered = raw.trim().isEmpty() ? mediaRef : raw;
-    Instant now = Instant.now();
-    String mid = normalize(eventId);
-    session.rememberLatestRoomEvent(rid, mid);
-
-    Map<String, String> tags =
-        withTag(privateMessageTags(peer, rid, type), TAG_MATRIX_MEDIA_URL, mediaRef);
-    bus.onNext(
-        new ServerIrcEvent(sid, new IrcEvent.PrivateMessage(now, sender, rendered, mid, tags)));
-  }
-
-  private void emitLocalNoticeEvent(
-      String serverId,
-      MatrixSession session,
-      String target,
-      String text,
-      String eventId,
-      Map<String, String> tags) {
-    if (session == null) return;
-    String sid = normalize(serverId);
-    String sender = normalize(session.userId);
-    String noticeTarget = normalize(target);
-    if (sid.isEmpty() || sender.isEmpty() || noticeTarget.isEmpty()) return;
-
-    String raw = Objects.toString(text, "");
-    String mid = normalize(eventId);
-    Map<String, String> safeTags = tags == null ? Map.of() : tags;
-    String roomId = normalize(safeTags.get(TAG_MATRIX_ROOM_ID));
-    if (roomId.isEmpty() && looksLikeMatrixRoomId(noticeTarget)) {
-      roomId = noticeTarget;
-    }
-    session.rememberLatestRoomEvent(roomId, mid);
-
-    bus.onNext(
-        new ServerIrcEvent(
-            sid, new IrcEvent.Notice(Instant.now(), sender, noticeTarget, raw, mid, safeTags)));
-  }
-
-  private static boolean isCtcpAction(String text) {
-    String raw = Objects.toString(text, "");
-    return raw.startsWith(CTCP_ACTION_PREFIX)
-        && raw.endsWith(CTCP_SUFFIX)
-        && raw.length() > (CTCP_ACTION_PREFIX.length() + CTCP_SUFFIX.length());
-  }
-
-  private static String extractCtcpAction(String text) {
-    String raw = Objects.toString(text, "");
-    if (!isCtcpAction(raw)) return raw;
-    String action = raw.substring(CTCP_ACTION_PREFIX.length(), raw.length() - 1).trim();
-    return action.isEmpty() ? raw : action;
   }
 
   private void startSyncPolling(
