@@ -118,6 +118,48 @@ final class MatrixEndpointResolver {
     return rebuild(apiBase, path);
   }
 
+  public static URI roomInviteUri(IrcProperties.Server server, String roomId) {
+    URI apiBase = clientApiBaseUri(server);
+    String rid = validatePathSegment(roomId, "roomId");
+    String path = appendPath(apiBase.getPath(), "rooms/" + rid + "/invite");
+    return rebuild(apiBase, path);
+  }
+
+  public static URI roomKickUri(IrcProperties.Server server, String roomId) {
+    URI apiBase = clientApiBaseUri(server);
+    String rid = validatePathSegment(roomId, "roomId");
+    String path = appendPath(apiBase.getPath(), "rooms/" + rid + "/kick");
+    return rebuild(apiBase, path);
+  }
+
+  public static URI roomBanUri(IrcProperties.Server server, String roomId) {
+    URI apiBase = clientApiBaseUri(server);
+    String rid = validatePathSegment(roomId, "roomId");
+    String path = appendPath(apiBase.getPath(), "rooms/" + rid + "/ban");
+    return rebuild(apiBase, path);
+  }
+
+  public static URI roomUnbanUri(IrcProperties.Server server, String roomId) {
+    URI apiBase = clientApiBaseUri(server);
+    String rid = validatePathSegment(roomId, "roomId");
+    String path = appendPath(apiBase.getPath(), "rooms/" + rid + "/unban");
+    return rebuild(apiBase, path);
+  }
+
+  public static URI roomStateEventUri(IrcProperties.Server server, String roomId, String eventType) {
+    URI apiBase = clientApiBaseUri(server);
+    String rid = validatePathSegment(roomId, "roomId");
+    String type = validatePathSegment(eventType, "eventType");
+    String path = appendPath(apiBase.getPath(), "rooms/" + rid + "/state/" + type);
+    return rebuild(apiBase, path);
+  }
+
+  public static URI joinedRoomsUri(IrcProperties.Server server) {
+    URI apiBase = clientApiBaseUri(server);
+    String path = appendPath(apiBase.getPath(), "joined_rooms");
+    return rebuild(apiBase, path);
+  }
+
   public static URI roomJoinedMembersUri(IrcProperties.Server server, String roomId) {
     URI apiBase = clientApiBaseUri(server);
     String rid = validatePathSegment(roomId, "roomId");

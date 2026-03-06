@@ -3,7 +3,6 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
@@ -83,10 +82,6 @@ public class OutboundModeCommandService {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
       return;
     }
-    if (!ensureIrcRawCommandSupported(
-        at.serverId(), new TargetRef(at.serverId(), "status"), "(mode)", "/mode")) {
-      return;
-    }
 
     String line =
         "MODE " + channel + (modeSpec == null || modeSpec.isBlank() ? "" : " " + modeSpec);
@@ -159,10 +154,6 @@ public class OutboundModeCommandService {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
       return;
     }
-    if (!ensureIrcRawCommandSupported(
-        at.serverId(), new TargetRef(at.serverId(), "status"), "(mode)", "/mode")) {
-      return;
-    }
 
     String ch = resolveChannelOrNull(at, channel);
     if (ch == null) {
@@ -208,10 +199,6 @@ public class OutboundModeCommandService {
     }
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-    if (!ensureIrcRawCommandSupported(
-        at.serverId(), new TargetRef(at.serverId(), "status"), "(mode)", "/mode")) {
       return;
     }
 
@@ -290,31 +277,6 @@ public class OutboundModeCommandService {
   private static boolean looksLikeMask(String s) {
     if (s == null) return false;
     return s.indexOf('!') >= 0 || s.indexOf('@') >= 0 || s.indexOf('*') >= 0 || s.indexOf('?') >= 0;
-  }
-
-  private boolean ensureIrcRawCommandSupported(
-      String serverId, TargetRef out, String statusTag, String commandLabel) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) {
-      return true;
-    }
-    IrcProperties.Server.Backend backend = commandTargetPolicy.backendForServer(sid);
-    if (backend != IrcProperties.Server.Backend.MATRIX) {
-      return true;
-    }
-    String label = Objects.toString(commandLabel, "").trim();
-    if (label.isEmpty()) {
-      label = "command";
-    }
-    ui.appendStatus(
-        out,
-        statusTag,
-        "Server '"
-            + sid
-            + "' uses the Matrix backend. IRC-specific "
-            + label
-            + " behavior is not available yet.");
-    return false;
   }
 
   private String resolveChannelOrNull(TargetRef active, String explicitChannel) {

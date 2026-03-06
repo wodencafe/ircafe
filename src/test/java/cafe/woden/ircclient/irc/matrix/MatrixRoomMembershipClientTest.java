@@ -68,6 +68,85 @@ class MatrixRoomMembershipClientTest {
   }
 
   @Test
+  void inviteUserPostsInviteRequest() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server =
+        TestServer.start(200, "{\"room_id\":\"!joined:matrix.example.org\"}", 200, "{}")) {
+      MatrixRoomMembershipClient.ActionResult result =
+          membershipClient.inviteUser(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!joined:matrix.example.org",
+              "@bob:matrix.example.org");
+
+      assertTrue(result.success());
+      assertEquals("POST", server.lastLeaveMethod().get());
+      assertEquals(
+          "/_matrix/client/v3/rooms/!joined:matrix.example.org/invite", server.lastLeavePath().get());
+      assertTrue(server.lastRoomsRequestBody().get().contains("\"user_id\":\"@bob:matrix.example.org\""));
+    }
+  }
+
+  @Test
+  void kickUserPostsKickRequestWithReason() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server =
+        TestServer.start(200, "{\"room_id\":\"!joined:matrix.example.org\"}", 200, "{}")) {
+      MatrixRoomMembershipClient.ActionResult result =
+          membershipClient.kickUser(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!joined:matrix.example.org",
+              "@bob:matrix.example.org",
+              "cleanup");
+
+      assertTrue(result.success());
+      assertEquals("POST", server.lastLeaveMethod().get());
+      assertEquals(
+          "/_matrix/client/v3/rooms/!joined:matrix.example.org/kick", server.lastLeavePath().get());
+      assertTrue(server.lastRoomsRequestBody().get().contains("\"user_id\":\"@bob:matrix.example.org\""));
+      assertTrue(server.lastRoomsRequestBody().get().contains("\"reason\":\"cleanup\""));
+    }
+  }
+
+  @Test
+  void banAndUnbanPostMembershipRequests() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server =
+        TestServer.start(200, "{\"room_id\":\"!joined:matrix.example.org\"}", 200, "{}")) {
+      MatrixRoomMembershipClient.ActionResult ban =
+          membershipClient.banUser(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!joined:matrix.example.org",
+              "@bob:matrix.example.org",
+              "spam");
+
+      assertTrue(ban.success());
+      assertEquals("POST", server.lastLeaveMethod().get());
+      assertEquals(
+          "/_matrix/client/v3/rooms/!joined:matrix.example.org/ban", server.lastLeavePath().get());
+
+      MatrixRoomMembershipClient.ActionResult unban =
+          membershipClient.unbanUser(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!joined:matrix.example.org",
+              "@bob:matrix.example.org");
+
+      assertTrue(unban.success());
+      assertEquals(
+          "/_matrix/client/v3/rooms/!joined:matrix.example.org/unban",
+          server.lastLeavePath().get());
+      assertTrue(server.lastRoomsRequestBody().get().contains("\"user_id\":\"@bob:matrix.example.org\""));
+    }
+  }
+
+  @Test
   void joinRoomReportsHttpFailure() throws Exception {
     when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
     try (TestServer server = TestServer.start(403, "{\"errcode\":\"M_FORBIDDEN\"}", 200, "{}")) {
@@ -128,7 +207,8 @@ class MatrixRoomMembershipClientTest {
       AtomicReference<String> lastJoinAuthorizationHeader,
       AtomicReference<String> lastLeaveMethod,
       AtomicReference<String> lastLeavePath,
-      AtomicReference<String> lastLeaveAuthorizationHeader)
+      AtomicReference<String> lastLeaveAuthorizationHeader,
+      AtomicReference<String> lastRoomsRequestBody)
       implements AutoCloseable {
 
     static TestServer start(int joinStatus, String joinBody, int leaveStatus, String leaveBody)
@@ -140,6 +220,7 @@ class MatrixRoomMembershipClientTest {
       AtomicReference<String> leaveMethod = new AtomicReference<>("");
       AtomicReference<String> leavePath = new AtomicReference<>("");
       AtomicReference<String> leaveAuth = new AtomicReference<>("");
+      AtomicReference<String> roomsBody = new AtomicReference<>("");
 
       server.createContext(
           "/_matrix/client/v3/join/",
@@ -156,6 +237,7 @@ class MatrixRoomMembershipClientTest {
             leaveMethod.set(exchange.getRequestMethod());
             leavePath.set(exchange.getRequestURI().getRawPath());
             leaveAuth.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            roomsBody.set(readRequestBody(exchange));
             reply(exchange, leaveStatus, leaveBody.getBytes(StandardCharsets.UTF_8));
           });
       server.start();
@@ -167,7 +249,8 @@ class MatrixRoomMembershipClientTest {
           joinAuth,
           leaveMethod,
           leavePath,
-          leaveAuth);
+          leaveAuth,
+          roomsBody);
     }
 
     @Override
@@ -181,6 +264,14 @@ class MatrixRoomMembershipClientTest {
       exchange.sendResponseHeaders(statusCode, payload.length);
       exchange.getResponseBody().write(payload);
       exchange.close();
+    }
+
+    private static String readRequestBody(HttpExchange exchange) throws IOException {
+      byte[] raw = exchange.getRequestBody().readAllBytes();
+      if (raw == null || raw.length == 0) {
+        return "";
+      }
+      return new String(raw, StandardCharsets.UTF_8);
     }
   }
 }

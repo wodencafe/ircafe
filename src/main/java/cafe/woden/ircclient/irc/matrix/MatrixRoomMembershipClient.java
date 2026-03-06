@@ -99,6 +99,103 @@ final class MatrixRoomMembershipClient {
     }
   }
 
+  ActionResult inviteUser(
+      String serverId, IrcProperties.Server server, String accessToken, String roomId, String userId) {
+    return postRoomMembershipAction(
+        serverId,
+        MatrixEndpointResolver.roomInviteUri(server, roomId),
+        accessToken,
+        Map.of("user_id", normalize(userId)),
+        "invite endpoint");
+  }
+
+  ActionResult kickUser(
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String userId,
+      String reason) {
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("user_id", normalize(userId));
+    String why = normalize(reason);
+    if (!why.isEmpty()) {
+      payload.put("reason", why);
+    }
+    return postRoomMembershipAction(
+        serverId,
+        MatrixEndpointResolver.roomKickUri(server, roomId),
+        accessToken,
+        payload,
+        "kick endpoint");
+  }
+
+  ActionResult banUser(
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String userId,
+      String reason) {
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("user_id", normalize(userId));
+    String why = normalize(reason);
+    if (!why.isEmpty()) {
+      payload.put("reason", why);
+    }
+    return postRoomMembershipAction(
+        serverId,
+        MatrixEndpointResolver.roomBanUri(server, roomId),
+        accessToken,
+        payload,
+        "ban endpoint");
+  }
+
+  ActionResult unbanUser(
+      String serverId, IrcProperties.Server server, String accessToken, String roomId, String userId) {
+    return postRoomMembershipAction(
+        serverId,
+        MatrixEndpointResolver.roomUnbanUri(server, roomId),
+        accessToken,
+        Map.of("user_id", normalize(userId)),
+        "unban endpoint");
+  }
+
+  private ActionResult postRoomMembershipAction(
+      String serverId, URI endpoint, String accessToken, Map<String, ?> payload, String opLabel) {
+    String token = normalize(accessToken);
+    if (token.isEmpty()) {
+      return ActionResult.failed(endpoint, "access token is blank");
+    }
+
+    ProxyPlan plan = proxyResolver.planForServer(serverId);
+    Map<String, String> headers = new HashMap<>(REQUEST_HEADERS);
+    headers.put("Authorization", "Bearer " + token);
+
+    try {
+      String payloadJson = JSON.writeValueAsString(payload == null ? Map.of() : payload);
+      HttpLite.Response<String> response =
+          HttpLite.postString(
+              endpoint,
+              headers,
+              payloadJson,
+              plan.proxy(),
+              plan.connectTimeoutMs(),
+              plan.readTimeoutMs());
+      int code = response.statusCode();
+      if (code < 200 || code >= 300) {
+        return ActionResult.failed(endpoint, "HTTP " + code + " from " + opLabel);
+      }
+      return ActionResult.success(endpoint);
+    } catch (IOException ex) {
+      String message = normalize(ex.getMessage());
+      if (message.isEmpty()) {
+        message = ex.getClass().getSimpleName();
+      }
+      return ActionResult.failed(endpoint, message);
+    }
+  }
+
   private static String parseRoomId(String body) {
     String json = normalize(body);
     if (json.isEmpty()) return "";
@@ -140,6 +237,20 @@ final class MatrixRoomMembershipClient {
         message = "leave failed";
       }
       return new LeaveResult(false, Objects.requireNonNull(endpoint, "endpoint"), message);
+    }
+  }
+
+  record ActionResult(boolean success, URI endpoint, String detail) {
+    static ActionResult success(URI endpoint) {
+      return new ActionResult(true, Objects.requireNonNull(endpoint, "endpoint"), "");
+    }
+
+    static ActionResult failed(URI endpoint, String detail) {
+      String message = normalize(detail);
+      if (message.isEmpty()) {
+        message = "room membership action failed";
+      }
+      return new ActionResult(false, Objects.requireNonNull(endpoint, "endpoint"), message);
     }
   }
 }

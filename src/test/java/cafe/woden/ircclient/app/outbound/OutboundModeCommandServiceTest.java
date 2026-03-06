@@ -2,7 +2,6 @@ package cafe.woden.ircclient.app.outbound;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -127,19 +126,17 @@ class OutboundModeCommandServiceTest {
   }
 
   @Test
-  void modeOnMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+  void modeOnMatrixBackendSendsRawModeLine() {
     TargetRef channel = new TargetRef("matrix", "#room:example.org");
     when(targetCoordinator.getActiveTarget()).thenReturn(channel);
     when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
     when(serverCatalog.find("matrix"))
         .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(irc.sendRaw("matrix", "MODE #room:example.org +m")).thenReturn(Completable.complete());
 
     service.handleMode(disposables, "#room:example.org", "+m");
 
-    verify(ui)
-        .appendStatus(
-            eq(new TargetRef("matrix", "status")), eq("(mode)"), contains("Matrix backend"));
-    verify(irc, never()).sendRaw(anyString(), anyString());
+    verify(irc).sendRaw("matrix", "MODE #room:example.org +m");
   }
 
   private static IrcProperties.Server serverWithBackend(

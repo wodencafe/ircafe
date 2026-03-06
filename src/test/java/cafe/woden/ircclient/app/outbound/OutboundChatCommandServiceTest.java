@@ -105,19 +105,19 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void joinWithKeyOnMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+  void joinWithKeyOnMatrixBackendDelegatesToRawJoin() {
     TargetRef status = new TargetRef("matrix", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);
     when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
     when(serverCatalog.find("matrix"))
         .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(irc.sendRaw("matrix", "JOIN #room:example.org hunter2")).thenReturn(Completable.complete());
 
     service.handleJoin(disposables, "#room:example.org", "hunter2");
 
     verify(runtimeConfig).rememberJoinedChannel("matrix", "#room:example.org");
     verify(joinRoutingState).rememberOrigin("matrix", "#room:example.org", status);
-    verify(ui).appendStatus(eq(status), eq("(join)"), contains("Matrix backend"));
-    verify(irc, never()).sendRaw(anyString(), anyString());
+    verify(irc).sendRaw("matrix", "JOIN #room:example.org hunter2");
   }
 
   @Test
@@ -942,18 +942,37 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void listOnMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
+  void listOnMatrixBackendSendsRawListLine() {
     TargetRef status = new TargetRef("matrix", "status");
+    TargetRef channelList = TargetRef.channelList("matrix");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);
     when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
     when(serverCatalog.find("matrix"))
         .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(irc.sendRaw("matrix", "LIST >10")).thenReturn(Completable.complete());
 
     service.handleList(disposables, ">10");
 
-    verify(ui).appendStatus(eq(status), eq("(list)"), contains("Matrix backend"));
-    verify(ui, never()).beginChannelList(anyString(), anyString());
-    verify(irc, never()).sendRaw(anyString(), anyString());
+    verify(ui).ensureTargetExists(channelList);
+    verify(ui).beginChannelList("matrix", "Loading channel list (>10)...");
+    verify(ui).selectTarget(channelList);
+    verify(irc).sendRaw("matrix", "LIST >10");
+  }
+
+  @Test
+  void namesOnMatrixBackendRequestsNames() {
+    TargetRef room = new TargetRef("matrix", "!room:example.org");
+    when(targetCoordinator.getActiveTarget()).thenReturn(room);
+    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(irc.requestNames("matrix", "!room:example.org")).thenReturn(Completable.complete());
+
+    service.handleNames(disposables, "");
+
+    verify(ui).ensureTargetExists(room);
+    verify(ui).appendStatus(room, "(names)", "Requesting NAMES for !room:example.org...");
+    verify(irc).requestNames("matrix", "!room:example.org");
   }
 
   @Test

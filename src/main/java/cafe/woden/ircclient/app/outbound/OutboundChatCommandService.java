@@ -144,10 +144,6 @@ public class OutboundChatCommandService {
     }
 
     if (!joinKey.isEmpty()) {
-      TargetRef status = new TargetRef(at.serverId(), "status");
-      if (!ensureIrcRawCommandSupported(at.serverId(), status, "(join)", "join with a key")) {
-        return;
-      }
       String line = "JOIN " + chan + " " + joinKey;
       disposables.add(
           irc.sendRaw(at.serverId(), line)
@@ -1091,10 +1087,6 @@ public class OutboundChatCommandService {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
       return;
     }
-    if (!ensureIrcRawCommandSupported(
-        at.serverId(), new TargetRef(at.serverId(), "status"), "(topic)", "/topic")) {
-      return;
-    }
 
     if (containsCrlf(channel) || containsCrlf(topicText)) {
       ui.appendStatus(
@@ -1139,10 +1131,6 @@ public class OutboundChatCommandService {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
       return;
     }
-    if (!ensureIrcRawCommandSupported(
-        at.serverId(), new TargetRef(at.serverId(), "status"), "(kick)", "/kick")) {
-      return;
-    }
 
     if (containsCrlf(ch) || containsCrlf(n) || containsCrlf(rsn)) {
       ui.appendStatus(
@@ -1183,10 +1171,6 @@ public class OutboundChatCommandService {
 
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-    if (!ensureIrcRawCommandSupported(
-        at.serverId(), new TargetRef(at.serverId(), "status"), "(invite)", "/invite")) {
       return;
     }
 
@@ -1406,10 +1390,6 @@ public class OutboundChatCommandService {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
       return;
     }
-    if (!ensureIrcRawCommandSupported(
-        at.serverId(), new TargetRef(at.serverId(), "status"), "(names)", "/names")) {
-      return;
-    }
 
     if (containsCrlf(ch)) {
       ui.appendStatus(
@@ -1452,10 +1432,6 @@ public class OutboundChatCommandService {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
       return;
     }
-    if (!ensureIrcRawCommandSupported(
-        at.serverId(), new TargetRef(at.serverId(), "status"), "(who)", "/who")) {
-      return;
-    }
 
     if (containsCrlf(a)) {
       ui.appendStatus(
@@ -1495,10 +1471,6 @@ public class OutboundChatCommandService {
     String a = args == null ? "" : args.trim();
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-    if (!ensureIrcRawCommandSupported(
-        at.serverId(), new TargetRef(at.serverId(), "status"), "(list)", "/list")) {
       return;
     }
 

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -37,8 +38,10 @@ class MatrixIrcClientServiceTest {
   private final MatrixReadMarkerClient readMarkerClient = mock(MatrixReadMarkerClient.class);
   private final MatrixRoomMembershipClient roomMembershipClient =
       mock(MatrixRoomMembershipClient.class);
+  private final MatrixRoomStateClient roomStateClient = mock(MatrixRoomStateClient.class);
   private final MatrixRoomDirectoryClient roomDirectoryClient =
       mock(MatrixRoomDirectoryClient.class);
+  private final MatrixJoinedRoomsClient joinedRoomsClient = mock(MatrixJoinedRoomsClient.class);
   private final MatrixRoomRosterClient roomRosterClient = mock(MatrixRoomRosterClient.class);
   private final MatrixRoomHistoryClient roomHistoryClient = mock(MatrixRoomHistoryClient.class);
   private final MatrixRoomTypingClient roomTypingClient = mock(MatrixRoomTypingClient.class);
@@ -55,7 +58,9 @@ class MatrixIrcClientServiceTest {
           presenceClient,
           readMarkerClient,
           roomMembershipClient,
+          roomStateClient,
           roomDirectoryClient,
+          joinedRoomsClient,
           roomRosterClient,
           roomHistoryClient,
           roomTypingClient,
@@ -3772,6 +3777,238 @@ class MatrixIrcClientServiceTest {
     IrcEvent.JoinedChannel joined =
         assertInstanceOf(IrcEvent.JoinedChannel.class, events.values().get(3).event());
     assertEquals("!room:matrix.example.org", joined.channel());
+  }
+
+  @Test
+  void rawTopicQueryFetchesRoomTopicAndEmitsTopicEvent() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomStateClient.fetchRoomTopic(
+            "matrix", server, "secret-token", "!room:matrix.example.org"))
+        .thenReturn(
+            MatrixRoomStateClient.TopicResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/%21room%3Amatrix.example.org/state/m.room.topic"),
+                "hello matrix topic"));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service.sendRaw("matrix", "TOPIC !room:matrix.example.org").blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.ChannelTopicUpdated topic =
+        assertInstanceOf(IrcEvent.ChannelTopicUpdated.class, events.values().get(3).event());
+    assertEquals("!room:matrix.example.org", topic.channel());
+    assertEquals("hello matrix topic", topic.topic());
+  }
+
+  @Test
+  void rawInviteDelegatesToMembershipInviteAndEmitsInviteEvent() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomMembershipClient.inviteUser(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "@bob:matrix.example.org"))
+        .thenReturn(
+            MatrixRoomMembershipClient.ActionResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/%21room%3Amatrix.example.org/invite")));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service.sendRaw("matrix", "INVITE @bob:matrix.example.org !room:matrix.example.org").blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.InvitedToChannel invite =
+        assertInstanceOf(IrcEvent.InvitedToChannel.class, events.values().get(3).event());
+    assertEquals("!room:matrix.example.org", invite.channel());
+    assertEquals("@bob:matrix.example.org", invite.invitee());
+  }
+
+  @Test
+  void rawKickDelegatesToMembershipKickAndEmitsKickEvent() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomMembershipClient.kickUser(
+            "matrix",
+            server,
+            "secret-token",
+            "!room:matrix.example.org",
+            "@bob:matrix.example.org",
+            "cleanup"))
+        .thenReturn(
+            MatrixRoomMembershipClient.ActionResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/%21room%3Amatrix.example.org/kick")));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service
+        .sendRaw("matrix", "KICK !room:matrix.example.org @bob:matrix.example.org :cleanup")
+        .blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.UserKickedFromChannel kick =
+        assertInstanceOf(IrcEvent.UserKickedFromChannel.class, events.values().get(3).event());
+    assertEquals("!room:matrix.example.org", kick.channel());
+    assertEquals("@bob:matrix.example.org", kick.nick());
+    assertEquals("@alice:matrix.example.org", kick.by());
+    assertEquals("cleanup", kick.reason());
+  }
+
+  @Test
+  void rawWhoForRoomDelegatesToNames() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomRosterClient.fetchJoinedMembers(
+            "matrix", server, "secret-token", "!room:matrix.example.org"))
+        .thenReturn(
+            MatrixRoomRosterClient.RosterResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/%21room%3Amatrix.example.org/joined_members"),
+                List.of(new MatrixRoomRosterClient.JoinedMember("@bob:matrix.example.org", "Bob"))));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service.sendRaw("matrix", "WHO !room:matrix.example.org").blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.NickListUpdated names =
+        assertInstanceOf(IrcEvent.NickListUpdated.class, events.values().get(3).event());
+    assertEquals("!room:matrix.example.org", names.channel());
+    assertEquals(1, names.totalUsers());
+  }
+
+  @Test
+  void rawListEmitsChannelListEventsFromJoinedRooms() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(joinedRoomsClient.fetchJoinedRooms("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixJoinedRoomsClient.JoinedRoomsResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/joined_rooms"),
+                List.of("!a:matrix.example.org", "!b:matrix.example.org")));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service.sendRaw("matrix", "LIST").blockingAwait();
+    events.awaitCount(7);
+
+    assertInstanceOf(IrcEvent.ChannelListStarted.class, events.values().get(3).event());
+    assertInstanceOf(IrcEvent.ChannelListEntry.class, events.values().get(4).event());
+    assertInstanceOf(IrcEvent.ChannelListEntry.class, events.values().get(5).event());
+    assertInstanceOf(IrcEvent.ChannelListEnded.class, events.values().get(6).event());
+  }
+
+  @Test
+  void rawModeOpUpdatesPowerLevelsAndEmitsModeObserved() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomStateClient.fetchRoomPowerLevels(
+            "matrix", server, "secret-token", "!room:matrix.example.org"))
+        .thenReturn(
+            MatrixRoomStateClient.PowerLevelsResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/%21room%3Amatrix.example.org/state/m.room.power_levels"),
+                Map.of("users_default", 0L, "users", Map.of())));
+    when(roomStateClient.updateRoomPowerLevels(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            argThat(
+                map -> {
+                  if (map == null) return false;
+                  Object usersObj = map.get("users");
+                  if (!(usersObj instanceof Map<?, ?> usersMap)) return false;
+                  return Long.valueOf(50L).equals(usersMap.get("@bob:matrix.example.org"))
+                      || Integer.valueOf(50).equals(usersMap.get("@bob:matrix.example.org"));
+                })))
+        .thenReturn(
+            MatrixRoomStateClient.UpdateResult.updated(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/%21room%3Amatrix.example.org/state/m.room.power_levels")));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service.sendRaw("matrix", "MODE !room:matrix.example.org +o @bob:matrix.example.org").blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.ChannelModeObserved mode =
+        assertInstanceOf(IrcEvent.ChannelModeObserved.class, events.values().get(3).event());
+    assertEquals("!room:matrix.example.org", mode.channel());
+    assertEquals("+o @bob:matrix.example.org", mode.details());
   }
 
   @Test

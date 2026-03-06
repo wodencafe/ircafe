@@ -131,6 +131,61 @@ class MatrixEndpointResolverTest {
   }
 
   @Test
+  void roomInviteUriBuildsRoomsInvitePath() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri = MatrixEndpointResolver.roomInviteUri(server, "!room:example.org");
+
+    assertEquals(
+        "https://example.org:443/matrix/_matrix/client/v3/rooms/!room:example.org/invite",
+        uri.toString());
+  }
+
+  @Test
+  void roomKickUriBuildsRoomsKickPath() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri = MatrixEndpointResolver.roomKickUri(server, "!room:example.org");
+
+    assertEquals(
+        "https://example.org:443/matrix/_matrix/client/v3/rooms/!room:example.org/kick",
+        uri.toString());
+  }
+
+  @Test
+  void roomBanUriBuildsRoomsBanPath() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri = MatrixEndpointResolver.roomBanUri(server, "!room:example.org");
+
+    assertEquals(
+        "https://example.org:443/matrix/_matrix/client/v3/rooms/!room:example.org/ban",
+        uri.toString());
+  }
+
+  @Test
+  void roomUnbanUriBuildsRoomsUnbanPath() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri = MatrixEndpointResolver.roomUnbanUri(server, "!room:example.org");
+
+    assertEquals(
+        "https://example.org:443/matrix/_matrix/client/v3/rooms/!room:example.org/unban",
+        uri.toString());
+  }
+
+  @Test
+  void roomStateEventUriBuildsRoomsStatePath() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri = MatrixEndpointResolver.roomStateEventUri(server, "!room:example.org", "m.room.topic");
+
+    assertEquals(
+        "https://example.org:443/matrix/_matrix/client/v3/rooms/!room:example.org/state/m.room.topic",
+        uri.toString());
+  }
+
+  @Test
   void roomJoinedMembersUriBuildsRoomsJoinedMembersPath() {
     IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
 
@@ -173,6 +228,15 @@ class MatrixEndpointResolverTest {
     assertEquals(
         "https://example.org:443/matrix/_matrix/client/v3/rooms/!room:example.org/read_markers",
         uri.toString());
+  }
+
+  @Test
+  void joinedRoomsUriBuildsJoinedRoomsPath() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri = MatrixEndpointResolver.joinedRoomsUri(server);
+
+    assertEquals("https://example.org:443/matrix/_matrix/client/v3/joined_rooms", uri.toString());
   }
 
   @Test

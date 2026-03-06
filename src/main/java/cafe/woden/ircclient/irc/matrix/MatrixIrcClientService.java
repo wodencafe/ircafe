@@ -79,7 +79,9 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private final MatrixPresenceClient presenceClient;
   private final MatrixReadMarkerClient readMarkerClient;
   private final MatrixRoomMembershipClient roomMembershipClient;
+  private final MatrixRoomStateClient roomStateClient;
   private final MatrixRoomDirectoryClient roomDirectoryClient;
+  private final MatrixJoinedRoomsClient joinedRoomsClient;
   private final MatrixRoomRosterClient roomRosterClient;
   private final MatrixRoomHistoryClient roomHistoryClient;
   private final MatrixRoomTypingClient roomTypingClient;
@@ -99,7 +101,9 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       MatrixPresenceClient presenceClient,
       MatrixReadMarkerClient readMarkerClient,
       MatrixRoomMembershipClient roomMembershipClient,
+      MatrixRoomStateClient roomStateClient,
       MatrixRoomDirectoryClient roomDirectoryClient,
+      MatrixJoinedRoomsClient joinedRoomsClient,
       MatrixRoomRosterClient roomRosterClient,
       MatrixRoomHistoryClient roomHistoryClient,
       MatrixRoomTypingClient roomTypingClient,
@@ -115,7 +119,9 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     this.readMarkerClient = Objects.requireNonNull(readMarkerClient, "readMarkerClient");
     this.roomMembershipClient =
         Objects.requireNonNull(roomMembershipClient, "roomMembershipClient");
+    this.roomStateClient = Objects.requireNonNull(roomStateClient, "roomStateClient");
     this.roomDirectoryClient = Objects.requireNonNull(roomDirectoryClient, "roomDirectoryClient");
+    this.joinedRoomsClient = Objects.requireNonNull(joinedRoomsClient, "joinedRoomsClient");
     this.roomRosterClient = Objects.requireNonNull(roomRosterClient, "roomRosterClient");
     this.roomHistoryClient = Objects.requireNonNull(roomHistoryClient, "roomHistoryClient");
     this.roomTypingClient = Objects.requireNonNull(roomTypingClient, "roomTypingClient");
@@ -694,6 +700,12 @@ public class MatrixIrcClientService implements IrcBackendClientService {
               sid, argOrBlank(raw, 0, "PART requires a room target"), joinArgs(raw.arguments(), 1));
       case "PRIVMSG" -> sendRawPrivmsg(sid, line, raw);
       case "NOTICE" -> sendRawNotice(sid, line, raw);
+      case "TOPIC" -> sendRawTopic(sid, raw);
+      case "KICK" -> sendRawKick(sid, raw);
+      case "INVITE" -> sendRawInvite(sid, raw);
+      case "WHO" -> sendRawWho(sid, raw);
+      case "LIST" -> sendRawList(sid, raw);
+      case "MODE" -> sendRawMode(sid, raw);
       case "WHOIS" -> whois(sid, argOrBlank(raw, 0, "WHOIS requires a target"));
       case "WHOWAS" -> sendRawWhowas(sid, raw);
       case "AWAY" -> setAway(sid, joinArgs(raw.arguments(), 0));
@@ -1515,6 +1527,493 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       }
     }
     return whowas(serverId, target, count);
+  }
+
+  private Completable sendRawTopic(String serverId, RawCommand raw) {
+    String target = argOrBlank(raw, 0, "TOPIC requires a room target");
+    String topic = joinArgs(raw.arguments(), 1);
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "topic",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveAliasOrRoomId(sid, target, server, session);
+
+              if (topic.isEmpty()) {
+                MatrixRoomStateClient.TopicResult result =
+                    roomStateClient.fetchRoomTopic(sid, server, session.accessToken, roomId);
+                if (!result.success()) {
+                  throw new IllegalStateException(
+                      "Matrix topic fetch failed at " + result.endpoint() + ": " + result.detail());
+                }
+                bus.onNext(
+                    new ServerIrcEvent(
+                        sid,
+                        new IrcEvent.ChannelTopicUpdated(
+                            Instant.now(), roomId, Objects.toString(result.topic(), ""))));
+                return;
+              }
+
+              MatrixRoomStateClient.UpdateResult update =
+                  roomStateClient.updateRoomTopic(sid, server, session.accessToken, roomId, topic);
+              if (!update.updated()) {
+                throw new IllegalStateException(
+                    "Matrix topic update failed at " + update.endpoint() + ": " + update.detail());
+              }
+              bus.onNext(
+                  new ServerIrcEvent(
+                      sid, new IrcEvent.ChannelTopicUpdated(Instant.now(), roomId, topic)));
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private Completable sendRawKick(String serverId, RawCommand raw) {
+    String target = argOrBlank(raw, 0, "KICK requires <room> <userId> [reason]");
+    String userId = argOrBlank(raw, 1, "KICK requires <room> <userId> [reason]");
+    String reason = joinArgs(raw.arguments(), 2);
+    if (!looksLikeMatrixUserId(userId)) {
+      throw new IllegalArgumentException("KICK target must be a Matrix user id");
+    }
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "kick",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveAliasOrRoomId(sid, target, server, session);
+              MatrixRoomMembershipClient.ActionResult result =
+                  roomMembershipClient.kickUser(
+                      sid, server, session.accessToken, roomId, userId, reason);
+              if (!result.success()) {
+                throw new IllegalStateException(
+                    "Matrix kick failed at " + result.endpoint() + ": " + result.detail());
+              }
+
+              Instant now = Instant.now();
+              String by = normalize(session.userId);
+              if (userId.equals(by)) {
+                session.forgetJoinedRoom(roomId);
+                bus.onNext(
+                    new ServerIrcEvent(sid, new IrcEvent.KickedFromChannel(now, roomId, by, reason)));
+              } else {
+                bus.onNext(
+                    new ServerIrcEvent(
+                        sid, new IrcEvent.UserKickedFromChannel(now, roomId, userId, by, reason)));
+              }
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private Completable sendRawInvite(String serverId, RawCommand raw) {
+    String invitee = argOrBlank(raw, 0, "INVITE requires <userId> <room>");
+    String target = argOrBlank(raw, 1, "INVITE requires <userId> <room>");
+    if (!looksLikeMatrixUserId(invitee)) {
+      throw new IllegalArgumentException("INVITE target must be a Matrix user id");
+    }
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "invite",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveAliasOrRoomId(sid, target, server, session);
+              MatrixRoomMembershipClient.ActionResult result =
+                  roomMembershipClient.inviteUser(sid, server, session.accessToken, roomId, invitee);
+              if (!result.success()) {
+                throw new IllegalStateException(
+                    "Matrix invite failed at " + result.endpoint() + ": " + result.detail());
+              }
+              bus.onNext(
+                  new ServerIrcEvent(
+                      sid,
+                      new IrcEvent.InvitedToChannel(
+                          Instant.now(), roomId, session.userId, invitee, "", false)));
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private Completable sendRawWho(String serverId, RawCommand raw) {
+    String token = argOrBlank(raw, 0, "WHO requires a target");
+    if (looksLikeMatrixUserId(token)) {
+      return whois(serverId, token);
+    }
+    if (looksLikeMatrixRoomId(token)
+        || looksLikeMatrixRoomAlias(token)
+        || (token.startsWith("#") && token.indexOf(':') < 0)) {
+      return requestNames(serverId, token);
+    }
+    throw new IllegalArgumentException("WHO supports Matrix user ids and room targets only");
+  }
+
+  private Completable sendRawList(String serverId, RawCommand raw) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "list",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+              IrcProperties.Server server = serverCatalog.require(sid);
+              MatrixJoinedRoomsClient.JoinedRoomsResult result =
+                  joinedRoomsClient.fetchJoinedRooms(sid, server, session.accessToken);
+              if (!result.success()) {
+                throw new IllegalStateException(
+                    "Matrix list failed at " + result.endpoint() + ": " + result.detail());
+              }
+
+              Instant now = Instant.now();
+              bus.onNext(new ServerIrcEvent(sid, new IrcEvent.ChannelListStarted(now, "Matrix rooms")));
+              List<String> roomIds = result.roomIds();
+              if (roomIds != null) {
+                for (String roomId : roomIds) {
+                  String rid = normalize(roomId);
+                  if (rid.isEmpty()) continue;
+                  bus.onNext(new ServerIrcEvent(sid, new IrcEvent.ChannelListEntry(now, rid, 0, "")));
+                }
+              }
+              int listed = roomIds == null ? 0 : roomIds.size();
+              bus.onNext(
+                  new ServerIrcEvent(
+                      sid, new IrcEvent.ChannelListEnded(now, "Listed " + listed + " Matrix room(s).")));
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private Completable sendRawMode(String serverId, RawCommand raw) {
+    String target = argOrBlank(raw, 0, "MODE requires <room> [modes] [args...]");
+    if (raw.arguments().size() < 2) {
+      return sendRawModeQuery(serverId, target);
+    }
+    String modeSpec = normalize(raw.arguments().get(1));
+    if (modeSpec.isEmpty()) {
+      return sendRawModeQuery(serverId, target);
+    }
+    List<String> modeArgs =
+        raw.arguments().size() > 2
+            ? raw.arguments().subList(2, raw.arguments().size())
+            : List.of();
+    return sendRawModeMutation(serverId, target, modeSpec, modeArgs);
+  }
+
+  private Completable sendRawModeQuery(String serverId, String target) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "mode",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveAliasOrRoomId(sid, target, server, session);
+              MatrixRoomStateClient.PowerLevelsResult state =
+                  roomStateClient.fetchRoomPowerLevels(sid, server, session.accessToken, roomId);
+              if (!state.success()) {
+                throw new IllegalStateException(
+                    "Matrix mode query failed at " + state.endpoint() + ": " + state.detail());
+              }
+              Instant now = Instant.now();
+              bus.onNext(
+                  new ServerIrcEvent(
+                      sid,
+                      new IrcEvent.ChannelModeObserved(
+                          now,
+                          roomId,
+                          session.userId,
+                          "+matrix",
+                          IrcEvent.ChannelModeKind.SNAPSHOT,
+                          IrcEvent.ChannelModeProvenance.UNKNOWN)));
+              bus.onNext(
+                  new ServerIrcEvent(
+                      sid,
+                      new IrcEvent.ServerResponseLine(
+                          now,
+                          324,
+                          roomId + " " + renderMatrixPowerLevelSummary(state.content()),
+                          "",
+                          "",
+                          Map.of())));
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private Completable sendRawModeMutation(
+      String serverId, String target, String modeSpec, List<String> modeArgs) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "mode",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveAliasOrRoomId(sid, target, server, session);
+
+              int argIndex = 0;
+              boolean adding = true;
+              boolean powerLevelsChanged = false;
+              Map<String, Object> powerLevels = null;
+              List<String> applied = new java.util.ArrayList<>();
+
+              for (int i = 0; i < modeSpec.length(); i++) {
+                char c = modeSpec.charAt(i);
+                if (c == '+') {
+                  adding = true;
+                  continue;
+                }
+                if (c == '-') {
+                  adding = false;
+                  continue;
+                }
+
+                if (c == 'o' || c == 'v') {
+                  if (argIndex >= modeArgs.size()) {
+                    throw new IllegalArgumentException("MODE " + modeSpec + " is missing nick arguments");
+                  }
+                  String userId = normalize(modeArgs.get(argIndex++));
+                  if (!looksLikeMatrixUserId(userId)) {
+                    throw new IllegalArgumentException("MODE target must be a Matrix user id");
+                  }
+                  if (powerLevels == null) {
+                    powerLevels = fetchOrDefaultPowerLevels(sid, server, session.accessToken, roomId);
+                  }
+                  int usersDefault = matrixUsersDefault(powerLevels);
+                  int level =
+                      switch (c) {
+                        case 'o' -> adding ? 50 : usersDefault;
+                        case 'v' -> adding ? 10 : usersDefault;
+                        default -> usersDefault;
+                      };
+                  setMatrixUserPowerLevel(powerLevels, userId, level);
+                  powerLevelsChanged = true;
+                  applied.add((adding ? "+" : "-") + c + " " + userId);
+                  continue;
+                }
+
+                if (c == 'b') {
+                  if (argIndex >= modeArgs.size()) {
+                    throw new IllegalArgumentException("MODE " + modeSpec + " is missing ban arguments");
+                  }
+                  String userId = normalize(modeArgs.get(argIndex++));
+                  if (!looksLikeMatrixUserId(userId)) {
+                    throw new IllegalArgumentException("MODE ban target must be a Matrix user id");
+                  }
+                  MatrixRoomMembershipClient.ActionResult action =
+                      adding
+                          ? roomMembershipClient.banUser(
+                              sid, server, session.accessToken, roomId, userId, "")
+                          : roomMembershipClient.unbanUser(
+                              sid, server, session.accessToken, roomId, userId);
+                  if (!action.success()) {
+                    throw new IllegalStateException(
+                        "Matrix mode ban update failed at "
+                            + action.endpoint()
+                            + ": "
+                            + action.detail());
+                  }
+                  applied.add((adding ? "+" : "-") + "b " + userId);
+                  continue;
+                }
+
+                throw new IllegalArgumentException("MODE " + c + " is not supported by Matrix backend");
+              }
+
+              if (argIndex < modeArgs.size()) {
+                throw new IllegalArgumentException("MODE has too many arguments for the mode sequence");
+              }
+
+              if (powerLevelsChanged) {
+                MatrixRoomStateClient.UpdateResult update =
+                    roomStateClient.updateRoomPowerLevels(
+                        sid, server, session.accessToken, roomId, powerLevels);
+                if (!update.updated()) {
+                  throw new IllegalStateException(
+                      "Matrix mode update failed at " + update.endpoint() + ": " + update.detail());
+                }
+              }
+
+              Instant now = Instant.now();
+              for (String details : applied) {
+                bus.onNext(
+                    new ServerIrcEvent(
+                        sid,
+                        new IrcEvent.ChannelModeObserved(
+                            now,
+                            roomId,
+                            session.userId,
+                            details,
+                            IrcEvent.ChannelModeKind.DELTA,
+                            IrcEvent.ChannelModeProvenance.LIVE_MODE_EVENT)));
+              }
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private Map<String, Object> fetchOrDefaultPowerLevels(
+      String serverId, IrcProperties.Server server, String accessToken, String roomId) {
+    MatrixRoomStateClient.PowerLevelsResult state =
+        roomStateClient.fetchRoomPowerLevels(serverId, server, accessToken, roomId);
+    if (!state.success()) {
+      throw new IllegalStateException(
+          "Matrix power-level fetch failed at " + state.endpoint() + ": " + state.detail());
+    }
+    Map<String, Object> content = state.content();
+    if (content == null || content.isEmpty()) {
+      return new LinkedHashMap<>(MatrixRoomStateClient.defaultPowerLevelsState());
+    }
+    return deepMutableCopy(content);
+  }
+
+  private static int matrixUsersDefault(Map<String, Object> powerLevels) {
+    if (powerLevels == null || powerLevels.isEmpty()) {
+      return 0;
+    }
+    return parseInteger(powerLevels.get("users_default"), 0);
+  }
+
+  private static void setMatrixUserPowerLevel(
+      Map<String, Object> powerLevels, String userId, int level) {
+    if (powerLevels == null) return;
+    Map<String, Object> users = mutableMap(powerLevels.get("users"));
+    users.put(normalize(userId), Integer.valueOf(level));
+    powerLevels.put("users", users);
+  }
+
+  private static Map<String, Object> mutableMap(Object value) {
+    if (value instanceof Map<?, ?> mapValue) {
+      LinkedHashMap<String, Object> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : mapValue.entrySet()) {
+        if (entry == null) continue;
+        String key = normalize(Objects.toString(entry.getKey(), ""));
+        if (key.isEmpty()) continue;
+        out.put(key, entry.getValue());
+      }
+      return out;
+    }
+    return new LinkedHashMap<>();
+  }
+
+  private static Map<String, Object> deepMutableCopy(Map<String, Object> input) {
+    LinkedHashMap<String, Object> out = new LinkedHashMap<>();
+    if (input == null || input.isEmpty()) {
+      return out;
+    }
+    for (Map.Entry<String, Object> entry : input.entrySet()) {
+      if (entry == null) continue;
+      String key = normalize(entry.getKey());
+      if (key.isEmpty()) continue;
+      out.put(key, deepMutableValue(entry.getValue()));
+    }
+    return out;
+  }
+
+  private static Object deepMutableValue(Object value) {
+    if (value instanceof Map<?, ?> mapValue) {
+      LinkedHashMap<String, Object> out = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : mapValue.entrySet()) {
+        if (entry == null) continue;
+        String key = normalize(Objects.toString(entry.getKey(), ""));
+        if (key.isEmpty()) continue;
+        out.put(key, deepMutableValue(entry.getValue()));
+      }
+      return out;
+    }
+    if (value instanceof List<?> listValue) {
+      java.util.ArrayList<Object> out = new java.util.ArrayList<>(listValue.size());
+      for (Object item : listValue) {
+        out.add(deepMutableValue(item));
+      }
+      return out;
+    }
+    return value;
+  }
+
+  private static int parseInteger(Object raw, int fallback) {
+    if (raw == null) return fallback;
+    if (raw instanceof Number n) {
+      return n.intValue();
+    }
+    String token = normalize(Objects.toString(raw, ""));
+    if (!looksLikeInteger(token)) {
+      return fallback;
+    }
+    try {
+      return Integer.parseInt(token);
+    } catch (NumberFormatException ignored) {
+      return fallback;
+    }
+  }
+
+  private static String renderMatrixPowerLevelSummary(Map<String, Object> powerLevels) {
+    if (powerLevels == null || powerLevels.isEmpty()) {
+      return "users_default=0";
+    }
+    int usersDefault = matrixUsersDefault(powerLevels);
+    StringBuilder out = new StringBuilder().append("users_default=").append(usersDefault);
+    Map<String, Object> users = mutableMap(powerLevels.get("users"));
+    if (!users.isEmpty()) {
+      users.entrySet().stream()
+          .sorted(Map.Entry.comparingByKey(String::compareToIgnoreCase))
+          .forEach(
+              entry ->
+                  out.append(" ")
+                      .append(entry.getKey())
+                      .append("=")
+                      .append(parseInteger(entry.getValue(), usersDefault)));
+    }
+    return out.toString();
   }
 
   private Completable sendRawMarkRead(String serverId, RawCommand raw) {
