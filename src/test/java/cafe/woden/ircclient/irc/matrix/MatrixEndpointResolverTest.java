@@ -174,6 +174,33 @@ class MatrixEndpointResolverTest {
   }
 
   @Test
+  void roomMessagesUriBuildsForwardPaginationQuery() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri =
+        MatrixEndpointResolver.roomMessagesUri(
+            server, "!room:example.org", "s72595_4483_1934", "", "f", 20);
+
+    assertEquals(
+        "https://example.org:443/matrix/_matrix/client/v3/rooms/!room:example.org/messages?from=s72595_4483_1934&dir=f&limit=20",
+        uri.toString());
+  }
+
+  @Test
+  void roomMessagesUriRejectsInvalidDirection() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    IllegalArgumentException err =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                MatrixEndpointResolver.roomMessagesUri(
+                    server, "!room:example.org", "s72595_4483_1934", "", "x", 20));
+
+    assertEquals("direction must be 'b' or 'f'", err.getMessage());
+  }
+
+  @Test
   void versionsUriFromAbsoluteBaseUrlKeepsPathPrefix() {
     IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
 

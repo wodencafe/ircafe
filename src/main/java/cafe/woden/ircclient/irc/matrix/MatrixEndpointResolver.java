@@ -140,6 +140,16 @@ final class MatrixEndpointResolver {
 
   public static URI roomMessagesUri(
       IrcProperties.Server server, String roomId, String fromToken, String toToken, int limit) {
+    return roomMessagesUri(server, roomId, fromToken, toToken, "b", limit);
+  }
+
+  public static URI roomMessagesUri(
+      IrcProperties.Server server,
+      String roomId,
+      String fromToken,
+      String toToken,
+      String direction,
+      int limit) {
     URI apiBase = clientApiBaseUri(server);
     String rid = validatePathSegment(roomId, "roomId");
     String from = normalize(fromToken);
@@ -147,12 +157,16 @@ final class MatrixEndpointResolver {
       throw new IllegalArgumentException("fromToken is blank");
     }
     String to = normalize(toToken);
+    String dir = normalize(direction).toLowerCase(java.util.Locale.ROOT);
+    if (!"b".equals(dir) && !"f".equals(dir)) {
+      throw new IllegalArgumentException("direction must be 'b' or 'f'");
+    }
     int boundedLimit = Math.max(1, Math.min(limit, 200));
 
     String path = appendPath(apiBase.getPath(), "rooms/" + rid + "/messages");
     StringBuilder query = new StringBuilder();
     query.append("from=").append(encodeQueryParam(from));
-    query.append("&dir=b");
+    query.append("&dir=").append(dir);
     query.append("&limit=").append(boundedLimit);
     if (!to.isEmpty()) {
       query.append("&to=").append(encodeQueryParam(to));

@@ -42,7 +42,34 @@ final class MatrixRoomHistoryClient {
       String roomId,
       String fromToken,
       int limit) {
-    URI endpoint = MatrixEndpointResolver.roomMessagesUri(server, roomId, fromToken, "", limit);
+    return fetchMessages(
+        serverId, server, accessToken, roomId, fromToken, "", Direction.BACKWARD, limit);
+  }
+
+  HistoryResult fetchMessagesAfter(
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String fromToken,
+      int limit) {
+    return fetchMessages(
+        serverId, server, accessToken, roomId, fromToken, "", Direction.FORWARD, limit);
+  }
+
+  HistoryResult fetchMessages(
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String fromToken,
+      String toToken,
+      Direction direction,
+      int limit) {
+    Direction dir = direction == null ? Direction.BACKWARD : direction;
+    URI endpoint =
+        MatrixEndpointResolver.roomMessagesUri(
+            server, roomId, fromToken, toToken, dir.queryToken(), limit);
     String token = normalize(accessToken);
     if (token.isEmpty()) {
       return HistoryResult.failed(endpoint, "access token is blank");
@@ -72,6 +99,21 @@ final class MatrixRoomHistoryClient {
         message = ex.getClass().getSimpleName();
       }
       return HistoryResult.failed(endpoint, message);
+    }
+  }
+
+  enum Direction {
+    BACKWARD("b"),
+    FORWARD("f");
+
+    private final String queryToken;
+
+    Direction(String queryToken) {
+      this.queryToken = queryToken;
+    }
+
+    private String queryToken() {
+      return queryToken;
     }
   }
 

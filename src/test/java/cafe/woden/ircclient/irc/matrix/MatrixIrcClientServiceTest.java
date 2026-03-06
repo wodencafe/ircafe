@@ -1616,7 +1616,62 @@ class MatrixIrcClientServiceTest {
   }
 
   @Test
-  void requestChatHistoryBeforeSelectorMsgidReportsUnsupported() {
+  void requestChatHistoryBeforeSelectorMsgidUsesKnownMessageAnchor() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomMessageSender.sendRoomMessage(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            anyString(),
+            eq("seed")))
+        .thenReturn(
+            MatrixRoomMessageSender.SendResult.accepted(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/send/m.room.message/txn-seed"),
+                "$h1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 10))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=10"),
+                "s-next",
+                List.of()));
+    service.connect("matrix").blockingAwait();
+    service.sendToChannel("matrix", "!room:matrix.example.org", "seed").blockingAwait();
+
+    assertDoesNotThrow(
+        () ->
+            service
+                .requestChatHistoryBefore("matrix", "!room:matrix.example.org", "msgid=$h1", 10)
+                .blockingAwait());
+
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 10);
+  }
+
+  @Test
+  void requestChatHistoryBeforeSelectorMsgidUnknownReportsUnavailable() {
     IrcProperties.Server server =
         server("matrix", "matrix.example.org", 8448, true, "secret-token");
     when(serverCatalog.require("matrix")).thenReturn(server);
@@ -1637,11 +1692,158 @@ class MatrixIrcClientServiceTest {
             BackendNotAvailableException.class,
             () ->
                 service
-                    .requestChatHistoryBefore("matrix", "!room:matrix.example.org", "msgid=$h1", 10)
+                    .requestChatHistoryBefore(
+                        "matrix", "!room:matrix.example.org", "msgid=$unknown", 10)
                     .blockingAwait());
 
     assertEquals("chat-history-before", err.operation());
-    assertTrue(err.getMessage().contains("does not support msgid selectors"));
+    assertTrue(err.getMessage().contains("cannot resolve msgid selector"));
+  }
+
+  @Test
+  void requestChatHistoryBeforeSelectorMsgidScansHistoryWhenMissingFromIndex() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
+                "s-scan-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-scan",
+                        "m.text",
+                        "seeded from scan",
+                        Instant.parse("2024-03-09T15:45:00Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-scan-next", 5))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-scan-next&dir=b&limit=5"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-result",
+                        "m.text",
+                        "result line",
+                        Instant.parse("2024-03-09T15:40:00Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 5))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=5"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-result",
+                        "m.text",
+                        "result line",
+                        Instant.parse("2024-03-09T15:40:00Z").toEpochMilli()))));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    assertDoesNotThrow(
+        () ->
+            service
+                .requestChatHistoryBefore("matrix", "!room:matrix.example.org", "msgid=$h-scan", 5)
+                .blockingAwait());
+    events.awaitCount(4);
+
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            anyString(),
+            eq(5));
+    IrcEvent.ChatHistoryBatchReceived batch =
+        assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, events.values().get(3).event());
+    assertEquals(1, batch.entries().size());
+    assertEquals("$h-result", batch.entries().getFirst().messageId());
+  }
+
+  @Test
+  void requestChatHistoryLatestSelectorMsgidUsesKnownMessageAnchor() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomMessageSender.sendRoomMessage(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            anyString(),
+            eq("seed")))
+        .thenReturn(
+            MatrixRoomMessageSender.SendResult.accepted(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/send/m.room.message/txn-seed"),
+                "$h1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 3))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=3"),
+                "s-next",
+                List.of()));
+    service.connect("matrix").blockingAwait();
+    service.sendToChannel("matrix", "!room:matrix.example.org", "seed").blockingAwait();
+
+    assertDoesNotThrow(
+        () ->
+            service
+                .requestChatHistoryLatest("matrix", "!room:matrix.example.org", "msgid=$h1", 3)
+                .blockingAwait());
+
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 3);
   }
 
   @Test
@@ -1738,7 +1940,7 @@ class MatrixIrcClientServiceTest {
   }
 
   @Test
-  void requestChatHistoryAroundTimestampSelectorUsesBeforePath() {
+  void requestChatHistoryAroundTimestampSelectorUsesBidirectionalWindowing() {
     IrcProperties.Server server =
         server("matrix", "matrix.example.org", 8448, true, "secret-token");
     when(serverCatalog.require("matrix")).thenReturn(server);
@@ -1759,14 +1961,50 @@ class MatrixIrcClientServiceTest {
                 "s-anchor",
                 List.of()));
     when(roomHistoryClient.fetchMessagesBefore(
-            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 10))
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
         .thenReturn(
             MatrixRoomHistoryClient.HistoryResult.success(
                 URI.create(
-                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=10"),
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
                 "s-next",
-                List.of()));
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-center",
+                        "m.text",
+                        "around center",
+                        Instant.parse("2024-03-09T16:00:03Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=f&limit=40"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-newer",
+                        "m.text",
+                        "around newer",
+                        Instant.parse("2024-03-09T16:01:03Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=b&limit=40"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-older",
+                        "m.text",
+                        "around older",
+                        Instant.parse("2024-03-09T15:59:03Z").toEpochMilli()))));
+    var events = service.events().test();
     service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
 
     assertDoesNotThrow(
         () ->
@@ -1774,10 +2012,256 @@ class MatrixIrcClientServiceTest {
                 .requestChatHistoryAround(
                     "matrix", "!room:matrix.example.org", "timestamp=2024-03-09T16:00:03Z", 10)
                 .blockingAwait());
+    events.awaitCount(4);
+
+    IrcEvent.ChatHistoryBatchReceived batch =
+        assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, events.values().get(3).event());
+    assertEquals(2, batch.entries().size());
+    assertEquals("$h-older", batch.entries().get(0).messageId());
+    assertEquals("$h-newer", batch.entries().get(1).messageId());
 
     verify(roomHistoryClient, times(1))
         .fetchMessagesBefore(
-            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 10);
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40);
+  }
+
+  @Test
+  void requestChatHistoryAroundMsgidSelectorUsesKnownMessageTimestamp() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of(
+                    new MatrixSyncClient.RoomTimelineEvent(
+                        "!room:matrix.example.org",
+                        "@bob:matrix.example.org",
+                        "$h-center",
+                        "m.text",
+                        "seed center",
+                        Instant.parse("2024-03-09T16:00:03Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-center",
+                        "m.text",
+                        "seed center",
+                        Instant.parse("2024-03-09T16:00:03Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=b&limit=40"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-older",
+                        "m.text",
+                        "older",
+                        Instant.parse("2024-03-09T15:59:03Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=f&limit=40"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-newer",
+                        "m.text",
+                        "newer",
+                        Instant.parse("2024-03-09T16:01:03Z").toEpochMilli()))));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(4);
+
+    service
+        .requestChatHistoryAround("matrix", "!room:matrix.example.org", "msgid=$h-center", 10)
+        .blockingAwait();
+    events.awaitCount(5);
+
+    IrcEvent.ChatHistoryBatchReceived batch =
+        assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, events.values().get(4).event());
+    assertEquals(2, batch.entries().size());
+    assertEquals("$h-older", batch.entries().get(0).messageId());
+    assertEquals("$h-newer", batch.entries().get(1).messageId());
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40);
+  }
+
+  @Test
+  void requestChatHistoryAroundFailsWhenBackwardHistoryFetchFails() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-center",
+                        "m.text",
+                        "center",
+                        Instant.parse("2024-03-09T16:00:03Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.failed(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=b&limit=40"),
+                "backward failed"));
+    service.connect("matrix").blockingAwait();
+
+    IllegalStateException err =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                service
+                    .requestChatHistoryAround(
+                        "matrix", "!room:matrix.example.org", "timestamp=2024-03-09T16:00:03Z", 10)
+                    .blockingAwait());
+
+    assertTrue(err.getMessage().contains("Matrix history backward fetch failed"));
+    verify(roomHistoryClient, times(0))
+        .fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40);
+  }
+
+  @Test
+  void requestChatHistoryAroundDedupesDuplicateEntriesWithoutMsgid() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-center",
+                        "m.text",
+                        "center",
+                        Instant.parse("2024-03-09T16:00:03Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=b&limit=40"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "",
+                        "m.text",
+                        "duplicate without id",
+                        Instant.parse("2024-03-09T16:00:03Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=f&limit=40"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "",
+                        "m.text",
+                        "duplicate without id",
+                        Instant.parse("2024-03-09T16:00:03Z").toEpochMilli()))));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service
+        .requestChatHistoryAround(
+            "matrix", "!room:matrix.example.org", "timestamp=2024-03-09T16:00:03Z", 10)
+        .blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.ChatHistoryBatchReceived batch =
+        assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, events.values().get(3).event());
+    assertEquals(1, batch.entries().size());
+    assertEquals("", batch.entries().getFirst().messageId());
   }
 
   @Test
@@ -1802,11 +2286,11 @@ class MatrixIrcClientServiceTest {
                 "s-anchor",
                 List.of()));
     when(roomHistoryClient.fetchMessagesBefore(
-            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 10))
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
         .thenReturn(
             MatrixRoomHistoryClient.HistoryResult.success(
                 URI.create(
-                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=10"),
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
                 "s-next",
                 List.of(
                     new MatrixRoomHistoryClient.RoomHistoryEvent(
@@ -1815,6 +2299,26 @@ class MatrixIrcClientServiceTest {
                         "m.text",
                         "older",
                         Instant.parse("2024-03-09T15:10:00Z").toEpochMilli()),
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$inside",
+                        "m.text",
+                        "inside",
+                        Instant.parse("2024-03-09T15:45:00Z").toEpochMilli()),
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$newer",
+                        "m.text",
+                        "newer",
+                        Instant.parse("2024-03-09T16:05:00Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 10))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=f&limit=10"),
+                "s-forward",
+                List.of(
                     new MatrixRoomHistoryClient.RoomHistoryEvent(
                         "@bob:matrix.example.org",
                         "$inside",
@@ -1845,6 +2349,322 @@ class MatrixIrcClientServiceTest {
         assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, events.values().get(3).event());
     assertEquals(1, batch.entries().size());
     assertEquals("$inside", batch.entries().getFirst().messageId());
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 10);
+  }
+
+  @Test
+  void requestChatHistoryBetweenMsgidSelectorsEmitFilteredBatch() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of(
+                    new MatrixSyncClient.RoomTimelineEvent(
+                        "!room:matrix.example.org",
+                        "@bob:matrix.example.org",
+                        "$h-start",
+                        "m.text",
+                        "start",
+                        Instant.parse("2024-03-09T15:30:00Z").toEpochMilli()),
+                    new MatrixSyncClient.RoomTimelineEvent(
+                        "!room:matrix.example.org",
+                        "@bob:matrix.example.org",
+                        "$h-end",
+                        "m.text",
+                        "end",
+                        Instant.parse("2024-03-09T16:00:00Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-start",
+                        "m.text",
+                        "start",
+                        Instant.parse("2024-03-09T15:30:00Z").toEpochMilli()),
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$inside",
+                        "m.text",
+                        "inside",
+                        Instant.parse("2024-03-09T15:45:00Z").toEpochMilli()),
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-end",
+                        "m.text",
+                        "end",
+                        Instant.parse("2024-03-09T16:00:00Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 10))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=f&limit=10"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$inside",
+                        "m.text",
+                        "inside",
+                        Instant.parse("2024-03-09T15:45:00Z").toEpochMilli()),
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-end",
+                        "m.text",
+                        "end",
+                        Instant.parse("2024-03-09T16:00:00Z").toEpochMilli()))));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(5);
+
+    service
+        .requestChatHistoryBetween(
+            "matrix", "!room:matrix.example.org", "msgid=$h-start", "msgid=$h-end", 10)
+        .blockingAwait();
+    events.awaitCount(6);
+
+    IrcEvent.ChatHistoryBatchReceived batch =
+        assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, events.values().get(5).event());
+    assertEquals(1, batch.entries().size());
+    assertEquals("$inside", batch.entries().getFirst().messageId());
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 10);
+  }
+
+  @Test
+  void requestChatHistoryBetweenFailsWhenTimestampCursorScanFails() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.failed(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
+                "scan failed"));
+    service.connect("matrix").blockingAwait();
+
+    IllegalStateException err =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                service
+                    .requestChatHistoryBetween(
+                        "matrix",
+                        "!room:matrix.example.org",
+                        "timestamp=2024-03-09T15:30:00Z",
+                        "timestamp=2024-03-09T16:00:00Z",
+                        10)
+                    .blockingAwait());
+
+    assertTrue(err.getMessage().contains("Matrix history timestamp scan failed"));
+    verify(roomHistoryClient, times(0))
+        .fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 10);
+  }
+
+  @Test
+  void requestChatHistoryBetweenFailsWhenForwardHistoryFetchFails() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$inside",
+                        "m.text",
+                        "inside",
+                        Instant.parse("2024-03-09T15:45:00Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 10))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.failed(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=f&limit=10"),
+                "forward failed"));
+    service.connect("matrix").blockingAwait();
+
+    IllegalStateException err =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                service
+                    .requestChatHistoryBetween(
+                        "matrix",
+                        "!room:matrix.example.org",
+                        "timestamp=2024-03-09T15:30:00Z",
+                        "timestamp=2024-03-09T16:00:00Z",
+                        10)
+                    .blockingAwait());
+
+    assertTrue(err.getMessage().contains("Matrix history forward fetch failed"));
+  }
+
+  @Test
+  void requestChatHistoryBetweenDedupesDuplicateEntriesWithoutMsgidAcrossPages() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$older",
+                        "m.text",
+                        "older",
+                        Instant.parse("2024-03-09T15:10:00Z").toEpochMilli()),
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$inside",
+                        "m.text",
+                        "inside",
+                        Instant.parse("2024-03-09T15:45:00Z").toEpochMilli()),
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$newer",
+                        "m.text",
+                        "newer",
+                        Instant.parse("2024-03-09T16:05:00Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 3))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=f&limit=3"),
+                "s-page2",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "",
+                        "m.text",
+                        "duplicate without id",
+                        Instant.parse("2024-03-09T15:45:00Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-page2", 2))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-page2&dir=f&limit=2"),
+                "s-page2",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "",
+                        "m.text",
+                        "duplicate without id",
+                        Instant.parse("2024-03-09T15:45:00Z").toEpochMilli()))));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service
+        .requestChatHistoryBetween(
+            "matrix",
+            "!room:matrix.example.org",
+            "timestamp=2024-03-09T15:30:00Z",
+            "timestamp=2024-03-09T16:00:00Z",
+            3)
+        .blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.ChatHistoryBatchReceived batch =
+        assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, events.values().get(3).event());
+    assertEquals(1, batch.entries().size());
+    assertEquals("", batch.entries().getFirst().messageId());
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 3);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-page2", 2);
   }
 
   @Test
@@ -2719,6 +3539,61 @@ class MatrixIrcClientServiceTest {
   }
 
   @Test
+  void rawChatHistoryBeforeMsgidUsesIndexedAnchor() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomMessageSender.sendRoomMessage(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            anyString(),
+            eq("seed")))
+        .thenReturn(
+            MatrixRoomMessageSender.SendResult.accepted(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/send/m.room.message/txn-seed"),
+                "$h1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 2))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=2"),
+                "s-next",
+                List.of()));
+    service.connect("matrix").blockingAwait();
+    service.sendToChannel("matrix", "!room:matrix.example.org", "seed").blockingAwait();
+
+    assertDoesNotThrow(
+        () ->
+            service
+                .sendRaw("matrix", "CHATHISTORY BEFORE !room:matrix.example.org msgid=$h1 2")
+                .blockingAwait());
+
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 2);
+  }
+
+  @Test
   void rawChatHistoryLatestWithLimitOnlyUsesWildcardSelector() {
     IrcProperties.Server server =
         server("matrix", "matrix.example.org", 8448, true, "secret-token");
@@ -2778,12 +3653,23 @@ class MatrixIrcClientServiceTest {
                 "s-anchor",
                 List.of()));
     when(roomHistoryClient.fetchMessagesBefore(
-            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 10))
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
         .thenReturn(
             MatrixRoomHistoryClient.HistoryResult.success(
                 URI.create(
-                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=10"),
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
                 "s-next",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 200))
+        .thenReturn(null);
+    when(roomHistoryClient.fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 10))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=f&limit=10"),
+                "s-forward",
                 List.of()));
     service.connect("matrix").blockingAwait();
 
@@ -2798,7 +3684,196 @@ class MatrixIrcClientServiceTest {
 
     verify(roomHistoryClient, times(1))
         .fetchMessagesBefore(
-            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 10);
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 200);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 10);
+  }
+
+  @Test
+  void rawChatHistoryAroundDelegatesToBidirectionalHistoryFetch() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-center",
+                        "m.text",
+                        "center",
+                        Instant.parse("2024-03-09T16:00:03Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=b&limit=40"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-older",
+                        "m.text",
+                        "older",
+                        Instant.parse("2024-03-09T15:59:03Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=f&limit=40"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-newer",
+                        "m.text",
+                        "newer",
+                        Instant.parse("2024-03-09T16:01:03Z").toEpochMilli()))));
+    service.connect("matrix").blockingAwait();
+
+    assertDoesNotThrow(
+        () ->
+            service
+                .sendRaw(
+                    "matrix",
+                    "CHATHISTORY AROUND !room:matrix.example.org timestamp=2024-03-09T16:00:03Z 10")
+                .blockingAwait());
+
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 40);
+  }
+
+  @Test
+  void rawChatHistoryBetweenMsgidSelectorsUseIndexedAnchors() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of(
+                    new MatrixSyncClient.RoomTimelineEvent(
+                        "!room:matrix.example.org",
+                        "@bob:matrix.example.org",
+                        "$h-start",
+                        "m.text",
+                        "start",
+                        Instant.parse("2024-03-09T15:30:00Z").toEpochMilli()),
+                    new MatrixSyncClient.RoomTimelineEvent(
+                        "!room:matrix.example.org",
+                        "@bob:matrix.example.org",
+                        "$h-end",
+                        "m.text",
+                        "end",
+                        Instant.parse("2024-03-09T16:00:00Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=200"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-start",
+                        "m.text",
+                        "start",
+                        Instant.parse("2024-03-09T15:30:00Z").toEpochMilli()),
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$inside",
+                        "m.text",
+                        "inside",
+                        Instant.parse("2024-03-09T15:45:00Z").toEpochMilli()),
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-end",
+                        "m.text",
+                        "end",
+                        Instant.parse("2024-03-09T16:00:00Z").toEpochMilli()))));
+    when(roomHistoryClient.fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 10))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-next&dir=f&limit=10"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$inside",
+                        "m.text",
+                        "inside",
+                        Instant.parse("2024-03-09T15:45:00Z").toEpochMilli()),
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-end",
+                        "m.text",
+                        "end",
+                        Instant.parse("2024-03-09T16:00:00Z").toEpochMilli()))));
+    service.connect("matrix").blockingAwait();
+
+    assertDoesNotThrow(
+        () ->
+            service
+                .sendRaw(
+                    "matrix",
+                    "CHATHISTORY BETWEEN !room:matrix.example.org msgid=$h-start msgid=$h-end 10")
+                .blockingAwait());
+
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 200);
+    verify(roomHistoryClient, times(1))
+        .fetchMessagesAfter(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-next", 10);
   }
 
   @Test

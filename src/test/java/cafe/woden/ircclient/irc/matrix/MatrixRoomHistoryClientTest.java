@@ -75,6 +75,44 @@ class MatrixRoomHistoryClientTest {
   }
 
   @Test
+  void fetchMessagesAfterUsesForwardPaginationDirection() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    String body =
+        """
+        {
+          "start":"s-forward",
+          "end":"s-forward-next",
+          "chunk":[
+            {
+              "type":"m.room.message",
+              "event_id":"$f1",
+              "sender":"@alice:matrix.example.org",
+              "origin_server_ts":1710000010000,
+              "content":{"msgtype":"m.text","body":"forward"}
+            }
+          ]
+        }
+        """;
+    try (TestServer server = TestServer.start(200, body)) {
+      MatrixRoomHistoryClient.HistoryResult result =
+          historyClient.fetchMessagesAfter(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "s-anchor",
+              25);
+
+      assertTrue(result.success());
+      assertEquals("s-forward-next", result.endToken());
+      assertEquals(1, result.events().size());
+      assertTrue(server.lastQuery().get().contains("from=s-anchor"));
+      assertTrue(server.lastQuery().get().contains("dir=f"));
+      assertTrue(server.lastQuery().get().contains("limit=25"));
+    }
+  }
+
+  @Test
   void fetchMessagesBeforeReportsHttpFailure() throws Exception {
     when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
     try (TestServer server = TestServer.start(500, "{\"errcode\":\"M_UNKNOWN\"}")) {

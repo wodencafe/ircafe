@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -50,6 +51,11 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private static final int MATRIX_TYPING_TIMEOUT_MS = 30_000;
   private static final int SYNC_INTERVAL_SECONDS = 3;
   private static final int SYNC_TIMEOUT_MS = 0;
+  private static final int ROOM_MESSAGE_INDEX_CAPACITY = 1_000;
+  private static final int MSGID_LOOKUP_SCAN_PAGE_LIMIT = 200;
+  private static final int MSGID_LOOKUP_MAX_PAGES = 10;
+  private static final int TIMESTAMP_CURSOR_SCAN_PAGE_LIMIT = 200;
+  private static final int TIMESTAMP_CURSOR_MAX_PAGES = 20;
 
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
@@ -815,13 +821,10 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       return requestChatHistoryBefore(serverId, target, ts, limit);
     }
 
-    if (historyMsgidSelector(token)) {
-      return Completable.error(
-          new BackendNotAvailableException(
-              IrcProperties.Server.Backend.MATRIX,
-              "chat-history-before",
-              normalizeServerId(serverId),
-              "Matrix backend does not support msgid selectors for chat history"));
+    String messageId = parseHistoryMessageIdSelector(token);
+    if (!messageId.isEmpty()) {
+      return requestChatHistoryBeforeByMessageId(
+          serverId, target, messageId, limit, "chat-history-before");
     }
 
     return Completable.error(
@@ -839,13 +842,10 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     if (ts != null) {
       return requestChatHistoryBefore(serverId, target, ts, limit);
     }
-    if (historyMsgidSelector(token)) {
-      return Completable.error(
-          new BackendNotAvailableException(
-              IrcProperties.Server.Backend.MATRIX,
-              "chat-history-latest",
-              normalizeServerId(serverId),
-              "Matrix backend does not support msgid selectors for chat history"));
+    String messageId = parseHistoryMessageIdSelector(token);
+    if (!messageId.isEmpty()) {
+      return requestChatHistoryBeforeByMessageId(
+          serverId, target, messageId, limit, "chat-history-latest");
     }
     return Completable.error(
         new IllegalArgumentException("selector must be *, msgid=..., or timestamp=..."));
@@ -861,17 +861,6 @@ public class MatrixIrcClientService implements IrcBackendClientService {
           new IllegalArgumentException(
               "CHATHISTORY BETWEEN requires <start-selector> <end-selector>"));
     }
-    if (historyMsgidSelector(startToken) || historyMsgidSelector(endToken)) {
-      return Completable.error(
-          new BackendNotAvailableException(
-              IrcProperties.Server.Backend.MATRIX,
-              "chat-history-between",
-              normalizeServerId(serverId),
-              "Matrix backend does not support msgid selectors for chat history"));
-    }
-
-    Instant startAt = parseHistorySelectorOrWildcard(startToken, "start selector");
-    Instant endAt = parseHistorySelectorOrWildcard(endToken, "end selector");
 
     return Completable.fromAction(
             () -> {
@@ -896,22 +885,45 @@ public class MatrixIrcClientService implements IrcBackendClientService {
               int requestedLimit = normalizeHistoryLimit(limit);
               IrcProperties.Server server = serverCatalog.require(sid);
               String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
+              Instant startAt =
+                  resolveHistorySelectorInstant(
+                      sid,
+                      server,
+                      session,
+                      roomId,
+                      startToken,
+                      "chat-history-between",
+                      "start selector");
+              Instant endAt =
+                  resolveHistorySelectorInstant(
+                      sid,
+                      server,
+                      session,
+                      roomId,
+                      endToken,
+                      "chat-history-between",
+                      "end selector");
               Instant endExclusive = endAt == null ? Instant.now() : endAt;
               if (startAt != null && !startAt.isBefore(endExclusive)) {
                 throw new IllegalArgumentException(
                     "start selector must be earlier than end selector");
               }
 
+              Instant startInclusive = startAt == null ? Instant.EPOCH : startAt;
+              String forwardCursor =
+                  resolveForwardCursorForTimestamp(
+                      sid, server, session, roomId, startInclusive.toEpochMilli());
               List<ChatHistoryEntry> entries =
-                  fetchHistoryEntriesBefore(
+                  fetchHistoryEntriesForwardFromCursor(
                       sid,
                       server,
                       session,
                       requestedTarget,
                       roomId,
-                      endExclusive.toEpochMilli(),
+                      forwardCursor,
+                      startInclusive,
+                      endExclusive,
                       requestedLimit);
-              entries = filterHistoryEntriesByTimestamp(entries, startAt, endExclusive);
               emitHistoryBatch(sid, requestedTarget, entries);
             })
         .subscribeOn(RxVirtualSchedulers.io());
@@ -920,26 +932,73 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   @Override
   public Completable requestChatHistoryAround(
       String serverId, String target, String selector, int limit) {
-    String token = normalize(selector);
-    if (token.isEmpty() || "*".equals(token)) {
-      return requestChatHistoryBefore(serverId, target, Instant.now(), limit);
-    }
-    Instant ts = parseHistoryTimestampSelector(token);
-    if (ts != null) {
-      // Matrix currently exposes backward pagination in this backend path; approximate AROUND as
-      // a bounded BEFORE request anchored at selector.
-      return requestChatHistoryBefore(serverId, target, ts, limit);
-    }
-    if (historyMsgidSelector(token)) {
-      return Completable.error(
-          new BackendNotAvailableException(
-              IrcProperties.Server.Backend.MATRIX,
-              "chat-history-around",
-              normalizeServerId(serverId),
-              "Matrix backend does not support msgid selectors for chat history"));
-    }
-    return Completable.error(
-        new IllegalArgumentException("selector must be *, msgid=..., or timestamp=..."));
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+              String requestedTarget = normalize(target);
+              if (requestedTarget.isEmpty()) {
+                throw new IllegalArgumentException("target is blank");
+              }
+              String token = normalize(selector);
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "chat-history-around",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+
+              int requestedLimit = normalizeHistoryLimit(limit);
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
+
+              Instant centerAt;
+              if (token.isEmpty() || "*".equals(token)) {
+                centerAt = Instant.now();
+              } else {
+                centerAt =
+                    resolveHistorySelectorInstant(
+                        sid, server, session, roomId, token, "chat-history-around", "selector");
+              }
+
+              String forwardCursor =
+                  resolveForwardCursorForTimestamp(
+                      sid, server, session, roomId, centerAt.toEpochMilli());
+              int scanLimit = Math.min(200, Math.max(requestedLimit * 4, requestedLimit + 20));
+              List<ChatHistoryEntry> backwardCandidates =
+                  fetchHistoryEntriesBackwardFromCursor(
+                      sid,
+                      server,
+                      session,
+                      requestedTarget,
+                      roomId,
+                      forwardCursor,
+                      null,
+                      null,
+                      scanLimit);
+              List<ChatHistoryEntry> forwardCandidates =
+                  fetchHistoryEntriesForwardFromCursor(
+                      sid,
+                      server,
+                      session,
+                      requestedTarget,
+                      roomId,
+                      forwardCursor,
+                      null,
+                      null,
+                      scanLimit);
+              List<ChatHistoryEntry> candidates =
+                  mergeHistoryCandidates(backwardCandidates, forwardCandidates);
+              List<ChatHistoryEntry> entries =
+                  selectEntriesAroundTimestamp(candidates, centerAt, requestedLimit);
+              emitHistoryBatch(sid, requestedTarget, entries);
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
@@ -1121,7 +1180,57 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     return normalize(selector).toLowerCase(Locale.ROOT).startsWith(HISTORY_SELECTOR_MSGID_PREFIX);
   }
 
-  private static Instant parseHistorySelectorOrWildcard(String selector, String selectorName) {
+  private static String parseHistoryMessageIdSelector(String selector) {
+    String token = normalize(selector);
+    if (!historyMsgidSelector(token)) {
+      return "";
+    }
+    String messageId = normalize(token.substring(HISTORY_SELECTOR_MSGID_PREFIX.length()));
+    if (messageId.isEmpty()) {
+      throw new IllegalArgumentException("msgid selector is blank");
+    }
+    return messageId;
+  }
+
+  private Completable requestChatHistoryBeforeByMessageId(
+      String serverId, String target, String messageId, int limit, String operation) {
+    return Completable.defer(
+        () -> {
+          String sid = normalizeServerId(serverId);
+          if (sid.isEmpty()) {
+            return Completable.error(new IllegalArgumentException("server id is blank"));
+          }
+          String requestedTarget = normalize(target);
+          if (requestedTarget.isEmpty()) {
+            return Completable.error(new IllegalArgumentException("target is blank"));
+          }
+
+          MatrixSession session = sessionsByServer.get(sid);
+          if (session == null) {
+            return Completable.error(
+                new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    operation,
+                    sid,
+                    backendAvailabilityReason(sid)));
+          }
+
+          IrcProperties.Server server = serverCatalog.require(sid);
+          String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
+          Instant marker =
+              resolveHistoryMessageIdInstant(sid, server, session, roomId, messageId, operation);
+          return requestChatHistoryBefore(sid, requestedTarget, marker, limit);
+        });
+  }
+
+  private Instant resolveHistorySelectorInstant(
+      String serverId,
+      IrcProperties.Server server,
+      MatrixSession session,
+      String roomId,
+      String selector,
+      String operation,
+      String selectorName) {
     String token = normalize(selector);
     if (token.isEmpty() || "*".equals(token)) {
       return null;
@@ -1130,7 +1239,89 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     if (ts != null) {
       return ts;
     }
-    throw new IllegalArgumentException(selectorName + " must be '*' or timestamp=...");
+    String messageId = parseHistoryMessageIdSelector(token);
+    if (!messageId.isEmpty()) {
+      return resolveHistoryMessageIdInstant(
+          serverId, server, session, roomId, messageId, operation);
+    }
+    throw new IllegalArgumentException(selectorName + " must be '*', msgid=..., or timestamp=...");
+  }
+
+  private Instant resolveHistoryMessageIdInstant(
+      String serverId,
+      IrcProperties.Server server,
+      MatrixSession session,
+      String roomId,
+      String messageId,
+      String operation) {
+    long timestampMs =
+        session == null ? 0L : session.roomEventTimestampMs(roomId, normalize(messageId));
+    if (timestampMs <= 0L) {
+      timestampMs =
+          lookupMessageTimestampByScanningHistory(
+              serverId, server, session, roomId, messageId, operation);
+    }
+    if (timestampMs <= 0L) {
+      throw new BackendNotAvailableException(
+          IrcProperties.Server.Backend.MATRIX,
+          operation,
+          normalizeServerId(serverId),
+          "Matrix backend cannot resolve msgid selector in this session");
+    }
+    return Instant.ofEpochMilli(timestampMs);
+  }
+
+  private long lookupMessageTimestampByScanningHistory(
+      String serverId,
+      IrcProperties.Server server,
+      MatrixSession session,
+      String roomId,
+      String messageId,
+      String operation) {
+    if (session == null) return 0L;
+    String rid = normalize(roomId);
+    String mid = normalize(messageId);
+    if (rid.isEmpty() || mid.isEmpty()) return 0L;
+
+    long cached = session.roomEventTimestampMs(rid, mid);
+    if (cached > 0L) return cached;
+
+    long beforeEpochMs = System.currentTimeMillis();
+    String fromToken = resolveHistoryFromToken(serverId, server, session, rid, beforeEpochMs);
+    if (fromToken.isEmpty()) return 0L;
+
+    String cursor = fromToken;
+    for (int page = 0; page < MSGID_LOOKUP_MAX_PAGES; page++) {
+      MatrixRoomHistoryClient.HistoryResult result =
+          roomHistoryClient.fetchMessagesBefore(
+              serverId, server, session.accessToken, rid, cursor, MSGID_LOOKUP_SCAN_PAGE_LIMIT);
+      if (result == null) {
+        break;
+      }
+      if (!result.success()) {
+        throw new BackendNotAvailableException(
+            IrcProperties.Server.Backend.MATRIX,
+            operation,
+            normalizeServerId(serverId),
+            "Matrix backend could not scan history for msgid selector: " + result.detail());
+      }
+
+      session.rememberHistoryEvents(rid, result.events());
+      long found = session.roomEventTimestampMs(rid, mid);
+      if (found > 0L) return found;
+
+      String nextToken = normalize(result.endToken());
+      if (nextToken.isEmpty() || nextToken.equals(cursor)) {
+        break;
+      }
+      session.rememberHistoryCursor(rid, nextToken, beforeEpochMs);
+      cursor = nextToken;
+      if (result.events() == null || result.events().isEmpty()) {
+        break;
+      }
+    }
+
+    return session.roomEventTimestampMs(rid, mid);
   }
 
   private Completable sendRawPrivmsg(String serverId, RawCommand raw) {
@@ -1548,6 +1739,18 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     String target = normalize(requestedTarget);
     if (looksLikeMatrixUserId(target)) {
       String roomId = session == null ? "" : session.roomForPeer(target);
+      if (roomId.isEmpty() && session != null) {
+        MatrixSyncClient.SyncResult sync =
+            syncClient.sync(serverId, server, session.accessToken, "", SYNC_TIMEOUT_MS);
+        if (sync != null && sync.success()) {
+          String nextBatch = normalize(sync.nextBatch());
+          if (!nextBatch.isEmpty()) {
+            session.sinceToken.set(nextBatch);
+          }
+          session.rememberDirectRooms(sync.directPeerByRoom());
+          roomId = session.roomForPeer(target);
+        }
+      }
       if (roomId.isEmpty()) {
         throw new IllegalStateException("Matrix direct room is unknown for target");
       }
@@ -1631,6 +1834,9 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     MatrixRoomHistoryClient.HistoryResult result =
         roomHistoryClient.fetchMessagesBefore(
             serverId, server, session.accessToken, roomId, fromToken, requestedLimit);
+    if (result == null) {
+      throw new IllegalStateException("Matrix history fetch returned no result");
+    }
     if (!result.success()) {
       throw new IllegalStateException(
           "Matrix history fetch failed at " + result.endpoint() + ": " + result.detail());
@@ -1641,7 +1847,244 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       nextToken = fromToken;
     }
     session.rememberHistoryCursor(roomId, nextToken, beforeEpochMs);
+    session.rememberHistoryEvents(roomId, result.events());
     return toHistoryEntries(requestedTarget, roomId, result.events());
+  }
+
+  private String resolveForwardCursorForTimestamp(
+      String serverId,
+      IrcProperties.Server server,
+      MatrixSession session,
+      String roomId,
+      long targetEpochMs) {
+    long targetMs = targetEpochMs <= 0L ? System.currentTimeMillis() : targetEpochMs;
+    String cursor = resolveHistoryFromToken(serverId, server, session, roomId, targetMs);
+    if (cursor.isEmpty()) {
+      throw new IllegalStateException("Matrix history pagination token is unavailable");
+    }
+
+    String scanCursor = cursor;
+    for (int page = 0; page < TIMESTAMP_CURSOR_MAX_PAGES; page++) {
+      MatrixRoomHistoryClient.HistoryResult result =
+          roomHistoryClient.fetchMessagesBefore(
+              serverId,
+              server,
+              session.accessToken,
+              roomId,
+              scanCursor,
+              TIMESTAMP_CURSOR_SCAN_PAGE_LIMIT);
+      if (result == null) {
+        break;
+      }
+      if (!result.success()) {
+        throw new IllegalStateException(
+            "Matrix history timestamp scan failed at "
+                + result.endpoint()
+                + ": "
+                + result.detail());
+      }
+
+      session.rememberHistoryEvents(roomId, result.events());
+
+      String nextToken = normalize(result.endToken());
+      if (nextToken.isEmpty()) {
+        nextToken = scanCursor;
+      }
+      session.rememberHistoryCursor(roomId, nextToken, targetMs);
+
+      long minTs = minHistoryTimestamp(result.events());
+      long maxTs = maxHistoryTimestamp(result.events());
+      if (minTs > 0L && maxTs > 0L && targetMs >= minTs && targetMs <= maxTs) {
+        return nextToken;
+      }
+      if (minTs > 0L && targetMs > maxTs) {
+        return scanCursor;
+      }
+
+      if (nextToken.equals(scanCursor)) {
+        return nextToken;
+      }
+      scanCursor = nextToken;
+    }
+
+    return scanCursor;
+  }
+
+  private List<ChatHistoryEntry> fetchHistoryEntriesForwardFromCursor(
+      String serverId,
+      IrcProperties.Server server,
+      MatrixSession session,
+      String requestedTarget,
+      String roomId,
+      String fromToken,
+      Instant fromInclusive,
+      Instant untilExclusive,
+      int limit) {
+    String cursor = normalize(fromToken);
+    if (cursor.isEmpty()) {
+      throw new IllegalStateException("Matrix history pagination token is unavailable");
+    }
+    int requestedLimit = normalizeHistoryLimit(limit);
+    List<ChatHistoryEntry> out = new java.util.ArrayList<>(requestedLimit);
+    Set<String> seenMessageIds = new LinkedHashSet<>();
+    Set<Integer> seenFallbackFingerprints = new LinkedHashSet<>();
+
+    for (int page = 0; page < TIMESTAMP_CURSOR_MAX_PAGES && out.size() < requestedLimit; page++) {
+      int remaining = requestedLimit - out.size();
+      MatrixRoomHistoryClient.HistoryResult result =
+          roomHistoryClient.fetchMessagesAfter(
+              serverId, server, session.accessToken, roomId, cursor, remaining);
+      if (result == null) {
+        break;
+      }
+      if (!result.success()) {
+        throw new IllegalStateException(
+            "Matrix history forward fetch failed at " + result.endpoint() + ": " + result.detail());
+      }
+
+      session.rememberHistoryEvents(roomId, result.events());
+      List<ChatHistoryEntry> pageEntries =
+          toHistoryEntries(requestedTarget, roomId, result.events());
+      for (ChatHistoryEntry entry : pageEntries) {
+        if (entry == null) continue;
+        Instant at = entry.at();
+        if (fromInclusive != null && at.isBefore(fromInclusive)) continue;
+        if (untilExclusive != null && !at.isBefore(untilExclusive)) {
+          return out.isEmpty() ? List.of() : List.copyOf(out);
+        }
+        if (!rememberHistoryEntry(entry, seenMessageIds, seenFallbackFingerprints)) continue;
+        out.add(entry);
+        if (out.size() >= requestedLimit) {
+          return List.copyOf(out);
+        }
+      }
+
+      String nextToken = normalize(result.endToken());
+      if (nextToken.isEmpty() || nextToken.equals(cursor)) {
+        break;
+      }
+      cursor = nextToken;
+    }
+
+    if (out.isEmpty()) {
+      return List.of();
+    }
+    return List.copyOf(out);
+  }
+
+  private List<ChatHistoryEntry> fetchHistoryEntriesBackwardFromCursor(
+      String serverId,
+      IrcProperties.Server server,
+      MatrixSession session,
+      String requestedTarget,
+      String roomId,
+      String fromToken,
+      Instant fromInclusive,
+      Instant untilExclusive,
+      int limit) {
+    String cursor = normalize(fromToken);
+    if (cursor.isEmpty()) {
+      throw new IllegalStateException("Matrix history pagination token is unavailable");
+    }
+    int requestedLimit = normalizeHistoryLimit(limit);
+    List<ChatHistoryEntry> out = new java.util.ArrayList<>(requestedLimit);
+    Set<String> seenMessageIds = new LinkedHashSet<>();
+    Set<Integer> seenFallbackFingerprints = new LinkedHashSet<>();
+
+    for (int page = 0; page < TIMESTAMP_CURSOR_MAX_PAGES && out.size() < requestedLimit; page++) {
+      int remaining = requestedLimit - out.size();
+      MatrixRoomHistoryClient.HistoryResult result =
+          roomHistoryClient.fetchMessagesBefore(
+              serverId, server, session.accessToken, roomId, cursor, remaining);
+      if (result == null) {
+        break;
+      }
+      if (!result.success()) {
+        throw new IllegalStateException(
+            "Matrix history backward fetch failed at "
+                + result.endpoint()
+                + ": "
+                + result.detail());
+      }
+
+      session.rememberHistoryEvents(roomId, result.events());
+      List<ChatHistoryEntry> pageEntries =
+          toHistoryEntries(requestedTarget, roomId, result.events());
+      for (ChatHistoryEntry entry : pageEntries) {
+        if (entry == null) continue;
+        Instant at = entry.at();
+        if (fromInclusive != null && at.isBefore(fromInclusive)) continue;
+        if (untilExclusive != null && !at.isBefore(untilExclusive)) continue;
+        if (!rememberHistoryEntry(entry, seenMessageIds, seenFallbackFingerprints)) continue;
+        out.add(entry);
+        if (out.size() >= requestedLimit) {
+          out.sort(Comparator.comparing(ChatHistoryEntry::at));
+          return List.copyOf(out);
+        }
+      }
+
+      String nextToken = normalize(result.endToken());
+      if (nextToken.isEmpty() || nextToken.equals(cursor)) {
+        break;
+      }
+      cursor = nextToken;
+      session.rememberHistoryCursor(roomId, cursor, System.currentTimeMillis());
+    }
+
+    if (out.isEmpty()) {
+      return List.of();
+    }
+    out.sort(Comparator.comparing(ChatHistoryEntry::at));
+    return List.copyOf(out);
+  }
+
+  private static List<ChatHistoryEntry> mergeHistoryCandidates(
+      List<ChatHistoryEntry> first, List<ChatHistoryEntry> second) {
+    if ((first == null || first.isEmpty()) && (second == null || second.isEmpty())) {
+      return List.of();
+    }
+    Set<String> seenMessageIds = new LinkedHashSet<>();
+    Set<Integer> seenFallbackFingerprints = new LinkedHashSet<>();
+    List<ChatHistoryEntry> merged = new java.util.ArrayList<>();
+
+    for (ChatHistoryEntry entry : first == null ? List.<ChatHistoryEntry>of() : first) {
+      if (entry == null) continue;
+      if (!rememberHistoryEntry(entry, seenMessageIds, seenFallbackFingerprints)) continue;
+      merged.add(entry);
+    }
+    for (ChatHistoryEntry entry : second == null ? List.<ChatHistoryEntry>of() : second) {
+      if (entry == null) continue;
+      if (!rememberHistoryEntry(entry, seenMessageIds, seenFallbackFingerprints)) continue;
+      merged.add(entry);
+    }
+
+    if (merged.isEmpty()) {
+      return List.of();
+    }
+    merged.sort(Comparator.comparing(ChatHistoryEntry::at));
+    return List.copyOf(merged);
+  }
+
+  private static boolean rememberHistoryEntry(
+      ChatHistoryEntry entry, Set<String> seenMessageIds, Set<Integer> seenFallbackFingerprints) {
+    if (entry == null) {
+      return false;
+    }
+    String msgId = normalize(entry.messageId());
+    if (!msgId.isEmpty()) {
+      return seenMessageIds.add(msgId);
+    }
+    return seenFallbackFingerprints.add(historyEntryFingerprint(entry));
+  }
+
+  private static int historyEntryFingerprint(ChatHistoryEntry entry) {
+    Instant at = entry.at();
+    return Objects.hash(
+        at == null ? 0L : at.toEpochMilli(),
+        entry.kind(),
+        normalize(entry.target()),
+        normalize(entry.from()),
+        Objects.toString(entry.text(), ""));
   }
 
   private void emitHistoryBatch(String serverId, String target, List<ChatHistoryEntry> entries) {
@@ -1662,26 +2105,63 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     return Math.max(1, Math.min(normalized, 200));
   }
 
-  private static List<ChatHistoryEntry> filterHistoryEntriesByTimestamp(
-      List<ChatHistoryEntry> entries, Instant fromInclusive, Instant untilExclusive) {
+  private static long minHistoryTimestamp(List<MatrixRoomHistoryClient.RoomHistoryEvent> events) {
+    if (events == null || events.isEmpty()) return 0L;
+    long min = Long.MAX_VALUE;
+    boolean found = false;
+    for (MatrixRoomHistoryClient.RoomHistoryEvent event : events) {
+      if (event == null) continue;
+      long ts = event.originServerTs();
+      if (ts <= 0L) continue;
+      if (ts < min) min = ts;
+      found = true;
+    }
+    return found ? min : 0L;
+  }
+
+  private static long maxHistoryTimestamp(List<MatrixRoomHistoryClient.RoomHistoryEvent> events) {
+    if (events == null || events.isEmpty()) return 0L;
+    long max = 0L;
+    for (MatrixRoomHistoryClient.RoomHistoryEvent event : events) {
+      if (event == null) continue;
+      long ts = event.originServerTs();
+      if (ts > max) max = ts;
+    }
+    return max;
+  }
+
+  private static List<ChatHistoryEntry> selectEntriesAroundTimestamp(
+      List<ChatHistoryEntry> entries, Instant centerAt, int limit) {
     if (entries == null || entries.isEmpty()) {
       return List.of();
     }
-    if (fromInclusive == null && untilExclusive == null) {
-      return List.copyOf(entries);
-    }
-    List<ChatHistoryEntry> filtered = new java.util.ArrayList<>(entries.size());
-    for (ChatHistoryEntry entry : entries) {
-      if (entry == null) continue;
-      Instant at = entry.at();
-      if (fromInclusive != null && at.isBefore(fromInclusive)) continue;
-      if (untilExclusive != null && !at.isBefore(untilExclusive)) continue;
-      filtered.add(entry);
-    }
-    if (filtered.isEmpty()) {
+    Instant center = centerAt == null ? Instant.now() : centerAt;
+    int requestedLimit = normalizeHistoryLimit(limit);
+
+    List<ChatHistoryEntry> safe = entries.stream().filter(Objects::nonNull).toList();
+    if (safe.isEmpty()) {
       return List.of();
     }
-    return List.copyOf(filtered);
+
+    long centerMs = center.toEpochMilli();
+    List<ChatHistoryEntry> ranked = new java.util.ArrayList<>(safe);
+    ranked.sort(
+        Comparator.comparingLong(
+                (ChatHistoryEntry e) -> distanceAbs(e.at().toEpochMilli(), centerMs))
+            .thenComparing(ChatHistoryEntry::at)
+            .thenComparing(
+                ChatHistoryEntry::messageId, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)));
+
+    if (ranked.size() > requestedLimit) {
+      ranked = new java.util.ArrayList<>(ranked.subList(0, requestedLimit));
+    }
+    ranked.sort(Comparator.comparing(ChatHistoryEntry::at));
+    return List.copyOf(ranked);
+  }
+
+  private static long distanceAbs(long left, long right) {
+    long diff = left - right;
+    return diff < 0L ? -diff : diff;
   }
 
   private static List<ChatHistoryEntry> toHistoryEntries(
@@ -1974,7 +2454,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       long ts = event.originServerTs();
       Instant at = ts > 0L ? Instant.ofEpochMilli(ts) : Instant.now();
       if (session != null) {
-        session.rememberLatestRoomEvent(roomId, messageId);
+        session.rememberRoomEvent(roomId, messageId, ts);
       }
       String peerUserId = session == null ? "" : session.peerForRoom(roomId);
       boolean isDirectMessageRoom = !peerUserId.isEmpty();
@@ -2194,6 +2674,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     private final Map<String, String> joinedRoomByAlias = new ConcurrentHashMap<>();
     private final Map<String, HistoryCursor> historyCursorByRoom = new ConcurrentHashMap<>();
     private final Map<String, String> latestEventByRoom = new ConcurrentHashMap<>();
+    private final Map<String, LinkedHashMap<String, Long>> messageTimestampByIdByRoom =
+        new ConcurrentHashMap<>();
     private final Map<String, Set<String>> typingUsersByRoom = new ConcurrentHashMap<>();
     private final Map<String, Long> readMarkerTsByRoom = new ConcurrentHashMap<>();
 
@@ -2243,6 +2725,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       joinedRoomByAlias.entrySet().removeIf(entry -> rid.equals(normalize(entry.getValue())));
       historyCursorByRoom.remove(rid);
       latestEventByRoom.remove(rid);
+      messageTimestampByIdByRoom.remove(rid);
       typingUsersByRoom.remove(rid);
       readMarkerTsByRoom.remove(rid);
     }
@@ -2259,14 +2742,51 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     }
 
     private void rememberLatestRoomEvent(String roomId, String eventId) {
+      rememberRoomEvent(roomId, eventId, System.currentTimeMillis());
+    }
+
+    private void rememberRoomEvent(String roomId, String eventId, long timestampMs) {
       String rid = normalize(roomId);
       String eid = normalize(eventId);
       if (rid.isEmpty() || eid.isEmpty()) return;
+      long ts = timestampMs > 0L ? timestampMs : System.currentTimeMillis();
       latestEventByRoom.put(rid, eid);
+      LinkedHashMap<String, Long> index =
+          messageTimestampByIdByRoom.computeIfAbsent(rid, ignored -> new LinkedHashMap<>());
+      synchronized (index) {
+        index.put(eid, ts);
+        while (index.size() > ROOM_MESSAGE_INDEX_CAPACITY) {
+          String eldest = index.entrySet().iterator().next().getKey();
+          index.remove(eldest);
+        }
+      }
+    }
+
+    private void rememberHistoryEvents(
+        String roomId, List<MatrixRoomHistoryClient.RoomHistoryEvent> events) {
+      if (events == null || events.isEmpty()) return;
+      String rid = normalize(roomId);
+      if (rid.isEmpty()) return;
+      for (MatrixRoomHistoryClient.RoomHistoryEvent event : events) {
+        if (event == null) continue;
+        rememberRoomEvent(rid, event.eventId(), event.originServerTs());
+      }
     }
 
     private String latestRoomEventId(String roomId) {
       return normalize(latestEventByRoom.get(normalize(roomId)));
+    }
+
+    private long roomEventTimestampMs(String roomId, String eventId) {
+      String rid = normalize(roomId);
+      String eid = normalize(eventId);
+      if (rid.isEmpty() || eid.isEmpty()) return 0L;
+      LinkedHashMap<String, Long> index = messageTimestampByIdByRoom.get(rid);
+      if (index == null) return 0L;
+      synchronized (index) {
+        Long ts = index.get(eid);
+        return ts == null ? 0L : ts.longValue();
+      }
     }
 
     private Set<String> replaceTypingUsers(String roomId, Set<String> users) {
