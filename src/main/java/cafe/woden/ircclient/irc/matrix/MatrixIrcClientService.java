@@ -89,6 +89,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private final MatrixRawRoomAdminCommandHandler rawRoomAdminCommandHandler;
   private final MatrixRawModeCommandHandler rawModeCommandHandler;
   private final MatrixRawLookupCommandHandler rawLookupCommandHandler;
+  private final MatrixSyncTimelineEventProjector syncTimelineEventProjector;
   private final MatrixSyncSignalEventProjector syncSignalEventProjector;
   private final MatrixSyncMutationEventProjector syncMutationEventProjector;
   private final MatrixSyncClient syncClient;
@@ -149,6 +150,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
             bus::onNext);
     this.rawLookupCommandHandler =
         new MatrixRawLookupCommandHandler(this::whois, this::requestNames, this::whowas);
+    this.syncTimelineEventProjector = new MatrixSyncTimelineEventProjector(bus::onNext);
     this.syncSignalEventProjector = new MatrixSyncSignalEventProjector(bus::onNext);
     this.syncMutationEventProjector = new MatrixSyncMutationEventProjector(bus::onNext);
     this.syncClient = Objects.requireNonNull(syncClient, "syncClient");
@@ -1337,6 +1339,27 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       @Override
       public boolean shouldEmitReadMarker(String roomId, long markerTsMs) {
         return session.shouldEmitReadMarker(roomId, markerTsMs);
+      }
+    };
+  }
+
+  private MatrixSyncTimelineEventProjector.SessionView syncTimelineSessionView(
+      MatrixSession session) {
+    if (session == null) return null;
+    return new MatrixSyncTimelineEventProjector.SessionView() {
+      @Override
+      public String userId() {
+        return session.userId;
+      }
+
+      @Override
+      public String peerForRoom(String roomId) {
+        return session.peerForRoom(roomId);
+      }
+
+      @Override
+      public void rememberRoomEvent(String roomId, String eventId, long timestampMs) {
+        session.rememberRoomEvent(roomId, eventId, timestampMs);
       }
     };
   }
@@ -3517,108 +3540,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
 
   private void emitSyncTimelineEvents(
       String serverId, MatrixSession session, List<MatrixSyncClient.RoomTimelineEvent> events) {
-    if (events == null || events.isEmpty()) return;
-    String sid = normalize(serverId);
-    if (sid.isEmpty()) return;
-
-    for (MatrixSyncClient.RoomTimelineEvent event : events) {
-      if (event == null) continue;
-      String roomId = normalize(event.roomId());
-      String sender = normalize(event.sender());
-      String body = Objects.toString(event.body(), "");
-      if (roomId.isEmpty() || sender.isEmpty() || body.trim().isEmpty()) continue;
-
-      String msgType = normalize(event.msgType());
-      String replyToMessageId = normalize(event.replyToEventId());
-      String messageId = normalize(event.eventId());
-      String mediaUrl = normalize(event.mediaUrl());
-      long ts = event.originServerTs();
-      Instant at = ts > 0L ? Instant.ofEpochMilli(ts) : Instant.now();
-      if (session != null) {
-        session.rememberRoomEvent(roomId, messageId, ts);
-      }
-      String peerUserId = session == null ? "" : session.peerForRoom(roomId);
-      boolean isDirectMessageRoom = !peerUserId.isEmpty();
-      boolean fromSelf = session != null && sender.equals(session.userId);
-
-      if (isDirectMessageRoom) {
-        String normalizedType = msgType.isEmpty() ? "m.text" : msgType;
-        if ("m.emote".equals(msgType)) {
-          Map<String, String> tags =
-              withTag(
-                  withTag(
-                      privateMessageTags(peerUserId, roomId, "m.emote", fromSelf),
-                      TAG_MATRIX_MEDIA_URL,
-                      mediaUrl),
-                  TAG_DRAFT_REPLY,
-                  replyToMessageId);
-          bus.onNext(
-              new ServerIrcEvent(
-                  sid, new IrcEvent.PrivateAction(at, sender, body, messageId, tags)));
-          continue;
-        }
-        if ("m.notice".equals(msgType)) {
-          Map<String, String> tags =
-              withTag(
-                  withTag(
-                      privateMessageTags(peerUserId, roomId, "m.notice", fromSelf),
-                      TAG_MATRIX_MEDIA_URL,
-                      mediaUrl),
-                  TAG_DRAFT_REPLY,
-                  replyToMessageId);
-          bus.onNext(
-              new ServerIrcEvent(
-                  sid, new IrcEvent.Notice(at, sender, peerUserId, body, messageId, tags)));
-          continue;
-        }
-        Map<String, String> tags =
-            withTag(
-                withTag(
-                    privateMessageTags(peerUserId, roomId, normalizedType, fromSelf),
-                    TAG_MATRIX_MEDIA_URL,
-                    mediaUrl),
-                TAG_DRAFT_REPLY,
-                replyToMessageId);
-        bus.onNext(
-            new ServerIrcEvent(
-                sid, new IrcEvent.PrivateMessage(at, sender, body, messageId, tags)));
-        continue;
-      }
-
-      if ("m.emote".equals(msgType)) {
-        Map<String, String> tags =
-            withTag(
-                withTag(Map.of(TAG_MATRIX_MSGTYPE, "m.emote"), TAG_MATRIX_MEDIA_URL, mediaUrl),
-                TAG_DRAFT_REPLY,
-                replyToMessageId);
-        bus.onNext(
-            new ServerIrcEvent(
-                sid, new IrcEvent.ChannelAction(at, roomId, sender, body, messageId, tags)));
-        continue;
-      }
-
-      if ("m.notice".equals(msgType)) {
-        Map<String, String> tags =
-            withTag(
-                withTag(Map.of(TAG_MATRIX_MSGTYPE, "m.notice"), TAG_MATRIX_MEDIA_URL, mediaUrl),
-                TAG_DRAFT_REPLY,
-                replyToMessageId);
-        bus.onNext(
-            new ServerIrcEvent(
-                sid, new IrcEvent.Notice(at, sender, roomId, body, messageId, tags)));
-        continue;
-      }
-
-      String normalizedType = msgType.isEmpty() ? "m.text" : msgType;
-      Map<String, String> tags =
-          withTag(
-              withTag(Map.of(TAG_MATRIX_MSGTYPE, normalizedType), TAG_MATRIX_MEDIA_URL, mediaUrl),
-              TAG_DRAFT_REPLY,
-              replyToMessageId);
-      bus.onNext(
-          new ServerIrcEvent(
-              sid, new IrcEvent.ChannelMessage(at, roomId, sender, body, messageId, tags)));
-    }
+    syncTimelineEventProjector.emitTimelineEvents(serverId, syncTimelineSessionView(session), events);
   }
 
   private void emitSyncMutationEvents(
