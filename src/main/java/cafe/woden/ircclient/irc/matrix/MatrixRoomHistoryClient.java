@@ -91,8 +91,9 @@ final class MatrixRoomHistoryClient {
 
       JsonNode root = JSON.readTree(body);
       String endToken = normalize(root.path("end").asText(""));
-      List<RoomHistoryEvent> events = parseChunk(root.path("chunk"));
-      return HistoryResult.success(endpoint, endToken, events);
+      ChunkParseResult chunk = parseChunk(root.path("chunk"));
+      return HistoryResult.success(
+          endpoint, endToken, chunk.events(), chunk.reactionEvents(), chunk.redactionEvents());
     } catch (IOException ex) {
       String message = normalize(ex.getMessage());
       if (message.isEmpty()) {
@@ -117,30 +118,64 @@ final class MatrixRoomHistoryClient {
     }
   }
 
-  private static List<RoomHistoryEvent> parseChunk(JsonNode chunk) {
+  private static ChunkParseResult parseChunk(JsonNode chunk) {
     if (chunk == null || !chunk.isArray()) {
-      return List.of();
+      return ChunkParseResult.empty();
     }
     List<RoomHistoryEvent> events = new ArrayList<>();
+    List<RoomReactionEvent> reactionEvents = new ArrayList<>();
+    List<RoomRedactionEvent> redactionEvents = new ArrayList<>();
     for (JsonNode event : chunk) {
       if (event == null || event.isNull()) continue;
       String type = normalize(event.path("type").asText(""));
-      if (!"m.room.message".equals(type)) continue;
+      if ("m.room.message".equals(type)) {
+        JsonNode content = event.path("content");
+        String sender = normalize(event.path("sender").asText(""));
+        String eventId = normalize(event.path("event_id").asText(""));
+        String msgType = normalize(content.path("msgtype").asText(""));
+        String body = Objects.toString(content.path("body").asText(""), "");
+        String replyToEventId = parseReplyToEventId(content);
+        long originServerTs = event.path("origin_server_ts").asLong(0L);
+        if (sender.isEmpty() || body.trim().isEmpty()) continue;
+        if (msgType.isEmpty()) msgType = "m.text";
 
-      JsonNode content = event.path("content");
-      String sender = normalize(event.path("sender").asText(""));
-      String eventId = normalize(event.path("event_id").asText(""));
-      String msgType = normalize(content.path("msgtype").asText(""));
-      String body = Objects.toString(content.path("body").asText(""), "");
-      String replyToEventId = parseReplyToEventId(content);
-      long originServerTs = event.path("origin_server_ts").asLong(0L);
-      if (sender.isEmpty() || body.trim().isEmpty()) continue;
-      if (msgType.isEmpty()) msgType = "m.text";
+        events.add(
+            new RoomHistoryEvent(sender, eventId, msgType, body, replyToEventId, originServerTs));
+        continue;
+      }
 
-      events.add(
-          new RoomHistoryEvent(sender, eventId, msgType, body, replyToEventId, originServerTs));
+      if ("m.reaction".equals(type)) {
+        JsonNode relatesTo = event.path("content").path("m.relates_to");
+        String relType = normalize(relatesTo.path("rel_type").asText(""));
+        String sender = normalize(event.path("sender").asText(""));
+        String eventId = normalize(event.path("event_id").asText(""));
+        String targetEventId = normalize(relatesTo.path("event_id").asText(""));
+        String reaction = normalize(relatesTo.path("key").asText(""));
+        long originServerTs = event.path("origin_server_ts").asLong(0L);
+        if (!"m.annotation".equals(relType)) continue;
+        if (sender.isEmpty()
+            || eventId.isEmpty()
+            || targetEventId.isEmpty()
+            || reaction.isEmpty()) {
+          continue;
+        }
+        reactionEvents.add(
+            new RoomReactionEvent(sender, eventId, targetEventId, reaction, originServerTs));
+        continue;
+      }
+
+      if ("m.room.redaction".equals(type)) {
+        String sender = normalize(event.path("sender").asText(""));
+        String eventId = normalize(event.path("event_id").asText(""));
+        String redactsEventId = normalize(event.path("redacts").asText(""));
+        String reason = normalize(event.path("content").path("reason").asText(""));
+        long originServerTs = event.path("origin_server_ts").asLong(0L);
+        if (redactsEventId.isEmpty()) continue;
+        redactionEvents.add(
+            new RoomRedactionEvent(sender, eventId, redactsEventId, reason, originServerTs));
+      }
     }
-    return List.copyOf(events);
+    return ChunkParseResult.of(events, reactionEvents, redactionEvents);
   }
 
   private static String parseReplyToEventId(JsonNode content) {
@@ -166,11 +201,32 @@ final class MatrixRoomHistoryClient {
       URI endpoint,
       String endToken,
       List<RoomHistoryEvent> events,
+      List<RoomReactionEvent> reactionEvents,
+      List<RoomRedactionEvent> redactionEvents,
       String detail) {
     static HistoryResult success(URI endpoint, String endToken, List<RoomHistoryEvent> events) {
+      return success(endpoint, endToken, events, List.of(), List.of());
+    }
+
+    static HistoryResult success(
+        URI endpoint,
+        String endToken,
+        List<RoomHistoryEvent> events,
+        List<RoomReactionEvent> reactionEvents,
+        List<RoomRedactionEvent> redactionEvents) {
       List<RoomHistoryEvent> safeEvents = events == null ? List.of() : List.copyOf(events);
+      List<RoomReactionEvent> safeReactionEvents =
+          reactionEvents == null ? List.of() : List.copyOf(reactionEvents);
+      List<RoomRedactionEvent> safeRedactionEvents =
+          redactionEvents == null ? List.of() : List.copyOf(redactionEvents);
       return new HistoryResult(
-          true, Objects.requireNonNull(endpoint, "endpoint"), normalize(endToken), safeEvents, "");
+          true,
+          Objects.requireNonNull(endpoint, "endpoint"),
+          normalize(endToken),
+          safeEvents,
+          safeReactionEvents,
+          safeRedactionEvents,
+          "");
     }
 
     static HistoryResult failed(URI endpoint, String detail) {
@@ -179,9 +235,21 @@ final class MatrixRoomHistoryClient {
         message = "history fetch failed";
       }
       return new HistoryResult(
-          false, Objects.requireNonNull(endpoint, "endpoint"), "", List.of(), message);
+          false,
+          Objects.requireNonNull(endpoint, "endpoint"),
+          "",
+          List.of(),
+          List.of(),
+          List.of(),
+          message);
     }
   }
+
+  record RoomReactionEvent(
+      String sender, String eventId, String targetEventId, String reaction, long originServerTs) {}
+
+  record RoomRedactionEvent(
+      String sender, String eventId, String redactsEventId, String reason, long originServerTs) {}
 
   record RoomHistoryEvent(
       String sender,
@@ -193,6 +261,27 @@ final class MatrixRoomHistoryClient {
     RoomHistoryEvent(
         String sender, String eventId, String msgType, String body, long originServerTs) {
       this(sender, eventId, msgType, body, "", originServerTs);
+    }
+  }
+
+  private record ChunkParseResult(
+      List<RoomHistoryEvent> events,
+      List<RoomReactionEvent> reactionEvents,
+      List<RoomRedactionEvent> redactionEvents) {
+    private static ChunkParseResult empty() {
+      return of(List.of(), List.of(), List.of());
+    }
+
+    private static ChunkParseResult of(
+        List<RoomHistoryEvent> events,
+        List<RoomReactionEvent> reactionEvents,
+        List<RoomRedactionEvent> redactionEvents) {
+      List<RoomHistoryEvent> safeEvents = events == null ? List.of() : List.copyOf(events);
+      List<RoomReactionEvent> safeReactionEvents =
+          reactionEvents == null ? List.of() : List.copyOf(reactionEvents);
+      List<RoomRedactionEvent> safeRedactionEvents =
+          redactionEvents == null ? List.of() : List.copyOf(redactionEvents);
+      return new ChunkParseResult(safeEvents, safeReactionEvents, safeRedactionEvents);
     }
   }
 }

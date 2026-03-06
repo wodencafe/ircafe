@@ -216,6 +216,61 @@ class MatrixRoomHistoryClientTest {
     }
   }
 
+  @Test
+  void fetchMessagesBeforeParsesReactionAndRedactionEvents() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    String body =
+        """
+        {
+          "start":"s-start",
+          "end":"s-end",
+          "chunk":[
+            {
+              "type":"m.reaction",
+              "event_id":"$react-1",
+              "sender":"@alice:matrix.example.org",
+              "origin_server_ts":1710000300000,
+              "content":{
+                "m.relates_to":{
+                  "rel_type":"m.annotation",
+                  "event_id":"$msg-1",
+                  "key":":+1:"
+                }
+              }
+            },
+            {
+              "type":"m.room.redaction",
+              "event_id":"$redact-1",
+              "sender":"@alice:matrix.example.org",
+              "redacts":"$react-1",
+              "origin_server_ts":1710000301000,
+              "content":{"reason":"cleanup"}
+            }
+          ]
+        }
+        """;
+    try (TestServer server = TestServer.start(200, body)) {
+      MatrixRoomHistoryClient.HistoryResult result =
+          historyClient.fetchMessagesBefore(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "s-anchor",
+              50);
+
+      assertTrue(result.success());
+      assertEquals("s-end", result.endToken());
+      assertEquals(1, result.reactionEvents().size());
+      assertEquals("$react-1", result.reactionEvents().get(0).eventId());
+      assertEquals("$msg-1", result.reactionEvents().get(0).targetEventId());
+      assertEquals(":+1:", result.reactionEvents().get(0).reaction());
+      assertEquals(1, result.redactionEvents().size());
+      assertEquals("$react-1", result.redactionEvents().get(0).redactsEventId());
+      assertEquals("cleanup", result.redactionEvents().get(0).reason());
+    }
+  }
+
   private static ProxyPlan directPlan() {
     IrcProperties.Proxy cfg = new IrcProperties.Proxy(false, "", 0, "", "", true, 3_000, 3_000);
     return new ProxyPlan(cfg, Proxy.NO_PROXY, 3_000, 3_000);

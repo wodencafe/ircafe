@@ -3957,6 +3957,193 @@ class MatrixIrcClientServiceTest {
   }
 
   @Test
+  void rawTagmsgDraftUnreactHydratesReactionIndexFromHistoryWhenSessionLookupMisses() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "anchor-sync-1",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                Map.of(),
+                List.of(),
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            eq("anchor-sync-1"),
+            eq(200)))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages"),
+                "anchor-sync-2",
+                List.of(),
+                List.of(
+                    new MatrixRoomHistoryClient.RoomReactionEvent(
+                        "@alice:matrix.example.org",
+                        "$react-history",
+                        "$msg-1",
+                        ":+1:",
+                        1710000002000L)),
+                List.of()));
+    when(roomMessageSender.sendRoomRedaction(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            eq("$react-history"),
+            anyString(),
+            eq("")))
+        .thenReturn(
+            MatrixRoomMessageSender.SendResult.accepted(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/redact/$react-history/txn-u2"),
+                "$unreact-history"));
+    service.connect("matrix").blockingAwait();
+
+    service
+        .sendRaw(
+            "matrix", "@+draft/unreact=:+1:;+draft/reply=$msg-1 TAGMSG !room:matrix.example.org")
+        .blockingAwait();
+
+    verify(roomMessageSender, times(1))
+        .sendRoomRedaction(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            eq("$react-history"),
+            anyString(),
+            eq(""));
+  }
+
+  @Test
+  void rawTagmsgDraftUnreactHistoryFallbackIgnoresPreviouslyRedactedReactionIds() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "anchor-sync-1",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                Map.of(),
+                List.of(),
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            eq("anchor-sync-1"),
+            eq(200)))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages"),
+                "anchor-sync-2",
+                List.of(),
+                List.of(),
+                List.of(
+                    new MatrixRoomHistoryClient.RoomRedactionEvent(
+                        "@alice:matrix.example.org",
+                        "$redact-1",
+                        "$react-stale",
+                        "cleanup",
+                        1710000001000L))));
+    when(roomHistoryClient.fetchMessagesBefore(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            eq("anchor-sync-2"),
+            eq(200)))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages"),
+                "",
+                List.of(),
+                List.of(
+                    new MatrixRoomHistoryClient.RoomReactionEvent(
+                        "@alice:matrix.example.org",
+                        "$react-stale",
+                        "$msg-1",
+                        ":+1:",
+                        1710000000000L),
+                    new MatrixRoomHistoryClient.RoomReactionEvent(
+                        "@alice:matrix.example.org",
+                        "$react-active",
+                        "$msg-1",
+                        ":+1:",
+                        1710000000001L)),
+                List.of()));
+    when(roomMessageSender.sendRoomRedaction(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            eq("$react-active"),
+            anyString(),
+            eq("")))
+        .thenReturn(
+            MatrixRoomMessageSender.SendResult.accepted(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/redact/$react-active/txn-u3"),
+                "$unreact-active"));
+    service.connect("matrix").blockingAwait();
+
+    service
+        .sendRaw(
+            "matrix", "@+draft/unreact=:+1:;+draft/reply=$msg-1 TAGMSG !room:matrix.example.org")
+        .blockingAwait();
+
+    verify(roomMessageSender, times(1))
+        .sendRoomRedaction(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            eq("$react-active"),
+            anyString(),
+            eq(""));
+  }
+
+  @Test
   void rawRedactDelegatesToMatrixRoomRedactionSend() {
     IrcProperties.Server server =
         server("matrix", "matrix.example.org", 8448, true, "secret-token");
