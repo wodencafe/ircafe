@@ -523,6 +523,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       UserListStore userListStore,
       UserListDockable usersDock,
       IrcClientService irc) {
+    channelListPanel.setIsMatrixServer(irc::isMatrixBackendServer);
     return new ChatChannelListCoordinator(
         channelListPanel,
         serverTree,

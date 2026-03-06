@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.irc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -72,6 +74,30 @@ class BackendRoutingIrcClientServiceTest {
 
     verify(matrixBackend).connect("matrix");
     verify(ircBackend, never()).connect("matrix");
+  }
+
+  @Test
+  void reportsMatrixBackendServerFromConfiguration() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+    IrcBackendClientService matrixBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(matrixBackend.backend()).thenReturn(IrcProperties.Server.Backend.MATRIX);
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(matrixBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(server("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(serverCatalog.find("irc"))
+        .thenReturn(Optional.of(server("irc", IrcProperties.Server.Backend.IRC)));
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, matrixBackend));
+
+    assertTrue(service.isMatrixBackendServer("matrix"));
+    assertFalse(service.isMatrixBackendServer("irc"));
   }
 
   @Test

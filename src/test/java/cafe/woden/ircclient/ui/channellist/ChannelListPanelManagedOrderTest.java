@@ -46,6 +46,38 @@ class ChannelListPanelManagedOrderTest {
   }
 
   @Test
+  void buildMatrixListCommandSupportsSearchSinceAndLimit() {
+    ChannelListPanel.MatrixListOptions options =
+        new ChannelListPanel.MatrixListOptions("rust lang", "s123", 75);
+
+    assertEquals(
+        "/list rust lang since s123 limit 75", ChannelListPanel.buildMatrixListCommand(options));
+  }
+
+  @Test
+  void matrixNextPageButtonUsesNextBatchFromLastSummary() throws Exception {
+    ChannelListPanel panel = new ChannelListPanel();
+    AtomicReference<String> command = new AtomicReference<>("");
+
+    onEdt(
+        () -> {
+          panel.setIsMatrixServer(sid -> "matrix".equalsIgnoreCase(sid));
+          panel.setServerId("matrix");
+          panel.setOnRunAlisRequest(command::set);
+          panel.beginList("matrix", "Loading channel list (rust limit 30)...");
+          panel.endList("matrix", "Listed 30 Matrix room(s). next_batch=nxt-42");
+        });
+
+    JButton nextPageButton = field(panel, "runMatrixNextButton", JButton.class);
+    onEdt(() -> assertTrue(nextPageButton.isVisible()));
+    onEdt(() -> assertTrue(nextPageButton.isEnabled()));
+
+    onEdt(nextPageButton::doClick);
+    assertEquals("/list rust since nxt-42 limit 30", command.get());
+    onEdt(() -> assertFalse(nextPageButton.isEnabled()));
+  }
+
+  @Test
   void managedSortModeIsScopedPerServer() throws Exception {
     onEdt(
         () -> {

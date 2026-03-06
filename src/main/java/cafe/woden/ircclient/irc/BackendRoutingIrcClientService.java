@@ -244,6 +244,11 @@ public class BackendRoutingIrcClientService
   }
 
   @Override
+  public boolean isMatrixBackendServer(String serverId) {
+    return effectiveBackendForServer(serverId) == IrcProperties.Server.Backend.MATRIX;
+  }
+
+  @Override
   public boolean isQuasselCoreSetupPending(String serverId) {
     return routeActiveOrConfigured(serverId).isQuasselCoreSetupPending(serverId);
   }
@@ -435,10 +440,7 @@ public class BackendRoutingIrcClientService
     String sid = normalizeServerId(serverId);
     Optional<IrcProperties.Server> configuredServer =
         sid.isEmpty() ? Optional.empty() : serverCatalog.find(sid);
-    IrcProperties.Server.Backend backend =
-        configuredServer
-            .map(IrcProperties.Server::backend)
-            .orElse(IrcProperties.Server.Backend.IRC);
+    IrcProperties.Server.Backend backend = configuredBackend(configuredServer);
     IrcBackendClientService delegate = backendsByType.get(backend);
     if (delegate != null) return delegate;
 
@@ -469,6 +471,24 @@ public class BackendRoutingIrcClientService
           first.backend().token());
     }
     return first;
+  }
+
+  private IrcProperties.Server.Backend effectiveBackendForServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    IrcBackendClientService active = resolveActiveOwner(sid);
+    if (active != null && active.backend() != null) {
+      return active.backend();
+    }
+    Optional<IrcProperties.Server> configuredServer =
+        sid.isEmpty() ? Optional.empty() : serverCatalog.find(sid);
+    return configuredBackend(configuredServer);
+  }
+
+  private static IrcProperties.Server.Backend configuredBackend(
+      Optional<IrcProperties.Server> configuredServer) {
+    return configuredServer
+        .map(IrcProperties.Server::backend)
+        .orElse(IrcProperties.Server.Backend.IRC);
   }
 
   private IrcBackendClientService resolveActiveOwner(String sid) {

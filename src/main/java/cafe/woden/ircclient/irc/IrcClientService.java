@@ -156,6 +156,13 @@ public interface IrcClientService {
   }
 
   /**
+   * @return true when the server is configured/routed to the Matrix backend.
+   */
+  default boolean isMatrixBackendServer(String serverId) {
+    return false;
+  }
+
+  /**
    * @return true when Quassel Core initial setup is pending for this server.
    */
   default boolean isQuasselCoreSetupPending(String serverId) {

@@ -30,6 +30,7 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.JButton;
@@ -68,7 +69,8 @@ public final class ChannelListPanel extends JPanel {
   private enum ListRequestType {
     UNKNOWN,
     FULL_LIST,
-    ALIS
+    ALIS,
+    MATRIX_LIST
   }
 
   private enum AlisActivityState {
@@ -145,6 +147,34 @@ public final class ChannelListPanel extends JPanel {
     }
   }
 
+  record MatrixListOptions(String searchTerm, String sinceToken, Integer limit) {
+    static MatrixListOptions defaults() {
+      return new MatrixListOptions("", "", MATRIX_LIST_DEFAULT_LIMIT);
+    }
+
+    MatrixListOptions {
+      searchTerm = normalizeMatrixToken(searchTerm);
+      sinceToken = normalizeMatrixToken(sinceToken);
+      if (limit == null) {
+        limit = Integer.valueOf(MATRIX_LIST_DEFAULT_LIMIT);
+      } else {
+        limit = Integer.valueOf(normalizeMatrixListLimit(limit.intValue()));
+      }
+    }
+  }
+
+  private record MatrixListState(String searchTerm, int limit, String nextSinceToken) {
+    MatrixListState {
+      searchTerm = normalizeMatrixToken(searchTerm);
+      limit = normalizeMatrixListLimit(limit);
+      nextSinceToken = normalizeMatrixToken(nextSinceToken);
+    }
+
+    MatrixListState withNextSinceToken(String nextSinceToken) {
+      return new MatrixListState(searchTerm, limit, nextSinceToken);
+    }
+  }
+
   private static final int LIST_COL_CHANNEL = 0;
   private static final int LIST_COL_USERS = 1;
   private static final int LIST_COL_TOPIC = 2;
@@ -158,8 +188,12 @@ public final class ChannelListPanel extends JPanel {
 
   private static final String DEFAULT_HINT =
       "Use the refresh button to request /list (heavy) or the ALIS search button for filtered results.";
+  private static final String MATRIX_HINT =
+      "Use refresh for /list defaults, filters for Matrix search/since/limit, and next page when available.";
   private static final String MANAGED_HINT =
       "Managed channels include connected and disconnected channels for this server.";
+  private static final int MATRIX_LIST_DEFAULT_LIMIT = 100;
+  private static final int MATRIX_LIST_MAX_LIMIT = 200;
 
   private static final int ACTION_ICON_SIZE = 16;
   private static final Dimension ACTION_BUTTON_SIZE = new Dimension(28, 28);
@@ -171,6 +205,7 @@ public final class ChannelListPanel extends JPanel {
   private final TableRowSorter<ChannelListTableModel> listSorter = new TableRowSorter<>(listModel);
   private final JButton runListButton = new JButton();
   private final JButton runAlisButton = new JButton();
+  private final JButton runMatrixNextButton = new JButton();
   private final JButton listDetailsButton = new JButton();
 
   private final ManagedChannelTableModel managedModel = new ManagedChannelTableModel();
@@ -189,6 +224,7 @@ public final class ChannelListPanel extends JPanel {
   private final Map<String, String> statusByServer = new HashMap<>();
   private final Map<String, Boolean> loadingByServer = new HashMap<>();
   private final Map<String, ListRequestType> requestTypeByServer = new HashMap<>();
+  private final Map<String, MatrixListState> matrixListStateByServer = new HashMap<>();
   private final Map<String, ArrayList<ManagedChannelRow>> managedRowsByServer = new HashMap<>();
   private final Map<String, ManagedSortMode> managedSortModeByServer = new HashMap<>();
   private final Map<String, Map<String, ChannelModeSnapshot>> channelModeSnapshotsByServer =
@@ -206,6 +242,7 @@ public final class ChannelListPanel extends JPanel {
   private volatile Consumer<String> onJoinChannel;
   private volatile Runnable onRunListRequest;
   private volatile Consumer<String> onRunAlisRequest;
+  private volatile Predicate<String> isMatrixServer = sid -> false;
   private volatile Consumer<String> onAddChannelRequest;
   private volatile Consumer<String> onReconnectChannelRequest;
   private volatile Consumer<String> onDisconnectChannelRequest;
@@ -241,14 +278,15 @@ public final class ChannelListPanel extends JPanel {
     JPanel root = new JPanel(new BorderLayout(0, 8));
     root.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
-    JPanel controls = new JPanel(new MigLayout("insets 0, fillx", "[][][]push[][grow,fill]", "[]"));
+    JPanel controls =
+        new JPanel(new MigLayout("insets 0, fillx", "[][][][]push[][grow,fill]", "[]"));
     configureActionButton(
         runListButton,
         "refresh",
         "Request full /list from server (heavy; confirmation required)",
         "Run /list");
     runListButton.setToolTipText("Request full /list from server (heavy; confirmation required)");
-    runListButton.addActionListener(e -> runFullListRequested());
+    runListButton.addActionListener(e -> runListRequested());
 
     configureActionButton(
         runAlisButton,
@@ -260,11 +298,20 @@ public final class ChannelListPanel extends JPanel {
     runAlisButton.addActionListener(e -> runAlisRequested());
 
     configureActionButton(
+        runMatrixNextButton,
+        "play",
+        "Run next Matrix /list page (uses next_batch from the last result)",
+        "Run next Matrix list page");
+    runMatrixNextButton.addActionListener(e -> runMatrixNextPageRequested());
+    runMatrixNextButton.setVisible(false);
+
+    configureActionButton(
         listDetailsButton, "eye", "Show details for selected channel", "Show details");
     listDetailsButton.addActionListener(e -> showServerListDetailsForSelection());
 
     controls.add(runListButton);
     controls.add(runAlisButton);
+    controls.add(runMatrixNextButton);
     controls.add(listDetailsButton);
     controls.add(new JLabel("Filter:"), "gapleft 12");
     controls.add(filterField, "pushx,growx");
@@ -351,6 +398,7 @@ public final class ChannelListPanel extends JPanel {
     JScrollPane scroll = new JScrollPane(listTable);
     scroll.setBorder(null);
     root.add(scroll, BorderLayout.CENTER);
+    updateListActionPresentation();
     updateListButtons();
     return root;
   }
@@ -549,6 +597,7 @@ public final class ChannelListPanel extends JPanel {
 
   public void setServerId(String serverId) {
     this.serverId = normalizeServerId(serverId);
+    updateListActionPresentation();
     refreshCurrentServerViews();
     refreshOpenDetailsDialog();
   }
@@ -567,6 +616,13 @@ public final class ChannelListPanel extends JPanel {
 
   public void setOnRunAlisRequest(Consumer<String> onRunAlisRequest) {
     this.onRunAlisRequest = onRunAlisRequest;
+  }
+
+  public void setIsMatrixServer(Predicate<String> isMatrixServer) {
+    this.isMatrixServer = isMatrixServer == null ? sid -> false : isMatrixServer;
+    updateListActionPresentation();
+    updateListHeader();
+    updateListButtons();
   }
 
   public void setOnAddChannelRequest(Consumer<String> onAddChannelRequest) {
@@ -704,6 +760,21 @@ public final class ChannelListPanel extends JPanel {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
 
+    if (isMatrixServer(sid)) {
+      MatrixListOptions options = parseMatrixListOptionsFromLoadingBanner(banner);
+      MatrixListState current =
+          matrixListStateByServer.getOrDefault(
+              sid, new MatrixListState("", MATRIX_LIST_DEFAULT_LIMIT, ""));
+      if (options == null) {
+        matrixListStateByServer.put(sid, current.withNextSinceToken(""));
+      } else {
+        matrixListStateByServer.put(
+            sid,
+            new MatrixListState(
+                options.searchTerm(), normalizeMatrixListLimit(options.limit()), ""));
+      }
+    }
+
     rowsByServer.put(sid, new ArrayList<>());
     statusByServer.put(sid, normalizeBanner(banner));
     loadingByServer.put(sid, Boolean.TRUE);
@@ -752,6 +823,12 @@ public final class ChannelListPanel extends JPanel {
 
     String base = Objects.toString(summary, "").trim();
     if (base.isEmpty()) base = "End of /LIST";
+    if (isMatrixServer(sid)) {
+      MatrixListState state =
+          matrixListStateByServer.getOrDefault(
+              sid, new MatrixListState("", MATRIX_LIST_DEFAULT_LIMIT, ""));
+      matrixListStateByServer.put(sid, state.withNextSinceToken(parseMatrixNextBatchToken(base)));
+    }
     statusByServer.put(sid, base);
     loadingByServer.put(sid, Boolean.FALSE);
     if (sid.equals(this.serverId)) {
@@ -891,7 +968,7 @@ public final class ChannelListPanel extends JPanel {
     String status = Objects.toString(statusByServer.get(sid), "").trim();
     if (status.isEmpty()) {
       if (totalCount == 0) {
-        listSubtitle.setText(DEFAULT_HINT);
+        listSubtitle.setText(defaultListHintForServer(sid));
       } else if (filtered) {
         listSubtitle.setText(sid + " - " + visibleCount + " of " + totalCount + " channels shown");
       } else {
@@ -962,6 +1039,14 @@ public final class ChannelListPanel extends JPanel {
     updateListHeader();
   }
 
+  private void runListRequested() {
+    if (isCurrentServerMatrixBackend()) {
+      runMatrixListDefaultsRequested();
+      return;
+    }
+    runFullListRequested();
+  }
+
   private void runFullListRequested() {
     String sid = this.serverId;
     if (sid.isEmpty()) return;
@@ -991,6 +1076,10 @@ public final class ChannelListPanel extends JPanel {
   private void runAlisRequested() {
     String sid = this.serverId;
     if (sid.isEmpty()) return;
+    if (isCurrentServerMatrixBackend()) {
+      runMatrixListWithOptionsRequested();
+      return;
+    }
 
     JTextField queryField = new JTextField(28);
     JCheckBox includeTopic = new JCheckBox("Include topic matching (-topic)", true);
@@ -1084,6 +1173,102 @@ public final class ChannelListPanel extends JPanel {
     if (cb != null) SwingUtilities.invokeLater(() -> cb.accept(cmd));
   }
 
+  private void runMatrixListDefaultsRequested() {
+    String sid = this.serverId;
+    if (sid.isEmpty()) return;
+
+    rememberRequestType(sid, ListRequestType.MATRIX_LIST);
+    matrixListStateByServer.put(sid, new MatrixListState("", MATRIX_LIST_DEFAULT_LIMIT, ""));
+    if (!filterField.getText().isBlank()) {
+      filterField.setText("");
+    }
+    updateListButtons();
+
+    Runnable cb = onRunListRequest;
+    if (cb != null) SwingUtilities.invokeLater(cb);
+  }
+
+  private void runMatrixListWithOptionsRequested() {
+    String sid = this.serverId;
+    if (sid.isEmpty()) return;
+
+    MatrixListState current =
+        matrixListStateByServer.getOrDefault(
+            sid, new MatrixListState("", MATRIX_LIST_DEFAULT_LIMIT, ""));
+    JTextField queryField = new JTextField(current.searchTerm(), 28);
+    JSpinner limitSpinner =
+        new JSpinner(
+            new SpinnerNumberModel(
+                normalizeMatrixListLimit(current.limit()), 1, MATRIX_LIST_MAX_LIMIT, 1));
+    JCheckBox sinceEnabled = new JCheckBox("Use since token");
+    JTextField sinceField = new JTextField(28);
+    String defaultSince = current.nextSinceToken();
+    if (!defaultSince.isEmpty()) {
+      sinceEnabled.setSelected(true);
+      sinceField.setText(defaultSince);
+    }
+    sinceField.setEnabled(sinceEnabled.isSelected());
+    sinceEnabled.addActionListener(e -> sinceField.setEnabled(sinceEnabled.isSelected()));
+
+    JPanel form =
+        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right][grow,fill]", "[]6[]6[]6[]"));
+    form.add(new JLabel("Search:"));
+    form.add(queryField, "growx");
+    form.add(new JLabel("Limit:"));
+    form.add(limitSpinner, "w 120!");
+    form.add(sinceEnabled);
+    form.add(sinceField, "growx");
+    form.add(new JLabel("Tip:"));
+    form.add(new JLabel("Use Next Page after results include next_batch."), "growx");
+
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    int choice =
+        JOptionPane.showConfirmDialog(
+            owner,
+            form,
+            "Run Matrix /LIST",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE);
+    if (choice != JOptionPane.OK_OPTION) return;
+
+    String searchTerm = Objects.toString(queryField.getText(), "").trim();
+    String sinceToken =
+        sinceEnabled.isSelected() ? Objects.toString(sinceField.getText(), "").trim() : "";
+    int limit = ((Number) limitSpinner.getValue()).intValue();
+
+    MatrixListOptions options = new MatrixListOptions(searchTerm, sinceToken, limit);
+    String cmd = buildMatrixListCommand(options);
+    matrixListStateByServer.put(
+        sid, new MatrixListState(options.searchTerm(), options.limit(), ""));
+    rememberRequestType(sid, ListRequestType.MATRIX_LIST);
+    updateListButtons();
+
+    Consumer<String> cb = onRunAlisRequest;
+    if (cb != null) SwingUtilities.invokeLater(() -> cb.accept(cmd));
+  }
+
+  private void runMatrixNextPageRequested() {
+    String sid = this.serverId;
+    if (sid.isEmpty() || !isCurrentServerMatrixBackend()) return;
+
+    MatrixListState current =
+        matrixListStateByServer.getOrDefault(
+            sid, new MatrixListState("", MATRIX_LIST_DEFAULT_LIMIT, ""));
+    String nextSince = normalizeMatrixToken(current.nextSinceToken());
+    if (nextSince.isEmpty()) return;
+
+    MatrixListOptions options =
+        new MatrixListOptions(current.searchTerm(), nextSince, Integer.valueOf(current.limit()));
+    String cmd = buildMatrixListCommand(options);
+    matrixListStateByServer.put(
+        sid, new MatrixListState(current.searchTerm(), current.limit(), ""));
+    rememberRequestType(sid, ListRequestType.MATRIX_LIST);
+    updateListButtons();
+
+    Consumer<String> cb = onRunAlisRequest;
+    if (cb != null) SwingUtilities.invokeLater(() -> cb.accept(cmd));
+  }
+
   static String buildAlisCommand(String query, boolean includeTopic) {
     return buildAlisCommand(query, AlisSearchOptions.defaults(includeTopic));
   }
@@ -1123,6 +1308,29 @@ public final class ChannelListPanel extends JPanel {
     }
 
     return "/quote PRIVMSG ALIS :" + raw.toString().trim();
+  }
+
+  static String buildMatrixListCommand(MatrixListOptions options) {
+    MatrixListOptions opts = options == null ? MatrixListOptions.defaults() : options;
+    String search = normalizeMatrixToken(opts.searchTerm());
+    String since = normalizeMatrixToken(opts.sinceToken());
+    int limit = normalizeMatrixListLimit(opts.limit());
+
+    StringBuilder args = new StringBuilder();
+    if (!search.isEmpty()) {
+      args.append(search);
+    }
+    if (!since.isEmpty()) {
+      if (!args.isEmpty()) args.append(' ');
+      args.append("since ").append(since);
+    }
+    if (limit > 0) {
+      if (!args.isEmpty()) args.append(' ');
+      args.append("limit ").append(limit);
+    }
+
+    String suffix = args.toString().trim();
+    return suffix.isEmpty() ? "/list" : ("/list " + suffix);
   }
 
   private void addChannelRequested() {
@@ -1257,10 +1465,64 @@ public final class ChannelListPanel extends JPanel {
     int row = listTable.getSelectedRow();
     boolean hasServer = !this.serverId.isBlank();
     boolean busy = isCurrentServerListLoading();
+    boolean matrix = isCurrentServerMatrixBackend();
+    MatrixListState matrixState =
+        hasServer
+            ? matrixListStateByServer.getOrDefault(
+                this.serverId, new MatrixListState("", MATRIX_LIST_DEFAULT_LIMIT, ""))
+            : new MatrixListState("", MATRIX_LIST_DEFAULT_LIMIT, "");
+    boolean hasNextMatrixPage = !normalizeMatrixToken(matrixState.nextSinceToken()).isEmpty();
+
+    updateListActionPresentation();
     listDetailsButton.setEnabled(row >= 0 && hasServer);
     runListButton.setEnabled(hasServer && !busy);
     runAlisButton.setEnabled(hasServer && !busy);
+    runMatrixNextButton.setEnabled(hasServer && matrix && !busy && hasNextMatrixPage);
     updateListBusyIndicator(busy);
+  }
+
+  private void updateListActionPresentation() {
+    boolean matrix = isCurrentServerMatrixBackend();
+    if (matrix) {
+      runListButton.setToolTipText("Run Matrix /list with default options.");
+      runListButton.getAccessibleContext().setAccessibleName("Run Matrix /list");
+      runAlisButton.setToolTipText("Run Matrix /list with search/since/limit options.");
+      runAlisButton.getAccessibleContext().setAccessibleName("Run Matrix list filters");
+      runMatrixNextButton.setVisible(true);
+      runMatrixNextButton.setToolTipText(
+          "Run next Matrix /list page (uses next_batch from last response).");
+    } else {
+      runListButton.setToolTipText("Request full /list from server (heavy; confirmation required)");
+      runListButton.getAccessibleContext().setAccessibleName("Run /list");
+      runAlisButton.setToolTipText(
+          "Run filtered ALIS search (topic, min/max users, and display filters)");
+      runAlisButton.getAccessibleContext().setAccessibleName("Run ALIS search");
+      runMatrixNextButton.setVisible(false);
+      runMatrixNextButton.setToolTipText(
+          "Run next Matrix /list page (uses next_batch from last response)");
+    }
+  }
+
+  private String defaultListHintForServer(String sid) {
+    String server = normalizeServerId(sid);
+    if (server.isEmpty()) return DEFAULT_HINT;
+    return isMatrixServer(server) ? MATRIX_HINT : DEFAULT_HINT;
+  }
+
+  private boolean isCurrentServerMatrixBackend() {
+    return isMatrixServer(this.serverId);
+  }
+
+  private boolean isMatrixServer(String sid) {
+    String serverId = normalizeServerId(sid);
+    if (serverId.isEmpty()) return false;
+    Predicate<String> predicate = isMatrixServer;
+    if (predicate == null) return false;
+    try {
+      return predicate.test(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 
   private void updateManagedButtons() {
@@ -1818,7 +2080,8 @@ public final class ChannelListPanel extends JPanel {
 
     if (!busy) {
       listTable.setCursor(Cursor.getDefaultCursor());
-      if (requestType == ListRequestType.ALIS && alisActivityState == AlisActivityState.SPINNER) {
+      if ((requestType == ListRequestType.ALIS || requestType == ListRequestType.MATRIX_LIST)
+          && alisActivityState == AlisActivityState.SPINNER) {
         startAlisConfirmedIndicator();
       } else if (alisActivityState != AlisActivityState.IDLE) {
         restoreAlisDefaultIcon();
@@ -1829,7 +2092,7 @@ public final class ChannelListPanel extends JPanel {
       return;
     }
 
-    if (requestType == ListRequestType.ALIS) {
+    if (requestType == ListRequestType.ALIS || requestType == ListRequestType.MATRIX_LIST) {
       startAlisSpinnerIndicator();
     } else if (alisActivityState != AlisActivityState.IDLE) {
       restoreAlisDefaultIcon();
@@ -1846,6 +2109,7 @@ public final class ChannelListPanel extends JPanel {
   private static ListRequestType inferRequestTypeFromBanner(String banner) {
     String text = Objects.toString(banner, "").trim().toLowerCase(Locale.ROOT);
     if (text.contains("alis")) return ListRequestType.ALIS;
+    if (text.contains("matrix")) return ListRequestType.MATRIX_LIST;
     return ListRequestType.UNKNOWN;
   }
 
@@ -1923,6 +2187,167 @@ public final class ChannelListPanel extends JPanel {
   public void removeNotify() {
     restoreAlisDefaultIcon();
     super.removeNotify();
+  }
+
+  private static MatrixListOptions parseMatrixListOptionsFromLoadingBanner(String banner) {
+    String text = Objects.toString(banner, "").trim();
+    if (text.isEmpty()) return null;
+    String lower = text.toLowerCase(Locale.ROOT);
+    if (!lower.startsWith("loading channel list")) {
+      return null;
+    }
+    int open = text.indexOf('(');
+    int close = text.lastIndexOf(')');
+    if (open < 0 || close <= open) {
+      return MatrixListOptions.defaults();
+    }
+    String args = text.substring(open + 1, close).trim();
+    return parseMatrixListOptions(args);
+  }
+
+  private static MatrixListOptions parseMatrixListOptions(String rawArgs) {
+    String args = Objects.toString(rawArgs, "").trim();
+    if (args.isEmpty()) return MatrixListOptions.defaults();
+
+    String[] tokens = args.split("\\s+");
+    java.util.ArrayList<String> freeTokens = new java.util.ArrayList<>();
+    String searchTerm = "";
+    String sinceToken = "";
+    int limit = MATRIX_LIST_DEFAULT_LIMIT;
+
+    for (int i = 0; i < tokens.length; i++) {
+      String token = normalizeMatrixToken(tokens[i]);
+      if (token.isEmpty()) continue;
+      String lower = token.toLowerCase(Locale.ROOT);
+
+      String sinceInline = matrixListOptionValue(lower, token, "since");
+      if (!sinceInline.isEmpty()) {
+        sinceToken = sinceInline;
+        continue;
+      }
+      if ("since".equals(lower) || "--since".equals(lower) || "-since".equals(lower)) {
+        if (i + 1 < tokens.length) {
+          sinceToken = normalizeMatrixToken(tokens[++i]);
+        }
+        continue;
+      }
+
+      String searchInline = matrixListOptionValue(lower, token, "search");
+      if (searchInline.isEmpty()) {
+        searchInline = matrixListOptionValue(lower, token, "q");
+      }
+      if (!searchInline.isEmpty()) {
+        searchTerm = searchInline;
+        continue;
+      }
+      if ("search".equals(lower)
+          || "--search".equals(lower)
+          || "-search".equals(lower)
+          || "q".equals(lower)
+          || "--q".equals(lower)
+          || "-q".equals(lower)) {
+        if (i + 1 < tokens.length) {
+          searchTerm = normalizeMatrixToken(tokens[++i]);
+        }
+        continue;
+      }
+
+      String limitInline = matrixListOptionValue(lower, token, "limit");
+      if (limitInline.isEmpty()) {
+        limitInline = matrixListOptionValue(lower, token, "max");
+      }
+      if (!limitInline.isEmpty()) {
+        Integer parsed = parsePositiveIntToken(limitInline);
+        if (parsed != null) {
+          limit = parsed.intValue();
+        }
+        continue;
+      }
+      if ("limit".equals(lower)
+          || "--limit".equals(lower)
+          || "-limit".equals(lower)
+          || "max".equals(lower)
+          || "--max".equals(lower)
+          || "-max".equals(lower)) {
+        if (i + 1 < tokens.length) {
+          Integer parsed = parsePositiveIntToken(tokens[++i]);
+          if (parsed != null) {
+            limit = parsed.intValue();
+          }
+        }
+        continue;
+      }
+
+      freeTokens.add(token);
+    }
+
+    if (searchTerm.isEmpty() && !freeTokens.isEmpty()) {
+      searchTerm = normalizeMatrixToken(String.join(" ", freeTokens));
+    }
+    return new MatrixListOptions(searchTerm, sinceToken, Integer.valueOf(limit));
+  }
+
+  private static String matrixListOptionValue(
+      String tokenLower, String tokenRaw, String optionName) {
+    String option = normalizeMatrixToken(optionName).toLowerCase(Locale.ROOT);
+    if (option.isEmpty()) return "";
+    if (tokenLower.startsWith(option + "=")) {
+      return normalizeMatrixToken(tokenRaw.substring(option.length() + 1));
+    }
+    if (tokenLower.startsWith("--" + option + "=")) {
+      return normalizeMatrixToken(tokenRaw.substring(option.length() + 3));
+    }
+    if (tokenLower.startsWith("-" + option + "=")) {
+      return normalizeMatrixToken(tokenRaw.substring(option.length() + 2));
+    }
+    return "";
+  }
+
+  private static String parseMatrixNextBatchToken(String summary) {
+    String text = Objects.toString(summary, "").trim();
+    if (text.isEmpty()) return "";
+
+    String marker = "next_batch=";
+    String lower = text.toLowerCase(Locale.ROOT);
+    int markerIndex = lower.indexOf(marker);
+    if (markerIndex < 0) return "";
+
+    int start = markerIndex + marker.length();
+    while (start < text.length() && Character.isWhitespace(text.charAt(start))) {
+      start++;
+    }
+    int end = start;
+    while (end < text.length()) {
+      char c = text.charAt(end);
+      if (Character.isWhitespace(c) || c == ',' || c == ';' || c == ')') {
+        break;
+      }
+      end++;
+    }
+    return normalizeMatrixToken(text.substring(start, end));
+  }
+
+  private static Integer parsePositiveIntToken(String token) {
+    String value = normalizeMatrixToken(token);
+    if (value.isEmpty()) return null;
+    try {
+      int parsed = Integer.parseInt(value);
+      if (parsed <= 0) {
+        return null;
+      }
+      return Integer.valueOf(parsed);
+    } catch (NumberFormatException ignored) {
+      return null;
+    }
+  }
+
+  private static int normalizeMatrixListLimit(int limit) {
+    int requested = limit <= 0 ? MATRIX_LIST_DEFAULT_LIMIT : limit;
+    return Math.max(1, Math.min(requested, MATRIX_LIST_MAX_LIMIT));
+  }
+
+  private static String normalizeMatrixToken(String value) {
+    return Objects.toString(value, "").trim();
   }
 
   private static String normalizeBanner(String banner) {
