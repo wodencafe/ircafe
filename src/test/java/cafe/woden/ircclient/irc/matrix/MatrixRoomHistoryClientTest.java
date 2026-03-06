@@ -118,6 +118,93 @@ class MatrixRoomHistoryClientTest {
   }
 
   @Test
+  void fetchMessagesBeforeParsesEncryptedEventsAsPlaceholderMessages() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    String body =
+        """
+        {
+          "start":"s-start",
+          "end":"s-end",
+          "chunk":[
+            {
+              "type":"m.room.encrypted",
+              "event_id":"$enc-h1",
+              "sender":"@alice:matrix.example.org",
+              "origin_server_ts":1710000015000,
+              "content":{"algorithm":"m.megolm.v1.aes-sha2"}
+            }
+          ]
+        }
+        """;
+    try (TestServer server = TestServer.start(200, body)) {
+      MatrixRoomHistoryClient.HistoryResult result =
+          historyClient.fetchMessagesBefore(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "s-anchor",
+              25);
+
+      assertTrue(result.success());
+      assertEquals("s-end", result.endToken());
+      assertEquals(1, result.events().size());
+      MatrixRoomHistoryClient.RoomHistoryEvent encrypted = result.events().getFirst();
+      assertEquals("@alice:matrix.example.org", encrypted.sender());
+      assertEquals("$enc-h1", encrypted.eventId());
+      assertEquals("m.room.encrypted", encrypted.msgType());
+      assertEquals("[encrypted message unavailable]", encrypted.body());
+      assertEquals("", encrypted.replyToEventId());
+      assertEquals(1710000015000L, encrypted.originServerTs());
+    }
+  }
+
+  @Test
+  void fetchMessagesBeforeParsesMediaEventsAndIncludesMediaUrlMetadata() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    String body =
+        """
+        {
+          "start":"s-start",
+          "end":"s-end",
+          "chunk":[
+            {
+              "type":"m.room.message",
+              "event_id":"$img-h1",
+              "sender":"@alice:matrix.example.org",
+              "origin_server_ts":1710000016000,
+              "content":{
+                "msgtype":"m.image",
+                "url":"mxc://matrix.example.org/media-h1"
+              }
+            }
+          ]
+        }
+        """;
+    try (TestServer server = TestServer.start(200, body)) {
+      MatrixRoomHistoryClient.HistoryResult result =
+          historyClient.fetchMessagesBefore(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "s-anchor",
+              25);
+
+      assertTrue(result.success());
+      assertEquals("s-end", result.endToken());
+      assertEquals(1, result.events().size());
+      MatrixRoomHistoryClient.RoomHistoryEvent media = result.events().getFirst();
+      assertEquals("$img-h1", media.eventId());
+      assertEquals("m.image", media.msgType());
+      assertEquals("mxc://matrix.example.org/media-h1", media.body());
+      assertEquals("mxc://matrix.example.org/media-h1", media.mediaUrl());
+      assertEquals("", media.replyToEventId());
+      assertEquals(1710000016000L, media.originServerTs());
+    }
+  }
+
+  @Test
   void fetchMessagesBeforeReportsHttpFailure() throws Exception {
     when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
     try (TestServer server = TestServer.start(500, "{\"errcode\":\"M_UNKNOWN\"}")) {

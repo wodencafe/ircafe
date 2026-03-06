@@ -97,6 +97,66 @@ class MatrixRoomMessageSenderTest {
   }
 
   @Test
+  void sendRoomMediaMessageUsesProvidedMsgtypeAndMediaUrl() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server = TestServer.start(200, "{\"event_id\":\"$media\"}")) {
+      MatrixRoomMessageSender.SendResult result =
+          sender.sendRoomMediaMessage(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "txn-m1",
+              "image.png",
+              "m.image",
+              "mxc://matrix.example.org/media-1");
+
+      assertTrue(result.accepted());
+      assertEquals("$media", result.eventId());
+      JsonNode body = JSON.readTree(server.lastRequestBody().get());
+      assertEquals("m.image", body.path("msgtype").asText(""));
+      assertEquals("image.png", body.path("body").asText(""));
+      assertEquals("mxc://matrix.example.org/media-1", body.path("url").asText(""));
+    }
+  }
+
+  @Test
+  void sendRoomMediaMessageRejectsUnsupportedMediaMsgtype() {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    MatrixRoomMessageSender.SendResult result =
+        sender.sendRoomMediaMessage(
+            "matrix",
+            serverConfig("matrix", "matrix.example.org", 8448, true),
+            "secret-token",
+            "!room:matrix.example.org",
+            "txn-m2",
+            "payload",
+            "m.text",
+            "mxc://matrix.example.org/media-2");
+
+    assertFalse(result.accepted());
+    assertEquals("unsupported media msgtype", result.detail());
+  }
+
+  @Test
+  void sendRoomMediaMessageRejectsBlankMediaUrl() {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    MatrixRoomMessageSender.SendResult result =
+        sender.sendRoomMediaMessage(
+            "matrix",
+            serverConfig("matrix", "matrix.example.org", 8448, true),
+            "secret-token",
+            "!room:matrix.example.org",
+            "txn-m3",
+            "payload",
+            "m.image",
+            " ");
+
+    assertFalse(result.accepted());
+    assertEquals("media url is blank", result.detail());
+  }
+
+  @Test
   void sendRoomReplyIncludesReplyRelationPayload() throws Exception {
     when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
     try (TestServer server = TestServer.start(200, "{\"event_id\":\"$reply\"}")) {

@@ -11,6 +11,7 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +30,8 @@ final class MatrixRoomMessageSender {
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final String CTCP_ACTION_PREFIX = "\u0001ACTION ";
   private static final String CTCP_SUFFIX = "\u0001";
+  private static final Set<String> MEDIA_MSGTYPES =
+      Set.of("m.image", "m.file", "m.video", "m.audio");
 
   private final ServerProxyResolver proxyResolver;
 
@@ -63,6 +66,37 @@ final class MatrixRoomMessageSender {
         "m.room.message",
         Map.of("msgtype", content.msgtype(), "body", content.body()),
         "room send");
+  }
+
+  SendResult sendRoomMediaMessage(
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String transactionId,
+      String message,
+      String msgType,
+      String mediaUrl) {
+    URI endpoint = MatrixEndpointResolver.roomSendMessageUri(server, roomId, transactionId);
+    String type = normalize(msgType);
+    if (!MEDIA_MSGTYPES.contains(type)) {
+      return SendResult.failed(endpoint, "unsupported media msgtype");
+    }
+    String url = normalize(mediaUrl);
+    if (url.isEmpty()) {
+      return SendResult.failed(endpoint, "media url is blank");
+    }
+    String bodyText = Objects.toString(message, "");
+    String body = bodyText.trim().isEmpty() ? url : bodyText;
+    return sendRoomEvent(
+        serverId,
+        server,
+        accessToken,
+        roomId,
+        transactionId,
+        "m.room.message",
+        Map.of("msgtype", type, "body", body, "url", url),
+        "room media send");
   }
 
   SendResult sendRoomReply(

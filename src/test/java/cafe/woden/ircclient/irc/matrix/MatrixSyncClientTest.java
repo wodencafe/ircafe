@@ -244,6 +244,104 @@ class MatrixSyncClientTest {
   }
 
   @Test
+  void syncParsesEncryptedTimelineEventsAsPlaceholderMessages() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    String body =
+        """
+        {
+          "next_batch":"s-next",
+          "rooms":{
+            "join":{
+              "!room:matrix.example.org":{
+                "timeline":{
+                  "events":[
+                    {
+                      "type":"m.room.encrypted",
+                      "event_id":"$enc1",
+                      "sender":"@alice:matrix.example.org",
+                      "origin_server_ts":1710000004500,
+                      "content":{"algorithm":"m.megolm.v1.aes-sha2"}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+        """;
+    try (TestServer server = TestServer.start(200, body)) {
+      MatrixSyncClient.SyncResult result =
+          syncClient.sync(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "",
+              0);
+
+      assertTrue(result.success());
+      assertEquals(1, result.events().size());
+      MatrixSyncClient.RoomTimelineEvent encrypted = result.events().getFirst();
+      assertEquals("!room:matrix.example.org", encrypted.roomId());
+      assertEquals("@alice:matrix.example.org", encrypted.sender());
+      assertEquals("$enc1", encrypted.eventId());
+      assertEquals("m.room.encrypted", encrypted.msgType());
+      assertEquals("[encrypted message unavailable]", encrypted.body());
+      assertEquals(1710000004500L, encrypted.originServerTs());
+      assertEquals("", encrypted.replyToEventId());
+    }
+  }
+
+  @Test
+  void syncParsesMediaTimelineEventsAndIncludesMediaUrlMetadata() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    String body =
+        """
+        {
+          "next_batch":"s-next",
+          "rooms":{
+            "join":{
+              "!room:matrix.example.org":{
+                "timeline":{
+                  "events":[
+                    {
+                      "type":"m.room.message",
+                      "event_id":"$img1",
+                      "sender":"@alice:matrix.example.org",
+                      "origin_server_ts":1710000005500,
+                      "content":{
+                        "msgtype":"m.image",
+                        "url":"mxc://matrix.example.org/media-1"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+        """;
+    try (TestServer server = TestServer.start(200, body)) {
+      MatrixSyncClient.SyncResult result =
+          syncClient.sync(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "",
+              0);
+
+      assertTrue(result.success());
+      assertEquals(1, result.events().size());
+      MatrixSyncClient.RoomTimelineEvent media = result.events().getFirst();
+      assertEquals("$img1", media.eventId());
+      assertEquals("m.image", media.msgType());
+      assertEquals("mxc://matrix.example.org/media-1", media.body());
+      assertEquals("mxc://matrix.example.org/media-1", media.mediaUrl());
+      assertEquals("", media.replyToEventId());
+      assertEquals(1710000005500L, media.originServerTs());
+    }
+  }
+
+  @Test
   void syncRejectsBlankAccessToken() {
     when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
     MatrixSyncClient.SyncResult result =

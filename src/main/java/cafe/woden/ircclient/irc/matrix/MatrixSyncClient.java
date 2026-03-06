@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +30,9 @@ final class MatrixSyncClient {
           "Accept-Encoding", "gzip");
 
   private static final ObjectMapper JSON = new ObjectMapper();
+  private static final String ENCRYPTED_PLACEHOLDER_BODY = "[encrypted message unavailable]";
+  private static final Set<String> MEDIA_MSGTYPES =
+      Set.of("m.image", "m.file", "m.video", "m.audio");
 
   private final ServerProxyResolver proxyResolver;
 
@@ -117,6 +121,23 @@ final class MatrixSyncClient {
               for (JsonNode event : timelineEvents) {
                 if (event == null || event.isNull()) continue;
                 String type = normalize(event.path("type").asText(""));
+                if ("m.room.encrypted".equals(type)) {
+                  String sender = normalize(event.path("sender").asText(""));
+                  String eventId = normalize(event.path("event_id").asText(""));
+                  long originServerTs = event.path("origin_server_ts").asLong(0L);
+                  if (sender.isEmpty()) continue;
+                  events.add(
+                      new RoomTimelineEvent(
+                          roomId,
+                          sender,
+                          eventId,
+                          "m.room.encrypted",
+                          ENCRYPTED_PLACEHOLDER_BODY,
+                          "",
+                          originServerTs,
+                          ""));
+                  continue;
+                }
                 if (!"m.room.message".equals(type)) continue;
 
                 JsonNode content = event.path("content");
@@ -124,17 +145,25 @@ final class MatrixSyncClient {
                 String sender = normalize(event.path("sender").asText(""));
                 String eventId = normalize(event.path("event_id").asText(""));
                 String msgType = normalize(content.path("msgtype").asText(""));
-                String body = Objects.toString(content.path("body").asText(""), "");
+                if (msgType.isEmpty()) msgType = "m.text";
+                String mediaUrl = parseMediaUrl(content, msgType);
+                String body = resolveMessageBody(content, msgType, mediaUrl);
                 String replyToEventId = parseReplyToEventId(content);
                 long originServerTs = event.path("origin_server_ts").asLong(0L);
 
                 if (sender.isEmpty()) continue;
                 if (body.trim().isEmpty()) continue;
-                if (msgType.isEmpty()) msgType = "m.text";
 
                 events.add(
                     new RoomTimelineEvent(
-                        roomId, sender, eventId, msgType, body, replyToEventId, originServerTs));
+                        roomId,
+                        sender,
+                        eventId,
+                        msgType,
+                        body,
+                        replyToEventId,
+                        originServerTs,
+                        mediaUrl));
               }
             });
 
@@ -357,6 +386,33 @@ final class MatrixSyncClient {
     String topLevelStable = normalize(content.path("m.in_reply_to").path("event_id").asText(""));
     if (!topLevelStable.isEmpty()) return topLevelStable;
     return normalize(content.path("in_reply_to").path("event_id").asText(""));
+  }
+
+  private static String parseMediaUrl(JsonNode content, String msgType) {
+    if (!isMediaMsgType(msgType)) {
+      return "";
+    }
+    if (content == null || content.isNull() || !content.isObject()) {
+      return "";
+    }
+    String direct = normalize(content.path("url").asText(""));
+    if (!direct.isEmpty()) return direct;
+    return normalize(content.path("file").path("url").asText(""));
+  }
+
+  private static String resolveMessageBody(JsonNode content, String msgType, String mediaUrl) {
+    String body = content == null ? "" : Objects.toString(content.path("body").asText(""), "");
+    if (!body.trim().isEmpty()) {
+      return body;
+    }
+    if (isMediaMsgType(msgType)) {
+      return normalize(mediaUrl);
+    }
+    return body;
+  }
+
+  private static boolean isMediaMsgType(String msgType) {
+    return MEDIA_MSGTYPES.contains(normalize(msgType));
   }
 
   private static Map<String, String> parseDirectRoomMappings(JsonNode root) {
@@ -674,7 +730,19 @@ final class MatrixSyncClient {
       String msgType,
       String body,
       String replyToEventId,
-      long originServerTs) {
+      long originServerTs,
+      String mediaUrl) {
+    RoomTimelineEvent(
+        String roomId,
+        String sender,
+        String eventId,
+        String msgType,
+        String body,
+        String replyToEventId,
+        long originServerTs) {
+      this(roomId, sender, eventId, msgType, body, replyToEventId, originServerTs, "");
+    }
+
     RoomTimelineEvent(
         String roomId,
         String sender,
@@ -682,7 +750,7 @@ final class MatrixSyncClient {
         String msgType,
         String body,
         long originServerTs) {
-      this(roomId, sender, eventId, msgType, body, "", originServerTs);
+      this(roomId, sender, eventId, msgType, body, "", originServerTs, "");
     }
   }
 

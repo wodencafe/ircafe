@@ -45,11 +45,16 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private static final String CTCP_SUFFIX = "\u0001";
   private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
   private static final String TAG_MATRIX_MSGTYPE = "matrix.msgtype";
+  private static final String TAG_MATRIX_MEDIA_URL = "matrix.media_url";
   private static final String TAG_MATRIX_ROOM_ID = "matrix.room_id";
   private static final String TAG_DRAFT_REPLY = "draft/reply";
   private static final String TAG_DRAFT_EDIT = "draft/edit";
+  private static final String RAW_TAG_MATRIX_MSGTYPE = "matrix/msgtype";
+  private static final String RAW_TAG_MATRIX_MEDIA_URL = "matrix/media_url";
   private static final String HISTORY_SELECTOR_TIMESTAMP_PREFIX = "timestamp=";
   private static final String HISTORY_SELECTOR_MSGID_PREFIX = "msgid=";
+  private static final Set<String> MATRIX_MEDIA_MSGTYPES =
+      Set.of("m.image", "m.file", "m.video", "m.audio");
   private static final int MATRIX_TYPING_TIMEOUT_MS = 30_000;
   private static final int SYNC_INTERVAL_SECONDS = 3;
   private static final int SYNC_TIMEOUT_MS = 0;
@@ -830,16 +835,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
               }
 
               String eventId = session.latestRoomEventId(roomId);
-              if (eventId.isEmpty()) {
-                return;
-              }
-              MatrixReadMarkerClient.ReadMarkerResult result =
-                  readMarkerClient.updateReadMarker(
-                      sid, server, session.accessToken, roomId, eventId);
-              if (!result.success()) {
-                throw new IllegalStateException(
-                    "Matrix read marker failed at " + result.endpoint() + ": " + result.detail());
-              }
+              sendReadMarkerForEventId(sid, server, session, roomId, eventId);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -1363,10 +1359,11 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private Completable sendRawPrivmsg(String serverId, String rawLine, RawCommand raw) {
     String target = argOrBlank(raw, 0, "PRIVMSG requires target and message");
     String message = joinArgs(raw.arguments(), 1);
-    if (message.isEmpty()) {
+    Map<String, String> tags = parseRawTags(rawLine);
+    String matrixMsgType = rawMatrixMsgType(tags);
+    if (message.isEmpty() && matrixMsgType.isEmpty()) {
       throw new IllegalArgumentException("PRIVMSG requires target and message");
     }
-    Map<String, String> tags = parseRawTags(rawLine);
     String editTarget = normalize(tags.get("draft/edit"));
     if (!editTarget.isEmpty()) {
       return sendRawEdit(serverId, target, editTarget, message);
@@ -1374,6 +1371,9 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     String replyTarget = normalize(tags.get("draft/reply"));
     if (!replyTarget.isEmpty()) {
       return sendRawReply(serverId, target, replyTarget, message);
+    }
+    if (!matrixMsgType.isEmpty()) {
+      return sendRawMediaMessage(serverId, target, message, matrixMsgType, rawMatrixMediaUrl(tags));
     }
     if (looksLikeMatrixUserId(target)) {
       return sendPrivateMessage(serverId, target, message);
@@ -1402,6 +1402,73 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     return sendNoticeToChannel(serverId, target, message);
   }
 
+  private Completable sendRawMediaMessage(
+      String serverId, String target, String message, String msgType, String mediaUrl) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+              String mediaType = normalize(msgType);
+              if (!isMatrixMediaMsgType(mediaType)) {
+                throw new IllegalArgumentException("unsupported Matrix media msgtype");
+              }
+              String mediaRef = normalize(mediaUrl);
+              if (mediaRef.isEmpty()) {
+                throw new IllegalArgumentException("matrix media url tag is blank");
+              }
+              String rawTarget = normalize(target);
+              if (rawTarget.isEmpty()) {
+                throw new IllegalArgumentException("target is blank");
+              }
+              String text = Objects.toString(message, "");
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "send-media-message",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String txnId = nextTransactionId(sid);
+              if (looksLikeMatrixUserId(rawTarget)) {
+                String roomId = resolveDirectRoomId(sid, server, session, rawTarget);
+                MatrixRoomMessageSender.SendResult result =
+                    roomMessageSender.sendRoomMediaMessage(
+                        sid, server, session.accessToken, roomId, txnId, text, mediaType, mediaRef);
+                if (!result.accepted()) {
+                  throw new IllegalStateException(
+                      "Matrix private media send failed at "
+                          + result.endpoint()
+                          + ": "
+                          + result.detail());
+                }
+                emitPrivateLocalMediaEchoEvent(
+                    sid, session, rawTarget, roomId, text, result.eventId(), mediaType, mediaRef);
+                return;
+              }
+
+              String roomId = resolveAliasOrRoomId(sid, rawTarget, server, session);
+              MatrixRoomMessageSender.SendResult result =
+                  roomMessageSender.sendRoomMediaMessage(
+                      sid, server, session.accessToken, roomId, txnId, text, mediaType, mediaRef);
+              if (!result.accepted()) {
+                throw new IllegalStateException(
+                    "Matrix room media send failed at "
+                        + result.endpoint()
+                        + ": "
+                        + result.detail());
+              }
+              emitLocalMediaEchoEvent(
+                  sid, session, roomId, text, result.eventId(), mediaType, mediaRef);
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
   private Completable sendRawWhowas(String serverId, RawCommand raw) {
     String target = argOrBlank(raw, 0, "WHOWAS requires a target");
     int count = 0;
@@ -1427,7 +1494,65 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     if (timestamp != null) {
       return sendReadMarker(serverId, target, timestamp);
     }
-    throw new IllegalArgumentException("MARKREAD selector must be timestamp=...");
+    String messageId = parseHistoryMessageIdSelector(selector);
+    if (!messageId.isEmpty()) {
+      return sendRawMarkReadByMessageId(serverId, target, messageId);
+    }
+    throw new IllegalArgumentException("MARKREAD selector must be timestamp=... or msgid=...");
+  }
+
+  private Completable sendRawMarkReadByMessageId(String serverId, String target, String messageId) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+              String requestedTarget = normalize(target);
+              if (requestedTarget.isEmpty()) {
+                throw new IllegalArgumentException("target is blank");
+              }
+              String markerMessageId = normalize(messageId);
+              if (markerMessageId.isEmpty()) {
+                throw new IllegalArgumentException("msgid selector is blank");
+              }
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "markread",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveHistoryRoomId(sid, requestedTarget, server, session);
+              resolveHistoryMessageIdInstant(
+                  sid, server, session, roomId, markerMessageId, "markread");
+              sendReadMarkerForEventId(sid, server, session, roomId, markerMessageId);
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private void sendReadMarkerForEventId(
+      String serverId,
+      IrcProperties.Server server,
+      MatrixSession session,
+      String roomId,
+      String eventId) {
+    String sid = normalizeServerId(serverId);
+    String rid = normalize(roomId);
+    String eid = normalize(eventId);
+    if (sid.isEmpty() || session == null || rid.isEmpty() || eid.isEmpty()) {
+      return;
+    }
+    MatrixReadMarkerClient.ReadMarkerResult result =
+        readMarkerClient.updateReadMarker(sid, server, session.accessToken, rid, eid);
+    if (!result.success()) {
+      throw new IllegalStateException(
+          "Matrix read marker failed at " + result.endpoint() + ": " + result.detail());
+    }
   }
 
   private Completable sendRawTagmsg(String serverId, String rawLine, RawCommand raw) {
@@ -2133,6 +2258,41 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     return normalize(tags.get("typing"));
   }
 
+  private static String rawMatrixMsgType(Map<String, String> tags) {
+    if (tags == null || tags.isEmpty()) {
+      return "";
+    }
+    return firstNonBlank(tags.get(RAW_TAG_MATRIX_MSGTYPE), tags.get("matrix.msgtype"));
+  }
+
+  private static String rawMatrixMediaUrl(Map<String, String> tags) {
+    if (tags == null || tags.isEmpty()) {
+      return "";
+    }
+    return firstNonBlank(
+        tags.get(RAW_TAG_MATRIX_MEDIA_URL),
+        tags.get("matrix.url"),
+        tags.get("matrix.media_url"),
+        tags.get("matrix/url"));
+  }
+
+  private static String firstNonBlank(String... values) {
+    if (values == null || values.length == 0) {
+      return "";
+    }
+    for (String value : values) {
+      String token = normalize(value);
+      if (!token.isEmpty()) {
+        return token;
+      }
+    }
+    return "";
+  }
+
+  private static boolean isMatrixMediaMsgType(String msgType) {
+    return MATRIX_MEDIA_MSGTYPES.contains(normalize(msgType));
+  }
+
   private static Map<String, String> parseRawTags(String rawLine) {
     String line = Objects.toString(rawLine, "");
     if (!line.startsWith("@")) {
@@ -2780,6 +2940,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       if (msgType.isEmpty()) {
         msgType = "m.text";
       }
+      String mediaUrl = normalize(event.mediaUrl());
       ChatHistoryEntry.Kind kind =
           switch (msgType) {
             case "m.emote" -> ChatHistoryEntry.Kind.ACTION;
@@ -2793,7 +2954,10 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       String replyToMessageId = normalize(event.replyToEventId());
       Map<String, String> tags =
           withTag(
-              Map.of(TAG_MATRIX_ROOM_ID, rid, TAG_MATRIX_MSGTYPE, msgType),
+              withTag(
+                  Map.of(TAG_MATRIX_ROOM_ID, rid, TAG_MATRIX_MSGTYPE, msgType),
+                  TAG_MATRIX_MEDIA_URL,
+                  mediaUrl),
               TAG_DRAFT_REPLY,
               replyToMessageId);
       entries.add(new ChatHistoryEntry(at, kind, target, sender, body, messageId, tags));
@@ -2954,6 +3118,66 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                 now, sender, raw, mid, privateMessageTags(peer, rid, "m.text"))));
   }
 
+  private void emitLocalMediaEchoEvent(
+      String serverId,
+      MatrixSession session,
+      String roomId,
+      String text,
+      String eventId,
+      String msgType,
+      String mediaUrl) {
+    if (session == null) return;
+    String sid = normalize(serverId);
+    String sender = normalize(session.userId);
+    String rid = normalize(roomId);
+    String type = normalize(msgType);
+    String mediaRef = normalize(mediaUrl);
+    if (sid.isEmpty() || sender.isEmpty() || rid.isEmpty() || type.isEmpty()) return;
+
+    String raw = Objects.toString(text, "");
+    String rendered = raw.trim().isEmpty() ? mediaRef : raw;
+    Instant now = Instant.now();
+    String mid = normalize(eventId);
+    session.rememberLatestRoomEvent(rid, mid);
+
+    Map<String, String> tags =
+        withTag(Map.of(TAG_MATRIX_MSGTYPE, type), TAG_MATRIX_MEDIA_URL, mediaRef);
+    bus.onNext(
+        new ServerIrcEvent(
+            sid, new IrcEvent.ChannelMessage(now, rid, sender, rendered, mid, tags)));
+  }
+
+  private void emitPrivateLocalMediaEchoEvent(
+      String serverId,
+      MatrixSession session,
+      String peerUserId,
+      String roomId,
+      String text,
+      String eventId,
+      String msgType,
+      String mediaUrl) {
+    if (session == null) return;
+    String sid = normalize(serverId);
+    String sender = normalize(session.userId);
+    String peer = normalize(peerUserId);
+    String rid = normalize(roomId);
+    String type = normalize(msgType);
+    String mediaRef = normalize(mediaUrl);
+    if (sid.isEmpty() || sender.isEmpty() || peer.isEmpty() || rid.isEmpty() || type.isEmpty())
+      return;
+
+    String raw = Objects.toString(text, "");
+    String rendered = raw.trim().isEmpty() ? mediaRef : raw;
+    Instant now = Instant.now();
+    String mid = normalize(eventId);
+    session.rememberLatestRoomEvent(rid, mid);
+
+    Map<String, String> tags =
+        withTag(privateMessageTags(peer, rid, type), TAG_MATRIX_MEDIA_URL, mediaRef);
+    bus.onNext(
+        new ServerIrcEvent(sid, new IrcEvent.PrivateMessage(now, sender, rendered, mid, tags)));
+  }
+
   private void emitLocalNoticeEvent(
       String serverId,
       MatrixSession session,
@@ -3056,6 +3280,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       String msgType = normalize(event.msgType());
       String replyToMessageId = normalize(event.replyToEventId());
       String messageId = normalize(event.eventId());
+      String mediaUrl = normalize(event.mediaUrl());
       long ts = event.originServerTs();
       Instant at = ts > 0L ? Instant.ofEpochMilli(ts) : Instant.now();
       if (session != null) {
@@ -3068,99 +3293,80 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       if (isDirectMessageRoom) {
         String normalizedType = msgType.isEmpty() ? "m.text" : msgType;
         if ("m.emote".equals(msgType)) {
+          Map<String, String> tags =
+              withTag(
+                  withTag(
+                      privateMessageTags(peerUserId, roomId, "m.emote", fromSelf),
+                      TAG_MATRIX_MEDIA_URL,
+                      mediaUrl),
+                  TAG_DRAFT_REPLY,
+                  replyToMessageId);
           bus.onNext(
               new ServerIrcEvent(
-                  sid,
-                  new IrcEvent.PrivateAction(
-                      at,
-                      sender,
-                      body,
-                      messageId,
-                      withTag(
-                          privateMessageTags(peerUserId, roomId, "m.emote", fromSelf),
-                          TAG_DRAFT_REPLY,
-                          replyToMessageId))));
+                  sid, new IrcEvent.PrivateAction(at, sender, body, messageId, tags)));
           continue;
         }
         if ("m.notice".equals(msgType)) {
+          Map<String, String> tags =
+              withTag(
+                  withTag(
+                      privateMessageTags(peerUserId, roomId, "m.notice", fromSelf),
+                      TAG_MATRIX_MEDIA_URL,
+                      mediaUrl),
+                  TAG_DRAFT_REPLY,
+                  replyToMessageId);
           bus.onNext(
               new ServerIrcEvent(
-                  sid,
-                  new IrcEvent.Notice(
-                      at,
-                      sender,
-                      peerUserId,
-                      body,
-                      messageId,
-                      withTag(
-                          privateMessageTags(peerUserId, roomId, "m.notice", fromSelf),
-                          TAG_DRAFT_REPLY,
-                          replyToMessageId))));
+                  sid, new IrcEvent.Notice(at, sender, peerUserId, body, messageId, tags)));
           continue;
         }
+        Map<String, String> tags =
+            withTag(
+                withTag(
+                    privateMessageTags(peerUserId, roomId, normalizedType, fromSelf),
+                    TAG_MATRIX_MEDIA_URL,
+                    mediaUrl),
+                TAG_DRAFT_REPLY,
+                replyToMessageId);
         bus.onNext(
             new ServerIrcEvent(
-                sid,
-                new IrcEvent.PrivateMessage(
-                    at,
-                    sender,
-                    body,
-                    messageId,
-                    withTag(
-                        privateMessageTags(peerUserId, roomId, normalizedType, fromSelf),
-                        TAG_DRAFT_REPLY,
-                        replyToMessageId))));
+                sid, new IrcEvent.PrivateMessage(at, sender, body, messageId, tags)));
         continue;
       }
 
       if ("m.emote".equals(msgType)) {
+        Map<String, String> tags =
+            withTag(
+                withTag(Map.of(TAG_MATRIX_MSGTYPE, "m.emote"), TAG_MATRIX_MEDIA_URL, mediaUrl),
+                TAG_DRAFT_REPLY,
+                replyToMessageId);
         bus.onNext(
             new ServerIrcEvent(
-                sid,
-                new IrcEvent.ChannelAction(
-                    at,
-                    roomId,
-                    sender,
-                    body,
-                    messageId,
-                    withTag(
-                        Map.of(TAG_MATRIX_MSGTYPE, "m.emote"),
-                        TAG_DRAFT_REPLY,
-                        replyToMessageId))));
+                sid, new IrcEvent.ChannelAction(at, roomId, sender, body, messageId, tags)));
         continue;
       }
 
       if ("m.notice".equals(msgType)) {
+        Map<String, String> tags =
+            withTag(
+                withTag(Map.of(TAG_MATRIX_MSGTYPE, "m.notice"), TAG_MATRIX_MEDIA_URL, mediaUrl),
+                TAG_DRAFT_REPLY,
+                replyToMessageId);
         bus.onNext(
             new ServerIrcEvent(
-                sid,
-                new IrcEvent.Notice(
-                    at,
-                    sender,
-                    roomId,
-                    body,
-                    messageId,
-                    withTag(
-                        Map.of(TAG_MATRIX_MSGTYPE, "m.notice"),
-                        TAG_DRAFT_REPLY,
-                        replyToMessageId))));
+                sid, new IrcEvent.Notice(at, sender, roomId, body, messageId, tags)));
         continue;
       }
 
       String normalizedType = msgType.isEmpty() ? "m.text" : msgType;
+      Map<String, String> tags =
+          withTag(
+              withTag(Map.of(TAG_MATRIX_MSGTYPE, normalizedType), TAG_MATRIX_MEDIA_URL, mediaUrl),
+              TAG_DRAFT_REPLY,
+              replyToMessageId);
       bus.onNext(
           new ServerIrcEvent(
-              sid,
-              new IrcEvent.ChannelMessage(
-                  at,
-                  roomId,
-                  sender,
-                  body,
-                  messageId,
-                  withTag(
-                      Map.of(TAG_MATRIX_MSGTYPE, normalizedType),
-                      TAG_DRAFT_REPLY,
-                      replyToMessageId))));
+              sid, new IrcEvent.ChannelMessage(at, roomId, sender, body, messageId, tags)));
     }
   }
 

@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +29,9 @@ final class MatrixRoomHistoryClient {
           "Accept-Encoding", "gzip");
 
   private static final ObjectMapper JSON = new ObjectMapper();
+  private static final String ENCRYPTED_PLACEHOLDER_BODY = "[encrypted message unavailable]";
+  private static final Set<String> MEDIA_MSGTYPES =
+      Set.of("m.image", "m.file", "m.video", "m.audio");
 
   private final ServerProxyResolver proxyResolver;
 
@@ -133,14 +137,33 @@ final class MatrixRoomHistoryClient {
         String sender = normalize(event.path("sender").asText(""));
         String eventId = normalize(event.path("event_id").asText(""));
         String msgType = normalize(content.path("msgtype").asText(""));
-        String body = Objects.toString(content.path("body").asText(""), "");
+        if (msgType.isEmpty()) msgType = "m.text";
+        String mediaUrl = parseMediaUrl(content, msgType);
+        String body = resolveMessageBody(content, msgType, mediaUrl);
         String replyToEventId = parseReplyToEventId(content);
         long originServerTs = event.path("origin_server_ts").asLong(0L);
         if (sender.isEmpty() || body.trim().isEmpty()) continue;
-        if (msgType.isEmpty()) msgType = "m.text";
 
         events.add(
-            new RoomHistoryEvent(sender, eventId, msgType, body, replyToEventId, originServerTs));
+            new RoomHistoryEvent(
+                sender, eventId, msgType, body, replyToEventId, originServerTs, mediaUrl));
+        continue;
+      }
+
+      if ("m.room.encrypted".equals(type)) {
+        String sender = normalize(event.path("sender").asText(""));
+        String eventId = normalize(event.path("event_id").asText(""));
+        long originServerTs = event.path("origin_server_ts").asLong(0L);
+        if (sender.isEmpty()) continue;
+        events.add(
+            new RoomHistoryEvent(
+                sender,
+                eventId,
+                "m.room.encrypted",
+                ENCRYPTED_PLACEHOLDER_BODY,
+                "",
+                originServerTs,
+                ""));
         continue;
       }
 
@@ -190,6 +213,33 @@ final class MatrixRoomHistoryClient {
     String topLevelStable = normalize(content.path("m.in_reply_to").path("event_id").asText(""));
     if (!topLevelStable.isEmpty()) return topLevelStable;
     return normalize(content.path("in_reply_to").path("event_id").asText(""));
+  }
+
+  private static String parseMediaUrl(JsonNode content, String msgType) {
+    if (!isMediaMsgType(msgType)) {
+      return "";
+    }
+    if (content == null || content.isNull() || !content.isObject()) {
+      return "";
+    }
+    String direct = normalize(content.path("url").asText(""));
+    if (!direct.isEmpty()) return direct;
+    return normalize(content.path("file").path("url").asText(""));
+  }
+
+  private static String resolveMessageBody(JsonNode content, String msgType, String mediaUrl) {
+    String body = content == null ? "" : Objects.toString(content.path("body").asText(""), "");
+    if (!body.trim().isEmpty()) {
+      return body;
+    }
+    if (isMediaMsgType(msgType)) {
+      return normalize(mediaUrl);
+    }
+    return body;
+  }
+
+  private static boolean isMediaMsgType(String msgType) {
+    return MEDIA_MSGTYPES.contains(normalize(msgType));
   }
 
   private static String normalize(String value) {
@@ -257,10 +307,21 @@ final class MatrixRoomHistoryClient {
       String msgType,
       String body,
       String replyToEventId,
-      long originServerTs) {
+      long originServerTs,
+      String mediaUrl) {
+    RoomHistoryEvent(
+        String sender,
+        String eventId,
+        String msgType,
+        String body,
+        String replyToEventId,
+        long originServerTs) {
+      this(sender, eventId, msgType, body, replyToEventId, originServerTs, "");
+    }
+
     RoomHistoryEvent(
         String sender, String eventId, String msgType, String body, long originServerTs) {
-      this(sender, eventId, msgType, body, "", originServerTs);
+      this(sender, eventId, msgType, body, "", originServerTs, "");
     }
   }
 

@@ -1367,6 +1367,88 @@ class MatrixIrcClientServiceTest {
   }
 
   @Test
+  void connectEmitsEncryptedTimelinePlaceholderFromSyncPoll() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "next-sync-token",
+                List.of(
+                    new MatrixSyncClient.RoomTimelineEvent(
+                        "!room:matrix.example.org",
+                        "@bob:matrix.example.org",
+                        "$timeline-encrypted",
+                        "m.room.encrypted",
+                        "[encrypted message unavailable]",
+                        1710000000500L))));
+    var events = service.events().test();
+
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.ChannelMessage message =
+        assertInstanceOf(IrcEvent.ChannelMessage.class, events.values().get(3).event());
+    assertEquals("$timeline-encrypted", message.messageId());
+    assertEquals("[encrypted message unavailable]", message.text());
+    assertEquals("m.room.encrypted", message.ircv3Tags().get("matrix.msgtype"));
+  }
+
+  @Test
+  void connectEmitsMatrixMediaUrlTagOnSyncTimelineMessage() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "next-sync-token",
+                List.of(
+                    new MatrixSyncClient.RoomTimelineEvent(
+                        "!room:matrix.example.org",
+                        "@bob:matrix.example.org",
+                        "$timeline-media",
+                        "m.image",
+                        "photo.png",
+                        "",
+                        1710000000550L,
+                        "mxc://matrix.example.org/media-1"))));
+    var events = service.events().test();
+
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.ChannelMessage message =
+        assertInstanceOf(IrcEvent.ChannelMessage.class, events.values().get(3).event());
+    assertEquals("$timeline-media", message.messageId());
+    assertEquals("m.image", message.ircv3Tags().get("matrix.msgtype"));
+    assertEquals("mxc://matrix.example.org/media-1", message.ircv3Tags().get("matrix.media_url"));
+  }
+
+  @Test
   void connectEmitsDraftReplyTagOnSyncTimelineMessage() {
     IrcProperties.Server server =
         server("matrix", "matrix.example.org", 8448, true, "secret-token");
@@ -1891,6 +1973,115 @@ class MatrixIrcClientServiceTest {
     assertEquals(ChatHistoryEntry.Kind.ACTION, batch.entries().get(2).kind());
     assertEquals("$h1", batch.entries().get(0).messageId());
     assertEquals("$root-msg", batch.entries().get(0).ircv3Tags().get("draft/reply"));
+  }
+
+  @Test
+  void requestChatHistoryBeforeIncludesEncryptedPlaceholderEntries() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 1))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=1"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-encrypted",
+                        "m.room.encrypted",
+                        "[encrypted message unavailable]",
+                        1710000006000L))));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service
+        .requestChatHistoryBefore("matrix", "!room:matrix.example.org", Instant.now(), 1)
+        .blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.ChatHistoryBatchReceived batch =
+        assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, events.values().get(3).event());
+    assertEquals(1, batch.entries().size());
+    assertEquals(ChatHistoryEntry.Kind.PRIVMSG, batch.entries().getFirst().kind());
+    assertEquals("$h-encrypted", batch.entries().getFirst().messageId());
+    assertEquals("[encrypted message unavailable]", batch.entries().getFirst().text());
+    assertEquals("m.room.encrypted", batch.entries().getFirst().ircv3Tags().get("matrix.msgtype"));
+  }
+
+  @Test
+  void requestChatHistoryBeforeIncludesMatrixMediaUrlTag() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "s-anchor",
+                List.of()));
+    when(roomHistoryClient.fetchMessagesBefore(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "s-anchor", 1))
+        .thenReturn(
+            MatrixRoomHistoryClient.HistoryResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/messages?from=s-anchor&dir=b&limit=1"),
+                "s-next",
+                List.of(
+                    new MatrixRoomHistoryClient.RoomHistoryEvent(
+                        "@bob:matrix.example.org",
+                        "$h-image",
+                        "m.image",
+                        "photo.png",
+                        "",
+                        1710000006100L,
+                        "mxc://matrix.example.org/media-h1"))));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service
+        .requestChatHistoryBefore("matrix", "!room:matrix.example.org", Instant.now(), 1)
+        .blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.ChatHistoryBatchReceived batch =
+        assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, events.values().get(3).event());
+    assertEquals(1, batch.entries().size());
+    assertEquals("$h-image", batch.entries().getFirst().messageId());
+    assertEquals("m.image", batch.entries().getFirst().ircv3Tags().get("matrix.msgtype"));
+    assertEquals(
+        "mxc://matrix.example.org/media-h1",
+        batch.entries().getFirst().ircv3Tags().get("matrix.media_url"));
   }
 
   @Test
@@ -3844,6 +4035,143 @@ class MatrixIrcClientServiceTest {
   }
 
   @Test
+  void rawPrivmsgWithMatrixMediaTagsDelegatesToMatrixMediaSendAndEmitsEchoTags() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomMessageSender.sendRoomMediaMessage(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            anyString(),
+            eq("photo.png"),
+            eq("m.image"),
+            eq("mxc://matrix.example.org/media-1")))
+        .thenReturn(
+            MatrixRoomMessageSender.SendResult.accepted(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/send/m.room.message/txn-m1"),
+                "$media-1"));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service
+        .sendRaw(
+            "matrix",
+            "@+matrix/msgtype=m.image;+matrix/media_url=mxc://matrix.example.org/media-1 PRIVMSG !room:matrix.example.org :photo.png")
+        .blockingAwait();
+    events.awaitCount(4);
+
+    verify(roomMessageSender, times(1))
+        .sendRoomMediaMessage(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            anyString(),
+            eq("photo.png"),
+            eq("m.image"),
+            eq("mxc://matrix.example.org/media-1"));
+
+    IrcEvent.ChannelMessage echoed =
+        assertInstanceOf(IrcEvent.ChannelMessage.class, events.values().get(3).event());
+    assertEquals("$media-1", echoed.messageId());
+    assertEquals("photo.png", echoed.text());
+    assertEquals("m.image", echoed.ircv3Tags().get("matrix.msgtype"));
+    assertEquals("mxc://matrix.example.org/media-1", echoed.ircv3Tags().get("matrix.media_url"));
+  }
+
+  @Test
+  void rawPrivmsgWithMatrixMediaTagsAllowsEmptyBodyAndUsesMediaUrlAsEchoText() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomMessageSender.sendRoomMediaMessage(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            anyString(),
+            eq(""),
+            eq("m.image"),
+            eq("mxc://matrix.example.org/media-empty")))
+        .thenReturn(
+            MatrixRoomMessageSender.SendResult.accepted(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/send/m.room.message/txn-m2"),
+                "$media-2"));
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service
+        .sendRaw(
+            "matrix",
+            "@+matrix/msgtype=m.image;+matrix/media_url=mxc://matrix.example.org/media-empty PRIVMSG !room:matrix.example.org")
+        .blockingAwait();
+    events.awaitCount(4);
+
+    IrcEvent.ChannelMessage echoed =
+        assertInstanceOf(IrcEvent.ChannelMessage.class, events.values().get(3).event());
+    assertEquals("mxc://matrix.example.org/media-empty", echoed.text());
+    assertEquals("m.image", echoed.ircv3Tags().get("matrix.msgtype"));
+    assertEquals(
+        "mxc://matrix.example.org/media-empty", echoed.ircv3Tags().get("matrix.media_url"));
+  }
+
+  @Test
+  void rawPrivmsgWithMatrixMediaTagsRequiresMediaUrlTag() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    service.connect("matrix").blockingAwait();
+
+    IllegalArgumentException err =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                service
+                    .sendRaw(
+                        "matrix",
+                        "@+matrix/msgtype=m.image PRIVMSG !room:matrix.example.org :photo.png")
+                    .blockingAwait());
+
+    assertEquals("matrix media url tag is blank", err.getMessage());
+  }
+
+  @Test
   void rawTagmsgDraftReactDelegatesToMatrixReactionSend() {
     IrcProperties.Server server =
         server("matrix", "matrix.example.org", 8448, true, "secret-token");
@@ -4372,7 +4700,80 @@ class MatrixIrcClientServiceTest {
   }
 
   @Test
-  void rawMarkReadRejectsNonTimestampSelector() {
+  void rawMarkReadMsgidSelectorDelegatesToReadMarkerForMessageEventId() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(roomMessageSender.sendRoomMessage(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            anyString(),
+            eq("seed")))
+        .thenReturn(
+            MatrixRoomMessageSender.SendResult.accepted(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/send/m.room.message/txn-seed"),
+                "$seed-1"));
+    when(readMarkerClient.updateReadMarker(
+            "matrix", server, "secret-token", "!room:matrix.example.org", "$seed-1"))
+        .thenReturn(
+            MatrixReadMarkerClient.ReadMarkerResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/read_markers"),
+                "!room:matrix.example.org",
+                "$seed-1"));
+    service.connect("matrix").blockingAwait();
+    service.sendToChannel("matrix", "!room:matrix.example.org", "seed").blockingAwait();
+
+    service.sendRaw("matrix", "MARKREAD !room:matrix.example.org msgid=$seed-1").blockingAwait();
+
+    verify(readMarkerClient, times(1))
+        .updateReadMarker("matrix", server, "secret-token", "!room:matrix.example.org", "$seed-1");
+  }
+
+  @Test
+  void rawMarkReadMsgidSelectorFailsWhenMessageCannotBeResolved() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    service.connect("matrix").blockingAwait();
+
+    BackendNotAvailableException err =
+        assertThrows(
+            BackendNotAvailableException.class,
+            () ->
+                service
+                    .sendRaw("matrix", "MARKREAD !room:matrix.example.org msgid=$missing")
+                    .blockingAwait());
+
+    assertEquals("markread", err.operation());
+    assertTrue(err.getMessage().contains("cannot resolve msgid selector"));
+  }
+
+  @Test
+  void rawMarkReadRejectsUnsupportedSelectorType() {
     IrcProperties.Server server =
         server("matrix", "matrix.example.org", 8448, true, "secret-token");
     when(serverCatalog.require("matrix")).thenReturn(server);
@@ -4393,10 +4794,10 @@ class MatrixIrcClientServiceTest {
             IllegalArgumentException.class,
             () ->
                 service
-                    .sendRaw("matrix", "MARKREAD !room:matrix.example.org msgid=$abc")
+                    .sendRaw("matrix", "MARKREAD !room:matrix.example.org selector=abc")
                     .blockingAwait());
 
-    assertEquals("MARKREAD selector must be timestamp=...", err.getMessage());
+    assertEquals("MARKREAD selector must be timestamp=... or msgid=...", err.getMessage());
   }
 
   @Test
