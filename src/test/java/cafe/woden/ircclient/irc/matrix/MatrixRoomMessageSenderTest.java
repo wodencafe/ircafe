@@ -29,7 +29,7 @@ class MatrixRoomMessageSenderTest {
   private final MatrixRoomMessageSender sender = new MatrixRoomMessageSender(proxyResolver);
 
   @Test
-  void sendRoomMessagePostsJsonBodyAndAuthorizationHeader() throws Exception {
+  void sendRoomMessagePutsJsonBodyAndAuthorizationHeader() throws Exception {
     when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
     try (TestServer server = TestServer.start(200, "{\"event_id\":\"$abc\"}")) {
       MatrixRoomMessageSender.SendResult result =
@@ -43,7 +43,7 @@ class MatrixRoomMessageSenderTest {
 
       assertTrue(result.accepted());
       assertEquals("$abc", result.eventId());
-      assertEquals("POST", server.lastMethod().get());
+      assertEquals("PUT", server.lastMethod().get());
       assertEquals("Bearer secret-token", server.lastAuthorizationHeader().get());
       assertEquals(
           "/_matrix/client/v3/rooms/!room:matrix.example.org/send/m.room.message/txn-1",
@@ -93,6 +93,105 @@ class MatrixRoomMessageSenderTest {
       JsonNode body = JSON.readTree(server.lastRequestBody().get());
       assertEquals("m.notice", body.path("msgtype").asText(""));
       assertEquals("maintenance notice", body.path("body").asText(""));
+    }
+  }
+
+  @Test
+  void sendRoomReplyIncludesReplyRelationPayload() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server = TestServer.start(200, "{\"event_id\":\"$reply\"}")) {
+      MatrixRoomMessageSender.SendResult result =
+          sender.sendRoomReply(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "txn-r1",
+              "$target",
+              "reply body");
+
+      assertTrue(result.accepted());
+      assertEquals("$reply", result.eventId());
+      JsonNode body = JSON.readTree(server.lastRequestBody().get());
+      assertEquals("m.text", body.path("msgtype").asText(""));
+      assertEquals("reply body", body.path("body").asText(""));
+      assertEquals(
+          "$target", body.path("m.relates_to").path("m.in_reply_to").path("event_id").asText(""));
+    }
+  }
+
+  @Test
+  void sendRoomEditIncludesReplaceRelationPayload() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server = TestServer.start(200, "{\"event_id\":\"$edit\"}")) {
+      MatrixRoomMessageSender.SendResult result =
+          sender.sendRoomEdit(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "txn-e1",
+              "$target",
+              "edited body");
+
+      assertTrue(result.accepted());
+      assertEquals("$edit", result.eventId());
+      JsonNode body = JSON.readTree(server.lastRequestBody().get());
+      assertEquals("m.text", body.path("msgtype").asText(""));
+      assertEquals("edited body", body.path("body").asText(""));
+      assertEquals("m.replace", body.path("m.relates_to").path("rel_type").asText(""));
+      assertEquals("$target", body.path("m.relates_to").path("event_id").asText(""));
+      assertEquals("edited body", body.path("m.new_content").path("body").asText(""));
+    }
+  }
+
+  @Test
+  void sendRoomReactionUsesReactionEventTypePath() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server = TestServer.start(200, "{\"event_id\":\"$react\"}")) {
+      MatrixRoomMessageSender.SendResult result =
+          sender.sendRoomReaction(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "txn-re1",
+              "$target",
+              ":+1:");
+
+      assertTrue(result.accepted());
+      assertEquals("$react", result.eventId());
+      assertEquals(
+          "/_matrix/client/v3/rooms/!room:matrix.example.org/send/m.reaction/txn-re1",
+          server.lastPath().get());
+      JsonNode body = JSON.readTree(server.lastRequestBody().get());
+      assertEquals("m.annotation", body.path("m.relates_to").path("rel_type").asText(""));
+      assertEquals("$target", body.path("m.relates_to").path("event_id").asText(""));
+      assertEquals(":+1:", body.path("m.relates_to").path("key").asText(""));
+    }
+  }
+
+  @Test
+  void sendRoomRedactionUsesRedactionEndpointPath() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    try (TestServer server = TestServer.start(200, "{\"event_id\":\"$redact\"}")) {
+      MatrixRoomMessageSender.SendResult result =
+          sender.sendRoomRedaction(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "$target",
+              "txn-rd1",
+              "cleanup");
+
+      assertTrue(result.accepted());
+      assertEquals("$redact", result.eventId());
+      assertEquals(
+          "/_matrix/client/v3/rooms/!room:matrix.example.org/redact/$target/txn-rd1",
+          server.lastPath().get());
+      JsonNode body = JSON.readTree(server.lastRequestBody().get());
+      assertEquals("cleanup", body.path("reason").asText(""));
     }
   }
 

@@ -53,8 +53,146 @@ final class MatrixRoomMessageSender {
       String roomId,
       String transactionId,
       String message) {
-    return sendRoomMessage(
-        serverId, server, accessToken, roomId, transactionId, message, "m.notice");
+    MessageContent content = messageContent(message, "m.notice");
+    return sendRoomEvent(
+        serverId,
+        server,
+        accessToken,
+        roomId,
+        transactionId,
+        "m.room.message",
+        Map.of("msgtype", content.msgtype(), "body", content.body()),
+        "room send");
+  }
+
+  SendResult sendRoomReply(
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String transactionId,
+      String replyToEventId,
+      String message) {
+    String replyTo = normalize(replyToEventId);
+    if (replyTo.isEmpty()) {
+      URI endpoint = MatrixEndpointResolver.roomSendMessageUri(server, roomId, transactionId);
+      return SendResult.failed(endpoint, "reply event id is blank");
+    }
+    MessageContent content = messageContent(message, "");
+    Map<String, Object> payload =
+        Map.of(
+            "msgtype", content.msgtype(),
+            "body", content.body(),
+            "m.relates_to", Map.of("m.in_reply_to", Map.of("event_id", replyTo)));
+    return sendRoomEvent(
+        serverId, server, accessToken, roomId, transactionId, "m.room.message", payload, "reply");
+  }
+
+  SendResult sendRoomEdit(
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String transactionId,
+      String targetEventId,
+      String message) {
+    String target = normalize(targetEventId);
+    URI endpoint = MatrixEndpointResolver.roomSendMessageUri(server, roomId, transactionId);
+    if (target.isEmpty()) {
+      return SendResult.failed(endpoint, "target event id is blank");
+    }
+    String body = Objects.toString(message, "");
+    if (body.trim().isEmpty()) {
+      return SendResult.failed(endpoint, "message is blank");
+    }
+    Map<String, Object> payload =
+        Map.of(
+            "msgtype",
+            "m.text",
+            "body",
+            body,
+            "m.new_content",
+            Map.of("msgtype", "m.text", "body", body),
+            "m.relates_to",
+            Map.of("rel_type", "m.replace", "event_id", target));
+    return sendRoomEvent(
+        serverId, server, accessToken, roomId, transactionId, "m.room.message", payload, "edit");
+  }
+
+  SendResult sendRoomReaction(
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String transactionId,
+      String targetEventId,
+      String reaction) {
+    String target = normalize(targetEventId);
+    String key = normalize(reaction);
+    URI endpoint =
+        MatrixEndpointResolver.roomSendEventUri(server, roomId, "m.reaction", transactionId);
+    if (target.isEmpty()) {
+      return SendResult.failed(endpoint, "target event id is blank");
+    }
+    if (key.isEmpty()) {
+      return SendResult.failed(endpoint, "reaction is blank");
+    }
+    Map<String, Object> payload =
+        Map.of("m.relates_to", Map.of("rel_type", "m.annotation", "event_id", target, "key", key));
+    return sendRoomEvent(
+        serverId, server, accessToken, roomId, transactionId, "m.reaction", payload, "reaction");
+  }
+
+  SendResult sendRoomRedaction(
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String redactsEventId,
+      String transactionId,
+      String reason) {
+    URI endpoint =
+        MatrixEndpointResolver.roomRedactEventUri(server, roomId, redactsEventId, transactionId);
+    String token = normalize(accessToken);
+    if (token.isEmpty()) {
+      return SendResult.failed(endpoint, "access token is blank");
+    }
+    String redactEventId = normalize(redactsEventId);
+    if (redactEventId.isEmpty()) {
+      return SendResult.failed(endpoint, "redacts event id is blank");
+    }
+
+    Map<String, Object> payload = new HashMap<>();
+    String why = normalize(reason);
+    if (!why.isEmpty()) {
+      payload.put("reason", why);
+    }
+    Map<String, String> headers = new HashMap<>(REQUEST_HEADERS);
+    headers.put("Authorization", "Bearer " + token);
+    ProxyPlan plan = proxyResolver.planForServer(serverId);
+    try {
+      String payloadJson = JSON.writeValueAsString(payload);
+      HttpLite.Response<String> response =
+          HttpLite.putString(
+              endpoint,
+              headers,
+              payloadJson,
+              plan.proxy(),
+              plan.connectTimeoutMs(),
+              plan.readTimeoutMs());
+      int code = response.statusCode();
+      String body = Objects.toString(response.body(), "");
+      if (code < 200 || code >= 300) {
+        return SendResult.failed(endpoint, "HTTP " + code + " from room redaction endpoint");
+      }
+      return SendResult.accepted(endpoint, parseEventId(body));
+    } catch (IOException ex) {
+      String msg = normalize(ex.getMessage());
+      if (msg.isEmpty()) {
+        msg = ex.getClass().getSimpleName();
+      }
+      return SendResult.failed(endpoint, msg);
+    }
   }
 
   private SendResult sendRoomMessage(
@@ -65,29 +203,50 @@ final class MatrixRoomMessageSender {
       String transactionId,
       String message,
       String msgTypeOverride) {
-    URI endpoint = MatrixEndpointResolver.roomSendMessageUri(server, roomId, transactionId);
+    String bodyText = Objects.toString(message, "");
+    MessageContent content = messageContent(bodyText, msgTypeOverride);
+    return sendRoomEvent(
+        serverId,
+        server,
+        accessToken,
+        roomId,
+        transactionId,
+        "m.room.message",
+        Map.of("msgtype", content.msgtype(), "body", content.body()),
+        "room send");
+  }
+
+  private SendResult sendRoomEvent(
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String transactionId,
+      String eventType,
+      Map<String, Object> payload,
+      String operationName) {
+    URI endpoint =
+        MatrixEndpointResolver.roomSendEventUri(server, roomId, eventType, transactionId);
     String token = normalize(accessToken);
     if (token.isEmpty()) {
       return SendResult.failed(endpoint, "access token is blank");
     }
-    String bodyText = Objects.toString(message, "");
-    if (bodyText.trim().isEmpty()) {
+    Map<String, Object> safePayload = payload == null ? Map.of() : payload;
+    if (safePayload.isEmpty()) {
+      return SendResult.failed(endpoint, "event payload is blank");
+    }
+    if ("m.room.message".equals(normalize(eventType))
+        && normalize(Objects.toString(safePayload.get("body"), "")).isEmpty()) {
       return SendResult.failed(endpoint, "message is blank");
     }
 
-    MessageContent content = messageContent(bodyText, msgTypeOverride);
-    Map<String, Object> payload =
-        Map.of(
-            "msgtype", content.msgtype(),
-            "body", content.body());
     Map<String, String> headers = new HashMap<>(REQUEST_HEADERS);
     headers.put("Authorization", "Bearer " + token);
     ProxyPlan plan = proxyResolver.planForServer(serverId);
-
     try {
-      String payloadJson = JSON.writeValueAsString(payload);
+      String payloadJson = JSON.writeValueAsString(safePayload);
       HttpLite.Response<String> response =
-          HttpLite.postString(
+          HttpLite.putString(
               endpoint,
               headers,
               payloadJson,
@@ -97,11 +256,9 @@ final class MatrixRoomMessageSender {
       int code = response.statusCode();
       String body = Objects.toString(response.body(), "");
       if (code < 200 || code >= 300) {
-        return SendResult.failed(endpoint, "HTTP " + code + " from room send endpoint");
+        return SendResult.failed(endpoint, "HTTP " + code + " from " + operationName + " endpoint");
       }
-
-      String eventId = parseEventId(body);
-      return SendResult.accepted(endpoint, eventId);
+      return SendResult.accepted(endpoint, parseEventId(body));
     } catch (IOException ex) {
       String msg = normalize(ex.getMessage());
       if (msg.isEmpty()) {

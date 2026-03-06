@@ -132,13 +132,29 @@ final class MatrixRoomHistoryClient {
       String eventId = normalize(event.path("event_id").asText(""));
       String msgType = normalize(content.path("msgtype").asText(""));
       String body = Objects.toString(content.path("body").asText(""), "");
+      String replyToEventId = parseReplyToEventId(content);
       long originServerTs = event.path("origin_server_ts").asLong(0L);
       if (sender.isEmpty() || body.trim().isEmpty()) continue;
       if (msgType.isEmpty()) msgType = "m.text";
 
-      events.add(new RoomHistoryEvent(sender, eventId, msgType, body, originServerTs));
+      events.add(
+          new RoomHistoryEvent(sender, eventId, msgType, body, replyToEventId, originServerTs));
     }
     return List.copyOf(events);
+  }
+
+  private static String parseReplyToEventId(JsonNode content) {
+    if (content == null || content.isNull() || !content.isObject()) {
+      return "";
+    }
+    JsonNode relatesTo = content.path("m.relates_to");
+    String replyViaStable = normalize(relatesTo.path("m.in_reply_to").path("event_id").asText(""));
+    if (!replyViaStable.isEmpty()) return replyViaStable;
+    String replyViaLegacy = normalize(relatesTo.path("in_reply_to").path("event_id").asText(""));
+    if (!replyViaLegacy.isEmpty()) return replyViaLegacy;
+    String topLevelStable = normalize(content.path("m.in_reply_to").path("event_id").asText(""));
+    if (!topLevelStable.isEmpty()) return topLevelStable;
+    return normalize(content.path("in_reply_to").path("event_id").asText(""));
   }
 
   private static String normalize(String value) {
@@ -168,5 +184,15 @@ final class MatrixRoomHistoryClient {
   }
 
   record RoomHistoryEvent(
-      String sender, String eventId, String msgType, String body, long originServerTs) {}
+      String sender,
+      String eventId,
+      String msgType,
+      String body,
+      String replyToEventId,
+      long originServerTs) {
+    RoomHistoryEvent(
+        String sender, String eventId, String msgType, String body, long originServerTs) {
+      this(sender, eventId, msgType, body, "", originServerTs);
+    }
+  }
 }

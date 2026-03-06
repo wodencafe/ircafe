@@ -63,10 +63,26 @@ final class MatrixEndpointResolver {
 
   public static URI roomSendMessageUri(
       IrcProperties.Server server, String roomId, String transactionId) {
+    return roomSendEventUri(server, roomId, "m.room.message", transactionId);
+  }
+
+  public static URI roomSendEventUri(
+      IrcProperties.Server server, String roomId, String eventType, String transactionId) {
     URI apiBase = clientApiBaseUri(server);
     String rid = validatePathSegment(roomId, "roomId");
+    String type = validatePathSegment(eventType, "eventType");
     String tid = validatePathSegment(transactionId, "transactionId");
-    String path = appendPath(apiBase.getPath(), "rooms/" + rid + "/send/m.room.message/" + tid);
+    String path = appendPath(apiBase.getPath(), "rooms/" + rid + "/send/" + type + "/" + tid);
+    return rebuild(apiBase, path);
+  }
+
+  public static URI roomRedactEventUri(
+      IrcProperties.Server server, String roomId, String eventId, String transactionId) {
+    URI apiBase = clientApiBaseUri(server);
+    String rid = validatePathSegment(roomId, "roomId");
+    String eid = validatePathSegment(eventId, "eventId");
+    String tid = validatePathSegment(transactionId, "transactionId");
+    String path = appendPath(apiBase.getPath(), "rooms/" + rid + "/redact/" + eid + "/" + tid);
     return rebuild(apiBase, path);
   }
 

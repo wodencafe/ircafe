@@ -38,7 +38,11 @@ class MatrixRoomHistoryClientTest {
               "event_id":"$h1",
               "sender":"@alice:matrix.example.org",
               "origin_server_ts":1710000000000,
-              "content":{"msgtype":"m.text","body":"hello"}
+              "content":{
+                "msgtype":"m.text",
+                "body":"hello",
+                "m.relates_to":{"m.in_reply_to":{"event_id":"$root"}}
+              }
             },
             {
               "type":"m.room.message",
@@ -67,6 +71,7 @@ class MatrixRoomHistoryClientTest {
       assertEquals("$h1", result.events().get(0).eventId());
       assertEquals("m.text", result.events().get(0).msgType());
       assertEquals("hello", result.events().get(0).body());
+      assertEquals("$root", result.events().get(0).replyToEventId());
       assertEquals("Bearer secret-token", server.lastAuthorizationHeader().get());
       assertTrue(server.lastQuery().get().contains("from=s-anchor"));
       assertTrue(server.lastQuery().get().contains("dir=b"));
@@ -146,6 +151,69 @@ class MatrixRoomHistoryClientTest {
     assertFalse(result.success());
     assertEquals("access token is blank", result.detail());
     assertTrue(result.events().isEmpty());
+  }
+
+  @Test
+  void fetchMessagesBeforeParsesReplyContextFromAlternateRelationShapes() throws Exception {
+    when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
+    String body =
+        """
+        {
+          "start":"s-start",
+          "end":"s-end",
+          "chunk":[
+            {
+              "type":"m.room.message",
+              "event_id":"$stable",
+              "sender":"@alice:matrix.example.org",
+              "origin_server_ts":1710000200000,
+              "content":{
+                "msgtype":"m.text",
+                "body":"stable",
+                "m.relates_to":{"m.in_reply_to":{"event_id":"$root-stable"}}
+              }
+            },
+            {
+              "type":"m.room.message",
+              "event_id":"$legacy",
+              "sender":"@alice:matrix.example.org",
+              "origin_server_ts":1710000201000,
+              "content":{
+                "msgtype":"m.text",
+                "body":"legacy",
+                "m.relates_to":{"in_reply_to":{"event_id":"$root-legacy"}}
+              }
+            },
+            {
+              "type":"m.room.message",
+              "event_id":"$top-level",
+              "sender":"@alice:matrix.example.org",
+              "origin_server_ts":1710000202000,
+              "content":{
+                "msgtype":"m.text",
+                "body":"top",
+                "m.in_reply_to":{"event_id":"$root-top"}
+              }
+            }
+          ]
+        }
+        """;
+    try (TestServer server = TestServer.start(200, body)) {
+      MatrixRoomHistoryClient.HistoryResult result =
+          historyClient.fetchMessagesBefore(
+              "matrix",
+              serverConfig("matrix", "127.0.0.1", server.port(), false),
+              "secret-token",
+              "!room:matrix.example.org",
+              "s-anchor",
+              50);
+
+      assertTrue(result.success());
+      assertEquals(3, result.events().size());
+      assertEquals("$root-stable", result.events().get(0).replyToEventId());
+      assertEquals("$root-legacy", result.events().get(1).replyToEventId());
+      assertEquals("$root-top", result.events().get(2).replyToEventId());
+    }
   }
 
   private static ProxyPlan directPlan() {

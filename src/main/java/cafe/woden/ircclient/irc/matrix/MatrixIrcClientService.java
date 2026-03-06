@@ -46,12 +46,15 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
   private static final String TAG_MATRIX_MSGTYPE = "matrix.msgtype";
   private static final String TAG_MATRIX_ROOM_ID = "matrix.room_id";
+  private static final String TAG_DRAFT_REPLY = "draft/reply";
+  private static final String TAG_DRAFT_EDIT = "draft/edit";
   private static final String HISTORY_SELECTOR_TIMESTAMP_PREFIX = "timestamp=";
   private static final String HISTORY_SELECTOR_MSGID_PREFIX = "msgid=";
   private static final int MATRIX_TYPING_TIMEOUT_MS = 30_000;
   private static final int SYNC_INTERVAL_SECONDS = 3;
   private static final int SYNC_TIMEOUT_MS = 0;
   private static final int ROOM_MESSAGE_INDEX_CAPACITY = 1_000;
+  private static final int ROOM_REACTION_INDEX_CAPACITY = 1_000;
   private static final int MSGID_LOOKUP_SCAN_PAGE_LIMIT = 200;
   private static final int MSGID_LOOKUP_MAX_PAGES = 10;
   private static final int TIMESTAMP_CURSOR_SCAN_PAGE_LIMIT = 200;
@@ -677,8 +680,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       case "PART" ->
           partChannel(
               sid, argOrBlank(raw, 0, "PART requires a room target"), joinArgs(raw.arguments(), 1));
-      case "PRIVMSG" -> sendRawPrivmsg(sid, raw);
-      case "NOTICE" -> sendRawNotice(sid, raw);
+      case "PRIVMSG" -> sendRawPrivmsg(sid, line, raw);
+      case "NOTICE" -> sendRawNotice(sid, line, raw);
       case "WHOIS" -> whois(sid, argOrBlank(raw, 0, "WHOIS requires a target"));
       case "WHOWAS" -> sendRawWhowas(sid, raw);
       case "AWAY" -> setAway(sid, joinArgs(raw.arguments(), 0));
@@ -686,6 +689,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       case "NAMES" -> requestNames(sid, argOrBlank(raw, 0, "NAMES requires a room target"));
       case "MARKREAD" -> sendRawMarkRead(sid, raw);
       case "TAGMSG" -> sendRawTagmsg(sid, line, raw);
+      case "REDACT" -> sendRawRedact(sid, raw);
       case "CHATHISTORY" -> sendRawChatHistory(sid, raw);
       default -> rawCommandUnsupported(sid, raw.command());
     };
@@ -693,6 +697,36 @@ public class MatrixIrcClientService implements IrcBackendClientService {
 
   @Override
   public boolean isTypingAvailable(String serverId) {
+    String sid = normalizeServerId(serverId);
+    return !sid.isEmpty() && sessionsByServer.containsKey(sid);
+  }
+
+  @Override
+  public boolean isDraftReplyAvailable(String serverId) {
+    String sid = normalizeServerId(serverId);
+    return !sid.isEmpty() && sessionsByServer.containsKey(sid);
+  }
+
+  @Override
+  public boolean isDraftReactAvailable(String serverId) {
+    String sid = normalizeServerId(serverId);
+    return !sid.isEmpty() && sessionsByServer.containsKey(sid);
+  }
+
+  @Override
+  public boolean isDraftUnreactAvailable(String serverId) {
+    String sid = normalizeServerId(serverId);
+    return !sid.isEmpty() && sessionsByServer.containsKey(sid);
+  }
+
+  @Override
+  public boolean isMessageEditAvailable(String serverId) {
+    String sid = normalizeServerId(serverId);
+    return !sid.isEmpty() && sessionsByServer.containsKey(sid);
+  }
+
+  @Override
+  public boolean isMessageRedactionAvailable(String serverId) {
     String sid = normalizeServerId(serverId);
     return !sid.isEmpty() && sessionsByServer.containsKey(sid);
   }
@@ -1324,11 +1358,20 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     return session.roomEventTimestampMs(rid, mid);
   }
 
-  private Completable sendRawPrivmsg(String serverId, RawCommand raw) {
+  private Completable sendRawPrivmsg(String serverId, String rawLine, RawCommand raw) {
     String target = argOrBlank(raw, 0, "PRIVMSG requires target and message");
     String message = joinArgs(raw.arguments(), 1);
     if (message.isEmpty()) {
       throw new IllegalArgumentException("PRIVMSG requires target and message");
+    }
+    Map<String, String> tags = parseRawTags(rawLine);
+    String editTarget = normalize(tags.get("draft/edit"));
+    if (!editTarget.isEmpty()) {
+      return sendRawEdit(serverId, target, editTarget, message);
+    }
+    String replyTarget = normalize(tags.get("draft/reply"));
+    if (!replyTarget.isEmpty()) {
+      return sendRawReply(serverId, target, replyTarget, message);
     }
     if (looksLikeMatrixUserId(target)) {
       return sendPrivateMessage(serverId, target, message);
@@ -1336,11 +1379,20 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     return sendToChannel(serverId, target, message);
   }
 
-  private Completable sendRawNotice(String serverId, RawCommand raw) {
+  private Completable sendRawNotice(String serverId, String rawLine, RawCommand raw) {
     String target = argOrBlank(raw, 0, "NOTICE requires target and message");
     String message = joinArgs(raw.arguments(), 1);
     if (message.isEmpty()) {
       throw new IllegalArgumentException("NOTICE requires target and message");
+    }
+    Map<String, String> tags = parseRawTags(rawLine);
+    String editTarget = normalize(tags.get("draft/edit"));
+    if (!editTarget.isEmpty()) {
+      return sendRawEdit(serverId, target, editTarget, message);
+    }
+    String replyTarget = normalize(tags.get("draft/reply"));
+    if (!replyTarget.isEmpty()) {
+      return sendRawReply(serverId, target, replyTarget, message);
     }
     if (looksLikeMatrixUserId(target)) {
       return sendNoticePrivate(serverId, target, message);
@@ -1379,11 +1431,235 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private Completable sendRawTagmsg(String serverId, String rawLine, RawCommand raw) {
     String target = argOrBlank(raw, 0, "TAGMSG requires a target");
     Map<String, String> tags = parseRawTags(rawLine);
+    String replyTarget = normalize(tags.get("draft/reply"));
+    String reaction = normalize(tags.get("draft/react"));
+    String unreaction = normalize(tags.get("draft/unreact"));
+    if (!reaction.isEmpty() && !unreaction.isEmpty()) {
+      throw new IllegalArgumentException(
+          "TAGMSG cannot include both +draft/react and +draft/unreact");
+    }
+    if (!reaction.isEmpty() || !unreaction.isEmpty()) {
+      if (replyTarget.isEmpty()) {
+        throw new IllegalArgumentException("TAGMSG draft reactions require +draft/reply=<msgid>");
+      }
+      if (!reaction.isEmpty()) {
+        return sendRawReaction(serverId, target, replyTarget, reaction);
+      }
+      return sendRawUnreaction(serverId, target, replyTarget, unreaction);
+    }
     String typingState = normalizeTypingState(rawTypingTagValue(tags));
     if (typingState.isEmpty()) {
       throw new IllegalArgumentException("TAGMSG requires +typing=<active|paused|done>");
     }
     return sendTyping(serverId, target, typingState);
+  }
+
+  private Completable sendRawReply(
+      String serverId, String target, String replyToEventId, String message) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+              String targetEventId = normalize(replyToEventId);
+              if (targetEventId.isEmpty()) {
+                throw new IllegalArgumentException("reply target is blank");
+              }
+              String text = Objects.toString(message, "");
+              if (text.trim().isEmpty()) {
+                throw new IllegalArgumentException("message is blank");
+              }
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "reply",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveMutationRoomId(sid, target, server, session);
+              String txnId = nextTransactionId(sid);
+              MatrixRoomMessageSender.SendResult result =
+                  roomMessageSender.sendRoomReply(
+                      sid, server, session.accessToken, roomId, txnId, targetEventId, text);
+              if (!result.accepted()) {
+                throw new IllegalStateException(
+                    "Matrix room reply failed at " + result.endpoint() + ": " + result.detail());
+              }
+              session.rememberLatestRoomEvent(roomId, result.eventId());
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private Completable sendRawEdit(
+      String serverId, String target, String targetEventId, String message) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+              String editTarget = normalize(targetEventId);
+              if (editTarget.isEmpty()) {
+                throw new IllegalArgumentException("edit target is blank");
+              }
+              String text = Objects.toString(message, "");
+              if (text.trim().isEmpty()) {
+                throw new IllegalArgumentException("message is blank");
+              }
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "edit",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveMutationRoomId(sid, target, server, session);
+              String txnId = nextTransactionId(sid);
+              MatrixRoomMessageSender.SendResult result =
+                  roomMessageSender.sendRoomEdit(
+                      sid, server, session.accessToken, roomId, txnId, editTarget, text);
+              if (!result.accepted()) {
+                throw new IllegalStateException(
+                    "Matrix room edit failed at " + result.endpoint() + ": " + result.detail());
+              }
+              session.rememberLatestRoomEvent(roomId, result.eventId());
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private Completable sendRawReaction(
+      String serverId, String target, String targetEventId, String reaction) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+              String reactTarget = normalize(targetEventId);
+              String react = normalize(reaction);
+              if (reactTarget.isEmpty() || react.isEmpty()) {
+                throw new IllegalArgumentException("reaction target or token is blank");
+              }
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "react",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveMutationRoomId(sid, target, server, session);
+              String txnId = nextTransactionId(sid);
+              MatrixRoomMessageSender.SendResult result =
+                  roomMessageSender.sendRoomReaction(
+                      sid, server, session.accessToken, roomId, txnId, reactTarget, react);
+              if (!result.accepted()) {
+                throw new IllegalStateException(
+                    "Matrix room reaction failed at " + result.endpoint() + ": " + result.detail());
+              }
+              session.rememberReactionEvent(
+                  roomId, result.eventId(), reactTarget, react, session.userId);
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private Completable sendRawUnreaction(
+      String serverId, String target, String targetEventId, String reaction) {
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+              String reactTarget = normalize(targetEventId);
+              String react = normalize(reaction);
+              if (reactTarget.isEmpty() || react.isEmpty()) {
+                throw new IllegalArgumentException("reaction target or token is blank");
+              }
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "unreact",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveMutationRoomId(sid, target, server, session);
+              String reactionEventId =
+                  session.findReactionEventId(roomId, reactTarget, react, session.userId);
+              if (reactionEventId.isEmpty()) {
+                throw new IllegalStateException(
+                    "Matrix reaction event is unknown for target/reaction in this session");
+              }
+
+              String txnId = nextTransactionId(sid);
+              MatrixRoomMessageSender.SendResult result =
+                  roomMessageSender.sendRoomRedaction(
+                      sid, server, session.accessToken, roomId, reactionEventId, txnId, "");
+              if (!result.accepted()) {
+                throw new IllegalStateException(
+                    "Matrix unreact failed at " + result.endpoint() + ": " + result.detail());
+              }
+              session.consumeReactionEvent(roomId, reactionEventId);
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  private Completable sendRawRedact(String serverId, RawCommand raw) {
+    String target = argOrBlank(raw, 0, "REDACT requires target and message id");
+    String targetEventId = argOrBlank(raw, 1, "REDACT requires target and message id");
+    String reason = joinArgs(raw.arguments(), 2);
+    return Completable.fromAction(
+            () -> {
+              String sid = normalizeServerId(serverId);
+              if (sid.isEmpty()) {
+                throw new IllegalArgumentException("server id is blank");
+              }
+
+              MatrixSession session = sessionsByServer.get(sid);
+              if (session == null) {
+                throw new BackendNotAvailableException(
+                    IrcProperties.Server.Backend.MATRIX,
+                    "redact",
+                    sid,
+                    backendAvailabilityReason(sid));
+              }
+              IrcProperties.Server server = serverCatalog.require(sid);
+              String roomId = resolveMutationRoomId(sid, target, server, session);
+              String txnId = nextTransactionId(sid);
+              MatrixRoomMessageSender.SendResult result =
+                  roomMessageSender.sendRoomRedaction(
+                      sid,
+                      server,
+                      session.accessToken,
+                      roomId,
+                      normalize(targetEventId),
+                      txnId,
+                      reason);
+              if (!result.accepted()) {
+                throw new IllegalStateException(
+                    "Matrix room redaction failed at "
+                        + result.endpoint()
+                        + ": "
+                        + result.detail());
+              }
+            })
+        .subscribeOn(RxVirtualSchedulers.io());
   }
 
   private Completable sendRawChatHistory(String serverId, RawCommand raw) {
@@ -1787,6 +2063,22 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       return "";
     }
     return resolveAliasOrRoomId(serverId, alias, server, session);
+  }
+
+  private String resolveMutationRoomId(
+      String serverId, String requestedTarget, IrcProperties.Server server, MatrixSession session) {
+    String target = normalize(requestedTarget);
+    if (target.isEmpty()) {
+      throw new IllegalArgumentException("target is blank");
+    }
+    if (looksLikeMatrixUserId(target)) {
+      String roomId = session == null ? "" : session.roomForPeer(target);
+      if (roomId.isEmpty()) {
+        throw new IllegalStateException("Matrix direct room is unknown for target");
+      }
+      return roomId;
+    }
+    return resolveAliasOrRoomId(serverId, target, server, session);
   }
 
   private String resolveHistoryFromToken(
@@ -2198,7 +2490,12 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       long ts = event.originServerTs();
       Instant at = ts > 0L ? Instant.ofEpochMilli(ts) : Instant.now();
       String messageId = normalize(event.eventId());
-      Map<String, String> tags = Map.of(TAG_MATRIX_ROOM_ID, rid, TAG_MATRIX_MSGTYPE, msgType);
+      String replyToMessageId = normalize(event.replyToEventId());
+      Map<String, String> tags =
+          withTag(
+              Map.of(TAG_MATRIX_ROOM_ID, rid, TAG_MATRIX_MSGTYPE, msgType),
+              TAG_DRAFT_REPLY,
+              replyToMessageId);
       entries.add(new ChatHistoryEntry(at, kind, target, sender, body, messageId, tags));
     }
     if (entries.isEmpty()) {
@@ -2426,6 +2723,13 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     }
     session.rememberDirectRooms(result.directPeerByRoom());
     emitSyncTimelineEvents(serverId, session, result.events());
+    emitSyncMembershipEvents(serverId, session, result.membershipEvents());
+    emitSyncMutationEvents(
+        serverId,
+        session,
+        result.messageEditEvents(),
+        result.reactionEvents(),
+        result.redactionEvents());
     emitSyncSignalEvents(serverId, session, result.typingEvents(), result.readReceipts());
   }
 
@@ -2450,6 +2754,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       if (roomId.isEmpty() || sender.isEmpty() || body.trim().isEmpty()) continue;
 
       String msgType = normalize(event.msgType());
+      String replyToMessageId = normalize(event.replyToEventId());
       String messageId = normalize(event.eventId());
       long ts = event.originServerTs();
       Instant at = ts > 0L ? Instant.ofEpochMilli(ts) : Instant.now();
@@ -2471,7 +2776,10 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                       sender,
                       body,
                       messageId,
-                      privateMessageTags(peerUserId, roomId, "m.emote", fromSelf))));
+                      withTag(
+                          privateMessageTags(peerUserId, roomId, "m.emote", fromSelf),
+                          TAG_DRAFT_REPLY,
+                          replyToMessageId))));
           continue;
         }
         if ("m.notice".equals(msgType)) {
@@ -2484,7 +2792,10 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                       peerUserId,
                       body,
                       messageId,
-                      privateMessageTags(peerUserId, roomId, "m.notice", fromSelf))));
+                      withTag(
+                          privateMessageTags(peerUserId, roomId, "m.notice", fromSelf),
+                          TAG_DRAFT_REPLY,
+                          replyToMessageId))));
           continue;
         }
         bus.onNext(
@@ -2495,7 +2806,10 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                     sender,
                     body,
                     messageId,
-                    privateMessageTags(peerUserId, roomId, normalizedType, fromSelf))));
+                    withTag(
+                        privateMessageTags(peerUserId, roomId, normalizedType, fromSelf),
+                        TAG_DRAFT_REPLY,
+                        replyToMessageId))));
         continue;
       }
 
@@ -2504,7 +2818,15 @@ public class MatrixIrcClientService implements IrcBackendClientService {
             new ServerIrcEvent(
                 sid,
                 new IrcEvent.ChannelAction(
-                    at, roomId, sender, body, messageId, Map.of(TAG_MATRIX_MSGTYPE, "m.emote"))));
+                    at,
+                    roomId,
+                    sender,
+                    body,
+                    messageId,
+                    withTag(
+                        Map.of(TAG_MATRIX_MSGTYPE, "m.emote"),
+                        TAG_DRAFT_REPLY,
+                        replyToMessageId))));
         continue;
       }
 
@@ -2513,7 +2835,15 @@ public class MatrixIrcClientService implements IrcBackendClientService {
             new ServerIrcEvent(
                 sid,
                 new IrcEvent.Notice(
-                    at, sender, roomId, body, messageId, Map.of(TAG_MATRIX_MSGTYPE, "m.notice"))));
+                    at,
+                    sender,
+                    roomId,
+                    body,
+                    messageId,
+                    withTag(
+                        Map.of(TAG_MATRIX_MSGTYPE, "m.notice"),
+                        TAG_DRAFT_REPLY,
+                        replyToMessageId))));
         continue;
       }
 
@@ -2527,7 +2857,154 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                   sender,
                   body,
                   messageId,
-                  Map.of(TAG_MATRIX_MSGTYPE, normalizedType))));
+                  withTag(
+                      Map.of(TAG_MATRIX_MSGTYPE, normalizedType),
+                      TAG_DRAFT_REPLY,
+                      replyToMessageId))));
+    }
+  }
+
+  private void emitSyncMutationEvents(
+      String serverId,
+      MatrixSession session,
+      List<MatrixSyncClient.RoomMessageEditEvent> messageEdits,
+      List<MatrixSyncClient.RoomReactionEvent> reactions,
+      List<MatrixSyncClient.RoomRedactionEvent> redactions) {
+    emitSyncEditEvents(serverId, session, messageEdits);
+    emitSyncReactionEvents(serverId, session, reactions);
+    emitSyncRedactionEvents(serverId, session, redactions);
+  }
+
+  private void emitSyncEditEvents(
+      String serverId, MatrixSession session, List<MatrixSyncClient.RoomMessageEditEvent> edits) {
+    if (session == null || edits == null || edits.isEmpty()) return;
+    String sid = normalize(serverId);
+    if (sid.isEmpty()) return;
+
+    for (MatrixSyncClient.RoomMessageEditEvent edit : edits) {
+      if (edit == null) continue;
+      String roomId = normalize(edit.roomId());
+      String sender = normalize(edit.sender());
+      String messageId = normalize(edit.eventId());
+      String targetMessageId = normalize(edit.targetEventId());
+      String body = Objects.toString(edit.body(), "");
+      String msgType = normalize(edit.msgType());
+      if (roomId.isEmpty()
+          || sender.isEmpty()
+          || targetMessageId.isEmpty()
+          || body.trim().isEmpty()) {
+        continue;
+      }
+
+      long ts = edit.originServerTs();
+      Instant at = ts > 0L ? Instant.ofEpochMilli(ts) : Instant.now();
+      session.rememberRoomEvent(roomId, messageId, ts);
+
+      String normalizedType = msgType.isEmpty() ? "m.text" : msgType;
+      String peerUserId = session.peerForRoom(roomId);
+      boolean fromSelf = sender.equals(session.userId);
+      if (!peerUserId.isEmpty()) {
+        bus.onNext(
+            new ServerIrcEvent(
+                sid,
+                new IrcEvent.PrivateMessage(
+                    at,
+                    sender,
+                    body,
+                    messageId,
+                    withTag(
+                        privateMessageTags(peerUserId, roomId, normalizedType, fromSelf),
+                        TAG_DRAFT_EDIT,
+                        targetMessageId))));
+      } else {
+        bus.onNext(
+            new ServerIrcEvent(
+                sid,
+                new IrcEvent.ChannelMessage(
+                    at,
+                    roomId,
+                    sender,
+                    body,
+                    messageId,
+                    withTag(
+                        Map.of(TAG_MATRIX_MSGTYPE, normalizedType),
+                        TAG_DRAFT_EDIT,
+                        targetMessageId))));
+      }
+    }
+  }
+
+  private void emitSyncReactionEvents(
+      String serverId,
+      MatrixSession session,
+      List<MatrixSyncClient.RoomReactionEvent> reactionEvents) {
+    if (session == null || reactionEvents == null || reactionEvents.isEmpty()) return;
+    String sid = normalize(serverId);
+    if (sid.isEmpty()) return;
+
+    for (MatrixSyncClient.RoomReactionEvent reactionEvent : reactionEvents) {
+      if (reactionEvent == null) continue;
+      String roomId = normalize(reactionEvent.roomId());
+      String sender = normalize(reactionEvent.sender());
+      String eventId = normalize(reactionEvent.eventId());
+      String targetMessageId = normalize(reactionEvent.targetEventId());
+      String reaction = normalize(reactionEvent.reaction());
+      if (roomId.isEmpty() || sender.isEmpty() || targetMessageId.isEmpty() || reaction.isEmpty()) {
+        continue;
+      }
+
+      String target = signalTargetForRoom(session, roomId);
+      if (target.isEmpty()) continue;
+
+      long ts = reactionEvent.originServerTs();
+      Instant at = ts > 0L ? Instant.ofEpochMilli(ts) : Instant.now();
+      session.rememberReactionEvent(roomId, eventId, targetMessageId, reaction, sender);
+      bus.onNext(
+          new ServerIrcEvent(
+              sid,
+              new IrcEvent.MessageReactObserved(at, sender, target, reaction, targetMessageId)));
+    }
+  }
+
+  private void emitSyncRedactionEvents(
+      String serverId,
+      MatrixSession session,
+      List<MatrixSyncClient.RoomRedactionEvent> redactionEvents) {
+    if (session == null || redactionEvents == null || redactionEvents.isEmpty()) return;
+    String sid = normalize(serverId);
+    if (sid.isEmpty()) return;
+
+    for (MatrixSyncClient.RoomRedactionEvent redactionEvent : redactionEvents) {
+      if (redactionEvent == null) continue;
+      String roomId = normalize(redactionEvent.roomId());
+      String sender = normalize(redactionEvent.sender());
+      String redactsEventId = normalize(redactionEvent.redactsEventId());
+      if (roomId.isEmpty() || redactsEventId.isEmpty()) continue;
+
+      String target = signalTargetForRoom(session, roomId);
+      if (target.isEmpty()) continue;
+
+      long ts = redactionEvent.originServerTs();
+      Instant at = ts > 0L ? Instant.ofEpochMilli(ts) : Instant.now();
+      MatrixSession.ReactionIndexEntry removedReaction =
+          session.consumeReactionEvent(roomId, redactsEventId);
+      if (removedReaction != null) {
+        String reactionSender = normalize(removedReaction.sender());
+        String reaction = normalize(removedReaction.reaction());
+        String targetMessageId = normalize(removedReaction.targetEventId());
+        if (!reactionSender.isEmpty() && !reaction.isEmpty() && !targetMessageId.isEmpty()) {
+          bus.onNext(
+              new ServerIrcEvent(
+                  sid,
+                  new IrcEvent.MessageUnreactObserved(
+                      at, reactionSender, target, reaction, targetMessageId)));
+          continue;
+        }
+      }
+
+      bus.onNext(
+          new ServerIrcEvent(
+              sid, new IrcEvent.MessageRedactionObserved(at, sender, target, redactsEventId)));
     }
   }
 
@@ -2538,6 +3015,54 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       List<MatrixSyncClient.ReadReceiptEvent> readReceipts) {
     emitSyncTypingEvents(serverId, session, typingEvents);
     emitSyncReadMarkerEvents(serverId, session, readReceipts);
+  }
+
+  private void emitSyncMembershipEvents(
+      String serverId,
+      MatrixSession session,
+      List<MatrixSyncClient.RoomMembershipEvent> membershipEvents) {
+    if (session == null || membershipEvents == null || membershipEvents.isEmpty()) return;
+    String sid = normalize(serverId);
+    if (sid.isEmpty()) return;
+    String selfUserId = normalize(session.userId);
+
+    for (MatrixSyncClient.RoomMembershipEvent membershipEvent : membershipEvents) {
+      if (membershipEvent == null) continue;
+      String roomId = normalize(membershipEvent.roomId());
+      String userId = normalize(membershipEvent.userId());
+      if (roomId.isEmpty() || !looksLikeMatrixUserId(userId)) continue;
+
+      String membership = normalize(membershipEvent.membership()).toLowerCase(Locale.ROOT);
+      String prevMembership = normalize(membershipEvent.prevMembership()).toLowerCase(Locale.ROOT);
+      String displayName = normalize(membershipEvent.displayName());
+      String prevDisplayName = normalize(membershipEvent.prevDisplayName());
+      String reason = normalize(membershipEvent.reason());
+      long ts = membershipEvent.originServerTs();
+      Instant at = ts > 0L ? Instant.ofEpochMilli(ts) : Instant.now();
+
+      boolean joinedNow = "join".equals(membership);
+      boolean joinedBefore = "join".equals(prevMembership);
+
+      if (!userId.equals(selfUserId) && joinedNow && !joinedBefore) {
+        bus.onNext(new ServerIrcEvent(sid, new IrcEvent.UserJoinedChannel(at, roomId, userId)));
+      } else if (joinedBefore && !joinedNow) {
+        if (userId.equals(selfUserId)) {
+          session.forgetJoinedRoom(roomId);
+          bus.onNext(new ServerIrcEvent(sid, new IrcEvent.LeftChannel(at, roomId, reason)));
+        } else {
+          bus.onNext(
+              new ServerIrcEvent(sid, new IrcEvent.UserPartedChannel(at, roomId, userId, reason)));
+        }
+      }
+
+      if (!displayName.isEmpty() && !displayName.equals(prevDisplayName)) {
+        bus.onNext(
+            new ServerIrcEvent(
+                sid,
+                new IrcEvent.UserSetNameObserved(
+                    at, userId, displayName, IrcEvent.UserSetNameObserved.Source.SETNAME)));
+      }
+    }
   }
 
   private void emitSyncTypingEvents(
@@ -2648,6 +3173,20 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     return Map.of(TAG_MATRIX_ROOM_ID, rid, TAG_MATRIX_MSGTYPE, type);
   }
 
+  private static Map<String, String> withTag(Map<String, String> base, String key, String value) {
+    String tagKey = normalize(key);
+    String tagValue = normalize(value);
+    if (tagKey.isEmpty() || tagValue.isEmpty()) {
+      return base == null ? Map.of() : base;
+    }
+    LinkedHashMap<String, String> tags = new LinkedHashMap<>();
+    if (base != null && !base.isEmpty()) {
+      tags.putAll(base);
+    }
+    tags.put(tagKey, tagValue);
+    return Map.copyOf(tags);
+  }
+
   private static void disposeSyncTask(MatrixSession session) {
     if (session == null) return;
     Disposable task = session.syncTask.getAndSet(null);
@@ -2675,6 +3214,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     private final Map<String, HistoryCursor> historyCursorByRoom = new ConcurrentHashMap<>();
     private final Map<String, String> latestEventByRoom = new ConcurrentHashMap<>();
     private final Map<String, LinkedHashMap<String, Long>> messageTimestampByIdByRoom =
+        new ConcurrentHashMap<>();
+    private final Map<String, LinkedHashMap<String, ReactionIndexEntry>> reactionByEventIdByRoom =
         new ConcurrentHashMap<>();
     private final Map<String, Set<String>> typingUsersByRoom = new ConcurrentHashMap<>();
     private final Map<String, Long> readMarkerTsByRoom = new ConcurrentHashMap<>();
@@ -2726,6 +3267,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       historyCursorByRoom.remove(rid);
       latestEventByRoom.remove(rid);
       messageTimestampByIdByRoom.remove(rid);
+      reactionByEventIdByRoom.remove(rid);
       typingUsersByRoom.remove(rid);
       readMarkerTsByRoom.remove(rid);
     }
@@ -2759,6 +3301,71 @@ public class MatrixIrcClientService implements IrcBackendClientService {
           String eldest = index.entrySet().iterator().next().getKey();
           index.remove(eldest);
         }
+      }
+    }
+
+    private void rememberReactionEvent(
+        String roomId,
+        String reactionEventId,
+        String targetEventId,
+        String reaction,
+        String sender) {
+      String rid = normalize(roomId);
+      String reactionId = normalize(reactionEventId);
+      String targetId = normalize(targetEventId);
+      String key = normalize(reaction);
+      String from = normalize(sender);
+      if (rid.isEmpty()
+          || reactionId.isEmpty()
+          || targetId.isEmpty()
+          || key.isEmpty()
+          || from.isEmpty()) {
+        return;
+      }
+      LinkedHashMap<String, ReactionIndexEntry> index =
+          reactionByEventIdByRoom.computeIfAbsent(rid, ignored -> new LinkedHashMap<>());
+      synchronized (index) {
+        index.put(reactionId, new ReactionIndexEntry(targetId, key, from));
+        while (index.size() > ROOM_REACTION_INDEX_CAPACITY) {
+          String eldest = index.entrySet().iterator().next().getKey();
+          index.remove(eldest);
+        }
+      }
+    }
+
+    private ReactionIndexEntry consumeReactionEvent(String roomId, String reactionEventId) {
+      String rid = normalize(roomId);
+      String reactionId = normalize(reactionEventId);
+      if (rid.isEmpty() || reactionId.isEmpty()) return null;
+      LinkedHashMap<String, ReactionIndexEntry> index = reactionByEventIdByRoom.get(rid);
+      if (index == null) return null;
+      synchronized (index) {
+        return index.remove(reactionId);
+      }
+    }
+
+    private String findReactionEventId(
+        String roomId, String targetEventId, String reaction, String sender) {
+      String rid = normalize(roomId);
+      String targetId = normalize(targetEventId);
+      String key = normalize(reaction);
+      String from = normalize(sender);
+      if (rid.isEmpty() || targetId.isEmpty() || key.isEmpty() || from.isEmpty()) {
+        return "";
+      }
+      LinkedHashMap<String, ReactionIndexEntry> index = reactionByEventIdByRoom.get(rid);
+      if (index == null || index.isEmpty()) return "";
+      synchronized (index) {
+        String found = "";
+        for (Map.Entry<String, ReactionIndexEntry> entry : index.entrySet()) {
+          if (entry == null || entry.getValue() == null) continue;
+          ReactionIndexEntry value = entry.getValue();
+          if (!targetId.equals(normalize(value.targetEventId()))) continue;
+          if (!key.equals(normalize(value.reaction()))) continue;
+          if (!from.equals(normalize(value.sender()))) continue;
+          found = normalize(entry.getKey());
+        }
+        return found;
       }
     }
 
@@ -2819,6 +3426,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       readMarkerTsByRoom.put(rid, markerTsMs);
       return true;
     }
+
+    private record ReactionIndexEntry(String targetEventId, String reaction, String sender) {}
 
     private record HistoryCursor(String nextToken, long beforeEpochMs) {}
   }

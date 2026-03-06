@@ -63,6 +63,32 @@ class MatrixEndpointResolverTest {
   }
 
   @Test
+  void roomSendEventUriSupportsCustomEventTypePath() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri =
+        MatrixEndpointResolver.roomSendEventUri(
+            server, "!room:matrix.example.org", "m.reaction", "txn-r1");
+
+    assertEquals(
+        "https://example.org:443/matrix/_matrix/client/v3/rooms/!room:matrix.example.org/send/m.reaction/txn-r1",
+        uri.toString());
+  }
+
+  @Test
+  void roomRedactEventUriBuildsRedactionPath() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri =
+        MatrixEndpointResolver.roomRedactEventUri(
+            server, "!room:matrix.example.org", "$event-1", "txn-x1");
+
+    assertEquals(
+        "https://example.org:443/matrix/_matrix/client/v3/rooms/!room:matrix.example.org/redact/$event-1/txn-x1",
+        uri.toString());
+  }
+
+  @Test
   void syncUriIncludesTimeoutAndSinceQuery() {
     IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
 
