@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
+import com.sun.security.auth.module.UnixSystem;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -21,6 +22,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.Comparator;
@@ -59,6 +62,8 @@ class MatrixSynapseContainerIntegrationTest {
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final HttpClient HTTP =
       HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+  private static final String CURRENT_UID = detectCurrentUid();
+  private static final String CURRENT_GID = detectCurrentGid();
 
   private static final String SERVER_ID = "matrix-it";
   private static final String ALICE = "alice";
@@ -82,8 +87,8 @@ class MatrixSynapseContainerIntegrationTest {
     DockerImageName image = DockerImageName.parse(cfg.image());
     Path dataDir = Files.createTempDirectory("matrix-synapse-it-");
     try {
-      generateSynapseConfig(image, cfg, dataDir);
-      configureRegistrationSharedSecret(dataDir.resolve("homeserver.yaml"), cfg.registrationSecret());
+      Path homeserverYaml = generateSynapseConfig(image, cfg, dataDir);
+      configureRegistrationSharedSecret(homeserverYaml, cfg.registrationSecret());
 
       try (GenericContainer<?> synapse = newSynapseContainer(image, cfg, dataDir)) {
         synapse.start();
@@ -100,6 +105,7 @@ class MatrixSynapseContainerIntegrationTest {
         LoginResult bobLogin = login(server, BOB, BOB_PASSWORD);
 
         MatrixHomeserverProbe probe = new MatrixHomeserverProbe(proxyResolver);
+        MatrixMediaUploadClient mediaUploadClient = new MatrixMediaUploadClient(proxyResolver);
         MatrixRoomMessageSender sender = new MatrixRoomMessageSender(proxyResolver);
         MatrixSyncClient syncClient = new MatrixSyncClient(proxyResolver);
         MatrixRoomHistoryClient historyClient = new MatrixRoomHistoryClient(proxyResolver);
@@ -142,6 +148,59 @@ class MatrixSynapseContainerIntegrationTest {
         assertTrue(
             history.events().stream().anyMatch(event -> MESSAGE_TEXT.equals(event.body())),
             "history should contain the sent message");
+
+        Path uploadFile = dataDir.resolve("matrix-it-upload.bin");
+        Files.writeString(uploadFile, "matrix upload payload", StandardCharsets.UTF_8);
+
+        MatrixMediaUploadClient.UploadResult uploadResult =
+            mediaUploadClient.uploadFile(
+                SERVER_ID, server, aliceLogin.accessToken(), uploadFile.toString());
+        assertTrue(uploadResult.success(), "media upload should succeed: " + uploadResult.detail());
+        String mediaUrl = normalize(uploadResult.contentUri());
+        assertTrue(mediaUrl.startsWith("mxc://"), "upload should return an mxc:// content URI");
+
+        MatrixRoomMessageSender.SendResult mediaSendResult =
+            sender.sendRoomMediaMessage(
+                SERVER_ID,
+                server,
+                aliceLogin.accessToken(),
+                roomId,
+                "txn-matrix-it-media-1",
+                "matrix-it-upload.bin",
+                "m.file",
+                mediaUrl);
+        assertTrue(
+            mediaSendResult.accepted(),
+            "room media send should succeed: "
+                + mediaSendResult.endpoint()
+                + " "
+                + mediaSendResult.detail());
+
+        SyncObservation mediaObservation =
+            awaitSyncedRoomMediaMessage(
+                syncClient,
+                server,
+                bobLogin.accessToken(),
+                roomId,
+                "m.file",
+                mediaUrl,
+                observation.nextBatch());
+        MatrixRoomHistoryClient.HistoryResult mediaHistory =
+            historyClient.fetchMessagesBefore(
+                SERVER_ID,
+                server,
+                bobLogin.accessToken(),
+                roomId,
+                mediaObservation.nextBatch(),
+                50);
+        assertTrue(mediaHistory.success(), "media history fetch should succeed: " + mediaHistory.detail());
+        assertTrue(
+            mediaHistory.events().stream()
+                .anyMatch(
+                    event ->
+                        "m.file".equals(normalize(event.msgType()))
+                            && mediaUrl.equals(normalize(event.mediaUrl()))),
+            "history should contain uploaded media event");
       }
     } finally {
       deleteRecursively(dataDir);
@@ -150,30 +209,96 @@ class MatrixSynapseContainerIntegrationTest {
 
   private static GenericContainer<?> newSynapseContainer(
       DockerImageName image, ContainerConfig cfg, Path dataDir) {
-    return new GenericContainer<>(image)
-        .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data")
-        .withEnv("SYNAPSE_SERVER_NAME", cfg.serverName())
-        .withEnv("SYNAPSE_REPORT_STATS", "no")
-        .withExposedPorts(cfg.httpPort())
-        .waitingFor(
-            Wait.forHttp("/_matrix/client/versions").forPort(cfg.httpPort()).forStatusCode(200))
-        .withStartupTimeout(Duration.ofSeconds(cfg.startupTimeoutSeconds()));
+    GenericContainer<?> container =
+        new GenericContainer<>(image)
+            .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data")
+            .withEnv("SYNAPSE_SERVER_NAME", cfg.serverName())
+            .withEnv("SYNAPSE_REPORT_STATS", "no")
+            .withExposedPorts(cfg.httpPort())
+            .waitingFor(
+                Wait.forHttp("/_matrix/client/versions").forPort(cfg.httpPort()).forStatusCode(200))
+            .withStartupTimeout(Duration.ofSeconds(cfg.startupTimeoutSeconds()));
+    applyUidGidEnv(container);
+    return container;
   }
 
-  private static void generateSynapseConfig(DockerImageName image, ContainerConfig cfg, Path dataDir) {
-    try (GenericContainer<?> generator =
+  private static Path generateSynapseConfig(DockerImageName image, ContainerConfig cfg, Path dataDir)
+      throws IOException {
+    GenericContainer<?> generator =
         new GenericContainer<>(image)
             .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data")
             .withEnv("SYNAPSE_SERVER_NAME", cfg.serverName())
             .withEnv("SYNAPSE_REPORT_STATS", "no")
             .withCommand("generate")
             .withStartupCheckStrategy(new OneShotStartupCheckStrategy())
-            .withStartupTimeout(Duration.ofSeconds(cfg.startupTimeoutSeconds()))) {
+            .withStartupTimeout(Duration.ofSeconds(cfg.startupTimeoutSeconds()));
+    applyUidGidEnv(generator);
+    try (generator) {
       generator.start();
     }
 
     Path homeserverYaml = dataDir.resolve("homeserver.yaml");
-    assertTrue(Files.exists(homeserverYaml), "expected generated Synapse config at " + homeserverYaml);
+    if (Files.exists(homeserverYaml)) {
+      return homeserverYaml;
+    }
+
+    Path discovered = discoverGeneratedHomeserverYaml(dataDir);
+    assertTrue(discovered != null, "expected generated Synapse config under " + dataDir);
+    if (!discovered.equals(homeserverYaml)) {
+      Files.copy(discovered, homeserverYaml, StandardCopyOption.REPLACE_EXISTING);
+    }
+    return homeserverYaml;
+  }
+
+  private static Path discoverGeneratedHomeserverYaml(Path dataDir) {
+    if (dataDir == null || !Files.exists(dataDir)) {
+      return null;
+    }
+    try (var walk = Files.walk(dataDir)) {
+      return walk
+          .filter(Files::isRegularFile)
+          .filter(path -> normalize(path.getFileName().toString()).endsWith("homeserver.yaml"))
+          .findFirst()
+          .orElse(null);
+    } catch (IOException ignored) {
+      return null;
+    }
+  }
+
+  private static void applyUidGidEnv(GenericContainer<?> container) {
+    if (container == null) {
+      return;
+    }
+    if (!CURRENT_UID.isEmpty()) {
+      container.withEnv("UID", CURRENT_UID);
+    }
+    if (!CURRENT_GID.isEmpty()) {
+      container.withEnv("GID", CURRENT_GID);
+    }
+  }
+
+  private static String detectCurrentUid() {
+    String envUid = normalize(System.getenv("UID"));
+    if (!envUid.isEmpty()) {
+      return envUid;
+    }
+    try {
+      return Long.toString(new UnixSystem().getUid());
+    } catch (Throwable ignored) {
+      return "";
+    }
+  }
+
+  private static String detectCurrentGid() {
+    String envGid = normalize(System.getenv("GID"));
+    if (!envGid.isEmpty()) {
+      return envGid;
+    }
+    try {
+      return Long.toString(new UnixSystem().getGid());
+    } catch (Throwable ignored) {
+      return "";
+    }
   }
 
   private static void configureRegistrationSharedSecret(Path homeserverYaml, String sharedSecret)
@@ -298,6 +423,41 @@ class MatrixSynapseContainerIntegrationTest {
     throw new AssertionError("did not observe expected room message via sync within timeout");
   }
 
+  private static SyncObservation awaitSyncedRoomMediaMessage(
+      MatrixSyncClient syncClient,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String expectedMsgType,
+      String expectedMediaUrl,
+      String sinceToken)
+      throws Exception {
+    long deadline = System.nanoTime() + MESSAGE_TIMEOUT.toNanos();
+    String since = normalize(sinceToken);
+    String msgType = normalize(expectedMsgType);
+    String mediaUrl = normalize(expectedMediaUrl);
+
+    while (System.nanoTime() < deadline) {
+      MatrixSyncClient.SyncResult result = syncClient.sync(SERVER_ID, server, accessToken, since, 1_000);
+      assertTrue(result.success(), "sync request failed: " + result.detail());
+      String nextBatch = normalize(result.nextBatch());
+
+      for (MatrixSyncClient.RoomTimelineEvent event : result.events()) {
+        if (event == null) continue;
+        if (!roomId.equals(normalize(event.roomId()))) continue;
+        if (!msgType.equals(normalize(event.msgType()))) continue;
+        if (!mediaUrl.equals(normalize(event.mediaUrl()))) continue;
+        return new SyncObservation(event, nextBatch);
+      }
+
+      if (!nextBatch.isEmpty()) {
+        since = nextBatch;
+      }
+      Thread.sleep(250L);
+    }
+    throw new AssertionError("did not observe uploaded media message via sync within timeout");
+  }
+
   private static JsonNode postJson(URI uri, JsonNode payload, String accessToken) throws Exception {
     JsonNode safePayload = payload == null ? JSON.createObjectNode() : payload;
     String body = JSON.writeValueAsString(safePayload);
@@ -351,7 +511,7 @@ class MatrixSynapseContainerIntegrationTest {
         IrcProperties.Server.Backend.MATRIX);
   }
 
-  private static void deleteRecursively(Path root) throws IOException {
+  private static void deleteRecursively(Path root) {
     if (root == null || !Files.exists(root)) return;
     try (var walk = Files.walk(root)) {
       walk.sorted(Comparator.reverseOrder())
@@ -362,6 +522,8 @@ class MatrixSynapseContainerIntegrationTest {
                 } catch (IOException ignored) {
                 }
               });
+    } catch (IOException ignored) {
+      // Best-effort cleanup. Container-created files may be unreadable by the test user.
     }
   }
 

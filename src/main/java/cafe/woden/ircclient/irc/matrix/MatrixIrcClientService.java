@@ -46,11 +46,13 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
   private static final String TAG_MATRIX_MSGTYPE = "matrix.msgtype";
   private static final String TAG_MATRIX_MEDIA_URL = "matrix.media_url";
+  private static final String TAG_MATRIX_UPLOAD_PATH = "matrix.upload_path";
   private static final String TAG_MATRIX_ROOM_ID = "matrix.room_id";
   private static final String TAG_DRAFT_REPLY = "draft/reply";
   private static final String TAG_DRAFT_EDIT = "draft/edit";
   private static final String RAW_TAG_MATRIX_MSGTYPE = "matrix/msgtype";
   private static final String RAW_TAG_MATRIX_MEDIA_URL = "matrix/media_url";
+  private static final String RAW_TAG_MATRIX_UPLOAD_PATH = "matrix/upload_path";
   private static final String HISTORY_SELECTOR_TIMESTAMP_PREFIX = "timestamp=";
   private static final String HISTORY_SELECTOR_MSGID_PREFIX = "msgid=";
   private static final Set<String> MATRIX_MEDIA_MSGTYPES =
@@ -82,6 +84,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private final MatrixRoomHistoryClient roomHistoryClient;
   private final MatrixRoomTypingClient roomTypingClient;
   private final MatrixDirectRoomResolver directRoomResolver;
+  private final MatrixMediaUploadClient mediaUploadClient;
   private final MatrixRoomMessageSender roomMessageSender;
   private final MatrixSyncClient syncClient;
   private final Map<String, String> availabilityReasonByServer = new ConcurrentHashMap<>();
@@ -101,6 +104,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       MatrixRoomHistoryClient roomHistoryClient,
       MatrixRoomTypingClient roomTypingClient,
       MatrixDirectRoomResolver directRoomResolver,
+      MatrixMediaUploadClient mediaUploadClient,
       MatrixRoomMessageSender roomMessageSender,
       MatrixSyncClient syncClient) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
@@ -116,6 +120,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     this.roomHistoryClient = Objects.requireNonNull(roomHistoryClient, "roomHistoryClient");
     this.roomTypingClient = Objects.requireNonNull(roomTypingClient, "roomTypingClient");
     this.directRoomResolver = Objects.requireNonNull(directRoomResolver, "directRoomResolver");
+    this.mediaUploadClient = Objects.requireNonNull(mediaUploadClient, "mediaUploadClient");
     this.roomMessageSender = Objects.requireNonNull(roomMessageSender, "roomMessageSender");
     this.syncClient = Objects.requireNonNull(syncClient, "syncClient");
   }
@@ -1373,7 +1378,13 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       return sendRawReply(serverId, target, replyTarget, message);
     }
     if (!matrixMsgType.isEmpty()) {
-      return sendRawMediaMessage(serverId, target, message, matrixMsgType, rawMatrixMediaUrl(tags));
+      return sendRawMediaMessage(
+          serverId,
+          target,
+          message,
+          matrixMsgType,
+          rawMatrixMediaUrl(tags),
+          rawMatrixUploadPath(tags));
     }
     if (looksLikeMatrixUserId(target)) {
       return sendPrivateMessage(serverId, target, message);
@@ -1403,7 +1414,12 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   }
 
   private Completable sendRawMediaMessage(
-      String serverId, String target, String message, String msgType, String mediaUrl) {
+      String serverId,
+      String target,
+      String message,
+      String msgType,
+      String mediaUrl,
+      String uploadPath) {
     return Completable.fromAction(
             () -> {
               String sid = normalizeServerId(serverId);
@@ -1413,10 +1429,6 @@ public class MatrixIrcClientService implements IrcBackendClientService {
               String mediaType = normalize(msgType);
               if (!isMatrixMediaMsgType(mediaType)) {
                 throw new IllegalArgumentException("unsupported Matrix media msgtype");
-              }
-              String mediaRef = normalize(mediaUrl);
-              if (mediaRef.isEmpty()) {
-                throw new IllegalArgumentException("matrix media url tag is blank");
               }
               String rawTarget = normalize(target);
               if (rawTarget.isEmpty()) {
@@ -1434,6 +1446,27 @@ public class MatrixIrcClientService implements IrcBackendClientService {
               }
 
               IrcProperties.Server server = serverCatalog.require(sid);
+              String mediaRef = normalize(mediaUrl);
+              String uploadSource = normalize(uploadPath);
+              if (mediaRef.isEmpty()) {
+                if (uploadSource.isEmpty()) {
+                  throw new IllegalArgumentException("matrix media url tag is blank");
+                }
+                MatrixMediaUploadClient.UploadResult uploadResult =
+                    mediaUploadClient.uploadFile(sid, server, session.accessToken, uploadSource);
+                if (!uploadResult.success()) {
+                  throw new IllegalStateException(
+                      "Matrix media upload failed at "
+                          + uploadResult.endpoint()
+                          + ": "
+                          + uploadResult.detail());
+                }
+                mediaRef = normalize(uploadResult.contentUri());
+                if (mediaRef.isEmpty()) {
+                  throw new IllegalStateException("Matrix media upload returned blank content URI");
+                }
+              }
+
               String txnId = nextTransactionId(sid);
               if (looksLikeMatrixUserId(rawTarget)) {
                 String roomId = resolveDirectRoomId(sid, server, session, rawTarget);
@@ -2274,6 +2307,17 @@ public class MatrixIrcClientService implements IrcBackendClientService {
         tags.get("matrix.url"),
         tags.get("matrix.media_url"),
         tags.get("matrix/url"));
+  }
+
+  private static String rawMatrixUploadPath(Map<String, String> tags) {
+    if (tags == null || tags.isEmpty()) {
+      return "";
+    }
+    return firstNonBlank(
+        tags.get(RAW_TAG_MATRIX_UPLOAD_PATH),
+        tags.get(TAG_MATRIX_UPLOAD_PATH),
+        tags.get("matrix.upload-path"),
+        tags.get("matrix/upload-path"));
   }
 
   private static String firstNonBlank(String... values) {

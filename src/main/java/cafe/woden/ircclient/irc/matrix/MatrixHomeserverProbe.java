@@ -14,7 +14,7 @@ import java.util.Objects;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
-/** Probes Matrix homeserver reachability via {@code /_matrix/client/v3/versions}. */
+/** Probes Matrix homeserver reachability via {@code /_matrix/client/versions}. */
 @Component
 @InfrastructureLayer
 final class MatrixHomeserverProbe {

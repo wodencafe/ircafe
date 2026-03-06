@@ -36,9 +36,9 @@ final class MatrixEndpointResolver {
   }
 
   public static URI versionsUri(IrcProperties.Server server) {
-    URI apiBase = clientApiBaseUri(server);
-    String path = appendPath(apiBase.getPath(), "versions");
-    return rebuild(apiBase, path);
+    URI base = homeserverBaseUri(server);
+    String path = appendPath(base.getPath(), "_matrix/client/versions");
+    return rebuild(base, path);
   }
 
   public static URI whoamiUri(IrcProperties.Server server) {
@@ -157,6 +157,17 @@ final class MatrixEndpointResolver {
   public static URI roomMessagesUri(
       IrcProperties.Server server, String roomId, String fromToken, String toToken, int limit) {
     return roomMessagesUri(server, roomId, fromToken, toToken, "b", limit);
+  }
+
+  public static URI mediaUploadUri(IrcProperties.Server server, String fileName) {
+    URI base = homeserverBaseUri(server);
+    String path = appendPath(base.getPath(), "_matrix/media/v3/upload");
+    URI endpoint = rebuild(base, path);
+    String filename = normalize(fileName);
+    if (filename.isEmpty()) {
+      return endpoint;
+    }
+    return URI.create(endpoint + "?filename=" + encodeQueryParam(filename));
   }
 
   public static URI roomMessagesUri(

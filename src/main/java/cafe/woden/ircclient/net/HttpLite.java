@@ -196,6 +196,55 @@ public final class HttpLite {
     return new Response<>(code, headers, new String(bytes, charset));
   }
 
+  public static Response<String> postBytes(
+      URI uri,
+      Map<String, String> requestHeaders,
+      byte[] requestBody,
+      Proxy proxy,
+      int connectTimeoutMs,
+      int readTimeoutMs)
+      throws IOException {
+    HttpURLConnection conn = open(uri, proxy, connectTimeoutMs, readTimeoutMs);
+    conn.setInstanceFollowRedirects(false);
+    conn.setRequestMethod("POST");
+    conn.setDoOutput(true);
+
+    if (requestHeaders != null) {
+      for (Map.Entry<String, String> e : requestHeaders.entrySet()) {
+        if (e.getKey() != null && e.getValue() != null) {
+          conn.setRequestProperty(e.getKey(), e.getValue());
+        }
+      }
+    }
+
+    byte[] payload = requestBody == null ? new byte[0] : requestBody;
+    if (conn.getRequestProperty("Content-Type") == null) {
+      conn.setRequestProperty("Content-Type", "application/octet-stream");
+    }
+    conn.setRequestProperty("Content-Length", Integer.toString(payload.length));
+
+    try (OutputStream out = conn.getOutputStream()) {
+      out.write(payload);
+    }
+
+    int code = conn.getResponseCode();
+    InputStream body = (code >= 400) ? conn.getErrorStream() : conn.getInputStream();
+    if (body == null) body = InputStream.nullInputStream();
+
+    String encoding = conn.getHeaderField("Content-Encoding");
+    if (encoding != null && encoding.toLowerCase(Locale.ROOT).contains("gzip")) {
+      body = new GZIPInputStream(body);
+    }
+
+    byte[] bytes;
+    try (InputStream in = body) {
+      bytes = in.readAllBytes();
+    }
+    Headers headers = new Headers(conn.getHeaderFields());
+    Charset charset = charsetFromContentType(headers.firstValue("Content-Type").orElse(null));
+    return new Response<>(code, headers, new String(bytes, charset));
+  }
+
   public static Response<String> putString(
       URI uri,
       Map<String, String> requestHeaders,

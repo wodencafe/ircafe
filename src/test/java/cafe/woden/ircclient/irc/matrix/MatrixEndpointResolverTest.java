@@ -16,7 +16,7 @@ class MatrixEndpointResolverTest {
 
     URI uri = MatrixEndpointResolver.versionsUri(server);
 
-    assertEquals("https://matrix.example.org:8448/_matrix/client/v3/versions", uri.toString());
+    assertEquals("https://matrix.example.org:8448/_matrix/client/versions", uri.toString());
   }
 
   @Test
@@ -176,6 +176,26 @@ class MatrixEndpointResolverTest {
   }
 
   @Test
+  void mediaUploadUriBuildsMediaPathAndFilenameQuery() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri = MatrixEndpointResolver.mediaUploadUri(server, "photo one.png");
+
+    assertEquals(
+        "https://example.org:443/matrix/_matrix/media/v3/upload?filename=photo%20one.png",
+        uri.toString());
+  }
+
+  @Test
+  void mediaUploadUriOmitsFilenameQueryWhenBlank() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri = MatrixEndpointResolver.mediaUploadUri(server, " ");
+
+    assertEquals("https://example.org:443/matrix/_matrix/media/v3/upload", uri.toString());
+  }
+
+  @Test
   void roomAliasDirectoryUriBuildsDirectoryPath() {
     IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
 
@@ -232,7 +252,7 @@ class MatrixEndpointResolverTest {
 
     URI uri = MatrixEndpointResolver.versionsUri(server);
 
-    assertEquals("https://example.org:443/matrix/_matrix/client/v3/versions", uri.toString());
+    assertEquals("https://example.org:443/matrix/_matrix/client/versions", uri.toString());
   }
 
   @Test
@@ -241,7 +261,7 @@ class MatrixEndpointResolverTest {
 
     URI uri = MatrixEndpointResolver.versionsUri(server);
 
-    assertEquals("http://example.org:8008/custom/base/_matrix/client/v3/versions", uri.toString());
+    assertEquals("http://example.org:8008/custom/base/_matrix/client/versions", uri.toString());
   }
 
   @Test

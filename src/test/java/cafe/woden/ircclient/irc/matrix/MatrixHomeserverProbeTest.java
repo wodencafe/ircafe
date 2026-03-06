@@ -37,7 +37,7 @@ class MatrixHomeserverProbeTest {
       assertTrue(result.reachable());
       assertEquals(2, result.advertisedVersionCount());
       assertEquals(
-          "http://127.0.0.1:" + server.port() + "/_matrix/client/v3/versions",
+          "http://127.0.0.1:" + server.port() + "/_matrix/client/versions",
           result.endpoint().toString());
     }
   }
@@ -177,7 +177,7 @@ class MatrixHomeserverProbeTest {
       ResponseSpec whoamiResponse = whoami == null ? response(404, "{}") : whoami;
 
       server.createContext(
-          "/_matrix/client/v3/versions",
+          "/_matrix/client/versions",
           exchange ->
               reply(
                   exchange,

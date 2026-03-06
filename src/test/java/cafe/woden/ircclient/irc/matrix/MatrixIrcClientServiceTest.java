@@ -43,6 +43,7 @@ class MatrixIrcClientServiceTest {
   private final MatrixRoomHistoryClient roomHistoryClient = mock(MatrixRoomHistoryClient.class);
   private final MatrixRoomTypingClient roomTypingClient = mock(MatrixRoomTypingClient.class);
   private final MatrixDirectRoomResolver directRoomResolver = mock(MatrixDirectRoomResolver.class);
+  private final MatrixMediaUploadClient mediaUploadClient = mock(MatrixMediaUploadClient.class);
   private final MatrixRoomMessageSender roomMessageSender = mock(MatrixRoomMessageSender.class);
   private final MatrixSyncClient syncClient = mock(MatrixSyncClient.class);
   private final MatrixIrcClientService service =
@@ -59,6 +60,7 @@ class MatrixIrcClientServiceTest {
           roomHistoryClient,
           roomTypingClient,
           directRoomResolver,
+          mediaUploadClient,
           roomMessageSender,
           syncClient);
 
@@ -92,7 +94,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 2));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 2));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -153,7 +155,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.failed(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"),
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"),
                 "HTTP 503 from versions endpoint"));
 
     BackendNotAvailableException err =
@@ -176,7 +178,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.failed(
@@ -202,7 +204,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
 
     BackendNotAvailableException err =
         assertThrows(
@@ -222,7 +224,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "sasl-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -243,7 +245,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -285,7 +287,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -310,7 +312,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -342,7 +344,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -386,7 +388,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -437,7 +439,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -469,7 +471,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -514,7 +516,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -551,7 +553,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -583,7 +585,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -619,7 +621,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -668,7 +670,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -700,7 +702,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -736,7 +738,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -781,7 +783,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -826,7 +828,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -859,7 +861,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -914,7 +916,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -960,7 +962,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1018,7 +1020,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1072,7 +1074,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1130,7 +1132,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1217,7 +1219,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1269,7 +1271,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1333,7 +1335,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1374,7 +1376,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1414,7 +1416,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1456,7 +1458,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1496,7 +1498,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1549,7 +1551,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1591,7 +1593,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1676,7 +1678,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1723,7 +1725,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1813,7 +1815,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1859,7 +1861,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1915,7 +1917,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -1983,7 +1985,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2036,7 +2038,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2092,7 +2094,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2145,7 +2147,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2200,7 +2202,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2230,7 +2232,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2321,7 +2323,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2376,7 +2378,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2426,7 +2428,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2469,7 +2471,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2561,7 +2563,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2656,7 +2658,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2715,7 +2717,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2794,7 +2796,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2884,7 +2886,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -2987,7 +2989,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3036,7 +3038,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3096,7 +3098,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3197,7 +3199,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3252,7 +3254,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3392,7 +3394,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3437,7 +3439,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3474,7 +3476,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3500,7 +3502,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3549,7 +3551,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3574,7 +3576,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3608,7 +3610,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3633,7 +3635,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3665,7 +3667,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3718,7 +3720,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3744,7 +3746,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3780,7 +3782,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3819,7 +3821,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3859,7 +3861,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3884,7 +3886,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3927,7 +3929,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3952,7 +3954,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -3997,7 +3999,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4042,7 +4044,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4084,6 +4086,7 @@ class MatrixIrcClientServiceTest {
             eq("photo.png"),
             eq("m.image"),
             eq("mxc://matrix.example.org/media-1"));
+    verifyNoInteractions(mediaUploadClient);
 
     IrcEvent.ChannelMessage echoed =
         assertInstanceOf(IrcEvent.ChannelMessage.class, events.values().get(3).event());
@@ -4101,7 +4104,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4139,6 +4142,116 @@ class MatrixIrcClientServiceTest {
     assertEquals("m.image", echoed.ircv3Tags().get("matrix.msgtype"));
     assertEquals(
         "mxc://matrix.example.org/media-empty", echoed.ircv3Tags().get("matrix.media_url"));
+    verifyNoInteractions(mediaUploadClient);
+  }
+
+  @Test
+  void rawPrivmsgWithMatrixUploadPathUploadsThenSendsMediaEvent() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(mediaUploadClient.uploadFile(
+            eq("matrix"), eq(server), eq("secret-token"), eq("/tmp/photo.png")))
+        .thenReturn(
+            MatrixMediaUploadClient.UploadResult.success(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/media/v3/upload?filename=photo.png"),
+                "mxc://matrix.example.org/upload-1",
+                "photo.png",
+                "image/png",
+                42L));
+    when(roomMessageSender.sendRoomMediaMessage(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            anyString(),
+            eq("photo.png"),
+            eq("m.image"),
+            eq("mxc://matrix.example.org/upload-1")))
+        .thenReturn(
+            MatrixRoomMessageSender.SendResult.accepted(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/client/v3/rooms/!room:matrix.example.org/send/m.room.message/txn-m3"),
+                "$media-3"));
+
+    var events = service.events().test();
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(3);
+
+    service
+        .sendRaw(
+            "matrix",
+            "@+matrix/msgtype=m.image;+matrix/upload_path=/tmp/photo.png PRIVMSG !room:matrix.example.org :photo.png")
+        .blockingAwait();
+    events.awaitCount(4);
+
+    verify(mediaUploadClient, times(1))
+        .uploadFile(eq("matrix"), eq(server), eq("secret-token"), eq("/tmp/photo.png"));
+    verify(roomMessageSender, times(1))
+        .sendRoomMediaMessage(
+            eq("matrix"),
+            eq(server),
+            eq("secret-token"),
+            eq("!room:matrix.example.org"),
+            anyString(),
+            eq("photo.png"),
+            eq("m.image"),
+            eq("mxc://matrix.example.org/upload-1"));
+
+    IrcEvent.ChannelMessage echoed =
+        assertInstanceOf(IrcEvent.ChannelMessage.class, events.values().get(3).event());
+    assertEquals("$media-3", echoed.messageId());
+    assertEquals("photo.png", echoed.text());
+    assertEquals("m.image", echoed.ircv3Tags().get("matrix.msgtype"));
+    assertEquals("mxc://matrix.example.org/upload-1", echoed.ircv3Tags().get("matrix.media_url"));
+  }
+
+  @Test
+  void rawPrivmsgWithMatrixUploadPathFailsWhenUploadFails() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(mediaUploadClient.uploadFile(
+            eq("matrix"), eq(server), eq("secret-token"), eq("/tmp/missing.png")))
+        .thenReturn(
+            MatrixMediaUploadClient.UploadResult.failed(
+                URI.create(
+                    "https://matrix.example.org:8448/_matrix/media/v3/upload?filename=missing.png"),
+                "upload path is not a readable file"));
+    service.connect("matrix").blockingAwait();
+
+    IllegalStateException err =
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                service
+                    .sendRaw(
+                        "matrix",
+                        "@+matrix/msgtype=m.image;+matrix/upload_path=/tmp/missing.png PRIVMSG !room:matrix.example.org :missing.png")
+                    .blockingAwait());
+
+    assertTrue(err.getMessage().contains("Matrix media upload failed"));
   }
 
   @Test
@@ -4149,7 +4262,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4179,7 +4292,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4224,7 +4337,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4292,7 +4405,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4372,7 +4485,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4479,7 +4592,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4590,7 +4703,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4633,7 +4746,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4661,7 +4774,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4707,7 +4820,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4751,7 +4864,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4780,7 +4893,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4808,7 +4921,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4850,7 +4963,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4905,7 +5018,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -4943,7 +5056,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -5005,7 +5118,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -5089,7 +5202,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -5188,7 +5301,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
@@ -5216,7 +5329,7 @@ class MatrixIrcClientServiceTest {
     when(homeserverProbe.probe("matrix", server))
         .thenReturn(
             MatrixHomeserverProbe.ProbeResult.reachable(
-                URI.create("https://matrix.example.org:8448/_matrix/client/v3/versions"), 1));
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
     when(homeserverProbe.whoami("matrix", server, "secret-token"))
         .thenReturn(
             MatrixHomeserverProbe.WhoamiResult.authenticated(
