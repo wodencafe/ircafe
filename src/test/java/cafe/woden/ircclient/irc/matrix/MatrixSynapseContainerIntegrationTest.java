@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.net.Proxy;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -27,8 +28,10 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -201,6 +204,106 @@ class MatrixSynapseContainerIntegrationTest {
                         "m.file".equals(normalize(event.msgType()))
                             && mediaUrl.equals(normalize(event.mediaUrl()))),
             "history should contain uploaded media event");
+      }
+    } finally {
+      deleteRecursively(dataDir);
+    }
+  }
+
+  @Test
+  void containerizedSynapseSupportsPublicListAndModeAdminFlows() throws Exception {
+    ContainerConfig cfg = ContainerConfig.fromSystem();
+    Assumptions.assumeTrue(
+        cfg.enabled(),
+        "Matrix Synapse container integration test disabled."
+            + " Set -Dmatrix.it.container.enabled=true.");
+    Assumptions.assumeTrue(
+        DockerClientFactory.instance().isDockerAvailable(),
+        "Docker is not available on this machine.");
+
+    DockerImageName image = DockerImageName.parse(cfg.image());
+    Path dataDir = Files.createTempDirectory("matrix-synapse-it-admin-");
+    try {
+      Path homeserverYaml = generateSynapseConfig(image, cfg, dataDir);
+      configureRegistrationSharedSecret(homeserverYaml, cfg.registrationSecret());
+
+      try (GenericContainer<?> synapse = newSynapseContainer(image, cfg, dataDir)) {
+        synapse.start();
+
+        IrcProperties.Server server =
+            serverConfig(SERVER_ID, synapse.getHost(), synapse.getMappedPort(cfg.httpPort()), false);
+        ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
+        when(proxyResolver.planForServer(SERVER_ID)).thenReturn(directPlan());
+
+        registerUser(synapse, cfg, ALICE, ALICE_PASSWORD);
+        registerUser(synapse, cfg, BOB, BOB_PASSWORD);
+
+        LoginResult aliceLogin = login(server, ALICE, ALICE_PASSWORD);
+        LoginResult bobLogin = login(server, BOB, BOB_PASSWORD);
+
+        MatrixRoomDirectoryClient roomDirectoryClient = new MatrixRoomDirectoryClient(proxyResolver);
+        MatrixRoomStateClient roomStateClient = new MatrixRoomStateClient(proxyResolver);
+        MatrixRoomMembershipClient roomMembershipClient =
+            new MatrixRoomMembershipClient(proxyResolver);
+
+        String aliasLocalPart = "matrixit" + System.currentTimeMillis();
+        String roomId = createPublicRoom(server, aliceLogin.accessToken(), aliasLocalPart);
+        boolean roomPublished = tryPublishRoomToDirectory(server, aliceLogin.accessToken(), roomId);
+        joinRoom(server, bobLogin.accessToken(), roomId);
+
+        if (roomPublished) {
+          awaitPublicRoomListed(
+              roomDirectoryClient, server, aliceLogin.accessToken(), roomId, aliasLocalPart);
+        } else {
+          MatrixRoomDirectoryClient.PublicRoomsResult listResult =
+              roomDirectoryClient.fetchPublicRooms(
+                  SERVER_ID, server, aliceLogin.accessToken(), aliasLocalPart, "", 100);
+          assertTrue(
+              listResult.success(),
+              "public room directory lookup should succeed even when publication is forbidden: "
+                  + listResult.detail());
+        }
+
+        MatrixRoomStateClient.PowerLevelsResult baselineState =
+            roomStateClient.fetchRoomPowerLevels(SERVER_ID, server, aliceLogin.accessToken(), roomId);
+        assertTrue(
+            baselineState.success(),
+            "power-level state fetch should succeed: " + baselineState.detail());
+        long usersDefault = usersDefaultLevel(baselineState.content());
+        Map<String, Object> nextState =
+            withUserPowerLevel(baselineState.content(), bobLogin.userId(), 50L);
+
+        MatrixRoomStateClient.UpdateResult powerLevelUpdate =
+            roomStateClient.updateRoomPowerLevels(
+                SERVER_ID, server, aliceLogin.accessToken(), roomId, nextState);
+        assertTrue(
+            powerLevelUpdate.updated(),
+            "power-level state update should succeed: " + powerLevelUpdate.detail());
+
+        MatrixRoomStateClient.PowerLevelsResult updatedState =
+            roomStateClient.fetchRoomPowerLevels(SERVER_ID, server, aliceLogin.accessToken(), roomId);
+        assertTrue(
+            updatedState.success(),
+            "updated power-level state fetch should succeed: " + updatedState.detail());
+        assertEquals(
+            50L,
+            userPowerLevel(updatedState.content(), bobLogin.userId(), usersDefault),
+            "bob should be promoted to +o-equivalent power level");
+
+        MatrixRoomMembershipClient.ActionResult ban =
+            roomMembershipClient.banUser(
+                SERVER_ID,
+                server,
+                aliceLogin.accessToken(),
+                roomId,
+                bobLogin.userId(),
+                "matrix-it-ban");
+        assertTrue(ban.success(), "ban request should succeed: " + ban.detail());
+
+        MatrixRoomMembershipClient.ActionResult unban =
+            roomMembershipClient.unbanUser(
+                SERVER_ID, server, aliceLogin.accessToken(), roomId, bobLogin.userId());
+        assertTrue(unban.success(), "unban request should succeed: " + unban.detail());
       }
     } finally {
       deleteRecursively(dataDir);
@@ -387,6 +490,192 @@ class MatrixSynapseContainerIntegrationTest {
     String roomId = normalize(root.path("room_id").asText(""));
     assertTrue(roomId.startsWith("!"), "createRoom should return a valid room id");
     return roomId;
+  }
+
+  private static String createPublicRoom(
+      IrcProperties.Server server, String creatorAccessToken, String aliasLocalPart) throws Exception {
+    ObjectNode body = JSON.createObjectNode();
+    body.put("preset", "public_chat");
+    body.put("visibility", "public");
+    body.put("room_alias_name", normalize(aliasLocalPart));
+    body.put("name", "Matrix IT Public Room");
+    body.put("topic", "Matrix IT public room for directory/mode coverage");
+
+    JsonNode root = postJson(MatrixEndpointResolver.createRoomUri(server), body, creatorAccessToken);
+    String roomId = normalize(root.path("room_id").asText(""));
+    assertTrue(roomId.startsWith("!"), "createRoom should return a valid room id");
+    return roomId;
+  }
+
+  private static boolean tryPublishRoomToDirectory(
+      IrcProperties.Server server, String accessToken, String roomId) throws Exception {
+    String rid = normalize(roomId);
+    String encodedRoomId = URLEncoder.encode(rid, StandardCharsets.UTF_8);
+    URI endpoint = appendClientPath(server, "directory/list/room/" + encodedRoomId);
+    ObjectNode payload = JSON.createObjectNode();
+    payload.put("visibility", "public");
+    JsonNode safePayload = payload;
+    String body = JSON.writeValueAsString(safePayload);
+
+    HttpRequest.Builder request =
+        HttpRequest.newBuilder(endpoint)
+            .timeout(Duration.ofSeconds(30))
+            .header("Content-Type", "application/json")
+            .PUT(HttpRequest.BodyPublishers.ofString(body));
+    String token = normalize(accessToken);
+    if (!token.isEmpty()) {
+      request.header("Authorization", "Bearer " + token);
+    }
+
+    HttpResponse<String> response = HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    int code = response.statusCode();
+    String responseBody = Objects.toString(response.body(), "");
+    if (code >= 200 && code < 300) {
+      return true;
+    }
+    if (code == 403) {
+      return false;
+    }
+    fail("HTTP " + code + " from " + endpoint + " body=" + responseBody);
+    return false;
+  }
+
+  private static String aliasLocalPartFromAlias(String alias) {
+    String value = normalize(alias);
+    if (!value.startsWith("#")) {
+      return "";
+    }
+    int colon = value.indexOf(':');
+    if (colon <= 1) {
+      return "";
+    }
+    return normalize(value.substring(1, colon));
+  }
+
+  private static void awaitPublicRoomListed(
+      MatrixRoomDirectoryClient roomDirectoryClient,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String aliasLocalPart)
+      throws Exception {
+    long deadline = System.nanoTime() + MESSAGE_TIMEOUT.toNanos();
+    String expectedRoomId = normalize(roomId);
+    String expectedAliasPart = normalize(aliasLocalPart);
+
+    while (System.nanoTime() < deadline) {
+      String since = "";
+      for (int page = 0; page < 20; page++) {
+        MatrixRoomDirectoryClient.PublicRoomsResult result =
+            roomDirectoryClient.fetchPublicRooms(SERVER_ID, server, accessToken, "", since, 100);
+        assertTrue(
+            result.success(),
+            "public room directory lookup should succeed: " + result.detail());
+        if (publicRoomsContain(result.rooms(), expectedRoomId, expectedAliasPart)) {
+          return;
+        }
+
+        since = normalize(result.nextBatch());
+        if (since.isEmpty()) {
+          break;
+        }
+      }
+      Thread.sleep(250L);
+    }
+
+    fail(
+        "public room directory did not include expected room within timeout."
+            + " roomId="
+            + expectedRoomId
+            + " aliasLocalPart="
+            + expectedAliasPart);
+  }
+
+  private static boolean publicRoomsContain(
+      List<MatrixRoomDirectoryClient.PublicRoom> rooms, String roomId, String aliasLocalPart) {
+    if (rooms == null || rooms.isEmpty()) {
+      return false;
+    }
+    String expectedRoomId = normalize(roomId);
+    String expectedAliasPart = normalize(aliasLocalPart);
+    for (MatrixRoomDirectoryClient.PublicRoom room : rooms) {
+      if (room == null) continue;
+      if (!expectedRoomId.isEmpty() && expectedRoomId.equals(normalize(room.roomId()))) {
+        return true;
+      }
+      if (!expectedAliasPart.isEmpty()
+          && expectedAliasPart.equals(aliasLocalPartFromAlias(room.canonicalAlias()))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static long usersDefaultLevel(Map<String, Object> state) {
+    if (state == null || state.isEmpty()) {
+      return 0L;
+    }
+    return toLongValue(state.get("users_default"), 0L);
+  }
+
+  private static Map<String, Object> withUserPowerLevel(
+      Map<String, Object> state, String userId, long level) {
+    LinkedHashMap<String, Object> copy = new LinkedHashMap<>();
+    if (state != null && !state.isEmpty()) {
+      for (Map.Entry<String, Object> entry : state.entrySet()) {
+        if (entry == null) continue;
+        String key = normalize(Objects.toString(entry.getKey(), ""));
+        if (key.isEmpty()) continue;
+        copy.put(key, entry.getValue());
+      }
+    }
+
+    LinkedHashMap<String, Object> users = new LinkedHashMap<>();
+    Object existingUsers = copy.get("users");
+    if (existingUsers instanceof Map<?, ?> map) {
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        if (entry == null) continue;
+        String key = normalize(Objects.toString(entry.getKey(), ""));
+        if (key.isEmpty()) continue;
+        users.put(key, entry.getValue());
+      }
+    }
+    users.put(normalize(userId), Long.valueOf(level));
+    copy.put("users", users);
+    if (!copy.containsKey("users_default")) {
+      copy.put("users_default", Long.valueOf(0L));
+    }
+    return copy;
+  }
+
+  private static long userPowerLevel(Map<String, Object> state, String userId, long fallback) {
+    if (state == null || state.isEmpty()) {
+      return fallback;
+    }
+    Object usersObj = state.get("users");
+    if (!(usersObj instanceof Map<?, ?> users)) {
+      return fallback;
+    }
+    String uid = normalize(userId);
+    if (uid.isEmpty()) {
+      return fallback;
+    }
+    return toLongValue(users.get(uid), fallback);
+  }
+
+  private static long toLongValue(Object raw, long fallback) {
+    if (raw instanceof Number n) {
+      return n.longValue();
+    }
+    String value = normalize(Objects.toString(raw, ""));
+    if (value.isEmpty()) {
+      return fallback;
+    }
+    try {
+      return Long.parseLong(value);
+    } catch (NumberFormatException ignored) {
+      return fallback;
+    }
   }
 
   private static void joinRoom(IrcProperties.Server server, String accessToken, String roomId)

@@ -41,7 +41,6 @@ class MatrixIrcClientServiceTest {
   private final MatrixRoomStateClient roomStateClient = mock(MatrixRoomStateClient.class);
   private final MatrixRoomDirectoryClient roomDirectoryClient =
       mock(MatrixRoomDirectoryClient.class);
-  private final MatrixJoinedRoomsClient joinedRoomsClient = mock(MatrixJoinedRoomsClient.class);
   private final MatrixRoomRosterClient roomRosterClient = mock(MatrixRoomRosterClient.class);
   private final MatrixRoomHistoryClient roomHistoryClient = mock(MatrixRoomHistoryClient.class);
   private final MatrixRoomTypingClient roomTypingClient = mock(MatrixRoomTypingClient.class);
@@ -60,7 +59,6 @@ class MatrixIrcClientServiceTest {
           roomMembershipClient,
           roomStateClient,
           roomDirectoryClient,
-          joinedRoomsClient,
           roomRosterClient,
           roomHistoryClient,
           roomTypingClient,

@@ -9,6 +9,7 @@ import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.net.SocksProxySocketFactory;
 import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
+import cafe.woden.ircclient.util.VirtualThreads;
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -209,11 +210,7 @@ public class PircbotxBotFactory {
             LISTENER_THREAD_KEEP_ALIVE_SECONDS,
             TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(),
-            runnable -> {
-              Thread t = new Thread(runnable, namePrefix);
-              t.setDaemon(true);
-              return t;
-            });
+            VirtualThreads.namedFactory(namePrefix));
     pool.allowCoreThreadTimeOut(true);
     return new ThreadedListenerManager(pool);
   }

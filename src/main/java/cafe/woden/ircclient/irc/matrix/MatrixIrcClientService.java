@@ -83,7 +83,6 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private final MatrixRoomMembershipClient roomMembershipClient;
   private final MatrixRoomStateClient roomStateClient;
   private final MatrixRoomDirectoryClient roomDirectoryClient;
-  private final MatrixJoinedRoomsClient joinedRoomsClient;
   private final MatrixRoomRosterClient roomRosterClient;
   private final MatrixRoomHistoryClient roomHistoryClient;
   private final MatrixRoomTypingClient roomTypingClient;
@@ -105,7 +104,6 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       MatrixRoomMembershipClient roomMembershipClient,
       MatrixRoomStateClient roomStateClient,
       MatrixRoomDirectoryClient roomDirectoryClient,
-      MatrixJoinedRoomsClient joinedRoomsClient,
       MatrixRoomRosterClient roomRosterClient,
       MatrixRoomHistoryClient roomHistoryClient,
       MatrixRoomTypingClient roomTypingClient,
@@ -123,7 +121,6 @@ public class MatrixIrcClientService implements IrcBackendClientService {
         Objects.requireNonNull(roomMembershipClient, "roomMembershipClient");
     this.roomStateClient = Objects.requireNonNull(roomStateClient, "roomStateClient");
     this.roomDirectoryClient = Objects.requireNonNull(roomDirectoryClient, "roomDirectoryClient");
-    this.joinedRoomsClient = Objects.requireNonNull(joinedRoomsClient, "joinedRoomsClient");
     this.roomRosterClient = Objects.requireNonNull(roomRosterClient, "roomRosterClient");
     this.roomHistoryClient = Objects.requireNonNull(roomHistoryClient, "roomHistoryClient");
     this.roomTypingClient = Objects.requireNonNull(roomTypingClient, "roomTypingClient");
