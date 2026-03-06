@@ -53,7 +53,8 @@ class MatrixRoomDirectoryClientTest {
   void resolveRoomAliasReportsHttpFailure() throws Exception {
     when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
     try (TestServer server =
-        TestServer.start("/_matrix/client/v3/directory/room/", 404, "{\"errcode\":\"M_NOT_FOUND\"}")) {
+        TestServer.start(
+            "/_matrix/client/v3/directory/room/", 404, "{\"errcode\":\"M_NOT_FOUND\"}")) {
       MatrixRoomDirectoryClient.ResolveResult result =
           directoryClient.resolveRoomAlias(
               "matrix",
@@ -179,7 +180,8 @@ class MatrixRoomDirectoryClientTest {
           exchange -> {
             path.set(exchange.getRequestURI().getRawPath());
             auth.set(exchange.getRequestHeaders().getFirst("Authorization"));
-            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            requestBody.set(
+                new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             reply(exchange, statusCode, payload);
           });
       server.start();

@@ -146,7 +146,8 @@ final class MatrixEndpointResolver {
     return rebuild(apiBase, path);
   }
 
-  public static URI roomStateEventUri(IrcProperties.Server server, String roomId, String eventType) {
+  public static URI roomStateEventUri(
+      IrcProperties.Server server, String roomId, String eventType) {
     URI apiBase = clientApiBaseUri(server);
     String rid = validatePathSegment(roomId, "roomId");
     String type = validatePathSegment(eventType, "eventType");

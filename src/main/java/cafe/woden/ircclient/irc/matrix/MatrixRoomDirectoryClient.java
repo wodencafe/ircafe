@@ -97,7 +97,8 @@ final class MatrixRoomDirectoryClient {
     headers.put("Authorization", "Bearer " + token);
 
     try {
-      String payload = JSON.writeValueAsString(buildPublicRoomsRequest(searchTerm, sinceToken, limit));
+      String payload =
+          JSON.writeValueAsString(buildPublicRoomsRequest(searchTerm, sinceToken, limit));
       HttpLite.Response<String> response =
           HttpLite.postString(
               endpoint,
@@ -251,11 +252,7 @@ final class MatrixRoomDirectoryClient {
     static PublicRoomsResult success(URI endpoint, List<PublicRoom> rooms, String nextBatch) {
       List<PublicRoom> safeRooms = rooms == null ? List.of() : List.copyOf(rooms);
       return new PublicRoomsResult(
-          true,
-          Objects.requireNonNull(endpoint, "endpoint"),
-          safeRooms,
-          normalize(nextBatch),
-          "");
+          true, Objects.requireNonNull(endpoint, "endpoint"), safeRooms, normalize(nextBatch), "");
     }
 
     static PublicRoomsResult failed(URI endpoint, String detail) {

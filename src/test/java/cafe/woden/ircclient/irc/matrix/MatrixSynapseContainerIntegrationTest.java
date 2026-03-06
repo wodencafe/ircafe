@@ -11,10 +11,10 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
-import com.sun.security.auth.module.UnixSystem;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.sun.security.auth.module.UnixSystem;
 import java.io.IOException;
 import java.net.Proxy;
 import java.net.URI;
@@ -22,9 +22,9 @@ import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
@@ -99,7 +99,8 @@ class MatrixSynapseContainerIntegrationTest {
         synapse.start();
 
         IrcProperties.Server server =
-            serverConfig(SERVER_ID, synapse.getHost(), synapse.getMappedPort(cfg.httpPort()), false);
+            serverConfig(
+                SERVER_ID, synapse.getHost(), synapse.getMappedPort(cfg.httpPort()), false);
         ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
         when(proxyResolver.planForServer(SERVER_ID)).thenReturn(directPlan());
 
@@ -116,7 +117,8 @@ class MatrixSynapseContainerIntegrationTest {
         MatrixRoomHistoryClient historyClient = new MatrixRoomHistoryClient(proxyResolver);
 
         MatrixHomeserverProbe.ProbeResult probeResult = probe.probe(SERVER_ID, server);
-        assertTrue(probeResult.reachable(), "versions probe should succeed: " + probeResult.detail());
+        assertTrue(
+            probeResult.reachable(), "versions probe should succeed: " + probeResult.detail());
 
         MatrixHomeserverProbe.WhoamiResult whoami =
             probe.whoami(SERVER_ID, server, aliceLogin.accessToken());
@@ -135,20 +137,17 @@ class MatrixSynapseContainerIntegrationTest {
                 "txn-matrix-it-1",
                 MESSAGE_TEXT);
         assertTrue(
-            sendResult.accepted(), "room send should succeed: " + sendResult.endpoint() + " " + sendResult.detail());
+            sendResult.accepted(),
+            "room send should succeed: " + sendResult.endpoint() + " " + sendResult.detail());
 
         SyncObservation observation =
-            awaitSyncedRoomMessage(syncClient, server, bobLogin.accessToken(), roomId, MESSAGE_TEXT);
+            awaitSyncedRoomMessage(
+                syncClient, server, bobLogin.accessToken(), roomId, MESSAGE_TEXT);
 
         assertFalse(observation.nextBatch().isEmpty(), "sync next_batch should be present");
         MatrixRoomHistoryClient.HistoryResult history =
             historyClient.fetchMessagesBefore(
-                SERVER_ID,
-                server,
-                bobLogin.accessToken(),
-                roomId,
-                observation.nextBatch(),
-                50);
+                SERVER_ID, server, bobLogin.accessToken(), roomId, observation.nextBatch(), 50);
         assertTrue(history.success(), "history fetch should succeed: " + history.detail());
         assertTrue(
             history.events().stream().anyMatch(event -> MESSAGE_TEXT.equals(event.body())),
@@ -198,7 +197,8 @@ class MatrixSynapseContainerIntegrationTest {
                 roomId,
                 mediaObservation.nextBatch(),
                 50);
-        assertTrue(mediaHistory.success(), "media history fetch should succeed: " + mediaHistory.detail());
+        assertTrue(
+            mediaHistory.success(), "media history fetch should succeed: " + mediaHistory.detail());
         assertTrue(
             mediaHistory.events().stream()
                 .anyMatch(
@@ -233,7 +233,8 @@ class MatrixSynapseContainerIntegrationTest {
         synapse.start();
 
         IrcProperties.Server server =
-            serverConfig(SERVER_ID, synapse.getHost(), synapse.getMappedPort(cfg.httpPort()), false);
+            serverConfig(
+                SERVER_ID, synapse.getHost(), synapse.getMappedPort(cfg.httpPort()), false);
         ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
         when(proxyResolver.planForServer(SERVER_ID)).thenReturn(directPlan());
 
@@ -247,7 +248,8 @@ class MatrixSynapseContainerIntegrationTest {
         LoginResult bobLogin = login(server, BOB, BOB_PASSWORD);
         LoginResult charlieLogin = login(server, charlie, charliePassword);
 
-        MatrixRoomDirectoryClient roomDirectoryClient = new MatrixRoomDirectoryClient(proxyResolver);
+        MatrixRoomDirectoryClient roomDirectoryClient =
+            new MatrixRoomDirectoryClient(proxyResolver);
         MatrixRoomStateClient roomStateClient = new MatrixRoomStateClient(proxyResolver);
         MatrixRoomMembershipClient roomMembershipClient =
             new MatrixRoomMembershipClient(proxyResolver);
@@ -272,7 +274,8 @@ class MatrixSynapseContainerIntegrationTest {
         }
 
         MatrixRoomStateClient.PowerLevelsResult baselineState =
-            roomStateClient.fetchRoomPowerLevels(SERVER_ID, server, aliceLogin.accessToken(), roomId);
+            roomStateClient.fetchRoomPowerLevels(
+                SERVER_ID, server, aliceLogin.accessToken(), roomId);
         assertTrue(
             baselineState.success(),
             "power-level state fetch should succeed: " + baselineState.detail());
@@ -288,7 +291,8 @@ class MatrixSynapseContainerIntegrationTest {
             "power-level state update should succeed: " + powerLevelUpdate.detail());
 
         MatrixRoomStateClient.PowerLevelsResult updatedState =
-            roomStateClient.fetchRoomPowerLevels(SERVER_ID, server, aliceLogin.accessToken(), roomId);
+            roomStateClient.fetchRoomPowerLevels(
+                SERVER_ID, server, aliceLogin.accessToken(), roomId);
         assertTrue(
             updatedState.success(),
             "updated power-level state fetch should succeed: " + updatedState.detail());
@@ -384,7 +388,8 @@ class MatrixSynapseContainerIntegrationTest {
         synapse.start();
 
         IrcProperties.Server probeServer =
-            serverConfig(SERVER_ID, synapse.getHost(), synapse.getMappedPort(cfg.httpPort()), false);
+            serverConfig(
+                SERVER_ID, synapse.getHost(), synapse.getMappedPort(cfg.httpPort()), false);
         ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
         when(proxyResolver.planForServer(SERVER_ID)).thenReturn(directPlan());
 
@@ -432,8 +437,8 @@ class MatrixSynapseContainerIntegrationTest {
     return container;
   }
 
-  private static Path generateSynapseConfig(DockerImageName image, ContainerConfig cfg, Path dataDir)
-      throws IOException {
+  private static Path generateSynapseConfig(
+      DockerImageName image, ContainerConfig cfg, Path dataDir) throws IOException {
     GenericContainer<?> generator =
         new GenericContainer<>(image)
             .withFileSystemBind(dataDir.toAbsolutePath().toString(), "/data")
@@ -465,8 +470,7 @@ class MatrixSynapseContainerIntegrationTest {
       return null;
     }
     try (var walk = Files.walk(dataDir)) {
-      return walk
-          .filter(Files::isRegularFile)
+      return walk.filter(Files::isRegularFile)
           .filter(path -> normalize(path.getFileName().toString()).endsWith("homeserver.yaml"))
           .findFirst()
           .orElse(null);
@@ -525,10 +529,7 @@ class MatrixSynapseContainerIntegrationTest {
       updated = yaml + System.lineSeparator() + line + System.lineSeparator();
     }
     Files.writeString(
-        homeserverYaml,
-        updated,
-        StandardOpenOption.TRUNCATE_EXISTING,
-        StandardOpenOption.WRITE);
+        homeserverYaml, updated, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
   }
 
   private static void registerUser(
@@ -587,20 +588,23 @@ class MatrixSynapseContainerIntegrationTest {
   }
 
   private static String createPrivateRoom(
-      IrcProperties.Server server, String creatorAccessToken, String inviteeUserId) throws Exception {
+      IrcProperties.Server server, String creatorAccessToken, String inviteeUserId)
+      throws Exception {
     ObjectNode body = JSON.createObjectNode();
     body.put("preset", "private_chat");
     body.put("is_direct", true);
     body.putArray("invite").add(inviteeUserId);
 
-    JsonNode root = postJson(MatrixEndpointResolver.createRoomUri(server), body, creatorAccessToken);
+    JsonNode root =
+        postJson(MatrixEndpointResolver.createRoomUri(server), body, creatorAccessToken);
     String roomId = normalize(root.path("room_id").asText(""));
     assertTrue(roomId.startsWith("!"), "createRoom should return a valid room id");
     return roomId;
   }
 
   private static String createPublicRoom(
-      IrcProperties.Server server, String creatorAccessToken, String aliasLocalPart) throws Exception {
+      IrcProperties.Server server, String creatorAccessToken, String aliasLocalPart)
+      throws Exception {
     ObjectNode body = JSON.createObjectNode();
     body.put("preset", "public_chat");
     body.put("visibility", "public");
@@ -608,7 +612,8 @@ class MatrixSynapseContainerIntegrationTest {
     body.put("name", "Matrix IT Public Room");
     body.put("topic", "Matrix IT public room for directory/mode coverage");
 
-    JsonNode root = postJson(MatrixEndpointResolver.createRoomUri(server), body, creatorAccessToken);
+    JsonNode root =
+        postJson(MatrixEndpointResolver.createRoomUri(server), body, creatorAccessToken);
     String roomId = normalize(root.path("room_id").asText(""));
     assertTrue(roomId.startsWith("!"), "createRoom should return a valid room id");
     return roomId;
@@ -634,7 +639,8 @@ class MatrixSynapseContainerIntegrationTest {
       request.header("Authorization", "Bearer " + token);
     }
 
-    HttpResponse<String> response = HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    HttpResponse<String> response =
+        HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
     int code = response.statusCode();
     String responseBody = Objects.toString(response.body(), "");
     if (code >= 200 && code < 300) {
@@ -676,8 +682,7 @@ class MatrixSynapseContainerIntegrationTest {
         MatrixRoomDirectoryClient.PublicRoomsResult result =
             roomDirectoryClient.fetchPublicRooms(SERVER_ID, server, accessToken, "", since, 100);
         assertTrue(
-            result.success(),
-            "public room directory lookup should succeed: " + result.detail());
+            result.success(), "public room directory lookup should succeed: " + result.detail());
         if (publicRoomsContain(result.rooms(), expectedRoomId, expectedAliasPart)) {
           return;
         }
@@ -802,7 +807,8 @@ class MatrixSynapseContainerIntegrationTest {
 
   private static void joinRoom(IrcProperties.Server server, String accessToken, String roomId)
       throws Exception {
-    postJson(MatrixEndpointResolver.joinRoomUri(server, roomId), JSON.createObjectNode(), accessToken);
+    postJson(
+        MatrixEndpointResolver.joinRoomUri(server, roomId), JSON.createObjectNode(), accessToken);
   }
 
   private static SyncObservation awaitSyncedRoomMessage(
@@ -815,7 +821,8 @@ class MatrixSynapseContainerIntegrationTest {
     long deadline = System.nanoTime() + MESSAGE_TIMEOUT.toNanos();
     String since = "";
     while (System.nanoTime() < deadline) {
-      MatrixSyncClient.SyncResult result = syncClient.sync(SERVER_ID, server, accessToken, since, 1_000);
+      MatrixSyncClient.SyncResult result =
+          syncClient.sync(SERVER_ID, server, accessToken, since, 1_000);
       assertTrue(result.success(), "sync request failed: " + result.detail());
       String nextBatch = normalize(result.nextBatch());
 
@@ -849,7 +856,8 @@ class MatrixSynapseContainerIntegrationTest {
     String mediaUrl = normalize(expectedMediaUrl);
 
     while (System.nanoTime() < deadline) {
-      MatrixSyncClient.SyncResult result = syncClient.sync(SERVER_ID, server, accessToken, since, 1_000);
+      MatrixSyncClient.SyncResult result =
+          syncClient.sync(SERVER_ID, server, accessToken, since, 1_000);
       assertTrue(result.success(), "sync request failed: " + result.detail());
       String nextBatch = normalize(result.nextBatch());
 
@@ -883,12 +891,12 @@ class MatrixSynapseContainerIntegrationTest {
       request.header("Authorization", "Bearer " + token);
     }
 
-    HttpResponse<String> response = HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    HttpResponse<String> response =
+        HTTP.send(request.build(), HttpResponse.BodyHandlers.ofString());
     int code = response.statusCode();
     String responseBody = Objects.toString(response.body(), "");
     assertTrue(
-        code >= 200 && code < 300,
-        "HTTP " + code + " from " + uri + " body=" + responseBody);
+        code >= 200 && code < 300, "HTTP " + code + " from " + uri + " body=" + responseBody);
     return responseBody.isBlank() ? JSON.createObjectNode() : JSON.readTree(responseBody);
   }
 
@@ -998,11 +1006,14 @@ class MatrixSynapseContainerIntegrationTest {
           readBoolean("matrix.it.container.enabled", "MATRIX_IT_CONTAINER_ENABLED", false);
       String image =
           readString(
-              "matrix.it.container.image", "MATRIX_IT_CONTAINER_IMAGE", "matrixdotorg/synapse:latest");
+              "matrix.it.container.image",
+              "MATRIX_IT_CONTAINER_IMAGE",
+              "matrixdotorg/synapse:latest");
       String serverName =
           readString(
               "matrix.it.container.server-name", "MATRIX_IT_CONTAINER_SERVER_NAME", "localhost");
-      int httpPort = readInt("matrix.it.container.http-port", "MATRIX_IT_CONTAINER_HTTP_PORT", 8008);
+      int httpPort =
+          readInt("matrix.it.container.http-port", "MATRIX_IT_CONTAINER_HTTP_PORT", 8008);
       int startupTimeoutSeconds =
           readInt(
               "matrix.it.container.startup-timeout-seconds",

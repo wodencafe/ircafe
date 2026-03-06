@@ -368,8 +368,7 @@ class ConnectionCoordinatorTest {
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("libera"));
     when(serverCatalog.containsId("libera")).thenReturn(true);
-    when(runtimeConfig.readPrivateMessageTargets("libera"))
-        .thenReturn(List.of("title", "Alice"));
+    when(runtimeConfig.readPrivateMessageTargets("libera")).thenReturn(List.of("title", "Alice"));
     when(runtimeConfig.readKnownChannels("libera")).thenReturn(List.of());
 
     ConnectionCoordinator coordinator =

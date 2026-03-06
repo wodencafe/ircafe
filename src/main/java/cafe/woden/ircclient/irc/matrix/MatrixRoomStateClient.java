@@ -70,7 +70,11 @@ final class MatrixRoomStateClient {
   }
 
   UpdateResult updateRoomTopic(
-      String serverId, IrcProperties.Server server, String accessToken, String roomId, String topic) {
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String topic) {
     URI endpoint = MatrixEndpointResolver.roomStateEventUri(server, roomId, "m.room.topic");
     String token = normalize(accessToken);
     if (token.isEmpty()) {
@@ -165,12 +169,7 @@ final class MatrixRoomStateClient {
       String body = JSON.writeValueAsString(payload);
       HttpLite.Response<String> response =
           HttpLite.putString(
-              endpoint,
-              headers,
-              body,
-              plan.proxy(),
-              plan.connectTimeoutMs(),
-              plan.readTimeoutMs());
+              endpoint, headers, body, plan.proxy(), plan.connectTimeoutMs(), plan.readTimeoutMs());
       int code = response.statusCode();
       if (code < 200 || code >= 300) {
         return UpdateResult.failed(endpoint, "HTTP " + code + " from room state endpoint");
@@ -312,7 +311,8 @@ final class MatrixRoomStateClient {
     }
   }
 
-  record PowerLevelsResult(boolean success, URI endpoint, Map<String, Object> content, String detail) {
+  record PowerLevelsResult(
+      boolean success, URI endpoint, Map<String, Object> content, String detail) {
     static PowerLevelsResult success(URI endpoint, Map<String, Object> content) {
       Map<String, Object> data = content == null ? Map.of() : deepCopyMap(content);
       return new PowerLevelsResult(true, Objects.requireNonNull(endpoint, "endpoint"), data, "");

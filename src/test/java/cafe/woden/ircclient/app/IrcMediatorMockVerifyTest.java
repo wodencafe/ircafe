@@ -546,12 +546,7 @@ class IrcMediatorMockVerifyTest {
         new ServerIrcEvent(
             "libera",
             new IrcEvent.Notice(
-                Instant.now(),
-                "server",
-                "",
-                "Last login from services",
-                "",
-                Map.of())));
+                Instant.now(), "server", "", "Last login from services", "", Map.of())));
 
     verify(ui)
         .appendNoticeAt(

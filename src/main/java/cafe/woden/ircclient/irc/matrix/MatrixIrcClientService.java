@@ -1650,7 +1650,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
               if (userId.equals(by)) {
                 session.forgetJoinedRoom(roomId);
                 bus.onNext(
-                    new ServerIrcEvent(sid, new IrcEvent.KickedFromChannel(now, roomId, by, reason)));
+                    new ServerIrcEvent(
+                        sid, new IrcEvent.KickedFromChannel(now, roomId, by, reason)));
               } else {
                 bus.onNext(
                     new ServerIrcEvent(
@@ -1684,7 +1685,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
               IrcProperties.Server server = serverCatalog.require(sid);
               String roomId = resolveAliasOrRoomId(sid, target, server, session);
               MatrixRoomMembershipClient.ActionResult result =
-                  roomMembershipClient.inviteUser(sid, server, session.accessToken, roomId, invitee);
+                  roomMembershipClient.inviteUser(
+                      sid, server, session.accessToken, roomId, invitee);
               if (!result.success()) {
                 throw new IllegalStateException(
                     "Matrix invite failed at " + result.endpoint() + ": " + result.detail());
@@ -1769,8 +1771,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                   nextBatch.isEmpty()
                       ? ("Listed " + listed + " Matrix room(s).")
                       : ("Listed " + listed + " Matrix room(s). next_batch=" + nextBatch);
-              bus.onNext(
-                  new ServerIrcEvent(sid, new IrcEvent.ChannelListEnded(now, summary)));
+              bus.onNext(new ServerIrcEvent(sid, new IrcEvent.ChannelListEnded(now, summary)));
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -1916,9 +1917,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       return sendRawModeQuery(serverId, target);
     }
     List<String> modeArgs =
-        raw.arguments().size() > 2
-            ? raw.arguments().subList(2, raw.arguments().size())
-            : List.of();
+        raw.arguments().size() > 2 ? raw.arguments().subList(2, raw.arguments().size()) : List.of();
     return sendRawModeMutation(serverId, target, modeSpec, modeArgs);
   }
 
@@ -2008,14 +2007,16 @@ public class MatrixIrcClientService implements IrcBackendClientService {
 
                 if (isMatrixRoleMode(c)) {
                   if (argIndex >= modeArgs.size()) {
-                    throw new IllegalArgumentException("MODE " + modeSpec + " is missing nick arguments");
+                    throw new IllegalArgumentException(
+                        "MODE " + modeSpec + " is missing nick arguments");
                   }
                   String userId = normalize(modeArgs.get(argIndex++));
                   if (!looksLikeMatrixUserId(userId)) {
                     throw new IllegalArgumentException("MODE target must be a Matrix user id");
                   }
                   if (powerLevels == null) {
-                    powerLevels = fetchOrDefaultPowerLevels(sid, server, session.accessToken, roomId);
+                    powerLevels =
+                        fetchOrDefaultPowerLevels(sid, server, session.accessToken, roomId);
                   }
                   int usersDefault = matrixUsersDefault(powerLevels);
                   int level = adding ? matrixRolePowerLevel(c) : usersDefault;
@@ -2027,7 +2028,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
 
                 if (c == 'b') {
                   if (argIndex >= modeArgs.size()) {
-                    throw new IllegalArgumentException("MODE " + modeSpec + " is missing ban arguments");
+                    throw new IllegalArgumentException(
+                        "MODE " + modeSpec + " is missing ban arguments");
                   }
                   String userId = normalize(modeArgs.get(argIndex++));
                   if (!looksLikeMatrixUserId(userId)) {
@@ -2050,11 +2052,13 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                   continue;
                 }
 
-                throw new IllegalArgumentException("MODE " + c + " is not supported by Matrix backend");
+                throw new IllegalArgumentException(
+                    "MODE " + c + " is not supported by Matrix backend");
               }
 
               if (argIndex < modeArgs.size()) {
-                throw new IllegalArgumentException("MODE has too many arguments for the mode sequence");
+                throw new IllegalArgumentException(
+                    "MODE has too many arguments for the mode sequence");
               }
 
               if (powerLevelsChanged) {

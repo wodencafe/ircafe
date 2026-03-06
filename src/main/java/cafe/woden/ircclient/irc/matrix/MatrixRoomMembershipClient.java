@@ -100,7 +100,11 @@ final class MatrixRoomMembershipClient {
   }
 
   ActionResult inviteUser(
-      String serverId, IrcProperties.Server server, String accessToken, String roomId, String userId) {
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String userId) {
     return postRoomMembershipAction(
         serverId,
         MatrixEndpointResolver.roomInviteUri(server, roomId),
@@ -152,7 +156,11 @@ final class MatrixRoomMembershipClient {
   }
 
   ActionResult unbanUser(
-      String serverId, IrcProperties.Server server, String accessToken, String roomId, String userId) {
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String roomId,
+      String userId) {
     return postRoomMembershipAction(
         serverId,
         MatrixEndpointResolver.roomUnbanUri(server, roomId),

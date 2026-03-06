@@ -3842,7 +3842,11 @@ class MatrixIrcClientServiceTest {
                 "@alice:matrix.example.org",
                 "DEV1"));
     when(roomMembershipClient.inviteUser(
-            "matrix", server, "secret-token", "!room:matrix.example.org", "@bob:matrix.example.org"))
+            "matrix",
+            server,
+            "secret-token",
+            "!room:matrix.example.org",
+            "@bob:matrix.example.org"))
         .thenReturn(
             MatrixRoomMembershipClient.ActionResult.success(
                 URI.create(
@@ -3851,7 +3855,9 @@ class MatrixIrcClientServiceTest {
     service.connect("matrix").blockingAwait();
     events.awaitCount(3);
 
-    service.sendRaw("matrix", "INVITE @bob:matrix.example.org !room:matrix.example.org").blockingAwait();
+    service
+        .sendRaw("matrix", "INVITE @bob:matrix.example.org !room:matrix.example.org")
+        .blockingAwait();
     events.awaitCount(4);
 
     IrcEvent.InvitedToChannel invite =
@@ -3924,7 +3930,8 @@ class MatrixIrcClientServiceTest {
             MatrixRoomRosterClient.RosterResult.success(
                 URI.create(
                     "https://matrix.example.org:8448/_matrix/client/v3/rooms/%21room%3Amatrix.example.org/joined_members"),
-                List.of(new MatrixRoomRosterClient.JoinedMember("@bob:matrix.example.org", "Bob"))));
+                List.of(
+                    new MatrixRoomRosterClient.JoinedMember("@bob:matrix.example.org", "Bob"))));
     var events = service.events().test();
     service.connect("matrix").blockingAwait();
     events.awaitCount(3);
@@ -3959,11 +3966,7 @@ class MatrixIrcClientServiceTest {
                 URI.create("https://matrix.example.org:8448/_matrix/client/v3/publicRooms"),
                 List.of(
                     new MatrixRoomDirectoryClient.PublicRoom(
-                        "!a:matrix.example.org",
-                        "#a:matrix.example.org",
-                        "Room A",
-                        "Topic A",
-                        42),
+                        "!a:matrix.example.org", "#a:matrix.example.org", "Room A", "Topic A", 42),
                     new MatrixRoomDirectoryClient.PublicRoom(
                         "!b:matrix.example.org", "", "Room B", "", 8)),
                 "s-page-2"));
@@ -4008,7 +4011,8 @@ class MatrixIrcClientServiceTest {
                 URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
                 "@alice:matrix.example.org",
                 "DEV1"));
-    when(roomDirectoryClient.fetchPublicRooms("matrix", server, "secret-token", "linux", "s-token", 30))
+    when(roomDirectoryClient.fetchPublicRooms(
+            "matrix", server, "secret-token", "linux", "s-token", 30))
         .thenReturn(
             MatrixRoomDirectoryClient.PublicRoomsResult.success(
                 URI.create("https://matrix.example.org:8448/_matrix/client/v3/publicRooms"),
@@ -4068,7 +4072,9 @@ class MatrixIrcClientServiceTest {
     service.connect("matrix").blockingAwait();
     events.awaitCount(3);
 
-    service.sendRaw("matrix", "MODE !room:matrix.example.org +o @bob:matrix.example.org").blockingAwait();
+    service
+        .sendRaw("matrix", "MODE !room:matrix.example.org +o @bob:matrix.example.org")
+        .blockingAwait();
     events.awaitCount(4);
 
     IrcEvent.ChannelModeObserved mode =
@@ -4120,7 +4126,9 @@ class MatrixIrcClientServiceTest {
     service.connect("matrix").blockingAwait();
     events.awaitCount(3);
 
-    service.sendRaw("matrix", "MODE !room:matrix.example.org +q @bob:matrix.example.org").blockingAwait();
+    service
+        .sendRaw("matrix", "MODE !room:matrix.example.org +q @bob:matrix.example.org")
+        .blockingAwait();
     events.awaitCount(4);
 
     IrcEvent.ChannelModeObserved mode =

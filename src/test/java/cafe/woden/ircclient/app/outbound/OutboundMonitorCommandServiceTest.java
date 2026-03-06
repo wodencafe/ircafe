@@ -96,15 +96,15 @@ class OutboundMonitorCommandServiceTest {
     TargetRef status = new TargetRef("matrix", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(active);
     when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
-    when(monitorRosterPort.parseNickInput("alice"))
-        .thenReturn(java.util.List.of("alice"));
+    when(monitorRosterPort.parseNickInput("alice")).thenReturn(java.util.List.of("alice"));
     when(monitorRosterPort.addNicks(eq("matrix"), eq(java.util.List.of("alice")))).thenReturn(1);
     when(irc.isMonitorAvailable("matrix")).thenReturn(false);
     when(monitorFallbackPort.isFallbackActive("matrix")).thenReturn(false);
 
     service.handleMonitor(disposables, "+alice");
 
-    verify(ui).appendStatus(status, "(monitor)", "MONITOR capability is unavailable on this server.");
+    verify(ui)
+        .appendStatus(status, "(monitor)", "MONITOR capability is unavailable on this server.");
     verify(irc, never()).sendRaw(eq("matrix"), any());
   }
 }

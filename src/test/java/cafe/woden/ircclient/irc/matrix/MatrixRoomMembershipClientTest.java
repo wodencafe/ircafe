@@ -83,8 +83,10 @@ class MatrixRoomMembershipClientTest {
       assertTrue(result.success());
       assertEquals("POST", server.lastLeaveMethod().get());
       assertEquals(
-          "/_matrix/client/v3/rooms/!joined:matrix.example.org/invite", server.lastLeavePath().get());
-      assertTrue(server.lastRoomsRequestBody().get().contains("\"user_id\":\"@bob:matrix.example.org\""));
+          "/_matrix/client/v3/rooms/!joined:matrix.example.org/invite",
+          server.lastLeavePath().get());
+      assertTrue(
+          server.lastRoomsRequestBody().get().contains("\"user_id\":\"@bob:matrix.example.org\""));
     }
   }
 
@@ -106,7 +108,8 @@ class MatrixRoomMembershipClientTest {
       assertEquals("POST", server.lastLeaveMethod().get());
       assertEquals(
           "/_matrix/client/v3/rooms/!joined:matrix.example.org/kick", server.lastLeavePath().get());
-      assertTrue(server.lastRoomsRequestBody().get().contains("\"user_id\":\"@bob:matrix.example.org\""));
+      assertTrue(
+          server.lastRoomsRequestBody().get().contains("\"user_id\":\"@bob:matrix.example.org\""));
       assertTrue(server.lastRoomsRequestBody().get().contains("\"reason\":\"cleanup\""));
     }
   }
@@ -142,7 +145,8 @@ class MatrixRoomMembershipClientTest {
       assertEquals(
           "/_matrix/client/v3/rooms/!joined:matrix.example.org/unban",
           server.lastLeavePath().get());
-      assertTrue(server.lastRoomsRequestBody().get().contains("\"user_id\":\"@bob:matrix.example.org\""));
+      assertTrue(
+          server.lastRoomsRequestBody().get().contains("\"user_id\":\"@bob:matrix.example.org\""));
     }
   }
 

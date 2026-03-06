@@ -22,7 +22,8 @@ import org.junit.jupiter.api.Test;
 class MatrixJoinedRoomsClientTest {
 
   private final ServerProxyResolver proxyResolver = mock(ServerProxyResolver.class);
-  private final MatrixJoinedRoomsClient joinedRoomsClient = new MatrixJoinedRoomsClient(proxyResolver);
+  private final MatrixJoinedRoomsClient joinedRoomsClient =
+      new MatrixJoinedRoomsClient(proxyResolver);
 
   @Test
   void fetchJoinedRoomsParsesSortedRoomIds() throws Exception {
@@ -36,8 +37,7 @@ class MatrixJoinedRoomsClientTest {
               "matrix", serverConfig("matrix", "127.0.0.1", server.port(), false), "secret-token");
 
       assertTrue(result.success());
-      assertEquals(
-          List.of("!a:matrix.example.org", "!b:matrix.example.org"), result.roomIds());
+      assertEquals(List.of("!a:matrix.example.org", "!b:matrix.example.org"), result.roomIds());
       assertEquals("GET", server.lastMethod().get());
       assertEquals("/_matrix/client/v3/joined_rooms", server.lastPath().get());
       assertEquals("Bearer secret-token", server.lastAuthorization().get());
@@ -48,9 +48,7 @@ class MatrixJoinedRoomsClientTest {
   void fetchJoinedRoomsRejectsBlankToken() {
     MatrixJoinedRoomsClient.JoinedRoomsResult result =
         joinedRoomsClient.fetchJoinedRooms(
-            "matrix",
-            serverConfig("matrix", "matrix.example.org", 8448, true),
-            " ");
+            "matrix", serverConfig("matrix", "matrix.example.org", 8448, true), " ");
 
     assertFalse(result.success());
     assertEquals("access token is blank", result.detail());
