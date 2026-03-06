@@ -89,6 +89,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private final MatrixRawRoomAdminCommandHandler rawRoomAdminCommandHandler;
   private final MatrixRawModeCommandHandler rawModeCommandHandler;
   private final MatrixRawLookupCommandHandler rawLookupCommandHandler;
+  private final MatrixSyncSignalEventProjector syncSignalEventProjector;
   private final MatrixSyncClient syncClient;
   private final Map<String, String> availabilityReasonByServer = new ConcurrentHashMap<>();
   private final Map<String, MatrixSession> sessionsByServer = new ConcurrentHashMap<>();
@@ -147,6 +148,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
             bus::onNext);
     this.rawLookupCommandHandler =
         new MatrixRawLookupCommandHandler(this::whois, this::requestNames, this::whowas);
+    this.syncSignalEventProjector = new MatrixSyncSignalEventProjector(bus::onNext);
     this.syncClient = Objects.requireNonNull(syncClient, "syncClient");
   }
 
@@ -1303,6 +1305,36 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       @Override
       public void rememberJoinedAlias(String roomAlias, String roomId) {
         session.rememberJoinedAlias(roomAlias, roomId);
+      }
+    };
+  }
+
+  private MatrixSyncSignalEventProjector.SessionView syncSignalSessionView(MatrixSession session) {
+    if (session == null) return null;
+    return new MatrixSyncSignalEventProjector.SessionView() {
+      @Override
+      public String userId() {
+        return session.userId;
+      }
+
+      @Override
+      public void forgetJoinedRoom(String roomId) {
+        session.forgetJoinedRoom(roomId);
+      }
+
+      @Override
+      public String peerForRoom(String roomId) {
+        return session.peerForRoom(roomId);
+      }
+
+      @Override
+      public Set<String> replaceTypingUsers(String roomId, Set<String> users) {
+        return session.replaceTypingUsers(roomId, users);
+      }
+
+      @Override
+      public boolean shouldEmitReadMarker(String roomId, long markerTsMs) {
+        return session.shouldEmitReadMarker(roomId, markerTsMs);
       }
     };
   }
@@ -3700,134 +3732,16 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       MatrixSession session,
       List<MatrixSyncClient.TypingEvent> typingEvents,
       List<MatrixSyncClient.ReadReceiptEvent> readReceipts) {
-    emitSyncTypingEvents(serverId, session, typingEvents);
-    emitSyncReadMarkerEvents(serverId, session, readReceipts);
+    syncSignalEventProjector.emitSignalEvents(
+        serverId, syncSignalSessionView(session), typingEvents, readReceipts);
   }
 
   private void emitSyncMembershipEvents(
       String serverId,
       MatrixSession session,
       List<MatrixSyncClient.RoomMembershipEvent> membershipEvents) {
-    if (session == null || membershipEvents == null || membershipEvents.isEmpty()) return;
-    String sid = normalize(serverId);
-    if (sid.isEmpty()) return;
-    String selfUserId = normalize(session.userId);
-
-    for (MatrixSyncClient.RoomMembershipEvent membershipEvent : membershipEvents) {
-      if (membershipEvent == null) continue;
-      String roomId = normalize(membershipEvent.roomId());
-      String userId = normalize(membershipEvent.userId());
-      if (roomId.isEmpty() || !looksLikeMatrixUserId(userId)) continue;
-
-      String membership = normalize(membershipEvent.membership()).toLowerCase(Locale.ROOT);
-      String prevMembership = normalize(membershipEvent.prevMembership()).toLowerCase(Locale.ROOT);
-      String displayName = normalize(membershipEvent.displayName());
-      String prevDisplayName = normalize(membershipEvent.prevDisplayName());
-      String reason = normalize(membershipEvent.reason());
-      long ts = membershipEvent.originServerTs();
-      Instant at = ts > 0L ? Instant.ofEpochMilli(ts) : Instant.now();
-
-      boolean joinedNow = "join".equals(membership);
-      boolean joinedBefore = "join".equals(prevMembership);
-
-      if (!userId.equals(selfUserId) && joinedNow && !joinedBefore) {
-        bus.onNext(new ServerIrcEvent(sid, new IrcEvent.UserJoinedChannel(at, roomId, userId)));
-      } else if (joinedBefore && !joinedNow) {
-        if (userId.equals(selfUserId)) {
-          session.forgetJoinedRoom(roomId);
-          bus.onNext(new ServerIrcEvent(sid, new IrcEvent.LeftChannel(at, roomId, reason)));
-        } else {
-          bus.onNext(
-              new ServerIrcEvent(sid, new IrcEvent.UserPartedChannel(at, roomId, userId, reason)));
-        }
-      }
-
-      if (!displayName.isEmpty() && !displayName.equals(prevDisplayName)) {
-        bus.onNext(
-            new ServerIrcEvent(
-                sid,
-                new IrcEvent.UserSetNameObserved(
-                    at, userId, displayName, IrcEvent.UserSetNameObserved.Source.SETNAME)));
-      }
-    }
-  }
-
-  private void emitSyncTypingEvents(
-      String serverId, MatrixSession session, List<MatrixSyncClient.TypingEvent> typingEvents) {
-    if (session == null || typingEvents == null || typingEvents.isEmpty()) return;
-    String sid = normalize(serverId);
-    if (sid.isEmpty()) return;
-
-    for (MatrixSyncClient.TypingEvent typingEvent : typingEvents) {
-      if (typingEvent == null) continue;
-      String roomId = normalize(typingEvent.roomId());
-      if (roomId.isEmpty()) continue;
-      String target = signalTargetForRoom(session, roomId);
-      if (target.isEmpty()) continue;
-
-      Set<String> currentUsers = normalizeTypingUsers(typingEvent.userIds(), session.userId);
-      Set<String> previousUsers = session.replaceTypingUsers(roomId, currentUsers);
-
-      Instant now = Instant.now();
-      for (String userId : currentUsers) {
-        if (previousUsers.contains(userId)) continue;
-        bus.onNext(
-            new ServerIrcEvent(
-                sid, new IrcEvent.UserTypingObserved(now, userId, target, "active")));
-      }
-      for (String userId : previousUsers) {
-        if (currentUsers.contains(userId)) continue;
-        bus.onNext(
-            new ServerIrcEvent(sid, new IrcEvent.UserTypingObserved(now, userId, target, "done")));
-      }
-    }
-  }
-
-  private void emitSyncReadMarkerEvents(
-      String serverId,
-      MatrixSession session,
-      List<MatrixSyncClient.ReadReceiptEvent> readReceipts) {
-    if (session == null || readReceipts == null || readReceipts.isEmpty()) return;
-    String sid = normalize(serverId);
-    if (sid.isEmpty()) return;
-    String selfUserId = normalize(session.userId);
-    if (selfUserId.isEmpty()) return;
-
-    for (MatrixSyncClient.ReadReceiptEvent receipt : readReceipts) {
-      if (receipt == null) continue;
-      String roomId = normalize(receipt.roomId());
-      String fromUserId = normalize(receipt.userId());
-      long ts = receipt.timestampMs();
-      if (roomId.isEmpty() || fromUserId.isEmpty() || ts <= 0L) continue;
-      if (!selfUserId.equals(fromUserId)) continue;
-      if (!session.shouldEmitReadMarker(roomId, ts)) continue;
-
-      String target = signalTargetForRoom(session, roomId);
-      if (target.isEmpty()) continue;
-      Instant markerAt = Instant.ofEpochMilli(ts);
-      String marker = "timestamp=" + markerAt;
-      bus.onNext(
-          new ServerIrcEvent(
-              sid, new IrcEvent.ReadMarkerObserved(markerAt, fromUserId, target, marker)));
-    }
-  }
-
-  private static Set<String> normalizeTypingUsers(List<String> rawUsers, String selfUserId) {
-    if (rawUsers == null || rawUsers.isEmpty()) {
-      return Set.of();
-    }
-    String self = normalize(selfUserId);
-    LinkedHashSet<String> normalized = new LinkedHashSet<>();
-    for (String raw : rawUsers) {
-      String userId = normalize(raw);
-      if (!looksLikeMatrixUserId(userId)) continue;
-      if (!self.isEmpty() && self.equals(userId)) continue;
-      normalized.add(userId);
-    }
-    if (normalized.isEmpty()) {
-      return Set.of();
-    }
-    return Set.copyOf(normalized);
+    syncSignalEventProjector.emitMembershipEvents(
+        serverId, syncSignalSessionView(session), membershipEvents);
   }
 
   private static String signalTargetForRoom(MatrixSession session, String roomId) {
