@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app.commands;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcCurrentNickPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.model.UserCommandAlias;
 import cafe.woden.ircclient.util.AppVersion;
@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Expands user-defined slash-command aliases before regular command parsing. */
@@ -29,11 +30,13 @@ public class UserCommandAliasEngine {
           .withZone(ZoneId.systemDefault());
 
   private final UserCommandAliasesBus aliasesBus;
-  private final IrcClientService irc;
+  private final IrcCurrentNickPort currentNickPort;
 
-  public UserCommandAliasEngine(UserCommandAliasesBus aliasesBus, IrcClientService irc) {
+  public UserCommandAliasEngine(
+      UserCommandAliasesBus aliasesBus,
+      @Qualifier("ircCurrentNickPort") IrcCurrentNickPort currentNickPort) {
     this.aliasesBus = Objects.requireNonNull(aliasesBus, "aliasesBus");
-    this.irc = Objects.requireNonNull(irc, "irc");
+    this.currentNickPort = Objects.requireNonNull(currentNickPort, "currentNickPort");
   }
 
   public ExpansionResult expand(String raw, TargetRef contextTarget) {
@@ -131,7 +134,7 @@ public class UserCommandAliasEngine {
 
     String nick = "";
     if (!sid.isBlank()) {
-      Optional<String> n = irc.currentNick(sid);
+      Optional<String> n = currentNickPort.currentNick(sid);
       nick = n.map(UserCommandAliasEngine::norm).orElse("");
     }
 

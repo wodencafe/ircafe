@@ -7,7 +7,7 @@ import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcCurrentNickPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
@@ -23,6 +23,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Orchestrates history batch persistence side effects extracted from {@link IrcMediator}. */
@@ -43,7 +44,7 @@ public class MediatorHistoryIngestOrchestrator {
   private final ZncPlaybackEventsPort zncPlaybackEventsPort;
   private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState;
   private final ChatTranscriptHistoryPort transcripts;
-  private final IrcClientService irc;
+  private final IrcCurrentNickPort currentNickPort;
   private final Cache<HistoryRenderKey, Boolean> recentRenderedHistory =
       Caffeine.newBuilder()
           .maximumSize(HISTORY_RENDER_DEDUP_MAX)
@@ -58,7 +59,7 @@ public class MediatorHistoryIngestOrchestrator {
       ZncPlaybackEventsPort zncPlaybackEventsPort,
       ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState,
       ChatTranscriptHistoryPort transcripts,
-      IrcClientService irc) {
+      @Qualifier("ircCurrentNickPort") IrcCurrentNickPort currentNickPort) {
     this.ui = ui;
     this.chatHistoryIngestionPort = chatHistoryIngestionPort;
     this.chatHistoryIngestEventsPort = chatHistoryIngestEventsPort;
@@ -66,7 +67,7 @@ public class MediatorHistoryIngestOrchestrator {
     this.zncPlaybackEventsPort = zncPlaybackEventsPort;
     this.chatHistoryRequestRoutingState = chatHistoryRequestRoutingState;
     this.transcripts = transcripts;
-    this.irc = irc;
+    this.currentNickPort = currentNickPort;
   }
 
   public void onChatHistoryBatchReceived(String sid, IrcEvent.ChatHistoryBatchReceived ev) {
@@ -246,7 +247,7 @@ public class MediatorHistoryIngestOrchestrator {
 
     String myNick = "";
     try {
-      myNick = irc.currentNick(sid).orElse("");
+      myNick = currentNickPort.currentNick(sid).orElse("");
     } catch (Exception ignored) {
       myNick = "";
     }
