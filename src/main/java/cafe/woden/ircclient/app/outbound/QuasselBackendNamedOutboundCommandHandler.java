@@ -9,11 +9,13 @@ import org.springframework.stereotype.Component;
 
 /** Handles Quassel named commands routed from backend command parsing. */
 @Component
-final class QuasselBackendNamedOutboundCommandHandler implements BackendNamedOutboundCommandHandler {
+final class QuasselBackendNamedOutboundCommandHandler
+    implements BackendNamedOutboundCommandHandler {
 
   private final QuasselOutboundCommandService quasselOutboundCommandService;
 
-  QuasselBackendNamedOutboundCommandHandler(QuasselOutboundCommandService quasselOutboundCommandService) {
+  QuasselBackendNamedOutboundCommandHandler(
+      QuasselOutboundCommandService quasselOutboundCommandService) {
     this.quasselOutboundCommandService =
         Objects.requireNonNull(quasselOutboundCommandService, "quasselOutboundCommandService");
   }

@@ -280,18 +280,15 @@ public class SwingUiPort implements UiPort {
                 quasselNetworkManagerRequestsFromApp.onBackpressureLatest())
             .onBackpressureBuffer();
     return Flowable.mergeArray(
-            setupRequests
-                .map(
-                    sid ->
-                        new ParsedInput.BackendNamed(
-                            BackendNamedCommandNames.QUASSEL_SETUP,
-                            normalizeBackendCommandArgs(sid))),
-            networkManagerRequests
-                .map(
-                    sid ->
-                        new ParsedInput.BackendNamed(
-                            BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER,
-                            normalizeBackendCommandArgs(sid))))
+            setupRequests.map(
+                sid ->
+                    new ParsedInput.BackendNamed(
+                        BackendNamedCommandNames.QUASSEL_SETUP, normalizeBackendCommandArgs(sid))),
+            networkManagerRequests.map(
+                sid ->
+                    new ParsedInput.BackendNamed(
+                        BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER,
+                        normalizeBackendCommandArgs(sid))))
         .onBackpressureBuffer();
   }
 

@@ -173,13 +173,7 @@ class IrcMediatorMockVerifyTest {
         inOrder(mediatorUiSubscriptionBinder, irc, ui, mediatorConnectionSubscriptionBinder);
     inOrder
         .verify(mediatorUiSubscriptionBinder)
-        .bind(
-            eq(ui),
-            eq(targetCoordinator),
-            any(CompositeDisposable.class),
-            any(),
-            any(),
-            any());
+        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
     inOrder.verify(irc).events();
     inOrder.verify(ui).ircv3CapabilityToggleRequests();
     inOrder
@@ -192,13 +186,7 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class));
 
     verify(mediatorUiSubscriptionBinder, times(1))
-        .bind(
-            eq(ui),
-            eq(targetCoordinator),
-            any(CompositeDisposable.class),
-            any(),
-            any(),
-            any());
+        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
     verify(mediatorConnectionSubscriptionBinder, times(1))
         .bind(
             eq(ui),
@@ -245,7 +233,8 @@ class IrcMediatorMockVerifyTest {
 
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Consumer<ParsedInput.BackendNamed>> quasselRequestCaptor =
-        ArgumentCaptor.forClass((Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
+        ArgumentCaptor.forClass(
+            (Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
     verify(mediatorUiSubscriptionBinder)
         .bind(
             eq(ui),
@@ -278,7 +267,8 @@ class IrcMediatorMockVerifyTest {
 
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Consumer<ParsedInput.BackendNamed>> quasselSetupRequestCaptor =
-        ArgumentCaptor.forClass((Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
+        ArgumentCaptor.forClass(
+            (Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
     verify(mediatorUiSubscriptionBinder)
         .bind(
             eq(ui),

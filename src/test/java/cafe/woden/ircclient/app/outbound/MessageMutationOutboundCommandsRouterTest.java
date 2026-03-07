@@ -21,7 +21,8 @@ class MessageMutationOutboundCommandsRouterTest {
                 new QuasselMessageMutationOutboundCommands()));
 
     assertInstanceOf(
-        IrcMessageMutationOutboundCommands.class, router.commandsFor(IrcProperties.Server.Backend.IRC));
+        IrcMessageMutationOutboundCommands.class,
+        router.commandsFor(IrcProperties.Server.Backend.IRC));
     assertInstanceOf(
         MatrixMessageMutationOutboundCommands.class,
         router.commandsFor(IrcProperties.Server.Backend.MATRIX));
@@ -34,7 +35,9 @@ class MessageMutationOutboundCommandsRouterTest {
   void fallsBackToIrcHandlerWhenBackendHasNoRegisteredHandler() {
     MessageMutationOutboundCommandsRouter router =
         new MessageMutationOutboundCommandsRouter(
-            List.of(new IrcMessageMutationOutboundCommands(), new MatrixMessageMutationOutboundCommands()));
+            List.of(
+                new IrcMessageMutationOutboundCommands(),
+                new MatrixMessageMutationOutboundCommands()));
 
     assertInstanceOf(IrcMessageMutationOutboundCommands.class, router.commandsFor(null));
     assertInstanceOf(
@@ -65,7 +68,8 @@ class MessageMutationOutboundCommandsRouterTest {
                 new MessageMutationOutboundCommandsRouter(
                     List.of(new MatrixMessageMutationOutboundCommands())));
 
-    assertTrue(err.getMessage().contains("Missing message mutation outbound handler for backend IRC"));
+    assertTrue(
+        err.getMessage().contains("Missing message mutation outbound handler for backend IRC"));
   }
 
   private static final class DuplicateIrcMessageMutationOutboundCommands

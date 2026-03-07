@@ -19,13 +19,13 @@ import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.shell.StatusBar;
+import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import javax.swing.SwingUtilities;
-import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.junit.jupiter.api.Test;
 
 class SwingUiPortCommandRoutingTest {

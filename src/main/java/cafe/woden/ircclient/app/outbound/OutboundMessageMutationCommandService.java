@@ -561,5 +561,4 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
   private static String normalizeReactionToken(String raw) {
     return normalizeIrcv3Token(raw);
   }
-
 }

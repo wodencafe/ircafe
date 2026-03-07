@@ -18,12 +18,14 @@ class BackendNamedCommandParserTest {
   void parsesQuasselSetupCommands() {
     ParsedInput full = parser.parse("/quasselsetup core");
     assertTrue(full instanceof ParsedInput.BackendNamed);
-    assertEquals(BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) full).command());
+    assertEquals(
+        BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) full).command());
     assertEquals("core", ((ParsedInput.BackendNamed) full).args());
 
     ParsedInput alias = parser.parse("/qsetup");
     assertTrue(alias instanceof ParsedInput.BackendNamed);
-    assertEquals(BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) alias).command());
+    assertEquals(
+        BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) alias).command());
     assertEquals("", ((ParsedInput.BackendNamed) alias).args());
   }
 

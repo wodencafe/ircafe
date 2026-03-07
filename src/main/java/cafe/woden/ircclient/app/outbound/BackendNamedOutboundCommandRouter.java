@@ -22,7 +22,9 @@ final class BackendNamedOutboundCommandRouter {
   private final UiPort ui;
 
   BackendNamedOutboundCommandRouter(
-      List<BackendNamedOutboundCommandHandler> handlers, TargetCoordinator targetCoordinator, UiPort ui) {
+      List<BackendNamedOutboundCommandHandler> handlers,
+      TargetCoordinator targetCoordinator,
+      UiPort ui) {
     List<BackendNamedOutboundCommandHandler> safeHandlers =
         List.copyOf(Objects.requireNonNull(handlers, "handlers"));
     this.handlersByCommandName = indexHandlersByCommandName(safeHandlers);

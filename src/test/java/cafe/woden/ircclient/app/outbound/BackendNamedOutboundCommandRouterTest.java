@@ -5,8 +5,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.model.TargetRef;
@@ -18,8 +18,10 @@ import org.junit.jupiter.api.Test;
 
 class BackendNamedOutboundCommandRouterTest {
 
-  private final BackendNamedOutboundCommandHandler first = mock(BackendNamedOutboundCommandHandler.class);
-  private final BackendNamedOutboundCommandHandler second = mock(BackendNamedOutboundCommandHandler.class);
+  private final BackendNamedOutboundCommandHandler first =
+      mock(BackendNamedOutboundCommandHandler.class);
+  private final BackendNamedOutboundCommandHandler second =
+      mock(BackendNamedOutboundCommandHandler.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final UiPort ui = mock(UiPort.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -31,7 +33,8 @@ class BackendNamedOutboundCommandRouterTest {
 
   @Test
   void routesToFirstSupportingHandler() {
-    when(first.supportedCommandNames()).thenReturn(Set.of(BackendNamedCommandNames.QUASSEL_NETWORK));
+    when(first.supportedCommandNames())
+        .thenReturn(Set.of(BackendNamedCommandNames.QUASSEL_NETWORK));
     when(second.supportedCommandNames()).thenReturn(Set.of(BackendNamedCommandNames.QUASSEL_SETUP));
     BackendNamedOutboundCommandRouter router =
         new BackendNamedOutboundCommandRouter(List.of(first, second), targetCoordinator, ui);

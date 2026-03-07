@@ -91,12 +91,7 @@ class MediatorUiSubscriptionBinderTest {
 
     MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
     binder.bind(
-        ui,
-        targetCoordinator,
-        disposables,
-        req -> {},
-        line -> {},
-        onBackendNamedCommandRequest);
+        ui, targetCoordinator, disposables, req -> {}, line -> {}, onBackendNamedCommandRequest);
 
     backendNamedRequests.onNext(
         new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "quassel"));
@@ -118,7 +113,8 @@ class MediatorUiSubscriptionBinderTest {
     when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
     when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
     when(ui.outboundLines()).thenReturn(Flowable.never());
-    when(ui.backendNamedCommandRequests()).thenReturn(Flowable.error(new IllegalStateException("boom")));
+    when(ui.backendNamedCommandRequests())
+        .thenReturn(Flowable.error(new IllegalStateException("boom")));
     when(ui.closeTargetRequests()).thenReturn(Flowable.never());
     when(ui.joinChannelRequests()).thenReturn(Flowable.never());
     when(ui.disconnectChannelRequests()).thenReturn(Flowable.never());
@@ -158,12 +154,7 @@ class MediatorUiSubscriptionBinderTest {
 
     MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
     binder.bind(
-        ui,
-        targetCoordinator,
-        disposables,
-        req -> {},
-        line -> {},
-        onBackendNamedCommandRequest);
+        ui, targetCoordinator, disposables, req -> {}, line -> {}, onBackendNamedCommandRequest);
 
     backendNamedRequests.onNext(
         new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel"));

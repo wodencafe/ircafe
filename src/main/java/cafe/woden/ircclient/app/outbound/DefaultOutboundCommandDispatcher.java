@@ -17,7 +17,8 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
           Class<? extends ParsedInput>, OutboundCommandRegistry.Handler<? extends ParsedInput>>
       handlers;
 
-  public DefaultOutboundCommandDispatcher(List<OutboundCommandRegistrar> outboundCommandRegistrars) {
+  public DefaultOutboundCommandDispatcher(
+      List<OutboundCommandRegistrar> outboundCommandRegistrars) {
     this.outboundCommandRegistrars = List.copyOf(outboundCommandRegistrars);
     this.handlers = buildHandlers();
   }

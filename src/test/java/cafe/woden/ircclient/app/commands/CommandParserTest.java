@@ -73,12 +73,14 @@ class CommandParserTest {
   void parsesQuasselSetupCommandAndAlias() {
     ParsedInput setup = parser.parse("/quasselsetup quassel");
     assertTrue(setup instanceof ParsedInput.BackendNamed);
-    assertEquals(BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) setup).command());
+    assertEquals(
+        BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) setup).command());
     assertEquals("quassel", ((ParsedInput.BackendNamed) setup).args());
 
     ParsedInput alias = parser.parse("/qsetup");
     assertTrue(alias instanceof ParsedInput.BackendNamed);
-    assertEquals(BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) alias).command());
+    assertEquals(
+        BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) alias).command());
     assertEquals("", ((ParsedInput.BackendNamed) alias).args());
   }
 

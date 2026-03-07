@@ -28,7 +28,8 @@ final class MessageMutationOutboundCommandsRouter {
       }
     }
     this.handlers = Map.copyOf(index);
-    MessageMutationOutboundCommands ircHandler = this.handlers.get(IrcProperties.Server.Backend.IRC);
+    MessageMutationOutboundCommands ircHandler =
+        this.handlers.get(IrcProperties.Server.Backend.IRC);
     if (ircHandler == null) {
       throw new IllegalStateException("Missing message mutation outbound handler for backend IRC");
     }

@@ -45,7 +45,8 @@ class QuasselBackendNamedOutboundCommandHandlerTest {
   @Test
   void handleQuasselNetworkDelegatesToService() {
     handler.handle(
-        disposables, new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK, "list"));
+        disposables,
+        new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK, "list"));
     verify(quasselOutboundCommandService).handleQuasselNetwork(disposables, "list");
   }
 
