@@ -19,7 +19,7 @@ final class OutboundBackendCapabilityPolicy {
   OutboundBackendCapabilityPolicy(
       CommandTargetPolicy commandTargetPolicy,
       OutboundBackendFeatureRegistry outboundBackendFeatureRegistry,
-      @Qualifier("ircClientService") IrcNegotiatedFeaturePort irc,
+      @Qualifier("ircNegotiatedFeaturePort") IrcNegotiatedFeaturePort irc,
       @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability) {
     this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
     this.outboundBackendFeatureRegistry =

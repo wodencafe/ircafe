@@ -7,14 +7,14 @@ import java.util.function.BooleanSupplier;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-/** IrcClientService-backed capability policy for transcript message actions. */
+/** Negotiated-feature backed capability policy for transcript message actions. */
 @Component
 public final class IrcMessageActionCapabilityPolicy implements MessageActionCapabilityPolicy {
   private final IrcNegotiatedFeaturePort irc;
   private final IrcBouncerPlaybackPort bouncerPlayback;
 
   public IrcMessageActionCapabilityPolicy(
-      @Qualifier("ircClientService") IrcNegotiatedFeaturePort irc,
+      @Qualifier("ircNegotiatedFeaturePort") IrcNegotiatedFeaturePort irc,
       @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback) {
     this.irc = irc;
     this.bouncerPlayback = bouncerPlayback;
