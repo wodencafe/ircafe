@@ -15,11 +15,4 @@ public interface IrcBackendModePort {
     if (sid.isEmpty()) return false;
     return backendForServer(sid) == IrcProperties.Server.Backend.MATRIX;
   }
-
-  static IrcBackendModePort from(IrcClientService irc) {
-    if (irc instanceof IrcBackendModePort port) {
-      return port;
-    }
-    return new IrcBackendModePort() {};
-  }
 }

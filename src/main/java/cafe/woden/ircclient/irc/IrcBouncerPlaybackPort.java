@@ -52,11 +52,4 @@ public interface IrcBouncerPlaybackPort {
     Instant start = end.minus(w.toMillis(), ChronoUnit.MILLIS);
     return requestZncPlaybackRange(serverId, target, start, end);
   }
-
-  static IrcBouncerPlaybackPort from(IrcClientService irc) {
-    if (irc instanceof IrcBouncerPlaybackPort port) {
-      return port;
-    }
-    return new IrcBouncerPlaybackPort() {};
-  }
 }

@@ -10,6 +10,8 @@ import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
+import cafe.woden.ircclient.ui.coordinator.IrcMessageActionCapabilityPolicy;
+import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -65,7 +67,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private final Consumer<TargetRef> activate;
   private final OutboundLineBus outboundBus;
   private final IrcClientService irc;
-  private final IrcBouncerPlaybackPort bouncerPlayback;
+  private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final BiConsumer<TargetRef, String> onDraftChanged;
   private final BiConsumer<TargetRef, String> onClosed;
 
@@ -105,7 +107,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.activate = activate;
     this.outboundBus = outboundBus;
     this.irc = Objects.requireNonNull(irc, "irc");
-    this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
+    this.messageActionCapabilityPolicy =
+        new IrcMessageActionCapabilityPolicy(irc, Objects.requireNonNull(bouncerPlayback));
     this.activeInputRouter = activeInputRouter;
     this.onDraftChanged = onDraftChanged;
     this.onClosed = onClosed;
@@ -324,35 +327,19 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   @Override
   protected boolean replyContextActionVisible() {
     if (target == null || target.isStatus() || target.isUiOnly()) return false;
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReplyAvailable(target.serverId());
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canReply(target.serverId());
   }
 
   @Override
   protected boolean reactContextActionVisible() {
     if (target == null || target.isStatus() || target.isUiOnly()) return false;
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReactAvailable(target.serverId());
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canReact(target.serverId());
   }
 
   @Override
   protected boolean unreactContextActionVisible() {
     if (target == null || target.isStatus() || target.isUiOnly()) return false;
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReplyAvailable(target.serverId())
-          && irc.isDraftUnreactAvailable(target.serverId());
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canUnreact(target.serverId());
   }
 
   @Override
@@ -728,43 +715,19 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   }
 
   private boolean isLoadNewerHistorySupportedForServer(String serverId) {
-    return isChatHistorySupportedForServer(serverId) || isZncPlaybackSupportedForServer(serverId);
+    return messageActionCapabilityPolicy.canLoadNewerHistory(serverId);
   }
 
   private boolean isChatHistorySupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isChatHistoryAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private boolean isZncPlaybackSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return bouncerPlayback.isZncPlaybackAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canLoadAroundMessage(serverId);
   }
 
   private boolean isMessageEditSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isMessageEditAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canEdit(serverId);
   }
 
   private boolean isMessageRedactionSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isMessageRedactionAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canRedact(serverId);
   }
 
   private void applyReadMarkerViewState() {

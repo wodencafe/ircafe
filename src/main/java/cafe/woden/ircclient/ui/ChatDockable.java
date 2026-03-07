@@ -48,6 +48,7 @@ import cafe.woden.ircclient.ui.coordinator.ChatTranscriptInteractionCoordinator;
 import cafe.woden.ircclient.ui.coordinator.ChatTypingCoordinator;
 import cafe.woden.ircclient.ui.coordinator.DccActionCoordinator;
 import cafe.woden.ircclient.ui.coordinator.IrcMessageActionCapabilityPolicy;
+import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
@@ -293,18 +294,26 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         new MessageInputPanel(settingsBus, commandHistoryStore, spellcheckSettingsBus);
     this.inputPanel.setBackendUiContext(BackendUiContext.fromBackendModePort(backendModePort));
     add(inputPanel, BorderLayout.SOUTH);
+    MessageActionCapabilityPolicy messageActionCapabilityPolicy =
+        new IrcMessageActionCapabilityPolicy(irc, bouncerPlayback);
     configureTranscriptContextMenuActions(transcripts, chatHistoryService);
     configureInputActivation(activationBus);
     InputCoordinatorBundle inputBundle =
         createInputCoordinatorBundle(
-            transcripts, irc, bouncerPlayback, chatHistoryService, activationBus, outboundBus);
+            transcripts,
+            irc,
+            chatHistoryService,
+            activationBus,
+            outboundBus,
+            messageActionCapabilityPolicy);
     this.typingCoordinator = inputBundle.typingCoordinator();
     this.historyActionCoordinator = inputBundle.historyActionCoordinator();
     this.transcriptInteractionCoordinator = inputBundle.transcriptInteractionCoordinator();
     this.dccActionCoordinator = inputBundle.dccActionCoordinator();
     this.readMarkerCoordinator = inputBundle.readMarkerCoordinator();
     this.activeTargetCoordinator = inputBundle.activeTargetCoordinator();
-    configureReactionChipActions(transcripts, irc, activationBus, outboundBus);
+    configureReactionChipActions(
+        transcripts, messageActionCapabilityPolicy, activationBus, outboundBus);
     inputPanel.setOnTypingStateChanged(typingCoordinator::onLocalTypingStateChanged);
     bindInputOutboundMessages(outboundBus);
 
@@ -593,14 +602,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private InputCoordinatorBundle createInputCoordinatorBundle(
       ChatTranscriptStore transcripts,
       IrcClientService irc,
-      IrcBouncerPlaybackPort bouncerPlayback,
       ChatHistoryService chatHistoryService,
       TargetActivationBus activationBus,
-      OutboundLineBus outboundBus) {
+      OutboundLineBus outboundBus,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy) {
     ChatTypingCoordinator typingCoordinator = createTypingCoordinator(irc);
     ChatHistoryActionCoordinator historyActionCoordinator =
         createHistoryActionCoordinator(
-            irc, bouncerPlayback, chatHistoryService, activationBus, outboundBus);
+            messageActionCapabilityPolicy, chatHistoryService, activationBus, outboundBus);
     ChatTranscriptInteractionCoordinator transcriptInteractionCoordinator =
         createTranscriptInteractionCoordinator(
             activationBus, outboundBus, transcripts, historyActionCoordinator);
@@ -631,13 +640,12 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   private ChatHistoryActionCoordinator createHistoryActionCoordinator(
-      IrcClientService irc,
-      IrcBouncerPlaybackPort bouncerPlayback,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ChatHistoryService chatHistoryService,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus) {
     return new ChatHistoryActionCoordinator(
-        new IrcMessageActionCapabilityPolicy(irc, bouncerPlayback),
+        messageActionCapabilityPolicy,
         chatHistoryService,
         () -> activeTarget,
         activationBus::activate,
@@ -659,7 +667,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private void configureReactionChipActions(
       ChatTranscriptStore transcripts,
-      IrcClientService irc,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus) {
     if (transcripts == null) return;
@@ -670,18 +678,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
           String token = Objects.toString(reactionToken, "").trim();
           if (msgId.isEmpty() || token.isEmpty()) return;
 
-          if (irc != null) {
-            try {
-              boolean supported =
-                  unreactRequested
-                      ? irc.isDraftReplyAvailable(target.serverId())
-                          && irc.isDraftUnreactAvailable(target.serverId())
-                      : irc.isDraftReactAvailable(target.serverId());
-              if (!supported) return;
-            } catch (Exception ignored) {
-              return;
-            }
-          }
+          boolean supported =
+              unreactRequested
+                  ? messageActionCapabilityPolicy.canUnreact(target.serverId())
+                  : messageActionCapabilityPolicy.canReact(target.serverId());
+          if (!supported) return;
 
           activationBus.activate(target);
           armTailPinOnNextAppendIfAtBottom();

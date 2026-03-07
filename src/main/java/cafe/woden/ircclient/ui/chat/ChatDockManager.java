@@ -11,6 +11,8 @@ import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
+import cafe.woden.ircclient.ui.coordinator.IrcMessageActionCapabilityPolicy;
+import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -50,6 +52,7 @@ public class ChatDockManager {
   private final IrcClientService irc;
   private final IrcBouncerPlaybackPort bouncerPlayback;
   private final IrcBackendModePort backendModePort;
+  private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final ActiveInputRouter activeInputRouter;
   private final CommandHistoryStore commandHistoryStore;
   private final ChatHistoryService chatHistoryService;
@@ -98,6 +101,7 @@ public class ChatDockManager {
     this.irc = irc;
     this.bouncerPlayback = bouncerPlayback;
     this.backendModePort = backendModePort;
+    this.messageActionCapabilityPolicy = new IrcMessageActionCapabilityPolicy(irc, bouncerPlayback);
     this.activeInputRouter = activeInputRouter;
     this.chatHistoryService = chatHistoryService;
     this.commandHistoryStore = commandHistoryStore;
@@ -230,21 +234,11 @@ public class ChatDockManager {
   }
 
   private boolean isDraftReplySupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReplyAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canReply(serverId);
   }
 
   private boolean isDraftReactSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReactAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canReact(serverId);
   }
 
   public void openPinned(TargetRef target) {
