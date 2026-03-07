@@ -13,16 +13,12 @@ import org.springframework.stereotype.Component;
 public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatcher {
 
   private final List<OutboundCommandRegistrar> outboundCommandRegistrars;
-  private final QuasselOutboundCommandService quasselOutboundCommandService;
   private final Map<
           Class<? extends ParsedInput>, OutboundCommandRegistry.Handler<? extends ParsedInput>>
       handlers;
 
-  public DefaultOutboundCommandDispatcher(
-      List<OutboundCommandRegistrar> outboundCommandRegistrars,
-      QuasselOutboundCommandService quasselOutboundCommandService) {
+  public DefaultOutboundCommandDispatcher(List<OutboundCommandRegistrar> outboundCommandRegistrars) {
     this.outboundCommandRegistrars = List.copyOf(outboundCommandRegistrars);
-    this.quasselOutboundCommandService = quasselOutboundCommandService;
     this.handlers = buildHandlers();
   }
 
@@ -81,15 +77,5 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       ParsedInput input) {
     OutboundCommandRegistry.Handler<T> typedHandler = (OutboundCommandRegistry.Handler<T>) handler;
     typedHandler.handle(disposables, (T) input);
-  }
-
-  @Override
-  public void openQuasselSetup(CompositeDisposable disposables, String serverId) {
-    quasselOutboundCommandService.handleQuasselSetup(disposables, serverId);
-  }
-
-  @Override
-  public void openQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
-    quasselOutboundCommandService.handleQuasselNetworkManager(disposables, serverId);
   }
 }

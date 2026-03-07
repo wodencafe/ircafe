@@ -27,6 +27,7 @@ class QuasselBackendNamedOutboundCommandHandlerTest {
   void supportsQuasselCommandNames() {
     assertTrue(handler.supports("quasselsetup"));
     assertTrue(handler.supports("/quasselnet"));
+    assertTrue(handler.supports("quasselnetmanager"));
     assertTrue(handler.supports("QuasselSetup"));
     assertFalse(handler.supports("join"));
   }
@@ -41,6 +42,12 @@ class QuasselBackendNamedOutboundCommandHandlerTest {
   void handleQuasselNetworkDelegatesToService() {
     handler.handle(disposables, "quasselnet", "list");
     verify(quasselOutboundCommandService).handleQuasselNetwork(disposables, "list");
+  }
+
+  @Test
+  void handleQuasselNetworkManagerDelegatesToService() {
+    handler.handle(disposables, "quasselnetmanager", "core");
+    verify(quasselOutboundCommandService).handleQuasselNetworkManager(disposables, "core");
   }
 
   @Test

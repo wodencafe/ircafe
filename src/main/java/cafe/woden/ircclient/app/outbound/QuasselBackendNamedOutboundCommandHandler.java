@@ -8,6 +8,10 @@ import org.springframework.stereotype.Component;
 @Component
 final class QuasselBackendNamedOutboundCommandHandler implements BackendNamedOutboundCommandHandler {
 
+  static final String QUASSEL_SETUP_COMMAND = "quasselsetup";
+  static final String QUASSEL_NETWORK_COMMAND = "quasselnet";
+  static final String QUASSEL_NETWORK_MANAGER_COMMAND = "quasselnetmanager";
+
   private final QuasselOutboundCommandService quasselOutboundCommandService;
 
   QuasselBackendNamedOutboundCommandHandler(QuasselOutboundCommandService quasselOutboundCommandService) {
@@ -18,18 +22,24 @@ final class QuasselBackendNamedOutboundCommandHandler implements BackendNamedOut
   @Override
   public boolean supports(String commandName) {
     String name = normalizeCommandName(commandName);
-    return "quasselsetup".equals(name) || "quasselnet".equals(name);
+    return QUASSEL_SETUP_COMMAND.equals(name)
+        || QUASSEL_NETWORK_COMMAND.equals(name)
+        || QUASSEL_NETWORK_MANAGER_COMMAND.equals(name);
   }
 
   @Override
   public void handle(CompositeDisposable disposables, String commandName, String args) {
     String name = normalizeCommandName(commandName);
-    if ("quasselsetup".equals(name)) {
+    if (QUASSEL_SETUP_COMMAND.equals(name)) {
       quasselOutboundCommandService.handleQuasselSetup(disposables, args);
       return;
     }
-    if ("quasselnet".equals(name)) {
+    if (QUASSEL_NETWORK_COMMAND.equals(name)) {
       quasselOutboundCommandService.handleQuasselNetwork(disposables, args);
+      return;
+    }
+    if (QUASSEL_NETWORK_MANAGER_COMMAND.equals(name)) {
+      quasselOutboundCommandService.handleQuasselNetworkManager(disposables, args);
     }
   }
 

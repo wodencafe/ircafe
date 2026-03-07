@@ -260,7 +260,9 @@ class IrcMediatorMockVerifyTest {
     quasselRequestCaptor.getValue().accept("quassel");
 
     verify(outboundCommandDispatcher)
-        .openQuasselNetworkManager(any(CompositeDisposable.class), eq("quassel"));
+        .dispatch(
+            any(CompositeDisposable.class),
+            eq(new ParsedInput.BackendNamed("quasselnetmanager", "quassel")));
   }
 
   @Test
@@ -286,7 +288,9 @@ class IrcMediatorMockVerifyTest {
     quasselSetupRequestCaptor.getValue().accept("quassel");
 
     verify(outboundCommandDispatcher)
-        .openQuasselSetup(any(CompositeDisposable.class), eq("quassel"));
+        .dispatch(
+            any(CompositeDisposable.class),
+            eq(new ParsedInput.BackendNamed("quasselsetup", "quassel")));
   }
 
   @Test

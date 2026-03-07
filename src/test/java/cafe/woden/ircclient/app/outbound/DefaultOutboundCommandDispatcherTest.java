@@ -41,7 +41,6 @@ class DefaultOutboundCommandDispatcherTest {
       mock(OutboundNamesWhoListCommandService.class);
   private final OutboundTopicKickCommandService topicKick =
       mock(OutboundTopicKickCommandService.class);
-  private final QuasselOutboundCommandService quassel = mock(QuasselOutboundCommandService.class);
   private final BackendNamedOutboundCommandRouter backendNamedRouter =
       mock(BackendNamedOutboundCommandRouter.class);
   private final OutboundUploadCommandService upload = mock(OutboundUploadCommandService.class);
@@ -68,7 +67,7 @@ class DefaultOutboundCommandDispatcherTest {
               userCommandAliasesBus, sayQuote, targetCoordinator, ui));
 
   private final DefaultOutboundCommandDispatcher dispatcher =
-      new DefaultOutboundCommandDispatcher(commandRegistrars, quassel);
+      new DefaultOutboundCommandDispatcher(commandRegistrars);
 
   @AfterEach
   void tearDown() {
@@ -156,18 +155,6 @@ class DefaultOutboundCommandDispatcherTest {
     ParsedInput.BackendNamed command = new ParsedInput.BackendNamed("quasselnet", "list");
     dispatcher.dispatch(disposables, command);
     verify(backendNamedRouter).handle(disposables, command);
-  }
-
-  @Test
-  void openQuasselNetworkManagerRoutesToQuasselService() {
-    dispatcher.openQuasselNetworkManager(disposables, "quassel");
-    verify(quassel).handleQuasselNetworkManager(disposables, "quassel");
-  }
-
-  @Test
-  void openQuasselSetupRoutesToQuasselService() {
-    dispatcher.openQuasselSetup(disposables, "quassel");
-    verify(quassel).handleQuasselSetup(disposables, "quassel");
   }
 
   @Test
