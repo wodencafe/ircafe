@@ -73,12 +73,12 @@ class CommandParserTest {
   void parsesQuasselSetupCommandAndAlias() {
     ParsedInput setup = parser.parse("/quasselsetup quassel");
     assertTrue(setup instanceof ParsedInput.BackendNamed);
-    assertEquals("quasselsetup", ((ParsedInput.BackendNamed) setup).command());
+    assertEquals(BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) setup).command());
     assertEquals("quassel", ((ParsedInput.BackendNamed) setup).args());
 
     ParsedInput alias = parser.parse("/qsetup");
     assertTrue(alias instanceof ParsedInput.BackendNamed);
-    assertEquals("quasselsetup", ((ParsedInput.BackendNamed) alias).command());
+    assertEquals(BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) alias).command());
     assertEquals("", ((ParsedInput.BackendNamed) alias).args());
   }
 
@@ -86,12 +86,14 @@ class CommandParserTest {
   void parsesQuasselNetworkCommandAndAlias() {
     ParsedInput direct = parser.parse("/quasselnet list");
     assertTrue(direct instanceof ParsedInput.BackendNamed);
-    assertEquals("quasselnet", ((ParsedInput.BackendNamed) direct).command());
+    assertEquals(
+        BackendNamedCommandNames.QUASSEL_NETWORK, ((ParsedInput.BackendNamed) direct).command());
     assertEquals("list", ((ParsedInput.BackendNamed) direct).args());
 
     ParsedInput alias = parser.parse("/qnet quassel connect libera");
     assertTrue(alias instanceof ParsedInput.BackendNamed);
-    assertEquals("quasselnet", ((ParsedInput.BackendNamed) alias).command());
+    assertEquals(
+        BackendNamedCommandNames.QUASSEL_NETWORK, ((ParsedInput.BackendNamed) alias).command());
     assertEquals("quassel connect libera", ((ParsedInput.BackendNamed) alias).args());
   }
 

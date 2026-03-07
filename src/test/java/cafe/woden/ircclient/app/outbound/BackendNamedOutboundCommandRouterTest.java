@@ -4,6 +4,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
@@ -30,13 +31,14 @@ class BackendNamedOutboundCommandRouterTest {
   void routesToFirstSupportingHandler() {
     BackendNamedOutboundCommandRouter router =
         new BackendNamedOutboundCommandRouter(List.of(first, second), targetCoordinator, ui);
-    ParsedInput.BackendNamed command = new ParsedInput.BackendNamed("quasselsetup", "core");
-    when(first.supports("quasselsetup")).thenReturn(false);
-    when(second.supports("quasselsetup")).thenReturn(true);
+    ParsedInput.BackendNamed command =
+        new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "core");
+    when(first.supports(BackendNamedCommandNames.QUASSEL_SETUP)).thenReturn(false);
+    when(second.supports(BackendNamedCommandNames.QUASSEL_SETUP)).thenReturn(true);
 
     router.handle(disposables, command);
 
-    verify(second).handle(disposables, "quasselsetup", "core");
+    verify(second).handle(disposables, BackendNamedCommandNames.QUASSEL_SETUP, "core");
   }
 
   @Test

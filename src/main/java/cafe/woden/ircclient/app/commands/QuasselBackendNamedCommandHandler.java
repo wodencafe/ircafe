@@ -15,7 +15,7 @@ final class QuasselBackendNamedCommandHandler implements BackendNamedCommandHand
           setup
               ? BackendNamedCommandParser.argAfter(line, "/quasselsetup")
               : BackendNamedCommandParser.argAfter(line, "/qsetup");
-      return new ParsedInput.BackendNamed("quasselsetup", serverId);
+      return new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, serverId);
     }
 
     boolean network = BackendNamedCommandParser.matchesCommand(line, "/quasselnet");
@@ -25,7 +25,7 @@ final class QuasselBackendNamedCommandHandler implements BackendNamedCommandHand
           network
               ? BackendNamedCommandParser.argAfter(line, "/quasselnet")
               : BackendNamedCommandParser.argAfter(line, "/qnet");
-      return new ParsedInput.BackendNamed("quasselnet", args);
+      return new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK, args);
     }
 
     return null;

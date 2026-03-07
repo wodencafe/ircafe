@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.outbound;
 
+import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
@@ -7,10 +8,6 @@ import org.springframework.stereotype.Component;
 /** Handles Quassel named commands routed from backend command parsing. */
 @Component
 final class QuasselBackendNamedOutboundCommandHandler implements BackendNamedOutboundCommandHandler {
-
-  static final String QUASSEL_SETUP_COMMAND = "quasselsetup";
-  static final String QUASSEL_NETWORK_COMMAND = "quasselnet";
-  static final String QUASSEL_NETWORK_MANAGER_COMMAND = "quasselnetmanager";
 
   private final QuasselOutboundCommandService quasselOutboundCommandService;
 
@@ -22,23 +19,23 @@ final class QuasselBackendNamedOutboundCommandHandler implements BackendNamedOut
   @Override
   public boolean supports(String commandName) {
     String name = normalizeCommandName(commandName);
-    return QUASSEL_SETUP_COMMAND.equals(name)
-        || QUASSEL_NETWORK_COMMAND.equals(name)
-        || QUASSEL_NETWORK_MANAGER_COMMAND.equals(name);
+    return BackendNamedCommandNames.QUASSEL_SETUP.equals(name)
+        || BackendNamedCommandNames.QUASSEL_NETWORK.equals(name)
+        || BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER.equals(name);
   }
 
   @Override
   public void handle(CompositeDisposable disposables, String commandName, String args) {
     String name = normalizeCommandName(commandName);
-    if (QUASSEL_SETUP_COMMAND.equals(name)) {
+    if (BackendNamedCommandNames.QUASSEL_SETUP.equals(name)) {
       quasselOutboundCommandService.handleQuasselSetup(disposables, args);
       return;
     }
-    if (QUASSEL_NETWORK_COMMAND.equals(name)) {
+    if (BackendNamedCommandNames.QUASSEL_NETWORK.equals(name)) {
       quasselOutboundCommandService.handleQuasselNetwork(disposables, args);
       return;
     }
-    if (QUASSEL_NETWORK_MANAGER_COMMAND.equals(name)) {
+    if (BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER.equals(name)) {
       quasselOutboundCommandService.handleQuasselNetworkManager(disposables, args);
     }
   }

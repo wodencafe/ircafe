@@ -22,6 +22,7 @@ import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
@@ -262,7 +263,9 @@ class IrcMediatorMockVerifyTest {
     verify(outboundCommandDispatcher)
         .dispatch(
             any(CompositeDisposable.class),
-            eq(new ParsedInput.BackendNamed("quasselnetmanager", "quassel")));
+            eq(
+                new ParsedInput.BackendNamed(
+                    BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "quassel")));
   }
 
   @Test
@@ -290,7 +293,7 @@ class IrcMediatorMockVerifyTest {
     verify(outboundCommandDispatcher)
         .dispatch(
             any(CompositeDisposable.class),
-            eq(new ParsedInput.BackendNamed("quasselsetup", "quassel")));
+            eq(new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel")));
   }
 
   @Test

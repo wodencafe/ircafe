@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
 import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
@@ -145,14 +146,16 @@ class DefaultOutboundCommandDispatcherTest {
 
   @Test
   void dispatchQuasselSetupRoutesToQuasselService() {
-    ParsedInput.BackendNamed command = new ParsedInput.BackendNamed("quasselsetup", "quassel");
+    ParsedInput.BackendNamed command =
+        new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel");
     dispatcher.dispatch(disposables, command);
     verify(backendNamedRouter).handle(disposables, command);
   }
 
   @Test
   void dispatchQuasselNetworkRoutesToQuasselService() {
-    ParsedInput.BackendNamed command = new ParsedInput.BackendNamed("quasselnet", "list");
+    ParsedInput.BackendNamed command =
+        new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK, "list");
     dispatcher.dispatch(disposables, command);
     verify(backendNamedRouter).handle(disposables, command);
   }
