@@ -14,6 +14,7 @@ import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,32 +54,19 @@ class DefaultOutboundCommandDispatcherTest {
   private final UiPort ui = mock(UiPort.class);
   private final UserCommandAliasesBus userCommandAliasesBus = mock(UserCommandAliasesBus.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
+  private final List<OutboundCommandRegistrar> commandRegistrars =
+      List.of(
+          new LifecycleBackendOutboundCommandRegistrar(joinPart, lifecycle, quassel),
+          new IdentityMessagingOutboundCommandRegistrar(nickAway, messaging, ctcp),
+          new ChannelModeOutboundCommandRegistrar(topicKick, invite, namesWhoList, monitor, mode),
+          new IgnoreCtcpOutboundCommandRegistrar(ignore, filter, ctcp, dcc),
+          new HistoryMutationOutboundCommandRegistrar(
+              chatHistory, readMarker, help, upload, messageMutations, sayQuote),
+          new UnknownOutboundCommandRegistrar(
+              userCommandAliasesBus, sayQuote, targetCoordinator, ui));
 
   private final DefaultOutboundCommandDispatcher dispatcher =
-      new DefaultOutboundCommandDispatcher(
-          mode,
-          ctcp,
-          dcc,
-          help,
-          messaging,
-          sayQuote,
-          joinPart,
-          nickAway,
-          lifecycle,
-          chatHistory,
-          invite,
-          namesWhoList,
-          topicKick,
-          quassel,
-          upload,
-          messageMutations,
-          readMarker,
-          monitor,
-          ignore,
-          filter,
-          targetCoordinator,
-          ui,
-          userCommandAliasesBus);
+      new DefaultOutboundCommandDispatcher(commandRegistrars, quassel);
 
   @AfterEach
   void tearDown() {
