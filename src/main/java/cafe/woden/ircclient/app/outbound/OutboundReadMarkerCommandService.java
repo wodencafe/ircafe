@@ -3,7 +3,7 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
@@ -16,19 +16,19 @@ import org.springframework.stereotype.Component;
 @Component
 final class OutboundReadMarkerCommandService implements OutboundHelpContributor {
 
-  private final IrcClientService irc;
+  private final IrcReadMarkerPort readMarkerPort;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
 
   OutboundReadMarkerCommandService(
-      IrcClientService irc,
+      IrcReadMarkerPort readMarkerPort,
       OutboundBackendCapabilityPolicy backendCapabilityPolicy,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator) {
-    this.irc = Objects.requireNonNull(irc, "irc");
+    this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
     this.backendCapabilityPolicy =
         Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
     this.ui = Objects.requireNonNull(ui, "ui");
@@ -84,7 +84,8 @@ final class OutboundReadMarkerCommandService implements OutboundHelpContributor 
     ui.clearUnread(at);
 
     disposables.add(
-        irc.sendReadMarker(at.serverId(), at.target(), now)
+        readMarkerPort
+            .sendReadMarker(at.serverId(), at.target(), now)
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(markread-error)", String.valueOf(err))));
   }

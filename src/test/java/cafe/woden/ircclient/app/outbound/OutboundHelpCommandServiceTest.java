@@ -12,6 +12,7 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
@@ -70,7 +71,11 @@ class OutboundHelpCommandServiceTest {
           rawLineCorrelationService);
   private final OutboundReadMarkerCommandService readMarkerCommandService =
       new OutboundReadMarkerCommandService(
-          irc, outboundBackendCapabilityPolicy, ui, connectionCoordinator, targetCoordinator);
+          IrcReadMarkerPort.from(irc),
+          outboundBackendCapabilityPolicy,
+          ui,
+          connectionCoordinator,
+          targetCoordinator);
   private final OutboundHelpCommandService service =
       new OutboundHelpCommandService(
           ui,
