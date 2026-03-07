@@ -20,7 +20,7 @@ final class OutboundUploadCommandService implements OutboundHelpContributor {
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
-  private final MatrixOutboundCommandService matrixOutboundCommandService;
+  private final SemanticUploadCommandHandler semanticUploadCommandHandler;
   private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
   OutboundUploadCommandService(
@@ -28,21 +28,21 @@ final class OutboundUploadCommandService implements OutboundHelpContributor {
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
-      MatrixOutboundCommandService matrixOutboundCommandService,
+      SemanticUploadCommandHandler semanticUploadCommandHandler,
       OutboundRawLineCorrelationService rawLineCorrelationService) {
     this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.matrixOutboundCommandService =
-        Objects.requireNonNull(matrixOutboundCommandService, "matrixOutboundCommandService");
+    this.semanticUploadCommandHandler =
+        Objects.requireNonNull(semanticUploadCommandHandler, "semanticUploadCommandHandler");
     this.rawLineCorrelationService =
         Objects.requireNonNull(rawLineCorrelationService, "rawLineCorrelationService");
   }
 
   void appendUploadHelp(TargetRef out) {
-    matrixOutboundCommandService.appendUploadHelp(out);
+    semanticUploadCommandHandler.appendUploadHelp(out);
   }
 
   @Override
@@ -68,10 +68,10 @@ final class OutboundUploadCommandService implements OutboundHelpContributor {
       return;
     }
 
-    MatrixOutboundCommandService.UploadPreparation uploadPreparation =
-        matrixOutboundCommandService.prepareUpload(at, msgType, path, caption);
+    SemanticUploadCommandHandler.UploadPreparation uploadPreparation =
+        semanticUploadCommandHandler.prepareUpload(at, msgType, path, caption);
     if (uploadPreparation.showUsage()) {
-      matrixOutboundCommandService.appendUploadUsage(at);
+      semanticUploadCommandHandler.appendUploadUsage(at);
       return;
     }
     if (!connectionCoordinator.isConnected(at.serverId())) {

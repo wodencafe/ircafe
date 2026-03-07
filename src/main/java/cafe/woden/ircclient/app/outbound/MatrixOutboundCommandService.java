@@ -8,21 +8,7 @@ import org.springframework.stereotype.Component;
 
 /** Handles Matrix-specific outbound command logic and semantic /upload translation. */
 @Component
-final class MatrixOutboundCommandService {
-
-  record UploadPreparation(String line, String statusMessage, boolean showUsage) {
-    static UploadPreparation success(String line) {
-      return new UploadPreparation(Objects.toString(line, ""), "", false);
-    }
-
-    static UploadPreparation unsupportedBackend(String message) {
-      return new UploadPreparation("", Objects.toString(message, ""), false);
-    }
-
-    static UploadPreparation usage() {
-      return new UploadPreparation("", "", true);
-    }
-  }
+final class MatrixOutboundCommandService implements SemanticUploadCommandHandler {
 
   private final UiPort ui;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
@@ -43,34 +29,38 @@ final class MatrixOutboundCommandService {
         Objects.requireNonNull(backendUploadCommandRegistry, "backendUploadCommandRegistry");
   }
 
-  void appendUploadHelp(TargetRef out) {
+  @Override
+  public void appendUploadHelp(TargetRef out) {
     matrixCommandSupport.appendUploadHelp(ui, out);
   }
 
-  void appendUploadUsage(TargetRef out) {
+  @Override
+  public void appendUploadUsage(TargetRef out) {
     matrixCommandSupport.appendUploadUsage(ui, out);
   }
 
-  UploadPreparation prepareUpload(TargetRef target, String msgType, String path, String caption) {
-    if (target == null) return UploadPreparation.usage();
+  @Override
+  public UploadPreparation prepareUpload(
+      TargetRef target, String msgType, String path, String caption) {
+    if (target == null) return usage();
 
     String normalizedType = matrixCommandSupport.normalizeUploadMsgType(msgType);
     String sourcePath = matrixCommandSupport.normalizeUploadPath(path);
     if (normalizedType.isEmpty() || sourcePath.isEmpty()) {
-      return UploadPreparation.usage();
+      return usage();
     }
 
     IrcProperties.Server.Backend backend =
         backendCapabilityPolicy.backendForServer(target.serverId());
     if (!backendCapabilityPolicy.supportsSemanticUpload(backend)) {
-      return UploadPreparation.unsupportedBackend(
+      return unsupportedBackend(
           "Server '"
               + target.serverId()
               + "' does not use the Matrix backend. /upload is only available on Matrix-backed servers.");
     }
     UploadCommandTranslationHandler translationHandler = backendUploadCommandRegistry.find(backend);
     if (translationHandler == null) {
-      return UploadPreparation.unsupportedBackend(
+      return unsupportedBackend(
           "Server '"
               + target.serverId()
               + "' does not use the Matrix backend. /upload is only available on Matrix-backed servers.");
@@ -83,8 +73,20 @@ final class MatrixOutboundCommandService {
         translationHandler.translateUpload(
             target.target(), normalizedType, sourcePath, displayBody);
     if (line.isBlank()) {
-      return UploadPreparation.usage();
+      return usage();
     }
-    return UploadPreparation.success(line);
+    return success(line);
+  }
+
+  private static UploadPreparation success(String line) {
+    return new UploadPreparation(Objects.toString(line, ""), "", false);
+  }
+
+  private static UploadPreparation unsupportedBackend(String message) {
+    return new UploadPreparation("", Objects.toString(message, ""), false);
+  }
+
+  private static UploadPreparation usage() {
+    return new UploadPreparation("", "", true);
   }
 }
