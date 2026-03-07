@@ -68,6 +68,14 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
       return;
     }
     if (!quasselControl.isQuasselCoreSetupPending(sid)) {
+      if (!connectionCoordinator.isConnected(sid)) {
+        ui.appendStatus(
+            status,
+            "(qsetup)",
+            "No pending Quassel setup is cached yet. Connecting to check setup state…");
+        connectionCoordinator.connectOne(sid);
+        return;
+      }
       ui.appendStatus(status, "(qsetup)", "No pending Quassel Core setup for this server.");
       return;
     }

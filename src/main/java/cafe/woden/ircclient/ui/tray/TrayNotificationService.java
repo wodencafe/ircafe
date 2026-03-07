@@ -453,13 +453,17 @@ public class TrayNotificationService implements TrayNotificationsPort {
       NotificationBackendMode mode = resolveNotificationBackendMode();
       switch (mode) {
         case NATIVE_ONLY -> {
-          if (tryNativeBackends(req.title(), req.body(), req.targetKey(), req.onClick())) return;
+          if (tryNativeBackends(req.title(), req.body(), req.targetKey(), req.onClick(), mode)) {
+            return;
+          }
         }
         case TWO_SLICES_ONLY -> {
           if (tryTwoSlicesFallback(req.title(), req.body(), req.onClick())) return;
         }
         case AUTO -> {
-          if (tryNativeBackends(req.title(), req.body(), req.targetKey(), req.onClick())) return;
+          if (tryNativeBackends(req.title(), req.body(), req.targetKey(), req.onClick(), mode)) {
+            return;
+          }
           if (tryTwoSlicesFallback(req.title(), req.body(), req.onClick())) return;
         }
       }
@@ -484,12 +488,13 @@ public class TrayNotificationService implements TrayNotificationsPort {
     return NotificationBackendMode.AUTO;
   }
 
-  private boolean tryNativeBackends(String title, String body, String targetKey, Runnable onClick) {
+  private boolean tryNativeBackends(
+      String title, String body, String targetKey, Runnable onClick, NotificationBackendMode mode) {
     if (tryWindowsToastPopup(title, body, onClick)) {
       log.debug("[ircafe] tray notify delivered via dorkbox popup backend");
       return true;
     }
-    if (tryLinuxNotifySend(title, body, onClick)) {
+    if (tryLinuxNotifySend(title, body, onClick, mode)) {
       log.debug("[ircafe] tray notify delivered via linux backend");
       return true;
     }
@@ -648,7 +653,8 @@ public class TrayNotificationService implements TrayNotificationsPort {
     }
   }
 
-  private boolean tryLinuxNotifySend(String title, String body, Runnable onClick) {
+  private boolean tryLinuxNotifySend(
+      String title, String body, Runnable onClick, NotificationBackendMode mode) {
     String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
     if (!os.contains("linux")) return false;
 
@@ -666,7 +672,7 @@ public class TrayNotificationService implements TrayNotificationsPort {
         GnomeDbusNotificationBackend backend = gnomeDbusProvider.getIfAvailable();
         if (backend != null) {
           GnomeDbusNotificationBackend.ProbeResult pr = backend.probe();
-          if (pr != null && pr.sessionBusReachable() && pr.actionsSupported()) {
+          if (pr != null && pr.sessionBusReachable()) {
             GnomeDbusNotificationBackend.NotifyResult nr =
                 backend.notifyWithDefaultAction(title, body, TOAST_TIMEOUT_SECONDS * 1000, onClick);
             if (nr != null && nr.sent()) {
@@ -678,6 +684,12 @@ public class TrayNotificationService implements TrayNotificationsPort {
       } catch (Throwable ignored) {
         // Best-effort only.
       }
+    }
+
+    if (!shouldUseNotifySendFallback(onClick != null, mode)) {
+      // notify-send has no click callback routing; preserve click behavior in AUTO mode by
+      // letting two-slices fallback try next.
+      return false;
     }
 
     // Very common on GNOME/KDE/etc. If missing, we'll silently fall back.
@@ -696,6 +708,13 @@ public class TrayNotificationService implements TrayNotificationsPort {
     } catch (Exception ignored) {
       return false;
     }
+  }
+
+  private static boolean shouldUseNotifySendFallback(
+      boolean hasClickHandler, NotificationBackendMode mode) {
+    if (!hasClickHandler) return true;
+    NotificationBackendMode effectiveMode = mode == null ? NotificationBackendMode.AUTO : mode;
+    return effectiveMode == NotificationBackendMode.NATIVE_ONLY;
   }
 
   private static boolean tryMacOsascript(String title, String body, String targetKey) {
