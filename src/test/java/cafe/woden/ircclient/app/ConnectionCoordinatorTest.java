@@ -22,6 +22,7 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -54,7 +55,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -93,7 +94,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -133,7 +134,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -172,7 +173,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -221,7 +222,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -256,7 +257,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -289,7 +290,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -322,7 +323,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -356,7 +357,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -392,7 +393,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -423,7 +424,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -460,7 +461,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -500,7 +501,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -566,7 +567,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -615,7 +616,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -653,7 +654,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -698,7 +699,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -778,7 +779,7 @@ class ConnectionCoordinatorTest {
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
-            irc,
+            IrcConnectionLifecyclePort.from(irc),
             irc,
             irc,
             ui,
@@ -821,7 +822,7 @@ class ConnectionCoordinatorTest {
     when(runtimeConfig.readKnownChannels("libera")).thenReturn(List.of("#ircafe", "#java"));
 
     new ConnectionCoordinator(
-        irc,
+        IrcConnectionLifecyclePort.from(irc),
         irc,
         irc,
         ui,

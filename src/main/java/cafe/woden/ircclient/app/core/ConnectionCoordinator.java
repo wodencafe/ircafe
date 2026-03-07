@@ -10,7 +10,7 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -47,7 +47,7 @@ public class ConnectionCoordinator {
     CHANGED
   }
 
-  private final IrcClientService irc;
+  private final IrcConnectionLifecyclePort irc;
   private final IrcBackendAvailabilityPort backendAvailability;
   private final QuasselCoreControlPort quasselControl;
   private final UiPort ui;
@@ -89,7 +89,7 @@ public class ConnectionCoordinator {
   }
 
   public ConnectionCoordinator(
-      IrcClientService irc,
+      @Qualifier("ircConnectionLifecyclePort") IrcConnectionLifecyclePort irc,
       @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
       @Qualifier("ircClientService") QuasselCoreControlPort quasselControl,
       UiPort ui,
