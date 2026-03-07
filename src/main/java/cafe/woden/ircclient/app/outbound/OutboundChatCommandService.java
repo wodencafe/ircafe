@@ -56,7 +56,6 @@ public class OutboundChatCommandService {
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
   private final MatrixOutboundCommandService matrixOutboundCommandService;
-  private final QuasselOutboundCommandService quasselOutboundCommandService;
 
   private final CommandTargetPolicy commandTargetPolicy;
   private final ChatCommandRuntimeConfigPort runtimeConfig;
@@ -77,7 +76,6 @@ public class OutboundChatCommandService {
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       MatrixOutboundCommandService matrixOutboundCommandService,
-      QuasselOutboundCommandService quasselOutboundCommandService,
       CommandTargetPolicy commandTargetPolicy,
       ChatCommandRuntimeConfigPort runtimeConfig,
       AwayRoutingPort awayRoutingState,
@@ -96,8 +94,6 @@ public class OutboundChatCommandService {
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
     this.matrixOutboundCommandService =
         Objects.requireNonNull(matrixOutboundCommandService, "matrixOutboundCommandService");
-    this.quasselOutboundCommandService =
-        Objects.requireNonNull(quasselOutboundCommandService, "quasselOutboundCommandService");
 
     this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
@@ -269,18 +265,6 @@ public class OutboundChatCommandService {
       return;
     }
     connectionCoordinator.reconnectOne(cmd.serverId());
-  }
-
-  public void handleQuasselSetup(CompositeDisposable disposables, String serverId) {
-    quasselOutboundCommandService.handleQuasselSetup(disposables, serverId);
-  }
-
-  public void handleQuasselNetwork(CompositeDisposable disposables, String args) {
-    quasselOutboundCommandService.handleQuasselNetwork(disposables, args);
-  }
-
-  public void handleQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
-    quasselOutboundCommandService.handleQuasselNetworkManager(disposables, serverId);
   }
 
   public void handleQuit(String reason) {

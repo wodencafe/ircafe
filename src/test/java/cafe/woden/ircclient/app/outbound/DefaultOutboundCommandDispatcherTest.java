@@ -23,6 +23,7 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundCtcpWhoisCommandService ctcp = mock(OutboundCtcpWhoisCommandService.class);
   private final OutboundDccCommandService dcc = mock(OutboundDccCommandService.class);
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
+  private final QuasselOutboundCommandService quassel = mock(QuasselOutboundCommandService.class);
   private final OutboundMonitorCommandService monitor = mock(OutboundMonitorCommandService.class);
   private final OutboundIgnoreCommandService ignore = mock(OutboundIgnoreCommandService.class);
   private final LocalFilterCommandHandler filter = mock(LocalFilterCommandHandler.class);
@@ -37,6 +38,7 @@ class DefaultOutboundCommandDispatcherTest {
           ctcp,
           dcc,
           chat,
+          quassel,
           monitor,
           ignore,
           filter,
@@ -89,27 +91,27 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
-  void dispatchQuasselSetupRoutesToChatService() {
+  void dispatchQuasselSetupRoutesToQuasselService() {
     dispatcher.dispatch(disposables, new ParsedInput.QuasselSetup("quassel"));
-    verify(chat).handleQuasselSetup(disposables, "quassel");
+    verify(quassel).handleQuasselSetup(disposables, "quassel");
   }
 
   @Test
-  void dispatchQuasselNetworkRoutesToChatService() {
+  void dispatchQuasselNetworkRoutesToQuasselService() {
     dispatcher.dispatch(disposables, new ParsedInput.QuasselNetwork("list"));
-    verify(chat).handleQuasselNetwork(disposables, "list");
+    verify(quassel).handleQuasselNetwork(disposables, "list");
   }
 
   @Test
-  void openQuasselNetworkManagerRoutesToChatService() {
+  void openQuasselNetworkManagerRoutesToQuasselService() {
     dispatcher.openQuasselNetworkManager(disposables, "quassel");
-    verify(chat).handleQuasselNetworkManager(disposables, "quassel");
+    verify(quassel).handleQuasselNetworkManager(disposables, "quassel");
   }
 
   @Test
-  void openQuasselSetupRoutesToChatService() {
+  void openQuasselSetupRoutesToQuasselService() {
     dispatcher.openQuasselSetup(disposables, "quassel");
-    verify(chat).handleQuasselSetup(disposables, "quassel");
+    verify(quassel).handleQuasselSetup(disposables, "quassel");
   }
 
   @Test

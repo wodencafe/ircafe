@@ -20,6 +20,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
   private final OutboundDccCommandService outboundDccCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
+  private final QuasselOutboundCommandService quasselOutboundCommandService;
   private final OutboundMonitorCommandService outboundMonitorCommandService;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
   private final LocalFilterCommandHandler localFilterCommandService;
@@ -33,6 +34,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
       OutboundDccCommandService outboundDccCommandService,
       OutboundChatCommandService outboundChatCommandService,
+      QuasselOutboundCommandService quasselOutboundCommandService,
       OutboundMonitorCommandService outboundMonitorCommandService,
       OutboundIgnoreCommandService outboundIgnoreCommandService,
       LocalFilterCommandHandler localFilterCommandService,
@@ -43,6 +45,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
     this.outboundDccCommandService = outboundDccCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
+    this.quasselOutboundCommandService = quasselOutboundCommandService;
     this.outboundMonitorCommandService = outboundMonitorCommandService;
     this.outboundIgnoreCommandService = outboundIgnoreCommandService;
     this.localFilterCommandService = localFilterCommandService;
@@ -91,11 +94,11 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     register(
         map,
         ParsedInput.QuasselSetup.class,
-        (d, cmd) -> outboundChatCommandService.handleQuasselSetup(d, cmd.serverId()));
+        (d, cmd) -> quasselOutboundCommandService.handleQuasselSetup(d, cmd.serverId()));
     register(
         map,
         ParsedInput.QuasselNetwork.class,
-        (d, cmd) -> outboundChatCommandService.handleQuasselNetwork(d, cmd.args()));
+        (d, cmd) -> quasselOutboundCommandService.handleQuasselNetwork(d, cmd.args()));
     register(
         map,
         ParsedInput.Quit.class,
@@ -389,12 +392,12 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
 
   @Override
   public void openQuasselSetup(CompositeDisposable disposables, String serverId) {
-    outboundChatCommandService.handleQuasselSetup(disposables, serverId);
+    quasselOutboundCommandService.handleQuasselSetup(disposables, serverId);
   }
 
   @Override
   public void openQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
-    outboundChatCommandService.handleQuasselNetworkManager(disposables, serverId);
+    quasselOutboundCommandService.handleQuasselNetworkManager(disposables, serverId);
   }
 
   @FunctionalInterface
