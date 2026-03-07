@@ -608,10 +608,6 @@ public final class ChannelListPanel extends JPanel {
     updateListButtons();
   }
 
-  public void setBackendUiContext(BackendUiContext backendUiContext) {
-    setBackendUiProfile(new BackendUiProfile(currentServerId(), backendUiContext));
-  }
-
   public void setOnAddChannelRequest(Consumer<String> onAddChannelRequest) {
     this.onAddChannelRequest = onAddChannelRequest;
   }

@@ -2,7 +2,6 @@ package cafe.woden.ircclient.ui.input;
 
 import cafe.woden.ircclient.irc.Ircv3DraftNormalizer;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
-import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettings;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
@@ -757,21 +756,9 @@ public class MessageInputPanel extends JPanel {
     refreshUploadUxStateOnEdt();
   }
 
-  public void setBackendUiContext(BackendUiContext backendUiContext) {
-    setBackendUiProfile(new BackendUiProfile(activeServerId(), backendUiContext));
-  }
-
-  public void setActiveServerId(String serverId) {
-    setBackendUiProfile(currentBackendUiProfile().withServerId(serverId));
-  }
-
   private BackendUiProfile currentBackendUiProfile() {
     BackendUiProfile profile = backendUiProfile;
     return profile == null ? BackendUiProfile.ircOnly("") : profile;
-  }
-
-  private String activeServerId() {
-    return currentBackendUiProfile().serverId();
   }
 
   /** Called when this input becomes the active typing surface (focus or click). */

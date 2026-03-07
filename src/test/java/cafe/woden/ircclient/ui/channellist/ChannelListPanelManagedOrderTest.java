@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.ui.backend.BackendUiContext;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import java.awt.Cursor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -62,8 +63,11 @@ class ChannelListPanelManagedOrderTest {
 
     onEdt(
         () -> {
-          panel.setBackendUiContext(
-              BackendUiContext.fromMatrixServerPredicate(sid -> "matrix".equalsIgnoreCase(sid)));
+          panel.setBackendUiProfile(
+              new BackendUiProfile(
+                  "",
+                  BackendUiContext.fromMatrixServerPredicate(
+                      sid -> "matrix".equalsIgnoreCase(sid))));
           panel.setServerId("matrix");
           panel.setOnRunAlisRequest(command::set);
           panel.beginList("matrix", "Loading channel list (rust limit 30)...");
@@ -88,8 +92,11 @@ class ChannelListPanelManagedOrderTest {
 
     onEdt(
         () -> {
-          panel.setBackendUiContext(
-              BackendUiContext.fromMatrixServerPredicate(sid -> "matrix".equalsIgnoreCase(sid)));
+          panel.setBackendUiProfile(
+              new BackendUiProfile(
+                  "",
+                  BackendUiContext.fromMatrixServerPredicate(
+                      sid -> "matrix".equalsIgnoreCase(sid))));
           panel.setServerId("libera");
           assertFalse(runMatrixNextButton.isVisible());
           assertTrue(runAlisButton.getToolTipText().toLowerCase(Locale.ROOT).contains("alis"));
