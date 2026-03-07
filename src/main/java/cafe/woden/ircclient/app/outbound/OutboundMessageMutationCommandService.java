@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcEchoCapabilityPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
 final class OutboundMessageMutationCommandService implements OutboundHelpContributor {
 
   private final IrcClientService irc;
+  private final IrcEchoCapabilityPort echoCapabilityPort;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
@@ -27,6 +29,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
 
   OutboundMessageMutationCommandService(
       IrcClientService irc,
+      IrcEchoCapabilityPort echoCapabilityPort,
       OutboundBackendCapabilityPolicy backendCapabilityPolicy,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
@@ -34,6 +37,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       PendingEchoMessagePort pendingEchoMessageState,
       OutboundRawLineCorrelationService rawLineCorrelationService) {
     this.irc = Objects.requireNonNull(irc, "irc");
+    this.echoCapabilityPort = Objects.requireNonNull(echoCapabilityPort, "echoCapabilityPort");
     this.backendCapabilityPolicy =
         Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
     this.ui = Objects.requireNonNull(ui, "ui");
@@ -504,7 +508,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
   }
 
   private boolean shouldUseLocalEcho(String serverId) {
-    return !irc.isEchoMessageAvailable(serverId);
+    return !echoCapabilityPort.isEchoMessageAvailable(serverId);
   }
 
   private String featureUnavailableMessage(String serverId, String fallback) {

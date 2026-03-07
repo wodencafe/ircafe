@@ -12,6 +12,7 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcEchoCapabilityPort;
 import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
@@ -52,6 +53,7 @@ class OutboundMessageMutationCommandServiceTest {
   private final OutboundMessageMutationCommandService service =
       new OutboundMessageMutationCommandService(
           irc,
+          IrcEchoCapabilityPort.from(irc),
           outboundBackendCapabilityPolicy,
           ui,
           connectionCoordinator,

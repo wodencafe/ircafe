@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcEchoCapabilityPort;
 import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
@@ -26,6 +27,7 @@ final class OutboundMessagingCommandService {
   }
 
   private final IrcClientService irc;
+  private final IrcEchoCapabilityPort echoCapabilityPort;
   private final IrcNegotiatedFeaturePort negotiatedFeaturePort;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   private final UiPort ui;
@@ -35,6 +37,7 @@ final class OutboundMessagingCommandService {
 
   OutboundMessagingCommandService(
       IrcClientService irc,
+      IrcEchoCapabilityPort echoCapabilityPort,
       IrcNegotiatedFeaturePort negotiatedFeaturePort,
       OutboundBackendCapabilityPolicy backendCapabilityPolicy,
       UiPort ui,
@@ -42,6 +45,7 @@ final class OutboundMessagingCommandService {
       TargetCoordinator targetCoordinator,
       PendingEchoMessagePort pendingEchoMessageState) {
     this.irc = Objects.requireNonNull(irc, "irc");
+    this.echoCapabilityPort = Objects.requireNonNull(echoCapabilityPort, "echoCapabilityPort");
     this.negotiatedFeaturePort =
         Objects.requireNonNull(negotiatedFeaturePort, "negotiatedFeaturePort");
     this.backendCapabilityPolicy =
@@ -363,6 +367,6 @@ final class OutboundMessagingCommandService {
   }
 
   private boolean shouldUseLocalEcho(String serverId) {
-    return !irc.isEchoMessageAvailable(serverId);
+    return !echoCapabilityPort.isEchoMessageAvailable(serverId);
   }
 }
