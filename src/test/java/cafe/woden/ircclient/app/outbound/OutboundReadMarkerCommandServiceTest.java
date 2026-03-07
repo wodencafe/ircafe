@@ -35,7 +35,8 @@ class OutboundReadMarkerCommandServiceTest {
               new MatrixOutboundBackendFeatureAdapter(),
               new QuasselOutboundBackendFeatureAdapter()));
   private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
-      new OutboundBackendCapabilityPolicy(commandTargetPolicy, outboundBackendFeatureRegistry, irc);
+      new OutboundBackendCapabilityPolicy(
+          commandTargetPolicy, outboundBackendFeatureRegistry, irc, irc);
   private final OutboundReadMarkerCommandService service =
       new OutboundReadMarkerCommandService(
           irc, outboundBackendCapabilityPolicy, ui, connectionCoordinator, targetCoordinator);

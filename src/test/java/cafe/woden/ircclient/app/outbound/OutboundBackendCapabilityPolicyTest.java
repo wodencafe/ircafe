@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
+import cafe.woden.ircclient.irc.IrcBackendClientService;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 class OutboundBackendCapabilityPolicyTest {
 
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
+  private final IrcBackendClientService irc = mock(IrcBackendClientService.class);
   private final IrcBackendAvailabilityPort backendAvailability =
       mock(IrcBackendAvailabilityPort.class);
   private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
@@ -26,13 +28,15 @@ class OutboundBackendCapabilityPolicyTest {
               new QuasselOutboundBackendFeatureAdapter()));
   private final OutboundBackendCapabilityPolicy policy =
       new OutboundBackendCapabilityPolicy(
-          commandTargetPolicy, outboundBackendFeatureRegistry, backendAvailability);
+          commandTargetPolicy, outboundBackendFeatureRegistry, irc, backendAvailability);
 
   @Test
   void supportsMatrixSemanticUploadViaBackendAdapter() {
     when(serverCatalog.find("matrix"))
         .thenReturn(Optional.of(server("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(irc.isDraftReplyAvailable("matrix")).thenReturn(true);
 
+    assertTrue(policy.supportsDraftReply("matrix"));
     assertTrue(policy.supportsSemanticUpload("matrix"));
     assertFalse(policy.supportsQuasselCoreCommands("matrix"));
   }
@@ -41,7 +45,9 @@ class OutboundBackendCapabilityPolicyTest {
   void supportsQuasselCommandsViaBackendAdapter() {
     when(serverCatalog.find("quassel"))
         .thenReturn(Optional.of(server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(irc.isReadMarkerAvailable("quassel")).thenReturn(true);
 
+    assertTrue(policy.supportsReadMarker("quassel"));
     assertTrue(policy.supportsQuasselCoreCommands("quassel"));
     assertFalse(policy.supportsSemanticUpload("quassel"));
   }

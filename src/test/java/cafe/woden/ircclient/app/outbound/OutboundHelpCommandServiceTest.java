@@ -33,7 +33,8 @@ class OutboundHelpCommandServiceTest {
               new MatrixOutboundBackendFeatureAdapter(),
               new QuasselOutboundBackendFeatureAdapter()));
   private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
-      new OutboundBackendCapabilityPolicy(commandTargetPolicy, outboundBackendFeatureRegistry, irc);
+      new OutboundBackendCapabilityPolicy(
+          commandTargetPolicy, outboundBackendFeatureRegistry, irc, irc);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);

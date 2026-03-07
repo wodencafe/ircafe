@@ -43,7 +43,8 @@ class QuasselOutboundCommandServiceTest {
   private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
       new OutboundBackendFeatureRegistry(List.of(new QuasselOutboundBackendFeatureAdapter()));
   private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
-      new OutboundBackendCapabilityPolicy(commandTargetPolicy, outboundBackendFeatureRegistry, irc);
+      new OutboundBackendCapabilityPolicy(
+          commandTargetPolicy, outboundBackendFeatureRegistry, irc, irc);
   private final QuasselOutboundCommandSupport quasselCommandSupport =
       new QuasselOutboundCommandSupport(serverCatalog, outboundBackendCapabilityPolicy);
   private final QuasselOutboundCommandService service =

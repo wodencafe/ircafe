@@ -36,7 +36,8 @@ class OutboundMonitorCommandServiceTest {
               new MatrixOutboundBackendFeatureAdapter(),
               new QuasselOutboundBackendFeatureAdapter()));
   private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
-      new OutboundBackendCapabilityPolicy(commandTargetPolicy, outboundBackendFeatureRegistry, irc);
+      new OutboundBackendCapabilityPolicy(
+          commandTargetPolicy, outboundBackendFeatureRegistry, irc, irc);
   private final MonitorRosterPort monitorRosterPort = Mockito.mock(MonitorRosterPort.class);
   private final MonitorFallbackPort monitorFallbackPort = Mockito.mock(MonitorFallbackPort.class);
   private final CompositeDisposable disposables = new CompositeDisposable();

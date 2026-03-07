@@ -88,7 +88,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       return;
     }
 
-    if (!irc.isDraftReplyAvailable(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsDraftReply(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(reply)",
@@ -120,7 +120,8 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       return;
     }
 
-    if (!irc.isDraftReplyAvailable(at.serverId()) || !irc.isDraftReactAvailable(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsDraftReply(at.serverId())
+        || !backendCapabilityPolicy.supportsDraftReact(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(react)",
@@ -152,7 +153,8 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       return;
     }
 
-    if (!irc.isDraftReplyAvailable(at.serverId()) || !irc.isDraftUnreactAvailable(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsDraftReply(at.serverId())
+        || !backendCapabilityPolicy.supportsDraftUnreact(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(unreact)",
@@ -184,7 +186,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       return;
     }
 
-    if (!irc.isMessageEditAvailable(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsMessageEdit(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(edit)",
@@ -226,7 +228,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       return;
     }
 
-    if (!irc.isMessageRedactionAvailable(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsMessageRedaction(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(redact)",
@@ -473,7 +475,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
   private void appendEditHelp(TargetRef out) {
     TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
     String serverId = target.serverId();
-    boolean available = irc.isMessageEditAvailable(serverId);
+    boolean available = backendCapabilityPolicy.supportsMessageEdit(serverId);
     ui.appendStatus(
         target,
         "(help)",
@@ -488,7 +490,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
   private void appendRedactHelp(TargetRef out) {
     TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
     String serverId = target.serverId();
-    boolean available = irc.isMessageRedactionAvailable(serverId);
+    boolean available = backendCapabilityPolicy.supportsMessageRedaction(serverId);
     ui.appendStatus(
         target,
         "(help)",

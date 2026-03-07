@@ -69,7 +69,7 @@ final class OutboundReadMarkerCommandService implements OutboundHelpContributor 
       ui.appendStatus(status, "(conn)", "Not connected");
       return;
     }
-    if (!irc.isReadMarkerAvailable(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsReadMarker(at.serverId())) {
       ui.appendStatus(
           status,
           "(markread)",
@@ -106,11 +106,7 @@ final class OutboundReadMarkerCommandService implements OutboundHelpContributor 
   private boolean isReadMarkerSupportedForServer(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
-    try {
-      return irc.isReadMarkerAvailable(sid);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return backendCapabilityPolicy.supportsReadMarker(sid);
   }
 
   private static String availabilitySuffix(boolean available, String unavailableReason) {

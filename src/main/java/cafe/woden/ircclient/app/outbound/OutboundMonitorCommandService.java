@@ -211,7 +211,7 @@ public class OutboundMonitorCommandService {
       return;
     }
 
-    if (!irc.isMonitorAvailable(sid)) {
+    if (!backendCapabilityPolicy.supportsMonitor(sid)) {
       if (monitorFallbackPort.isFallbackActive(sid)) {
         requestFallbackRefresh(sid, status, false);
       } else {
