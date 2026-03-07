@@ -25,6 +25,8 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
   private final OutboundJoinPartCommandService joinPart =
       mock(OutboundJoinPartCommandService.class);
+  private final OutboundNickAwayCommandService nickAway =
+      mock(OutboundNickAwayCommandService.class);
   private final OutboundConnectionLifecycleCommandService lifecycle =
       mock(OutboundConnectionLifecycleCommandService.class);
   private final OutboundChatHistoryCommandService chatHistory =
@@ -55,6 +57,7 @@ class DefaultOutboundCommandDispatcherTest {
           dcc,
           chat,
           joinPart,
+          nickAway,
           lifecycle,
           chatHistory,
           invite,
@@ -119,6 +122,15 @@ class DefaultOutboundCommandDispatcherTest {
 
     dispatcher.dispatch(disposables, new ParsedInput.Quit("bye"));
     verify(lifecycle).handleQuit("bye");
+  }
+
+  @Test
+  void dispatchNickAndAwayRouteToNickAwayService() {
+    dispatcher.dispatch(disposables, new ParsedInput.Nick("alice2"));
+    verify(nickAway).handleNick(disposables, "alice2");
+
+    dispatcher.dispatch(disposables, new ParsedInput.Away("brb"));
+    verify(nickAway).handleAway(disposables, "brb");
   }
 
   @Test

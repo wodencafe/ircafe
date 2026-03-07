@@ -3,7 +3,6 @@ package cafe.woden.ircclient.app.outbound;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -15,10 +14,8 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.state.api.AwayRoutingPort;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.core.Completable;
@@ -37,9 +34,6 @@ class OutboundChatCommandServiceTest {
   private final UiPort ui = mock(UiPort.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
-  private final ChatCommandRuntimeConfigPort runtimeConfig =
-      mock(ChatCommandRuntimeConfigPort.class);
-  private final AwayRoutingPort awayRoutingState = mock(AwayRoutingPort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
@@ -81,43 +75,11 @@ class OutboundChatCommandServiceTest {
           targetCoordinator,
           rawLineCorrelationService,
           List.of(uploadHelpContributor, messageMutationCommandService, readMarkerCommandService),
-          runtimeConfig,
-          awayRoutingState,
           pendingEchoMessageState);
 
   @AfterEach
   void tearDown() {
     disposables.dispose();
-  }
-
-  @Test
-  void nickWhileConnectedRequestsChangeWithoutPersistingPreferredNick() {
-    TargetRef status = new TargetRef("libera", "status");
-    when(targetCoordinator.getActiveTarget()).thenReturn(status);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.changeNick("libera", "alice1")).thenReturn(Completable.complete());
-
-    service.handleNick(disposables, "alice1");
-
-    verify(irc).changeNick("libera", "alice1");
-    verify(runtimeConfig, never()).rememberNick(anyString(), anyString());
-  }
-
-  @Test
-  void nickWhileDisconnectedPersistsPreferredNickOnly() {
-    TargetRef status = new TargetRef("libera", "status");
-    when(targetCoordinator.getActiveTarget()).thenReturn(status);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(false);
-
-    service.handleNick(disposables, "alice1");
-
-    verify(runtimeConfig).rememberNick("libera", "alice1");
-    verify(irc, never()).changeNick(anyString(), anyString());
-    verify(ui)
-        .appendStatus(
-            new TargetRef("libera", "status"),
-            "(nick)",
-            "Not connected. Saved preferred nick for next connect.");
   }
 
   @Test

@@ -21,6 +21,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundDccCommandService outboundDccCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
   private final OutboundJoinPartCommandService outboundJoinPartCommandService;
+  private final OutboundNickAwayCommandService outboundNickAwayCommandService;
   private final OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService;
   private final OutboundChatHistoryCommandService outboundChatHistoryCommandService;
   private final OutboundInviteCommandService outboundInviteCommandService;
@@ -44,6 +45,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundDccCommandService outboundDccCommandService,
       OutboundChatCommandService outboundChatCommandService,
       OutboundJoinPartCommandService outboundJoinPartCommandService,
+      OutboundNickAwayCommandService outboundNickAwayCommandService,
       OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService,
       OutboundChatHistoryCommandService outboundChatHistoryCommandService,
       OutboundInviteCommandService outboundInviteCommandService,
@@ -64,6 +66,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundDccCommandService = outboundDccCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
     this.outboundJoinPartCommandService = outboundJoinPartCommandService;
+    this.outboundNickAwayCommandService = outboundNickAwayCommandService;
     this.outboundConnectionLifecycleCommandService = outboundConnectionLifecycleCommandService;
     this.outboundChatHistoryCommandService = outboundChatHistoryCommandService;
     this.outboundInviteCommandService = outboundInviteCommandService;
@@ -133,11 +136,11 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     register(
         map,
         ParsedInput.Nick.class,
-        (d, cmd) -> outboundChatCommandService.handleNick(d, cmd.newNick()));
+        (d, cmd) -> outboundNickAwayCommandService.handleNick(d, cmd.newNick()));
     register(
         map,
         ParsedInput.Away.class,
-        (d, cmd) -> outboundChatCommandService.handleAway(d, cmd.message()));
+        (d, cmd) -> outboundNickAwayCommandService.handleAway(d, cmd.message()));
     register(
         map,
         ParsedInput.Query.class,

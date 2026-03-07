@@ -3,11 +3,9 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.state.api.AwayRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.nio.charset.StandardCharsets;
@@ -25,7 +23,7 @@ import org.springframework.stereotype.Component;
 /**
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
- * <p>Includes: /nick, /away, /query, /msg, /notice, /me, /say, /quote.
+ * <p>Includes: /query, /msg, /notice, /me, /say, /quote.
  *
  * <p>Behavior is intended to be preserved.
  */
@@ -46,8 +44,6 @@ public class OutboundChatCommandService {
   private final OutboundRawLineCorrelationService rawLineCorrelationService;
   private final List<OutboundHelpContributor> helpContributors;
 
-  private final ChatCommandRuntimeConfigPort runtimeConfig;
-  private final AwayRoutingPort awayRoutingState;
   private final PendingEchoMessagePort pendingEchoMessageState;
   private final Map<String, HelpTopicHandler> helpTopicHandlers;
 
@@ -59,8 +55,6 @@ public class OutboundChatCommandService {
       TargetCoordinator targetCoordinator,
       OutboundRawLineCorrelationService rawLineCorrelationService,
       List<OutboundHelpContributor> helpContributors,
-      ChatCommandRuntimeConfigPort runtimeConfig,
-      AwayRoutingPort awayRoutingState,
       PendingEchoMessagePort pendingEchoMessageState) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
@@ -73,113 +67,9 @@ public class OutboundChatCommandService {
     this.helpContributors =
         List.copyOf(Objects.requireNonNull(helpContributors, "helpContributors"));
 
-    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
-    this.awayRoutingState = Objects.requireNonNull(awayRoutingState, "awayRoutingState");
     this.pendingEchoMessageState =
         Objects.requireNonNull(pendingEchoMessageState, "pendingEchoMessageState");
     this.helpTopicHandlers = buildHelpTopicHandlers();
-  }
-
-  public void handleNick(CompositeDisposable disposables, String newNick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(nick)", "Select a server first.");
-      return;
-    }
-
-    String nick = newNick == null ? "" : newNick.trim();
-    if (nick.isEmpty()) {
-      ui.appendStatus(at, "(nick)", "Usage: /nick <newNick>");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      runtimeConfig.rememberNick(at.serverId(), nick);
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(nick)",
-          "Not connected. Saved preferred nick for next connect.");
-      return;
-    }
-
-    disposables.add(
-        irc.changeNick(at.serverId(), nick)
-            .subscribe(
-                () ->
-                    ui.appendStatus(
-                        new TargetRef(at.serverId(), "status"),
-                        "(nick)",
-                        "Requested nick change to " + nick),
-                err ->
-                    ui.appendError(
-                        targetCoordinator.safeStatusTarget(),
-                        "(nick-error)",
-                        String.valueOf(err))));
-  }
-
-  public void handleAway(CompositeDisposable disposables, String message) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(away)", "Select a server first.");
-      return;
-    }
-
-    TargetRef status = new TargetRef(at.serverId(), "status");
-
-    String msg = message == null ? "" : message.trim();
-
-    boolean explicitClear =
-        "-".equals(msg) || "off".equalsIgnoreCase(msg) || "clear".equalsIgnoreCase(msg);
-
-    boolean clear;
-    String toSend;
-
-    // Bare /away toggles: if not away, set a default; if already away, clear it.
-    if (msg.isEmpty()) {
-      boolean currentlyAway = awayRoutingState.isAway(at.serverId());
-      if (currentlyAway) {
-        clear = true;
-        toSend = "";
-      } else {
-        clear = false;
-        toSend = "Gone for now.";
-      }
-    } else if (explicitClear) {
-      clear = true;
-      toSend = "";
-    } else {
-      clear = false;
-      toSend = msg;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-
-    // Remember where the user initiated /away so the server confirmation (305/306)
-    // can be printed into the same buffer.
-    awayRoutingState.rememberOrigin(at.serverId(), at);
-
-    // Store the requested reason immediately so the upcoming 306 confirmation can
-    // include it, even if the numeric arrives before the Completable callback runs.
-    // If the request fails, we restore the previous value in the error handler.
-    String prevReason = awayRoutingState.getLastReason(at.serverId());
-    if (clear) awayRoutingState.setLastReason(at.serverId(), null);
-    else awayRoutingState.setLastReason(at.serverId(), toSend);
-
-    disposables.add(
-        irc.setAway(at.serverId(), toSend)
-            .subscribe(
-                () -> {
-                  awayRoutingState.setAway(at.serverId(), !clear);
-                  ui.appendStatus(
-                      status, "(away)", clear ? "Away cleared" : ("Away set: " + toSend));
-                },
-                err -> {
-                  awayRoutingState.setLastReason(at.serverId(), prevReason);
-                  ui.appendError(status, "(away-error)", String.valueOf(err));
-                }));
   }
 
   public void handleQuery(String nick) {
