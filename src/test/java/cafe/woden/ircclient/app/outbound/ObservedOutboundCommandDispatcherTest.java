@@ -40,51 +40,14 @@ class ObservedOutboundCommandDispatcherTest {
     assertEquals(1, delegate.calls);
   }
 
-  @Test
-  void delegatesQuasselNetworkManagerOpenRequest() {
-    StubDispatcher delegate = new StubDispatcher();
-    ObservedOutboundCommandDispatcher observed = new ObservedOutboundCommandDispatcher(delegate);
-
-    observed.openQuasselNetworkManager(disposables, "quassel");
-
-    assertEquals(1, delegate.openQuasselNetworkManagerCalls);
-    assertEquals("quassel", delegate.lastQuasselServerId);
-  }
-
-  @Test
-  void delegatesQuasselSetupOpenRequest() {
-    StubDispatcher delegate = new StubDispatcher();
-    ObservedOutboundCommandDispatcher observed = new ObservedOutboundCommandDispatcher(delegate);
-
-    observed.openQuasselSetup(disposables, "quassel");
-
-    assertEquals(1, delegate.openQuasselSetupCalls);
-    assertEquals("quassel", delegate.lastQuasselServerId);
-  }
-
   private static final class StubDispatcher implements OutboundCommandDispatcher {
     int calls = 0;
     boolean throwOnDispatch = false;
-    int openQuasselSetupCalls = 0;
-    int openQuasselNetworkManagerCalls = 0;
-    String lastQuasselServerId = "";
 
     @Override
     public void dispatch(CompositeDisposable disposables, ParsedInput input) {
       calls++;
       if (throwOnDispatch) throw new IllegalStateException("boom");
-    }
-
-    @Override
-    public void openQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
-      openQuasselNetworkManagerCalls++;
-      lastQuasselServerId = serverId;
-    }
-
-    @Override
-    public void openQuasselSetup(CompositeDisposable disposables, String serverId) {
-      openQuasselSetupCalls++;
-      lastQuasselServerId = serverId;
     }
   }
 }

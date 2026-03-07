@@ -3,6 +3,7 @@ package cafe.woden.ircclient.app.core;
 import cafe.woden.ircclient.app.AppSchedulers;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
+import cafe.woden.ircclient.app.commands.ParsedInput;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.function.Consumer;
 import org.jmolecules.architecture.layered.ApplicationLayer;
@@ -19,8 +20,7 @@ public class MediatorUiSubscriptionBinder {
       CompositeDisposable disposables,
       Consumer<UserActionRequest> onUserActionRequest,
       Consumer<String> onOutboundLine,
-      Consumer<String> onQuasselSetupRequest,
-      Consumer<String> onQuasselNetworkManagerRequest) {
+      Consumer<ParsedInput.BackendNamed> onBackendNamedRequest) {
     disposables.add(
         ui.targetSelections()
             // Some UI refresh paths (e.g. LAF/theme updates) can cause the current selection
@@ -71,19 +71,10 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
 
     disposables.add(
-        ui.quasselSetupRequests()
+        ui.backendNamedCommandRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
-                onQuasselSetupRequest::accept,
-                err ->
-                    ui.appendError(
-                        targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
-
-    disposables.add(
-        ui.quasselNetworkManagerRequests()
-            .observeOn(AppSchedulers.edt())
-            .subscribe(
-                onQuasselNetworkManagerRequest::accept,
+                onBackendNamedRequest::accept,
                 err ->
                     ui.appendError(
                         targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));

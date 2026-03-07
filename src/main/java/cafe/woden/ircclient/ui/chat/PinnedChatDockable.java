@@ -1,12 +1,15 @@
 package cafe.woden.ircclient.ui.chat;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
+import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -23,6 +26,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.IntConsumer;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
@@ -61,7 +65,9 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   private final Consumer<TargetRef> activate;
   private final OutboundLineBus outboundBus;
-  private final IrcClientService irc;
+  private final IrcTypingPort typingPort;
+  private final IrcReadMarkerPort readMarkerPort;
+  private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final BiConsumer<TargetRef, String> onDraftChanged;
   private final BiConsumer<TargetRef, String> onClosed;
 
@@ -88,7 +94,10 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       CommandHistoryStore historyStore,
       Consumer<TargetRef> activate,
       OutboundLineBus outboundBus,
-      IrcClientService irc,
+      IrcTypingPort typingPort,
+      IrcReadMarkerPort readMarkerPort,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
+      Function<String, BackendUiProfile> backendUiProfileProvider,
       ActiveInputRouter activeInputRouter,
       BiConsumer<TargetRef, String> onDraftChanged,
       BiConsumer<TargetRef, String> onClosed) {
@@ -98,7 +107,10 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.chatHistoryService = chatHistoryService;
     this.activate = activate;
     this.outboundBus = outboundBus;
-    this.irc = irc;
+    this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
+    this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
+    this.messageActionCapabilityPolicy =
+        Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.activeInputRouter = activeInputRouter;
     this.onDraftChanged = onDraftChanged;
     this.onClosed = onClosed;
@@ -150,6 +162,11 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     // Input panel embedded in the pinned view.
     this.inputPanel = new MessageInputPanel(settingsBus, historyStore, spellcheckSettingsBus);
+    BackendUiProfile initialProfile =
+        backendUiProfileProvider == null
+            ? BackendUiProfile.ircOnly(target.serverId())
+            : backendUiProfileProvider.apply(target.serverId());
+    this.inputPanel.setBackendUiProfile(initialProfile);
     add(inputPanel, BorderLayout.SOUTH);
 
     // Persist draft text continuously so closing/undocking doesn't lose the latest draft.
@@ -298,9 +315,9 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   public void refreshTypingSignalAvailability() {
     boolean available = false;
-    if (target != null && !target.isStatus() && !target.isUiOnly() && irc != null) {
+    if (target != null && !target.isStatus() && !target.isUiOnly()) {
       try {
-        available = irc.isTypingAvailable(target.serverId());
+        available = typingPort.isTypingAvailable(target.serverId());
       } catch (Exception ignored) {
       }
     }
@@ -315,35 +332,19 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   @Override
   protected boolean replyContextActionVisible() {
     if (target == null || target.isStatus() || target.isUiOnly()) return false;
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReplyAvailable(target.serverId());
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canReply(target.serverId());
   }
 
   @Override
   protected boolean reactContextActionVisible() {
     if (target == null || target.isStatus() || target.isUiOnly()) return false;
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReactAvailable(target.serverId());
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canReact(target.serverId());
   }
 
   @Override
   protected boolean unreactContextActionVisible() {
     if (target == null || target.isStatus() || target.isUiOnly()) return false;
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReplyAvailable(target.serverId())
-          && irc.isDraftUnreactAvailable(target.serverId());
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canUnreact(target.serverId());
   }
 
   @Override
@@ -668,10 +669,9 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   private void onLocalTypingStateChanged(String state) {
     if (target == null || target.isStatus() || target.isUiOnly()) return;
-    if (irc == null) return;
     boolean typingAvailable = false;
     try {
-      typingAvailable = irc.isTypingAvailable(target.serverId());
+      typingAvailable = typingPort.isTypingAvailable(target.serverId());
     } catch (Exception ignored) {
     }
     inputPanel.setTypingSignalAvailable(typingAvailable);
@@ -679,7 +679,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       String s = normalizeTypingState(state);
       if (!"done".equals(s) && typingUnavailableWarned.compareAndSet(false, true)) {
         String reason =
-            Objects.toString(irc.typingAvailabilityReason(target.serverId()), "").trim();
+            Objects.toString(typingPort.typingAvailabilityReason(target.serverId()), "").trim();
         if (reason.isEmpty()) reason = "not negotiated / not allowed";
         log.info(
             "[{}] typing indicators are enabled, but unavailable on this server ({})",
@@ -692,7 +692,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     String s = normalizeTypingState(state);
     if (s.isEmpty()) return;
     var unused =
-        irc.sendTyping(target.serverId(), target.target(), s)
+        typingPort
+            .sendTyping(target.serverId(), target.target(), s)
             .subscribe(
                 () -> inputPanel.onLocalTypingIndicatorSent(s),
                 err -> {
@@ -719,43 +720,19 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   }
 
   private boolean isLoadNewerHistorySupportedForServer(String serverId) {
-    return isChatHistorySupportedForServer(serverId) || isZncPlaybackSupportedForServer(serverId);
+    return messageActionCapabilityPolicy.canLoadNewerHistory(serverId);
   }
 
   private boolean isChatHistorySupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isChatHistoryAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private boolean isZncPlaybackSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isZncPlaybackAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canLoadAroundMessage(serverId);
   }
 
   private boolean isMessageEditSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isMessageEditAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canEdit(serverId);
   }
 
   private boolean isMessageRedactionSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isMessageRedactionAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
+    return messageActionCapabilityPolicy.canRedact(serverId);
   }
 
   private void applyReadMarkerViewState() {
@@ -774,7 +751,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   private void maybeSendReadMarker() {
     if (target == null || target.isStatus() || target.isUiOnly()) return;
-    if (irc == null || !irc.isReadMarkerAvailable(target.serverId())) return;
+    if (!readMarkerPort.isReadMarkerAvailable(target.serverId())) return;
 
     long now = System.currentTimeMillis();
     if ((now - lastReadMarkerSentAtMs) < READ_MARKER_SEND_COOLDOWN_MS) return;
@@ -782,7 +759,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     transcripts.updateReadMarker(target, now);
     var unused =
-        irc.sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now))
+        readMarkerPort
+            .sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now))
             .subscribe(() -> {}, err -> {});
   }
 }

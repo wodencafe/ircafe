@@ -5,6 +5,7 @@ import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
@@ -22,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -45,6 +47,7 @@ public class PerformOnConnectService {
   private static final long DEFAULT_INTERLINE_DELAY_MS = 200L;
 
   private final IrcClientService irc;
+  private final IrcBackendAvailabilityPort backendAvailability;
   private final ServerCatalog serverCatalog;
   private final CommandParser commandParser;
   private final UiPort ui;
@@ -56,8 +59,13 @@ public class PerformOnConnectService {
   private final Disposable eventsSub;
 
   public PerformOnConnectService(
-      IrcClientService irc, ServerCatalog serverCatalog, CommandParser commandParser, UiPort ui) {
+      IrcClientService irc,
+      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
+      ServerCatalog serverCatalog,
+      CommandParser commandParser,
+      UiPort ui) {
     this.irc = Objects.requireNonNull(irc, "irc");
+    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     this.commandParser = Objects.requireNonNull(commandParser, "commandParser");
     this.ui = Objects.requireNonNull(ui, "ui");
@@ -565,7 +573,8 @@ public class PerformOnConnectService {
   }
 
   private String normalizeBackendAvailabilityReason(String serverId) {
-    String reason = Objects.toString(irc.backendAvailabilityReason(serverId), "").trim();
+    String reason =
+        Objects.toString(backendAvailability.backendAvailabilityReason(serverId), "").trim();
     if (reason.endsWith(".")) {
       reason = reason.substring(0, reason.length() - 1).trim();
     }

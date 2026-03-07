@@ -36,6 +36,7 @@ public class StatusBar extends JPanel {
   private static final int MAX_NOTICE_HISTORY = 400;
   private static final int HISTORY_FLASH_TOGGLES = 6;
   private static final int HISTORY_FLASH_TICK_MS = 180;
+  private static final int UPDATE_NOTIFIER_TOOLTIP_AUTO_HIDE_MS = 12_000;
   private static final DateTimeFormatter NOTICE_HISTORY_TIME_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
   private static final String SERVER_DISCONNECTED_TEXT = "(disconnected)";
@@ -820,8 +821,7 @@ public class StatusBar extends JPanel {
     if (tip.isEmpty()) return;
     hideUpdateNotifierTooltipPopupOnEdt();
 
-    JToolTip tooltip = new JToolTip();
-    tooltip.setTipText(tip);
+    JToolTip tooltip = createUpdateNotifierTooltipAlertOnEdt(tip);
     Point p = updateNotifierButton.getLocationOnScreen();
     int x = p.x + Math.max(4, updateNotifierButton.getWidth() / 2 - 150);
     int y = p.y - 32;
@@ -829,19 +829,28 @@ public class StatusBar extends JPanel {
         PopupFactory.getSharedInstance().getPopup(updateNotifierButton, tooltip, x, y);
     updateNotifierTooltipPopup.show();
 
-    if (updateNotifierTooltipHideTimer == null) {
-      updateNotifierTooltipHideTimer =
-          new Timer(
-              5500,
-              e -> {
-                hideUpdateNotifierTooltipPopupOnEdt();
-                if (updateNotifierTooltipHideTimer != null) {
-                  updateNotifierTooltipHideTimer.stop();
-                }
-              });
-      updateNotifierTooltipHideTimer.setRepeats(false);
-    }
+    ensureUpdateNotifierTooltipHideTimerOnEdt();
     updateNotifierTooltipHideTimer.restart();
+  }
+
+  private JToolTip createUpdateNotifierTooltipAlertOnEdt(String tip) {
+    JToolTip tooltip = new JToolTip();
+    tooltip.setTipText(tip);
+    tooltip.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mousePressed(MouseEvent e) {
+            hideUpdateNotifierTooltipPopupOnEdt();
+          }
+        });
+    return tooltip;
+  }
+
+  private void ensureUpdateNotifierTooltipHideTimerOnEdt() {
+    if (updateNotifierTooltipHideTimer != null) return;
+    updateNotifierTooltipHideTimer =
+        new Timer(UPDATE_NOTIFIER_TOOLTIP_AUTO_HIDE_MS, e -> hideUpdateNotifierTooltipPopupOnEdt());
+    updateNotifierTooltipHideTimer.setRepeats(false);
   }
 
   private void hideUpdateNotifierTooltipPopupOnEdt() {

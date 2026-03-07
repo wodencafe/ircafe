@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.irc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -47,6 +49,82 @@ class BackendRoutingIrcClientServiceTest {
 
     verify(ircBackend).connect("irc");
     verify(quasselBackend).connect("quassel");
+  }
+
+  @Test
+  void routesCallsByConfiguredMatrixBackend() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+    IrcBackendClientService matrixBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(matrixBackend.backend()).thenReturn(IrcProperties.Server.Backend.MATRIX);
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(matrixBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(server("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(matrixBackend.connect("matrix")).thenReturn(Completable.complete());
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, matrixBackend));
+
+    service.connect("matrix").blockingAwait();
+
+    verify(matrixBackend).connect("matrix");
+    verify(ircBackend, never()).connect("matrix");
+  }
+
+  @Test
+  void reportsMatrixBackendServerFromConfiguration() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+    IrcBackendClientService matrixBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(matrixBackend.backend()).thenReturn(IrcProperties.Server.Backend.MATRIX);
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(matrixBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(server("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(serverCatalog.find("irc"))
+        .thenReturn(Optional.of(server("irc", IrcProperties.Server.Backend.IRC)));
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, matrixBackend));
+
+    assertTrue(service.isMatrixBackendServer("matrix"));
+    assertFalse(service.isMatrixBackendServer("irc"));
+  }
+
+  @Test
+  void routesMatrixRoomMessagesToChannelPath() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+    IrcBackendClientService matrixBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(matrixBackend.backend()).thenReturn(IrcProperties.Server.Backend.MATRIX);
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(matrixBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(server("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(matrixBackend.sendToChannel("matrix", "!room:matrix.example.org", "hello"))
+        .thenReturn(Completable.complete());
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, matrixBackend));
+
+    service.sendMessage("matrix", "!room:matrix.example.org", "hello").blockingAwait();
+
+    verify(matrixBackend).sendToChannel("matrix", "!room:matrix.example.org", "hello");
+    verify(matrixBackend, never())
+        .sendPrivateMessage("matrix", "!room:matrix.example.org", "hello");
   }
 
   @Test
@@ -149,20 +227,20 @@ class BackendRoutingIrcClientServiceTest {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
     IrcBackendClientService quasselBackend = mock(IrcBackendClientService.class);
-    IrcClientService.QuasselCoreSetupPrompt prompt =
-        new IrcClientService.QuasselCoreSetupPrompt(
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
+        new QuasselCoreControlPort.QuasselCoreSetupPrompt(
             "quassel", "setup required", List.of("SQLite"), List.of("Database"), Map.of());
-    IrcClientService.QuasselCoreSetupRequest request =
-        new IrcClientService.QuasselCoreSetupRequest(
+    QuasselCoreControlPort.QuasselCoreSetupRequest request =
+        new QuasselCoreControlPort.QuasselCoreSetupRequest(
             "admin", "secret", "SQLite", "Database", Map.of(), Map.of());
-    IrcClientService.QuasselCoreNetworkSummary network =
-        new IrcClientService.QuasselCoreNetworkSummary(
+    QuasselCoreControlPort.QuasselCoreNetworkSummary network =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
             1, "libera", true, true, 1, "irc.libera.chat", 6697, true, Map.of());
-    IrcClientService.QuasselCoreNetworkCreateRequest createRequest =
-        new IrcClientService.QuasselCoreNetworkCreateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkCreateRequest createRequest =
+        new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
             "libera", "irc.libera.chat", 6697, true, "", true, 1, List.of());
-    IrcClientService.QuasselCoreNetworkUpdateRequest updateRequest =
-        new IrcClientService.QuasselCoreNetworkUpdateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest updateRequest =
+        new QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest(
             "", "irc2.libera.chat", 6667, false, "", true, null, null);
 
     when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);

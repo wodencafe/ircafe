@@ -3464,6 +3464,11 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     return (bufferInfo.typeBits() & BUFFER_QUERY) != 0;
   }
 
+  private static boolean isStatusBuffer(QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo) {
+    if (bufferInfo == null) return false;
+    return (bufferInfo.typeBits() & BUFFER_STATUS) != 0;
+  }
+
   private static boolean isPlainMessage(int typeBits) {
     return (typeBits & MESSAGE_TYPE_PLAIN) != 0;
   }
@@ -3542,12 +3547,17 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       QuasselSession session,
       QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo,
       String fallbackFromNick) {
+    boolean channelBuffer = isChannelBuffer(bufferInfo);
+    boolean queryBuffer = isQueryBuffer(bufferInfo);
+    if (!channelBuffer && !queryBuffer && isStatusBuffer(bufferInfo)) {
+      return "status";
+    }
     String base = normalizedBufferName(bufferInfo);
-    if (base.isEmpty() && isQueryBuffer(bufferInfo)) {
+    if (base.isEmpty() && queryBuffer) {
       base = Objects.toString(fallbackFromNick, "").trim();
     }
     if (base.isEmpty()) return "";
-    if (!isChannelBuffer(bufferInfo) && !isQueryBuffer(bufferInfo)) {
+    if (!channelBuffer && !queryBuffer) {
       return base;
     }
     int networkId = bufferInfo == null ? -1 : bufferInfo.networkId();

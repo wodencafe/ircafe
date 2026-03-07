@@ -17,13 +17,16 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.ignore.IgnoreListService;
+import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.logging.ChatLogRepository;
 import cafe.woden.ircclient.logging.LogLineFactory;
+import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
 import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
 import cafe.woden.ircclient.logging.history.DbChatHistoryService;
 import cafe.woden.ircclient.logging.history.LoadOlderControlState;
@@ -210,6 +213,7 @@ class ChannelHistoryPreservationFunctionalTest {
     IrcClientService irc = mock(IrcClientService.class);
     when(irc.currentNick(anyString())).thenReturn(Optional.empty());
     when(irc.requestNames(anyString(), anyString())).thenReturn(Completable.complete());
+    IrcBouncerPlaybackPort bouncerPlayback = mock(IrcBouncerPlaybackPort.class);
 
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     when(connectionCoordinator.isConnected(anyString())).thenReturn(false);
@@ -218,13 +222,16 @@ class ChannelHistoryPreservationFunctionalTest {
     ChatLogRepository repo = repoFixture.repo;
 
     ExecutorService historyExec = Executors.newSingleThreadExecutor();
+    ScheduledExecutorService ingestBusScheduler = Executors.newSingleThreadScheduledExecutor();
+    ChatHistoryIngestBus ingestBus = new ChatHistoryIngestBus(ingestBusScheduler);
     DbChatHistoryService historyService =
         new DbChatHistoryService(
             repo,
             new LogProperties(true, true, true, true, true, 0, null, null, null),
             new FixedHistoryTranscriptPort(transcripts, 100, 200),
-            null,
-            null,
+            irc,
+            bouncerPlayback,
+            ingestBus,
             historyExec);
 
     TargetChatHistoryPort historyPort =
@@ -244,11 +251,12 @@ class ChannelHistoryPreservationFunctionalTest {
         new TargetCoordinator(
             ui,
             new UserListStore(),
-            irc,
+            IrcTargetMembershipPort.from(irc),
+            bouncerPlayback,
             serverRegistry,
             runtimeConfig,
             connectionCoordinator,
-            mock(IgnoreListService.class),
+            mock(IgnoreListQueryPort.class),
             mock(UserhostQueryService.class),
             mock(UserInfoEnrichmentService.class),
             historyPort,
@@ -261,6 +269,7 @@ class ChannelHistoryPreservationFunctionalTest {
         transcripts,
         targetCoordinator,
         historyExec,
+        ingestBusScheduler,
         repoFixture,
         new LogLineFactory(Clock.systemUTC()));
   }
@@ -366,11 +375,14 @@ class ChannelHistoryPreservationFunctionalTest {
       ChatTranscriptStore transcripts,
       TargetCoordinator targetCoordinator,
       ExecutorService historyExec,
+      ScheduledExecutorService ingestBusScheduler,
       RepoFixture repoFixture,
       LogLineFactory lineFactory) {
     void shutdown() throws Exception {
       historyExec.shutdownNow();
       historyExec.awaitTermination(2, TimeUnit.SECONDS);
+      ingestBusScheduler.shutdownNow();
+      ingestBusScheduler.awaitTermination(2, TimeUnit.SECONDS);
       repoFixture.close();
       onEdt(serverTree::shutdown);
       flushEdt();

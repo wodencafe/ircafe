@@ -6,6 +6,8 @@ import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
+import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
@@ -270,15 +272,23 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public Flowable<String> quasselSetupRequests() {
-    return serverTree.quasselSetupRequests();
-  }
-
-  @Override
-  public Flowable<String> quasselNetworkManagerRequests() {
+  public Flowable<ParsedInput.BackendNamed> backendNamedCommandRequests() {
+    Flowable<String> setupRequests = serverTree.quasselSetupRequests();
+    Flowable<String> networkManagerRequests =
+        Flowable.mergeArray(
+                serverTree.quasselNetworkManagerRequests(),
+                quasselNetworkManagerRequestsFromApp.onBackpressureLatest())
+            .onBackpressureBuffer();
     return Flowable.mergeArray(
-            serverTree.quasselNetworkManagerRequests(),
-            quasselNetworkManagerRequestsFromApp.onBackpressureLatest())
+            setupRequests.map(
+                sid ->
+                    new ParsedInput.BackendNamed(
+                        BackendNamedCommandNames.QUASSEL_SETUP, normalizeBackendCommandArgs(sid))),
+            networkManagerRequests.map(
+                sid ->
+                    new ParsedInput.BackendNamed(
+                        BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER,
+                        normalizeBackendCommandArgs(sid))))
         .onBackpressureBuffer();
   }
 
@@ -287,6 +297,10 @@ public class SwingUiPort implements UiPort {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
     quasselNetworkManagerRequestsFromApp.onNext(sid);
+  }
+
+  private static String normalizeBackendCommandArgs(String args) {
+    return Objects.toString(args, "").trim();
   }
 
   @Override
@@ -555,10 +569,10 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
-  public Optional<cafe.woden.ircclient.irc.IrcClientService.QuasselCoreSetupRequest>
+  public Optional<cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreSetupRequest>
       promptQuasselCoreSetup(
           String serverId,
-          cafe.woden.ircclient.irc.IrcClientService.QuasselCoreSetupPrompt prompt) {
+          cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreSetupPrompt prompt) {
     return onEdtCall(
         () -> {
           String sid = Objects.toString(serverId, "").trim();
@@ -667,7 +681,7 @@ public class SwingUiPort implements UiPort {
               statusBar.enqueueNotification("Submitting Quassel setup: " + detail, null);
             }
             return Optional.of(
-                new cafe.woden.ircclient.irc.IrcClientService.QuasselCoreSetupRequest(
+                new cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreSetupRequest(
                     adminUser, adminPassword, storage, auth, Map.of(), Map.of()));
           }
         },
@@ -677,17 +691,17 @@ public class SwingUiPort implements UiPort {
   @Override
   public Optional<QuasselNetworkManagerAction> promptQuasselNetworkManagerAction(
       String serverId,
-      List<cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkSummary> networks) {
+      List<cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {
     return onEdtCall(
         () -> {
           String sid = Objects.toString(serverId, "").trim();
-          List<cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkSummary> safeNetworks =
-              networks == null ? List.of() : List.copyOf(networks);
+          List<cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary>
+              safeNetworks = networks == null ? List.of() : List.copyOf(networks);
 
           while (true) {
             javax.swing.DefaultListModel<QuasselNetworkChoice> model =
                 new javax.swing.DefaultListModel<>();
-            for (cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkSummary summary :
+            for (cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary summary :
                 safeNetworks) {
               if (summary == null) continue;
               model.addElement(new QuasselNetworkChoice(summary));
@@ -733,7 +747,9 @@ public class SwingUiPort implements UiPort {
             }
 
             if (choice == 2) {
-              Optional<cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkCreateRequest>
+              Optional<
+                      cafe.woden.ircclient.irc.QuasselCoreControlPort
+                          .QuasselCoreNetworkCreateRequest>
                   addRequest = promptQuasselNetworkCreateRequest();
               if (addRequest.isEmpty()) {
                 continue;
@@ -762,7 +778,9 @@ public class SwingUiPort implements UiPort {
               return Optional.of(QuasselNetworkManagerAction.remove(networkToken));
             }
             if (choice == 3) {
-              Optional<cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkUpdateRequest>
+              Optional<
+                      cafe.woden.ircclient.irc.QuasselCoreControlPort
+                          .QuasselCoreNetworkUpdateRequest>
                   updateRequest = promptQuasselNetworkUpdateRequest(selected.summary());
               if (updateRequest.isEmpty()) {
                 continue;
@@ -775,7 +793,7 @@ public class SwingUiPort implements UiPort {
         Optional.empty());
   }
 
-  private Optional<cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkCreateRequest>
+  private Optional<cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkCreateRequest>
       promptQuasselNetworkCreateRequest() {
     javax.swing.JTextField nameField = new javax.swing.JTextField(28);
     javax.swing.JTextField hostField = new javax.swing.JTextField(28);
@@ -838,7 +856,7 @@ public class SwingUiPort implements UiPort {
         continue;
       }
       return Optional.of(
-          new cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkCreateRequest(
+          new cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
               networkName,
               serverHost,
               serverPort,
@@ -850,7 +868,7 @@ public class SwingUiPort implements UiPort {
     }
   }
 
-  private Optional<cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkUpdateRequest>
+  private Optional<cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest>
       promptQuasselNetworkUpdateRequest(QuasselNetworkChoiceSummary summary) {
     String defaultName = summary == null ? "" : summary.networkName();
     String defaultHost = summary == null ? "" : summary.serverHost();
@@ -915,7 +933,7 @@ public class SwingUiPort implements UiPort {
         continue;
       }
       return Optional.of(
-          new cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkUpdateRequest(
+          new cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest(
               networkName,
               serverHost,
               serverPort,
@@ -941,7 +959,8 @@ public class SwingUiPort implements UiPort {
 
   private record QuasselNetworkChoice(
       QuasselNetworkChoiceSummary summary, String idTokenOrName, String label) {
-    QuasselNetworkChoice(cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkSummary s) {
+    QuasselNetworkChoice(
+        cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary s) {
       this(
           new QuasselNetworkChoiceSummary(
               s.networkId(),
@@ -971,7 +990,7 @@ public class SwingUiPort implements UiPort {
       boolean connected) {}
 
   private static String renderQuasselNetworkChoiceLabel(
-      cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkSummary summary) {
+      cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary summary) {
     if (summary == null) return "(unknown network)";
     String name = Objects.toString(summary.networkName(), "").trim();
     if (name.isEmpty()) name = "network-" + summary.networkId();
@@ -989,7 +1008,7 @@ public class SwingUiPort implements UiPort {
   }
 
   private static String networkChoiceToken(
-      cafe.woden.ircclient.irc.IrcClientService.QuasselCoreNetworkSummary summary) {
+      cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary summary) {
     if (summary == null) return "";
     String token =
         summary.networkId() >= 0

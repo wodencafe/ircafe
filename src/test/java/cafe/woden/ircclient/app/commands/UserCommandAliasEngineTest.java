@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcCurrentNickPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.model.UserCommandAlias;
 import java.util.List;
@@ -16,8 +16,9 @@ import org.junit.jupiter.api.Test;
 class UserCommandAliasEngineTest {
 
   private final UserCommandAliasesBus aliasesBus = mock(UserCommandAliasesBus.class);
-  private final IrcClientService irc = mock(IrcClientService.class);
-  private final UserCommandAliasEngine engine = new UserCommandAliasEngine(aliasesBus, irc);
+  private final IrcCurrentNickPort currentNickPort = mock(IrcCurrentNickPort.class);
+  private final UserCommandAliasEngine engine =
+      new UserCommandAliasEngine(aliasesBus, currentNickPort);
 
   @Test
   void expandsPositionalAndRangePlaceholders() {
@@ -48,7 +49,7 @@ class UserCommandAliasEngineTest {
   void expandsContextPlaceholders() {
     when(aliasesBus.get())
         .thenReturn(List.of(new UserCommandAlias(true, "where", "/msg %1 ctx=%c|%t|%s|%n")));
-    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(currentNickPort.currentNick("libera")).thenReturn(Optional.of("me"));
 
     UserCommandAliasEngine.ExpansionResult out =
         engine.expand("/where bob", new TargetRef("libera", "#ircafe"));
@@ -92,7 +93,7 @@ class UserCommandAliasEngineTest {
   void expandsDollarNickWithoutPartialDollarNSubstitution() {
     when(aliasesBus.get())
         .thenReturn(List.of(new UserCommandAlias(true, "whoami", "/msg %1 me=$nick and short=$n")));
-    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(currentNickPort.currentNick("libera")).thenReturn(Optional.of("me"));
 
     UserCommandAliasEngine.ExpansionResult out =
         engine.expand("/whoami bob", new TargetRef("libera", "#ircafe"));

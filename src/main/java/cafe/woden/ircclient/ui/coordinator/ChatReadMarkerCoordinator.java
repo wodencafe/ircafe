@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.coordinator;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
@@ -21,7 +21,7 @@ public final class ChatReadMarkerCoordinator {
   private static final int MAX_TRACKED_TARGET_STATES = 1024;
 
   private final ChatTranscriptStore transcripts;
-  private final IrcClientService irc;
+  private final IrcReadMarkerPort readMarkerPort;
   private final Supplier<TargetRef> activeTargetSupplier;
   private final IntConsumer scrollToTranscriptOffset;
   private final Runnable updateScrollStateFromBar;
@@ -39,14 +39,14 @@ public final class ChatReadMarkerCoordinator {
 
   public ChatReadMarkerCoordinator(
       ChatTranscriptStore transcripts,
-      IrcClientService irc,
+      IrcReadMarkerPort readMarkerPort,
       Supplier<TargetRef> activeTargetSupplier,
       IntConsumer scrollToTranscriptOffset,
       Runnable updateScrollStateFromBar,
       BooleanSupplier transcriptAtBottomSupplier) {
     this(
         transcripts,
-        irc,
+        readMarkerPort,
         activeTargetSupplier,
         scrollToTranscriptOffset,
         updateScrollStateFromBar,
@@ -56,14 +56,14 @@ public final class ChatReadMarkerCoordinator {
 
   public ChatReadMarkerCoordinator(
       ChatTranscriptStore transcripts,
-      IrcClientService irc,
+      IrcReadMarkerPort readMarkerPort,
       Supplier<TargetRef> activeTargetSupplier,
       IntConsumer scrollToTranscriptOffset,
       Runnable updateScrollStateFromBar,
       BooleanSupplier transcriptAtBottomSupplier,
       LongSupplier currentTimeMillis) {
     this.transcripts = Objects.requireNonNull(transcripts, "transcripts");
-    this.irc = irc;
+    this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
     this.activeTargetSupplier =
         Objects.requireNonNull(activeTargetSupplier, "activeTargetSupplier");
     this.scrollToTranscriptOffset =
@@ -151,7 +151,7 @@ public final class ChatReadMarkerCoordinator {
 
   private void maybeSendReadMarker(TargetRef target) {
     if (target == null || target.isStatus() || target.isUiOnly()) return;
-    if (irc == null || !irc.isReadMarkerAvailable(target.serverId())) return;
+    if (!readMarkerPort.isReadMarkerAvailable(target.serverId())) return;
 
     long now = currentTimeMillis.getAsLong();
     Long last = lastReadMarkerSentAtByTarget.get(target);
@@ -160,7 +160,9 @@ public final class ChatReadMarkerCoordinator {
 
     transcripts.updateReadMarker(target, now);
     try {
-      var send = irc.sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now));
+      var send =
+          readMarkerPort.sendReadMarker(
+              target.serverId(), target.target(), Instant.ofEpochMilli(now));
       if (send != null) {
         var unused = send.subscribe(() -> {}, err -> {});
       }

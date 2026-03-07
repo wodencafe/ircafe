@@ -8,7 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -19,12 +20,13 @@ class ChatHistoryActionCoordinatorTest {
 
   @Test
   void replyContextActionVisibleUsesIrcCapabilityForActiveTarget() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,
@@ -48,7 +50,7 @@ class ChatHistoryActionCoordinatorTest {
 
   @Test
   void onReplyToMessageRequestedActivatesInputAndBeginsCompose() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
     AtomicReference<TargetRef> activatedTarget = new AtomicReference<>();
@@ -60,6 +62,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,
@@ -94,13 +97,14 @@ class ChatHistoryActionCoordinatorTest {
 
   @Test
   void unreactContextActionVisibleRequiresReplyAndUnreactCapabilities() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
     when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,
@@ -126,7 +130,7 @@ class ChatHistoryActionCoordinatorTest {
 
   @Test
   void onUnreactToMessageRequestedPrefillsCommandAndFocusesInput() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
     when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
@@ -137,6 +141,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,
@@ -165,7 +170,7 @@ class ChatHistoryActionCoordinatorTest {
 
   @Test
   void onLoadNewerHistoryRequestedEmitsLatestCommandWhenChatHistorySupported() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     AtomicReference<TargetRef> activatedTarget = new AtomicReference<>();
@@ -176,6 +181,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             chatHistoryService,
             () -> channel,
@@ -205,7 +211,7 @@ class ChatHistoryActionCoordinatorTest {
 
   @Test
   void onLoadNewerHistoryRequestedReloadsRecentWhenZncSupportedOnly() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     when(irc.isChatHistoryAvailable("libera")).thenReturn(false);
@@ -214,6 +220,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             chatHistoryService,
             () -> channel,
@@ -239,12 +246,13 @@ class ChatHistoryActionCoordinatorTest {
 
   @Test
   void requestHistoryAroundMessageReturnsFalseWhenUnsupported() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     when(irc.isChatHistoryAvailable("libera")).thenReturn(false);
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,
@@ -268,13 +276,14 @@ class ChatHistoryActionCoordinatorTest {
 
   @Test
   void onRedactMessageRequestedEmitsRedactCommandWhenSupported() {
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     AtomicReference<String> emittedCommand = new AtomicReference<>();
     when(irc.isMessageRedactionAvailable("libera")).thenReturn(true);
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,

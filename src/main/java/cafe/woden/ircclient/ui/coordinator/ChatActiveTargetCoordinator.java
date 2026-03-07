@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.coordinator;
 
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import java.util.Map;
@@ -18,6 +19,7 @@ public final class ChatActiveTargetCoordinator {
   private final Supplier<TargetRef> activeTargetSupplier;
   private final Consumer<TargetRef> activeTargetSetter;
   private final MessageInputPanel inputPanel;
+  private final Function<String, BackendUiProfile> backendUiProfileProvider;
   private final Map<TargetRef, String> draftByTarget;
   private final Runnable updateScrollStateFromBar;
   private final Runnable dockTitleUpdater;
@@ -36,6 +38,7 @@ public final class ChatActiveTargetCoordinator {
       Supplier<TargetRef> activeTargetSupplier,
       Consumer<TargetRef> activeTargetSetter,
       MessageInputPanel inputPanel,
+      Function<String, BackendUiProfile> backendUiProfileProvider,
       Map<TargetRef, String> draftByTarget,
       Runnable updateScrollStateFromBar,
       Runnable dockTitleUpdater,
@@ -53,6 +56,8 @@ public final class ChatActiveTargetCoordinator {
         Objects.requireNonNull(activeTargetSupplier, "activeTargetSupplier");
     this.activeTargetSetter = Objects.requireNonNull(activeTargetSetter, "activeTargetSetter");
     this.inputPanel = Objects.requireNonNull(inputPanel, "inputPanel");
+    this.backendUiProfileProvider =
+        Objects.requireNonNull(backendUiProfileProvider, "backendUiProfileProvider");
     this.draftByTarget = Objects.requireNonNull(draftByTarget, "draftByTarget");
     this.updateScrollStateFromBar =
         Objects.requireNonNull(updateScrollStateFromBar, "updateScrollStateFromBar");
@@ -90,6 +95,7 @@ public final class ChatActiveTargetCoordinator {
     }
 
     activeTargetSetter.accept(target);
+    inputPanel.setBackendUiProfile(backendUiProfileProvider.apply(target.serverId()));
     dockTitleUpdater.run();
     typingAvailabilityRefresher.run();
     setInputPanelVisibleForTarget(target);

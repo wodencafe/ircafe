@@ -3,12 +3,13 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.CtcpRoutingPort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Locale;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Component;
 public class OutboundCtcpWhoisCommandService {
 
   private final UiPort ui;
-  private final IrcClientService irc;
+  private final IrcMediatorInteractionPort mediatorIrc;
   private final TargetCoordinator targetCoordinator;
   private final ConnectionCoordinator connectionCoordinator;
   private final CtcpRoutingPort ctcpRoutingState;
@@ -29,13 +30,13 @@ public class OutboundCtcpWhoisCommandService {
 
   public OutboundCtcpWhoisCommandService(
       UiPort ui,
-      IrcClientService irc,
+      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
       TargetCoordinator targetCoordinator,
       ConnectionCoordinator connectionCoordinator,
       CtcpRoutingPort ctcpRoutingState,
       WhoisRoutingPort whoisRoutingState) {
     this.ui = ui;
-    this.irc = irc;
+    this.mediatorIrc = mediatorIrc;
     this.targetCoordinator = targetCoordinator;
     this.connectionCoordinator = connectionCoordinator;
     this.ctcpRoutingState = ctcpRoutingState;
@@ -59,7 +60,8 @@ public class OutboundCtcpWhoisCommandService {
     ui.appendStatus(ctx, "(whois)", "Requesting WHOIS for " + n + "...");
 
     disposables.add(
-        irc.whois(sid, n)
+        mediatorIrc
+            .whois(sid, n)
             .subscribe(() -> {}, err -> ui.appendError(ctx, "(whois)", String.valueOf(err))));
   }
 
@@ -124,7 +126,8 @@ public class OutboundCtcpWhoisCommandService {
     }
 
     disposables.add(
-        irc.whowas(at.serverId(), n, count)
+        mediatorIrc
+            .whowas(at.serverId(), n, count)
             .subscribe(() -> {}, err -> ui.appendError(at, "(whowas)", String.valueOf(err))));
   }
 
@@ -265,7 +268,8 @@ public class OutboundCtcpWhoisCommandService {
     ui.appendStatus(ctx, "(ctcp)", display);
 
     disposables.add(
-        irc.sendPrivateMessage(sid, n, ctcp)
+        mediatorIrc
+            .sendPrivateMessage(sid, n, ctcp)
             .subscribe(() -> {}, err -> ui.appendError(ctx, "(ctcp-error)", String.valueOf(err))));
   }
 }

@@ -10,6 +10,7 @@ import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -222,6 +223,17 @@ class ArchitectureGuardrailsTest {
               "application code should depend on IrcClientService, not transport-specific adapters");
 
   @ArchTest
+  static final ArchRule non_irc_modules_should_not_depend_on_matrix_transport_internals =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("cafe.woden.ircclient.irc..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.irc.matrix..")
+          .because(
+              "matrix transport internals should stay behind the irc module boundary and be accessed via irc ports");
+
+  @ArchTest
   static final ArchRule non_app_modules_should_not_depend_on_app_core_directly =
       noClasses()
           .that()
@@ -343,6 +355,83 @@ class ArchitectureGuardrailsTest {
           .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
           .because(
               "app outbound flows should depend on config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule only_quassel_outbound_service_should_depend_on_quassel_core_control_port =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app.outbound..")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.QuasselOutboundCommandService")
+          .should()
+          .dependOnClassesThat()
+          .areAssignableTo(QuasselCoreControlPort.class)
+          .because(
+              "backend-specific Quassel transport control should stay isolated in QuasselOutboundCommandService");
+
+  @ArchTest
+  static final ArchRule only_matrix_upload_services_should_depend_on_upload_translation_handlers =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app.outbound..")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandService")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.BackendUploadCommandRegistry")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.MatrixUploadCommandTranslationHandler")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler")
+          .should()
+          .dependOnClassesThat()
+          .haveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler")
+          .because(
+              "semantic /upload backend translation should stay behind dedicated matrix upload services");
+
+  @ArchTest
+  static final ArchRule
+      only_matrix_upload_services_should_depend_on_matrix_outbound_command_support =
+          noClasses()
+              .that()
+              .resideInAPackage("cafe.woden.ircclient.app.outbound..")
+              .and()
+              .doNotHaveFullyQualifiedName(
+                  "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupport")
+              .and()
+              .doNotHaveFullyQualifiedName(
+                  "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandService")
+              .and()
+              .doNotHaveFullyQualifiedName(
+                  "cafe.woden.ircclient.app.outbound.MatrixUploadCommandTranslationHandler")
+              .should()
+              .dependOnClassesThat()
+              .haveFullyQualifiedName(
+                  "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupport")
+              .because(
+                  "matrix upload payload shaping should remain isolated to dedicated matrix outbound services");
+
+  @ArchTest
+  static final ArchRule ui_should_only_access_backend_mode_port_through_ui_backend_profile_types =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui..")
+          .and()
+          .doNotHaveFullyQualifiedName("cafe.woden.ircclient.ui.backend.BackendUiProfile")
+          .and()
+          .doNotHaveFullyQualifiedName("cafe.woden.ircclient.ui.backend.BackendUiContext")
+          .and()
+          .doNotHaveFullyQualifiedName("cafe.woden.ircclient.ui.backend.BackendUiProfileProvider")
+          .should()
+          .dependOnClassesThat()
+          .haveFullyQualifiedName("cafe.woden.ircclient.irc.IrcBackendModePort")
+          .because(
+              "backend mode checks in UI should stay centralized behind backend-ui profile/context services");
 
   @ArchTest
   static final ArchRule state_should_not_depend_on_config_module_internals_directly =
@@ -483,7 +572,7 @@ class ArchitectureGuardrailsTest {
               "bouncer core should stay parser-agnostic and receive normalized discovery events only");
 
   @ArchTest
-  static final ArchRule only_soju_and_znc_should_depend_on_bouncer_internal_types =
+  static final ArchRule only_bouncer_and_backend_adapters_should_depend_on_bouncer_internal_types =
       noClasses()
           .that()
           .resideOutsideOfPackages(
@@ -493,7 +582,7 @@ class ArchitectureGuardrailsTest {
           .should()
           .dependOnClassesThat(BOUNCER_INTERNAL_TYPES)
           .because(
-              "bouncer internals should remain shared implementation details used only by Soju/ZNC specializations");
+              "bouncer internals should remain implementation details used only by bouncer core and backend-specific IRC adapters");
 
   @ArchTest
   static final ArchRule only_virtual_threads_factory_should_depend_on_executors =

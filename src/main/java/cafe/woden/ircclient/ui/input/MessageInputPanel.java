@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.input;
 
 import cafe.woden.ircclient.irc.Ircv3DraftNormalizer;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettings;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettings;
@@ -21,6 +22,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -33,6 +36,7 @@ public class MessageInputPanel extends JPanel {
   private static final Logger log = LoggerFactory.getLogger(MessageInputPanel.class);
   public static final String ID = "input";
   private final JTextField input = new JTextField();
+  private final JButton attach = new JButton();
   private final JButton send = new JButton();
 
   private final JPanel typingBanner = new JPanel(new BorderLayout());
@@ -46,11 +50,16 @@ public class MessageInputPanel extends JPanel {
   private final MessageInputHintPopupSupport hintPopupSupport;
   private final MessageInputContextMenuSupport contextMenuSupport;
   private final MessageInputComposeSupport composeSupport;
+  private final MessageInputUploadUxMode ircUploadUxMode = new IrcMessageInputUploadUxMode();
+  private final MessageInputUploadUxMode matrixUploadUxMode = new MatrixMessageInputUploadUxMode();
+  private final MessageInputUploadUxMode.Context uploadUxContext =
+      new MessageInputUploadUxContext();
   private boolean programmaticEdit;
   private final FlowableProcessor<String> outbound =
       PublishProcessor.<String>create().toSerialized();
   private volatile Runnable onActivated = () -> {};
   private volatile Consumer<String> onDraftChanged = t -> {};
+  private volatile BackendUiProfile backendUiProfile = BackendUiProfile.ircOnly("");
   private final MessageInputTypingSupport typingSupport;
   private final UiSettingsBus settingsBus;
   private final SpellcheckSettingsBus spellcheckSettingsBus;
@@ -144,11 +153,13 @@ public class MessageInputPanel extends JPanel {
     installInputSurface();
     installDraftListeners();
     installSendActions();
+    installUploadActions();
     installActivationListeners();
     installEscapeHandler();
 
     UiSettings initial = settingsBus.get();
     applySettings(initial);
+    refreshUploadUxState();
   }
 
   private void buildLayout() {
@@ -162,10 +173,16 @@ public class MessageInputPanel extends JPanel {
     sendOverlay.add(send);
     sendOverlay.add(typingSignalIndicator);
 
+    JPanel actionRow = new JPanel();
+    actionRow.setOpaque(false);
+    actionRow.setLayout(new BoxLayout(actionRow, BoxLayout.X_AXIS));
+    actionRow.add(attach);
+    actionRow.add(sendOverlay);
+
     JPanel inputRow = new JPanel(new BorderLayout(0, 0));
     inputRow.setOpaque(false);
     inputRow.add(input, BorderLayout.CENTER);
-    inputRow.add(sendOverlay, BorderLayout.EAST);
+    inputRow.add(actionRow, BorderLayout.EAST);
 
     JPanel center = new JPanel(new BorderLayout(0, 2));
     center.setOpaque(false);
@@ -209,6 +226,19 @@ public class MessageInputPanel extends JPanel {
   private void configureInputShell() {
     input.setOpaque(false);
     input.setBorder(BorderFactory.createEmptyBorder(5, 6, 5, 6));
+
+    attach.setName("messageAttachButton");
+    attach.setText("+");
+    attach.setToolTipText("Attach file");
+    if (attach.getAccessibleContext() != null) {
+      attach.getAccessibleContext().setAccessibleName("Attach file");
+      attach.getAccessibleContext().setAccessibleDescription("Attach files");
+    }
+    attach.setOpaque(false);
+    attach.setContentAreaFilled(false);
+    attach.setFocusPainted(false);
+    attach.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+    attach.setPreferredSize(new Dimension(34, 30));
 
     send.setName("messageSendButton");
     send.setText("");
@@ -290,6 +320,20 @@ public class MessageInputPanel extends JPanel {
     send.addActionListener(e -> emit());
   }
 
+  private void installUploadActions() {
+    attach.addActionListener(e -> runAttachRequested());
+    UploadTransferHandler sharedDropHandler = new UploadTransferHandler(null);
+    setTransferHandler(sharedDropHandler);
+    attach.setTransferHandler(sharedDropHandler);
+    send.setTransferHandler(sharedDropHandler);
+    TransferHandler defaultInputTransferHandler = input.getTransferHandler();
+    input.setTransferHandler(new UploadTransferHandler(defaultInputTransferHandler));
+  }
+
+  private void runAttachRequested() {
+    uploadUxModeForActiveServer().runAttachAction(uploadUxContext);
+  }
+
   private void installActivationListeners() {
     // Mark this input surface as "active" when the user interacts with it.
     FocusAdapter focusAdapter =
@@ -310,6 +354,7 @@ public class MessageInputPanel extends JPanel {
           }
         };
     input.addFocusListener(focusAdapter);
+    attach.addFocusListener(focusAdapter);
     send.addFocusListener(focusAdapter);
 
     MouseAdapter mouseAdapter =
@@ -321,6 +366,7 @@ public class MessageInputPanel extends JPanel {
           }
         };
     input.addMouseListener(mouseAdapter);
+    attach.addMouseListener(mouseAdapter);
     send.addMouseListener(mouseAdapter);
     addMouseListener(mouseAdapter);
   }
@@ -487,6 +533,7 @@ public class MessageInputPanel extends JPanel {
     try {
       Font f = new Font(s.chatFontFamily(), Font.PLAIN, s.chatFontSize());
       input.setFont(f);
+      attach.setFont(f);
       send.setFont(f);
       typingBannerLabel.setFont(f.deriveFont(Math.max(10f, f.getSize2D() - 2f)));
       typingDotsIndicator.setFont(typingBannerLabel.getFont());
@@ -554,6 +601,138 @@ public class MessageInputPanel extends JPanel {
     }
   }
 
+  private List<File> normalizeUploadFiles(List<File> files) {
+    if (files == null || files.isEmpty()) return List.of();
+    ArrayList<File> out = new ArrayList<>(files.size());
+    for (File file : files) {
+      if (file != null) out.add(file);
+    }
+    if (out.isEmpty()) return List.of();
+    return List.copyOf(out);
+  }
+
+  private String consumeDraftCaptionForUpload() {
+    String caption = input.getText().trim();
+    if (caption.isEmpty()) {
+      return "";
+    }
+    flushTypingDone();
+    historySupport.clearBrowseState();
+    runProgrammaticEdit(() -> input.setText(""));
+    undoSupport.discardAllEdits();
+    return caption;
+  }
+
+  private void emitOutboundLine(String line) {
+    String outboundLine = Objects.toString(line, "").trim();
+    if (outboundLine.isEmpty()) return;
+    outbound.onNext(outboundLine);
+  }
+
+  private void refreshUploadUxStateOnEdt() {
+    if (SwingUtilities.isEventDispatchThread()) {
+      refreshUploadUxState();
+      return;
+    }
+    SwingUtilities.invokeLater(this::refreshUploadUxState);
+  }
+
+  private void refreshUploadUxState() {
+    applyUploadActionPresentation(uploadUxModeForActiveServer().presentation());
+    revalidate();
+    repaint();
+  }
+
+  private void applyUploadActionPresentation(
+      MessageInputUploadUxMode.ActionPresentation presentation) {
+    if (presentation == null) return;
+    attach.setVisible(presentation.attachVisible());
+    attach.setToolTipText(presentation.attachTooltip());
+    if (attach.getAccessibleContext() != null) {
+      attach
+          .getAccessibleContext()
+          .setAccessibleDescription(presentation.attachAccessibleDescription());
+    }
+  }
+
+  private MessageInputUploadUxMode uploadUxModeForActiveServer() {
+    BackendUiProfile profile = backendUiProfile;
+    return profile != null && profile.isMatrixServer() ? matrixUploadUxMode : ircUploadUxMode;
+  }
+
+  private final class UploadTransferHandler extends TransferHandler {
+    private final TransferHandler fallback;
+
+    private UploadTransferHandler(TransferHandler fallback) {
+      this.fallback = fallback;
+    }
+
+    @Override
+    public boolean canImport(TransferSupport support) {
+      if (support != null && support.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+        MessageInputUploadUxMode mode = uploadUxModeForActiveServer();
+        if (!mode.canImportFileDrop(uploadUxContext)) {
+          return support != null && fallback != null && fallback.canImport(support);
+        }
+        return true;
+      }
+      return support != null && fallback != null && fallback.canImport(support);
+    }
+
+    @Override
+    public boolean importData(TransferSupport support) {
+      if (support != null && support.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+        try {
+          Transferable transferable = support.getTransferable();
+          Object payload = transferable.getTransferData(DataFlavor.javaFileListFlavor);
+          if (!(payload instanceof List<?> rawFiles) || rawFiles.isEmpty()) {
+            return false;
+          }
+          ArrayList<File> files = new ArrayList<>(rawFiles.size());
+          for (Object raw : rawFiles) {
+            if (raw instanceof File file) {
+              files.add(file);
+            }
+          }
+          if (files.isEmpty()) return false;
+          MessageInputUploadUxMode mode = uploadUxModeForActiveServer();
+          return mode.importFileDrop(uploadUxContext, files);
+        } catch (Exception ex) {
+          log.debug("[MessageInputPanel] file drop import failed", ex);
+          return false;
+        }
+      }
+      return support != null && fallback != null && fallback.importData(support);
+    }
+  }
+
+  private final class MessageInputUploadUxContext implements MessageInputUploadUxMode.Context {
+    @Override
+    public JComponent ownerComponent() {
+      return MessageInputPanel.this;
+    }
+
+    @Override
+    public boolean isInputEditable() {
+      return MessageInputPanel.this.isInputEditable();
+    }
+
+    @Override
+    public List<File> normalizeUploadFiles(List<File> files) {
+      return MessageInputPanel.this.normalizeUploadFiles(files);
+    }
+
+    @Override
+    public String consumeDraftCaptionForUpload() {
+      return MessageInputPanel.this.consumeDraftCaptionForUpload();
+    }
+
+    @Override
+    public void emitOutboundLine(String line) {
+      MessageInputPanel.this.emitOutboundLine(line);
+    }
+  }
+
   public void beginReplyCompose(String ircTarget, String messageId) {
     composeSupport.beginReplyCompose(ircTarget, messageId);
   }
@@ -569,6 +748,17 @@ public class MessageInputPanel extends JPanel {
 
   public void openQuickReactionPicker(String ircTarget, String messageId) {
     composeSupport.openQuickReactionPicker(ircTarget, messageId);
+  }
+
+  public void setBackendUiProfile(BackendUiProfile backendUiProfile) {
+    this.backendUiProfile =
+        backendUiProfile == null ? BackendUiProfile.ircOnly("") : backendUiProfile;
+    refreshUploadUxStateOnEdt();
+  }
+
+  private BackendUiProfile currentBackendUiProfile() {
+    BackendUiProfile profile = backendUiProfile;
+    return profile == null ? BackendUiProfile.ircOnly("") : profile;
   }
 
   /** Called when this input becomes the active typing surface (focus or click). */
@@ -697,6 +887,7 @@ public class MessageInputPanel extends JPanel {
   public void setInputEnabled(boolean enabled) {
     input.setEditable(enabled);
     input.setEnabled(enabled);
+    attach.setEnabled(enabled);
     send.setEnabled(enabled);
     if (!enabled) {
       flushTypingDone();

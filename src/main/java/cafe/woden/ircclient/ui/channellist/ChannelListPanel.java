@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.ui.channellist;
 
+import cafe.woden.ircclient.ui.backend.BackendUiContext;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
@@ -33,7 +35,6 @@ import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.JButton;
-import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
@@ -41,14 +42,12 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.TransferHandler;
@@ -63,12 +62,6 @@ public final class ChannelListPanel extends JPanel {
   @FunctionalInterface
   public interface ChannelModeCommandHandler {
     void accept(String serverId, String channel, String modeSpec);
-  }
-
-  private enum ListRequestType {
-    UNKNOWN,
-    FULL_LIST,
-    ALIS
   }
 
   private enum AlisActivityState {
@@ -145,6 +138,22 @@ public final class ChannelListPanel extends JPanel {
     }
   }
 
+  record MatrixListOptions(String searchTerm, String sinceToken, Integer limit) {
+    static MatrixListOptions defaults() {
+      return new MatrixListOptions("", "", MATRIX_LIST_DEFAULT_LIMIT);
+    }
+
+    MatrixListOptions {
+      searchTerm = normalizeMatrixToken(searchTerm);
+      sinceToken = normalizeMatrixToken(sinceToken);
+      if (limit == null) {
+        limit = Integer.valueOf(MATRIX_LIST_DEFAULT_LIMIT);
+      } else {
+        limit = Integer.valueOf(normalizeMatrixListLimit(limit.intValue()));
+      }
+    }
+  }
+
   private static final int LIST_COL_CHANNEL = 0;
   private static final int LIST_COL_USERS = 1;
   private static final int LIST_COL_TOPIC = 2;
@@ -156,21 +165,25 @@ public final class ChannelListPanel extends JPanel {
   private static final int MANAGED_COL_MODES = 4;
   private static final int MANAGED_COL_AUTO_REATTACH = 5;
 
-  private static final String DEFAULT_HINT =
-      "Use the refresh button to request /list (heavy) or the ALIS search button for filtered results.";
   private static final String MANAGED_HINT =
       "Managed channels include connected and disconnected channels for this server.";
+  private static final int MATRIX_LIST_DEFAULT_LIMIT = 100;
+  private static final int MATRIX_LIST_MAX_LIMIT = 200;
 
   private static final int ACTION_ICON_SIZE = 16;
   private static final Dimension ACTION_BUTTON_SIZE = new Dimension(28, 28);
 
+  private final ChannelListUxMode ircListUxMode = new IrcChannelListUxMode();
+  private final ChannelListUxMode matrixListUxMode = new MatrixChannelListUxMode();
+  private final ChannelListUxMode.Context listUxContext = new ChannelListUxModeContext();
   private final ChannelListTableModel listModel = new ChannelListTableModel();
   private final JTable listTable = new JTable(listModel);
-  private final JTextArea listSubtitle = createSubtitleArea(DEFAULT_HINT);
+  private final JTextArea listSubtitle = createSubtitleArea(ircListUxMode.defaultHint());
   private final JTextField filterField = new JTextField();
   private final TableRowSorter<ChannelListTableModel> listSorter = new TableRowSorter<>(listModel);
   private final JButton runListButton = new JButton();
   private final JButton runAlisButton = new JButton();
+  private final JButton runMatrixNextButton = new JButton();
   private final JButton listDetailsButton = new JButton();
 
   private final ManagedChannelTableModel managedModel = new ManagedChannelTableModel();
@@ -188,7 +201,7 @@ public final class ChannelListPanel extends JPanel {
   private final Map<String, ArrayList<Row>> rowsByServer = new HashMap<>();
   private final Map<String, String> statusByServer = new HashMap<>();
   private final Map<String, Boolean> loadingByServer = new HashMap<>();
-  private final Map<String, ListRequestType> requestTypeByServer = new HashMap<>();
+  private final Map<String, ChannelListRequestType> requestTypeByServer = new HashMap<>();
   private final Map<String, ArrayList<ManagedChannelRow>> managedRowsByServer = new HashMap<>();
   private final Map<String, ManagedSortMode> managedSortModeByServer = new HashMap<>();
   private final Map<String, Map<String, ChannelModeSnapshot>> channelModeSnapshotsByServer =
@@ -206,6 +219,7 @@ public final class ChannelListPanel extends JPanel {
   private volatile Consumer<String> onJoinChannel;
   private volatile Runnable onRunListRequest;
   private volatile Consumer<String> onRunAlisRequest;
+  private volatile BackendUiProfile backendUiProfile = BackendUiProfile.ircOnly("");
   private volatile Consumer<String> onAddChannelRequest;
   private volatile Consumer<String> onReconnectChannelRequest;
   private volatile Consumer<String> onDisconnectChannelRequest;
@@ -241,14 +255,15 @@ public final class ChannelListPanel extends JPanel {
     JPanel root = new JPanel(new BorderLayout(0, 8));
     root.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
-    JPanel controls = new JPanel(new MigLayout("insets 0, fillx", "[][][]push[][grow,fill]", "[]"));
+    JPanel controls =
+        new JPanel(new MigLayout("insets 0, fillx", "[][][][]push[][grow,fill]", "[]"));
     configureActionButton(
         runListButton,
         "refresh",
         "Request full /list from server (heavy; confirmation required)",
         "Run /list");
     runListButton.setToolTipText("Request full /list from server (heavy; confirmation required)");
-    runListButton.addActionListener(e -> runFullListRequested());
+    runListButton.addActionListener(e -> runListRequested());
 
     configureActionButton(
         runAlisButton,
@@ -260,11 +275,20 @@ public final class ChannelListPanel extends JPanel {
     runAlisButton.addActionListener(e -> runAlisRequested());
 
     configureActionButton(
+        runMatrixNextButton,
+        "play",
+        "Run next Matrix /list page (uses next_batch from the last result)",
+        "Run next Matrix list page");
+    runMatrixNextButton.addActionListener(e -> runMatrixNextPageRequested());
+    runMatrixNextButton.setVisible(false);
+
+    configureActionButton(
         listDetailsButton, "eye", "Show details for selected channel", "Show details");
     listDetailsButton.addActionListener(e -> showServerListDetailsForSelection());
 
     controls.add(runListButton);
     controls.add(runAlisButton);
+    controls.add(runMatrixNextButton);
     controls.add(listDetailsButton);
     controls.add(new JLabel("Filter:"), "gapleft 12");
     controls.add(filterField, "pushx,growx");
@@ -351,6 +375,7 @@ public final class ChannelListPanel extends JPanel {
     JScrollPane scroll = new JScrollPane(listTable);
     scroll.setBorder(null);
     root.add(scroll, BorderLayout.CENTER);
+    updateListActionPresentation();
     updateListButtons();
     return root;
   }
@@ -549,6 +574,8 @@ public final class ChannelListPanel extends JPanel {
 
   public void setServerId(String serverId) {
     this.serverId = normalizeServerId(serverId);
+    this.backendUiProfile = currentBackendUiProfile().withServerId(this.serverId);
+    updateListActionPresentation();
     refreshCurrentServerViews();
     refreshOpenDetailsDialog();
   }
@@ -567,6 +594,18 @@ public final class ChannelListPanel extends JPanel {
 
   public void setOnRunAlisRequest(Consumer<String> onRunAlisRequest) {
     this.onRunAlisRequest = onRunAlisRequest;
+  }
+
+  public void setBackendUiProfile(BackendUiProfile backendUiProfile) {
+    BackendUiProfile profile =
+        backendUiProfile == null ? BackendUiProfile.ircOnly("") : backendUiProfile;
+    this.backendUiProfile = profile;
+    this.serverId = profile.serverId();
+    updateListActionPresentation();
+    refreshCurrentServerViews();
+    refreshOpenDetailsDialog();
+    updateListHeader();
+    updateListButtons();
   }
 
   public void setOnAddChannelRequest(Consumer<String> onAddChannelRequest) {
@@ -704,11 +743,14 @@ public final class ChannelListPanel extends JPanel {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
 
+    uxModeForServer(sid).onBeginList(sid, banner);
+
     rowsByServer.put(sid, new ArrayList<>());
     statusByServer.put(sid, normalizeBanner(banner));
     loadingByServer.put(sid, Boolean.TRUE);
-    if (requestTypeByServer.getOrDefault(sid, ListRequestType.UNKNOWN) == ListRequestType.UNKNOWN) {
-      requestTypeByServer.put(sid, inferRequestTypeFromBanner(banner));
+    if (requestTypeByServer.getOrDefault(sid, ChannelListRequestType.UNKNOWN)
+        == ChannelListRequestType.UNKNOWN) {
+      requestTypeByServer.put(sid, uxModeForServer(sid).inferRequestTypeFromBanner(banner));
     }
     if (sid.equals(this.serverId)) {
       refreshListRows();
@@ -752,6 +794,7 @@ public final class ChannelListPanel extends JPanel {
 
     String base = Objects.toString(summary, "").trim();
     if (base.isEmpty()) base = "End of /LIST";
+    uxModeForServer(sid).onEndList(sid, base);
     statusByServer.put(sid, base);
     loadingByServer.put(sid, Boolean.FALSE);
     if (sid.equals(this.serverId)) {
@@ -880,7 +923,7 @@ public final class ChannelListPanel extends JPanel {
   private void updateListHeader() {
     String sid = this.serverId;
     if (sid.isEmpty()) {
-      listSubtitle.setText(DEFAULT_HINT);
+      listSubtitle.setText(ircListUxMode.defaultHint());
       return;
     }
 
@@ -891,7 +934,7 @@ public final class ChannelListPanel extends JPanel {
     String status = Objects.toString(statusByServer.get(sid), "").trim();
     if (status.isEmpty()) {
       if (totalCount == 0) {
-        listSubtitle.setText(DEFAULT_HINT);
+        listSubtitle.setText(defaultListHintForServer(sid));
       } else if (filtered) {
         listSubtitle.setText(sid + " - " + visibleCount + " of " + totalCount + " channels shown");
       } else {
@@ -962,17 +1005,10 @@ public final class ChannelListPanel extends JPanel {
     updateListHeader();
   }
 
-  private void runFullListRequested() {
+  private void runListRequested() {
     String sid = this.serverId;
     if (sid.isEmpty()) return;
-    if (!confirmFullListRequest()) return;
-    rememberRequestType(sid, ListRequestType.FULL_LIST);
-    if (!filterField.getText().isBlank()) {
-      filterField.setText("");
-    }
-
-    Runnable cb = onRunListRequest;
-    if (cb != null) SwingUtilities.invokeLater(cb);
+    uxModeForServer(sid).runPrimaryAction(listUxContext, sid);
   }
 
   private boolean confirmFullListRequest() {
@@ -991,95 +1027,29 @@ public final class ChannelListPanel extends JPanel {
   private void runAlisRequested() {
     String sid = this.serverId;
     if (sid.isEmpty()) return;
+    uxModeForServer(sid).runSecondaryAction(listUxContext, sid);
+  }
 
-    JTextField queryField = new JTextField(28);
-    JCheckBox includeTopic = new JCheckBox("Include topic matching (-topic)", true);
-    JCheckBox minEnabled = new JCheckBox("Minimum users (-min)");
-    JSpinner minUsers = new JSpinner(new SpinnerNumberModel(10, 0, 1_000_000, 1));
-    JCheckBox maxEnabled = new JCheckBox("Maximum users (-max)");
-    JSpinner maxUsers = new JSpinner(new SpinnerNumberModel(500, 0, 1_000_000, 1));
-    JCheckBox skipEnabled = new JCheckBox("Skip first results (-skip)");
-    JSpinner skipCount = new JSpinner(new SpinnerNumberModel(0, 0, 1_000_000, 1));
-    JCheckBox showModes = new JCheckBox("Show channel modes (-show m)", false);
-    JCheckBox showTopicSetter = new JCheckBox("Show topic setter (-show t)", false);
-    JComboBox<String> registrationScope =
-        new JComboBox<>(
-            new String[] {
-              "Any channel registration",
-              "Registered channels only (-show r)",
-              "Unregistered channels only (-show u)"
-            });
-    JPanel showFlagsPanel = new JPanel(new MigLayout("insets 0, fillx", "[][grow]", "[]"));
-    showFlagsPanel.add(showModes);
-    showFlagsPanel.add(showTopicSetter, "gapleft 10");
+  private void runMatrixNextPageRequested() {
+    String sid = this.serverId;
+    if (sid.isEmpty()) return;
+    uxModeForServer(sid).runPagingAction(listUxContext, sid);
+  }
 
-    minUsers.setEnabled(false);
-    maxUsers.setEnabled(false);
-    skipCount.setEnabled(false);
-    minEnabled.addActionListener(e -> minUsers.setEnabled(minEnabled.isSelected()));
-    maxEnabled.addActionListener(e -> maxUsers.setEnabled(maxEnabled.isSelected()));
-    skipEnabled.addActionListener(e -> skipCount.setEnabled(skipEnabled.isSelected()));
-
-    JPanel form =
-        new JPanel(
-            new MigLayout(
-                "insets 0, fillx, wrap 2", "[right][grow,fill]", "[]6[]6[]6[]6[]6[]6[]6[]"));
-    form.add(new JLabel("Query pattern:"));
-    form.add(queryField, "growx");
-    form.add(new JLabel("Topic filter:"));
-    form.add(includeTopic, "growx");
-    form.add(minEnabled);
-    form.add(minUsers, "w 120!");
-    form.add(maxEnabled);
-    form.add(maxUsers, "w 120!");
-    form.add(skipEnabled);
-    form.add(skipCount, "w 120!");
-    form.add(new JLabel("Display extras:"));
-    form.add(showFlagsPanel, "growx");
-    form.add(new JLabel("Registration:"));
-    form.add(registrationScope, "growx");
-
-    Window owner = SwingUtilities.getWindowAncestor(this);
-    int choice =
-        JOptionPane.showConfirmDialog(
-            owner,
-            form,
-            "Run ALIS Search",
-            JOptionPane.OK_CANCEL_OPTION,
-            JOptionPane.PLAIN_MESSAGE);
-    if (choice != JOptionPane.OK_OPTION) return;
-
-    String query = Objects.toString(queryField.getText(), "").trim();
-    Integer minUsersValue =
-        minEnabled.isSelected() ? ((Number) minUsers.getValue()).intValue() : null;
-    Integer maxUsersValue =
-        maxEnabled.isSelected() ? ((Number) maxUsers.getValue()).intValue() : null;
-    Integer skipValue =
-        skipEnabled.isSelected() ? ((Number) skipCount.getValue()).intValue() : null;
-    if (minUsersValue != null && maxUsersValue != null && minUsersValue > maxUsersValue) {
-      int t = minUsersValue;
-      minUsersValue = maxUsersValue;
-      maxUsersValue = t;
+  private void clearFilterText() {
+    if (!filterField.getText().isBlank()) {
+      filterField.setText("");
     }
-    AlisRegistrationFilter registrationFilter =
-        switch (registrationScope.getSelectedIndex()) {
-          case 1 -> AlisRegistrationFilter.REGISTERED_ONLY;
-          case 2 -> AlisRegistrationFilter.UNREGISTERED_ONLY;
-          default -> AlisRegistrationFilter.ANY;
-        };
-    AlisSearchOptions options =
-        new AlisSearchOptions(
-            includeTopic.isSelected(),
-            minUsersValue,
-            maxUsersValue,
-            skipValue,
-            showModes.isSelected(),
-            showTopicSetter.isSelected(),
-            registrationFilter);
-    String cmd = buildAlisCommand(query, options);
-    rememberRequestType(sid, ListRequestType.ALIS);
-    beginList(sid, "Loading ALIS search results...");
+  }
 
+  private void emitRunListRequest() {
+    Runnable cb = onRunListRequest;
+    if (cb != null) SwingUtilities.invokeLater(cb);
+  }
+
+  private void emitRunCommand(String command) {
+    String cmd = Objects.toString(command, "").trim();
+    if (cmd.isEmpty()) return;
     Consumer<String> cb = onRunAlisRequest;
     if (cb != null) SwingUtilities.invokeLater(() -> cb.accept(cmd));
   }
@@ -1089,40 +1059,11 @@ public final class ChannelListPanel extends JPanel {
   }
 
   static String buildAlisCommand(String query, AlisSearchOptions options) {
-    AlisSearchOptions opts = options == null ? AlisSearchOptions.defaults(false) : options;
-    String q = Objects.toString(query, "").trim();
-    StringBuilder raw = new StringBuilder("LIST ");
-    raw.append(opts.includeTopic() ? "*" : (q.isEmpty() ? "*" : q));
-    if (opts.includeTopic()) {
-      raw.append(" -topic");
-      raw.append(" ").append(q.isEmpty() ? "*" : q);
-    }
-    if (opts.minUsers() != null && opts.minUsers() >= 0) {
-      raw.append(" -min ").append(opts.minUsers());
-    }
-    if (opts.maxUsers() != null && opts.maxUsers() >= 0) {
-      raw.append(" -max ").append(opts.maxUsers());
-    }
-    if (opts.skipCount() != null && opts.skipCount() > 0) {
-      raw.append(" -skip ").append(opts.skipCount());
-    }
+    return IrcChannelListUxMode.buildAlisCommand(query, options);
+  }
 
-    StringBuilder showFlags = new StringBuilder();
-    if (opts.showModes()) showFlags.append("m");
-    if (opts.showTopicSetter()) showFlags.append("t");
-    if (showFlags.length() > 0) {
-      raw.append(" -show ").append(showFlags);
-    }
-
-    AlisRegistrationFilter registration =
-        opts.registrationFilter() == null ? AlisRegistrationFilter.ANY : opts.registrationFilter();
-    if (registration == AlisRegistrationFilter.REGISTERED_ONLY) {
-      raw.append(" -show r");
-    } else if (registration == AlisRegistrationFilter.UNREGISTERED_ONLY) {
-      raw.append(" -show u");
-    }
-
-    return "/quote PRIVMSG ALIS :" + raw.toString().trim();
+  static String buildMatrixListCommand(MatrixListOptions options) {
+    return MatrixChannelListUxMode.buildMatrixListCommand(options);
   }
 
   private void addChannelRequested() {
@@ -1257,10 +1198,100 @@ public final class ChannelListPanel extends JPanel {
     int row = listTable.getSelectedRow();
     boolean hasServer = !this.serverId.isBlank();
     boolean busy = isCurrentServerListLoading();
+    ChannelListUxMode mode = uxModeForServer(this.serverId);
+
+    applyListActionPresentation(mode.actionPresentation());
     listDetailsButton.setEnabled(row >= 0 && hasServer);
     runListButton.setEnabled(hasServer && !busy);
     runAlisButton.setEnabled(hasServer && !busy);
+    runMatrixNextButton.setEnabled(hasServer && !busy && mode.isPagingActionEnabled(this.serverId));
     updateListBusyIndicator(busy);
+  }
+
+  private void updateListActionPresentation() {
+    applyListActionPresentation(uxModeForServer(this.serverId).actionPresentation());
+  }
+
+  private void applyListActionPresentation(ChannelListUxMode.ActionPresentation presentation) {
+    if (presentation == null) return;
+    runListButton.setToolTipText(presentation.primaryTooltip());
+    runListButton.getAccessibleContext().setAccessibleName(presentation.primaryAccessibleName());
+    runAlisButton.setToolTipText(presentation.secondaryTooltip());
+    runAlisButton.getAccessibleContext().setAccessibleName(presentation.secondaryAccessibleName());
+    runMatrixNextButton.setVisible(presentation.pagingVisible());
+    runMatrixNextButton.setToolTipText(presentation.pagingTooltip());
+    runMatrixNextButton
+        .getAccessibleContext()
+        .setAccessibleName(presentation.pagingAccessibleName());
+  }
+
+  private String defaultListHintForServer(String sid) {
+    String server = normalizeServerId(sid);
+    if (server.isEmpty()) return ircListUxMode.defaultHint();
+    return uxModeForServer(server).defaultHint();
+  }
+
+  private boolean isMatrixServer(String sid) {
+    String serverId = normalizeServerId(sid);
+    if (serverId.isEmpty()) return false;
+    BackendUiContext context = currentBackendUiProfile().backendUiContext();
+    if (context == null) return false;
+    try {
+      return context.isMatrixServer(serverId);
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
+  private ChannelListUxMode uxModeForServer(String sid) {
+    return isMatrixServer(sid) ? matrixListUxMode : ircListUxMode;
+  }
+
+  private BackendUiProfile currentBackendUiProfile() {
+    BackendUiProfile profile = backendUiProfile;
+    return profile == null ? BackendUiProfile.ircOnly(serverId) : profile;
+  }
+
+  private final class ChannelListUxModeContext implements ChannelListUxMode.Context {
+    @Override
+    public Window ownerWindow() {
+      return SwingUtilities.getWindowAncestor(ChannelListPanel.this);
+    }
+
+    @Override
+    public boolean confirmFullListRequest() {
+      return ChannelListPanel.this.confirmFullListRequest();
+    }
+
+    @Override
+    public void clearFilterText() {
+      ChannelListPanel.this.clearFilterText();
+    }
+
+    @Override
+    public void rememberRequestType(String serverId, ChannelListRequestType requestType) {
+      ChannelListPanel.this.rememberRequestType(serverId, requestType);
+    }
+
+    @Override
+    public void beginList(String serverId, String banner) {
+      ChannelListPanel.this.beginList(serverId, banner);
+    }
+
+    @Override
+    public void emitRunListRequest() {
+      ChannelListPanel.this.emitRunListRequest();
+    }
+
+    @Override
+    public void emitRunCommand(String command) {
+      ChannelListPanel.this.emitRunCommand(command);
+    }
+
+    @Override
+    public void updateListButtons() {
+      ChannelListPanel.this.updateListButtons();
+    }
   }
 
   private void updateManagedButtons() {
@@ -1811,14 +1842,16 @@ public final class ChannelListPanel extends JPanel {
 
   private void updateListBusyIndicator(boolean busy) {
     String sid = normalizeServerId(this.serverId);
-    ListRequestType requestType =
+    ChannelListRequestType requestType =
         sid.isEmpty()
-            ? ListRequestType.UNKNOWN
-            : requestTypeByServer.getOrDefault(sid, ListRequestType.UNKNOWN);
+            ? ChannelListRequestType.UNKNOWN
+            : requestTypeByServer.getOrDefault(sid, ChannelListRequestType.UNKNOWN);
 
     if (!busy) {
       listTable.setCursor(Cursor.getDefaultCursor());
-      if (requestType == ListRequestType.ALIS && alisActivityState == AlisActivityState.SPINNER) {
+      if ((requestType == ChannelListRequestType.ALIS
+              || requestType == ChannelListRequestType.MATRIX_LIST)
+          && alisActivityState == AlisActivityState.SPINNER) {
         startAlisConfirmedIndicator();
       } else if (alisActivityState != AlisActivityState.IDLE) {
         restoreAlisDefaultIcon();
@@ -1829,7 +1862,8 @@ public final class ChannelListPanel extends JPanel {
       return;
     }
 
-    if (requestType == ListRequestType.ALIS) {
+    if (requestType == ChannelListRequestType.ALIS
+        || requestType == ChannelListRequestType.MATRIX_LIST) {
       startAlisSpinnerIndicator();
     } else if (alisActivityState != AlisActivityState.IDLE) {
       restoreAlisDefaultIcon();
@@ -1837,16 +1871,10 @@ public final class ChannelListPanel extends JPanel {
     listTable.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
   }
 
-  private void rememberRequestType(String sid, ListRequestType type) {
+  private void rememberRequestType(String sid, ChannelListRequestType type) {
     String serverId = normalizeServerId(sid);
     if (serverId.isEmpty() || type == null) return;
     requestTypeByServer.put(serverId, type);
-  }
-
-  private static ListRequestType inferRequestTypeFromBanner(String banner) {
-    String text = Objects.toString(banner, "").trim().toLowerCase(Locale.ROOT);
-    if (text.contains("alis")) return ListRequestType.ALIS;
-    return ListRequestType.UNKNOWN;
   }
 
   private void startAlisSpinnerIndicator() {
@@ -1923,6 +1951,15 @@ public final class ChannelListPanel extends JPanel {
   public void removeNotify() {
     restoreAlisDefaultIcon();
     super.removeNotify();
+  }
+
+  private static int normalizeMatrixListLimit(int limit) {
+    int requested = limit <= 0 ? MATRIX_LIST_DEFAULT_LIMIT : limit;
+    return Math.max(1, Math.min(requested, MATRIX_LIST_MAX_LIMIT));
+  }
+
+  private static String normalizeMatrixToken(String value) {
+    return Objects.toString(value, "").trim();
   }
 
   private static String normalizeBanner(String banner) {

@@ -1,11 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.composition;
 
-import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
+import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
-import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
-import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
@@ -203,39 +201,6 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
     runtimeConfig.rememberServerAutoConnectOnStart(serverId, enabled);
   }
 
-  private static boolean isSojuAutoConnectEnabled(
-      SojuAutoConnectStore store, String originId, String networkKey) {
-    return store != null && store.isEnabled(originId, networkKey);
-  }
-
-  private static boolean isZncAutoConnectEnabled(
-      ZncAutoConnectStore store, String originId, String networkKey) {
-    return store != null && store.isEnabled(originId, networkKey);
-  }
-
-  private static boolean isGenericAutoConnectEnabled(
-      GenericBouncerAutoConnectStore store, String originId, String networkKey) {
-    return store != null && store.isEnabled(originId, networkKey);
-  }
-
-  private static void setSojuAutoConnectEnabled(
-      SojuAutoConnectStore store, String originId, String networkKey, boolean enabled) {
-    if (store == null) return;
-    store.setEnabled(originId, networkKey, enabled);
-  }
-
-  private static void setZncAutoConnectEnabled(
-      ZncAutoConnectStore store, String originId, String networkKey, boolean enabled) {
-    if (store == null) return;
-    store.setEnabled(originId, networkKey, enabled);
-  }
-
-  private static void setGenericAutoConnectEnabled(
-      GenericBouncerAutoConnectStore store, String originId, String networkKey, boolean enabled) {
-    if (store == null) return;
-    store.setEnabled(originId, networkKey, enabled);
-  }
-
   private static String originFromServerId(String backendId, String serverId) {
     String prefix = ServerTreeBouncerBackends.prefixFor(backendId);
     if (prefix == null || prefix.isBlank()) return null;
@@ -283,34 +248,23 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       return inputs.serverLabelPolicy().isAutoConnectEnabled(backendId, originId, networkKey);
     }
     String backend = normalizeBackendId(backendId);
-    if (backend.isEmpty()) return false;
-    if (ServerTreeBouncerBackends.SOJU.equals(backend)) {
-      return isSojuAutoConnectEnabled(inputs.sojuAutoConnect(), originId, networkKey);
-    }
-    if (ServerTreeBouncerBackends.ZNC.equals(backend)) {
-      return isZncAutoConnectEnabled(inputs.zncAutoConnect(), originId, networkKey);
-    }
-    if (ServerTreeBouncerBackends.GENERIC.equals(backend)) {
-      return isGenericAutoConnectEnabled(inputs.genericAutoConnect(), originId, networkKey);
-    }
-    return false;
+    String origin = Objects.toString(originId, "").trim();
+    String network = Objects.toString(networkKey, "").trim();
+    if (backend.isEmpty() || origin.isEmpty() || network.isEmpty()) return false;
+    BouncerAutoConnectStore store = autoConnectStoreForBackend(inputs, backend);
+    return store != null && store.isEnabled(origin, network);
   }
 
   private static void setAutoConnectEnabled(
       Inputs inputs, String backendId, String originId, String networkKey, boolean enabled) {
     String backend = normalizeBackendId(backendId);
     if (backend.isEmpty()) return;
-    if (ServerTreeBouncerBackends.SOJU.equals(backend)) {
-      setSojuAutoConnectEnabled(inputs.sojuAutoConnect(), originId, networkKey, enabled);
-      return;
-    }
-    if (ServerTreeBouncerBackends.ZNC.equals(backend)) {
-      setZncAutoConnectEnabled(inputs.zncAutoConnect(), originId, networkKey, enabled);
-      return;
-    }
-    if (ServerTreeBouncerBackends.GENERIC.equals(backend)) {
-      setGenericAutoConnectEnabled(inputs.genericAutoConnect(), originId, networkKey, enabled);
-    }
+    BouncerAutoConnectStore store = autoConnectStoreForBackend(inputs, backend);
+    if (store == null) return;
+    String origin = Objects.toString(originId, "").trim();
+    String network = Objects.toString(networkKey, "").trim();
+    if (origin.isEmpty() || network.isEmpty()) return;
+    store.setEnabled(origin, network, enabled);
   }
 
   private static void refreshAutoConnectBadges(Inputs inputs, String backendId) {
@@ -331,6 +285,16 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
 
   private static String normalizeBackendId(String backendId) {
     return Objects.toString(backendId, "").trim().toLowerCase(java.util.Locale.ROOT);
+  }
+
+  private static BouncerAutoConnectStore autoConnectStoreForBackend(
+      Inputs inputs, String backendId) {
+    if (inputs == null || inputs.autoConnectStoreByBackendId() == null) {
+      return null;
+    }
+    String backend = normalizeBackendId(backendId);
+    if (backend.isEmpty()) return null;
+    return inputs.autoConnectStoreByBackendId().get(backend);
   }
 
   private static void promptAndRequestChannelModeSet(
@@ -409,9 +373,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       Map<String, String> serverDisplayNames,
       Map<String, Set<String>> bouncerControlServerIdsByBackendId,
       Map<String, Map<String, String>> originByServerIdByBackendId,
-      SojuAutoConnectStore sojuAutoConnect,
-      ZncAutoConnectStore zncAutoConnect,
-      GenericBouncerAutoConnectStore genericAutoConnect,
+      Map<String, BouncerAutoConnectStore> autoConnectStoreByBackendId,
       Supplier<Boolean> isApplicationJfrActive,
       ServerTreeServerActionOverlay serverActionOverlay,
       ServerCatalog serverCatalog,

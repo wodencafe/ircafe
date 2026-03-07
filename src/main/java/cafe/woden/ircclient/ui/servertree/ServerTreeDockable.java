@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.servertree;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
+import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -530,16 +531,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             PROP_MONITOR_NODES_VISIBLE,
             PROP_INTERCEPTORS_NODES_VISIBLE,
             PROP_APPLICATION_ROOT_VISIBLE);
+    Map<String, BouncerAutoConnectStore> autoConnectStoreByBackendId =
+        createAutoConnectStoreByBackendId(genericAutoConnect, sojuAutoConnect, zncAutoConnect);
     this.serverLabelPolicy =
         new ServerTreeServerLabelPolicy(
             serverDisplayNames,
             ephemeralServerIds,
-            originByServerIdForBackend(ServerTreeBouncerBackends.SOJU),
-            originByServerIdForBackend(ServerTreeBouncerBackends.ZNC),
-            originByServerIdForBackend(ServerTreeBouncerBackends.GENERIC),
-            genericAutoConnect,
-            sojuAutoConnect,
-            zncAutoConnect);
+            originByServerIdByBackendId,
+            autoConnectStoreByBackendId);
 
     this.networkInfoDialogBuilder =
         new ServerTreeNetworkInfoDialogBuilder(
@@ -830,9 +829,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 serverDisplayNames,
                 bouncerControlServerIdsByBackendId,
                 originByServerIdByBackendId,
-                sojuAutoConnect,
-                zncAutoConnect,
-                genericAutoConnect,
+                autoConnectStoreByBackendId,
                 this::isApplicationJfrActive,
                 serverActionOverlay,
                 serverCatalog,
@@ -1814,6 +1811,23 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       labels.put(backendId, ServerTreeBouncerBackends.defaultNetworksGroupLabel(backendId));
     }
     return labels;
+  }
+
+  private static Map<String, BouncerAutoConnectStore> createAutoConnectStoreByBackendId(
+      GenericBouncerAutoConnectStore genericAutoConnect,
+      SojuAutoConnectStore sojuAutoConnect,
+      ZncAutoConnectStore zncAutoConnect) {
+    Map<String, BouncerAutoConnectStore> stores = new LinkedHashMap<>();
+    if (sojuAutoConnect != null) {
+      stores.put(ServerTreeBouncerBackends.SOJU, sojuAutoConnect);
+    }
+    if (zncAutoConnect != null) {
+      stores.put(ServerTreeBouncerBackends.ZNC, zncAutoConnect);
+    }
+    if (genericAutoConnect != null) {
+      stores.put(ServerTreeBouncerBackends.GENERIC, genericAutoConnect);
+    }
+    return stores;
   }
 
   private static String normalizeBackendId(String backendId) {

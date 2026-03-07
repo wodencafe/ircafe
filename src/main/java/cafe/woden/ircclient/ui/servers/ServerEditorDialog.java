@@ -60,6 +60,7 @@ public class ServerEditorDialog extends JDialog {
   private final JTextField serverPassField = new JTextField();
   private final JCheckBox autoConnectOnStartBox =
       new JCheckBox("Auto-connect this server on startup");
+  private final JLabel hostLabel = new JLabel("Host");
   private final JLabel serverPasswordLabel = new JLabel("Server password");
   private final JLabel connectionBackendHintLabel = new JLabel(" ");
 
@@ -96,6 +97,9 @@ public class ServerEditorDialog extends JDialog {
       "Stay connected if SASL authentication fails";
   private static final String NICKSERV_DELAY_JOIN_TEXT =
       "Delay channel auto-join until identification succeeds";
+  private static final String MATRIX_AUTH_DISABLED_HINT_TEXT =
+      "Matrix backend uses access token authentication from the Connection tab."
+          + " IRC SASL/NickServ settings are ignored.";
 
   private final JComboBox<AuthMode> authModeCombo =
       new JComboBox<>(new AuthMode[] {AuthMode.DISABLED, AuthMode.SASL, AuthMode.NICKSERV});
@@ -200,6 +204,9 @@ public class ServerEditorDialog extends JDialog {
             return label;
           }
         });
+    // Keep combo sizing stable so short selections do not collapse Auth-tab field widths.
+    authModeCombo.setPrototypeDisplayValue(AuthMode.NICKSERV);
+    saslMechanism.setPrototypeDisplayValue("ECDSA-NIST256P-CHALLENGE");
     nickservDelayJoinBox.setSelected(true);
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
     setLayout(new BorderLayout(10, 10));
@@ -211,7 +218,7 @@ public class ServerEditorDialog extends JDialog {
     tabs.addTab("Auth", buildSaslPanel());
     tabs.addTab("Auto-Join", buildAutoJoinPanel());
     tabs.addTab("Perform", buildPerformPanel());
-    tabs.addTab("Proxy", buildProxyPanel());
+    tabs.addTab("Proxy", wrapScrollTab(buildProxyPanel()));
     add(tabs, BorderLayout.CENTER);
 
     JPanel actions = new JPanel();
@@ -397,6 +404,14 @@ public class ServerEditorDialog extends JDialog {
     setPreferredSize(new Dimension(640, 520));
     pack();
     setLocationRelativeTo(parent);
+  }
+
+  private static JComponent wrapScrollTab(JComponent content) {
+    JScrollPane scroll = new JScrollPane(content);
+    scroll.setBorder(BorderFactory.createEmptyBorder());
+    scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+    scroll.getVerticalScrollBar().setUnitIncrement(16);
+    return scroll;
   }
 
   private JPanel buildProxyPanel() {
@@ -747,7 +762,7 @@ public class ServerEditorDialog extends JDialog {
 
     addRow(p, g, 0, "Server ID", idField);
     addRow(p, g, 1, "Backend", backendCombo);
-    addRow(p, g, 2, "Host", hostField);
+    addRow(p, g, 2, hostLabel, hostField);
 
     // Port row with TLS
     JPanel portRow = new JPanel(new GridBagLayout());
@@ -954,7 +969,7 @@ public class ServerEditorDialog extends JDialog {
 
   private void updateAuthModeUi() {
     AuthMode mode = selectedAuthMode();
-    if (isQuasselBackendSelected() && mode != AuthMode.DISABLED) {
+    if ((isQuasselBackendSelected() || isMatrixBackendSelected()) && mode != AuthMode.DISABLED) {
       mode = AuthMode.DISABLED;
       authModeCombo.setSelectedItem(mode);
     }
@@ -974,13 +989,19 @@ public class ServerEditorDialog extends JDialog {
     return selectedBackend() == IrcProperties.Server.Backend.QUASSEL_CORE;
   }
 
+  private boolean isMatrixBackendSelected() {
+    return selectedBackend() == IrcProperties.Server.Backend.MATRIX;
+  }
+
   private void updateBackendUi() {
-    boolean quassel = isQuasselBackendSelected();
-    if (quassel) {
+    IrcProperties.Server.Backend backend = selectedBackend();
+    if (backend == IrcProperties.Server.Backend.QUASSEL_CORE) {
+      hostLabel.setText("Host");
       serverPasswordLabel.setText("Core password");
       nickLabel.setText("Default nick");
       loginLabel.setText("Core username");
       realNameLabel.setText("Core real name");
+      tlsBox.setText("Use TLS (SSL)");
       connectionBackendHintLabel.setText(
           "Quassel backend logs into Quassel Core here (default ports: 4242 plain, 4243 TLS)."
               + " Core password can be blank before initial setup. SASL/NickServ below are ignored.");
@@ -991,18 +1012,40 @@ public class ServerEditorDialog extends JDialog {
               "Quassel backend does not run direct IRC SASL/NickServ auth from IRCafe."
                   + " Configure upstream network auth inside Quassel Core."));
       applyFieldStyle(serverPassField, "(optional until core is configured)");
+      applyFieldStyle(hostField, "quassel.example.net");
       applyFieldStyle(loginField, "quassel-user");
       applyFieldStyle(nickField, "display nick (optional)");
       applyFieldStyle(realNameField, "display name (optional)");
+    } else if (backend == IrcProperties.Server.Backend.MATRIX) {
+      hostLabel.setText("Homeserver");
+      serverPasswordLabel.setText("Access token");
+      nickLabel.setText("Nick (optional)");
+      loginLabel.setText("User ID (optional)");
+      realNameLabel.setText("Display name (optional)");
+      tlsBox.setText("Use TLS (HTTPS)");
+      connectionBackendHintLabel.setText(
+          "Matrix backend connects to this homeserver and authenticates with an access token."
+              + " Defaults: 443 TLS, 80 plain. SASL/NickServ below are ignored.");
+      authModeCombo.setEnabled(false);
+      authModeCombo.setSelectedItem(AuthMode.DISABLED);
+      authDisabledHintLabel.setText(asHtml(MATRIX_AUTH_DISABLED_HINT_TEXT));
+      applyFieldStyle(serverPassField, "matrix access token");
+      applyFieldStyle(hostField, "https://matrix.example.org");
+      applyFieldStyle(loginField, "@alice:matrix.example.org");
+      applyFieldStyle(nickField, "IRCafeUser (optional)");
+      applyFieldStyle(realNameField, "IRCafe User (optional)");
     } else {
+      hostLabel.setText("Host");
       serverPasswordLabel.setText("Server password");
       nickLabel.setText("Nick");
       loginLabel.setText("Login/Ident");
       realNameLabel.setText("Real name");
+      tlsBox.setText("Use TLS (SSL)");
       connectionBackendHintLabel.setText("Direct IRC connection using this profile.");
       authModeCombo.setEnabled(true);
       authDisabledHintLabel.setText(asHtml(AUTH_DISABLED_HINT_TEXT));
       applyFieldStyle(serverPassField, "(optional)");
+      applyFieldStyle(hostField, "irc.example.net");
       applyFieldStyle(loginField, "ircafe");
       applyFieldStyle(nickField, "IRCafeUser");
       applyFieldStyle(realNameField, "IRCafe User");
@@ -1135,6 +1178,7 @@ public class ServerEditorDialog extends JDialog {
   private void updateValidation() {
     boolean ok = true;
     boolean quasselBackend = isQuasselBackendSelected();
+    boolean matrixBackend = isMatrixBackendSelected();
 
     boolean idBad = trim(idField.getText()).isEmpty();
     setError(idField, idBad);
@@ -1148,22 +1192,24 @@ public class ServerEditorDialog extends JDialog {
     setError(portField, portBad);
     ok &= !portBad;
 
-    boolean corePasswordBad = false;
-    setError(serverPassField, corePasswordBad);
-    ok &= !corePasswordBad;
+    boolean accessTokenBad = matrixBackend && trim(serverPassField.getText()).isEmpty();
+    setError(serverPassField, accessTokenBad);
+    ok &= !accessTokenBad;
 
     boolean loginBad = false;
     setError(loginField, loginBad);
     ok &= !loginBad;
 
-    boolean nickBad = !quasselBackend && trim(nickField.getText()).isEmpty();
+    boolean nickBad =
+        selectedBackend() == IrcProperties.Server.Backend.IRC
+            && trim(nickField.getText()).isEmpty();
     setError(nickField, nickBad);
     ok &= !nickBad;
 
     AuthMode authMode = selectedAuthMode();
 
     // SASL validation
-    if (quasselBackend || authMode != AuthMode.SASL) {
+    if (quasselBackend || matrixBackend || authMode != AuthMode.SASL) {
       clearOutline(saslUserField);
       clearOutline(saslPassField);
     } else {
@@ -1202,7 +1248,7 @@ public class ServerEditorDialog extends JDialog {
     }
 
     // NickServ validation
-    if (quasselBackend || authMode != AuthMode.NICKSERV) {
+    if (quasselBackend || matrixBackend || authMode != AuthMode.NICKSERV) {
       clearOutline(nickservServiceField);
       clearOutline(nickservPassField);
     } else {
@@ -1329,6 +1375,8 @@ public class ServerEditorDialog extends JDialog {
     String nextPort;
     if (isQuasselBackendSelected()) {
       nextPort = tlsBox.isSelected() ? "4243" : "4242";
+    } else if (isMatrixBackendSelected()) {
+      nextPort = tlsBox.isSelected() ? "443" : "80";
     } else {
       nextPort = tlsBox.isSelected() ? "6697" : "6667";
     }
@@ -1370,31 +1418,36 @@ public class ServerEditorDialog extends JDialog {
     IrcProperties.Server.Backend backend =
         backendSelection instanceof IrcProperties.Server.Backend selected ? selected : seedBackend;
     boolean quasselBackend = backend == IrcProperties.Server.Backend.QUASSEL_CORE;
+    boolean matrixBackend = backend == IrcProperties.Server.Backend.MATRIX;
+    boolean ircBackend = backend == IrcProperties.Server.Backend.IRC;
 
     boolean tls = tlsBox.isSelected();
     String serverPassword = Objects.toString(serverPassField.getText(), "");
+    if (matrixBackend && trim(serverPassword).isEmpty()) {
+      throw new IllegalArgumentException("Matrix access token is required");
+    }
     if (containsCrlf(serverPassword)) {
       throw new IllegalArgumentException("Server/Core password must not contain newlines");
     }
 
     String nick = trim(nickField.getText());
-    if (!quasselBackend && nick.isEmpty()) {
+    if (ircBackend && nick.isEmpty()) {
       throw new IllegalArgumentException("Nick is required");
     }
 
     String login = trim(loginField.getText());
     if (login.isEmpty()) login = nick;
-    if (login.isEmpty()) login = "quassel-user";
+    if (login.isEmpty() && quasselBackend) login = "quassel-user";
 
     String realName = trim(realNameField.getText());
     if (realName.isEmpty()) realName = nick.isEmpty() ? login : nick;
 
-    if (nick.isEmpty()) {
+    if (nick.isEmpty() && !login.isEmpty()) {
       nick = login;
     }
 
     AuthMode authMode = selectedAuthMode();
-    if (quasselBackend) {
+    if (quasselBackend || matrixBackend) {
       authMode = AuthMode.DISABLED;
     }
 
@@ -1514,6 +1567,7 @@ public class ServerEditorDialog extends JDialog {
     return switch (backend) {
       case IRC -> "IRC";
       case QUASSEL_CORE -> "Quassel Core";
+      case MATRIX -> "Matrix";
     };
   }
 

@@ -1,7 +1,8 @@
 package cafe.woden.ircclient.app.api;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
@@ -71,13 +72,8 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
-  public Flowable<String> quasselSetupRequests() {
-    return delegate.quasselSetupRequests();
-  }
-
-  @Override
-  public Flowable<String> quasselNetworkManagerRequests() {
-    return delegate.quasselNetworkManagerRequests();
+  public Flowable<ParsedInput.BackendNamed> backendNamedCommandRequests() {
+    return delegate.backendNamedCommandRequests();
   }
 
   @Override
@@ -263,14 +259,14 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
-  public Optional<IrcClientService.QuasselCoreSetupRequest> promptQuasselCoreSetup(
-      String serverId, IrcClientService.QuasselCoreSetupPrompt prompt) {
+  public Optional<QuasselCoreControlPort.QuasselCoreSetupRequest> promptQuasselCoreSetup(
+      String serverId, QuasselCoreControlPort.QuasselCoreSetupPrompt prompt) {
     return delegate.promptQuasselCoreSetup(serverId, prompt);
   }
 
   @Override
   public Optional<QuasselNetworkManagerAction> promptQuasselNetworkManagerAction(
-      String serverId, List<IrcClientService.QuasselCoreNetworkSummary> networks) {
+      String serverId, List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {
     return delegate.promptQuasselNetworkManagerAction(serverId, networks);
   }
 

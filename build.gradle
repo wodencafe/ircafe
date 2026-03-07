@@ -160,10 +160,11 @@ tasks.withType(Test).configureEach {
     // Allow opt-in integration tests to be controlled from Gradle CLI:
     //   ./gradlew integrationTest -Dquassel.it.enabled=true ...
     //   ./gradlew integrationTest -Dirc.it.container.e2e.enabled=true ...
+    //   ./gradlew integrationTest -Dmatrix.it.container.enabled=true ...
     // Forward only the scoped test-control properties.
     System.getProperties().each { key, value ->
         String k = key == null ? '' : key.toString()
-        if (!k.startsWith('quassel.it.') && !k.startsWith('irc.it.')) {
+        if (!k.startsWith('quassel.it.') && !k.startsWith('irc.it.') && !k.startsWith('matrix.it.')) {
             return
         }
         systemProperty k, value
@@ -612,13 +613,60 @@ tasks.register('pitestQuasselBackend', JavaExec) {
     }
 }
 
+tasks.register('pitestMatrixBackend', JavaExec) {
+    group = 'verification'
+    description = 'Runs PIT mutation checks for Matrix backend command translation and routing.'
+    dependsOn(tasks.named('testClasses'))
+    classpath = configurations.mutationTestTool
+    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
+
+    def reportDirProvider = layout.buildDirectory.dir('reports/pitest/matrix-backend')
+    inputs.files(sourceSets.main.output, sourceSets.test.output, configurations.testRuntimeClasspath)
+    outputs.dir(reportDirProvider)
+
+    doFirst {
+        String testClasspath =
+            files(
+                sourceSets.main.output,
+                sourceSets.test.output,
+                sourceSets.main.runtimeClasspath,
+                sourceSets.test.runtimeClasspath
+            ).files.collect { it.absolutePath }.join(',')
+        String mutableCodePaths =
+            sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
+        args = [
+            "--reportDir=${reportDirProvider.get().asFile.absolutePath}",
+            '--outputFormats=HTML,XML',
+            '--targetClasses=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupport*',
+            '--targetClasses=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandService*',
+            '--targetClasses=cafe.woden.ircclient.app.outbound.MatrixUploadCommandTranslationHandler*',
+            '--targetClasses=cafe.woden.ircclient.ui.backend.BackendUiProfileProvider*',
+            '--targetClasses=cafe.woden.ircclient.irc.BackendRoutingIrcClientService*',
+            '--targetTests=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupportTest*',
+            '--targetTests=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandServiceTest*',
+            '--targetTests=cafe.woden.ircclient.app.outbound.OutboundUploadCommandServiceTest*',
+            '--targetTests=cafe.woden.ircclient.ui.backend.BackendUiProfileProviderTest*',
+            '--targetTests=cafe.woden.ircclient.irc.BackendRoutingIrcClientServiceTest*',
+            "--sourceDirs=${file('src/main/java').absolutePath}",
+            "--mutableCodePaths=${mutableCodePaths}",
+            "--classPath=${testClasspath}",
+            '--threads=4',
+            '--testPlugin',
+            'junit5',
+            '--verbose=true',
+            '--failWhenNoMutations=false'
+        ]
+    }
+}
+
 tasks.register('mutationTest') {
     group = 'verification'
     description = 'Alias for focused PIT mutation checks.'
     dependsOn(
         tasks.named('pitestIgnoreCompatibility'),
         tasks.named('pitestExecutorLifecycle'),
-        tasks.named('pitestQuasselBackend')
+        tasks.named('pitestQuasselBackend'),
+        tasks.named('pitestMatrixBackend')
     )
 }
 

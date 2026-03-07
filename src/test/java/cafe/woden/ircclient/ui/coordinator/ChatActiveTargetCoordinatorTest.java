@@ -3,13 +3,17 @@ package cafe.woden.ircclient.ui.coordinator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.backend.BackendUiContext;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import java.util.HashMap;
@@ -89,6 +93,7 @@ class ChatActiveTargetCoordinatorTest {
             activeTarget::get,
             activeTarget::set,
             inputPanel,
+            BackendUiProfile::ircOnly,
             drafts,
             scrollUpdates::incrementAndGet,
             titleUpdates::incrementAndGet,
@@ -120,6 +125,13 @@ class ChatActiveTargetCoordinatorTest {
     assertEquals(1, repaints.get());
     verify(inputPanel).clearRemoteTypingIndicator();
     verify(inputPanel).flushTypingForBufferSwitch();
+    verify(inputPanel)
+        .setBackendUiProfile(
+            argThat(
+                profile ->
+                    profile != null
+                        && uiOnly.serverId().equals(profile.serverId())
+                        && !profile.isMatrixServer()));
     verify(inputPanel).setVisible(false);
     verify(inputPanel).setDraftText("");
     verify(inputPanel, never()).focusInput();
@@ -151,6 +163,7 @@ class ChatActiveTargetCoordinatorTest {
             activeTarget::get,
             activeTarget::set,
             inputPanel,
+            BackendUiProfile::ircOnly,
             drafts,
             () -> {},
             () -> {},
@@ -173,6 +186,13 @@ class ChatActiveTargetCoordinatorTest {
     assertEquals(next, activeTarget.get());
     assertEquals(doc, setDocumentValue.get());
     verify(inputPanel).setVisible(true);
+    verify(inputPanel)
+        .setBackendUiProfile(
+            argThat(
+                profile ->
+                    profile != null
+                        && next.serverId().equals(profile.serverId())
+                        && !profile.isMatrixServer()));
     verify(inputPanel).setDraftText("restored draft");
     verify(inputPanel).focusInput();
     verify(transcripts).ensureTargetExists(next);
@@ -185,6 +205,56 @@ class ChatActiveTargetCoordinatorTest {
     runnable.run();
     assertEquals(next, readMarkerTarget.get());
     assertEquals(42, readMarkerOffset.get());
+  }
+
+  @Test
+  void setActiveTargetAppliesMatrixProfileFromProvider() {
+    MessageInputPanel inputPanel = mock(MessageInputPanel.class);
+    when(inputPanel.isVisible()).thenReturn(true);
+    ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
+    StyledDocument doc = new DefaultStyledDocument();
+    TargetRef matrixRoom = new TargetRef("matrix", "!room:example.org");
+    AtomicReference<TargetRef> activeTarget = new AtomicReference<>();
+
+    when(transcripts.document(matrixRoom)).thenReturn(doc);
+    when(transcripts.readMarkerJumpOffset(matrixRoom)).thenReturn(0);
+
+    ChatActiveTargetCoordinator coordinator =
+        new ChatActiveTargetCoordinator(
+            activeTarget::get,
+            activeTarget::set,
+            inputPanel,
+            serverId ->
+                new BackendUiProfile(
+                    serverId, BackendUiContext.fromMatrixServerPredicate("matrix"::equals)),
+            new HashMap<>(),
+            () -> {},
+            () -> {},
+            () -> {},
+            (prev, current) -> {},
+            target -> ChatTargetViewRouter.TargetViewType.TRANSCRIPT,
+            transcripts,
+            ignored -> {},
+            () -> {},
+            (target, offset) -> {},
+            runnable -> runnable.run(),
+            () -> {},
+            () -> {});
+
+    coordinator.setActiveTarget(matrixRoom);
+
+    assertEquals(matrixRoom, activeTarget.get());
+    verify(inputPanel)
+        .setBackendUiProfile(
+            argThat(
+                profile ->
+                    profile != null
+                        && matrixRoom.serverId().equals(profile.serverId())
+                        && profile.isMatrixServer()));
+    verify(inputPanel).focusInput();
+    verify(transcripts).ensureTargetExists(matrixRoom);
+    verify(transcripts).document(matrixRoom);
+    verify(transcripts).readMarkerJumpOffset(matrixRoom);
   }
 
   @Test
@@ -226,6 +296,13 @@ class ChatActiveTargetCoordinatorTest {
     assertEquals("channel draft", drafts.get(channel));
     verify(inputPanel).setVisible(false);
     verify(inputPanel).setVisible(true);
+    verify(inputPanel, times(2))
+        .setBackendUiProfile(
+            argThat(
+                profile ->
+                    profile != null
+                        && ignores.serverId().equals(profile.serverId())
+                        && !profile.isMatrixServer()));
     verify(inputPanel).setDraftText("");
     verify(inputPanel).setDraftText("channel draft");
     verify(inputPanel).focusInput();
@@ -247,6 +324,7 @@ class ChatActiveTargetCoordinatorTest {
         activeTarget::get,
         activeTarget::set,
         inputPanel,
+        BackendUiProfile::ircOnly,
         drafts,
         () -> {},
         () -> {},

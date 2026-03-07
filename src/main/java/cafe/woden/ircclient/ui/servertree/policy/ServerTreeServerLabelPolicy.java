@@ -1,9 +1,11 @@
 package cafe.woden.ircclient.ui.servertree.policy;
 
+import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -13,12 +15,8 @@ public final class ServerTreeServerLabelPolicy {
 
   private final Map<String, String> serverDisplayNames;
   private final Set<String> ephemeralServerIds;
-  private final Map<String, String> sojuOriginByServerId;
-  private final Map<String, String> zncOriginByServerId;
-  private final Map<String, String> genericOriginByServerId;
-  private final GenericBouncerAutoConnectStore genericAutoConnect;
-  private final SojuAutoConnectStore sojuAutoConnect;
-  private final ZncAutoConnectStore zncAutoConnect;
+  private final Map<String, Map<String, String>> originByServerIdByBackendId;
+  private final Map<String, BouncerAutoConnectStore> autoConnectStoreByBackendId;
 
   public ServerTreeServerLabelPolicy(
       Map<String, String> serverDisplayNames,
@@ -29,16 +27,27 @@ public final class ServerTreeServerLabelPolicy {
       GenericBouncerAutoConnectStore genericAutoConnect,
       SojuAutoConnectStore sojuAutoConnect,
       ZncAutoConnectStore zncAutoConnect) {
+    this(
+        serverDisplayNames,
+        ephemeralServerIds,
+        originByServerIdByBackend(
+            sojuOriginByServerId, zncOriginByServerId, genericOriginByServerId),
+        autoConnectStoresByBackend(genericAutoConnect, sojuAutoConnect, zncAutoConnect));
+  }
+
+  public ServerTreeServerLabelPolicy(
+      Map<String, String> serverDisplayNames,
+      Set<String> ephemeralServerIds,
+      Map<String, Map<String, String>> originByServerIdByBackendId,
+      Map<String, BouncerAutoConnectStore> autoConnectStoreByBackendId) {
     this.serverDisplayNames = Objects.requireNonNull(serverDisplayNames, "serverDisplayNames");
     this.ephemeralServerIds = Objects.requireNonNull(ephemeralServerIds, "ephemeralServerIds");
-    this.sojuOriginByServerId =
-        Objects.requireNonNull(sojuOriginByServerId, "sojuOriginByServerId");
-    this.zncOriginByServerId = Objects.requireNonNull(zncOriginByServerId, "zncOriginByServerId");
-    this.genericOriginByServerId =
-        Objects.requireNonNull(genericOriginByServerId, "genericOriginByServerId");
-    this.genericAutoConnect = genericAutoConnect;
-    this.sojuAutoConnect = sojuAutoConnect;
-    this.zncAutoConnect = zncAutoConnect;
+    this.originByServerIdByBackendId =
+        normalizedOriginMap(
+            Objects.requireNonNull(originByServerIdByBackendId, "originByServerIdByBackendId"));
+    this.autoConnectStoreByBackendId =
+        normalizedAutoConnectMap(
+            Objects.requireNonNull(autoConnectStoreByBackendId, "autoConnectStoreByBackendId"));
   }
 
   public String prettyServerLabel(String serverId) {
@@ -105,30 +114,14 @@ public final class ServerTreeServerLabelPolicy {
     if (backend.isEmpty() || origin.isEmpty() || network.isEmpty()) {
       return false;
     }
-    if (ServerTreeBouncerBackends.SOJU.equals(backend)) {
-      return sojuAutoConnect != null && sojuAutoConnect.isEnabled(origin, network);
-    }
-    if (ServerTreeBouncerBackends.ZNC.equals(backend)) {
-      return zncAutoConnect != null && zncAutoConnect.isEnabled(origin, network);
-    }
-    if (ServerTreeBouncerBackends.GENERIC.equals(backend)) {
-      return genericAutoConnect != null && genericAutoConnect.isEnabled(origin, network);
-    }
-    return false;
+    BouncerAutoConnectStore store = autoConnectStoreByBackendId.get(backend);
+    return store != null && store.isEnabled(origin, network);
   }
 
   private Map<String, String> originMapForBackend(String backendId) {
     String backend = normalize(backendId);
-    if (ServerTreeBouncerBackends.SOJU.equals(backend)) {
-      return sojuOriginByServerId;
-    }
-    if (ServerTreeBouncerBackends.ZNC.equals(backend)) {
-      return zncOriginByServerId;
-    }
-    if (ServerTreeBouncerBackends.GENERIC.equals(backend)) {
-      return genericOriginByServerId;
-    }
-    return null;
+    if (backend.isEmpty()) return null;
+    return originByServerIdByBackendId.get(backend);
   }
 
   private static String parseOrigin(String serverId, String prefix) {
@@ -144,5 +137,61 @@ public final class ServerTreeServerLabelPolicy {
 
   private static String normalize(String value) {
     return Objects.toString(value, "").trim();
+  }
+
+  private static Map<String, Map<String, String>> originByServerIdByBackend(
+      Map<String, String> sojuOriginByServerId,
+      Map<String, String> zncOriginByServerId,
+      Map<String, String> genericOriginByServerId) {
+    Map<String, Map<String, String>> origins = new LinkedHashMap<>();
+    origins.put(
+        ServerTreeBouncerBackends.SOJU,
+        Objects.requireNonNull(sojuOriginByServerId, "sojuOriginByServerId"));
+    origins.put(
+        ServerTreeBouncerBackends.ZNC,
+        Objects.requireNonNull(zncOriginByServerId, "zncOriginByServerId"));
+    origins.put(
+        ServerTreeBouncerBackends.GENERIC,
+        Objects.requireNonNull(genericOriginByServerId, "genericOriginByServerId"));
+    return origins;
+  }
+
+  private static Map<String, BouncerAutoConnectStore> autoConnectStoresByBackend(
+      GenericBouncerAutoConnectStore genericAutoConnect,
+      SojuAutoConnectStore sojuAutoConnect,
+      ZncAutoConnectStore zncAutoConnect) {
+    Map<String, BouncerAutoConnectStore> stores = new LinkedHashMap<>();
+    if (sojuAutoConnect != null) {
+      stores.put(ServerTreeBouncerBackends.SOJU, sojuAutoConnect);
+    }
+    if (zncAutoConnect != null) {
+      stores.put(ServerTreeBouncerBackends.ZNC, zncAutoConnect);
+    }
+    if (genericAutoConnect != null) {
+      stores.put(ServerTreeBouncerBackends.GENERIC, genericAutoConnect);
+    }
+    return stores;
+  }
+
+  private static Map<String, Map<String, String>> normalizedOriginMap(
+      Map<String, Map<String, String>> source) {
+    Map<String, Map<String, String>> normalized = new LinkedHashMap<>();
+    for (var entry : source.entrySet()) {
+      String backend = normalize(entry.getKey());
+      if (backend.isEmpty() || entry.getValue() == null) continue;
+      normalized.put(backend, entry.getValue());
+    }
+    return normalized;
+  }
+
+  private static Map<String, BouncerAutoConnectStore> normalizedAutoConnectMap(
+      Map<String, BouncerAutoConnectStore> source) {
+    Map<String, BouncerAutoConnectStore> normalized = new LinkedHashMap<>();
+    for (var entry : source.entrySet()) {
+      String backend = normalize(entry.getKey());
+      if (backend.isEmpty() || entry.getValue() == null) continue;
+      normalized.put(backend, entry.getValue());
+    }
+    return normalized;
   }
 }

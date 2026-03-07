@@ -3,14 +3,13 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,26 +21,29 @@ import org.springframework.stereotype.Component;
 @Component
 public class OutboundModeCommandService {
 
-  private final IrcClientService irc;
+  private final IrcTargetMembershipPort targetMembership;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
+  private final CommandTargetPolicy commandTargetPolicy;
   private final ModeRoutingPort modeRoutingState;
-  private final LabeledResponseRoutingPort labeledResponseRoutingState;
+  private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
   public OutboundModeCommandService(
-      IrcClientService irc,
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
+      CommandTargetPolicy commandTargetPolicy,
       ModeRoutingPort modeRoutingState,
-      LabeledResponseRoutingPort labeledResponseRoutingState) {
-    this.irc = irc;
+      OutboundRawLineCorrelationService rawLineCorrelationService) {
+    this.targetMembership = targetMembership;
     this.ui = ui;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
+    this.commandTargetPolicy = commandTargetPolicy;
     this.modeRoutingState = modeRoutingState;
-    this.labeledResponseRoutingState = labeledResponseRoutingState;
+    this.rawLineCorrelationService = rawLineCorrelationService;
   }
 
   public void handleMode(CompositeDisposable disposables, String first, String rest) {
@@ -58,10 +60,10 @@ public class OutboundModeCommandService {
     String channel;
     String modeSpec;
 
-    if (f.startsWith("#") || f.startsWith("&")) {
+    if (commandTargetPolicy.isChannelLikeTargetForServer(at.serverId(), f)) {
       channel = f;
       modeSpec = r;
-    } else if (at.isChannel()) {
+    } else if (commandTargetPolicy.isChannelLikeTarget(at)) {
       channel = at.target();
       modeSpec = (f + (r.isEmpty() ? "" : " " + r)).trim();
     } else {
@@ -91,12 +93,14 @@ public class OutboundModeCommandService {
       modeRoutingState.putPendingModeTarget(at.serverId(), channel, out);
     }
 
-    PreparedRawLine prepared = prepareCorrelatedRawLine(out, line);
+    OutboundRawLineCorrelationService.PreparedRawLine prepared =
+        prepareCorrelatedRawLine(out, line);
     ui.ensureTargetExists(out);
     ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
     disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
+        targetMembership
+            .sendRaw(at.serverId(), prepared.line())
             .subscribe(
                 () -> {},
                 err ->
@@ -172,11 +176,13 @@ public class OutboundModeCommandService {
       if (n.isEmpty()) continue;
 
       String line = "MODE " + ch + " " + mode + " " + n;
-      PreparedRawLine prepared = prepareCorrelatedRawLine(out, line);
+      OutboundRawLineCorrelationService.PreparedRawLine prepared =
+          prepareCorrelatedRawLine(out, line);
       ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
       disposables.add(
-          irc.sendRaw(at.serverId(), prepared.line())
+          targetMembership
+              .sendRaw(at.serverId(), prepared.line())
               .subscribe(
                   () -> {},
                   err ->
@@ -229,11 +235,13 @@ public class OutboundModeCommandService {
       String mask = looksLikeMask(raw) ? raw : (raw + "!*@*");
 
       String line = "MODE " + ch + " " + mode + " " + mask;
-      PreparedRawLine prepared = prepareCorrelatedRawLine(out, line);
+      OutboundRawLineCorrelationService.PreparedRawLine prepared =
+          prepareCorrelatedRawLine(out, line);
       ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
       disposables.add(
-          irc.sendRaw(at.serverId(), prepared.line())
+          targetMembership
+              .sendRaw(at.serverId(), prepared.line())
               .subscribe(
                   () -> {},
                   err ->
@@ -244,22 +252,9 @@ public class OutboundModeCommandService {
     }
   }
 
-  private PreparedRawLine prepareCorrelatedRawLine(TargetRef origin, String rawLine) {
-    String line = rawLine == null ? "" : rawLine.trim();
-    if (line.isEmpty() || origin == null) return new PreparedRawLine(line, "");
-    if (!irc.isLabeledResponseAvailable(origin.serverId())) return new PreparedRawLine(line, "");
-
-    LabeledResponseRoutingPort.PreparedRawLine prepared =
-        labeledResponseRoutingState.prepareOutgoingRaw(origin.serverId(), line);
-    String sendLine =
-        (prepared == null || prepared.line() == null || prepared.line().isBlank())
-            ? line
-            : prepared.line();
-    String label = (prepared == null) ? "" : Objects.toString(prepared.label(), "").trim();
-    if (!label.isEmpty()) {
-      labeledResponseRoutingState.remember(origin.serverId(), label, origin, line, Instant.now());
-    }
-    return new PreparedRawLine(sendLine, label);
+  private OutboundRawLineCorrelationService.PreparedRawLine prepareCorrelatedRawLine(
+      TargetRef origin, String rawLine) {
+    return rawLineCorrelationService.prepare(origin, rawLine);
   }
 
   private static String withLabelHint(String preview, String label) {
@@ -269,17 +264,19 @@ public class OutboundModeCommandService {
     return p + " {label=" + l + "}";
   }
 
-  private record PreparedRawLine(String line, String label) {}
-
   private static boolean looksLikeMask(String s) {
     if (s == null) return false;
     return s.indexOf('!') >= 0 || s.indexOf('@') >= 0 || s.indexOf('*') >= 0 || s.indexOf('?') >= 0;
   }
 
-  private static String resolveChannelOrNull(TargetRef active, String explicitChannel) {
+  private String resolveChannelOrNull(TargetRef active, String explicitChannel) {
     String ch = explicitChannel == null ? "" : explicitChannel.trim();
-    if (!ch.isEmpty()) return ch;
-    if (active != null && active.isChannel()) return active.target();
+    if (!ch.isEmpty()) {
+      String sid = active == null ? "" : active.serverId();
+      if (commandTargetPolicy.isChannelLikeTargetForServer(sid, ch)) return ch;
+      return null;
+    }
+    if (commandTargetPolicy.isChannelLikeTarget(active)) return active.target();
     return null;
   }
 }

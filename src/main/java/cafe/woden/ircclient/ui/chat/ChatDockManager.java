@@ -1,14 +1,17 @@
 package cafe.woden.ircclient.ui.chat;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.SwingEdt;
+import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
+import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -44,7 +47,10 @@ public class ChatDockManager {
   private final UiSettingsBus settingsBus;
   private final SpellcheckSettingsBus spellcheckSettingsBus;
   private final OutboundLineBus outboundBus;
-  private final IrcClientService irc;
+  private final IrcTypingPort typingPort;
+  private final IrcReadMarkerPort readMarkerPort;
+  private final BackendUiProfileProvider backendUiProfileProvider;
+  private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final ActiveInputRouter activeInputRouter;
   private final CommandHistoryStore commandHistoryStore;
   private final ChatHistoryService chatHistoryService;
@@ -77,7 +83,10 @@ public class ChatDockManager {
       UiSettingsBus settingsBus,
       SpellcheckSettingsBus spellcheckSettingsBus,
       OutboundLineBus outboundBus,
-      IrcClientService irc,
+      IrcTypingPort typingPort,
+      IrcReadMarkerPort readMarkerPort,
+      BackendUiProfileProvider backendUiProfileProvider,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ActiveInputRouter activeInputRouter,
       ChatHistoryService chatHistoryService,
       CommandHistoryStore commandHistoryStore) {
@@ -88,7 +97,12 @@ public class ChatDockManager {
     this.settingsBus = settingsBus;
     this.spellcheckSettingsBus = spellcheckSettingsBus;
     this.outboundBus = outboundBus;
-    this.irc = irc;
+    this.typingPort = java.util.Objects.requireNonNull(typingPort, "typingPort");
+    this.readMarkerPort = java.util.Objects.requireNonNull(readMarkerPort, "readMarkerPort");
+    this.backendUiProfileProvider = backendUiProfileProvider;
+    this.messageActionCapabilityPolicy =
+        java.util.Objects.requireNonNull(
+            messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.activeInputRouter = activeInputRouter;
     this.chatHistoryService = chatHistoryService;
     this.commandHistoryStore = commandHistoryStore;
@@ -167,8 +181,8 @@ public class ChatDockManager {
     if (!"draft/reply".equals(cap) && !"draft/react".equals(cap) && !"draft/unreact".equals(cap))
       return;
 
-    boolean replySupported = isDraftReplySupportedForServer(sid);
-    boolean reactSupported = isDraftReactSupportedForServer(sid);
+    boolean replySupported = messageActionCapabilityPolicy.canReply(sid);
+    boolean reactSupported = messageActionCapabilityPolicy.canReact(sid);
     normalizePinnedDraftsForServer(sid, replySupported, reactSupported);
   }
 
@@ -217,24 +231,6 @@ public class ChatDockManager {
         }
       } catch (Exception ignored) {
       }
-    }
-  }
-
-  private boolean isDraftReplySupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReplyAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private boolean isDraftReactSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReactAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
     }
   }
 
@@ -375,7 +371,10 @@ public class ChatDockManager {
             commandHistoryStore,
             activationBus::activate,
             outboundBus,
-            irc,
+            typingPort,
+            readMarkerPort,
+            messageActionCapabilityPolicy,
+            backendUiProfileProvider::profileForServer,
             activeInputRouter,
             (t, draft) -> {
               if (t == null) return;

@@ -1,12 +1,13 @@
 package cafe.woden.ircclient.app;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcShutdownPort;
 import cafe.woden.ircclient.util.VirtualThreads;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.support.AbstractApplicationContext;
@@ -22,13 +23,14 @@ public class ApplicationShutdownCoordinator {
   private static final long SHUTDOWN_SPRING_PHASE_TIMEOUT_MS = 3000L;
 
   private final ConfigurableApplicationContext applicationContext;
-  private final IrcClientService ircClientService;
+  private final IrcShutdownPort ircShutdownPort;
   private final AtomicBoolean shutdownStarted = new AtomicBoolean(false);
 
   public ApplicationShutdownCoordinator(
-      ConfigurableApplicationContext applicationContext, IrcClientService ircClientService) {
+      ConfigurableApplicationContext applicationContext,
+      @Qualifier("ircShutdownPort") IrcShutdownPort ircShutdownPort) {
     this.applicationContext = applicationContext;
-    this.ircClientService = ircClientService;
+    this.ircShutdownPort = ircShutdownPort;
   }
 
   public void shutdown() {
@@ -73,7 +75,7 @@ public class ApplicationShutdownCoordinator {
 
   private void shutdownIrcClientBestEffort() {
     try {
-      ircClientService.shutdownNow();
+      ircShutdownPort.shutdownNow();
     } catch (Throwable t) {
       log.warn("[ircafe] Error while shutting down IRC client service", t);
     }

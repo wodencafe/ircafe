@@ -5,6 +5,7 @@ import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.application.InboundDedupDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
 import cafe.woden.ircclient.ui.ignore.IgnoresPanel;
@@ -15,6 +16,7 @@ import cafe.woden.ircclient.ui.notifications.NotificationsPanel;
 import java.awt.CardLayout;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.JPanel;
 
 /** Routes active targets to the correct center card in {@link ChatDockable}. */
@@ -57,6 +59,7 @@ public final class ChatTargetViewRouter {
   private final RuntimeEventsPanel appSpringPanel;
   private final Consumer<String> managedChannelRefresher;
   private final Consumer<String> monitorRowsRefresher;
+  private final Function<String, BackendUiProfile> backendUiProfileProvider;
 
   public ChatTargetViewRouter(
       JPanel centerCards,
@@ -75,6 +78,44 @@ public final class ChatTargetViewRouter {
       RuntimeEventsPanel appSpringPanel,
       Consumer<String> managedChannelRefresher,
       Consumer<String> monitorRowsRefresher) {
+    this(
+        centerCards,
+        notificationsPanel,
+        channelListPanel,
+        ignoresPanel,
+        dccTransfersPanel,
+        monitorPanel,
+        logViewerPanel,
+        interceptorPanel,
+        appUnhandledErrorsPanel,
+        appAssertjPanel,
+        appJhiccupPanel,
+        appInboundDedupPanel,
+        appJfrPanel,
+        appSpringPanel,
+        managedChannelRefresher,
+        monitorRowsRefresher,
+        BackendUiProfile::ircOnly);
+  }
+
+  public ChatTargetViewRouter(
+      JPanel centerCards,
+      NotificationsPanel notificationsPanel,
+      ChannelListPanel channelListPanel,
+      IgnoresPanel ignoresPanel,
+      DccTransfersPanel dccTransfersPanel,
+      MonitorPanel monitorPanel,
+      LogViewerPanel logViewerPanel,
+      InterceptorPanel interceptorPanel,
+      RuntimeEventsPanel appUnhandledErrorsPanel,
+      RuntimeEventsPanel appAssertjPanel,
+      RuntimeEventsPanel appJhiccupPanel,
+      InboundDedupDiagnosticsPanel appInboundDedupPanel,
+      JfrDiagnosticsPanel appJfrPanel,
+      RuntimeEventsPanel appSpringPanel,
+      Consumer<String> managedChannelRefresher,
+      Consumer<String> monitorRowsRefresher,
+      Function<String, BackendUiProfile> backendUiProfileProvider) {
     this.centerCards = Objects.requireNonNull(centerCards, "centerCards");
     this.notificationsPanel = Objects.requireNonNull(notificationsPanel, "notificationsPanel");
     this.channelListPanel = Objects.requireNonNull(channelListPanel, "channelListPanel");
@@ -95,6 +136,8 @@ public final class ChatTargetViewRouter {
         Objects.requireNonNull(managedChannelRefresher, "managedChannelRefresher");
     this.monitorRowsRefresher =
         Objects.requireNonNull(monitorRowsRefresher, "monitorRowsRefresher");
+    this.backendUiProfileProvider =
+        Objects.requireNonNull(backendUiProfileProvider, "backendUiProfileProvider");
   }
 
   public TargetViewType route(TargetRef target) {
@@ -185,7 +228,7 @@ public final class ChatTargetViewRouter {
 
   private void showChannelListCard(String serverId) {
     try {
-      channelListPanel.setServerId(serverId);
+      channelListPanel.setBackendUiProfile(backendUiProfileProvider.apply(serverId));
       managedChannelRefresher.accept(serverId);
       showCard(CARD_CHANNEL_LIST);
     } catch (Exception ignored) {

@@ -1,12 +1,19 @@
 package cafe.woden.ircclient.ui.shell;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.awt.Color;
+import java.awt.event.MouseEvent;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import javax.swing.JLabel;
+import javax.swing.JToolTip;
+import javax.swing.Popup;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import org.junit.jupiter.api.Test;
 
 class StatusBarTest {
@@ -45,10 +52,69 @@ class StatusBarTest {
     assertEquals(statusTextColor, lagLabel.getForeground());
   }
 
+  @Test
+  void updateNotifierTooltipAlertUsesExtendedAutoHideDelay() throws Exception {
+    StatusBar statusBar = onEdt(StatusBar::new);
+
+    onEdtVoid(() -> invokePrivate(statusBar, "ensureUpdateNotifierTooltipHideTimerOnEdt"));
+    Timer timer = readField(statusBar, "updateNotifierTooltipHideTimer", Timer.class);
+    assertEquals(12_000, timer.getDelay());
+    assertEquals(12_000, timer.getInitialDelay());
+    assertFalse(timer.isRepeats());
+  }
+
+  @Test
+  void updateNotifierTooltipAlertCanBeDismissedByClick() throws Exception {
+    StatusBar statusBar = onEdt(StatusBar::new);
+    TestPopup popup = new TestPopup();
+
+    onEdtVoid(() -> writeField(statusBar, "updateNotifierTooltipPopup", popup));
+
+    JToolTip tooltip =
+        onEdt(
+            () ->
+                invokePrivate(
+                    statusBar, "createUpdateNotifierTooltipAlertOnEdt", "Update is available"));
+    assertTrue(tooltip.getMouseListeners().length > 0);
+
+    MouseEvent click =
+        new MouseEvent(
+            tooltip, MouseEvent.MOUSE_PRESSED, System.currentTimeMillis(), 0, 1, 1, 1, false);
+    onEdtVoid(() -> tooltip.dispatchEvent(click));
+
+    assertTrue(popup.hidden);
+    assertNull(readField(statusBar, "updateNotifierTooltipPopup", Popup.class));
+  }
+
   private static JLabel readLabel(StatusBar statusBar, String fieldName) throws Exception {
+    return readField(statusBar, fieldName, JLabel.class);
+  }
+
+  private static <T> T readField(StatusBar statusBar, String fieldName, Class<T> type)
+      throws Exception {
     Field field = StatusBar.class.getDeclaredField(fieldName);
     field.setAccessible(true);
-    return (JLabel) field.get(statusBar);
+    return type.cast(field.get(statusBar));
+  }
+
+  private static void writeField(StatusBar statusBar, String fieldName, Object value)
+      throws Exception {
+    Field field = StatusBar.class.getDeclaredField(fieldName);
+    field.setAccessible(true);
+    field.set(statusBar, value);
+  }
+
+  private static void invokePrivate(StatusBar statusBar, String methodName) throws Exception {
+    Method method = StatusBar.class.getDeclaredMethod(methodName);
+    method.setAccessible(true);
+    method.invoke(statusBar);
+  }
+
+  private static JToolTip invokePrivate(StatusBar statusBar, String methodName, String arg)
+      throws Exception {
+    Method method = StatusBar.class.getDeclaredMethod(methodName, String.class);
+    method.setAccessible(true);
+    return (JToolTip) method.invoke(statusBar, arg);
   }
 
   private static <T> T onEdt(ThrowingSupplier<T> supplier) throws Exception {
@@ -87,5 +153,17 @@ class StatusBarTest {
   @FunctionalInterface
   private interface ThrowingRunnable {
     void run() throws Exception;
+  }
+
+  private static final class TestPopup extends Popup {
+    private boolean hidden;
+
+    @Override
+    public void show() {}
+
+    @Override
+    public void hide() {
+      hidden = true;
+    }
   }
 }

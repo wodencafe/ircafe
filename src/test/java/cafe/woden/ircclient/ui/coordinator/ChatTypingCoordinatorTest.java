@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import io.reactivex.rxjava3.core.Completable;
@@ -24,6 +25,7 @@ class ChatTypingCoordinatorTest {
   void showTypingIndicatorRepinsWhenBannerVisibilityChanges() throws Exception {
     MessageInputPanel inputPanel = mock(MessageInputPanel.class);
     IrcClientService irc = mock(IrcClientService.class);
+    MessageActionCapabilityPolicy capabilityPolicy = mock(MessageActionCapabilityPolicy.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     AtomicInteger armTailPinCalls = new AtomicInteger();
     AtomicInteger scrollToBottomCalls = new AtomicInteger();
@@ -34,7 +36,8 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            irc,
+            IrcTypingPort.from(irc),
+            capabilityPolicy,
             () -> channel,
             () -> true,
             armTailPinCalls::incrementAndGet,
@@ -54,12 +57,21 @@ class ChatTypingCoordinatorTest {
   void showTypingIndicatorIgnoresNonActiveTargets() {
     MessageInputPanel inputPanel = mock(MessageInputPanel.class);
     IrcClientService irc = mock(IrcClientService.class);
+    MessageActionCapabilityPolicy capabilityPolicy = mock(MessageActionCapabilityPolicy.class);
     TargetRef active = new TargetRef("libera", "#ircafe");
     Map<TargetRef, String> drafts = new HashMap<>();
 
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
-            inputPanel, irc, () -> active, () -> true, () -> {}, () -> false, () -> {}, drafts);
+            inputPanel,
+            IrcTypingPort.from(irc),
+            capabilityPolicy,
+            () -> active,
+            () -> true,
+            () -> {},
+            () -> false,
+            () -> {},
+            drafts);
 
     coordinator.showTypingIndicator(new TargetRef("libera", "#other"), "alice", "active");
 
@@ -70,6 +82,7 @@ class ChatTypingCoordinatorTest {
   void normalizeTypingCapabilityClearsRemoteIndicatorAndRefreshesAvailability() throws Exception {
     MessageInputPanel inputPanel = mock(MessageInputPanel.class);
     IrcClientService irc = mock(IrcClientService.class);
+    MessageActionCapabilityPolicy capabilityPolicy = mock(MessageActionCapabilityPolicy.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     AtomicInteger armTailPinCalls = new AtomicInteger();
     AtomicInteger scrollToBottomCalls = new AtomicInteger();
@@ -81,7 +94,8 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            irc,
+            IrcTypingPort.from(irc),
+            capabilityPolicy,
             () -> channel,
             () -> true,
             armTailPinCalls::incrementAndGet,
@@ -102,17 +116,26 @@ class ChatTypingCoordinatorTest {
   void normalizeDraftCapabilitiesUpdatesStoredDraftsForServer() {
     MessageInputPanel inputPanel = mock(MessageInputPanel.class);
     IrcClientService irc = mock(IrcClientService.class);
+    MessageActionCapabilityPolicy capabilityPolicy = mock(MessageActionCapabilityPolicy.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     Map<TargetRef, String> drafts = new HashMap<>();
     String before = "/quote @draft/reply=abc PRIVMSG #ircafe :hello";
     drafts.put(channel, before);
 
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(false);
-    when(irc.isDraftReactAvailable("libera")).thenReturn(false);
+    when(capabilityPolicy.canReply("libera")).thenReturn(false);
+    when(capabilityPolicy.canReact("libera")).thenReturn(false);
 
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
-            inputPanel, irc, () -> channel, () -> false, () -> {}, () -> false, () -> {}, drafts);
+            inputPanel,
+            IrcTypingPort.from(irc),
+            capabilityPolicy,
+            () -> channel,
+            () -> false,
+            () -> {},
+            () -> false,
+            () -> {},
+            drafts);
 
     coordinator.normalizeIrcv3CapabilityUiState("libera", "draft/reply");
 
@@ -125,6 +148,7 @@ class ChatTypingCoordinatorTest {
   void onLocalTypingStateChangedSendsNormalizedTypingWhenAvailable() {
     MessageInputPanel inputPanel = mock(MessageInputPanel.class);
     IrcClientService irc = mock(IrcClientService.class);
+    MessageActionCapabilityPolicy capabilityPolicy = mock(MessageActionCapabilityPolicy.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     Map<TargetRef, String> drafts = new HashMap<>();
 
@@ -133,7 +157,15 @@ class ChatTypingCoordinatorTest {
 
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
-            inputPanel, irc, () -> channel, () -> false, () -> {}, () -> false, () -> {}, drafts);
+            inputPanel,
+            IrcTypingPort.from(irc),
+            capabilityPolicy,
+            () -> channel,
+            () -> false,
+            () -> {},
+            () -> false,
+            () -> {},
+            drafts);
 
     coordinator.onLocalTypingStateChanged("composing");
 
@@ -146,6 +178,7 @@ class ChatTypingCoordinatorTest {
   void onLocalTypingStateChangedDoesNotSendWhenUnavailable() {
     MessageInputPanel inputPanel = mock(MessageInputPanel.class);
     IrcClientService irc = mock(IrcClientService.class);
+    MessageActionCapabilityPolicy capabilityPolicy = mock(MessageActionCapabilityPolicy.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
     Map<TargetRef, String> drafts = new HashMap<>();
 
@@ -154,7 +187,15 @@ class ChatTypingCoordinatorTest {
 
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
-            inputPanel, irc, () -> channel, () -> false, () -> {}, () -> false, () -> {}, drafts);
+            inputPanel,
+            IrcTypingPort.from(irc),
+            capabilityPolicy,
+            () -> channel,
+            () -> false,
+            () -> {},
+            () -> false,
+            () -> {},
+            drafts);
 
     coordinator.onLocalTypingStateChanged("active");
 

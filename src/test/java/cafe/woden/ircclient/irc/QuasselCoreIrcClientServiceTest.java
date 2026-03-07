@@ -676,7 +676,7 @@ class QuasselCoreIrcClientServiceTest {
                     List.of(Map.of("server", "irc.libera.chat", "port", 6697, "useSSL", true))))));
 
     long deadline = System.currentTimeMillis() + 2_000L;
-    List<IrcClientService.QuasselCoreNetworkSummary> networks = List.of();
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks = List.of();
     while (System.currentTimeMillis() < deadline) {
       networks = service.quasselCoreNetworks("quassel");
       if (networks.stream().anyMatch(n -> n.networkId() == 2 && "libera".equals(n.networkName()))) {
@@ -685,7 +685,7 @@ class QuasselCoreIrcClientServiceTest {
       Thread.sleep(10L);
     }
 
-    IrcClientService.QuasselCoreNetworkSummary libera =
+    QuasselCoreControlPort.QuasselCoreNetworkSummary libera =
         networks.stream().filter(n -> n.networkId() == 2).findFirst().orElseThrow();
     assertEquals("libera", libera.networkName());
     assertTrue(libera.connected());
@@ -791,11 +791,11 @@ class QuasselCoreIrcClientServiceTest {
       Thread.sleep(10L);
     }
 
-    IrcClientService.QuasselCoreNetworkCreateRequest createRequest =
-        new IrcClientService.QuasselCoreNetworkCreateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkCreateRequest createRequest =
+        new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
             "libera", "irc.libera.chat", 6697, true, "", true, null, List.of("#ircafe"));
-    IrcClientService.QuasselCoreNetworkUpdateRequest updateRequest =
-        new IrcClientService.QuasselCoreNetworkUpdateRequest(
+    QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest updateRequest =
+        new QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest(
             "", "irc2.libera.chat", 6667, false, "", true, null, null);
     service.quasselCoreCreateNetwork("quassel", createRequest).blockingAwait();
     service.quasselCoreUpdateNetwork("quassel", "1", updateRequest).blockingAwait();
@@ -2262,6 +2262,113 @@ class QuasselCoreIrcClientServiceTest {
   }
 
   @Test
+  void statusBufferNoticeUsesCanonicalStatusTarget() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec datastreamCodec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    QuasselCoreProtocolProbe.ProbeSelection probeSelection =
+        new QuasselCoreProtocolProbe.ProbeSelection(
+            0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0);
+    QuasselCoreDatastreamCodec.BufferInfoValue statusWithUnexpectedName =
+        new QuasselCoreDatastreamCodec.BufferInfoValue(3, 1, 0x01, -1, "title");
+
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket)).thenReturn(probeSelection);
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 1, List.of(1), Map.of(3, statusWithUnexpectedName)));
+
+    QuasselCoreIrcClientService service =
+        new QuasselCoreIrcClientService(
+            serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+
+    service.connect("quassel").blockingAwait();
+    events.awaitCount(3);
+
+    socket.writeInbound(
+        encodeRpcCall(
+            datastreamCodec,
+            "2displayMsg(Message)",
+            List.of(
+                new QuasselCoreDatastreamCodec.MessageValue(
+                    902L,
+                    TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis()),
+                    0x0002,
+                    0,
+                    statusWithUnexpectedName,
+                    "server",
+                    "Last login from: user@host"))));
+
+    events.awaitCount(4);
+    IrcEvent.Notice notice =
+        assertInstanceOf(IrcEvent.Notice.class, events.values().get(3).event());
+    assertEquals("status", notice.target());
+    assertEquals("server", notice.from());
+  }
+
+  @Test
+  void backlogStatusBufferNoticeUsesCanonicalStatusTarget() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec datastreamCodec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    QuasselCoreProtocolProbe.ProbeSelection probeSelection =
+        new QuasselCoreProtocolProbe.ProbeSelection(
+            0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0);
+    QuasselCoreDatastreamCodec.BufferInfoValue statusWithUnexpectedName =
+        new QuasselCoreDatastreamCodec.BufferInfoValue(3, 1, 0x01, -1, "title");
+
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket)).thenReturn(probeSelection);
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult(
+                "quassel", 1, List.of(1), Map.of(3, statusWithUnexpectedName)));
+
+    QuasselCoreIrcClientService service =
+        new QuasselCoreIrcClientService(
+            serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+
+    service.connect("quassel").blockingAwait();
+    events.awaitCount(3);
+
+    socket.writeInbound(
+        encodeRpcCall(
+            datastreamCodec,
+            "2displayMsg(Message)",
+            List.of(
+                new QuasselCoreDatastreamCodec.MessageValue(
+                    903L,
+                    TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis()),
+                    0x0002,
+                    0x80,
+                    statusWithUnexpectedName,
+                    "server",
+                    "Last login from: user@host"))));
+
+    events.awaitCount(4);
+    IrcEvent.ChatHistoryBatchReceived batch =
+        assertInstanceOf(IrcEvent.ChatHistoryBatchReceived.class, events.values().get(3).event());
+    assertEquals("status", batch.target());
+    assertEquals(1, batch.entries().size());
+    assertEquals(ChatHistoryEntry.Kind.NOTICE, batch.entries().get(0).kind());
+    assertEquals("status", batch.entries().get(0).target());
+    assertEquals("server", batch.entries().get(0).from());
+  }
+
+  @Test
   void connectFailureEmitsErrorAndDisconnectedEvents() throws Exception {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
@@ -2574,13 +2681,13 @@ class QuasselCoreIrcClientServiceTest {
     events.awaitCount(3);
 
     assertTrue(service.isQuasselCoreSetupPending("quassel"));
-    IrcClientService.QuasselCoreSetupPrompt prompt =
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
         service.quasselCoreSetupPrompt("quassel").orElseThrow();
     assertTrue(prompt.storageBackends().contains("SQLite"));
     assertTrue(prompt.authenticators().contains("Database"));
 
-    IrcClientService.QuasselCoreSetupRequest request =
-        new IrcClientService.QuasselCoreSetupRequest(
+    QuasselCoreControlPort.QuasselCoreSetupRequest request =
+        new QuasselCoreControlPort.QuasselCoreSetupRequest(
             "admin", "secret", "SQLite", "Database", Map.of(), Map.of());
     service.submitQuasselCoreSetup("quassel", request).blockingAwait();
 

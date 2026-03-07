@@ -1,13 +1,14 @@
 package cafe.woden.ircclient.app.commands;
 
+import java.util.Objects;
+
 public sealed interface ParsedInput
     permits ParsedInput.Join,
         ParsedInput.Part,
         ParsedInput.Connect,
         ParsedInput.Disconnect,
         ParsedInput.Reconnect,
-        ParsedInput.QuasselSetup,
-        ParsedInput.QuasselNetwork,
+        ParsedInput.BackendNamed,
         ParsedInput.Quit,
         ParsedInput.Nick,
         ParsedInput.Away,
@@ -54,6 +55,7 @@ public sealed interface ParsedInput
         ParsedInput.MarkRead,
         ParsedInput.Monitor,
         ParsedInput.Help,
+        ParsedInput.Upload,
         ParsedInput.ReplyMessage,
         ParsedInput.ReactMessage,
         ParsedInput.UnreactMessage,
@@ -87,11 +89,19 @@ public sealed interface ParsedInput
   /** /reconnect [serverId|all] */
   record Reconnect(String target) implements ParsedInput {}
 
-  /** /quasselsetup [serverId] */
-  record QuasselSetup(String serverId) implements ParsedInput {}
+  /** Backend-specific command parsed by backend command handlers. */
+  record BackendNamed(String command, String args) implements ParsedInput {
+    public BackendNamed {
+      command = normalizeToken(command);
+      args = Objects.toString(args, "").trim();
+    }
 
-  /** /quasselnet ... */
-  record QuasselNetwork(String args) implements ParsedInput {}
+    private static String normalizeToken(String raw) {
+      String token = Objects.toString(raw, "").trim().toLowerCase(java.util.Locale.ROOT);
+      if (token.startsWith("/")) token = token.substring(1).trim();
+      return token;
+    }
+  }
 
   /** /quit [reason...] */
   record Quit(String reason) implements ParsedInput {}
@@ -246,6 +256,13 @@ public sealed interface ParsedInput
    * <p>Local help output for common slash commands.
    */
   record Help(String topic) implements ParsedInput {}
+
+  /**
+   * /upload <msgtype> <path> [caption]
+   *
+   * <p>Semantic media-upload command.
+   */
+  record Upload(String msgType, String path, String caption) implements ParsedInput {}
 
   /**
    * /reply <msgid> <message>

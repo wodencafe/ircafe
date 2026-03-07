@@ -2,9 +2,12 @@ package cafe.woden.ircclient.ui.servers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.GraphicsEnvironment;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -16,7 +19,10 @@ import java.util.function.BooleanSupplier;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JLabel;
 import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Assumptions;
@@ -71,6 +77,13 @@ class ServerEditorDialogFunctionalTest {
 
       onEdt(() -> saslMechanism.setSelectedItem("SCRAM-SHA-256"));
       onEdt(() -> assertTrue(saslPassField.isEnabled(), "SCRAM requires secret field"));
+
+      int authModePrefBeforeAuto = onEdtCall(() -> authModeCombo.getPreferredSize().width);
+      onEdt(() -> saslMechanism.setSelectedItem("AUTO"));
+      int authModePrefAfterAuto = onEdtCall(() -> authModeCombo.getPreferredSize().width);
+      assertTrue(
+          authModePrefAfterAuto >= authModePrefBeforeAuto,
+          "auth method combo should not shrink when SASL mechanism switches to AUTO");
 
       onEdt(proxyOverrideBox::doClick);
       if (!onEdtCall(proxyEnabledBox::isSelected)) {
@@ -145,10 +158,114 @@ class ServerEditorDialogFunctionalTest {
     }
   }
 
+  @Test
+  void matrixBackendUsesAccessTokenAndDisablesIrcAuthMode() throws Exception {
+    Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
+
+    ServerEditorDialog dialog = onEdtCall(() -> new ServerEditorDialog(null, "Add Server", null));
+    JTextField idField = readField(dialog, "idField", JTextField.class);
+    JTextField hostField = readField(dialog, "hostField", JTextField.class);
+    JTextField portField = readField(dialog, "portField", JTextField.class);
+    JTextField serverPassField = readField(dialog, "serverPassField", JTextField.class);
+    JComboBox<?> backendCombo = readField(dialog, "backendCombo", JComboBox.class);
+    JComboBox<?> authModeCombo = readField(dialog, "authModeCombo", JComboBox.class);
+    JCheckBox tlsBox = readField(dialog, "tlsBox", JCheckBox.class);
+    JLabel hostLabel = readField(dialog, "hostLabel", JLabel.class);
+    JLabel serverPasswordLabel = readField(dialog, "serverPasswordLabel", JLabel.class);
+    JButton saveBtn = readField(dialog, "saveBtn", JButton.class);
+
+    try {
+      onEdt(
+          () -> {
+            idField.setText("matrix");
+            hostField.setText("https://matrix.example.org");
+            backendCombo.setSelectedItem(IrcProperties.Server.Backend.MATRIX);
+          });
+      onEdt(
+          () -> {
+            assertEquals("Homeserver", hostLabel.getText());
+            assertEquals("Access token", serverPasswordLabel.getText());
+            assertEquals("443", portField.getText(), "matrix backend should default to TLS 443");
+            assertFalse(authModeCombo.isEnabled(), "Matrix backend should disable IRC auth mode");
+            assertFalse(saveBtn.isEnabled(), "matrix backend should require access token");
+          });
+
+      onEdt(tlsBox::doClick);
+      onEdt(() -> assertEquals("80", portField.getText(), "matrix plain mode should use 80"));
+      onEdt(tlsBox::doClick);
+      onEdt(() -> assertEquals("443", portField.getText(), "matrix TLS mode should use 443"));
+
+      onEdt(() -> serverPassField.setText("matrix-access-token"));
+      waitFor(() -> onEdtBoolean(saveBtn::isEnabled), Duration.ofSeconds(2));
+      onEdt(saveBtn::doClick);
+
+      Optional<?> result = readField(dialog, "result", Optional.class);
+      assertTrue(result.isPresent(), "save should produce a server result");
+      Object server = result.get();
+      Method backend = server.getClass().getMethod("backend");
+      assertEquals(IrcProperties.Server.Backend.MATRIX, backend.invoke(server));
+      Method serverPassword = server.getClass().getMethod("serverPassword");
+      assertEquals("matrix-access-token", serverPassword.invoke(server));
+
+      Method saslMethod = server.getClass().getMethod("sasl");
+      Object sasl = saslMethod.invoke(server);
+      Method saslEnabled = sasl.getClass().getMethod("enabled");
+      assertEquals(Boolean.FALSE, saslEnabled.invoke(sasl));
+
+      Method nickservMethod = server.getClass().getMethod("nickserv");
+      Object nickserv = nickservMethod.invoke(server);
+      Method nickservEnabled = nickserv.getClass().getMethod("enabled");
+      assertEquals(Boolean.FALSE, nickservEnabled.invoke(nickserv));
+    } finally {
+      onEdt(dialog::dispose);
+      flushEdt();
+    }
+  }
+
+  @Test
+  void proxyTabUsesScrollPaneToAvoidClipping() throws Exception {
+    Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
+
+    ServerEditorDialog dialog = onEdtCall(() -> new ServerEditorDialog(null, "Add Server", null));
+    try {
+      JTabbedPane tabs = onEdtCall(() -> findDescendant(dialog, JTabbedPane.class));
+      assertNotNull(tabs, "server dialog should contain tabs");
+
+      int proxyTabIndex = onEdtCall(() -> tabs.indexOfTab("Proxy"));
+      assertTrue(proxyTabIndex >= 0, "proxy tab should be present");
+
+      Component proxyTabComponent = onEdtCall(() -> tabs.getComponentAt(proxyTabIndex));
+      assertTrue(
+          proxyTabComponent instanceof JScrollPane,
+          "proxy tab should be scrollable so fields do not clip");
+
+      JScrollPane proxyScroll = (JScrollPane) proxyTabComponent;
+      assertEquals(
+          JScrollPane.HORIZONTAL_SCROLLBAR_NEVER,
+          onEdtCall(proxyScroll::getHorizontalScrollBarPolicy));
+      assertNotNull(onEdtCall(() -> proxyScroll.getViewport().getView()));
+    } finally {
+      onEdt(dialog::dispose);
+      flushEdt();
+    }
+  }
+
   private static <T> T readField(Object target, String fieldName, Class<T> type) throws Exception {
     Field field = target.getClass().getDeclaredField(fieldName);
     field.setAccessible(true);
     return type.cast(field.get(target));
+  }
+
+  private static <T extends Component> T findDescendant(Container root, Class<T> type) {
+    if (root == null || type == null) return null;
+    for (Component child : root.getComponents()) {
+      if (type.isInstance(child)) return type.cast(child);
+      if (child instanceof Container nested) {
+        T found = findDescendant(nested, type);
+        if (found != null) return found;
+      }
+    }
+    return null;
   }
 
   private static void waitFor(BooleanSupplier condition, Duration timeout) throws Exception {

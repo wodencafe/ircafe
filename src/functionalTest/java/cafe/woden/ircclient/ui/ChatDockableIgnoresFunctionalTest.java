@@ -24,10 +24,12 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
@@ -90,6 +92,9 @@ class ChatDockableIgnoresFunctionalTest {
     TargetActivationBus activationBus = new TargetActivationBus();
     OutboundLineBus outboundBus = new OutboundLineBus();
     IrcClientService irc = mock(IrcClientService.class);
+    BackendUiProfileProvider backendUiProfileProvider = mock(BackendUiProfileProvider.class);
+    MessageActionCapabilityPolicy messageActionCapabilityPolicy =
+        mock(MessageActionCapabilityPolicy.class);
     ActiveInputRouter activeInputRouter = new ActiveInputRouter();
     IgnoreListService ignoreListService = mock(IgnoreListService.class);
     IgnoreStatusService ignoreStatusService = mock(IgnoreStatusService.class);
@@ -125,6 +130,8 @@ class ChatDockableIgnoresFunctionalTest {
                     activationBus,
                     outboundBus,
                     irc,
+                    backendUiProfileProvider,
+                    messageActionCapabilityPolicy,
                     activeInputRouter,
                     ignoreListService,
                     ignoreStatusService,

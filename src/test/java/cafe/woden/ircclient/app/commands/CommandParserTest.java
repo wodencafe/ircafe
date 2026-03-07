@@ -2,11 +2,15 @@ package cafe.woden.ircclient.app.commands;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class CommandParserTest {
 
-  private final CommandParser parser = new CommandParser(new FilterCommandParser());
+  private final CommandParser parser =
+      new CommandParser(
+          new FilterCommandParser(),
+          new BackendNamedCommandParser(List.of(new QuasselBackendNamedCommandHandler())));
 
   @Test
   void parsesJoinWithOptionalKey() {
@@ -48,25 +52,51 @@ class CommandParserTest {
   }
 
   @Test
+  void parsesPartWithMatrixRoomIdAsReasonPayload() {
+    ParsedInput in = parser.parse("/part !abc123:matrix.org later");
+    assertTrue(in instanceof ParsedInput.Part);
+    ParsedInput.Part part = (ParsedInput.Part) in;
+    assertEquals("", part.channel());
+    assertEquals("!abc123:matrix.org later", part.reason());
+  }
+
+  @Test
+  void parsesPartReasonStartingWithBangAsReasonWhenNotMatrixRoomId() {
+    ParsedInput in = parser.parse("/part !brb");
+    assertTrue(in instanceof ParsedInput.Part);
+    ParsedInput.Part part = (ParsedInput.Part) in;
+    assertEquals("", part.channel());
+    assertEquals("!brb", part.reason());
+  }
+
+  @Test
   void parsesQuasselSetupCommandAndAlias() {
     ParsedInput setup = parser.parse("/quasselsetup quassel");
-    assertTrue(setup instanceof ParsedInput.QuasselSetup);
-    assertEquals("quassel", ((ParsedInput.QuasselSetup) setup).serverId());
+    assertTrue(setup instanceof ParsedInput.BackendNamed);
+    assertEquals(
+        BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) setup).command());
+    assertEquals("quassel", ((ParsedInput.BackendNamed) setup).args());
 
     ParsedInput alias = parser.parse("/qsetup");
-    assertTrue(alias instanceof ParsedInput.QuasselSetup);
-    assertEquals("", ((ParsedInput.QuasselSetup) alias).serverId());
+    assertTrue(alias instanceof ParsedInput.BackendNamed);
+    assertEquals(
+        BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) alias).command());
+    assertEquals("", ((ParsedInput.BackendNamed) alias).args());
   }
 
   @Test
   void parsesQuasselNetworkCommandAndAlias() {
     ParsedInput direct = parser.parse("/quasselnet list");
-    assertTrue(direct instanceof ParsedInput.QuasselNetwork);
-    assertEquals("list", ((ParsedInput.QuasselNetwork) direct).args());
+    assertTrue(direct instanceof ParsedInput.BackendNamed);
+    assertEquals(
+        BackendNamedCommandNames.QUASSEL_NETWORK, ((ParsedInput.BackendNamed) direct).command());
+    assertEquals("list", ((ParsedInput.BackendNamed) direct).args());
 
     ParsedInput alias = parser.parse("/qnet quassel connect libera");
-    assertTrue(alias instanceof ParsedInput.QuasselNetwork);
-    assertEquals("quassel connect libera", ((ParsedInput.QuasselNetwork) alias).args());
+    assertTrue(alias instanceof ParsedInput.BackendNamed);
+    assertEquals(
+        BackendNamedCommandNames.QUASSEL_NETWORK, ((ParsedInput.BackendNamed) alias).command());
+    assertEquals("quassel connect libera", ((ParsedInput.BackendNamed) alias).args());
   }
 
   @Test
@@ -228,6 +258,35 @@ class CommandParserTest {
     assertEquals("list", dcc.subcommand());
     assertEquals("", dcc.nick());
     assertEquals("", dcc.argument());
+  }
+
+  @Test
+  void parsesUploadWithExplicitCaption() {
+    ParsedInput in = parser.parse("/upload image /tmp/photo.png hello matrix");
+    assertTrue(in instanceof ParsedInput.Upload);
+    ParsedInput.Upload upload = (ParsedInput.Upload) in;
+    assertEquals("image", upload.msgType());
+    assertEquals("/tmp/photo.png", upload.path());
+    assertEquals("hello matrix", upload.caption());
+  }
+
+  @Test
+  void parsesUploadWithQuotedPath() {
+    ParsedInput in = parser.parse("/upload m.file \"/tmp/my file.txt\" with caption");
+    assertTrue(in instanceof ParsedInput.Upload);
+    ParsedInput.Upload upload = (ParsedInput.Upload) in;
+    assertEquals("m.file", upload.msgType());
+    assertEquals("/tmp/my file.txt", upload.path());
+    assertEquals("with caption", upload.caption());
+  }
+
+  @Test
+  void legacyUploadAliasesAreUnknownCommands() {
+    ParsedInput legacyShort = parser.parse("/mupload m.image");
+    assertTrue(legacyShort instanceof ParsedInput.Unknown);
+
+    ParsedInput legacyLong = parser.parse("/matrixupload m.image");
+    assertTrue(legacyLong instanceof ParsedInput.Unknown);
   }
 
   @Test

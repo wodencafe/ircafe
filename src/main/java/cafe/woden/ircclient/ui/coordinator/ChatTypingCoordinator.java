@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.coordinator;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
@@ -21,7 +21,8 @@ public final class ChatTypingCoordinator {
   private static final Logger log = LoggerFactory.getLogger(ChatTypingCoordinator.class);
 
   private final MessageInputPanel inputPanel;
-  private final IrcClientService irc;
+  private final IrcTypingPort typingPort;
+  private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final Supplier<TargetRef> activeTargetSupplier;
   private final BooleanSupplier transcriptAtBottomSupplier;
   private final Runnable armTailPinOnNextAppendIfAtBottom;
@@ -34,7 +35,8 @@ public final class ChatTypingCoordinator {
 
   public ChatTypingCoordinator(
       MessageInputPanel inputPanel,
-      IrcClientService irc,
+      IrcTypingPort typingPort,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       Supplier<TargetRef> activeTargetSupplier,
       BooleanSupplier transcriptAtBottomSupplier,
       Runnable armTailPinOnNextAppendIfAtBottom,
@@ -42,7 +44,9 @@ public final class ChatTypingCoordinator {
       Runnable scrollToBottom,
       Map<TargetRef, String> draftByTarget) {
     this.inputPanel = Objects.requireNonNull(inputPanel, "inputPanel");
-    this.irc = irc;
+    this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
+    this.messageActionCapabilityPolicy =
+        Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.activeTargetSupplier =
         Objects.requireNonNull(activeTargetSupplier, "activeTargetSupplier");
     this.transcriptAtBottomSupplier =
@@ -92,8 +96,8 @@ public final class ChatTypingCoordinator {
       return;
     }
 
-    boolean replySupported = isDraftReplySupportedForServer(sid);
-    boolean reactSupported = isDraftReactSupportedForServer(sid);
+    boolean replySupported = messageActionCapabilityPolicy.canReply(sid);
+    boolean reactSupported = messageActionCapabilityPolicy.canReact(sid);
 
     TargetRef activeTarget = activeTargetSupplier.get();
     if (activeTarget != null
@@ -118,11 +122,10 @@ public final class ChatTypingCoordinator {
   public void onLocalTypingStateChanged(String state) {
     TargetRef target = activeTargetSupplier.get();
     if (target == null || target.isStatus() || target.isUiOnly()) return;
-    if (irc == null) return;
 
     boolean typingAvailable = false;
     try {
-      typingAvailable = irc.isTypingAvailable(target.serverId());
+      typingAvailable = typingPort.isTypingAvailable(target.serverId());
     } catch (Exception ignored) {
     }
     inputPanel.setTypingSignalAvailable(typingAvailable);
@@ -132,7 +135,7 @@ public final class ChatTypingCoordinator {
       // Only warn once per session when the user is actively composing.
       if (!"done".equals(normalized) && typingUnavailableWarned.compareAndSet(false, true)) {
         String reason =
-            Objects.toString(irc.typingAvailabilityReason(target.serverId()), "").trim();
+            Objects.toString(typingPort.typingAvailabilityReason(target.serverId()), "").trim();
         if (reason.isEmpty()) reason = "not negotiated / not allowed";
         log.info(
             "[{}] typing indicators are enabled, but unavailable on this server ({})",
@@ -146,7 +149,8 @@ public final class ChatTypingCoordinator {
     String normalized = normalizeTypingState(state);
     if (normalized.isEmpty()) return;
     var unused =
-        irc.sendTyping(target.serverId(), target.target(), normalized)
+        typingPort
+            .sendTyping(target.serverId(), target.target(), normalized)
             .subscribe(
                 () -> inputPanel.onLocalTypingIndicatorSent(normalized),
                 err -> {
@@ -164,9 +168,9 @@ public final class ChatTypingCoordinator {
   public void refreshTypingSignalAvailabilityForActiveTarget() {
     TargetRef target = activeTargetSupplier.get();
     boolean available = false;
-    if (target != null && !target.isStatus() && !target.isUiOnly() && irc != null) {
+    if (target != null && !target.isStatus() && !target.isUiOnly()) {
       try {
-        available = irc.isTypingAvailable(target.serverId());
+        available = typingPort.isTypingAvailable(target.serverId());
       } catch (Exception ignored) {
       }
     }
@@ -178,24 +182,6 @@ public final class ChatTypingCoordinator {
     if (!inputAreaChangedHeight) return;
     if (!atBottomBefore && !followTailSupplier.getAsBoolean()) return;
     SwingUtilities.invokeLater(scrollToBottom);
-  }
-
-  private boolean isDraftReplySupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReplyAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private boolean isDraftReactSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReactAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
   }
 
   private static String normalizeTypingState(String state) {

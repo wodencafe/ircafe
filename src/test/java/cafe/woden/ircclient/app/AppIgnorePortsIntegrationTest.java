@@ -10,7 +10,6 @@ import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
-import cafe.woden.ircclient.app.outbound.OutboundChatCommandService;
 import cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.ignore.IgnoreListService;
@@ -74,15 +73,12 @@ class AppIgnorePortsIntegrationTest extends AbstractApplicationModuleIntegration
 
   private final ApplicationContext applicationContext;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
-  private final OutboundChatCommandService outboundChatCommandService;
 
   AppIgnorePortsIntegrationTest(
       ApplicationContext applicationContext,
-      OutboundIgnoreCommandService outboundIgnoreCommandService,
-      OutboundChatCommandService outboundChatCommandService) {
+      OutboundIgnoreCommandService outboundIgnoreCommandService) {
     this.applicationContext = applicationContext;
     this.outboundIgnoreCommandService = outboundIgnoreCommandService;
-    this.outboundChatCommandService = outboundChatCommandService;
   }
 
   @Test
@@ -95,6 +91,5 @@ class AppIgnorePortsIntegrationTest extends AbstractApplicationModuleIntegration
   @Test
   void ignoreAwareAppBeansAreWiredWithApiPortDependencies() {
     assertNotNull(outboundIgnoreCommandService);
-    assertNotNull(outboundChatCommandService);
   }
 }

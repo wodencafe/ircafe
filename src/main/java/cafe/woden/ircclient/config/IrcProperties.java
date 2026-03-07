@@ -146,7 +146,8 @@ public record IrcProperties(Client client, List<Server> servers) {
     /** Transport backend used for this server entry. */
     public enum Backend {
       IRC("irc"),
-      QUASSEL_CORE("quassel-core");
+      QUASSEL_CORE("quassel-core"),
+      MATRIX("matrix");
 
       private final String token;
 

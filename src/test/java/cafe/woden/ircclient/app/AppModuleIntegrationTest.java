@@ -22,7 +22,7 @@ import cafe.woden.ircclient.app.core.IrcMediator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.dcc.DccTransferStore;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.modulith.AbstractApplicationModuleIntegrationTest;
@@ -91,7 +91,7 @@ class AppModuleIntegrationTest extends AbstractApplicationModuleIntegrationTest 
   private final TargetCoordinator targetCoordinator;
   private final ConnectionCoordinator connectionCoordinator;
   private final ServerRegistry serverRegistry;
-  private final IrcClientService ircClientService;
+  private final IrcConnectionLifecyclePort ircConnectionLifecyclePort;
   private final UserListStore userListStore;
   private final UiPort swingUiPort;
 
@@ -102,7 +102,8 @@ class AppModuleIntegrationTest extends AbstractApplicationModuleIntegrationTest 
       TargetCoordinator targetCoordinator,
       ConnectionCoordinator connectionCoordinator,
       ServerRegistry serverRegistry,
-      IrcClientService ircClientService,
+      @Qualifier("ircConnectionLifecyclePort")
+          IrcConnectionLifecyclePort ircConnectionLifecyclePort,
       UserListStore userListStore,
       @Qualifier("swingUiPort") UiPort swingUiPort) {
     this.applicationContext = applicationContext;
@@ -111,14 +112,14 @@ class AppModuleIntegrationTest extends AbstractApplicationModuleIntegrationTest 
     this.targetCoordinator = targetCoordinator;
     this.connectionCoordinator = connectionCoordinator;
     this.serverRegistry = serverRegistry;
-    this.ircClientService = ircClientService;
+    this.ircConnectionLifecyclePort = ircConnectionLifecyclePort;
     this.userListStore = userListStore;
     this.swingUiPort = swingUiPort;
   }
 
   @BeforeEach
   void clearInteractions() {
-    clearInvocations(ircClientService, swingUiPort, targetChatHistoryPort);
+    clearInvocations(ircConnectionLifecyclePort, swingUiPort, targetChatHistoryPort);
   }
 
   @Test
@@ -146,13 +147,13 @@ class AppModuleIntegrationTest extends AbstractApplicationModuleIntegrationTest 
   @Test
   void connectAllPortDelegatesToConnectionCoordinatorForEachConfiguredServer() {
     for (String sid : serverRegistry.serverIds()) {
-      when(ircClientService.connect(sid)).thenReturn(Completable.complete());
+      when(ircConnectionLifecyclePort.connect(sid)).thenReturn(Completable.complete());
     }
 
     mediatorControlPort.connectAll();
 
     for (String sid : serverRegistry.serverIds()) {
-      verify(ircClientService).connect(sid);
+      verify(ircConnectionLifecyclePort).connect(sid);
     }
   }
 

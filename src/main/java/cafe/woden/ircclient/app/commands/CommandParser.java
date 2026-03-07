@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.commands;
 
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 /**
@@ -11,9 +12,14 @@ import org.springframework.stereotype.Component;
 public class CommandParser {
 
   private final FilterCommandParser filterCommandParser;
+  private final BackendNamedCommandParser backendNamedCommandParser;
 
-  public CommandParser(FilterCommandParser filterCommandParser) {
-    this.filterCommandParser = filterCommandParser;
+  public CommandParser(
+      FilterCommandParser filterCommandParser,
+      BackendNamedCommandParser backendNamedCommandParser) {
+    this.filterCommandParser = Objects.requireNonNull(filterCommandParser, "filterCommandParser");
+    this.backendNamedCommandParser =
+        Objects.requireNonNull(backendNamedCommandParser, "backendNamedCommandParser");
   }
 
   public ParsedInput parse(String raw) {
@@ -57,7 +63,7 @@ public class CommandParser {
       }
       // If the first token looks like a channel, treat it as the explicit channel;
       // otherwise treat the whole rest as a part reason for the current channel.
-      if (first.startsWith("#") || first.startsWith("&")) {
+      if (looksLikePartTarget(first)) {
         return new ParsedInput.Part(first, tail);
       }
       return new ParsedInput.Part("", r);
@@ -78,21 +84,8 @@ public class CommandParser {
       return new ParsedInput.Reconnect(target);
     }
 
-    if (matchesCommand(line, "/quasselsetup") || matchesCommand(line, "/qsetup")) {
-      String serverId =
-          matchesCommand(line, "/quasselsetup")
-              ? argAfter(line, "/quasselsetup")
-              : argAfter(line, "/qsetup");
-      return new ParsedInput.QuasselSetup(serverId);
-    }
-
-    if (matchesCommand(line, "/quasselnet") || matchesCommand(line, "/qnet")) {
-      String args =
-          matchesCommand(line, "/quasselnet")
-              ? argAfter(line, "/quasselnet")
-              : argAfter(line, "/qnet");
-      return new ParsedInput.QuasselNetwork(args);
-    }
+    ParsedInput backendNamed = backendNamedCommandParser.parse(line);
+    if (backendNamed != null) return backendNamed;
 
     if (matchesCommand(line, "/quit")) {
       String reason = argAfter(line, "/quit");
@@ -390,6 +383,10 @@ public class CommandParser {
       return new ParsedInput.Help(topic);
     }
 
+    if (matchesCommand(line, "/upload")) {
+      return parseUploadInput(argAfter(line, "/upload"));
+    }
+
     // IRCv3 compose helpers (used by first-class reply/reaction input UX).
     if (matchesCommand(line, "/reply")) {
       return parseReplyInput(argAfter(line, "/reply"));
@@ -504,6 +501,64 @@ public class CommandParser {
     String nick = rest2.substring(0, sp2).trim();
     String arg = rest2.substring(sp2 + 1).trim();
     return new ParsedInput.Dcc(sub, nick, arg);
+  }
+
+  private static ParsedInput parseUploadInput(String rest) {
+    String raw = rest == null ? "" : rest.trim();
+    if (raw.isEmpty()) return new ParsedInput.Upload("", "", "");
+
+    int firstSpace = raw.indexOf(' ');
+    if (firstSpace <= 0) {
+      return new ParsedInput.Upload(raw.trim(), "", "");
+    }
+
+    String msgType = raw.substring(0, firstSpace).trim();
+    String remaining = raw.substring(firstSpace + 1).trim();
+    if (remaining.isEmpty()) {
+      return new ParsedInput.Upload(msgType, "", "");
+    }
+
+    ParsedPathToken pathToken = parsePathToken(remaining);
+    return new ParsedInput.Upload(
+        msgType, pathToken.path(), pathToken.remainder() == null ? "" : pathToken.remainder());
+  }
+
+  private static ParsedPathToken parsePathToken(String raw) {
+    String input = raw == null ? "" : raw.trim();
+    if (input.isEmpty()) {
+      return new ParsedPathToken("", "");
+    }
+
+    if (!input.startsWith("\"")) {
+      int sp = input.indexOf(' ');
+      if (sp < 0) {
+        return new ParsedPathToken(input, "");
+      }
+      return new ParsedPathToken(input.substring(0, sp).trim(), input.substring(sp + 1).trim());
+    }
+
+    StringBuilder token = new StringBuilder();
+    boolean escaped = false;
+    for (int i = 1; i < input.length(); i++) {
+      char ch = input.charAt(i);
+      if (escaped) {
+        token.append(ch);
+        escaped = false;
+        continue;
+      }
+      if (ch == '\\') {
+        escaped = true;
+        continue;
+      }
+      if (ch == '"') {
+        String remainder = i + 1 < input.length() ? input.substring(i + 1).trim() : "";
+        return new ParsedPathToken(token.toString(), remainder);
+      }
+      token.append(ch);
+    }
+
+    // Unterminated quote.
+    return new ParsedPathToken("", "");
   }
 
   private static ParsedInput parseReplyInput(String rest) {
@@ -727,6 +782,8 @@ public class CommandParser {
 
   private record ParsedKick(String channel, String nick, String reason) {}
 
+  private record ParsedPathToken(String path, String remainder) {}
+
   private static ParsedTargetList parseTargetList(String rest) {
     String r = rest == null ? "" : rest.trim();
     if (r.isEmpty()) return new ParsedTargetList("", java.util.List.of());
@@ -772,6 +829,12 @@ public class CommandParser {
     }
 
     return new ParsedKick("", first, afterFirst);
+  }
+
+  private static boolean looksLikePartTarget(String token) {
+    String value = token == null ? "" : token.trim();
+    if (value.isEmpty()) return false;
+    return value.startsWith("#") || value.startsWith("&");
   }
 
   private static boolean matchesCommand(String line, String cmd) {

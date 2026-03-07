@@ -2,6 +2,7 @@ package cafe.woden.ircclient.logging.history;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
@@ -59,6 +60,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_WINDOW_MINUTES = 360;
 
   private final IrcClientService irc;
+  private final IrcBouncerPlaybackPort bouncerPlayback;
   private final ChatHistoryBatchBus batchBus;
   private final ZncPlaybackBus zncPlaybackBus;
   private final ChatHistoryTranscriptPort transcripts;
@@ -74,11 +76,13 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
   public RemoteOnlyChatHistoryService(
       IrcClientService irc,
+      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
       ChatHistoryBatchBus batchBus,
       ZncPlaybackBus zncPlaybackBus,
       ChatHistoryTranscriptPort transcripts,
       @Qualifier(ExecutorConfig.REMOTE_CHAT_HISTORY_EXECUTOR) ExecutorService exec) {
     this.irc = Objects.requireNonNull(irc, "irc");
+    this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
     this.batchBus = Objects.requireNonNull(batchBus, "batchBus");
     this.zncPlaybackBus = zncPlaybackBus;
     this.transcripts = Objects.requireNonNull(transcripts, "transcripts");
@@ -181,7 +185,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     if (!shouldOfferPaging(target)) return false;
     // Allow reload even when transcript is empty.
     return irc.isChatHistoryAvailable(target.serverId())
-        || irc.isZncPlaybackAvailable(target.serverId());
+        || bouncerPlayback.isZncPlaybackAvailable(target.serverId());
   }
 
   @Override
@@ -278,7 +282,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   public boolean canLoadOlder(TargetRef target) {
     if (!shouldOfferPaging(target)) return false;
     if (!irc.isChatHistoryAvailable(target.serverId())
-        && !irc.isZncPlaybackAvailable(target.serverId())) return false;
+        && !bouncerPlayback.isZncPlaybackAvailable(target.serverId())) return false;
     if (Boolean.TRUE.equals(noMoreOlder.get(target))) return false;
     if (Boolean.TRUE.equals(inFlight.get(target))) return false;
 
@@ -348,7 +352,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     }
 
     if (!irc.isChatHistoryAvailable(target.serverId())
-        && !irc.isZncPlaybackAvailable(target.serverId())) {
+        && !bouncerPlayback.isZncPlaybackAvailable(target.serverId())) {
       transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.UNAVAILABLE);
       return;
     }
@@ -669,7 +673,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     final String myNick = myNickOpt.orElse("");
 
     boolean useChatHistory = irc.isChatHistoryAvailable(sid);
-    boolean useZnc = !useChatHistory && irc.isZncPlaybackAvailable(sid);
+    boolean useZnc = !useChatHistory && bouncerPlayback.isZncPlaybackAvailable(sid);
     Duration remoteTimeout = configuredRemoteTimeout();
     Duration remoteZncPlaybackTimeout = configuredRemoteZncPlaybackTimeout();
     Duration remoteZncPlaybackWindow = configuredRemoteZncPlaybackWindow();
@@ -763,7 +767,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
       var wait = zncPlaybackBus.awaitNext(sid, tgt, remoteZncPlaybackTimeout);
       try {
-        Completable send = irc.requestZncPlaybackRange(sid, tgt, start, end);
+        Completable send = bouncerPlayback.requestZncPlaybackRange(sid, tgt, start, end);
         if (send != null) {
           try {
             boolean completed =

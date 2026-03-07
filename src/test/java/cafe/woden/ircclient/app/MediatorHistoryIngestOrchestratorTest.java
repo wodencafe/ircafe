@@ -21,7 +21,7 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.app.core.MediatorHistoryIngestOrchestrator;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcCurrentNickPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
@@ -44,7 +44,7 @@ class MediatorHistoryIngestOrchestratorTest {
   private final ChatHistoryRequestRoutingPort routingState =
       mock(ChatHistoryRequestRoutingPort.class);
   private final ChatTranscriptHistoryPort transcripts = mock(ChatTranscriptHistoryPort.class);
-  private final IrcClientService irc = mock(IrcClientService.class);
+  private final IrcCurrentNickPort currentNickPort = mock(IrcCurrentNickPort.class);
 
   private final MediatorHistoryIngestOrchestrator orchestrator =
       new MediatorHistoryIngestOrchestrator(
@@ -55,7 +55,7 @@ class MediatorHistoryIngestOrchestratorTest {
           playbackEventsPort,
           routingState,
           transcripts,
-          irc);
+          currentNickPort);
 
   @BeforeEach
   void setUp() {
@@ -84,7 +84,7 @@ class MediatorHistoryIngestOrchestratorTest {
                 40,
                 "timestamp=now",
                 ChatHistoryRequestRoutingPort.QueryMode.BEFORE));
-    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(currentNickPort.currentNick("libera")).thenReturn(Optional.of("me"));
     when(transcripts.loadOlderInsertOffset(chan)).thenReturn(0);
 
     Instant t1 = Instant.parse("2026-02-16T00:00:01Z");
@@ -128,7 +128,7 @@ class MediatorHistoryIngestOrchestratorTest {
         .thenReturn(
             new ChatHistoryRequestRoutingPort.PendingRequest(
                 chan, Instant.now(), 20, "*", ChatHistoryRequestRoutingPort.QueryMode.LATEST));
-    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(currentNickPort.currentNick("libera")).thenReturn(Optional.of("me"));
 
     Instant t1 = Instant.parse("2026-02-16T01:00:01Z");
     Instant t2 = Instant.parse("2026-02-16T01:00:02Z");
@@ -230,7 +230,7 @@ class MediatorHistoryIngestOrchestratorTest {
             chan, Instant.now(), 20, "*", ChatHistoryRequestRoutingPort.QueryMode.LATEST);
     when(routingState.consumeIfFresh(eq("libera"), eq("#ircafe"), any(Duration.class)))
         .thenReturn(pending, pending);
-    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(currentNickPort.currentNick("libera")).thenReturn(Optional.of("me"));
 
     Instant t = Instant.parse("2026-02-16T02:00:01Z");
     ChatHistoryEntry chat =
@@ -255,7 +255,7 @@ class MediatorHistoryIngestOrchestratorTest {
         .thenReturn(
             new ChatHistoryRequestRoutingPort.PendingRequest(
                 chan, Instant.now(), 20, "*", ChatHistoryRequestRoutingPort.QueryMode.LATEST));
-    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(currentNickPort.currentNick("libera")).thenReturn(Optional.of("me"));
 
     String msgId = "history-msgid-1";
     Instant t1 = Instant.parse("2026-02-16T03:00:01Z");

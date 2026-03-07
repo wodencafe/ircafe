@@ -37,6 +37,7 @@ public final class BackendNotAvailableException extends UnsupportedOperationExce
             : switch (backend) {
               case IRC -> "IRC backend";
               case QUASSEL_CORE -> "Quassel Core backend";
+              case MATRIX -> "Matrix backend";
             };
     String op = Objects.toString(operation, "").trim();
     if (!op.isEmpty()) op = " (" + op + ")";

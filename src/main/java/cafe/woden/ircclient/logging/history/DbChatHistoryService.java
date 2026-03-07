@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.logging.history;
 
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.ChatLogRepository;
 import cafe.woden.ircclient.model.LogDirection;
@@ -63,6 +64,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
   //  - Prefer IRCv3 CHATHISTORY (soju / servers that support it)
   //  - Fall back to ZNC playback (znc.in/playback) when available
   private final IrcClientService irc;
+  private final IrcBouncerPlaybackPort bouncerPlayback;
   private final ChatHistoryIngestBus ingestBus;
 
   private final ConcurrentHashMap<TargetRef, LogCursor> oldestCursor = new ConcurrentHashMap<>();
@@ -78,13 +80,15 @@ public final class DbChatHistoryService implements ChatHistoryService {
       LogProperties props,
       ChatHistoryTranscriptPort transcripts,
       IrcClientService irc,
+      IrcBouncerPlaybackPort bouncerPlayback,
       ChatHistoryIngestBus ingestBus,
       ExecutorService exec) {
     this.repo = repo;
     this.props = props;
     this.transcripts = transcripts;
-    this.irc = irc;
-    this.ingestBus = ingestBus;
+    this.irc = Objects.requireNonNull(irc, "irc");
+    this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
+    this.ingestBus = Objects.requireNonNull(ingestBus, "ingestBus");
     this.exec = Objects.requireNonNull(exec, "exec");
   }
 
@@ -299,7 +303,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
       canChatHistory = false;
     }
     try {
-      canZncPlayback = irc.isZncPlaybackAvailable(serverId);
+      canZncPlayback = bouncerPlayback.isZncPlaybackAvailable(serverId);
     } catch (Exception ignored) {
       canZncPlayback = false;
     }
@@ -331,7 +335,8 @@ public final class DbChatHistoryService implements ChatHistoryService {
       // Fall back to ZNC playback if CHATHISTORY isn't usable or the send failed.
       if (!requested && canZncPlayback) {
         try {
-          irc.requestZncPlaybackBefore(serverId, target, beforeExclusive, zncPlaybackWindow)
+          bouncerPlayback
+              .requestZncPlaybackBefore(serverId, target, beforeExclusive, zncPlaybackWindow)
               .blockingAwait();
           requested = true;
         } catch (Exception e) {

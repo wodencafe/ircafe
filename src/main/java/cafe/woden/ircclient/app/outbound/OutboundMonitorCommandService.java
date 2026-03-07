@@ -24,6 +24,7 @@ public class OutboundMonitorCommandService {
   private final ConnectionCoordinator connectionCoordinator;
   private final MonitorRosterPort monitorRosterPort;
   private final MonitorFallbackPort monitorFallbackPort;
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
 
   public OutboundMonitorCommandService(
       IrcClientService irc,
@@ -31,13 +32,15 @@ public class OutboundMonitorCommandService {
       TargetCoordinator targetCoordinator,
       ConnectionCoordinator connectionCoordinator,
       MonitorRosterPort monitorRosterPort,
-      MonitorFallbackPort monitorFallbackPort) {
+      MonitorFallbackPort monitorFallbackPort,
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy) {
     this.irc = irc;
     this.ui = ui;
     this.targetCoordinator = targetCoordinator;
     this.connectionCoordinator = connectionCoordinator;
     this.monitorRosterPort = monitorRosterPort;
     this.monitorFallbackPort = monitorFallbackPort;
+    this.backendCapabilityPolicy = backendCapabilityPolicy;
   }
 
   public void handleMonitor(CompositeDisposable disposables, String args) {
@@ -204,6 +207,19 @@ public class OutboundMonitorCommandService {
     if (!connectionCoordinator.isConnected(sid)) {
       if (requireConnection) {
         ui.appendStatus(status, "(conn)", "Not connected");
+      }
+      return;
+    }
+
+    if (!backendCapabilityPolicy.supportsMonitor(sid)) {
+      if (monitorFallbackPort.isFallbackActive(sid)) {
+        requestFallbackRefresh(sid, status, false);
+      } else {
+        ui.appendStatus(
+            status,
+            "(monitor)",
+            backendCapabilityPolicy.featureUnavailableMessage(
+                sid, "MONITOR capability is unavailable on this server."));
       }
       return;
     }

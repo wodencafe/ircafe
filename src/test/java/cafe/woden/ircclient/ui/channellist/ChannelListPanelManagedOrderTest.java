@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.ui.backend.BackendUiContext;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import java.awt.Cursor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -43,6 +45,76 @@ class ChannelListPanelManagedOrderTest {
     assertEquals(
         "/quote PRIVMSG ALIS :LIST * -topic java -min 25 -max 400 -skip 10 -show mt -show r",
         ChannelListPanel.buildAlisCommand("java", options));
+  }
+
+  @Test
+  void buildMatrixListCommandSupportsSearchSinceAndLimit() {
+    ChannelListPanel.MatrixListOptions options =
+        new ChannelListPanel.MatrixListOptions("rust lang", "s123", 75);
+
+    assertEquals(
+        "/list rust lang since s123 limit 75", ChannelListPanel.buildMatrixListCommand(options));
+  }
+
+  @Test
+  void matrixNextPageButtonUsesNextBatchFromLastSummary() throws Exception {
+    ChannelListPanel panel = new ChannelListPanel();
+    AtomicReference<String> command = new AtomicReference<>("");
+
+    onEdt(
+        () -> {
+          panel.setBackendUiProfile(
+              new BackendUiProfile(
+                  "",
+                  BackendUiContext.fromMatrixServerPredicate(
+                      sid -> "matrix".equalsIgnoreCase(sid))));
+          panel.setServerId("matrix");
+          panel.setOnRunAlisRequest(command::set);
+          panel.beginList("matrix", "Loading channel list (rust limit 30)...");
+          panel.endList("matrix", "Listed 30 Matrix room(s). next_batch=nxt-42");
+        });
+
+    JButton nextPageButton = field(panel, "runMatrixNextButton", JButton.class);
+    onEdt(() -> assertTrue(nextPageButton.isVisible()));
+    onEdt(() -> assertTrue(nextPageButton.isEnabled()));
+
+    onEdt(nextPageButton::doClick);
+    assertEquals("/list rust since nxt-42 limit 30", command.get());
+    onEdt(() -> assertFalse(nextPageButton.isEnabled()));
+  }
+
+  @Test
+  void matrixSpecificListControlsOnlyShowForMatrixServers() throws Exception {
+    ChannelListPanel panel = new ChannelListPanel();
+
+    JButton runAlisButton = field(panel, "runAlisButton", JButton.class);
+    JButton runMatrixNextButton = field(panel, "runMatrixNextButton", JButton.class);
+
+    onEdt(
+        () -> {
+          panel.setBackendUiProfile(
+              new BackendUiProfile(
+                  "",
+                  BackendUiContext.fromMatrixServerPredicate(
+                      sid -> "matrix".equalsIgnoreCase(sid))));
+          panel.setServerId("libera");
+          assertFalse(runMatrixNextButton.isVisible());
+          assertTrue(runAlisButton.getToolTipText().toLowerCase(Locale.ROOT).contains("alis"));
+        });
+
+    onEdt(
+        () -> {
+          panel.setServerId("matrix");
+          assertTrue(runMatrixNextButton.isVisible());
+          assertTrue(runAlisButton.getToolTipText().toLowerCase(Locale.ROOT).contains("matrix"));
+        });
+
+    onEdt(
+        () -> {
+          panel.setServerId("libera");
+          assertFalse(runMatrixNextButton.isVisible());
+          assertTrue(runAlisButton.getToolTipText().toLowerCase(Locale.ROOT).contains("alis"));
+        });
   }
 
   @Test

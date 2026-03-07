@@ -4,7 +4,7 @@ import static com.google.common.base.Verify.verify;
 
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcLagProbePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PostConstruct;
@@ -16,6 +16,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -29,7 +30,7 @@ public class LagIndicatorService {
   private final RuntimeConfigStore runtimeConfig;
   private final StatusBar statusBar;
   private final ActiveTargetPort activeTargetPort;
-  private final IrcClientService ircClientService;
+  private final IrcLagProbePort lagProbePort;
   private final ScheduledExecutorService scheduler;
 
   private final AtomicBoolean enabled = new AtomicBoolean(true);
@@ -39,11 +40,11 @@ public class LagIndicatorService {
       RuntimeConfigStore runtimeConfig,
       StatusBar statusBar,
       ActiveTargetPort activeTargetPort,
-      IrcClientService ircClientService) {
+      @Qualifier("ircLagProbePort") IrcLagProbePort lagProbePort) {
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
     this.statusBar = Objects.requireNonNull(statusBar, "statusBar");
     this.activeTargetPort = Objects.requireNonNull(activeTargetPort, "activeTargetPort");
-    this.ircClientService = Objects.requireNonNull(ircClientService, "ircClientService");
+    this.lagProbePort = Objects.requireNonNull(lagProbePort, "lagProbePort");
     this.scheduler = VirtualThreads.newSingleThreadScheduledExecutor("ircafe-lag-indicator");
   }
 
@@ -102,7 +103,7 @@ public class LagIndicatorService {
       return;
     }
 
-    if (ircClientService.currentNick(serverId).isEmpty()) {
+    if (lagProbePort.currentNick(serverId).isEmpty()) {
       statusBar.setLagIndicatorReading(
           null, "Lag unavailable: not connected to '" + serverId + "'.");
       return;
@@ -110,10 +111,10 @@ public class LagIndicatorService {
 
     try {
       try {
-        verify(ircClientService.requestLagProbe(serverId).blockingAwait(2, TimeUnit.SECONDS));
+        verify(lagProbePort.requestLagProbe(serverId).blockingAwait(2, TimeUnit.SECONDS));
       } catch (Exception ignored) {
       }
-      OptionalLong lagMs = ircClientService.lastMeasuredLagMs(serverId);
+      OptionalLong lagMs = lagProbePort.lastMeasuredLagMs(serverId);
       if (lagMs.isPresent()) {
         long lag = Math.max(0L, lagMs.getAsLong());
         statusBar.setLagIndicatorReading(

@@ -2,12 +2,8 @@ package cafe.woden.ircclient.irc;
 
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
-import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -20,57 +16,6 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
  */
 @ApplicationLayer
 public interface IrcClientService {
-  /** Quassel Core initial-setup metadata exposed when the core reports setup is required. */
-  record QuasselCoreSetupPrompt(
-      String serverId,
-      String detail,
-      List<String> storageBackends,
-      List<String> authenticators,
-      Map<String, Object> rawSetupFields) {}
-
-  /** User-provided values for completing Quassel Core initial setup. */
-  record QuasselCoreSetupRequest(
-      String adminUser,
-      String adminPassword,
-      String storageBackend,
-      String authenticator,
-      Map<String, Object> storageSetupData,
-      Map<String, Object> authSetupData) {}
-
-  /** Snapshot of a Quassel upstream network as observed from core sync state. */
-  record QuasselCoreNetworkSummary(
-      int networkId,
-      String networkName,
-      boolean connected,
-      boolean enabled,
-      int identityId,
-      String serverHost,
-      int serverPort,
-      boolean useTls,
-      Map<String, Object> rawState) {}
-
-  /** User-provided values for creating a Quassel upstream network entry. */
-  record QuasselCoreNetworkCreateRequest(
-      String networkName,
-      String serverHost,
-      int serverPort,
-      boolean useTls,
-      String serverPassword,
-      boolean verifyTls,
-      Integer identityId,
-      List<String> autoJoinChannels) {}
-
-  /** User-provided values for updating a Quassel upstream network entry. */
-  record QuasselCoreNetworkUpdateRequest(
-      String networkName,
-      String serverHost,
-      int serverPort,
-      boolean useTls,
-      String serverPassword,
-      boolean verifyTls,
-      Integer identityId,
-      Boolean enabled) {}
-
   /**
    * Stop reconnect timers and close any active IRC connections immediately.
    *
@@ -144,77 +89,6 @@ public interface IrcClientService {
 
   /** Send a raw IRC line (advanced). */
   Completable sendRaw(String serverId, String rawLine);
-
-  /**
-   * Human-readable reason why this backend cannot currently provide features for a server.
-   *
-   * <p>Returns empty when backend availability is normal and capability checks should be
-   * interpreted as regular protocol-negotiation outcomes.
-   */
-  default String backendAvailabilityReason(String serverId) {
-    return "";
-  }
-
-  /**
-   * @return true when Quassel Core initial setup is pending for this server.
-   */
-  default boolean isQuasselCoreSetupPending(String serverId) {
-    return false;
-  }
-
-  /**
-   * @return setup metadata for Quassel Core initial setup, when available.
-   */
-  default Optional<QuasselCoreSetupPrompt> quasselCoreSetupPrompt(String serverId) {
-    return Optional.empty();
-  }
-
-  /**
-   * Submit Quassel Core initial setup values (admin user/password and storage/auth backend
-   * selections).
-   */
-  default Completable submitQuasselCoreSetup(String serverId, QuasselCoreSetupRequest request) {
-    return Completable.error(new UnsupportedOperationException("Quassel core setup not supported"));
-  }
-
-  /**
-   * @return observed Quassel upstream networks for this server session.
-   */
-  default List<QuasselCoreNetworkSummary> quasselCoreNetworks(String serverId) {
-    return List.of();
-  }
-
-  /** Request an upstream Quassel network connect by id or network name/token. */
-  default Completable quasselCoreConnectNetwork(String serverId, String networkIdOrName) {
-    return Completable.error(
-        new UnsupportedOperationException("Quassel network connect not supported"));
-  }
-
-  /** Request an upstream Quassel network disconnect by id or network name/token. */
-  default Completable quasselCoreDisconnectNetwork(String serverId, String networkIdOrName) {
-    return Completable.error(
-        new UnsupportedOperationException("Quassel network disconnect not supported"));
-  }
-
-  /** Create a new upstream Quassel network entry. */
-  default Completable quasselCoreCreateNetwork(
-      String serverId, QuasselCoreNetworkCreateRequest request) {
-    return Completable.error(
-        new UnsupportedOperationException("Quassel network create not supported"));
-  }
-
-  /** Update an upstream Quassel network by id or network name/token. */
-  default Completable quasselCoreUpdateNetwork(
-      String serverId, String networkIdOrName, QuasselCoreNetworkUpdateRequest request) {
-    return Completable.error(
-        new UnsupportedOperationException("Quassel network update not supported"));
-  }
-
-  /** Remove an upstream Quassel network by id or network name/token. */
-  default Completable quasselCoreRemoveNetwork(String serverId, String networkIdOrName) {
-    return Completable.error(
-        new UnsupportedOperationException("Quassel network remove not supported"));
-  }
 
   /**
    * Request chat history from the server/bouncer.
@@ -454,52 +328,6 @@ public interface IrcClientService {
     return sendRaw(serverId, "CAP REQ :" + token);
   }
 
-  /**
-   * @return true if the connection negotiated {@code znc.in/playback} (ZNC playback module).
-   */
-  default boolean isZncPlaybackAvailable(String serverId) {
-    return false;
-  }
-
-  /**
-   * @return true when this connection appears to be backed by a ZNC bouncer session.
-   */
-  default boolean isZncBouncerDetected(String serverId) {
-    return false;
-  }
-
-  /**
-   * @return true if the connection negotiated {@code soju.im/bouncer-networks}.
-   */
-  default boolean isSojuBouncerAvailable(String serverId) {
-    return false;
-  }
-
-  /**
-   * Request backlog playback from ZNC.
-   *
-   * <p>Requires {@code znc.in/playback}. ZNC playback replays messages as normal
-   * PRIVMSG/NOTICE/ACTION lines (often with {@code server-time} tags), rather than returning a
-   * structured batch.
-   *
-   * <p>This method only issues the request; callers are responsible for capturing/processing the
-   * replayed lines.
-   */
-  default Completable requestZncPlaybackRange(
-      String serverId, String target, Instant fromInclusive, Instant toInclusive) {
-    return Completable.error(new UnsupportedOperationException("ZNC playback not supported"));
-  }
-
-  /** Convenience overload: request a window ending at {@code beforeExclusive}. */
-  default Completable requestZncPlaybackBefore(
-      String serverId, String target, Instant beforeExclusive, Duration window) {
-    Instant end = beforeExclusive == null ? Instant.now() : beforeExclusive;
-    Duration w = (window == null) ? Duration.ofMinutes(30) : window;
-    // Clamp to seconds because ZNC playback typically uses epoch-seconds.
-    Instant start = end.minus(w.toMillis(), ChronoUnit.MILLIS);
-    return requestZncPlaybackRange(serverId, target, start, end);
-  }
-
   default Completable sendAction(String serverId, String target, String action) {
     String a = action == null ? "" : action;
     // Fallback implementation: manual CTCP wrapper.
@@ -509,14 +337,21 @@ public interface IrcClientService {
   /**
    * Convenience method used by the app layer.
    *
-   * <p>If {@code target} looks like a channel (# or &), we send to the channel. Otherwise we treat
-   * it as a nick and send a private message.
+   * <p>If {@code target} looks like a channel (# or &) or a room-style id ({@code !room:server}),
+   * we send to the channel path. Otherwise we treat it as a nick and send a private message.
    */
   default Completable sendMessage(String serverId, String target, String message) {
     String t = target == null ? "" : target.trim();
-    if (t.startsWith("#") || t.startsWith("&")) {
+    if (t.startsWith("#") || t.startsWith("&") || looksLikeRoomStyleTarget(t)) {
       return sendToChannel(serverId, t, message);
     }
     return sendPrivateMessage(serverId, t, message);
+  }
+
+  private static boolean looksLikeRoomStyleTarget(String token) {
+    String value = token == null ? "" : token.trim();
+    if (!value.startsWith("!")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
   }
 }

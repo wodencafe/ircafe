@@ -20,7 +20,8 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
@@ -33,7 +34,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void closingChannelDetachesInsteadOfClosingBuffer() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -53,7 +54,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void closeChannelForgetsPersistedChannelAndClosesBuffer() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -73,7 +74,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void closeDetachedChannelForgetsAndClosesWithoutSendingPart() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -93,7 +94,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void closeChannelDoesNotReopenAsDetachedOnSubsequentMembershipLoss() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -115,7 +116,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void joinedChannelWhileSuppressedIsPartedAgainAndRemainsDetached() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -135,7 +136,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void manualJoinClearsSuppressionAndAttachedStateOnJoinedEvent() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -157,7 +158,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void detachChannelWhileDisconnectedDoesNotSendPart() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -175,7 +176,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void joinChannelWhileDisconnectedPersistsAndStaysDetached() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -193,7 +194,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void joinChannelErrorKeepsDetachedState() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -214,7 +215,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void joinedChannelWithoutSuppressionAttachesNormally() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -232,7 +233,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void bouncerDetachUsesSojuDetachReasonAndReattachesOnJoin() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -254,7 +255,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void bouncerDetachUsesZncDetachCommandWhenDetected() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -273,7 +274,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void disconnectWithoutReasonKeepsRegularPartEvenWhenBouncerIsAvailable() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -293,7 +294,7 @@ class TargetCoordinatorChannelDetachPolicyTest {
   @Test
   void explicitPartReasonKeepsRegularPartEvenWhenBouncerIsAvailable() {
     UiPort ui = mock(UiPort.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
@@ -311,12 +312,13 @@ class TargetCoordinatorChannelDetachPolicyTest {
 
   private static TargetCoordinator newCoordinator(
       UiPort ui,
-      IrcClientService irc,
+      IrcBackendClientService irc,
       ConnectionCoordinator connectionCoordinator,
       RuntimeConfigStore runtimeConfig) {
     return new TargetCoordinator(
         ui,
         mock(UserListStore.class),
+        IrcTargetMembershipPort.from(irc),
         irc,
         mock(ServerRegistry.class),
         runtimeConfig,

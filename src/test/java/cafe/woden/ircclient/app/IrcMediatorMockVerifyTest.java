@@ -22,6 +22,7 @@ import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
@@ -36,8 +37,11 @@ import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
@@ -68,7 +72,11 @@ import org.springframework.context.ApplicationEventPublisher;
 
 class IrcMediatorMockVerifyTest {
 
-  private final IrcClientService irc = mock(IrcClientService.class);
+  private final IrcMediatorInteractionPort irc = mock(IrcMediatorInteractionPort.class);
+  private final IrcTypingPort typingPort = mock(IrcTypingPort.class);
+  private final IrcReadMarkerPort readMarkerPort = mock(IrcReadMarkerPort.class);
+  private final IrcNegotiatedFeaturePort negotiatedFeaturePort =
+      mock(IrcNegotiatedFeaturePort.class);
   private final UiPort ui = mock(UiPort.class);
   private final CommandParser commandParser = mock(CommandParser.class);
   private final UserCommandAliasEngine userCommandAliasEngine = mock(UserCommandAliasEngine.class);
@@ -117,6 +125,9 @@ class IrcMediatorMockVerifyTest {
   private final IrcMediator mediator =
       new IrcMediator(
           irc,
+          typingPort,
+          readMarkerPort,
+          negotiatedFeaturePort,
           ui,
           commandParser,
           userCommandAliasEngine,
@@ -162,14 +173,7 @@ class IrcMediatorMockVerifyTest {
         inOrder(mediatorUiSubscriptionBinder, irc, ui, mediatorConnectionSubscriptionBinder);
     inOrder
         .verify(mediatorUiSubscriptionBinder)
-        .bind(
-            eq(ui),
-            eq(targetCoordinator),
-            any(CompositeDisposable.class),
-            any(),
-            any(),
-            any(),
-            any());
+        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
     inOrder.verify(irc).events();
     inOrder.verify(ui).ircv3CapabilityToggleRequests();
     inOrder
@@ -182,14 +186,7 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class));
 
     verify(mediatorUiSubscriptionBinder, times(1))
-        .bind(
-            eq(ui),
-            eq(targetCoordinator),
-            any(CompositeDisposable.class),
-            any(),
-            any(),
-            any(),
-            any());
+        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
     verify(mediatorConnectionSubscriptionBinder, times(1))
         .bind(
             eq(ui),
@@ -235,8 +232,9 @@ class IrcMediatorMockVerifyTest {
     mediator.start();
 
     @SuppressWarnings("unchecked")
-    ArgumentCaptor<Consumer<String>> quasselRequestCaptor =
-        ArgumentCaptor.forClass((Class<Consumer<String>>) (Class<?>) Consumer.class);
+    ArgumentCaptor<Consumer<ParsedInput.BackendNamed>> quasselRequestCaptor =
+        ArgumentCaptor.forClass(
+            (Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
     verify(mediatorUiSubscriptionBinder)
         .bind(
             eq(ui),
@@ -244,13 +242,20 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class),
             any(),
             any(),
-            any(),
             quasselRequestCaptor.capture());
 
-    quasselRequestCaptor.getValue().accept("quassel");
+    quasselRequestCaptor
+        .getValue()
+        .accept(
+            new ParsedInput.BackendNamed(
+                BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "quassel"));
 
     verify(outboundCommandDispatcher)
-        .openQuasselNetworkManager(any(CompositeDisposable.class), eq("quassel"));
+        .dispatch(
+            any(CompositeDisposable.class),
+            eq(
+                new ParsedInput.BackendNamed(
+                    BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "quassel")));
   }
 
   @Test
@@ -261,8 +266,9 @@ class IrcMediatorMockVerifyTest {
     mediator.start();
 
     @SuppressWarnings("unchecked")
-    ArgumentCaptor<Consumer<String>> quasselSetupRequestCaptor =
-        ArgumentCaptor.forClass((Class<Consumer<String>>) (Class<?>) Consumer.class);
+    ArgumentCaptor<Consumer<ParsedInput.BackendNamed>> quasselSetupRequestCaptor =
+        ArgumentCaptor.forClass(
+            (Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
     verify(mediatorUiSubscriptionBinder)
         .bind(
             eq(ui),
@@ -270,13 +276,16 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class),
             any(),
             any(),
-            quasselSetupRequestCaptor.capture(),
-            any());
+            quasselSetupRequestCaptor.capture());
 
-    quasselSetupRequestCaptor.getValue().accept("quassel");
+    quasselSetupRequestCaptor
+        .getValue()
+        .accept(new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel"));
 
     verify(outboundCommandDispatcher)
-        .openQuasselSetup(any(CompositeDisposable.class), eq("quassel"));
+        .dispatch(
+            any(CompositeDisposable.class),
+            eq(new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel")));
   }
 
   @Test
@@ -536,6 +545,37 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void serverNoticeWithoutTargetRoutesToStatusEvenWhenPrivateTargetIsActive() throws Exception {
+    TargetRef status = new TargetRef("libera", "status");
+    TargetRef activePrivate = new TargetRef("libera", "title");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(targetCoordinator.getActiveTarget()).thenReturn(activePrivate);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.Notice(
+                Instant.now(), "server", "", "Last login from services", "", Map.of())));
+
+    verify(ui)
+        .appendNoticeAt(
+            eq(status),
+            any(),
+            eq("(notice) server"),
+            eq("Last login from services"),
+            eq(""),
+            eq(Map.of()));
+    verify(ui, never())
+        .appendNoticeAt(
+            eq(activePrivate),
+            any(),
+            anyString(),
+            anyString(),
+            anyString(),
+            org.mockito.ArgumentMatchers.<Map<String, String>>any());
+  }
+
+  @Test
   void ctcpReceivePassesCommandAndValueToIrcEventNotifier() throws Exception {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
@@ -627,7 +667,7 @@ class IrcMediatorMockVerifyTest {
 
   @Test
   void readMarkerTimestampSelectorParsesAndAppliesEpoch() throws Exception {
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(readMarkerPort.isReadMarkerAvailable("libera")).thenReturn(true);
     when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
 
     invokeOnServerIrcEvent(
@@ -648,7 +688,7 @@ class IrcMediatorMockVerifyTest {
 
   @Test
   void readMarkerWildcardAppliesZeroEpoch() throws Exception {
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(readMarkerPort.isReadMarkerAvailable("libera")).thenReturn(true);
     when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
 
     invokeOnServerIrcEvent(

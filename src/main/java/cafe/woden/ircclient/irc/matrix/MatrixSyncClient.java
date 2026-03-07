@@ -1,0 +1,811 @@
+package cafe.woden.ircclient.irc.matrix;
+
+import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.net.HttpLite;
+import cafe.woden.ircclient.net.ProxyPlan;
+import cafe.woden.ircclient.net.ServerProxyResolver;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
+import org.springframework.stereotype.Component;
+
+/** Fetches Matrix room timeline updates via {@code /_matrix/client/v3/sync}. */
+@Component
+@InfrastructureLayer
+final class MatrixSyncClient {
+
+  private static final Map<String, String> REQUEST_HEADERS =
+      Map.of(
+          "User-Agent", "ircafe-matrix-sync/1.0",
+          "Accept", "application/json",
+          "Accept-Encoding", "gzip");
+
+  private static final ObjectMapper JSON = new ObjectMapper();
+  private static final String ENCRYPTED_PLACEHOLDER_BODY = "[encrypted message unavailable]";
+  private static final Set<String> MEDIA_MSGTYPES =
+      Set.of("m.image", "m.file", "m.video", "m.audio");
+
+  private final ServerProxyResolver proxyResolver;
+
+  MatrixSyncClient(ServerProxyResolver proxyResolver) {
+    this.proxyResolver = Objects.requireNonNull(proxyResolver, "proxyResolver");
+  }
+
+  SyncResult sync(
+      String serverId,
+      IrcProperties.Server server,
+      String accessToken,
+      String sinceToken,
+      int timeoutMs) {
+    URI endpoint = MatrixEndpointResolver.syncUri(server, sinceToken, timeoutMs);
+    String token = normalize(accessToken);
+    if (token.isEmpty()) {
+      return SyncResult.failed(endpoint, "access token is blank");
+    }
+
+    ProxyPlan plan = proxyResolver.planForServer(serverId);
+    Map<String, String> headers =
+        Map.of(
+            "User-Agent", REQUEST_HEADERS.get("User-Agent"),
+            "Accept", REQUEST_HEADERS.get("Accept"),
+            "Accept-Encoding", REQUEST_HEADERS.get("Accept-Encoding"),
+            "Authorization", "Bearer " + token);
+
+    try {
+      HttpLite.Response<String> response =
+          HttpLite.getString(
+              endpoint, headers, plan.proxy(), plan.connectTimeoutMs(), plan.readTimeoutMs());
+      int code = response.statusCode();
+      String body = Objects.toString(response.body(), "");
+      if (code < 200 || code >= 300) {
+        return SyncResult.failed(endpoint, "HTTP " + code + " from sync endpoint");
+      }
+
+      JsonNode root = JSON.readTree(body);
+      String nextBatch = normalize(root.path("next_batch").asText(""));
+      List<RoomTimelineEvent> events = parseRoomTimelineEvents(root);
+      List<RoomMembershipEvent> membershipEvents = parseRoomMembershipEvents(root);
+      List<RoomMessageEditEvent> messageEditEvents = parseRoomMessageEditEvents(root);
+      List<RoomReactionEvent> reactionEvents = parseRoomReactionEvents(root);
+      List<RoomRedactionEvent> redactionEvents = parseRoomRedactionEvents(root);
+      Map<String, String> directPeerByRoom = parseDirectRoomMappings(root);
+      List<TypingEvent> typingEvents = parseTypingEvents(root);
+      List<ReadReceiptEvent> readReceipts = parseReadReceiptEvents(root);
+      return SyncResult.success(
+          endpoint,
+          nextBatch,
+          events,
+          membershipEvents,
+          messageEditEvents,
+          reactionEvents,
+          redactionEvents,
+          directPeerByRoom,
+          typingEvents,
+          readReceipts);
+    } catch (IOException ex) {
+      String message = normalize(ex.getMessage());
+      if (message.isEmpty()) {
+        message = ex.getClass().getSimpleName();
+      }
+      return SyncResult.failed(endpoint, message);
+    }
+  }
+
+  private static List<RoomTimelineEvent> parseRoomTimelineEvents(JsonNode root) {
+    List<RoomTimelineEvent> events = new ArrayList<>();
+    JsonNode joinedRooms = root.path("rooms").path("join");
+    if (!joinedRooms.isObject()) {
+      return List.copyOf(events);
+    }
+
+    joinedRooms
+        .fields()
+        .forEachRemaining(
+            roomEntry -> {
+              if (roomEntry == null) return;
+              String roomId = normalize(roomEntry.getKey());
+              if (roomId.isEmpty()) return;
+
+              JsonNode timelineEvents = roomEntry.getValue().path("timeline").path("events");
+              if (!timelineEvents.isArray()) return;
+
+              for (JsonNode event : timelineEvents) {
+                if (event == null || event.isNull()) continue;
+                String type = normalize(event.path("type").asText(""));
+                if ("m.room.encrypted".equals(type)) {
+                  String sender = normalize(event.path("sender").asText(""));
+                  String eventId = normalize(event.path("event_id").asText(""));
+                  long originServerTs = event.path("origin_server_ts").asLong(0L);
+                  if (sender.isEmpty()) continue;
+                  events.add(
+                      new RoomTimelineEvent(
+                          roomId,
+                          sender,
+                          eventId,
+                          "m.room.encrypted",
+                          ENCRYPTED_PLACEHOLDER_BODY,
+                          "",
+                          originServerTs,
+                          ""));
+                  continue;
+                }
+                if (!"m.room.message".equals(type)) continue;
+
+                JsonNode content = event.path("content");
+                if (isMessageEditEvent(content)) continue;
+                String sender = normalize(event.path("sender").asText(""));
+                String eventId = normalize(event.path("event_id").asText(""));
+                String msgType = normalize(content.path("msgtype").asText(""));
+                if (msgType.isEmpty()) msgType = "m.text";
+                String mediaUrl = parseMediaUrl(content, msgType);
+                String body = resolveMessageBody(content, msgType, mediaUrl);
+                String replyToEventId = parseReplyToEventId(content);
+                long originServerTs = event.path("origin_server_ts").asLong(0L);
+
+                if (sender.isEmpty()) continue;
+                if (body.trim().isEmpty()) continue;
+
+                events.add(
+                    new RoomTimelineEvent(
+                        roomId,
+                        sender,
+                        eventId,
+                        msgType,
+                        body,
+                        replyToEventId,
+                        originServerTs,
+                        mediaUrl));
+              }
+            });
+
+    return List.copyOf(events);
+  }
+
+  private static List<RoomMembershipEvent> parseRoomMembershipEvents(JsonNode root) {
+    List<RoomMembershipEvent> events = new ArrayList<>();
+    JsonNode joinedRooms = root.path("rooms").path("join");
+    if (!joinedRooms.isObject()) {
+      return List.of();
+    }
+
+    joinedRooms
+        .fields()
+        .forEachRemaining(
+            roomEntry -> {
+              if (roomEntry == null) return;
+              String roomId = normalize(roomEntry.getKey());
+              if (roomId.isEmpty()) return;
+
+              JsonNode timelineEvents = roomEntry.getValue().path("timeline").path("events");
+              if (!timelineEvents.isArray()) return;
+
+              for (JsonNode event : timelineEvents) {
+                if (event == null || event.isNull()) continue;
+                String type = normalize(event.path("type").asText(""));
+                if (!"m.room.member".equals(type)) continue;
+
+                String userId = normalize(event.path("state_key").asText(""));
+                if (!looksLikeMatrixUserId(userId)) continue;
+
+                JsonNode content = event.path("content");
+                String sender = normalize(event.path("sender").asText(""));
+                String eventId = normalize(event.path("event_id").asText(""));
+                String membership = normalize(content.path("membership").asText(""));
+                if (membership.isEmpty()) continue;
+                String displayName = normalize(content.path("displayname").asText(""));
+                String reason = Objects.toString(content.path("reason").asText(""), "");
+                long originServerTs = event.path("origin_server_ts").asLong(0L);
+
+                JsonNode prevContent = event.path("unsigned").path("prev_content");
+                if (!prevContent.isObject()) {
+                  prevContent = event.path("prev_content");
+                }
+                String prevMembership = normalize(prevContent.path("membership").asText(""));
+                String prevDisplayName = normalize(prevContent.path("displayname").asText(""));
+
+                events.add(
+                    new RoomMembershipEvent(
+                        roomId,
+                        userId,
+                        sender,
+                        eventId,
+                        membership,
+                        prevMembership,
+                        displayName,
+                        prevDisplayName,
+                        reason,
+                        originServerTs));
+              }
+            });
+
+    return events.isEmpty() ? List.of() : List.copyOf(events);
+  }
+
+  private static List<RoomMessageEditEvent> parseRoomMessageEditEvents(JsonNode root) {
+    List<RoomMessageEditEvent> events = new ArrayList<>();
+    JsonNode joinedRooms = root.path("rooms").path("join");
+    if (!joinedRooms.isObject()) {
+      return List.of();
+    }
+
+    joinedRooms
+        .fields()
+        .forEachRemaining(
+            roomEntry -> {
+              if (roomEntry == null) return;
+              String roomId = normalize(roomEntry.getKey());
+              if (!looksLikeMatrixRoomId(roomId)) return;
+
+              JsonNode timelineEvents = roomEntry.getValue().path("timeline").path("events");
+              if (!timelineEvents.isArray()) return;
+
+              for (JsonNode event : timelineEvents) {
+                if (event == null || event.isNull()) continue;
+                String type = normalize(event.path("type").asText(""));
+                if (!"m.room.message".equals(type)) continue;
+
+                JsonNode content = event.path("content");
+                if (!isMessageEditEvent(content)) continue;
+
+                JsonNode relatesTo = content.path("m.relates_to");
+                String targetEventId = normalize(relatesTo.path("event_id").asText(""));
+                if (targetEventId.isEmpty()) continue;
+
+                JsonNode newContent = content.path("m.new_content");
+                JsonNode effectiveContent = newContent.isObject() ? newContent : content;
+                String sender = normalize(event.path("sender").asText(""));
+                String eventId = normalize(event.path("event_id").asText(""));
+                String msgType = normalize(effectiveContent.path("msgtype").asText(""));
+                String body = Objects.toString(effectiveContent.path("body").asText(""), "");
+                long originServerTs = event.path("origin_server_ts").asLong(0L);
+
+                if (sender.isEmpty()) continue;
+                if (body.trim().isEmpty()) continue;
+                if (msgType.isEmpty()) msgType = "m.text";
+
+                events.add(
+                    new RoomMessageEditEvent(
+                        roomId, sender, eventId, targetEventId, msgType, body, originServerTs));
+              }
+            });
+
+    return events.isEmpty() ? List.of() : List.copyOf(events);
+  }
+
+  private static List<RoomReactionEvent> parseRoomReactionEvents(JsonNode root) {
+    List<RoomReactionEvent> events = new ArrayList<>();
+    JsonNode joinedRooms = root.path("rooms").path("join");
+    if (!joinedRooms.isObject()) {
+      return List.of();
+    }
+
+    joinedRooms
+        .fields()
+        .forEachRemaining(
+            roomEntry -> {
+              if (roomEntry == null) return;
+              String roomId = normalize(roomEntry.getKey());
+              if (!looksLikeMatrixRoomId(roomId)) return;
+
+              JsonNode timelineEvents = roomEntry.getValue().path("timeline").path("events");
+              if (!timelineEvents.isArray()) return;
+
+              for (JsonNode event : timelineEvents) {
+                if (event == null || event.isNull()) continue;
+                String type = normalize(event.path("type").asText(""));
+                if (!"m.reaction".equals(type)) continue;
+
+                JsonNode relatesTo = event.path("content").path("m.relates_to");
+                String relType = normalize(relatesTo.path("rel_type").asText(""));
+                String targetEventId = normalize(relatesTo.path("event_id").asText(""));
+                String reaction = normalize(relatesTo.path("key").asText(""));
+                String sender = normalize(event.path("sender").asText(""));
+                String eventId = normalize(event.path("event_id").asText(""));
+                long originServerTs = event.path("origin_server_ts").asLong(0L);
+
+                if (!"m.annotation".equals(relType)) continue;
+                if (sender.isEmpty() || targetEventId.isEmpty() || reaction.isEmpty()) continue;
+
+                events.add(
+                    new RoomReactionEvent(
+                        roomId, sender, eventId, targetEventId, reaction, originServerTs));
+              }
+            });
+
+    return events.isEmpty() ? List.of() : List.copyOf(events);
+  }
+
+  private static List<RoomRedactionEvent> parseRoomRedactionEvents(JsonNode root) {
+    List<RoomRedactionEvent> events = new ArrayList<>();
+    JsonNode joinedRooms = root.path("rooms").path("join");
+    if (!joinedRooms.isObject()) {
+      return List.of();
+    }
+
+    joinedRooms
+        .fields()
+        .forEachRemaining(
+            roomEntry -> {
+              if (roomEntry == null) return;
+              String roomId = normalize(roomEntry.getKey());
+              if (!looksLikeMatrixRoomId(roomId)) return;
+
+              JsonNode timelineEvents = roomEntry.getValue().path("timeline").path("events");
+              if (!timelineEvents.isArray()) return;
+
+              for (JsonNode event : timelineEvents) {
+                if (event == null || event.isNull()) continue;
+                String type = normalize(event.path("type").asText(""));
+                if (!"m.room.redaction".equals(type)) continue;
+
+                String sender = normalize(event.path("sender").asText(""));
+                String eventId = normalize(event.path("event_id").asText(""));
+                String redactsEventId = normalize(event.path("redacts").asText(""));
+                String reason = normalize(event.path("content").path("reason").asText(""));
+                long originServerTs = event.path("origin_server_ts").asLong(0L);
+
+                if (redactsEventId.isEmpty()) continue;
+
+                events.add(
+                    new RoomRedactionEvent(
+                        roomId, sender, eventId, redactsEventId, reason, originServerTs));
+              }
+            });
+
+    return events.isEmpty() ? List.of() : List.copyOf(events);
+  }
+
+  private static boolean isMessageEditEvent(JsonNode content) {
+    if (content == null || content.isNull() || !content.isObject()) {
+      return false;
+    }
+    JsonNode relatesTo = content.path("m.relates_to");
+    String relType = normalize(relatesTo.path("rel_type").asText(""));
+    String targetEventId = normalize(relatesTo.path("event_id").asText(""));
+    return "m.replace".equals(relType) && !targetEventId.isEmpty();
+  }
+
+  private static String parseReplyToEventId(JsonNode content) {
+    if (content == null || content.isNull() || !content.isObject()) {
+      return "";
+    }
+    JsonNode relatesTo = content.path("m.relates_to");
+    String replyViaStable = normalize(relatesTo.path("m.in_reply_to").path("event_id").asText(""));
+    if (!replyViaStable.isEmpty()) return replyViaStable;
+    String replyViaLegacy = normalize(relatesTo.path("in_reply_to").path("event_id").asText(""));
+    if (!replyViaLegacy.isEmpty()) return replyViaLegacy;
+    String topLevelStable = normalize(content.path("m.in_reply_to").path("event_id").asText(""));
+    if (!topLevelStable.isEmpty()) return topLevelStable;
+    return normalize(content.path("in_reply_to").path("event_id").asText(""));
+  }
+
+  private static String parseMediaUrl(JsonNode content, String msgType) {
+    if (!isMediaMsgType(msgType)) {
+      return "";
+    }
+    if (content == null || content.isNull() || !content.isObject()) {
+      return "";
+    }
+    String direct = normalize(content.path("url").asText(""));
+    if (!direct.isEmpty()) return direct;
+    return normalize(content.path("file").path("url").asText(""));
+  }
+
+  private static String resolveMessageBody(JsonNode content, String msgType, String mediaUrl) {
+    String body = content == null ? "" : Objects.toString(content.path("body").asText(""), "");
+    if (!body.trim().isEmpty()) {
+      return body;
+    }
+    if (isMediaMsgType(msgType)) {
+      return normalize(mediaUrl);
+    }
+    return body;
+  }
+
+  private static boolean isMediaMsgType(String msgType) {
+    return MEDIA_MSGTYPES.contains(normalize(msgType));
+  }
+
+  private static Map<String, String> parseDirectRoomMappings(JsonNode root) {
+    Map<String, String> directPeerByRoom = new HashMap<>();
+    JsonNode accountDataEvents = root.path("account_data").path("events");
+    if (!accountDataEvents.isArray()) {
+      return Map.of();
+    }
+
+    for (JsonNode event : accountDataEvents) {
+      if (event == null || event.isNull()) continue;
+      String type = normalize(event.path("type").asText(""));
+      if (!"m.direct".equals(type)) continue;
+
+      JsonNode content = event.path("content");
+      if (!content.isObject()) continue;
+
+      content
+          .fields()
+          .forEachRemaining(
+              peerEntry -> {
+                if (peerEntry == null) return;
+                String peerUserId = normalize(peerEntry.getKey());
+                if (!looksLikeMatrixUserId(peerUserId)) return;
+
+                JsonNode roomIds = peerEntry.getValue();
+                if (!roomIds.isArray()) return;
+                for (JsonNode roomIdNode : roomIds) {
+                  if (roomIdNode == null || roomIdNode.isNull()) continue;
+                  String roomId = normalize(roomIdNode.asText(""));
+                  if (!looksLikeMatrixRoomId(roomId)) continue;
+                  directPeerByRoom.put(roomId, peerUserId);
+                }
+              });
+    }
+
+    return directPeerByRoom.isEmpty() ? Map.of() : Map.copyOf(directPeerByRoom);
+  }
+
+  private static List<TypingEvent> parseTypingEvents(JsonNode root) {
+    List<TypingEvent> typingEvents = new ArrayList<>();
+    JsonNode joinedRooms = root.path("rooms").path("join");
+    if (!joinedRooms.isObject()) {
+      return List.of();
+    }
+
+    joinedRooms
+        .fields()
+        .forEachRemaining(
+            roomEntry -> {
+              if (roomEntry == null) return;
+              String roomId = normalize(roomEntry.getKey());
+              if (!looksLikeMatrixRoomId(roomId)) return;
+
+              JsonNode ephemeralEvents = roomEntry.getValue().path("ephemeral").path("events");
+              if (!ephemeralEvents.isArray()) return;
+
+              for (JsonNode event : ephemeralEvents) {
+                if (event == null || event.isNull()) continue;
+                String type = normalize(event.path("type").asText(""));
+                if (!"m.typing".equals(type)) continue;
+
+                JsonNode userIdsNode = event.path("content").path("user_ids");
+                LinkedHashSet<String> userIds = new LinkedHashSet<>();
+                if (userIdsNode.isArray()) {
+                  for (JsonNode userIdNode : userIdsNode) {
+                    if (userIdNode == null || userIdNode.isNull()) continue;
+                    String userId = normalize(userIdNode.asText(""));
+                    if (!looksLikeMatrixUserId(userId)) continue;
+                    userIds.add(userId);
+                  }
+                }
+
+                typingEvents.add(new TypingEvent(roomId, List.copyOf(userIds)));
+              }
+            });
+
+    return typingEvents.isEmpty() ? List.of() : List.copyOf(typingEvents);
+  }
+
+  private static List<ReadReceiptEvent> parseReadReceiptEvents(JsonNode root) {
+    List<ReadReceiptEvent> receipts = new ArrayList<>();
+    JsonNode joinedRooms = root.path("rooms").path("join");
+    if (!joinedRooms.isObject()) {
+      return List.of();
+    }
+
+    joinedRooms
+        .fields()
+        .forEachRemaining(
+            roomEntry -> {
+              if (roomEntry == null) return;
+              String roomId = normalize(roomEntry.getKey());
+              if (!looksLikeMatrixRoomId(roomId)) return;
+
+              JsonNode ephemeralEvents = roomEntry.getValue().path("ephemeral").path("events");
+              if (!ephemeralEvents.isArray()) return;
+
+              for (JsonNode event : ephemeralEvents) {
+                if (event == null || event.isNull()) continue;
+                String type = normalize(event.path("type").asText(""));
+                if (!"m.receipt".equals(type)) continue;
+
+                JsonNode content = event.path("content");
+                if (!content.isObject()) continue;
+                content
+                    .fields()
+                    .forEachRemaining(
+                        eventEntry -> {
+                          if (eventEntry == null) return;
+                          String eventId = normalize(eventEntry.getKey());
+                          if (eventId.isEmpty()) return;
+                          JsonNode byReceiptType = eventEntry.getValue();
+                          if (!byReceiptType.isObject()) return;
+
+                          byReceiptType
+                              .fields()
+                              .forEachRemaining(
+                                  typeEntry -> {
+                                    if (typeEntry == null) return;
+                                    String receiptType = normalize(typeEntry.getKey());
+                                    if (!isReadReceiptType(receiptType)) return;
+                                    JsonNode byUser = typeEntry.getValue();
+                                    if (!byUser.isObject()) return;
+
+                                    byUser
+                                        .fields()
+                                        .forEachRemaining(
+                                            userEntry -> {
+                                              if (userEntry == null) return;
+                                              String userId = normalize(userEntry.getKey());
+                                              if (!looksLikeMatrixUserId(userId)) return;
+                                              JsonNode userData = userEntry.getValue();
+                                              long ts = userData.path("ts").asLong(0L);
+                                              if (ts <= 0L) return;
+                                              receipts.add(
+                                                  new ReadReceiptEvent(
+                                                      roomId, eventId, userId, ts));
+                                            });
+                                  });
+                        });
+              }
+            });
+
+    return receipts.isEmpty() ? List.of() : List.copyOf(receipts);
+  }
+
+  private static boolean isReadReceiptType(String type) {
+    String token = normalize(type);
+    return "m.read".equals(token) || "m.read.private".equals(token);
+  }
+
+  private static String normalize(String value) {
+    return Objects.toString(value, "").trim();
+  }
+
+  private static boolean looksLikeMatrixUserId(String token) {
+    String value = normalize(token);
+    if (!value.startsWith("@")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
+  }
+
+  private static boolean looksLikeMatrixRoomId(String token) {
+    String value = normalize(token);
+    if (!value.startsWith("!")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
+  }
+
+  record SyncResult(
+      boolean success,
+      URI endpoint,
+      String nextBatch,
+      List<RoomTimelineEvent> events,
+      List<RoomMembershipEvent> membershipEvents,
+      List<RoomMessageEditEvent> messageEditEvents,
+      List<RoomReactionEvent> reactionEvents,
+      List<RoomRedactionEvent> redactionEvents,
+      Map<String, String> directPeerByRoom,
+      List<TypingEvent> typingEvents,
+      List<ReadReceiptEvent> readReceipts,
+      String detail) {
+    static SyncResult success(URI endpoint, String nextBatch, List<RoomTimelineEvent> events) {
+      return success(
+          endpoint, nextBatch, events, List.of(), List.of(), List.of(), List.of(), Map.of(),
+          List.of(), List.of());
+    }
+
+    static SyncResult success(
+        URI endpoint,
+        String nextBatch,
+        List<RoomTimelineEvent> events,
+        Map<String, String> directPeerByRoom) {
+      return success(
+          endpoint,
+          nextBatch,
+          events,
+          List.of(),
+          List.of(),
+          List.of(),
+          List.of(),
+          directPeerByRoom,
+          List.of(),
+          List.of());
+    }
+
+    static SyncResult success(
+        URI endpoint,
+        String nextBatch,
+        List<RoomTimelineEvent> events,
+        Map<String, String> directPeerByRoom,
+        List<TypingEvent> typingEvents,
+        List<ReadReceiptEvent> readReceipts) {
+      return success(
+          endpoint,
+          nextBatch,
+          events,
+          List.of(),
+          List.of(),
+          List.of(),
+          List.of(),
+          directPeerByRoom,
+          typingEvents,
+          readReceipts);
+    }
+
+    static SyncResult success(
+        URI endpoint,
+        String nextBatch,
+        List<RoomTimelineEvent> events,
+        List<RoomMembershipEvent> membershipEvents,
+        Map<String, String> directPeerByRoom,
+        List<TypingEvent> typingEvents,
+        List<ReadReceiptEvent> readReceipts) {
+      return success(
+          endpoint,
+          nextBatch,
+          events,
+          membershipEvents,
+          List.of(),
+          List.of(),
+          List.of(),
+          directPeerByRoom,
+          typingEvents,
+          readReceipts);
+    }
+
+    static SyncResult success(
+        URI endpoint,
+        String nextBatch,
+        List<RoomTimelineEvent> events,
+        List<RoomMembershipEvent> membershipEvents,
+        List<RoomMessageEditEvent> messageEditEvents,
+        List<RoomReactionEvent> reactionEvents,
+        List<RoomRedactionEvent> redactionEvents,
+        Map<String, String> directPeerByRoom,
+        List<TypingEvent> typingEvents,
+        List<ReadReceiptEvent> readReceipts) {
+      List<RoomTimelineEvent> safeEvents = events == null ? List.of() : List.copyOf(events);
+      List<RoomMembershipEvent> safeMembershipEvents =
+          membershipEvents == null ? List.of() : List.copyOf(membershipEvents);
+      List<RoomMessageEditEvent> safeMessageEditEvents =
+          messageEditEvents == null ? List.of() : List.copyOf(messageEditEvents);
+      List<RoomReactionEvent> safeReactionEvents =
+          reactionEvents == null ? List.of() : List.copyOf(reactionEvents);
+      List<RoomRedactionEvent> safeRedactionEvents =
+          redactionEvents == null ? List.of() : List.copyOf(redactionEvents);
+      Map<String, String> safeDirectPeerByRoom =
+          directPeerByRoom == null ? Map.of() : Map.copyOf(directPeerByRoom);
+      List<TypingEvent> safeTypingEvents =
+          typingEvents == null ? List.of() : List.copyOf(typingEvents);
+      List<ReadReceiptEvent> safeReadReceipts =
+          readReceipts == null ? List.of() : List.copyOf(readReceipts);
+      return new SyncResult(
+          true,
+          Objects.requireNonNull(endpoint, "endpoint"),
+          normalize(nextBatch),
+          safeEvents,
+          safeMembershipEvents,
+          safeMessageEditEvents,
+          safeReactionEvents,
+          safeRedactionEvents,
+          safeDirectPeerByRoom,
+          safeTypingEvents,
+          safeReadReceipts,
+          "");
+    }
+
+    static SyncResult failed(URI endpoint, String detail) {
+      String message = normalize(detail);
+      if (message.isEmpty()) {
+        message = "sync failed";
+      }
+      return new SyncResult(
+          false,
+          Objects.requireNonNull(endpoint, "endpoint"),
+          "",
+          List.of(),
+          List.of(),
+          List.of(),
+          List.of(),
+          List.of(),
+          Map.of(),
+          List.of(),
+          List.of(),
+          message);
+    }
+  }
+
+  record RoomTimelineEvent(
+      String roomId,
+      String sender,
+      String eventId,
+      String msgType,
+      String body,
+      String replyToEventId,
+      long originServerTs,
+      String mediaUrl) {
+    RoomTimelineEvent(
+        String roomId,
+        String sender,
+        String eventId,
+        String msgType,
+        String body,
+        String replyToEventId,
+        long originServerTs) {
+      this(roomId, sender, eventId, msgType, body, replyToEventId, originServerTs, "");
+    }
+
+    RoomTimelineEvent(
+        String roomId,
+        String sender,
+        String eventId,
+        String msgType,
+        String body,
+        long originServerTs) {
+      this(roomId, sender, eventId, msgType, body, "", originServerTs, "");
+    }
+  }
+
+  record RoomMembershipEvent(
+      String roomId,
+      String userId,
+      String sender,
+      String eventId,
+      String membership,
+      String prevMembership,
+      String displayName,
+      String prevDisplayName,
+      String reason,
+      long originServerTs) {}
+
+  record RoomMessageEditEvent(
+      String roomId,
+      String sender,
+      String eventId,
+      String targetEventId,
+      String msgType,
+      String body,
+      long originServerTs) {}
+
+  record RoomReactionEvent(
+      String roomId,
+      String sender,
+      String eventId,
+      String targetEventId,
+      String reaction,
+      long originServerTs) {}
+
+  record RoomRedactionEvent(
+      String roomId,
+      String sender,
+      String eventId,
+      String redactsEventId,
+      String reason,
+      long originServerTs) {}
+
+  record TypingEvent(String roomId, List<String> userIds) {
+    TypingEvent {
+      roomId = normalize(roomId);
+      userIds = userIds == null ? List.of() : List.copyOf(userIds);
+    }
+  }
+
+  record ReadReceiptEvent(String roomId, String eventId, String userId, long timestampMs) {
+    ReadReceiptEvent {
+      roomId = normalize(roomId);
+      eventId = normalize(eventId);
+      userId = normalize(userId);
+      if (timestampMs < 0L) {
+        timestampMs = 0L;
+      }
+    }
+  }
+}

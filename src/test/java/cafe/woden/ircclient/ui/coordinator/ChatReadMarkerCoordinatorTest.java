@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import io.reactivex.rxjava3.core.Completable;
@@ -33,7 +34,13 @@ class ChatReadMarkerCoordinatorTest {
 
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
-            transcripts, irc, () -> target, offset -> {}, () -> {}, () -> false, now::get);
+            transcripts,
+            IrcReadMarkerPort.from(irc),
+            () -> target,
+            offset -> {},
+            () -> {},
+            () -> false,
+            now::get);
 
     coordinator.setFollowTail(false);
     coordinator.setFollowTail(true);
@@ -54,7 +61,13 @@ class ChatReadMarkerCoordinatorTest {
 
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
-            transcripts, irc, () -> target, offset -> {}, () -> {}, () -> false, now::get);
+            transcripts,
+            IrcReadMarkerPort.from(irc),
+            () -> target,
+            offset -> {},
+            () -> {},
+            () -> false,
+            now::get);
 
     coordinator.setFollowTail(false);
     coordinator.setFollowTail(true);
@@ -78,7 +91,7 @@ class ChatReadMarkerCoordinatorTest {
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
             transcripts,
-            irc,
+            IrcReadMarkerPort.from(irc),
             () -> target,
             scrolledOffset::set,
             scrollStateUpdates::incrementAndGet,
@@ -106,7 +119,13 @@ class ChatReadMarkerCoordinatorTest {
 
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
-            transcripts, irc, () -> target, offset -> {}, () -> {}, () -> true, now::get);
+            transcripts,
+            IrcReadMarkerPort.from(irc),
+            () -> target,
+            offset -> {},
+            () -> {},
+            () -> true,
+            now::get);
 
     coordinator.applyReadMarkerViewState(target, -1);
 
@@ -123,7 +142,13 @@ class ChatReadMarkerCoordinatorTest {
 
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
-            transcripts, irc, () -> active, offset -> {}, () -> {}, () -> true, () -> 1_000L);
+            transcripts,
+            IrcReadMarkerPort.from(irc),
+            () -> active,
+            offset -> {},
+            () -> {},
+            () -> true,
+            () -> 1_000L);
 
     coordinator.applyReadMarkerViewState(other, -1);
 
@@ -143,7 +168,13 @@ class ChatReadMarkerCoordinatorTest {
 
     ChatReadMarkerCoordinator coordinator =
         new ChatReadMarkerCoordinator(
-            transcripts, irc, () -> target, offset -> {}, () -> {}, () -> false, now::get);
+            transcripts,
+            IrcReadMarkerPort.from(irc),
+            () -> target,
+            offset -> {},
+            () -> {},
+            () -> false,
+            now::get);
 
     coordinator.setFollowTail(false);
     coordinator.setFollowTail(true);

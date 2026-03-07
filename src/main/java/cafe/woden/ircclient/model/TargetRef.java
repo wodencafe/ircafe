@@ -240,7 +240,7 @@ public final class TargetRef {
   }
 
   public boolean isChannel() {
-    return target.startsWith("#") || target.startsWith("&");
+    return target.startsWith("#") || target.startsWith("&") || looksLikeMatrixRoomId(target);
   }
 
   /** True if this ref refers to the same target as {@code otherTarget} (case-insensitive). */
@@ -250,6 +250,13 @@ public final class TargetRef {
 
   private static String norm(String s) {
     return Objects.toString(s, "").trim();
+  }
+
+  private static boolean looksLikeMatrixRoomId(String value) {
+    String token = norm(value);
+    if (!token.startsWith("!")) return false;
+    int colon = token.indexOf(':');
+    return colon > 1 && colon < token.length() - 1;
   }
 
   private static String foldKey(String target) {

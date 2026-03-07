@@ -3,7 +3,6 @@ package cafe.woden.ircclient.app;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.OutboundChatCommandService;
 import cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
@@ -18,12 +17,6 @@ class IgnoreApiDependencySurfaceTest {
   void targetCoordinatorDependsOnIgnoreQueryPortOnly() {
     assertConstructorIncludes(TargetCoordinator.class, IgnoreListQueryPort.class);
     assertNoIgnoreInternalsInTypeSurface(TargetCoordinator.class);
-  }
-
-  @Test
-  void outboundChatCommandServiceDependsOnIgnoreCommandPortOnly() {
-    assertConstructorIncludes(OutboundChatCommandService.class, IgnoreListCommandPort.class);
-    assertNoIgnoreInternalsInTypeSurface(OutboundChatCommandService.class);
   }
 
   @Test

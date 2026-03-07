@@ -60,7 +60,9 @@ import cafe.woden.ircclient.irc.BouncerIrcConnectionPortAdapter;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
+import cafe.woden.ircclient.irc.QuasselCoreIrcClientService;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.matrix.MatrixIrcClientService;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
@@ -194,6 +196,8 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(SwingUiPort.class, InterfaceLayer.class);
     assertAnnotated(BouncerIrcConnectionPortAdapter.class, InfrastructureLayer.class);
     assertAnnotated(PircbotxIrcClientService.class, InfrastructureLayer.class);
+    assertAnnotated(MatrixIrcClientService.class, InfrastructureLayer.class);
+    assertAnnotated(QuasselCoreIrcClientService.class, InfrastructureLayer.class);
 
     assertTrue(UiPort.class.isInterface(), "UiPort should remain an interface");
     assertTrue(

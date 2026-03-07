@@ -1,14 +1,14 @@
 package cafe.woden.ircclient.app.api;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import java.util.Objects;
 
 /** User-selected operation from the Quassel network manager dialog. */
 public record QuasselNetworkManagerAction(
     Operation operation,
     String networkIdOrName,
-    IrcClientService.QuasselCoreNetworkCreateRequest createRequest,
-    IrcClientService.QuasselCoreNetworkUpdateRequest updateRequest) {
+    QuasselCoreControlPort.QuasselCoreNetworkCreateRequest createRequest,
+    QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest updateRequest) {
 
   public enum Operation {
     REFRESH,
@@ -41,12 +41,13 @@ public record QuasselNetworkManagerAction(
   }
 
   public static QuasselNetworkManagerAction add(
-      IrcClientService.QuasselCoreNetworkCreateRequest createRequest) {
+      QuasselCoreControlPort.QuasselCoreNetworkCreateRequest createRequest) {
     return new QuasselNetworkManagerAction(Operation.ADD, "", createRequest, null);
   }
 
   public static QuasselNetworkManagerAction edit(
-      String networkIdOrName, IrcClientService.QuasselCoreNetworkUpdateRequest updateRequest) {
+      String networkIdOrName,
+      QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest updateRequest) {
     return new QuasselNetworkManagerAction(Operation.EDIT, networkIdOrName, null, updateRequest);
   }
 }
