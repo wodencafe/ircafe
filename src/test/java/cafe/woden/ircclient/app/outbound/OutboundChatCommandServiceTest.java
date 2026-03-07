@@ -45,14 +45,6 @@ class OutboundChatCommandServiceTest {
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
   private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
-  private final MatrixOutboundCommandSupport matrixCommandSupport =
-      new MatrixOutboundCommandSupport();
-  private final BackendUploadCommandRegistry backendUploadCommandRegistry =
-      new BackendUploadCommandRegistry(
-          List.of(new MatrixUploadCommandTranslationHandler(matrixCommandSupport)));
-  private final MatrixOutboundCommandService matrixOutboundCommandService =
-      new MatrixOutboundCommandService(
-          ui, commandTargetPolicy, matrixCommandSupport, backendUploadCommandRegistry);
   private final ChatCommandRuntimeConfigPort runtimeConfig =
       mock(ChatCommandRuntimeConfigPort.class);
   private final AwayRoutingPort awayRoutingState = mock(AwayRoutingPort.class);
@@ -65,6 +57,10 @@ class OutboundChatCommandServiceTest {
   private final PendingInvitePort pendingInviteState = mock(PendingInvitePort.class);
   private final WhoisRoutingPort whoisRoutingState = mock(WhoisRoutingPort.class);
   private final IgnoreListCommandPort ignoreListService = mock(IgnoreListCommandPort.class);
+  private final OutboundRawLineCorrelationService rawLineCorrelationService =
+      new OutboundRawLineCorrelationService(irc, labeledResponseRoutingState);
+  private final OutboundUploadCommandService outboundUploadCommandService =
+      mock(OutboundUploadCommandService.class);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundChatCommandService service =
@@ -74,13 +70,13 @@ class OutboundChatCommandServiceTest {
           ui,
           connectionCoordinator,
           targetCoordinator,
-          matrixOutboundCommandService,
+          rawLineCorrelationService,
+          outboundUploadCommandService,
           commandTargetPolicy,
           runtimeConfig,
           awayRoutingState,
           chatHistoryRequestRoutingState,
           joinRoutingState,
-          labeledResponseRoutingState,
           pendingEchoMessageState,
           pendingInviteState,
           whoisRoutingState,
@@ -691,73 +687,6 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void uploadSendsTaggedPrivmsgOnMatrixBackend() {
-    TargetRef room = new TargetRef("matrix", "!room:example.org");
-    when(targetCoordinator.getActiveTarget()).thenReturn(room);
-    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
-    when(serverCatalog.find("matrix"))
-        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
-    when(irc.sendRaw(
-            "matrix",
-            "@+matrix/msgtype=m.image;+matrix/upload_path=/tmp/photo.png PRIVMSG !room:example.org :hello image"))
-        .thenReturn(Completable.complete());
-
-    service.handleUpload(disposables, "image", "/tmp/photo.png", "hello image");
-
-    verify(irc)
-        .sendRaw(
-            "matrix",
-            "@+matrix/msgtype=m.image;+matrix/upload_path=/tmp/photo.png PRIVMSG !room:example.org :hello image");
-  }
-
-  @Test
-  void uploadDefaultsCaptionToFileNameWhenCaptionBlank() {
-    TargetRef room = new TargetRef("matrix", "!room:example.org");
-    when(targetCoordinator.getActiveTarget()).thenReturn(room);
-    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
-    when(serverCatalog.find("matrix"))
-        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
-    when(irc.sendRaw(
-            "matrix",
-            "@+matrix/msgtype=m.file;+matrix/upload_path=/tmp/My\\sFile.txt PRIVMSG !room:example.org :My File.txt"))
-        .thenReturn(Completable.complete());
-
-    service.handleUpload(disposables, "m.file", "/tmp/My File.txt", "");
-
-    verify(irc)
-        .sendRaw(
-            "matrix",
-            "@+matrix/msgtype=m.file;+matrix/upload_path=/tmp/My\\sFile.txt PRIVMSG !room:example.org :My File.txt");
-  }
-
-  @Test
-  void uploadOnNonMatrixBackendShowsUnsupportedMessageAndDoesNotSendRaw() {
-    TargetRef chan = new TargetRef("libera", "#ircafe");
-    TargetRef status = new TargetRef("libera", "status");
-    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(serverCatalog.find("libera"))
-        .thenReturn(Optional.of(serverWithBackend("libera", IrcProperties.Server.Backend.IRC)));
-
-    service.handleUpload(disposables, "m.image", "/tmp/photo.png", "hello");
-
-    verify(ui)
-        .appendStatus(eq(status), eq("(upload)"), contains("does not use the Matrix backend"));
-    verify(irc, never()).sendRaw(anyString(), anyString());
-  }
-
-  @Test
-  void uploadWithInvalidMsgTypeShowsUsage() {
-    TargetRef room = new TargetRef("matrix", "!room:example.org");
-    when(targetCoordinator.getActiveTarget()).thenReturn(room);
-
-    service.handleUpload(disposables, "m.bad", "/tmp/photo.png", "");
-
-    verify(ui).appendStatus(room, "(upload)", "Usage: /upload <msgtype> <path> [caption]");
-    verify(irc, never()).sendRaw(anyString(), anyString());
-  }
-
-  @Test
   void replyCommandSendsTaggedPrivmsgWithoutQuotePrefill() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
@@ -1104,17 +1033,13 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void helpUploadShowsFocusedUploadHelp() {
+  void helpUploadDelegatesToUploadCommandService() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
 
     service.handleHelp("upload");
 
-    verify(ui)
-        .appendStatus(
-            chan,
-            "(help)",
-            "/upload <m.image|m.file|m.video|m.audio> <path> [caption]  (msgtype shortcuts: image|file|video|audio)");
+    verify(outboundUploadCommandService).appendUploadHelp(chan);
   }
 
   @Test

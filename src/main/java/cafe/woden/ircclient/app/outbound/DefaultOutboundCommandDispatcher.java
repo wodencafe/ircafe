@@ -21,6 +21,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundDccCommandService outboundDccCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
   private final QuasselOutboundCommandService quasselOutboundCommandService;
+  private final OutboundUploadCommandService outboundUploadCommandService;
   private final OutboundMonitorCommandService outboundMonitorCommandService;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
   private final LocalFilterCommandHandler localFilterCommandService;
@@ -35,6 +36,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundDccCommandService outboundDccCommandService,
       OutboundChatCommandService outboundChatCommandService,
       QuasselOutboundCommandService quasselOutboundCommandService,
+      OutboundUploadCommandService outboundUploadCommandService,
       OutboundMonitorCommandService outboundMonitorCommandService,
       OutboundIgnoreCommandService outboundIgnoreCommandService,
       LocalFilterCommandHandler localFilterCommandService,
@@ -46,6 +48,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundDccCommandService = outboundDccCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
     this.quasselOutboundCommandService = quasselOutboundCommandService;
+    this.outboundUploadCommandService = outboundUploadCommandService;
     this.outboundMonitorCommandService = outboundMonitorCommandService;
     this.outboundIgnoreCommandService = outboundIgnoreCommandService;
     this.localFilterCommandService = localFilterCommandService;
@@ -295,7 +298,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
         map,
         ParsedInput.Upload.class,
         (d, cmd) ->
-            outboundChatCommandService.handleUpload(d, cmd.msgType(), cmd.path(), cmd.caption()));
+            outboundUploadCommandService.handleUpload(d, cmd.msgType(), cmd.path(), cmd.caption()));
     register(
         map,
         ParsedInput.ReplyMessage.class,

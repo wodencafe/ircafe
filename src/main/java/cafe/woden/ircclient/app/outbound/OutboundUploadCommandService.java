@@ -1,0 +1,94 @@
+package cafe.woden.ircclient.app.outbound;
+
+import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.core.ConnectionCoordinator;
+import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.model.TargetRef;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
+
+/** Handles semantic /upload command flow and backend translation dispatch. */
+@Component
+final class OutboundUploadCommandService {
+
+  private final IrcClientService irc;
+  private final UiPort ui;
+  private final ConnectionCoordinator connectionCoordinator;
+  private final TargetCoordinator targetCoordinator;
+  private final MatrixOutboundCommandService matrixOutboundCommandService;
+  private final OutboundRawLineCorrelationService rawLineCorrelationService;
+
+  OutboundUploadCommandService(
+      IrcClientService irc,
+      UiPort ui,
+      ConnectionCoordinator connectionCoordinator,
+      TargetCoordinator targetCoordinator,
+      MatrixOutboundCommandService matrixOutboundCommandService,
+      OutboundRawLineCorrelationService rawLineCorrelationService) {
+    this.irc = Objects.requireNonNull(irc, "irc");
+    this.ui = Objects.requireNonNull(ui, "ui");
+    this.connectionCoordinator =
+        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
+    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
+    this.matrixOutboundCommandService =
+        Objects.requireNonNull(matrixOutboundCommandService, "matrixOutboundCommandService");
+    this.rawLineCorrelationService =
+        Objects.requireNonNull(rawLineCorrelationService, "rawLineCorrelationService");
+  }
+
+  void appendUploadHelp(TargetRef out) {
+    matrixOutboundCommandService.appendUploadHelp(out);
+  }
+
+  void handleUpload(CompositeDisposable disposables, String msgType, String path, String caption) {
+    TargetRef at = targetCoordinator.getActiveTarget();
+    if (at == null) {
+      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(upload)", "Select a target first.");
+      return;
+    }
+
+    TargetRef status = new TargetRef(at.serverId(), "status");
+    if (at.isStatus() || at.isUiOnly()) {
+      ui.appendStatus(status, "(upload)", "Select a channel or PM first.");
+      return;
+    }
+
+    MatrixOutboundCommandService.UploadPreparation uploadPreparation =
+        matrixOutboundCommandService.prepareUpload(at, msgType, path, caption);
+    if (uploadPreparation.showUsage()) {
+      matrixOutboundCommandService.appendUploadUsage(at);
+      return;
+    }
+    if (!connectionCoordinator.isConnected(at.serverId())) {
+      ui.appendStatus(status, "(conn)", "Not connected");
+      return;
+    }
+    if (!uploadPreparation.statusMessage().isEmpty()) {
+      ui.appendStatus(status, "(upload)", uploadPreparation.statusMessage());
+      return;
+    }
+    String line = uploadPreparation.line();
+    if (containsCrlf(line)) {
+      ui.appendStatus(status, "(upload)", "Refusing to send multi-line /upload input.");
+      return;
+    }
+    OutboundRawLineCorrelationService.PreparedRawLine prepared =
+        rawLineCorrelationService.prepare(at, line);
+
+    disposables.add(
+        irc.sendRaw(at.serverId(), prepared.line())
+            .subscribe(
+                () -> {},
+                err ->
+                    ui.appendError(
+                        targetCoordinator.safeStatusTarget(),
+                        "(upload-error)",
+                        String.valueOf(err))));
+  }
+
+  private static boolean containsCrlf(String input) {
+    return input != null && (input.indexOf('\n') >= 0 || input.indexOf('\r') >= 0);
+  }
+}

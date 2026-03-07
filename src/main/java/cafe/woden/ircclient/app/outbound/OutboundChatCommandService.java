@@ -12,7 +12,6 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
-import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
@@ -34,7 +33,7 @@ import org.springframework.stereotype.Component;
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
  * <p>Includes: /join, /part, /connect, /disconnect, /reconnect, /quit, /nick, /away, /query, /msg,
- * /notice, /me, /topic, /kick, /invite, /names, /who, /list, /say, /quote, /upload.
+ * /notice, /me, /topic, /kick, /invite, /names, /who, /list, /say, /quote.
  *
  * <p>Behavior is intended to be preserved.
  */
@@ -55,14 +54,14 @@ public class OutboundChatCommandService {
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
-  private final MatrixOutboundCommandService matrixOutboundCommandService;
+  private final OutboundRawLineCorrelationService rawLineCorrelationService;
+  private final OutboundUploadCommandService outboundUploadCommandService;
 
   private final CommandTargetPolicy commandTargetPolicy;
   private final ChatCommandRuntimeConfigPort runtimeConfig;
   private final AwayRoutingPort awayRoutingState;
   private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState;
   private final JoinRoutingPort joinRoutingState;
-  private final LabeledResponseRoutingPort labeledResponseRoutingState;
   private final PendingEchoMessagePort pendingEchoMessageState;
   private final PendingInvitePort pendingInviteState;
   private final WhoisRoutingPort whoisRoutingState;
@@ -75,13 +74,13 @@ public class OutboundChatCommandService {
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
-      MatrixOutboundCommandService matrixOutboundCommandService,
+      OutboundRawLineCorrelationService rawLineCorrelationService,
+      OutboundUploadCommandService outboundUploadCommandService,
       CommandTargetPolicy commandTargetPolicy,
       ChatCommandRuntimeConfigPort runtimeConfig,
       AwayRoutingPort awayRoutingState,
       ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState,
       JoinRoutingPort joinRoutingState,
-      LabeledResponseRoutingPort labeledResponseRoutingState,
       PendingEchoMessagePort pendingEchoMessageState,
       PendingInvitePort pendingInviteState,
       WhoisRoutingPort whoisRoutingState,
@@ -92,8 +91,10 @@ public class OutboundChatCommandService {
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.matrixOutboundCommandService =
-        Objects.requireNonNull(matrixOutboundCommandService, "matrixOutboundCommandService");
+    this.rawLineCorrelationService =
+        Objects.requireNonNull(rawLineCorrelationService, "rawLineCorrelationService");
+    this.outboundUploadCommandService =
+        Objects.requireNonNull(outboundUploadCommandService, "outboundUploadCommandService");
 
     this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
@@ -101,8 +102,6 @@ public class OutboundChatCommandService {
     this.chatHistoryRequestRoutingState =
         Objects.requireNonNull(chatHistoryRequestRoutingState, "chatHistoryRequestRoutingState");
     this.joinRoutingState = Objects.requireNonNull(joinRoutingState, "joinRoutingState");
-    this.labeledResponseRoutingState =
-        Objects.requireNonNull(labeledResponseRoutingState, "labeledResponseRoutingState");
     this.pendingEchoMessageState =
         Objects.requireNonNull(pendingEchoMessageState, "pendingEchoMessageState");
     this.pendingInviteState = Objects.requireNonNull(pendingInviteState, "pendingInviteState");
@@ -992,7 +991,7 @@ public class OutboundChatCommandService {
         out,
         "(help)",
         "Invites: /invites /invjoin (/join -i) /invignore /invwhois /invblock /inviteautojoin (/ajinvite)");
-    appendMatrixUploadHelp(out);
+    outboundUploadCommandService.appendUploadHelp(out);
     ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
     ui.appendStatus(
         out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
@@ -1019,7 +1018,7 @@ public class OutboundChatCommandService {
     registerHelpTopicHandler(handlers, this::appendRedactHelp, "redact", "delete");
     registerHelpTopicHandler(handlers, this::appendDccHelp, "dcc");
     registerHelpTopicHandler(handlers, this::appendMarkReadHelp, "markread");
-    registerHelpTopicHandler(handlers, this::appendMatrixUploadHelp, "upload");
+    registerHelpTopicHandler(handlers, outboundUploadCommandService::appendUploadHelp, "upload");
     return Map.copyOf(handlers);
   }
 
@@ -1039,52 +1038,6 @@ public class OutboundChatCommandService {
     void handle(TargetRef out);
   }
 
-  public void handleUpload(
-      CompositeDisposable disposables, String msgType, String path, String caption) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(upload)", "Select a target first.");
-      return;
-    }
-
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    if (at.isStatus() || at.isUiOnly()) {
-      ui.appendStatus(status, "(upload)", "Select a channel or PM first.");
-      return;
-    }
-
-    MatrixOutboundCommandService.UploadPreparation uploadPreparation =
-        matrixOutboundCommandService.prepareUpload(at, msgType, path, caption);
-    if (uploadPreparation.showUsage()) {
-      matrixOutboundCommandService.appendUploadUsage(at);
-      return;
-    }
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-    if (!uploadPreparation.statusMessage().isEmpty()) {
-      ui.appendStatus(status, "(upload)", uploadPreparation.statusMessage());
-      return;
-    }
-    String line = uploadPreparation.line();
-    if (containsCrlf(line)) {
-      ui.appendStatus(status, "(upload)", "Refusing to send multi-line /upload input.");
-      return;
-    }
-    PreparedRawLine prepared = prepareCorrelatedRawLine(at, line);
-
-    disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
-            .subscribe(
-                () -> {},
-                err ->
-                    ui.appendError(
-                        targetCoordinator.safeStatusTarget(),
-                        "(upload-error)",
-                        String.valueOf(err))));
-  }
-
   private void appendDccHelp(TargetRef out) {
     ui.appendStatus(out, "(help)", "/dcc chat <nick>");
     ui.appendStatus(out, "(help)", "/dcc send <nick> <file-path>");
@@ -1093,10 +1046,6 @@ public class OutboundChatCommandService {
     ui.appendStatus(out, "(help)", "/dcc msg <nick> <text>  (alias: /dccmsg <nick> <text>)");
     ui.appendStatus(out, "(help)", "/dcc close <nick>  /dcc list  /dcc panel");
     ui.appendStatus(out, "(help)", "UI: right-click a nick and use the DCC submenu.");
-  }
-
-  private void appendMatrixUploadHelp(TargetRef out) {
-    matrixOutboundCommandService.appendUploadHelp(out);
   }
 
   public void handleSay(CompositeDisposable disposables, String msg) {
@@ -1320,7 +1269,11 @@ public class OutboundChatCommandService {
 
     // Echo a safe preview of what we are sending (avoid leaking secrets).
     ui.appendStatus(
-        status, "(raw)", "→ " + withLabelHint(redactIfSensitive(line), prepared.label()));
+        status,
+        "(raw)",
+        "→ "
+            + withLabelHint(
+                OutboundRawLineCorrelationService.redactIfSensitive(line), prepared.label()));
 
     disposables.add(
         irc.sendRaw(sid, prepared.line())
@@ -1551,7 +1504,7 @@ public class OutboundChatCommandService {
     PreparedRawLine prepared = prepareCorrelatedRawLine(correlationOrigin, line);
 
     // Echo a safe preview of what we are sending (avoid leaking secrets).
-    String echo = redactIfSensitive(line);
+    String echo = OutboundRawLineCorrelationService.redactIfSensitive(line);
     ui.appendStatus(status, "(quote)", "→ " + withLabelHint(echo, prepared.label()));
 
     disposables.add(
@@ -1991,22 +1944,9 @@ public class OutboundChatCommandService {
   }
 
   private PreparedRawLine prepareCorrelatedRawLine(TargetRef origin, String rawLine) {
-    String line = rawLine == null ? "" : rawLine.trim();
-    if (line.isEmpty() || origin == null) return new PreparedRawLine(line, "");
-    if (!irc.isLabeledResponseAvailable(origin.serverId())) return new PreparedRawLine(line, "");
-
-    LabeledResponseRoutingPort.PreparedRawLine prepared =
-        labeledResponseRoutingState.prepareOutgoingRaw(origin.serverId(), line);
-    String sendLine =
-        (prepared == null || prepared.line() == null || prepared.line().isBlank())
-            ? line
-            : prepared.line();
-    String label = (prepared == null) ? "" : Objects.toString(prepared.label(), "").trim();
-    if (!label.isEmpty()) {
-      labeledResponseRoutingState.remember(
-          origin.serverId(), label, origin, redactIfSensitive(line), Instant.now());
-    }
-    return new PreparedRawLine(sendLine, label);
+    OutboundRawLineCorrelationService.PreparedRawLine prepared =
+        rawLineCorrelationService.prepare(origin, rawLine);
+    return new PreparedRawLine(prepared.line(), prepared.label());
   }
 
   private static String withLabelHint(String preview, String label) {
@@ -2046,19 +1986,6 @@ public class OutboundChatCommandService {
   }
 
   private record PreparedRawLine(String line, String label) {}
-
-  private static String redactIfSensitive(String raw) {
-    String s = raw == null ? "" : raw.trim();
-    if (s.isEmpty()) return s;
-
-    int sp = s.indexOf(' ');
-    String head = (sp < 0 ? s : s.substring(0, sp)).trim();
-    String upper = head.toUpperCase(Locale.ROOT);
-    if (upper.equals("PASS") || upper.equals("OPER") || upper.equals("AUTHENTICATE")) {
-      return upper + (sp < 0 ? "" : " <redacted>");
-    }
-    return s;
-  }
 
   private PendingInvitePort.PendingInvite resolveInviteByToken(
       String rawToken, TargetRef fallback, String statusTag) {

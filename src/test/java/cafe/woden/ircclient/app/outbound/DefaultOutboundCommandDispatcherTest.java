@@ -24,6 +24,7 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundDccCommandService dcc = mock(OutboundDccCommandService.class);
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
   private final QuasselOutboundCommandService quassel = mock(QuasselOutboundCommandService.class);
+  private final OutboundUploadCommandService upload = mock(OutboundUploadCommandService.class);
   private final OutboundMonitorCommandService monitor = mock(OutboundMonitorCommandService.class);
   private final OutboundIgnoreCommandService ignore = mock(OutboundIgnoreCommandService.class);
   private final LocalFilterCommandHandler filter = mock(LocalFilterCommandHandler.class);
@@ -39,6 +40,7 @@ class DefaultOutboundCommandDispatcherTest {
           dcc,
           chat,
           quassel,
+          upload,
           monitor,
           ignore,
           filter,
@@ -236,10 +238,10 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
-  void dispatchUploadRoutesToChatService() {
+  void dispatchUploadRoutesToUploadService() {
     dispatcher.dispatch(disposables, new ParsedInput.Upload("m.image", "/tmp/photo.png", "photo"));
 
-    verify(chat).handleUpload(disposables, "m.image", "/tmp/photo.png", "photo");
+    verify(upload).handleUpload(disposables, "m.image", "/tmp/photo.png", "photo");
   }
 
   @Test
