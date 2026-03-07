@@ -26,6 +26,8 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundChatHistoryCommandService chatHistory =
       mock(OutboundChatHistoryCommandService.class);
   private final OutboundInviteCommandService invite = mock(OutboundInviteCommandService.class);
+  private final OutboundNamesWhoListCommandService namesWhoList =
+      mock(OutboundNamesWhoListCommandService.class);
   private final QuasselOutboundCommandService quassel = mock(QuasselOutboundCommandService.class);
   private final OutboundUploadCommandService upload = mock(OutboundUploadCommandService.class);
   private final OutboundMessageMutationCommandService messageMutations =
@@ -48,6 +50,7 @@ class DefaultOutboundCommandDispatcherTest {
           chat,
           chatHistory,
           invite,
+          namesWhoList,
           quassel,
           upload,
           messageMutations,
@@ -169,19 +172,19 @@ class DefaultOutboundCommandDispatcherTest {
   @Test
   void dispatchNamesRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.Names("#ircafe"));
-    verify(chat).handleNames(disposables, "#ircafe");
+    verify(namesWhoList).handleNames(disposables, "#ircafe");
   }
 
   @Test
   void dispatchWhoRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.Who("#ircafe o"));
-    verify(chat).handleWho(disposables, "#ircafe o");
+    verify(namesWhoList).handleWho(disposables, "#ircafe o");
   }
 
   @Test
   void dispatchListRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.ListCmd(">10"));
-    verify(chat).handleList(disposables, ">10");
+    verify(namesWhoList).handleList(disposables, ">10");
   }
 
   @Test

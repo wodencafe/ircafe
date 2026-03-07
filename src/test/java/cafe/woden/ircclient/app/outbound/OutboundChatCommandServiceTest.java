@@ -476,56 +476,6 @@ class OutboundChatCommandServiceTest {
   }
 
   @Test
-  void listOpensChannelListTargetAndSendsListRawLine() {
-    TargetRef status = new TargetRef("libera", "status");
-    TargetRef channelList = TargetRef.channelList("libera");
-    when(targetCoordinator.getActiveTarget()).thenReturn(status);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.sendRaw("libera", "LIST >10")).thenReturn(Completable.complete());
-
-    service.handleList(disposables, ">10");
-
-    verify(ui).ensureTargetExists(channelList);
-    verify(ui).beginChannelList("libera", "Loading channel list (>10)...");
-    verify(ui).selectTarget(channelList);
-    verify(irc).sendRaw("libera", "LIST >10");
-  }
-
-  @Test
-  void listOnMatrixBackendSendsRawListLine() {
-    TargetRef status = new TargetRef("matrix", "status");
-    TargetRef channelList = TargetRef.channelList("matrix");
-    when(targetCoordinator.getActiveTarget()).thenReturn(status);
-    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
-    when(serverCatalog.find("matrix"))
-        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
-    when(irc.sendRaw("matrix", "LIST >10")).thenReturn(Completable.complete());
-
-    service.handleList(disposables, ">10");
-
-    verify(ui).ensureTargetExists(channelList);
-    verify(ui).beginChannelList("matrix", "Loading channel list (>10)...");
-    verify(ui).selectTarget(channelList);
-    verify(irc).sendRaw("matrix", "LIST >10");
-  }
-
-  @Test
-  void namesOnMatrixBackendRequestsNames() {
-    TargetRef room = new TargetRef("matrix", "!room:example.org");
-    when(targetCoordinator.getActiveTarget()).thenReturn(room);
-    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
-    when(serverCatalog.find("matrix"))
-        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
-    when(irc.requestNames("matrix", "!room:example.org")).thenReturn(Completable.complete());
-
-    service.handleNames(disposables, "");
-
-    verify(ui).ensureTargetExists(room);
-    verify(ui).appendStatus(room, "(names)", "Requesting NAMES for !room:example.org...");
-    verify(irc).requestNames("matrix", "!room:example.org");
-  }
-
-  @Test
   void quoteInjectsLabelWhenLabeledResponseIsAvailable() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     TargetRef status = new TargetRef("libera", "status");

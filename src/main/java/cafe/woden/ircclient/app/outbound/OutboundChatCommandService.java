@@ -27,7 +27,7 @@ import org.springframework.stereotype.Component;
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
  * <p>Includes: /join, /part, /connect, /disconnect, /reconnect, /quit, /nick, /away, /query, /msg,
- * /notice, /me, /topic, /kick, /names, /who, /list, /say, /quote.
+ * /notice, /me, /topic, /kick, /say, /quote.
  *
  * <p>Behavior is intended to be preserved.
  */
@@ -559,135 +559,6 @@ public class OutboundChatCommandService {
         irc.sendRaw(at.serverId(), prepared.line())
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(kick-error)", String.valueOf(err))));
-  }
-
-  public void handleNames(CompositeDisposable disposables, String channel) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(names)", "Select a server first.");
-      return;
-    }
-
-    String ch = resolveChannelOrNull(at, channel);
-    if (ch == null) {
-      ui.appendStatus(at, "(names)", "Usage: /names [#channel]");
-      ui.appendStatus(at, "(names)", "Tip: from a channel tab you can omit #channel.");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    if (containsCrlf(ch)) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(names)",
-          "Refusing to send multi-line /names input.");
-      return;
-    }
-
-    TargetRef out = new TargetRef(at.serverId(), ch);
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    ui.ensureTargetExists(out);
-    ui.appendStatus(out, "(names)", "Requesting NAMES for " + ch + "...");
-
-    disposables.add(
-        irc.requestNames(at.serverId(), ch)
-            .subscribe(
-                () -> {}, err -> ui.appendError(status, "(names-error)", String.valueOf(err))));
-  }
-
-  public void handleWho(CompositeDisposable disposables, String args) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(who)", "Select a server first.");
-      return;
-    }
-
-    String a = args == null ? "" : args.trim();
-    if (a.isEmpty()) {
-      if (at.isChannel()) {
-        a = at.target();
-      } else {
-        ui.appendStatus(at, "(who)", "Usage: /who [mask|#channel] [flags]");
-        ui.appendStatus(at, "(who)", "Tip: from a channel tab, /who defaults to that channel.");
-        return;
-      }
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    if (containsCrlf(a)) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(who)",
-          "Refusing to send multi-line /who input.");
-      return;
-    }
-
-    String line = "WHO " + a;
-    String firstToken = a;
-    int sp = firstToken.indexOf(' ');
-    if (sp >= 0) firstToken = firstToken.substring(0, sp).trim();
-
-    TargetRef out =
-        commandTargetPolicy.isChannelLikeTargetForServer(at.serverId(), firstToken)
-            ? new TargetRef(at.serverId(), firstToken)
-            : new TargetRef(at.serverId(), "status");
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    PreparedRawLine prepared = prepareCorrelatedRawLine(out, line);
-    ui.ensureTargetExists(out);
-    ui.appendStatus(out, "(who)", "→ " + withLabelHint(line, prepared.label()));
-
-    disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
-            .subscribe(
-                () -> {}, err -> ui.appendError(status, "(who-error)", String.valueOf(err))));
-  }
-
-  public void handleList(CompositeDisposable disposables, String args) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(list)", "Select a server first.");
-      return;
-    }
-
-    String a = args == null ? "" : args.trim();
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    if (containsCrlf(a)) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(list)",
-          "Refusing to send multi-line /list input.");
-      return;
-    }
-
-    TargetRef channelList = TargetRef.channelList(at.serverId());
-    ui.ensureTargetExists(channelList);
-    ui.beginChannelList(
-        at.serverId(),
-        a.isEmpty() ? "Loading channel list..." : ("Loading channel list (" + a + ")..."));
-    ui.selectTarget(channelList);
-
-    String line = a.isEmpty() ? "LIST" : ("LIST " + a);
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    PreparedRawLine prepared = prepareCorrelatedRawLine(status, line);
-    ui.ensureTargetExists(status);
-    ui.appendStatus(status, "(list)", "→ " + withLabelHint(line, prepared.label()));
-
-    disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
-            .subscribe(
-                () -> {}, err -> ui.appendError(status, "(list-error)", String.valueOf(err))));
   }
 
   public void handleHelp(String topic) {

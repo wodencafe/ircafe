@@ -22,6 +22,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundChatCommandService outboundChatCommandService;
   private final OutboundChatHistoryCommandService outboundChatHistoryCommandService;
   private final OutboundInviteCommandService outboundInviteCommandService;
+  private final OutboundNamesWhoListCommandService outboundNamesWhoListCommandService;
   private final QuasselOutboundCommandService quasselOutboundCommandService;
   private final OutboundUploadCommandService outboundUploadCommandService;
   private final OutboundMessageMutationCommandService outboundMessageMutationCommandService;
@@ -41,6 +42,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundChatCommandService outboundChatCommandService,
       OutboundChatHistoryCommandService outboundChatHistoryCommandService,
       OutboundInviteCommandService outboundInviteCommandService,
+      OutboundNamesWhoListCommandService outboundNamesWhoListCommandService,
       QuasselOutboundCommandService quasselOutboundCommandService,
       OutboundUploadCommandService outboundUploadCommandService,
       OutboundMessageMutationCommandService outboundMessageMutationCommandService,
@@ -57,6 +59,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundChatCommandService = outboundChatCommandService;
     this.outboundChatHistoryCommandService = outboundChatHistoryCommandService;
     this.outboundInviteCommandService = outboundInviteCommandService;
+    this.outboundNamesWhoListCommandService = outboundNamesWhoListCommandService;
     this.quasselOutboundCommandService = quasselOutboundCommandService;
     this.outboundUploadCommandService = outboundUploadCommandService;
     this.outboundMessageMutationCommandService = outboundMessageMutationCommandService;
@@ -190,15 +193,15 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     register(
         map,
         ParsedInput.Names.class,
-        (d, cmd) -> outboundChatCommandService.handleNames(d, cmd.channel()));
+        (d, cmd) -> outboundNamesWhoListCommandService.handleNames(d, cmd.channel()));
     register(
         map,
         ParsedInput.Who.class,
-        (d, cmd) -> outboundChatCommandService.handleWho(d, cmd.args()));
+        (d, cmd) -> outboundNamesWhoListCommandService.handleWho(d, cmd.args()));
     register(
         map,
         ParsedInput.ListCmd.class,
-        (d, cmd) -> outboundChatCommandService.handleList(d, cmd.args()));
+        (d, cmd) -> outboundNamesWhoListCommandService.handleList(d, cmd.args()));
     register(
         map,
         ParsedInput.Monitor.class,
