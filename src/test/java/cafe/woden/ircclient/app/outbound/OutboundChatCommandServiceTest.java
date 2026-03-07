@@ -54,6 +54,19 @@ class OutboundChatCommandServiceTest {
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
   private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final MatrixOutboundCommandSupport matrixCommandSupport =
+      new MatrixOutboundCommandSupport();
+  private final BackendUploadCommandRegistry backendUploadCommandRegistry =
+      new BackendUploadCommandRegistry(
+          List.of(new MatrixUploadCommandTranslationHandler(matrixCommandSupport)));
+  private final MatrixOutboundCommandService matrixOutboundCommandService =
+      new MatrixOutboundCommandService(
+          ui, commandTargetPolicy, matrixCommandSupport, backendUploadCommandRegistry);
+  private final QuasselOutboundCommandSupport quasselCommandSupport =
+      new QuasselOutboundCommandSupport(serverCatalog);
+  private final QuasselOutboundCommandService quasselOutboundCommandService =
+      new QuasselOutboundCommandService(
+          irc, ui, connectionCoordinator, targetCoordinator, quasselCommandSupport);
   private final ChatCommandRuntimeConfigPort runtimeConfig =
       mock(ChatCommandRuntimeConfigPort.class);
   private final AwayRoutingPort awayRoutingState = mock(AwayRoutingPort.class);
@@ -72,11 +85,11 @@ class OutboundChatCommandServiceTest {
       new OutboundChatCommandService(
           irc,
           irc,
-          irc,
           ui,
           connectionCoordinator,
           targetCoordinator,
-          serverCatalog,
+          matrixOutboundCommandService,
+          quasselOutboundCommandService,
           commandTargetPolicy,
           runtimeConfig,
           awayRoutingState,

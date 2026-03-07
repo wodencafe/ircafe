@@ -7,7 +7,9 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 
+@Component
 final class MatrixOutboundCommandSupport {
   private static final Set<String> MATRIX_UPLOAD_MSGTYPES =
       Set.of("m.image", "m.file", "m.video", "m.audio");

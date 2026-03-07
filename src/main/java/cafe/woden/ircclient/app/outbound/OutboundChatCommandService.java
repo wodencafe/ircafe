@@ -1,17 +1,13 @@
 package cafe.woden.ircclient.app.outbound;
 
-import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer;
 import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
@@ -31,7 +27,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -57,10 +52,11 @@ public class OutboundChatCommandService {
 
   private final IrcClientService irc;
   private final IrcBackendAvailabilityPort backendAvailability;
-  private final QuasselCoreControlPort quasselControl;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
+  private final MatrixOutboundCommandService matrixOutboundCommandService;
+  private final QuasselOutboundCommandService quasselOutboundCommandService;
 
   private final CommandTargetPolicy commandTargetPolicy;
   private final ChatCommandRuntimeConfigPort runtimeConfig;
@@ -72,21 +68,16 @@ public class OutboundChatCommandService {
   private final PendingInvitePort pendingInviteState;
   private final WhoisRoutingPort whoisRoutingState;
   private final IgnoreListCommandPort ignoreListService;
-  private final MatrixOutboundCommandSupport matrixCommandSupport;
-  private final QuasselOutboundCommandSupport quasselCommandSupport;
-  private final Map<IrcProperties.Server.Backend, UploadCommandTranslationHandler>
-      uploadCommandTranslationHandlers;
   private final Map<String, HelpTopicHandler> helpTopicHandlers;
-  private final Map<String, QuasselNetworkVerbHandler> quasselNetworkVerbHandlers;
 
   public OutboundChatCommandService(
       IrcClientService irc,
       @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
-      @Qualifier("ircClientService") QuasselCoreControlPort quasselControl,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
-      ServerCatalog serverCatalog,
+      MatrixOutboundCommandService matrixOutboundCommandService,
+      QuasselOutboundCommandService quasselOutboundCommandService,
       CommandTargetPolicy commandTargetPolicy,
       ChatCommandRuntimeConfigPort runtimeConfig,
       AwayRoutingPort awayRoutingState,
@@ -99,11 +90,14 @@ public class OutboundChatCommandService {
       IgnoreListCommandPort ignoreListService) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
-    this.quasselControl = Objects.requireNonNull(quasselControl, "quasselControl");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
+    this.matrixOutboundCommandService =
+        Objects.requireNonNull(matrixOutboundCommandService, "matrixOutboundCommandService");
+    this.quasselOutboundCommandService =
+        Objects.requireNonNull(quasselOutboundCommandService, "quasselOutboundCommandService");
 
     this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
@@ -118,14 +112,7 @@ public class OutboundChatCommandService {
     this.pendingInviteState = Objects.requireNonNull(pendingInviteState, "pendingInviteState");
     this.whoisRoutingState = Objects.requireNonNull(whoisRoutingState, "whoisRoutingState");
     this.ignoreListService = Objects.requireNonNull(ignoreListService, "ignoreListService");
-    this.matrixCommandSupport = new MatrixOutboundCommandSupport();
-    this.quasselCommandSupport = new QuasselOutboundCommandSupport(serverCatalog);
-    UploadCommandTranslationHandler matrixUploadTranslationHandler =
-        new MatrixUploadCommandTranslationHandler(this.matrixCommandSupport);
-    this.uploadCommandTranslationHandlers =
-        Map.of(matrixUploadTranslationHandler.backend(), matrixUploadTranslationHandler);
     this.helpTopicHandlers = buildHelpTopicHandlers();
-    this.quasselNetworkVerbHandlers = buildQuasselNetworkVerbHandlers();
   }
 
   public void handleJoin(CompositeDisposable disposables, String channel, String key) {
@@ -285,311 +272,15 @@ public class OutboundChatCommandService {
   }
 
   public void handleQuasselSetup(CompositeDisposable disposables, String serverId) {
-    String sid = normalizeConnectionTargetServerId(serverId);
-    TargetRef safe = targetCoordinator.safeStatusTarget();
-    if (sid.isBlank()) {
-      ui.appendStatus(
-          safe, "(qsetup)", "Usage: /quasselsetup [serverId] (or run it from that server tab)");
-      return;
-    }
-
-    TargetRef status = new TargetRef(sid, "status");
-    if (!ensureQuasselServerBackend(sid, status, "(qsetup)")) {
-      return;
-    }
-    if (!quasselControl.isQuasselCoreSetupPending(sid)) {
-      ui.appendStatus(status, "(qsetup)", "No pending Quassel Core setup for this server.");
-      return;
-    }
-
-    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
-        quasselControl
-            .quasselCoreSetupPrompt(sid)
-            .orElse(
-                new QuasselCoreControlPort.QuasselCoreSetupPrompt(
-                    sid, "", List.of(), List.of(), Map.of()));
-
-    Optional<QuasselCoreControlPort.QuasselCoreSetupRequest> maybeRequest =
-        ui.promptQuasselCoreSetup(sid, prompt);
-    if (maybeRequest.isEmpty()) {
-      ui.appendStatus(status, "(qsetup)", "Quassel Core setup canceled.");
-      return;
-    }
-
-    disposables.add(
-        quasselControl
-            .submitQuasselCoreSetup(sid, maybeRequest.orElseThrow())
-            .subscribe(
-                () -> {
-                  connectionCoordinator.markQuasselSetupSubmitted(sid);
-                  ui.appendStatus(
-                      status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
-                  connectionCoordinator.connectOne(sid);
-                },
-                err -> ui.appendError(status, "(qsetup-error)", String.valueOf(err))));
+    quasselOutboundCommandService.handleQuasselSetup(disposables, serverId);
   }
 
   public void handleQuasselNetwork(CompositeDisposable disposables, String args) {
-    List<String> tokens = tokenizeWhitespaceArgs(args);
-    TargetRef safe = targetCoordinator.safeStatusTarget();
-    if (tokens.isEmpty()) {
-      ui.appendStatus(safe, "(qnet)", quasselNetworkUsage());
-      return;
-    }
-
-    int cursor = 0;
-    String serverHint = "";
-    String first = tokens.get(0).toLowerCase(Locale.ROOT);
-    if (!isQuasselNetworkVerb(first)) {
-      serverHint = tokens.get(0);
-      cursor = 1;
-      if (cursor >= tokens.size()) {
-        ui.appendStatus(safe, "(qnet)", quasselNetworkUsage());
-        return;
-      }
-    }
-
-    String verb = tokens.get(cursor).toLowerCase(Locale.ROOT);
-    cursor++;
-
-    String sid =
-        serverHint.isBlank()
-            ? normalizeConnectionTargetServerId("")
-            : normalizeConnectionTargetServerId(serverHint);
-    if (sid.isBlank()) {
-      ui.appendStatus(safe, "(qnet)", quasselNetworkUsage());
-      return;
-    }
-    TargetRef status = new TargetRef(sid, "status");
-    if (!ensureQuasselServerBackend(sid, status, "(qnet)")) {
-      return;
-    }
-
-    QuasselNetworkVerbHandler handler = quasselNetworkVerbHandlers.get(verb);
-    if (handler == null) {
-      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-      return;
-    }
-    handler.handle(disposables, sid, status, tokens, cursor, verb);
+    quasselOutboundCommandService.handleQuasselNetwork(disposables, args);
   }
 
   public void handleQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
-    String sid = normalizeConnectionTargetServerId(serverId);
-    TargetRef safe = targetCoordinator.safeStatusTarget();
-    if (sid.isBlank()) {
-      ui.appendStatus(
-          safe, "(qnet-ui)", "Select a Quassel server first, then open Quassel Network Manager.");
-      return;
-    }
-    TargetRef status = new TargetRef(sid, "status");
-    if (!ensureQuasselServerBackend(sid, status, "(qnet-ui)")) {
-      return;
-    }
-    openQuasselNetworkManagerPrompt(disposables, sid, status);
-  }
-
-  private void openQuasselNetworkManagerPrompt(
-      CompositeDisposable disposables, String serverId, TargetRef status) {
-    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
-        quasselControl.quasselCoreNetworks(serverId);
-    Optional<QuasselNetworkManagerAction> maybeAction =
-        ui.promptQuasselNetworkManagerAction(serverId, networks);
-    if (maybeAction.isEmpty()) {
-      return;
-    }
-    QuasselNetworkManagerAction action = maybeAction.orElseThrow();
-    processQuasselNetworkManagerAction(disposables, serverId, status, action);
-  }
-
-  private void processQuasselNetworkManagerAction(
-      CompositeDisposable disposables,
-      String serverId,
-      TargetRef status,
-      QuasselNetworkManagerAction action) {
-    if (action == null || action.operation() == null) {
-      openQuasselNetworkManagerPrompt(disposables, serverId, status);
-      return;
-    }
-
-    switch (action.operation()) {
-      case REFRESH -> openQuasselNetworkManagerPrompt(disposables, serverId, status);
-      case CONNECT -> {
-        String network = Objects.toString(action.networkIdOrName(), "").trim();
-        if (network.isEmpty()) {
-          ui.appendStatus(status, "(qnet-ui)", "Select a network first.");
-          openQuasselNetworkManagerPrompt(disposables, serverId, status);
-          return;
-        }
-        disposables.add(
-            quasselControl
-                .quasselCoreConnectNetwork(serverId, network)
-                .subscribe(
-                    () -> {
-                      ui.appendStatus(
-                          status,
-                          "(qnet-ui)",
-                          "Requested connect for Quassel network '" + network + "'.");
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
-                    },
-                    err -> {
-                      ui.appendError(status, "(qnet-ui-error)", String.valueOf(err));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
-                    }));
-      }
-      case DISCONNECT -> {
-        String network = Objects.toString(action.networkIdOrName(), "").trim();
-        if (network.isEmpty()) {
-          ui.appendStatus(status, "(qnet-ui)", "Select a network first.");
-          openQuasselNetworkManagerPrompt(disposables, serverId, status);
-          return;
-        }
-        disposables.add(
-            quasselControl
-                .quasselCoreDisconnectNetwork(serverId, network)
-                .subscribe(
-                    () -> {
-                      ui.appendStatus(
-                          status,
-                          "(qnet-ui)",
-                          "Requested disconnect for Quassel network '" + network + "'.");
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
-                    },
-                    err -> {
-                      ui.appendError(status, "(qnet-ui-error)", String.valueOf(err));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
-                    }));
-      }
-      case REMOVE -> {
-        String network = Objects.toString(action.networkIdOrName(), "").trim();
-        if (network.isEmpty()) {
-          ui.appendStatus(status, "(qnet-ui)", "Select a network first.");
-          openQuasselNetworkManagerPrompt(disposables, serverId, status);
-          return;
-        }
-        disposables.add(
-            quasselControl
-                .quasselCoreRemoveNetwork(serverId, network)
-                .subscribe(
-                    () -> {
-                      ui.appendStatus(
-                          status,
-                          "(qnet-ui)",
-                          "Requested removal of Quassel network '" + network + "'.");
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
-                    },
-                    err -> {
-                      ui.appendError(status, "(qnet-ui-error)", String.valueOf(err));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
-                    }));
-      }
-      case ADD -> {
-        QuasselCoreControlPort.QuasselCoreNetworkCreateRequest request = action.createRequest();
-        if (request == null) {
-          openQuasselNetworkManagerPrompt(disposables, serverId, status);
-          return;
-        }
-        disposables.add(
-            quasselControl
-                .quasselCoreCreateNetwork(serverId, request)
-                .subscribe(
-                    () -> {
-                      ui.appendStatus(
-                          status,
-                          "(qnet-ui)",
-                          "Requested Quassel network create: "
-                              + request.networkName()
-                              + " -> "
-                              + request.serverHost()
-                              + ":"
-                              + request.serverPort()
-                              + (request.useTls() ? " (tls)" : " (plain)"));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
-                    },
-                    err -> {
-                      ui.appendError(status, "(qnet-ui-error)", String.valueOf(err));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
-                    }));
-      }
-      case EDIT -> {
-        String network = Objects.toString(action.networkIdOrName(), "").trim();
-        QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest request = action.updateRequest();
-        if (network.isEmpty() || request == null) {
-          ui.appendStatus(status, "(qnet-ui)", "Select a network first.");
-          openQuasselNetworkManagerPrompt(disposables, serverId, status);
-          return;
-        }
-        disposables.add(
-            quasselControl
-                .quasselCoreUpdateNetwork(serverId, network, request)
-                .subscribe(
-                    () -> {
-                      ui.appendStatus(
-                          status,
-                          "(qnet-ui)",
-                          "Requested update for Quassel network '"
-                              + network
-                              + "': "
-                              + request.serverHost()
-                              + ":"
-                              + request.serverPort()
-                              + (request.useTls() ? " (tls)" : " (plain)"));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
-                    },
-                    err -> {
-                      ui.appendError(status, "(qnet-ui-error)", String.valueOf(err));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
-                    }));
-      }
-    }
-  }
-
-  private String normalizeConnectionTargetServerId(String target) {
-    String sid = Objects.toString(target, "").trim();
-    if (!sid.isBlank()) return sid;
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at != null) {
-      sid = Objects.toString(at.serverId(), "").trim();
-      if (!sid.isBlank()) return sid;
-    }
-    TargetRef safe = targetCoordinator.safeStatusTarget();
-    return safe == null ? "" : Objects.toString(safe.serverId(), "").trim();
-  }
-
-  private boolean isQuasselNetworkVerb(String token) {
-    return quasselCommandSupport.isNetworkVerb(token);
-  }
-
-  private static List<String> tokenizeWhitespaceArgs(String raw) {
-    String value = Objects.toString(raw, "").trim();
-    if (value.isEmpty()) return List.of();
-    String[] parts = value.split("\\s+");
-    ArrayList<String> out = new ArrayList<>(parts.length);
-    for (String part : parts) {
-      String token = Objects.toString(part, "").trim();
-      if (!token.isEmpty()) out.add(token);
-    }
-    return out.isEmpty() ? List.of() : List.copyOf(out);
-  }
-
-  private Integer tryParseInt(String value) {
-    return quasselCommandSupport.tryParseInt(value);
-  }
-
-  private Boolean parseTlsToken(String raw) {
-    return quasselCommandSupport.parseTlsToken(raw);
-  }
-
-  private String quasselNetworkUsage() {
-    return quasselCommandSupport.networkUsage();
-  }
-
-  private boolean ensureQuasselServerBackend(String serverId, TargetRef out, String statusTag) {
-    return quasselCommandSupport.ensureQuasselServerBackend(serverId, out, statusTag, ui);
-  }
-
-  private String renderQuasselNetworkSummary(
-      QuasselCoreControlPort.QuasselCoreNetworkSummary network) {
-    return quasselCommandSupport.renderNetworkSummary(network);
+    quasselOutboundCommandService.handleQuasselNetworkManager(disposables, serverId);
   }
 
   public void handleQuit(String reason) {
@@ -1348,218 +1039,6 @@ public class OutboundChatCommandService {
     return Map.copyOf(handlers);
   }
 
-  private Map<String, QuasselNetworkVerbHandler> buildQuasselNetworkVerbHandlers() {
-    LinkedHashMap<String, QuasselNetworkVerbHandler> handlers = new LinkedHashMap<>();
-    registerQuasselNetworkVerbHandler(handlers, this::handleQuasselNetworkListVerb, "list", "ls");
-    registerQuasselNetworkVerbHandler(
-        handlers,
-        this::handleQuasselNetworkConnectLikeVerb,
-        "connect",
-        "disconnect",
-        "remove",
-        "rm");
-    registerQuasselNetworkVerbHandler(handlers, this::handleQuasselNetworkAddVerb, "add", "create");
-    registerQuasselNetworkVerbHandler(
-        handlers, this::handleQuasselNetworkEditVerb, "edit", "update", "set");
-    return Map.copyOf(handlers);
-  }
-
-  private void handleQuasselNetworkListVerb(
-      CompositeDisposable disposables,
-      String serverId,
-      TargetRef status,
-      List<String> tokens,
-      int cursor,
-      String verb) {
-    if (cursor < tokens.size()) {
-      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-      return;
-    }
-    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
-        quasselControl.quasselCoreNetworks(serverId);
-    if (networks.isEmpty()) {
-      ui.appendStatus(
-          status,
-          "(qnet)",
-          "No Quassel networks are known yet. Connect first or add one with /quasselnet add.");
-      return;
-    }
-    ui.appendStatus(status, "(qnet)", "Quassel networks:");
-    for (QuasselCoreControlPort.QuasselCoreNetworkSummary network : networks) {
-      ui.appendStatus(status, "(qnet)", renderQuasselNetworkSummary(network));
-    }
-  }
-
-  private void handleQuasselNetworkConnectLikeVerb(
-      CompositeDisposable disposables,
-      String serverId,
-      TargetRef status,
-      List<String> tokens,
-      int cursor,
-      String verb) {
-    if ((tokens.size() - cursor) != 1) {
-      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-      return;
-    }
-    String network = tokens.get(cursor);
-    if ("connect".equals(verb)) {
-      disposables.add(
-          quasselControl
-              .quasselCoreConnectNetwork(serverId, network)
-              .subscribe(
-                  () ->
-                      ui.appendStatus(
-                          status,
-                          "(qnet)",
-                          "Requested connect for Quassel network '" + network + "'."),
-                  err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
-      return;
-    }
-    if ("disconnect".equals(verb)) {
-      disposables.add(
-          quasselControl
-              .quasselCoreDisconnectNetwork(serverId, network)
-              .subscribe(
-                  () ->
-                      ui.appendStatus(
-                          status,
-                          "(qnet)",
-                          "Requested disconnect for Quassel network '" + network + "'."),
-                  err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
-      return;
-    }
-    disposables.add(
-        quasselControl
-            .quasselCoreRemoveNetwork(serverId, network)
-            .subscribe(
-                () ->
-                    ui.appendStatus(
-                        status,
-                        "(qnet)",
-                        "Requested removal of Quassel network '" + network + "'."),
-                err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
-  }
-
-  private void handleQuasselNetworkAddVerb(
-      CompositeDisposable disposables,
-      String serverId,
-      TargetRef status,
-      List<String> tokens,
-      int cursor,
-      String verb) {
-    if ((tokens.size() - cursor) < 2) {
-      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-      return;
-    }
-    String networkName = tokens.get(cursor++);
-    String serverHost = tokens.get(cursor++);
-    Integer explicitPort = null;
-    boolean useTls = true;
-
-    if (cursor < tokens.size()) {
-      explicitPort = tryParseInt(tokens.get(cursor));
-      if (explicitPort != null) {
-        cursor++;
-      }
-    }
-    if (cursor < tokens.size()) {
-      Boolean tls = parseTlsToken(tokens.get(cursor));
-      if (tls == null) {
-        ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-        return;
-      }
-      useTls = tls.booleanValue();
-      cursor++;
-    }
-    if (cursor < tokens.size()) {
-      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-      return;
-    }
-
-    int port = explicitPort != null ? explicitPort.intValue() : (useTls ? 6697 : 6667);
-    final int requestedPort = port;
-    final boolean requestedTls = useTls;
-    QuasselCoreControlPort.QuasselCoreNetworkCreateRequest request =
-        new QuasselCoreControlPort.QuasselCoreNetworkCreateRequest(
-            networkName, serverHost, requestedPort, requestedTls, "", true, null, List.of());
-    disposables.add(
-        quasselControl
-            .quasselCoreCreateNetwork(serverId, request)
-            .subscribe(
-                () ->
-                    ui.appendStatus(
-                        status,
-                        "(qnet)",
-                        "Requested Quassel network create: "
-                            + networkName
-                            + " -> "
-                            + serverHost
-                            + ":"
-                            + requestedPort
-                            + (requestedTls ? " (tls)" : " (plain)")),
-                err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
-  }
-
-  private void handleQuasselNetworkEditVerb(
-      CompositeDisposable disposables,
-      String serverId,
-      TargetRef status,
-      List<String> tokens,
-      int cursor,
-      String verb) {
-    if ((tokens.size() - cursor) < 2) {
-      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-      return;
-    }
-    String network = tokens.get(cursor++);
-    String serverHost = tokens.get(cursor++);
-    Integer explicitPort = null;
-    boolean useTls = true;
-
-    if (cursor < tokens.size()) {
-      explicitPort = tryParseInt(tokens.get(cursor));
-      if (explicitPort != null) {
-        cursor++;
-      }
-    }
-    if (cursor < tokens.size()) {
-      Boolean tls = parseTlsToken(tokens.get(cursor));
-      if (tls == null) {
-        ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-        return;
-      }
-      useTls = tls.booleanValue();
-      cursor++;
-    }
-    if (cursor < tokens.size()) {
-      ui.appendStatus(status, "(qnet)", quasselNetworkUsage());
-      return;
-    }
-
-    int port = explicitPort != null ? explicitPort.intValue() : (useTls ? 6697 : 6667);
-    final int requestedPort = port;
-    final boolean requestedTls = useTls;
-    QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest request =
-        new QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest(
-            "", serverHost, requestedPort, requestedTls, "", true, null, null);
-    disposables.add(
-        quasselControl
-            .quasselCoreUpdateNetwork(serverId, network, request)
-            .subscribe(
-                () ->
-                    ui.appendStatus(
-                        status,
-                        "(qnet)",
-                        "Requested update for Quassel network '"
-                            + network
-                            + "': "
-                            + serverHost
-                            + ":"
-                            + requestedPort
-                            + (requestedTls ? " (tls)" : " (plain)")),
-                err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
-  }
-
   private static void registerHelpTopicHandler(
       Map<String, HelpTopicHandler> handlers, HelpTopicHandler handler, String... topics) {
     if (handlers == null || handler == null || topics == null) return;
@@ -1571,33 +1050,9 @@ public class OutboundChatCommandService {
     }
   }
 
-  private static void registerQuasselNetworkVerbHandler(
-      Map<String, QuasselNetworkVerbHandler> handlers,
-      QuasselNetworkVerbHandler handler,
-      String... verbs) {
-    if (handlers == null || handler == null || verbs == null) return;
-    for (String rawVerb : verbs) {
-      String verb = Objects.toString(rawVerb, "").trim().toLowerCase(Locale.ROOT);
-      if (!verb.isEmpty()) {
-        handlers.put(verb, handler);
-      }
-    }
-  }
-
   @FunctionalInterface
   private interface HelpTopicHandler {
     void handle(TargetRef out);
-  }
-
-  @FunctionalInterface
-  private interface QuasselNetworkVerbHandler {
-    void handle(
-        CompositeDisposable disposables,
-        String serverId,
-        TargetRef status,
-        List<String> tokens,
-        int cursor,
-        String verb);
   }
 
   public void handleUpload(
@@ -1614,42 +1069,23 @@ public class OutboundChatCommandService {
       return;
     }
 
-    String normalizedType = normalizeMatrixUploadMsgType(msgType);
-    String sourcePath = normalizeMatrixUploadPath(path);
-    String body = Objects.toString(caption, "").trim();
-    if (normalizedType.isEmpty() || sourcePath.isEmpty()) {
-      appendMatrixUploadUsage(at);
+    MatrixOutboundCommandService.UploadPreparation uploadPreparation =
+        matrixOutboundCommandService.prepareUpload(at, msgType, path, caption);
+    if (uploadPreparation.showUsage()) {
+      matrixOutboundCommandService.appendUploadUsage(at);
       return;
     }
-
-    if (containsCrlf(normalizedType) || containsCrlf(sourcePath) || containsCrlf(body)) {
-      ui.appendStatus(status, "(upload)", "Refusing to send multi-line /upload input.");
-      return;
-    }
-
     if (!connectionCoordinator.isConnected(at.serverId())) {
       ui.appendStatus(status, "(conn)", "Not connected");
       return;
     }
-
-    IrcProperties.Server.Backend backend = commandTargetPolicy.backendForServer(at.serverId());
-    UploadCommandTranslationHandler translationHandler =
-        uploadCommandTranslationHandlers.get(backend);
-    if (translationHandler == null) {
-      ui.appendStatus(
-          status,
-          "(upload)",
-          "Server '"
-              + at.serverId()
-              + "' does not use the Matrix backend. /upload is only available on Matrix-backed servers.");
+    if (!uploadPreparation.statusMessage().isEmpty()) {
+      ui.appendStatus(status, "(upload)", uploadPreparation.statusMessage());
       return;
     }
-
-    String displayBody = body.isEmpty() ? defaultMatrixUploadCaption(sourcePath) : body;
-    String line =
-        translationHandler.translateUpload(at.target(), normalizedType, sourcePath, displayBody);
-    if (line.isBlank()) {
-      appendMatrixUploadUsage(at);
+    String line = uploadPreparation.line();
+    if (containsCrlf(line)) {
+      ui.appendStatus(status, "(upload)", "Refusing to send multi-line /upload input.");
       return;
     }
     PreparedRawLine prepared = prepareCorrelatedRawLine(at, line);
@@ -1676,7 +1112,7 @@ public class OutboundChatCommandService {
   }
 
   private void appendMatrixUploadHelp(TargetRef out) {
-    matrixCommandSupport.appendUploadHelp(ui, out);
+    matrixOutboundCommandService.appendUploadHelp(out);
   }
 
   public void handleSay(CompositeDisposable disposables, String msg) {
@@ -2720,22 +2156,6 @@ public class OutboundChatCommandService {
 
   private static boolean containsCrlf(String s) {
     return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);
-  }
-
-  private void appendMatrixUploadUsage(TargetRef out) {
-    matrixCommandSupport.appendUploadUsage(ui, out);
-  }
-
-  private String normalizeMatrixUploadMsgType(String raw) {
-    return matrixCommandSupport.normalizeUploadMsgType(raw);
-  }
-
-  private String normalizeMatrixUploadPath(String raw) {
-    return matrixCommandSupport.normalizeUploadPath(raw);
-  }
-
-  private String defaultMatrixUploadCaption(String path) {
-    return matrixCommandSupport.defaultUploadCaption(path);
   }
 
   private static String normalizeChatHistorySelector(String raw) {

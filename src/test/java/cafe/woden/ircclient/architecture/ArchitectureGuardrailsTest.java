@@ -10,6 +10,7 @@ import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -343,6 +344,44 @@ class ArchitectureGuardrailsTest {
           .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
           .because(
               "app outbound flows should depend on config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule only_quassel_outbound_service_should_depend_on_quassel_core_control_port =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app.outbound..")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.QuasselOutboundCommandService")
+          .should()
+          .dependOnClassesThat()
+          .areAssignableTo(QuasselCoreControlPort.class)
+          .because(
+              "backend-specific Quassel transport control should stay isolated in QuasselOutboundCommandService");
+
+  @ArchTest
+  static final ArchRule only_matrix_upload_services_should_depend_on_upload_translation_handlers =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.app.outbound..")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandService")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.BackendUploadCommandRegistry")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.MatrixUploadCommandTranslationHandler")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler")
+          .should()
+          .dependOnClassesThat()
+          .haveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler")
+          .because(
+              "semantic /upload backend translation should stay behind dedicated matrix upload services");
 
   @ArchTest
   static final ArchRule state_should_not_depend_on_config_module_internals_directly =
