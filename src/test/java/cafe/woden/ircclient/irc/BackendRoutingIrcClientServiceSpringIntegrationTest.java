@@ -38,8 +38,10 @@ class BackendRoutingIrcClientServiceSpringIntegrationTest {
   private final IrcClientService ircClientService;
   private final IrcBackendClientService ircBackend;
   private final IrcBackendClientService quasselBackend;
+  private final IrcBackendClientService matrixBackend;
   private final BackendStreamHandle ircStream;
   private final BackendStreamHandle quasselStream;
+  private final BackendStreamHandle matrixStream;
   private final Map<String, IrcProperties.Server> testServersById;
 
   BackendRoutingIrcClientServiceSpringIntegrationTest(
@@ -47,34 +49,39 @@ class BackendRoutingIrcClientServiceSpringIntegrationTest {
       @Qualifier("ircClientService") IrcClientService ircClientService,
       @Qualifier("ircBackendService") IrcBackendClientService ircBackend,
       @Qualifier("quasselBackendService") IrcBackendClientService quasselBackend,
+      @Qualifier("matrixBackendService") IrcBackendClientService matrixBackend,
       @Qualifier("ircBackendStream") BackendStreamHandle ircStream,
       @Qualifier("quasselBackendStream") BackendStreamHandle quasselStream,
+      @Qualifier("matrixBackendStream") BackendStreamHandle matrixStream,
       @Qualifier("testServersById") Map<String, IrcProperties.Server> testServersById) {
     this.applicationContext = applicationContext;
     this.ircClientService = ircClientService;
     this.ircBackend = ircBackend;
     this.quasselBackend = quasselBackend;
+    this.matrixBackend = matrixBackend;
     this.ircStream = ircStream;
     this.quasselStream = quasselStream;
+    this.matrixStream = matrixStream;
     this.testServersById = testServersById;
   }
 
   @BeforeEach
   void resetMocksAndServers() {
-    clearInvocations(ircBackend, quasselBackend);
+    clearInvocations(ircBackend, quasselBackend, matrixBackend);
     testServersById.clear();
     testServersById.put("irc", server("irc", IrcProperties.Server.Backend.IRC));
     testServersById.put("quassel", server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE));
+    testServersById.put("matrix", server("matrix", IrcProperties.Server.Backend.MATRIX));
     testServersById.put("hybrid", server("hybrid", IrcProperties.Server.Backend.IRC));
   }
 
   @Test
-  void wiringExposesRoutingBeanAndBothBackendBeans() {
+  void wiringExposesRoutingBeanAndAllBackendBeans() {
     Object bean = applicationContext.getBean("ircClientService");
 
     assertTrue(bean instanceof BackendRoutingIrcClientService);
     assertSame(bean, ircClientService);
-    assertEquals(2, applicationContext.getBeansOfType(IrcBackendClientService.class).size());
+    assertEquals(3, applicationContext.getBeansOfType(IrcBackendClientService.class).size());
   }
 
   @Test
@@ -121,6 +128,20 @@ class BackendRoutingIrcClientServiceSpringIntegrationTest {
 
     verify(ircBackend).sendRaw("missing", "PING :fallback");
     verify(quasselBackend, never()).sendRaw("missing", "PING :fallback");
+    verify(matrixBackend, never()).sendRaw("missing", "PING :fallback");
+  }
+
+  @Test
+  void matrixServerRoutesToMatrixBackend() {
+    ircClientService.connect("matrix").blockingAwait();
+    verify(matrixBackend).connect("matrix");
+    verify(ircBackend, never()).connect("matrix");
+    verify(quasselBackend, never()).connect("matrix");
+
+    ircClientService.sendRaw("matrix", "PING :matrix").blockingAwait();
+    verify(matrixBackend).sendRaw("matrix", "PING :matrix");
+    verify(ircBackend, never()).sendRaw("matrix", "PING :matrix");
+    verify(quasselBackend, never()).sendRaw("matrix", "PING :matrix");
   }
 
   @TestConfiguration
@@ -172,6 +193,11 @@ class BackendRoutingIrcClientServiceSpringIntegrationTest {
       return new BackendStreamHandle(PublishProcessor.create());
     }
 
+    @Bean("matrixBackendStream")
+    BackendStreamHandle matrixBackendStream() {
+      return new BackendStreamHandle(PublishProcessor.create());
+    }
+
     @Bean("ircBackendService")
     IrcBackendClientService ircBackendService(
         @Qualifier("ircBackendStream") BackendStreamHandle stream) {
@@ -182,6 +208,12 @@ class BackendRoutingIrcClientServiceSpringIntegrationTest {
     IrcBackendClientService quasselBackendService(
         @Qualifier("quasselBackendStream") BackendStreamHandle stream) {
       return createBackend(IrcProperties.Server.Backend.QUASSEL_CORE, stream);
+    }
+
+    @Bean("matrixBackendService")
+    IrcBackendClientService matrixBackendService(
+        @Qualifier("matrixBackendStream") BackendStreamHandle stream) {
+      return createBackend(IrcProperties.Server.Backend.MATRIX, stream);
     }
 
     private static IrcBackendClientService createBackend(

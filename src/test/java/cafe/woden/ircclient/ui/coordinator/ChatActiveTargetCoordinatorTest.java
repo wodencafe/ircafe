@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
@@ -204,6 +205,56 @@ class ChatActiveTargetCoordinatorTest {
     runnable.run();
     assertEquals(next, readMarkerTarget.get());
     assertEquals(42, readMarkerOffset.get());
+  }
+
+  @Test
+  void setActiveTargetAppliesMatrixProfileFromProvider() {
+    MessageInputPanel inputPanel = mock(MessageInputPanel.class);
+    when(inputPanel.isVisible()).thenReturn(true);
+    ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
+    StyledDocument doc = new DefaultStyledDocument();
+    TargetRef matrixRoom = new TargetRef("matrix", "!room:example.org");
+    AtomicReference<TargetRef> activeTarget = new AtomicReference<>();
+
+    when(transcripts.document(matrixRoom)).thenReturn(doc);
+    when(transcripts.readMarkerJumpOffset(matrixRoom)).thenReturn(0);
+
+    ChatActiveTargetCoordinator coordinator =
+        new ChatActiveTargetCoordinator(
+            activeTarget::get,
+            activeTarget::set,
+            inputPanel,
+            serverId ->
+                new BackendUiProfile(
+                    serverId, BackendUiContext.fromMatrixServerPredicate("matrix"::equals)),
+            new HashMap<>(),
+            () -> {},
+            () -> {},
+            () -> {},
+            (prev, current) -> {},
+            target -> ChatTargetViewRouter.TargetViewType.TRANSCRIPT,
+            transcripts,
+            ignored -> {},
+            () -> {},
+            (target, offset) -> {},
+            runnable -> runnable.run(),
+            () -> {},
+            () -> {});
+
+    coordinator.setActiveTarget(matrixRoom);
+
+    assertEquals(matrixRoom, activeTarget.get());
+    verify(inputPanel)
+        .setBackendUiProfile(
+            argThat(
+                profile ->
+                    profile != null
+                        && matrixRoom.serverId().equals(profile.serverId())
+                        && profile.isMatrixServer()));
+    verify(inputPanel).focusInput();
+    verify(transcripts).ensureTargetExists(matrixRoom);
+    verify(transcripts).document(matrixRoom);
+    verify(transcripts).readMarkerJumpOffset(matrixRoom);
   }
 
   @Test
