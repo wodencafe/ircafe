@@ -114,6 +114,7 @@ class MatrixSynapseContainerIntegrationTest {
         MatrixMediaUploadClient mediaUploadClient = new MatrixMediaUploadClient(proxyResolver);
         MatrixRoomMessageSender sender = new MatrixRoomMessageSender(proxyResolver);
         MatrixSyncClient syncClient = new MatrixSyncClient(proxyResolver);
+        MatrixReadMarkerClient readMarkerClient = new MatrixReadMarkerClient(proxyResolver);
         MatrixRoomHistoryClient historyClient = new MatrixRoomHistoryClient(proxyResolver);
 
         MatrixHomeserverProbe.ProbeResult probeResult = probe.probe(SERVER_ID, server);
@@ -143,6 +144,19 @@ class MatrixSynapseContainerIntegrationTest {
         SyncObservation observation =
             awaitSyncedRoomMessage(
                 syncClient, server, bobLogin.accessToken(), roomId, MESSAGE_TEXT);
+
+        MatrixReadMarkerClient.ReadMarkerResult readMarkerResult =
+            readMarkerClient.updateReadMarker(
+                SERVER_ID,
+                server,
+                bobLogin.accessToken(),
+                roomId,
+                normalize(observation.event().eventId()));
+        assertTrue(
+            readMarkerResult.success(),
+            "read marker update should succeed: " + readMarkerResult.detail());
+        assertEquals(roomId, readMarkerResult.roomId());
+        assertEquals(normalize(observation.event().eventId()), readMarkerResult.eventId());
 
         assertFalse(observation.nextBatch().isEmpty(), "sync next_batch should be present");
         MatrixRoomHistoryClient.HistoryResult history =

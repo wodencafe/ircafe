@@ -395,6 +395,45 @@ class ArchitectureGuardrailsTest {
               "semantic /upload backend translation should stay behind dedicated matrix upload services");
 
   @ArchTest
+  static final ArchRule
+      only_matrix_upload_services_should_depend_on_matrix_outbound_command_support =
+          noClasses()
+              .that()
+              .resideInAPackage("cafe.woden.ircclient.app.outbound..")
+              .and()
+              .doNotHaveFullyQualifiedName(
+                  "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupport")
+              .and()
+              .doNotHaveFullyQualifiedName(
+                  "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandService")
+              .and()
+              .doNotHaveFullyQualifiedName(
+                  "cafe.woden.ircclient.app.outbound.MatrixUploadCommandTranslationHandler")
+              .should()
+              .dependOnClassesThat()
+              .haveFullyQualifiedName(
+                  "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupport")
+              .because(
+                  "matrix upload payload shaping should remain isolated to dedicated matrix outbound services");
+
+  @ArchTest
+  static final ArchRule ui_should_only_access_backend_mode_port_through_ui_backend_profile_types =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui..")
+          .and()
+          .doNotHaveFullyQualifiedName("cafe.woden.ircclient.ui.backend.BackendUiProfile")
+          .and()
+          .doNotHaveFullyQualifiedName("cafe.woden.ircclient.ui.backend.BackendUiContext")
+          .and()
+          .doNotHaveFullyQualifiedName("cafe.woden.ircclient.ui.backend.BackendUiProfileProvider")
+          .should()
+          .dependOnClassesThat()
+          .haveFullyQualifiedName("cafe.woden.ircclient.irc.IrcBackendModePort")
+          .because(
+              "backend mode checks in UI should stay centralized behind backend-ui profile/context services");
+
+  @ArchTest
   static final ArchRule state_should_not_depend_on_config_module_internals_directly =
       noClasses()
           .that()

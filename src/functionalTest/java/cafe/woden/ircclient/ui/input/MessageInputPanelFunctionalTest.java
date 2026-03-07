@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -89,6 +90,43 @@ class MessageInputPanelFunctionalTest {
               new BackendUiProfile("matrix", BackendUiContext.fromMatrixServerPredicate(MATRIX)));
           assertTrue(attach.isVisible(), "attach should show on Matrix servers");
         });
+  }
+
+  @Test
+  void droppingFilesOnIrcServersDoesNotEmitMatrixUploadCommands() throws Exception {
+    UiSettingsBus settingsBus = mock(UiSettingsBus.class);
+    when(settingsBus.get()).thenReturn(null);
+    CommandHistoryStore historyStore = mock(CommandHistoryStore.class);
+
+    MessageInputPanel panel = new MessageInputPanel(settingsBus, historyStore);
+    CopyOnWriteArrayList<String> outbound = new CopyOnWriteArrayList<>();
+    Disposable subscription = panel.outboundMessages().subscribe(outbound::add);
+    Path image = Files.createTempFile("irc-drop-", ".png");
+
+    try {
+      JTextField input = findFirst(panel, JTextField.class);
+      assertNotNull(input, "message input field should be present");
+
+      onEdt(
+          () ->
+              panel.setBackendUiProfile(
+                  new BackendUiProfile(
+                      "libera", BackendUiContext.fromMatrixServerPredicate(MATRIX))));
+      onEdt(() -> input.setText("keep draft"));
+      flushEdt();
+
+      AtomicBoolean imported = new AtomicBoolean(true);
+      onEdt(() -> imported.set(dropFiles(input, List.of(image.toFile()))));
+      flushEdt();
+
+      assertFalse(imported.get(), "IRC upload UX should reject file drops");
+      waitFor(outbound::isEmpty, Duration.ofMillis(250));
+      onEdt(() -> assertEquals("keep draft", input.getText()));
+    } finally {
+      subscription.dispose();
+      Files.deleteIfExists(image);
+      flushEdt();
+    }
   }
 
   @Test

@@ -123,6 +123,31 @@ class BackendRoutingIrcClientServiceSpringIntegrationTest {
   }
 
   @Test
+  void matrixOwnershipFollowsReplayEventsAndClearsAfterDisconnected() {
+    var events = ircClientService.events().test();
+
+    matrixStream
+        .processor()
+        .onNext(
+            new ServerIrcEvent(
+                "hybrid", new IrcEvent.Connected(Instant.now(), "matrix.example.net", 443, "u")));
+    events.awaitCount(1).assertValueCount(1);
+
+    ircClientService.sendRaw("hybrid", "PING :matrix-one").blockingAwait();
+    verify(matrixBackend).sendRaw("hybrid", "PING :matrix-one");
+    verify(ircBackend, never()).sendRaw("hybrid", "PING :matrix-one");
+    verify(quasselBackend, never()).sendRaw("hybrid", "PING :matrix-one");
+
+    matrixStream
+        .processor()
+        .onNext(new ServerIrcEvent("hybrid", new IrcEvent.Disconnected(Instant.now(), "bye")));
+    events.awaitCount(2).assertValueCount(2);
+
+    ircClientService.sendRaw("hybrid", "PING :matrix-two").blockingAwait();
+    verify(ircBackend).sendRaw("hybrid", "PING :matrix-two");
+  }
+
+  @Test
   void unknownServerFallsBackToIrcBackend() {
     ircClientService.sendRaw("missing", "PING :fallback").blockingAwait();
 
