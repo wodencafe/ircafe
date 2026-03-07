@@ -200,72 +200,6 @@ public class OutboundChatCommandService {
                 err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
   }
 
-  public void handleConnect(String target) {
-    ConnectionCommandTarget cmd = parseConnectionCommandTarget(target);
-    if (cmd == null) {
-      ui.appendStatus(
-          targetCoordinator.safeStatusTarget(), "(connect)", "Usage: /connect [serverId|all]");
-      return;
-    }
-    if (cmd.all()) {
-      connectionCoordinator.connectAll();
-      return;
-    }
-    connectionCoordinator.connectOne(cmd.serverId());
-  }
-
-  public void handleDisconnect(String target) {
-    ConnectionCommandTarget cmd = parseConnectionCommandTarget(target);
-    if (cmd == null) {
-      ui.appendStatus(
-          targetCoordinator.safeStatusTarget(),
-          "(disconnect)",
-          "Usage: /disconnect [serverId|all]");
-      return;
-    }
-    if (cmd.all()) {
-      connectionCoordinator.disconnectAll();
-      return;
-    }
-    connectionCoordinator.disconnectOne(cmd.serverId());
-  }
-
-  public void handleReconnect(String target) {
-    ConnectionCommandTarget cmd = parseConnectionCommandTarget(target);
-    if (cmd == null) {
-      ui.appendStatus(
-          targetCoordinator.safeStatusTarget(), "(reconnect)", "Usage: /reconnect [serverId|all]");
-      return;
-    }
-    if (cmd.all()) {
-      connectionCoordinator.reconnectAll();
-      return;
-    }
-    connectionCoordinator.reconnectOne(cmd.serverId());
-  }
-
-  public void handleQuit(String reason) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    TargetRef status = targetCoordinator.safeStatusTarget();
-    String sid =
-        (at != null && at.serverId() != null && !at.serverId().isBlank())
-            ? at.serverId()
-            : status.serverId();
-    if (sid == null || sid.isBlank()) {
-      ui.appendStatus(status, "(quit)", "No server selected.");
-      return;
-    }
-
-    String msg = reason == null ? "" : reason.trim();
-    if (containsCrlf(msg)) {
-      ui.appendStatus(
-          new TargetRef(sid, "status"), "(quit)", "Refusing to send multi-line /quit reason.");
-      return;
-    }
-
-    connectionCoordinator.disconnectOne(sid, msg);
-  }
-
   public void handleNick(CompositeDisposable disposables, String newNick) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
@@ -862,30 +796,6 @@ public class OutboundChatCommandService {
   }
 
   private record PreparedRawLine(String line, String label) {}
-
-  private ConnectionCommandTarget parseConnectionCommandTarget(String rawTarget) {
-    String raw = Objects.toString(rawTarget, "").trim();
-    if (raw.isEmpty()) {
-      TargetRef at = targetCoordinator.getActiveTarget();
-      if (at != null) {
-        String sid = Objects.toString(at.serverId(), "").trim();
-        if (!sid.isEmpty()) return new ConnectionCommandTarget(false, sid);
-      }
-      return new ConnectionCommandTarget(true, "");
-    }
-
-    if ("all".equalsIgnoreCase(raw) || "*".equals(raw)) {
-      return new ConnectionCommandTarget(true, "");
-    }
-
-    if (raw.indexOf(' ') >= 0 || containsCrlf(raw)) {
-      return null;
-    }
-
-    return new ConnectionCommandTarget(false, raw);
-  }
-
-  private record ConnectionCommandTarget(boolean all, String serverId) {}
 
   private static boolean containsCrlf(String s) {
     return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);

@@ -23,6 +23,8 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundCtcpWhoisCommandService ctcp = mock(OutboundCtcpWhoisCommandService.class);
   private final OutboundDccCommandService dcc = mock(OutboundDccCommandService.class);
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
+  private final OutboundConnectionLifecycleCommandService lifecycle =
+      mock(OutboundConnectionLifecycleCommandService.class);
   private final OutboundChatHistoryCommandService chatHistory =
       mock(OutboundChatHistoryCommandService.class);
   private final OutboundInviteCommandService invite = mock(OutboundInviteCommandService.class);
@@ -50,6 +52,7 @@ class DefaultOutboundCommandDispatcherTest {
           ctcp,
           dcc,
           chat,
+          lifecycle,
           chatHistory,
           invite,
           namesWhoList,
@@ -97,16 +100,16 @@ class DefaultOutboundCommandDispatcherTest {
   @Test
   void dispatchConnectionLifecycleRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.Connect("libera"));
-    verify(chat).handleConnect("libera");
+    verify(lifecycle).handleConnect("libera");
 
     dispatcher.dispatch(disposables, new ParsedInput.Disconnect("all"));
-    verify(chat).handleDisconnect("all");
+    verify(lifecycle).handleDisconnect("all");
 
     dispatcher.dispatch(disposables, new ParsedInput.Reconnect(""));
-    verify(chat).handleReconnect("");
+    verify(lifecycle).handleReconnect("");
 
     dispatcher.dispatch(disposables, new ParsedInput.Quit("bye"));
-    verify(chat).handleQuit("bye");
+    verify(lifecycle).handleQuit("bye");
   }
 
   @Test
