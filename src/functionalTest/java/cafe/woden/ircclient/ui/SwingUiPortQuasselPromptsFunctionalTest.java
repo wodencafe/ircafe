@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
@@ -45,15 +45,15 @@ class SwingUiPortQuasselPromptsFunctionalTest {
     Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
 
     SwingUiPort ui = newUi();
-    IrcClientService.QuasselCoreSetupPrompt prompt =
-        new IrcClientService.QuasselCoreSetupPrompt(
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
+        new QuasselCoreControlPort.QuasselCoreSetupPrompt(
             "quassel",
             "setup required",
             List.of("SQLite"),
             List.of("Database"),
             Map.of("field", "value"));
 
-    AtomicReference<Optional<IrcClientService.QuasselCoreSetupRequest>> result =
+    AtomicReference<Optional<QuasselCoreControlPort.QuasselCoreSetupRequest>> result =
         new AtomicReference<>(Optional.empty());
     AtomicReference<Throwable> error = new AtomicReference<>();
     Thread caller =
@@ -85,7 +85,7 @@ class SwingUiPortQuasselPromptsFunctionalTest {
 
     joinCaller(caller, error);
 
-    Optional<IrcClientService.QuasselCoreSetupRequest> request = result.get();
+    Optional<QuasselCoreControlPort.QuasselCoreSetupRequest> request = result.get();
     assertTrue(request.isPresent(), "setup prompt should return request after confirmation");
     assertEquals("admin", request.orElseThrow().adminUser());
     assertEquals("secret", request.orElseThrow().adminPassword());
@@ -98,11 +98,11 @@ class SwingUiPortQuasselPromptsFunctionalTest {
     Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
 
     SwingUiPort ui = newUi();
-    IrcClientService.QuasselCoreSetupPrompt prompt =
-        new IrcClientService.QuasselCoreSetupPrompt(
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
+        new QuasselCoreControlPort.QuasselCoreSetupPrompt(
             "quassel", "setup required", List.of("SQLite"), List.of("Database"), Map.of());
 
-    AtomicReference<Optional<IrcClientService.QuasselCoreSetupRequest>> result =
+    AtomicReference<Optional<QuasselCoreControlPort.QuasselCoreSetupRequest>> result =
         new AtomicReference<>(Optional.empty());
     AtomicReference<Throwable> error = new AtomicReference<>();
     Thread caller =
@@ -130,9 +130,9 @@ class SwingUiPortQuasselPromptsFunctionalTest {
     Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
 
     SwingUiPort ui = newUi();
-    List<IrcClientService.QuasselCoreNetworkSummary> networks =
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
         List.of(
-            new IrcClientService.QuasselCoreNetworkSummary(
+            new QuasselCoreControlPort.QuasselCoreNetworkSummary(
                 2, "Libera", false, true, 4, "irc.libera.chat", 6697, true, Map.of()));
 
     AtomicReference<Optional<QuasselNetworkManagerAction>> result =
@@ -167,9 +167,9 @@ class SwingUiPortQuasselPromptsFunctionalTest {
     Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
 
     SwingUiPort ui = newUi();
-    List<IrcClientService.QuasselCoreNetworkSummary> networks =
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
         List.of(
-            new IrcClientService.QuasselCoreNetworkSummary(
+            new QuasselCoreControlPort.QuasselCoreNetworkSummary(
                 2, "Libera", false, true, 4, "irc.libera.chat", 6697, true, Map.of()));
 
     AtomicReference<Optional<QuasselNetworkManagerAction>> result =

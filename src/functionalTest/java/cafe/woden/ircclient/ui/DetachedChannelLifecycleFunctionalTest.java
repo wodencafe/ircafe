@@ -22,9 +22,13 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.ignore.IgnoreListService;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
+import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
+import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
+import cafe.woden.ircclient.irc.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
@@ -133,7 +137,7 @@ class DetachedChannelLifecycleFunctionalTest {
           });
       flushEdt();
 
-      verify(fixture.irc).joinChannel("libera", "#functional-join");
+      verify(fixture.targetMembership).joinChannel("libera", "#functional-join");
       assertTrue(
           fixture.serverTree.isChannelDisconnected(channel),
           "channel stays detached until JOIN event");
@@ -286,21 +290,41 @@ class DetachedChannelLifecycleFunctionalTest {
             chatDockManager,
             activeInputRouter);
 
-    IrcClientService irc = mock(IrcClientService.class);
-    when(irc.currentNick(anyString())).thenReturn(Optional.empty());
-    when(irc.requestNames(anyString(), anyString())).thenReturn(Completable.complete());
-    when(irc.joinChannel(anyString(), anyString())).thenReturn(Completable.complete());
-    when(irc.partChannel(anyString(), anyString(), nullable(String.class)))
+    IrcConnectionLifecyclePort lifecycle = mock(IrcConnectionLifecyclePort.class);
+    when(lifecycle.currentNick(anyString())).thenReturn(Optional.empty());
+    when(lifecycle.connect(anyString())).thenReturn(Completable.complete());
+    when(lifecycle.disconnect(anyString())).thenReturn(Completable.complete());
+    when(lifecycle.disconnect(anyString(), nullable(String.class)))
         .thenReturn(Completable.complete());
-    when(irc.partChannel(anyString(), anyString())).thenReturn(Completable.complete());
-    when(irc.connect(anyString())).thenReturn(Completable.complete());
-    when(irc.disconnect(anyString())).thenReturn(Completable.complete());
-    when(irc.disconnect(anyString(), nullable(String.class))).thenReturn(Completable.complete());
+
+    IrcBackendAvailabilityPort backendAvailability = mock(IrcBackendAvailabilityPort.class);
+    when(backendAvailability.backendAvailabilityReason(anyString())).thenReturn("");
+
+    QuasselCoreControlPort quasselControl = mock(QuasselCoreControlPort.class);
+
+    IrcTargetMembershipPort targetMembership = mock(IrcTargetMembershipPort.class);
+    when(targetMembership.currentNick(anyString())).thenReturn(Optional.empty());
+    when(targetMembership.requestNames(anyString(), anyString()))
+        .thenReturn(Completable.complete());
+    when(targetMembership.joinChannel(anyString(), anyString())).thenReturn(Completable.complete());
+    when(targetMembership.partChannel(anyString(), anyString(), nullable(String.class)))
+        .thenReturn(Completable.complete());
+    when(targetMembership.partChannel(anyString(), anyString())).thenReturn(Completable.complete());
+
+    IrcBouncerPlaybackPort bouncerPlayback = mock(IrcBouncerPlaybackPort.class);
 
     TrayNotificationsPort tray = mock(TrayNotificationsPort.class);
     ConnectionCoordinator connectionCoordinator =
         new ConnectionCoordinator(
-            irc, ui, serverRegistry, serverCatalog, runtimeConfig, logProps, tray);
+            lifecycle,
+            backendAvailability,
+            quasselControl,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            logProps,
+            tray);
 
     CopyOnWriteArrayList<Boolean> inputEnabledStates = new CopyOnWriteArrayList<>();
     doAnswer(
@@ -315,11 +339,12 @@ class DetachedChannelLifecycleFunctionalTest {
         new TargetCoordinator(
             ui,
             new UserListStore(),
-            irc,
+            targetMembership,
+            bouncerPlayback,
             serverRegistry,
             runtimeConfig,
             connectionCoordinator,
-            mock(IgnoreListService.class),
+            mock(IgnoreListQueryPort.class),
             mock(UserhostQueryService.class),
             mock(UserInfoEnrichmentService.class),
             mock(TargetChatHistoryPort.class),
@@ -329,7 +354,7 @@ class DetachedChannelLifecycleFunctionalTest {
 
     flushEdt();
     return new Fixture(
-        serverTree, irc, connectionCoordinator, targetCoordinator, inputEnabledStates);
+        serverTree, targetMembership, connectionCoordinator, targetCoordinator, inputEnabledStates);
   }
 
   private static IrcProperties.Server server(String id) {
@@ -465,7 +490,7 @@ class DetachedChannelLifecycleFunctionalTest {
 
   private record Fixture(
       ServerTreeDockable serverTree,
-      IrcClientService irc,
+      IrcTargetMembershipPort targetMembership,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       CopyOnWriteArrayList<Boolean> inputEnabledStates) {

@@ -31,6 +31,8 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.ui.backend.BackendUiContext;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
@@ -141,6 +143,10 @@ class ChannelListLoggingDecoratorFunctionalTest {
     OutboundLineBus outboundBus = new OutboundLineBus();
     IrcClientService irc = mock(IrcClientService.class);
     BackendUiProfileProvider backendUiProfileProvider = mock(BackendUiProfileProvider.class);
+    when(backendUiProfileProvider.backendUiContext()).thenReturn(BackendUiContext.ircOnly());
+    when(backendUiProfileProvider.profileForServer(anyString()))
+        .thenAnswer(
+            invocation -> BackendUiProfile.ircOnly(invocation.getArgument(0, String.class)));
     MessageActionCapabilityPolicy messageActionCapabilityPolicy =
         mock(MessageActionCapabilityPolicy.class);
     ActiveInputRouter activeInputRouter = new ActiveInputRouter();

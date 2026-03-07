@@ -8,6 +8,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.ui.backend.BackendUiContext;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.Component;
@@ -76,14 +78,15 @@ class MessageInputPanelFunctionalTest {
 
     onEdt(
         () -> {
-          panel.setIsMatrixServer(sid -> "matrix".equalsIgnoreCase(sid));
-          panel.setActiveServerId("libera");
+          panel.setBackendUiProfile(
+              new BackendUiProfile("libera", BackendUiContext.fromMatrixServerPredicate(MATRIX)));
           assertFalse(attach.isVisible(), "attach should hide on IRC servers");
         });
 
     onEdt(
         () -> {
-          panel.setActiveServerId("matrix");
+          panel.setBackendUiProfile(
+              new BackendUiProfile("matrix", BackendUiContext.fromMatrixServerPredicate(MATRIX)));
           assertTrue(attach.isVisible(), "attach should show on Matrix servers");
         });
   }
@@ -181,9 +184,12 @@ class MessageInputPanelFunctionalTest {
   }
 
   private static void enableMatrixUploads(MessageInputPanel panel) {
-    panel.setIsMatrixServer(sid -> "matrix".equalsIgnoreCase(sid));
-    panel.setActiveServerId("matrix");
+    panel.setBackendUiProfile(
+        new BackendUiProfile("matrix", BackendUiContext.fromMatrixServerPredicate(MATRIX)));
   }
+
+  private static final java.util.function.Predicate<String> MATRIX =
+      sid -> "matrix".equalsIgnoreCase(sid);
 
   private static JButton findNamedButton(Component root, String name) {
     if (root == null || name == null) return null;
