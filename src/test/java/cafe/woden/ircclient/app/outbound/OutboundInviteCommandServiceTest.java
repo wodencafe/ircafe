@@ -13,6 +13,7 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
@@ -45,7 +46,7 @@ class OutboundInviteCommandServiceTest {
   private final IgnoreListCommandPort ignoreListService = mock(IgnoreListCommandPort.class);
   private final OutboundInviteCommandService service =
       new OutboundInviteCommandService(
-          irc,
+          IrcMediatorInteractionPort.from(irc),
           ui,
           connectionCoordinator,
           targetCoordinator,

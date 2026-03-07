@@ -13,6 +13,7 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import java.time.Instant;
 import java.util.concurrent.ExecutorService;
@@ -30,7 +31,12 @@ class OutboundDccCommandServiceControlMessagesTest {
 
   private final OutboundDccCommandService service =
       new OutboundDccCommandService(
-          ui, irc, targetCoordinator, connectionCoordinator, dccTransferStore, io);
+          ui,
+          IrcMediatorInteractionPort.from(irc),
+          targetCoordinator,
+          connectionCoordinator,
+          dccTransferStore,
+          io);
 
   @Test
   void inboundResumeControlIsRecognizedAndNotReportedAsUnsupported() {

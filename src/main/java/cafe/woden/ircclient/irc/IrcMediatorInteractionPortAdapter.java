@@ -27,6 +27,11 @@ public class IrcMediatorInteractionPortAdapter implements IrcMediatorInteraction
   }
 
   @Override
+  public Completable whowas(String serverId, String nick, int count) {
+    return delegate.whowas(serverId, nick, count);
+  }
+
+  @Override
   public Completable sendPrivateMessage(String serverId, String target, String message) {
     return delegate.sendPrivateMessage(serverId, target, message);
   }

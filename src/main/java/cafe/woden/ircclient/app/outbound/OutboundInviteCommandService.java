@@ -6,7 +6,7 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
@@ -14,13 +14,14 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound invite command flow: /invite and pending invite actions. */
 @Component
 final class OutboundInviteCommandService {
 
-  private final IrcClientService irc;
+  private final IrcMediatorInteractionPort mediatorIrc;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
@@ -32,7 +33,7 @@ final class OutboundInviteCommandService {
   private final IgnoreListCommandPort ignoreListService;
 
   OutboundInviteCommandService(
-      IrcClientService irc,
+      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
@@ -42,7 +43,7 @@ final class OutboundInviteCommandService {
       PendingInvitePort pendingInviteState,
       WhoisRoutingPort whoisRoutingState,
       IgnoreListCommandPort ignoreListService) {
-    this.irc = Objects.requireNonNull(irc, "irc");
+    this.mediatorIrc = Objects.requireNonNull(mediatorIrc, "mediatorIrc");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
@@ -93,7 +94,8 @@ final class OutboundInviteCommandService {
     ui.appendStatus(out, "(invite)", "→ " + withLabelHint(line, prepared.label()));
 
     disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
+        mediatorIrc
+            .sendRaw(at.serverId(), prepared.line())
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(invite-error)", String.valueOf(err))));
   }
@@ -163,7 +165,8 @@ final class OutboundInviteCommandService {
         status, "(invite)", "Joining " + invite.channel() + " from invite #" + invite.id() + "...");
 
     disposables.add(
-        irc.joinChannel(invite.serverId(), invite.channel())
+        mediatorIrc
+            .joinChannel(invite.serverId(), invite.channel())
             .subscribe(
                 () -> pendingInviteState.remove(invite.id()),
                 err -> ui.appendError(status, "(invite-error)", String.valueOf(err))));
@@ -208,7 +211,8 @@ final class OutboundInviteCommandService {
     ui.appendStatus(
         status, "(whois)", "Requesting WHOIS for " + nick + " (invite #" + invite.id() + ")...");
     disposables.add(
-        irc.whois(invite.serverId(), nick)
+        mediatorIrc
+            .whois(invite.serverId(), nick)
             .subscribe(() -> {}, err -> ui.appendError(status, "(whois)", String.valueOf(err))));
   }
 

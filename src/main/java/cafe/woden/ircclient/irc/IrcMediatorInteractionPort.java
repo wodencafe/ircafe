@@ -16,6 +16,10 @@ public interface IrcMediatorInteractionPort {
     return Completable.complete();
   }
 
+  default Completable whowas(String serverId, String nick, int count) {
+    return Completable.complete();
+  }
+
   default Completable sendPrivateMessage(String serverId, String target, String message) {
     return Completable.complete();
   }
@@ -52,6 +56,11 @@ public interface IrcMediatorInteractionPort {
       @Override
       public Completable whois(String serverId, String nick) {
         return irc.whois(serverId, nick);
+      }
+
+      @Override
+      public Completable whowas(String serverId, String nick, int count) {
+        return irc.whowas(serverId, nick, count);
       }
 
       @Override

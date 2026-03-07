@@ -20,6 +20,7 @@ class IrcMediatorInteractionPortTest {
             "libera", new IrcEvent.Connecting(Instant.EPOCH, "irc.libera.chat", 6697, "alice"));
     when(irc.events()).thenReturn(Flowable.just(event));
     when(irc.whois("libera", "alice")).thenReturn(Completable.complete());
+    when(irc.whowas("libera", "alice", 5)).thenReturn(Completable.complete());
     when(irc.sendPrivateMessage("libera", "alice", "hi")).thenReturn(Completable.complete());
     when(irc.sendRaw("libera", "MODE #ircafe +o alice")).thenReturn(Completable.complete());
     when(irc.setIrcv3CapabilityEnabled("libera", "message-tags", true))
@@ -31,6 +32,7 @@ class IrcMediatorInteractionPortTest {
 
     assertEquals(1, port.events().test().assertComplete().values().size());
     port.whois("libera", "alice").blockingAwait();
+    port.whowas("libera", "alice", 5).blockingAwait();
     port.sendPrivateMessage("libera", "alice", "hi").blockingAwait();
     port.sendRaw("libera", "MODE #ircafe +o alice").blockingAwait();
     port.setIrcv3CapabilityEnabled("libera", "message-tags", true).blockingAwait();
@@ -45,6 +47,7 @@ class IrcMediatorInteractionPortTest {
 
     port.events().test().assertComplete().assertNoValues();
     port.whois("libera", "alice").blockingAwait();
+    port.whowas("libera", "alice", 5).blockingAwait();
     port.sendPrivateMessage("libera", "alice", "hi").blockingAwait();
     port.sendRaw("libera", "MODE #ircafe +o alice").blockingAwait();
     port.setIrcv3CapabilityEnabled("libera", "message-tags", true).blockingAwait();

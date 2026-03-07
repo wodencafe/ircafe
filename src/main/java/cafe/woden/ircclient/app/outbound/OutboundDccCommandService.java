@@ -5,7 +5,7 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.dcc.DccTransferStore;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
@@ -60,7 +60,7 @@ public class OutboundDccCommandService {
   private static final String DCC_ERR_TAG = "(dcc-error)";
 
   private final UiPort ui;
-  private final IrcClientService irc;
+  private final IrcMediatorInteractionPort mediatorIrc;
   private final TargetCoordinator targetCoordinator;
   private final ConnectionCoordinator connectionCoordinator;
   private final DccTransferStore dccTransferStore;
@@ -79,13 +79,13 @@ public class OutboundDccCommandService {
 
   public OutboundDccCommandService(
       UiPort ui,
-      IrcClientService irc,
+      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
       TargetCoordinator targetCoordinator,
       ConnectionCoordinator connectionCoordinator,
       DccTransferStore dccTransferStore,
       @Qualifier(ExecutorConfig.OUTBOUND_DCC_EXECUTOR) ExecutorService io) {
     this.ui = ui;
-    this.irc = irc;
+    this.mediatorIrc = mediatorIrc;
     this.targetCoordinator = targetCoordinator;
     this.connectionCoordinator = connectionCoordinator;
     this.dccTransferStore = dccTransferStore;
@@ -287,7 +287,8 @@ public class OutboundDccCommandService {
           DccTransferStore.ActionHint.NONE);
 
       disposables.add(
-          irc.sendPrivateMessage(sid, n, ctcp)
+          mediatorIrc
+              .sendPrivateMessage(sid, n, ctcp)
               .subscribe(
                   () -> {
                     ui.appendStatus(pm, DCC_TAG, "Offer sent. Waiting for " + n + " to connect…");
@@ -436,7 +437,8 @@ public class OutboundDccCommandService {
           DccTransferStore.ActionHint.NONE);
 
       disposables.add(
-          irc.sendPrivateMessage(sid, n, ctcp)
+          mediatorIrc
+              .sendPrivateMessage(sid, n, ctcp)
               .subscribe(
                   () -> {
                     ui.appendStatus(pm, DCC_TAG, "Offer sent. Waiting for " + n + " to connect…");
@@ -718,7 +720,7 @@ public class OutboundDccCommandService {
         session.writer().write("\r\n");
         session.writer().flush();
       }
-      String me = irc.currentNick(sid).orElse("me");
+      String me = mediatorIrc.currentNick(sid).orElse("me");
       ui.appendChat(pm, "(" + me + ")", "[DCC] " + message, true);
     } catch (Exception e) {
       ui.appendError(pm, DCC_ERR_TAG, "Failed to write DCC chat message: " + e.getMessage());
