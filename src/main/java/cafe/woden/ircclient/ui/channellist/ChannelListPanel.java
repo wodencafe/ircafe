@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.channellist;
 
 import cafe.woden.ircclient.ui.backend.BackendUiContext;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
@@ -218,7 +219,7 @@ public final class ChannelListPanel extends JPanel {
   private volatile Consumer<String> onJoinChannel;
   private volatile Runnable onRunListRequest;
   private volatile Consumer<String> onRunAlisRequest;
-  private volatile BackendUiContext backendUiContext = BackendUiContext.ircOnly();
+  private volatile BackendUiProfile backendUiProfile = BackendUiProfile.ircOnly("");
   private volatile Consumer<String> onAddChannelRequest;
   private volatile Consumer<String> onReconnectChannelRequest;
   private volatile Consumer<String> onDisconnectChannelRequest;
@@ -573,6 +574,7 @@ public final class ChannelListPanel extends JPanel {
 
   public void setServerId(String serverId) {
     this.serverId = normalizeServerId(serverId);
+    this.backendUiProfile = currentBackendUiProfile().withServerId(this.serverId);
     updateListActionPresentation();
     refreshCurrentServerViews();
     refreshOpenDetailsDialog();
@@ -594,12 +596,20 @@ public final class ChannelListPanel extends JPanel {
     this.onRunAlisRequest = onRunAlisRequest;
   }
 
-  public void setBackendUiContext(BackendUiContext backendUiContext) {
-    this.backendUiContext =
-        backendUiContext == null ? BackendUiContext.ircOnly() : backendUiContext;
+  public void setBackendUiProfile(BackendUiProfile backendUiProfile) {
+    BackendUiProfile profile =
+        backendUiProfile == null ? BackendUiProfile.ircOnly("") : backendUiProfile;
+    this.backendUiProfile = profile;
+    this.serverId = profile.serverId();
     updateListActionPresentation();
+    refreshCurrentServerViews();
+    refreshOpenDetailsDialog();
     updateListHeader();
     updateListButtons();
+  }
+
+  public void setBackendUiContext(BackendUiContext backendUiContext) {
+    setBackendUiProfile(new BackendUiProfile(currentServerId(), backendUiContext));
   }
 
   public void setIsMatrixServer(java.util.function.Predicate<String> isMatrixServer) {
@@ -1232,7 +1242,7 @@ public final class ChannelListPanel extends JPanel {
   private boolean isMatrixServer(String sid) {
     String serverId = normalizeServerId(sid);
     if (serverId.isEmpty()) return false;
-    BackendUiContext context = backendUiContext;
+    BackendUiContext context = currentBackendUiProfile().backendUiContext();
     if (context == null) return false;
     try {
       return context.isMatrixServer(serverId);
@@ -1243,6 +1253,11 @@ public final class ChannelListPanel extends JPanel {
 
   private ChannelListUxMode uxModeForServer(String sid) {
     return isMatrixServer(sid) ? matrixListUxMode : ircListUxMode;
+  }
+
+  private BackendUiProfile currentBackendUiProfile() {
+    BackendUiProfile profile = backendUiProfile;
+    return profile == null ? BackendUiProfile.ircOnly(serverId) : profile;
   }
 
   private final class ChannelListUxModeContext implements ChannelListUxMode.Context {

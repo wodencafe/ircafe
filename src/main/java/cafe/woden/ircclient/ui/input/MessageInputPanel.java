@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.input;
 import cafe.woden.ircclient.irc.Ircv3DraftNormalizer;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.backend.BackendUiContext;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettings;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettings;
@@ -59,8 +60,7 @@ public class MessageInputPanel extends JPanel {
       PublishProcessor.<String>create().toSerialized();
   private volatile Runnable onActivated = () -> {};
   private volatile Consumer<String> onDraftChanged = t -> {};
-  private volatile BackendUiContext backendUiContext = BackendUiContext.ircOnly();
-  private volatile String activeServerId = "";
+  private volatile BackendUiProfile backendUiProfile = BackendUiProfile.ircOnly("");
   private final MessageInputTypingSupport typingSupport;
   private final UiSettingsBus settingsBus;
   private final SpellcheckSettingsBus spellcheckSettingsBus;
@@ -656,24 +656,9 @@ public class MessageInputPanel extends JPanel {
     }
   }
 
-  private boolean isMatrixServer(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return false;
-    BackendUiContext context = backendUiContext;
-    if (context == null) return false;
-    try {
-      return context.isMatrixServer(sid);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
   private MessageInputUploadUxMode uploadUxModeForActiveServer() {
-    return isMatrixServer(activeServerId) ? matrixUploadUxMode : ircUploadUxMode;
-  }
-
-  private static String normalizeServerId(String serverId) {
-    return Objects.toString(serverId, "").trim();
+    BackendUiProfile profile = backendUiProfile;
+    return profile != null && profile.isMatrixServer() ? matrixUploadUxMode : ircUploadUxMode;
   }
 
   private final class UploadTransferHandler extends TransferHandler {
@@ -766,10 +751,14 @@ public class MessageInputPanel extends JPanel {
     composeSupport.openQuickReactionPicker(ircTarget, messageId);
   }
 
-  public void setBackendUiContext(BackendUiContext backendUiContext) {
-    this.backendUiContext =
-        backendUiContext == null ? BackendUiContext.ircOnly() : backendUiContext;
+  public void setBackendUiProfile(BackendUiProfile backendUiProfile) {
+    this.backendUiProfile =
+        backendUiProfile == null ? BackendUiProfile.ircOnly("") : backendUiProfile;
     refreshUploadUxStateOnEdt();
+  }
+
+  public void setBackendUiContext(BackendUiContext backendUiContext) {
+    setBackendUiProfile(new BackendUiProfile(activeServerId(), backendUiContext));
   }
 
   public void setIsMatrixServer(java.util.function.Predicate<String> isMatrixServer) {
@@ -777,8 +766,16 @@ public class MessageInputPanel extends JPanel {
   }
 
   public void setActiveServerId(String serverId) {
-    this.activeServerId = normalizeServerId(serverId);
-    refreshUploadUxStateOnEdt();
+    setBackendUiProfile(currentBackendUiProfile().withServerId(serverId));
+  }
+
+  private BackendUiProfile currentBackendUiProfile() {
+    BackendUiProfile profile = backendUiProfile;
+    return profile == null ? BackendUiProfile.ircOnly("") : profile;
+  }
+
+  private String activeServerId() {
+    return currentBackendUiProfile().serverId();
   }
 
   /** Called when this input becomes the active typing surface (focus or click). */

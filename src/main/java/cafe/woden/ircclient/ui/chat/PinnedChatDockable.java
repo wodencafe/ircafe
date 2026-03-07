@@ -5,7 +5,7 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
-import cafe.woden.ircclient.ui.backend.BackendUiContext;
+import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
@@ -158,8 +158,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     // Input panel embedded in the pinned view.
     this.inputPanel = new MessageInputPanel(settingsBus, historyStore, spellcheckSettingsBus);
-    this.inputPanel.setBackendUiContext(BackendUiContext.fromBackendModePort(backendModePort));
-    this.inputPanel.setActiveServerId(target.serverId());
+    this.inputPanel.setBackendUiProfile(
+        BackendUiProfile.fromBackendModePort(backendModePort, target.serverId()));
     add(inputPanel, BorderLayout.SOUTH);
 
     // Persist draft text continuously so closing/undocking doesn't lose the latest draft.

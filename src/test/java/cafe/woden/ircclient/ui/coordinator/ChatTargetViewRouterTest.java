@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.coordinator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -64,7 +65,13 @@ class ChatTargetViewRouterTest {
 
     assertEquals(ChatTargetViewRouter.TargetViewType.UI_ONLY, viewType);
     assertEquals("libera", refreshedServerId.get());
-    verify(channelListPanel).setServerId("libera");
+    verify(channelListPanel)
+        .setBackendUiProfile(
+            argThat(
+                profile ->
+                    profile != null
+                        && "libera".equals(profile.serverId())
+                        && !profile.isMatrixServer()));
     verifyNoInteractions(monitorPanel);
   }
 
