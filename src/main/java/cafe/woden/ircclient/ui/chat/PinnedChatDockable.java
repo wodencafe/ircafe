@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.ui.chat;
 
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -95,7 +94,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       CommandHistoryStore historyStore,
       Consumer<TargetRef> activate,
       OutboundLineBus outboundBus,
-      IrcClientService irc,
+      IrcTypingPort typingPort,
+      IrcReadMarkerPort readMarkerPort,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       Function<String, BackendUiProfile> backendUiProfileProvider,
       ActiveInputRouter activeInputRouter,
@@ -107,8 +107,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.chatHistoryService = chatHistoryService;
     this.activate = activate;
     this.outboundBus = outboundBus;
-    this.typingPort = IrcTypingPort.from(Objects.requireNonNull(irc, "irc"));
-    this.readMarkerPort = IrcReadMarkerPort.from(irc);
+    this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
+    this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
     this.messageActionCapabilityPolicy =
         Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.activeInputRouter = activeInputRouter;

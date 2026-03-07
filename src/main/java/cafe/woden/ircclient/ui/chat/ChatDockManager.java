@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.chat;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
@@ -46,7 +47,8 @@ public class ChatDockManager {
   private final UiSettingsBus settingsBus;
   private final SpellcheckSettingsBus spellcheckSettingsBus;
   private final OutboundLineBus outboundBus;
-  private final IrcClientService irc;
+  private final IrcTypingPort typingPort;
+  private final IrcReadMarkerPort readMarkerPort;
   private final BackendUiProfileProvider backendUiProfileProvider;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final ActiveInputRouter activeInputRouter;
@@ -81,7 +83,8 @@ public class ChatDockManager {
       UiSettingsBus settingsBus,
       SpellcheckSettingsBus spellcheckSettingsBus,
       OutboundLineBus outboundBus,
-      IrcClientService irc,
+      IrcTypingPort typingPort,
+      IrcReadMarkerPort readMarkerPort,
       BackendUiProfileProvider backendUiProfileProvider,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ActiveInputRouter activeInputRouter,
@@ -94,7 +97,8 @@ public class ChatDockManager {
     this.settingsBus = settingsBus;
     this.spellcheckSettingsBus = spellcheckSettingsBus;
     this.outboundBus = outboundBus;
-    this.irc = irc;
+    this.typingPort = java.util.Objects.requireNonNull(typingPort, "typingPort");
+    this.readMarkerPort = java.util.Objects.requireNonNull(readMarkerPort, "readMarkerPort");
     this.backendUiProfileProvider = backendUiProfileProvider;
     this.messageActionCapabilityPolicy =
         java.util.Objects.requireNonNull(
@@ -367,7 +371,8 @@ public class ChatDockManager {
             commandHistoryStore,
             activationBus::activate,
             outboundBus,
-            irc,
+            typingPort,
+            readMarkerPort,
             messageActionCapabilityPolicy,
             backendUiProfileProvider::profileForServer,
             activeInputRouter,

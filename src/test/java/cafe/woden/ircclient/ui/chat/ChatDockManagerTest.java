@@ -7,7 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
@@ -41,7 +42,8 @@ class ChatDockManagerTest {
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     SpellcheckSettingsBus spellcheckSettingsBus = mock(SpellcheckSettingsBus.class);
     OutboundLineBus outboundBus = mock(OutboundLineBus.class);
-    IrcClientService irc = mock(IrcClientService.class);
+    IrcTypingPort typingPort = mock(IrcTypingPort.class);
+    IrcReadMarkerPort readMarkerPort = mock(IrcReadMarkerPort.class);
     BackendUiProfileProvider backendUiProfileProvider = mock(BackendUiProfileProvider.class);
     MessageActionCapabilityPolicy messageActionCapabilityPolicy =
         mock(MessageActionCapabilityPolicy.class);
@@ -57,7 +59,8 @@ class ChatDockManagerTest {
             settingsBus,
             spellcheckSettingsBus,
             outboundBus,
-            irc,
+            typingPort,
+            readMarkerPort,
             backendUiProfileProvider,
             messageActionCapabilityPolicy,
             activeInputRouter,
@@ -100,7 +103,8 @@ class ChatDockManagerTest {
             mock(UiSettingsBus.class),
             mock(SpellcheckSettingsBus.class),
             mock(OutboundLineBus.class),
-            mock(IrcClientService.class),
+            mock(IrcTypingPort.class),
+            mock(IrcReadMarkerPort.class),
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
             mock(ActiveInputRouter.class),
