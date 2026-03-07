@@ -179,7 +179,6 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class),
             any(),
             any(),
-            any(),
             any());
     inOrder.verify(irc).events();
     inOrder.verify(ui).ircv3CapabilityToggleRequests();
@@ -197,7 +196,6 @@ class IrcMediatorMockVerifyTest {
             eq(ui),
             eq(targetCoordinator),
             any(CompositeDisposable.class),
-            any(),
             any(),
             any(),
             any());
@@ -246,8 +244,8 @@ class IrcMediatorMockVerifyTest {
     mediator.start();
 
     @SuppressWarnings("unchecked")
-    ArgumentCaptor<Consumer<String>> quasselRequestCaptor =
-        ArgumentCaptor.forClass((Class<Consumer<String>>) (Class<?>) Consumer.class);
+    ArgumentCaptor<Consumer<ParsedInput.BackendNamed>> quasselRequestCaptor =
+        ArgumentCaptor.forClass((Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
     verify(mediatorUiSubscriptionBinder)
         .bind(
             eq(ui),
@@ -255,10 +253,13 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class),
             any(),
             any(),
-            any(),
             quasselRequestCaptor.capture());
 
-    quasselRequestCaptor.getValue().accept("quassel");
+    quasselRequestCaptor
+        .getValue()
+        .accept(
+            new ParsedInput.BackendNamed(
+                BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "quassel"));
 
     verify(outboundCommandDispatcher)
         .dispatch(
@@ -276,8 +277,8 @@ class IrcMediatorMockVerifyTest {
     mediator.start();
 
     @SuppressWarnings("unchecked")
-    ArgumentCaptor<Consumer<String>> quasselSetupRequestCaptor =
-        ArgumentCaptor.forClass((Class<Consumer<String>>) (Class<?>) Consumer.class);
+    ArgumentCaptor<Consumer<ParsedInput.BackendNamed>> quasselSetupRequestCaptor =
+        ArgumentCaptor.forClass((Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
     verify(mediatorUiSubscriptionBinder)
         .bind(
             eq(ui),
@@ -285,10 +286,11 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class),
             any(),
             any(),
-            quasselSetupRequestCaptor.capture(),
-            any());
+            quasselSetupRequestCaptor.capture());
 
-    quasselSetupRequestCaptor.getValue().accept("quassel");
+    quasselSetupRequestCaptor
+        .getValue()
+        .accept(new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel"));
 
     verify(outboundCommandDispatcher)
         .dispatch(

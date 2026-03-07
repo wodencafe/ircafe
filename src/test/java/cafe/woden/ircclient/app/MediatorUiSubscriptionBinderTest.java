@@ -7,6 +7,8 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
+import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.model.TargetRef;
@@ -52,7 +54,7 @@ class MediatorUiSubscriptionBinderTest {
     when(ui.clearLogRequests()).thenReturn(Flowable.never());
 
     MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
-    binder.bind(ui, targetCoordinator, disposables, req -> {}, line -> {}, sid -> {}, sid -> {});
+    binder.bind(ui, targetCoordinator, disposables, req -> {}, line -> {}, cmd -> {});
 
     TargetRef channel = new TargetRef("libera", "#ircafe");
     joinRequests.onNext(channel);
@@ -71,7 +73,7 @@ class MediatorUiSubscriptionBinderTest {
     UiPort ui = Mockito.mock(UiPort.class);
     TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
     @SuppressWarnings("unchecked")
-    Consumer<String> onQuasselNetworkManagerRequest = Mockito.mock(Consumer.class);
+    Consumer<ParsedInput.BackendNamed> onBackendNamedCommandRequest = Mockito.mock(Consumer.class);
 
     PublishProcessor<String> quasselNetworkManagerRequests = PublishProcessor.create();
 
@@ -96,12 +98,14 @@ class MediatorUiSubscriptionBinderTest {
         disposables,
         req -> {},
         line -> {},
-        sid -> {},
-        onQuasselNetworkManagerRequest);
+        onBackendNamedCommandRequest);
 
     quasselNetworkManagerRequests.onNext("quassel");
 
-    verify(onQuasselNetworkManagerRequest, timeout(1_000)).accept("quassel");
+    verify(onBackendNamedCommandRequest, timeout(1_000))
+        .accept(
+            new ParsedInput.BackendNamed(
+                BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "quassel"));
   }
 
   @Test
@@ -127,7 +131,7 @@ class MediatorUiSubscriptionBinderTest {
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
 
     MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
-    binder.bind(ui, targetCoordinator, disposables, req -> {}, line -> {}, sid -> {}, sid -> {});
+    binder.bind(ui, targetCoordinator, disposables, req -> {}, line -> {}, cmd -> {});
 
     verify(ui, timeout(1_000))
         .appendError(status, "(ui-error)", "java.lang.IllegalStateException: boom");
@@ -138,7 +142,7 @@ class MediatorUiSubscriptionBinderTest {
     UiPort ui = Mockito.mock(UiPort.class);
     TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
     @SuppressWarnings("unchecked")
-    Consumer<String> onQuasselSetupRequest = Mockito.mock(Consumer.class);
+    Consumer<ParsedInput.BackendNamed> onBackendNamedCommandRequest = Mockito.mock(Consumer.class);
 
     PublishProcessor<String> quasselSetupRequests = PublishProcessor.create();
 
@@ -163,11 +167,11 @@ class MediatorUiSubscriptionBinderTest {
         disposables,
         req -> {},
         line -> {},
-        onQuasselSetupRequest,
-        sid -> {});
+        onBackendNamedCommandRequest);
 
     quasselSetupRequests.onNext("quassel");
 
-    verify(onQuasselSetupRequest, timeout(1_000)).accept("quassel");
+    verify(onBackendNamedCommandRequest, timeout(1_000))
+        .accept(new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel"));
   }
 }
