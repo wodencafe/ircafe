@@ -25,6 +25,7 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
@@ -85,6 +86,7 @@ public class IrcMediator implements MediatorControlPort {
 
   private final IrcClientService irc;
   private final IrcTypingPort typingPort;
+  private final IrcReadMarkerPort readMarkerPort;
   private final UiPort ui;
   private final CommandParser commandParser;
   private final UserCommandAliasEngine userCommandAliasEngine;
@@ -175,6 +177,7 @@ public class IrcMediator implements MediatorControlPort {
   public IrcMediator(
       IrcClientService irc,
       IrcTypingPort typingPort,
+      IrcReadMarkerPort readMarkerPort,
       UiPort ui,
       CommandParser commandParser,
       UserCommandAliasEngine userCommandAliasEngine,
@@ -210,6 +213,7 @@ public class IrcMediator implements MediatorControlPort {
 
     this.irc = irc;
     this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
+    this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
     this.ui = ui;
     this.commandParser = commandParser;
     this.userCommandAliasEngine = userCommandAliasEngine;
@@ -1905,7 +1909,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.ReadMarkerObserved ev -> {
-        if (!irc.isReadMarkerAvailable(sid)) return;
+        if (!readMarkerPort.isReadMarkerAvailable(sid)) return;
         if (!shouldApplyReadMarkerEvent(sid, ev.from())) return;
         TargetRef dest = resolveReadMarkerTarget(sid, ev.target(), status);
         long markerEpochMs = parseReadMarkerEpochMs(ev.marker(), ev.at());

@@ -38,6 +38,7 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
@@ -71,6 +72,7 @@ class IrcMediatorMockVerifyTest {
 
   private final IrcClientService irc = mock(IrcClientService.class);
   private final IrcTypingPort typingPort = mock(IrcTypingPort.class);
+  private final IrcReadMarkerPort readMarkerPort = mock(IrcReadMarkerPort.class);
   private final UiPort ui = mock(UiPort.class);
   private final CommandParser commandParser = mock(CommandParser.class);
   private final UserCommandAliasEngine userCommandAliasEngine = mock(UserCommandAliasEngine.class);
@@ -120,6 +122,7 @@ class IrcMediatorMockVerifyTest {
       new IrcMediator(
           irc,
           typingPort,
+          readMarkerPort,
           ui,
           commandParser,
           userCommandAliasEngine,
@@ -661,7 +664,7 @@ class IrcMediatorMockVerifyTest {
 
   @Test
   void readMarkerTimestampSelectorParsesAndAppliesEpoch() throws Exception {
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(readMarkerPort.isReadMarkerAvailable("libera")).thenReturn(true);
     when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
 
     invokeOnServerIrcEvent(
@@ -682,7 +685,7 @@ class IrcMediatorMockVerifyTest {
 
   @Test
   void readMarkerWildcardAppliesZeroEpoch() throws Exception {
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
+    when(readMarkerPort.isReadMarkerAvailable("libera")).thenReturn(true);
     when(irc.currentNick("libera")).thenReturn(java.util.Optional.of("me"));
 
     invokeOnServerIrcEvent(
