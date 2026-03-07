@@ -67,8 +67,12 @@ public class GnomeDbusNotificationBackend {
     if (!ensureLiveConnection()) {
       return NotifyResult.failed("DBus session bus not reachable");
     }
-    if (Boolean.FALSE.equals(liveActionsSupported)) {
+    if (Boolean.FALSE.equals(liveActionsSupported) && onDefaultClick == null) {
       return NotifyResult.failed("Notification server does not support actions");
+    }
+    if (Boolean.FALSE.equals(liveActionsSupported) && onDefaultClick != null) {
+      log.debug(
+          "[ircafe] Notification server does not advertise actions; attempting best-effort default-action delivery");
     }
 
     // Minimal default-click action. Some servers won't show a button for "default", but still emit

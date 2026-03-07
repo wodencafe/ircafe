@@ -42,6 +42,23 @@ class TrayNotificationServiceTest {
     }
   }
 
+  @Test
+  void notifySendFallbackIsSkippedForClickableNotificationsInAutoMode() throws Exception {
+    assertFalse(invokeShouldUseNotifySendFallback(true, NotificationBackendMode.AUTO));
+  }
+
+  @Test
+  void notifySendFallbackIsKeptForClickableNotificationsInNativeOnlyMode() throws Exception {
+    assertTrue(invokeShouldUseNotifySendFallback(true, NotificationBackendMode.NATIVE_ONLY));
+  }
+
+  @Test
+  void notifySendFallbackIsAlwaysAllowedWhenNoClickHandlerIsNeeded() throws Exception {
+    assertTrue(invokeShouldUseNotifySendFallback(false, NotificationBackendMode.AUTO));
+    assertTrue(invokeShouldUseNotifySendFallback(false, NotificationBackendMode.TWO_SLICES_ONLY));
+    assertTrue(invokeShouldUseNotifySendFallback(false, NotificationBackendMode.NATIVE_ONLY));
+  }
+
   private static TrayNotificationService newService(
       UiSettings settings, boolean frameActive, TargetRef activeTarget) {
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
@@ -97,6 +114,15 @@ class TrayNotificationServiceTest {
             "passesNotifyConditions", TargetRef.class, boolean.class);
     m.setAccessible(true);
     return (boolean) m.invoke(service, target, allowWhenFocused);
+  }
+
+  private static boolean invokeShouldUseNotifySendFallback(
+      boolean hasClickHandler, NotificationBackendMode mode) throws Exception {
+    Method m =
+        TrayNotificationService.class.getDeclaredMethod(
+            "shouldUseNotifySendFallback", boolean.class, NotificationBackendMode.class);
+    m.setAccessible(true);
+    return (boolean) m.invoke(null, hasClickHandler, mode);
   }
 
   private static UiSettings baseSettings(

@@ -113,13 +113,35 @@ class QuasselOutboundCommandServiceTest {
   }
 
   @Test
-  void quasselSetupReportsWhenNoPendingSetupExists() {
+  void quasselSetupReconnectsToProbeWhenNoPendingSetupExistsAndServerIsDisconnected() {
     TargetRef status = new TargetRef("quassel", "status");
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
     when(serverCatalog.find("quassel"))
         .thenReturn(
             Optional.of(serverWithBackend("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
     when(irc.isQuasselCoreSetupPending("quassel")).thenReturn(false);
+    when(connectionCoordinator.isConnected("quassel")).thenReturn(false);
+
+    service.handleQuasselSetup(disposables, "quassel");
+
+    verify(ui)
+        .appendStatus(
+            status,
+            "(qsetup)",
+            "No pending Quassel setup is cached yet. Connecting to check setup state…");
+    verify(irc, never()).submitQuasselCoreSetup(anyString(), any());
+    verify(connectionCoordinator).connectOne("quassel");
+  }
+
+  @Test
+  void quasselSetupReportsNoPendingWhenServerIsAlreadyConnected() {
+    TargetRef status = new TargetRef("quassel", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(serverCatalog.find("quassel"))
+        .thenReturn(
+            Optional.of(serverWithBackend("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(irc.isQuasselCoreSetupPending("quassel")).thenReturn(false);
+    when(connectionCoordinator.isConnected("quassel")).thenReturn(true);
 
     service.handleQuasselSetup(disposables, "quassel");
 
