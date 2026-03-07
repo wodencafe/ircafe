@@ -31,6 +31,10 @@ class OutboundUploadCommandServiceTest {
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
   private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
+      new OutboundBackendFeatureRegistry(List.of(new MatrixOutboundBackendFeatureAdapter()));
+  private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
+      new OutboundBackendCapabilityPolicy(commandTargetPolicy, outboundBackendFeatureRegistry);
   private final MatrixOutboundCommandSupport matrixCommandSupport =
       new MatrixOutboundCommandSupport();
   private final BackendUploadCommandRegistry backendUploadCommandRegistry =
@@ -38,7 +42,7 @@ class OutboundUploadCommandServiceTest {
           List.of(new MatrixUploadCommandTranslationHandler(matrixCommandSupport)));
   private final MatrixOutboundCommandService matrixOutboundCommandService =
       new MatrixOutboundCommandService(
-          ui, commandTargetPolicy, matrixCommandSupport, backendUploadCommandRegistry);
+          ui, outboundBackendCapabilityPolicy, matrixCommandSupport, backendUploadCommandRegistry);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =

@@ -13,9 +13,13 @@ import org.springframework.stereotype.Component;
 @Component
 final class QuasselOutboundCommandSupport {
   private final ServerCatalog serverCatalog;
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
 
-  QuasselOutboundCommandSupport(ServerCatalog serverCatalog) {
+  QuasselOutboundCommandSupport(
+      ServerCatalog serverCatalog, OutboundBackendCapabilityPolicy backendCapabilityPolicy) {
     this.serverCatalog = serverCatalog;
+    this.backendCapabilityPolicy =
+        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
   }
 
   boolean ensureQuasselServerBackend(String serverId, TargetRef out, String statusTag, UiPort ui) {
@@ -33,7 +37,7 @@ final class QuasselOutboundCommandSupport {
       return false;
     }
     IrcProperties.Server.Backend backend = server.orElseThrow().backend();
-    if (backend == IrcProperties.Server.Backend.QUASSEL_CORE) {
+    if (backendCapabilityPolicy.supportsQuasselCoreCommands(backend)) {
       return true;
     }
     ui.appendStatus(

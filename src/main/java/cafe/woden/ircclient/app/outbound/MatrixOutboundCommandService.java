@@ -25,17 +25,18 @@ final class MatrixOutboundCommandService {
   }
 
   private final UiPort ui;
-  private final CommandTargetPolicy commandTargetPolicy;
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   private final MatrixOutboundCommandSupport matrixCommandSupport;
   private final BackendUploadCommandRegistry backendUploadCommandRegistry;
 
   MatrixOutboundCommandService(
       UiPort ui,
-      CommandTargetPolicy commandTargetPolicy,
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
       MatrixOutboundCommandSupport matrixCommandSupport,
       BackendUploadCommandRegistry backendUploadCommandRegistry) {
     this.ui = Objects.requireNonNull(ui, "ui");
-    this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
+    this.backendCapabilityPolicy =
+        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
     this.matrixCommandSupport =
         Objects.requireNonNull(matrixCommandSupport, "matrixCommandSupport");
     this.backendUploadCommandRegistry =
@@ -59,7 +60,14 @@ final class MatrixOutboundCommandService {
       return UploadPreparation.usage();
     }
 
-    IrcProperties.Server.Backend backend = commandTargetPolicy.backendForServer(target.serverId());
+    IrcProperties.Server.Backend backend =
+        backendCapabilityPolicy.backendForServer(target.serverId());
+    if (!backendCapabilityPolicy.supportsSemanticUpload(backend)) {
+      return UploadPreparation.unsupportedBackend(
+          "Server '"
+              + target.serverId()
+              + "' does not use the Matrix backend. /upload is only available on Matrix-backed servers.");
+    }
     UploadCommandTranslationHandler translationHandler = backendUploadCommandRegistry.find(backend);
     if (translationHandler == null) {
       return UploadPreparation.unsupportedBackend(

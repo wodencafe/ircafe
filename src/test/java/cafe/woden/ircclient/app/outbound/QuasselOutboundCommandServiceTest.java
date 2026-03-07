@@ -39,8 +39,13 @@ class QuasselOutboundCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
+  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
+      new OutboundBackendFeatureRegistry(List.of(new QuasselOutboundBackendFeatureAdapter()));
+  private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
+      new OutboundBackendCapabilityPolicy(commandTargetPolicy, outboundBackendFeatureRegistry);
   private final QuasselOutboundCommandSupport quasselCommandSupport =
-      new QuasselOutboundCommandSupport(serverCatalog);
+      new QuasselOutboundCommandSupport(serverCatalog, outboundBackendCapabilityPolicy);
   private final QuasselOutboundCommandService service =
       new QuasselOutboundCommandService(
           irc, ui, connectionCoordinator, targetCoordinator, quasselCommandSupport);
