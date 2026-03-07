@@ -27,7 +27,7 @@ import org.springframework.stereotype.Component;
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
  * <p>Includes: /join, /part, /connect, /disconnect, /reconnect, /quit, /nick, /away, /query, /msg,
- * /notice, /me, /topic, /kick, /say, /quote.
+ * /notice, /me, /say, /quote.
  *
  * <p>Behavior is intended to be preserved.
  */
@@ -463,104 +463,6 @@ public class OutboundChatCommandService {
                         String.valueOf(err))));
   }
 
-  public void handleTopic(CompositeDisposable disposables, String first, String rest) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(topic)", "Select a server first.");
-      return;
-    }
-
-    String f = first == null ? "" : first.trim();
-    String r = rest == null ? "" : rest.trim();
-
-    String channel;
-    String topicText = "";
-    boolean settingTopic;
-
-    if (commandTargetPolicy.isChannelLikeTargetForServer(at.serverId(), f)) {
-      channel = f;
-      topicText = r;
-      settingTopic = !topicText.isEmpty();
-    } else if (at.isChannel()) {
-      channel = at.target();
-      topicText = (f + (r.isEmpty() ? "" : " " + r)).trim();
-      settingTopic = !topicText.isEmpty();
-    } else {
-      ui.appendStatus(at, "(topic)", "Usage: /topic [#channel] [new topic...]");
-      ui.appendStatus(at, "(topic)", "Tip: from a channel tab you can omit #channel.");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    if (containsCrlf(channel) || containsCrlf(topicText)) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(topic)",
-          "Refusing to send multi-line /topic input.");
-      return;
-    }
-
-    String line = settingTopic ? ("TOPIC " + channel + " :" + topicText) : ("TOPIC " + channel);
-    TargetRef out = new TargetRef(at.serverId(), channel);
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    PreparedRawLine prepared = prepareCorrelatedRawLine(out, line);
-    ui.ensureTargetExists(out);
-    ui.appendStatus(out, "(topic)", "→ " + withLabelHint(line, prepared.label()));
-
-    disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
-            .subscribe(
-                () -> {}, err -> ui.appendError(status, "(topic-error)", String.valueOf(err))));
-  }
-
-  public void handleKick(
-      CompositeDisposable disposables, String channel, String nick, String reason) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(kick)", "Select a server first.");
-      return;
-    }
-
-    String ch = resolveChannelOrNull(at, channel);
-    String n = nick == null ? "" : nick.trim();
-    String rsn = reason == null ? "" : reason.trim();
-
-    if (ch == null || n.isEmpty()) {
-      ui.appendStatus(at, "(kick)", "Usage: /kick [#channel] <nick> [reason]");
-      ui.appendStatus(at, "(kick)", "Tip: from a channel tab you can omit #channel.");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    if (containsCrlf(ch) || containsCrlf(n) || containsCrlf(rsn)) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(kick)",
-          "Refusing to send multi-line /kick input.");
-      return;
-    }
-
-    String line = "KICK " + ch + " " + n + (rsn.isEmpty() ? "" : " :" + rsn);
-    TargetRef out = new TargetRef(at.serverId(), ch);
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    PreparedRawLine prepared = prepareCorrelatedRawLine(out, line);
-    ui.ensureTargetExists(out);
-    ui.appendStatus(out, "(kick)", "→ " + withLabelHint(line, prepared.label()));
-
-    disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
-            .subscribe(
-                () -> {}, err -> ui.appendError(status, "(kick-error)", String.valueOf(err))));
-  }
-
   public void handleHelp(String topic) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef out = (at != null) ? at : targetCoordinator.safeStatusTarget();
@@ -984,17 +886,6 @@ public class OutboundChatCommandService {
   }
 
   private record ConnectionCommandTarget(boolean all, String serverId) {}
-
-  private String resolveChannelOrNull(TargetRef active, String explicitChannel) {
-    String ch = explicitChannel == null ? "" : explicitChannel.trim();
-    if (!ch.isEmpty()) {
-      String sid = active == null ? "" : active.serverId();
-      if (commandTargetPolicy.isChannelLikeTargetForServer(sid, ch)) return ch;
-      return null;
-    }
-    if (commandTargetPolicy.isChannelLikeTarget(active)) return active.target();
-    return null;
-  }
 
   private static boolean containsCrlf(String s) {
     return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);

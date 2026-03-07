@@ -23,6 +23,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundChatHistoryCommandService outboundChatHistoryCommandService;
   private final OutboundInviteCommandService outboundInviteCommandService;
   private final OutboundNamesWhoListCommandService outboundNamesWhoListCommandService;
+  private final OutboundTopicKickCommandService outboundTopicKickCommandService;
   private final QuasselOutboundCommandService quasselOutboundCommandService;
   private final OutboundUploadCommandService outboundUploadCommandService;
   private final OutboundMessageMutationCommandService outboundMessageMutationCommandService;
@@ -43,6 +44,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundChatHistoryCommandService outboundChatHistoryCommandService,
       OutboundInviteCommandService outboundInviteCommandService,
       OutboundNamesWhoListCommandService outboundNamesWhoListCommandService,
+      OutboundTopicKickCommandService outboundTopicKickCommandService,
       QuasselOutboundCommandService quasselOutboundCommandService,
       OutboundUploadCommandService outboundUploadCommandService,
       OutboundMessageMutationCommandService outboundMessageMutationCommandService,
@@ -60,6 +62,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundChatHistoryCommandService = outboundChatHistoryCommandService;
     this.outboundInviteCommandService = outboundInviteCommandService;
     this.outboundNamesWhoListCommandService = outboundNamesWhoListCommandService;
+    this.outboundTopicKickCommandService = outboundTopicKickCommandService;
     this.quasselOutboundCommandService = quasselOutboundCommandService;
     this.outboundUploadCommandService = outboundUploadCommandService;
     this.outboundMessageMutationCommandService = outboundMessageMutationCommandService;
@@ -156,12 +159,12 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     register(
         map,
         ParsedInput.Topic.class,
-        (d, cmd) -> outboundChatCommandService.handleTopic(d, cmd.first(), cmd.rest()));
+        (d, cmd) -> outboundTopicKickCommandService.handleTopic(d, cmd.first(), cmd.rest()));
     register(
         map,
         ParsedInput.Kick.class,
         (d, cmd) ->
-            outboundChatCommandService.handleKick(d, cmd.channel(), cmd.nick(), cmd.reason()));
+            outboundTopicKickCommandService.handleKick(d, cmd.channel(), cmd.nick(), cmd.reason()));
     register(
         map,
         ParsedInput.Invite.class,
