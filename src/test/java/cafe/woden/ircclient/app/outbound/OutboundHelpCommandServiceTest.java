@@ -48,6 +48,12 @@ class OutboundHelpCommandServiceTest {
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
       new OutboundRawLineCorrelationService(
           outboundBackendCapabilityPolicy, labeledResponseRoutingState);
+  private final MessageMutationOutboundCommandsRouter messageMutationOutboundCommandsRouter =
+      new MessageMutationOutboundCommandsRouter(
+          List.of(
+              new IrcMessageMutationOutboundCommands(),
+              new MatrixMessageMutationOutboundCommands(),
+              new QuasselMessageMutationOutboundCommands()));
   private final OutboundUploadCommandService outboundUploadCommandService =
       mock(OutboundUploadCommandService.class);
   private final OutboundHelpContributor uploadHelpContributor =
@@ -67,6 +73,7 @@ class OutboundHelpCommandServiceTest {
           IrcTargetMembershipPort.from(irc),
           IrcEchoCapabilityPort.from(irc),
           outboundBackendCapabilityPolicy,
+          messageMutationOutboundCommandsRouter,
           ui,
           connectionCoordinator,
           targetCoordinator,

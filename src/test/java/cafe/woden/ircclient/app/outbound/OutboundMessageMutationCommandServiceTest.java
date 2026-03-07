@@ -51,11 +51,18 @@ class OutboundMessageMutationCommandServiceTest {
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
       new OutboundRawLineCorrelationService(
           outboundBackendCapabilityPolicy, labeledResponseRoutingState);
+  private final MessageMutationOutboundCommandsRouter messageMutationOutboundCommandsRouter =
+      new MessageMutationOutboundCommandsRouter(
+          List.of(
+              new IrcMessageMutationOutboundCommands(),
+              new MatrixMessageMutationOutboundCommands(),
+              new QuasselMessageMutationOutboundCommands()));
   private final OutboundMessageMutationCommandService service =
       new OutboundMessageMutationCommandService(
           IrcTargetMembershipPort.from(irc),
           IrcEchoCapabilityPort.from(irc),
           outboundBackendCapabilityPolicy,
+          messageMutationOutboundCommandsRouter,
           ui,
           connectionCoordinator,
           targetCoordinator,

@@ -22,6 +22,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
   private final IrcTargetMembershipPort targetMembership;
   private final IrcEchoCapabilityPort echoCapabilityPort;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  private final MessageMutationOutboundCommandsRouter messageMutationOutboundCommandsRouter;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
@@ -32,6 +33,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       IrcEchoCapabilityPort echoCapabilityPort,
       OutboundBackendCapabilityPolicy backendCapabilityPolicy,
+      MessageMutationOutboundCommandsRouter messageMutationOutboundCommandsRouter,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
@@ -41,6 +43,9 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
     this.echoCapabilityPort = Objects.requireNonNull(echoCapabilityPort, "echoCapabilityPort");
     this.backendCapabilityPolicy =
         Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
+    this.messageMutationOutboundCommandsRouter =
+        Objects.requireNonNull(
+            messageMutationOutboundCommandsRouter, "messageMutationOutboundCommandsRouter");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
@@ -277,8 +282,11 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
           target, pendingEntry.pendingId(), pendingEntry.createdAt(), me, m);
     }
 
-    String rawLine =
-        "@+draft/reply=" + escapeIrcv3TagValue(msgId) + " PRIVMSG " + target.target() + " :" + m;
+    MessageMutationOutboundCommands mutationCommands = mutationCommandsForServer(target.serverId());
+    String rawLine = mutationCommands.buildReplyRawLine(target, msgId, m);
+    if (rawLine.isBlank()) {
+      return;
+    }
     OutboundRawLineCorrelationService.PreparedRawLine prepared =
         rawLineCorrelationService.prepare(target, rawLine);
 
@@ -323,13 +331,11 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       return;
     }
 
-    String rawLine =
-        "@+draft/react="
-            + escapeIrcv3TagValue(react)
-            + ";+draft/reply="
-            + escapeIrcv3TagValue(msgId)
-            + " TAGMSG "
-            + target.target();
+    MessageMutationOutboundCommands mutationCommands = mutationCommandsForServer(target.serverId());
+    String rawLine = mutationCommands.buildReactRawLine(target, msgId, react);
+    if (rawLine.isBlank()) {
+      return;
+    }
     OutboundRawLineCorrelationService.PreparedRawLine prepared =
         rawLineCorrelationService.prepare(target, rawLine);
 
@@ -367,13 +373,11 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       return;
     }
 
-    String rawLine =
-        "@+draft/unreact="
-            + escapeIrcv3TagValue(react)
-            + ";+draft/reply="
-            + escapeIrcv3TagValue(msgId)
-            + " TAGMSG "
-            + target.target();
+    MessageMutationOutboundCommands mutationCommands = mutationCommandsForServer(target.serverId());
+    String rawLine = mutationCommands.buildUnreactRawLine(target, msgId, react);
+    if (rawLine.isBlank()) {
+      return;
+    }
     OutboundRawLineCorrelationService.PreparedRawLine prepared =
         rawLineCorrelationService.prepare(target, rawLine);
 
@@ -414,15 +418,19 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       return;
     }
 
-    String rawLine =
-        "@+draft/edit=" + escapeIrcv3TagValue(msgId) + " PRIVMSG " + target.target() + " :" + text;
+    MessageMutationOutboundCommands mutationCommands = mutationCommandsForServer(target.serverId());
+    String rawLine = mutationCommands.buildEditRawLine(target, msgId, text);
+    if (rawLine.isBlank()) {
+      return;
+    }
     OutboundRawLineCorrelationService.PreparedRawLine prepared =
         rawLineCorrelationService.prepare(target, rawLine);
 
     String me = targetMembership.currentNick(target.serverId()).orElse("me");
     Instant now = Instant.now();
     if (shouldUseLocalEcho(target.serverId())) {
-      ui.applyMessageEdit(target, now, me, msgId, text, "", java.util.Map.of("draft/edit", msgId));
+      ui.applyMessageEdit(
+          target, now, me, msgId, text, "", mutationCommands.localEchoEditTags(msgId));
     }
 
     disposables.add(
@@ -452,18 +460,19 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       return;
     }
 
-    String why = Objects.toString(reason, "").trim();
-    String rawLine =
-        why.isEmpty()
-            ? ("REDACT " + target.target() + " " + msgId)
-            : ("REDACT " + target.target() + " " + msgId + " :" + why);
+    MessageMutationOutboundCommands mutationCommands = mutationCommandsForServer(target.serverId());
+    String rawLine = mutationCommands.buildRedactRawLine(target, msgId, reason);
+    if (rawLine.isBlank()) {
+      return;
+    }
     OutboundRawLineCorrelationService.PreparedRawLine prepared =
         rawLineCorrelationService.prepare(target, rawLine);
 
     String me = targetMembership.currentNick(target.serverId()).orElse("me");
     Instant now = Instant.now();
     if (shouldUseLocalEcho(target.serverId())) {
-      ui.applyMessageRedaction(target, now, me, msgId, "", java.util.Map.of("draft/delete", msgId));
+      ui.applyMessageRedaction(
+          target, now, me, msgId, "", mutationCommands.localEchoRedactionTags(msgId));
     }
 
     disposables.add(
@@ -525,6 +534,11 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
     return backendCapabilityPolicy.unavailableReasonForHelp(serverId, fallback);
   }
 
+  private MessageMutationOutboundCommands mutationCommandsForServer(String serverId) {
+    return messageMutationOutboundCommandsRouter.commandsFor(
+        backendCapabilityPolicy.backendForServer(serverId));
+  }
+
   private static String unavailableSuffix(String reason) {
     if (reason == null || reason.isBlank()) return "";
     return " (unavailable: " + reason + ")";
@@ -548,21 +562,4 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
     return normalizeIrcv3Token(raw);
   }
 
-  private static String escapeIrcv3TagValue(String value) {
-    String raw = Objects.toString(value, "");
-    if (raw.isEmpty()) return "";
-    StringBuilder out = new StringBuilder(raw.length() + 8);
-    for (int i = 0; i < raw.length(); i++) {
-      char c = raw.charAt(i);
-      switch (c) {
-        case ';' -> out.append("\\:");
-        case ' ' -> out.append("\\s");
-        case '\\' -> out.append("\\\\");
-        case '\r' -> out.append("\\r");
-        case '\n' -> out.append("\\n");
-        default -> out.append(c);
-      }
-    }
-    return out.toString();
-  }
 }
