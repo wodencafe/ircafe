@@ -13,7 +13,6 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcBackendModePort;
-import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -47,7 +46,6 @@ import cafe.woden.ircclient.ui.coordinator.ChatTopicCoordinator;
 import cafe.woden.ircclient.ui.coordinator.ChatTranscriptInteractionCoordinator;
 import cafe.woden.ircclient.ui.coordinator.ChatTypingCoordinator;
 import cafe.woden.ircclient.ui.coordinator.DccActionCoordinator;
-import cafe.woden.ircclient.ui.coordinator.IrcMessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.dcc.DccTransfersPanel;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
@@ -198,7 +196,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       OutboundLineBus outboundBus,
       IrcClientService irc,
       @Qualifier("ircClientService") IrcBackendModePort backendModePort,
-      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ActiveInputRouter activeInputRouter,
       IgnoreListService ignoreListService,
       IgnoreStatusService ignoreStatusService,
@@ -294,26 +292,20 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         new MessageInputPanel(settingsBus, commandHistoryStore, spellcheckSettingsBus);
     this.inputPanel.setBackendUiContext(BackendUiContext.fromBackendModePort(backendModePort));
     add(inputPanel, BorderLayout.SOUTH);
-    MessageActionCapabilityPolicy messageActionCapabilityPolicy =
-        new IrcMessageActionCapabilityPolicy(irc, bouncerPlayback);
+    MessageActionCapabilityPolicy capabilityPolicy =
+        Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     configureTranscriptContextMenuActions(transcripts, chatHistoryService);
     configureInputActivation(activationBus);
     InputCoordinatorBundle inputBundle =
         createInputCoordinatorBundle(
-            transcripts,
-            irc,
-            chatHistoryService,
-            activationBus,
-            outboundBus,
-            messageActionCapabilityPolicy);
+            transcripts, irc, chatHistoryService, activationBus, outboundBus, capabilityPolicy);
     this.typingCoordinator = inputBundle.typingCoordinator();
     this.historyActionCoordinator = inputBundle.historyActionCoordinator();
     this.transcriptInteractionCoordinator = inputBundle.transcriptInteractionCoordinator();
     this.dccActionCoordinator = inputBundle.dccActionCoordinator();
     this.readMarkerCoordinator = inputBundle.readMarkerCoordinator();
     this.activeTargetCoordinator = inputBundle.activeTargetCoordinator();
-    configureReactionChipActions(
-        transcripts, messageActionCapabilityPolicy, activationBus, outboundBus);
+    configureReactionChipActions(transcripts, capabilityPolicy, activationBus, outboundBus);
     inputPanel.setOnTypingStateChanged(typingCoordinator::onLocalTypingStateChanged);
     bindInputOutboundMessages(outboundBus);
 

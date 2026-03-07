@@ -8,7 +8,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.IrcBackendModePort;
-import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -17,6 +16,7 @@ import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
+import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -42,8 +42,9 @@ class ChatDockManagerTest {
     SpellcheckSettingsBus spellcheckSettingsBus = mock(SpellcheckSettingsBus.class);
     OutboundLineBus outboundBus = mock(OutboundLineBus.class);
     IrcClientService irc = mock(IrcClientService.class);
-    IrcBouncerPlaybackPort bouncerPlayback = mock(IrcBouncerPlaybackPort.class);
     IrcBackendModePort backendModePort = mock(IrcBackendModePort.class);
+    MessageActionCapabilityPolicy messageActionCapabilityPolicy =
+        mock(MessageActionCapabilityPolicy.class);
     ActiveInputRouter activeInputRouter = mock(ActiveInputRouter.class);
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
@@ -57,8 +58,8 @@ class ChatDockManagerTest {
             spellcheckSettingsBus,
             outboundBus,
             irc,
-            bouncerPlayback,
             backendModePort,
+            messageActionCapabilityPolicy,
             activeInputRouter,
             chatHistoryService,
             commandHistoryStore);
@@ -100,8 +101,8 @@ class ChatDockManagerTest {
             mock(SpellcheckSettingsBus.class),
             mock(OutboundLineBus.class),
             mock(IrcClientService.class),
-            mock(IrcBouncerPlaybackPort.class),
             mock(IrcBackendModePort.class),
+            mock(MessageActionCapabilityPolicy.class),
             mock(ActiveInputRouter.class),
             mock(ChatHistoryService.class),
             mock(CommandHistoryStore.class));

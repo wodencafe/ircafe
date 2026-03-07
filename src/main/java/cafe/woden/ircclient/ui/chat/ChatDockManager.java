@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.irc.IrcBackendModePort;
-import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -11,7 +10,6 @@ import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
-import cafe.woden.ircclient.ui.coordinator.IrcMessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
@@ -50,7 +48,6 @@ public class ChatDockManager {
   private final SpellcheckSettingsBus spellcheckSettingsBus;
   private final OutboundLineBus outboundBus;
   private final IrcClientService irc;
-  private final IrcBouncerPlaybackPort bouncerPlayback;
   private final IrcBackendModePort backendModePort;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final ActiveInputRouter activeInputRouter;
@@ -86,8 +83,8 @@ public class ChatDockManager {
       SpellcheckSettingsBus spellcheckSettingsBus,
       OutboundLineBus outboundBus,
       IrcClientService irc,
-      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
       @Qualifier("ircClientService") IrcBackendModePort backendModePort,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ActiveInputRouter activeInputRouter,
       ChatHistoryService chatHistoryService,
       CommandHistoryStore commandHistoryStore) {
@@ -99,9 +96,10 @@ public class ChatDockManager {
     this.spellcheckSettingsBus = spellcheckSettingsBus;
     this.outboundBus = outboundBus;
     this.irc = irc;
-    this.bouncerPlayback = bouncerPlayback;
     this.backendModePort = backendModePort;
-    this.messageActionCapabilityPolicy = new IrcMessageActionCapabilityPolicy(irc, bouncerPlayback);
+    this.messageActionCapabilityPolicy =
+        java.util.Objects.requireNonNull(
+            messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.activeInputRouter = activeInputRouter;
     this.chatHistoryService = chatHistoryService;
     this.commandHistoryStore = commandHistoryStore;
@@ -371,7 +369,7 @@ public class ChatDockManager {
             activationBus::activate,
             outboundBus,
             irc,
-            bouncerPlayback,
+            messageActionCapabilityPolicy,
             backendModePort,
             activeInputRouter,
             (t, draft) -> {

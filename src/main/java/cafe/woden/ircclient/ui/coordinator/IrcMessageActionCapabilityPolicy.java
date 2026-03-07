@@ -4,14 +4,18 @@ import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
 
 /** IrcClientService-backed capability policy for transcript message actions. */
+@Component
 public final class IrcMessageActionCapabilityPolicy implements MessageActionCapabilityPolicy {
   private final IrcClientService irc;
   private final IrcBouncerPlaybackPort bouncerPlayback;
 
   public IrcMessageActionCapabilityPolicy(
-      IrcClientService irc, IrcBouncerPlaybackPort bouncerPlayback) {
+      @Qualifier("ircClientService") IrcClientService irc,
+      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback) {
     this.irc = irc;
     this.bouncerPlayback = bouncerPlayback;
   }

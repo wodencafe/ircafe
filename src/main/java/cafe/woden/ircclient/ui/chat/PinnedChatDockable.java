@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.irc.IrcBackendModePort;
-import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -10,7 +9,6 @@ import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
-import cafe.woden.ircclient.ui.coordinator.IrcMessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
@@ -95,7 +93,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       Consumer<TargetRef> activate,
       OutboundLineBus outboundBus,
       IrcClientService irc,
-      IrcBouncerPlaybackPort bouncerPlayback,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       IrcBackendModePort backendModePort,
       ActiveInputRouter activeInputRouter,
       BiConsumer<TargetRef, String> onDraftChanged,
@@ -108,7 +106,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.outboundBus = outboundBus;
     this.irc = Objects.requireNonNull(irc, "irc");
     this.messageActionCapabilityPolicy =
-        new IrcMessageActionCapabilityPolicy(irc, Objects.requireNonNull(bouncerPlayback));
+        Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.activeInputRouter = activeInputRouter;
     this.onDraftChanged = onDraftChanged;
     this.onClosed = onClosed;
