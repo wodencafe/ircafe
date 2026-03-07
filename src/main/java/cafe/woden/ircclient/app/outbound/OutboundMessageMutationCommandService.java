@@ -3,7 +3,6 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
@@ -12,7 +11,6 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles reply/reaction/edit/redaction outbound command flows. */
@@ -20,7 +18,7 @@ import org.springframework.stereotype.Component;
 final class OutboundMessageMutationCommandService implements OutboundHelpContributor {
 
   private final IrcClientService irc;
-  private final IrcBackendAvailabilityPort backendAvailability;
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
@@ -29,14 +27,15 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
 
   OutboundMessageMutationCommandService(
       IrcClientService irc,
-      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       PendingEchoMessagePort pendingEchoMessageState,
       OutboundRawLineCorrelationService rawLineCorrelationService) {
     this.irc = Objects.requireNonNull(irc, "irc");
-    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
+    this.backendCapabilityPolicy =
+        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
@@ -507,25 +506,11 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
   }
 
   private String featureUnavailableMessage(String serverId, String fallback) {
-    String reason = backendAvailability.backendAvailabilityReason(serverId);
-    if (!reason.isBlank()) {
-      return reason.endsWith(".") ? reason : (reason + ".");
-    }
-    return fallback;
+    return backendCapabilityPolicy.featureUnavailableMessage(serverId, fallback);
   }
 
   private String unavailableReasonForHelp(String serverId, String fallback) {
-    String backendReason = normalizedBackendAvailabilityReason(serverId);
-    if (!backendReason.isEmpty()) return backendReason;
-    return fallback;
-  }
-
-  private String normalizedBackendAvailabilityReason(String serverId) {
-    try {
-      return Objects.toString(backendAvailability.backendAvailabilityReason(serverId), "").trim();
-    } catch (Exception ignored) {
-      return "";
-    }
+    return backendCapabilityPolicy.unavailableReasonForHelp(serverId, fallback);
   }
 
   private static String unavailableSuffix(String reason) {

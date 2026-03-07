@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
@@ -17,6 +18,7 @@ import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,15 @@ class OutboundMessageMutationCommandServiceTest {
   private final UiPort ui = mock(UiPort.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
+  private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
+  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
+      new OutboundBackendFeatureRegistry(
+          List.of(
+              new MatrixOutboundBackendFeatureAdapter(),
+              new QuasselOutboundBackendFeatureAdapter()));
+  private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
+      new OutboundBackendCapabilityPolicy(commandTargetPolicy, outboundBackendFeatureRegistry, irc);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
@@ -35,7 +46,7 @@ class OutboundMessageMutationCommandServiceTest {
   private final OutboundMessageMutationCommandService service =
       new OutboundMessageMutationCommandService(
           irc,
-          irc,
+          outboundBackendCapabilityPolicy,
           ui,
           connectionCoordinator,
           targetCoordinator,

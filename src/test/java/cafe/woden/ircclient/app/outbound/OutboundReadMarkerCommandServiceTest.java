@@ -11,11 +11,13 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,8 +27,18 @@ class OutboundReadMarkerCommandServiceTest {
   private final UiPort ui = mock(UiPort.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
+  private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
+  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
+      new OutboundBackendFeatureRegistry(
+          List.of(
+              new MatrixOutboundBackendFeatureAdapter(),
+              new QuasselOutboundBackendFeatureAdapter()));
+  private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
+      new OutboundBackendCapabilityPolicy(commandTargetPolicy, outboundBackendFeatureRegistry, irc);
   private final OutboundReadMarkerCommandService service =
-      new OutboundReadMarkerCommandService(irc, irc, ui, connectionCoordinator, targetCoordinator);
+      new OutboundReadMarkerCommandService(
+          irc, outboundBackendCapabilityPolicy, ui, connectionCoordinator, targetCoordinator);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   @AfterEach

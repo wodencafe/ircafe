@@ -34,7 +34,7 @@ class OutboundUploadCommandServiceTest {
   private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
       new OutboundBackendFeatureRegistry(List.of(new MatrixOutboundBackendFeatureAdapter()));
   private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
-      new OutboundBackendCapabilityPolicy(commandTargetPolicy, outboundBackendFeatureRegistry);
+      new OutboundBackendCapabilityPolicy(commandTargetPolicy, outboundBackendFeatureRegistry, irc);
   private final MatrixOutboundCommandSupport matrixCommandSupport =
       new MatrixOutboundCommandSupport();
   private final BackendUploadCommandRegistry backendUploadCommandRegistry =

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
@@ -24,6 +25,15 @@ class OutboundHelpCommandServiceTest {
   private final UiPort ui = mock(UiPort.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
+  private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
+  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
+      new OutboundBackendFeatureRegistry(
+          List.of(
+              new MatrixOutboundBackendFeatureAdapter(),
+              new QuasselOutboundBackendFeatureAdapter()));
+  private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
+      new OutboundBackendCapabilityPolicy(commandTargetPolicy, outboundBackendFeatureRegistry, irc);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
@@ -46,14 +56,15 @@ class OutboundHelpCommandServiceTest {
   private final OutboundMessageMutationCommandService messageMutationCommandService =
       new OutboundMessageMutationCommandService(
           irc,
-          irc,
+          outboundBackendCapabilityPolicy,
           ui,
           connectionCoordinator,
           targetCoordinator,
           pendingEchoMessageState,
           rawLineCorrelationService);
   private final OutboundReadMarkerCommandService readMarkerCommandService =
-      new OutboundReadMarkerCommandService(irc, irc, ui, connectionCoordinator, targetCoordinator);
+      new OutboundReadMarkerCommandService(
+          irc, outboundBackendCapabilityPolicy, ui, connectionCoordinator, targetCoordinator);
   private final OutboundHelpCommandService service =
       new OutboundHelpCommandService(
           ui,
