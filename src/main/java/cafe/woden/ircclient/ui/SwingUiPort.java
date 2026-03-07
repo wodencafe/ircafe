@@ -6,6 +6,8 @@ import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
+import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
@@ -283,10 +285,32 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public Flowable<ParsedInput.BackendNamed> backendNamedCommandRequests() {
+    return Flowable.mergeArray(
+            quasselSetupRequests()
+                .map(
+                    sid ->
+                        new ParsedInput.BackendNamed(
+                            BackendNamedCommandNames.QUASSEL_SETUP,
+                            normalizeBackendCommandArgs(sid))),
+            quasselNetworkManagerRequests()
+                .map(
+                    sid ->
+                        new ParsedInput.BackendNamed(
+                            BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER,
+                            normalizeBackendCommandArgs(sid))))
+        .onBackpressureBuffer();
+  }
+
+  @Override
   public void openQuasselNetworkManager(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
     quasselNetworkManagerRequestsFromApp.onNext(sid);
+  }
+
+  private static String normalizeBackendCommandArgs(String args) {
+    return Objects.toString(args, "").trim();
   }
 
   @Override

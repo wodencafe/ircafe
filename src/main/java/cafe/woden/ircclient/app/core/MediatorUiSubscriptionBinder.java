@@ -3,10 +3,8 @@ package cafe.woden.ircclient.app.core;
 import cafe.woden.ircclient.app.AppSchedulers;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
-import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.util.Objects;
 import java.util.function.Consumer;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
@@ -73,24 +71,7 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
 
     disposables.add(
-        ui.quasselSetupRequests()
-            .map(
-                sid ->
-                    new ParsedInput.BackendNamed(
-                        BackendNamedCommandNames.QUASSEL_SETUP, normalizeArgs(sid)))
-            .observeOn(AppSchedulers.edt())
-            .subscribe(
-                onBackendNamedRequest::accept,
-                err ->
-                    ui.appendError(
-                        targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
-
-    disposables.add(
-        ui.quasselNetworkManagerRequests()
-            .map(
-                sid ->
-                    new ParsedInput.BackendNamed(
-                        BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, normalizeArgs(sid)))
+        ui.backendNamedCommandRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 onBackendNamedRequest::accept,
@@ -151,9 +132,5 @@ public class MediatorUiSubscriptionBinder {
                 err ->
                     ui.appendError(
                         targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
-  }
-
-  private static String normalizeArgs(String args) {
-    return Objects.toString(args, "").trim();
   }
 }

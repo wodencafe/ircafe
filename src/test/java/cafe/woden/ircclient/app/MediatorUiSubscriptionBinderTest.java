@@ -44,8 +44,7 @@ class MediatorUiSubscriptionBinderTest {
     when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
     when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
     when(ui.outboundLines()).thenReturn(Flowable.never());
-    when(ui.quasselSetupRequests()).thenReturn(Flowable.never());
-    when(ui.quasselNetworkManagerRequests()).thenReturn(Flowable.never());
+    when(ui.backendNamedCommandRequests()).thenReturn(Flowable.never());
     when(ui.closeTargetRequests()).thenReturn(Flowable.never());
     when(ui.joinChannelRequests()).thenReturn(joinRequests);
     when(ui.disconnectChannelRequests()).thenReturn(detachRequests);
@@ -75,15 +74,14 @@ class MediatorUiSubscriptionBinderTest {
     @SuppressWarnings("unchecked")
     Consumer<ParsedInput.BackendNamed> onBackendNamedCommandRequest = Mockito.mock(Consumer.class);
 
-    PublishProcessor<String> quasselNetworkManagerRequests = PublishProcessor.create();
+    PublishProcessor<ParsedInput.BackendNamed> backendNamedRequests = PublishProcessor.create();
 
     when(ui.targetSelections()).thenReturn(Flowable.never());
     when(ui.targetActivations()).thenReturn(Flowable.never());
     when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
     when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
     when(ui.outboundLines()).thenReturn(Flowable.never());
-    when(ui.quasselSetupRequests()).thenReturn(Flowable.never());
-    when(ui.quasselNetworkManagerRequests()).thenReturn(quasselNetworkManagerRequests);
+    when(ui.backendNamedCommandRequests()).thenReturn(backendNamedRequests);
     when(ui.closeTargetRequests()).thenReturn(Flowable.never());
     when(ui.joinChannelRequests()).thenReturn(Flowable.never());
     when(ui.disconnectChannelRequests()).thenReturn(Flowable.never());
@@ -100,7 +98,8 @@ class MediatorUiSubscriptionBinderTest {
         line -> {},
         onBackendNamedCommandRequest);
 
-    quasselNetworkManagerRequests.onNext("quassel");
+    backendNamedRequests.onNext(
+        new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "quassel"));
 
     verify(onBackendNamedCommandRequest, timeout(1_000))
         .accept(
@@ -119,9 +118,7 @@ class MediatorUiSubscriptionBinderTest {
     when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
     when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
     when(ui.outboundLines()).thenReturn(Flowable.never());
-    when(ui.quasselSetupRequests()).thenReturn(Flowable.never());
-    when(ui.quasselNetworkManagerRequests())
-        .thenReturn(Flowable.error(new IllegalStateException("boom")));
+    when(ui.backendNamedCommandRequests()).thenReturn(Flowable.error(new IllegalStateException("boom")));
     when(ui.closeTargetRequests()).thenReturn(Flowable.never());
     when(ui.joinChannelRequests()).thenReturn(Flowable.never());
     when(ui.disconnectChannelRequests()).thenReturn(Flowable.never());
@@ -144,15 +141,14 @@ class MediatorUiSubscriptionBinderTest {
     @SuppressWarnings("unchecked")
     Consumer<ParsedInput.BackendNamed> onBackendNamedCommandRequest = Mockito.mock(Consumer.class);
 
-    PublishProcessor<String> quasselSetupRequests = PublishProcessor.create();
+    PublishProcessor<ParsedInput.BackendNamed> backendNamedRequests = PublishProcessor.create();
 
     when(ui.targetSelections()).thenReturn(Flowable.never());
     when(ui.targetActivations()).thenReturn(Flowable.never());
     when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
     when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
     when(ui.outboundLines()).thenReturn(Flowable.never());
-    when(ui.quasselSetupRequests()).thenReturn(quasselSetupRequests);
-    when(ui.quasselNetworkManagerRequests()).thenReturn(Flowable.never());
+    when(ui.backendNamedCommandRequests()).thenReturn(backendNamedRequests);
     when(ui.closeTargetRequests()).thenReturn(Flowable.never());
     when(ui.joinChannelRequests()).thenReturn(Flowable.never());
     when(ui.disconnectChannelRequests()).thenReturn(Flowable.never());
@@ -169,7 +165,8 @@ class MediatorUiSubscriptionBinderTest {
         line -> {},
         onBackendNamedCommandRequest);
 
-    quasselSetupRequests.onNext("quassel");
+    backendNamedRequests.onNext(
+        new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel"));
 
     verify(onBackendNamedCommandRequest, timeout(1_000))
         .accept(new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel"));

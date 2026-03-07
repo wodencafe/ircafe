@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.api;
 
+import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -56,6 +57,11 @@ public interface UiPort {
 
   /** User-initiated request to open dialog-driven Quassel network manager for a server. */
   default Flowable<String> quasselNetworkManagerRequests() {
+    return Flowable.empty();
+  }
+
+  /** User-initiated backend-specific command requests. */
+  default Flowable<ParsedInput.BackendNamed> backendNamedCommandRequests() {
     return Flowable.empty();
   }
 

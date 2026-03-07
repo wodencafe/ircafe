@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.api;
 
+import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -78,6 +79,11 @@ public abstract class UiPortDecorator implements UiPort {
   @Override
   public Flowable<String> quasselNetworkManagerRequests() {
     return delegate.quasselNetworkManagerRequests();
+  }
+
+  @Override
+  public Flowable<ParsedInput.BackendNamed> backendNamedCommandRequests() {
+    return delegate.backendNamedCommandRequests();
   }
 
   @Override

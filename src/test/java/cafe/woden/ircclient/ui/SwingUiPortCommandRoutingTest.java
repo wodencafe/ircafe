@@ -3,7 +3,10 @@ package cafe.woden.ircclient.ui;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
+import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
@@ -22,9 +25,45 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import javax.swing.SwingUtilities;
+import io.reactivex.rxjava3.processors.PublishProcessor;
 import org.junit.jupiter.api.Test;
 
 class SwingUiPortCommandRoutingTest {
+
+  @Test
+  void backendNamedCommandRequestsMergeServerTreeAndAppRequests() {
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    PublishProcessor<String> setupRequests = PublishProcessor.create();
+    PublishProcessor<String> networkManagerRequests = PublishProcessor.create();
+    when(serverTree.quasselSetupRequests()).thenReturn(setupRequests);
+    when(serverTree.quasselNetworkManagerRequests()).thenReturn(networkManagerRequests);
+
+    SwingUiPort ui =
+        new SwingUiPort(
+            serverTree,
+            mock(ChatDockable.class),
+            mock(ChatTranscriptStore.class),
+            mock(MentionPatternRegistry.class),
+            mock(NotificationStore.class),
+            mock(UserListDockable.class),
+            mock(StatusBar.class),
+            mock(ConnectButton.class),
+            mock(DisconnectButton.class),
+            new TargetActivationBus(),
+            new OutboundLineBus(),
+            mock(ChatDockManager.class),
+            new ActiveInputRouter());
+
+    var subscriber = ui.backendNamedCommandRequests().test();
+    setupRequests.onNext(" quassel ");
+    networkManagerRequests.onNext(" core ");
+    ui.openQuasselNetworkManager(" app ");
+
+    subscriber.assertValues(
+        new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel"),
+        new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "core"),
+        new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "app"));
+  }
 
   @Test
   void ensureTargetExistsDelegatesInOrderOnEdt() throws Exception {
