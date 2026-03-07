@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.coordinator;
 
 import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -40,7 +39,7 @@ public final class ChatHistoryActionCoordinator {
   private final IntConsumer scrollToTranscriptOffset;
 
   public ChatHistoryActionCoordinator(
-      IrcClientService irc,
+      IrcNegotiatedFeaturePort irc,
       IrcBouncerPlaybackPort bouncerPlayback,
       ChatHistoryService chatHistoryService,
       Supplier<TargetRef> activeTargetSupplier,
@@ -59,7 +58,7 @@ public final class ChatHistoryActionCoordinator {
       Runnable disableFollowTail,
       IntConsumer scrollToTranscriptOffset) {
     this(
-        new IrcMessageActionCapabilityPolicy(IrcNegotiatedFeaturePort.from(irc), bouncerPlayback),
+        new IrcMessageActionCapabilityPolicy(irc, bouncerPlayback),
         chatHistoryService,
         activeTargetSupplier,
         activateTarget,

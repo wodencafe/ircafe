@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,7 +26,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            irc,
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,
@@ -61,7 +62,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            irc,
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,
@@ -103,7 +104,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            irc,
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,
@@ -140,7 +141,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            irc,
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,
@@ -180,7 +181,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            irc,
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             chatHistoryService,
             () -> channel,
@@ -219,7 +220,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            irc,
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             chatHistoryService,
             () -> channel,
@@ -251,7 +252,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            irc,
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,
@@ -282,7 +283,7 @@ class ChatHistoryActionCoordinatorTest {
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
-            irc,
+            IrcNegotiatedFeaturePort.from(irc),
             irc,
             null,
             () -> channel,
