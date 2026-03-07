@@ -3,168 +3,56 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
- * <p>Includes: /query, /msg, /notice, /me, /say, /quote.
+ * <p>Includes: /say, /quote, /help.
  *
  * <p>Behavior is intended to be preserved.
  */
 @Component
 public class OutboundChatCommandService {
 
-  private enum MultilineSendDecision {
-    SEND_AS_MULTILINE,
-    SEND_AS_SPLIT_LINES,
-    CANCEL
-  }
-
   private final IrcClientService irc;
-  private final IrcBackendAvailabilityPort backendAvailability;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
   private final OutboundRawLineCorrelationService rawLineCorrelationService;
+  private final OutboundMessagingCommandService outboundMessagingCommandService;
   private final List<OutboundHelpContributor> helpContributors;
-
-  private final PendingEchoMessagePort pendingEchoMessageState;
   private final Map<String, HelpTopicHandler> helpTopicHandlers;
 
   public OutboundChatCommandService(
       IrcClientService irc,
-      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       OutboundRawLineCorrelationService rawLineCorrelationService,
       List<OutboundHelpContributor> helpContributors,
-      PendingEchoMessagePort pendingEchoMessageState) {
+      OutboundMessagingCommandService outboundMessagingCommandService) {
     this.irc = Objects.requireNonNull(irc, "irc");
-    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
     this.rawLineCorrelationService =
         Objects.requireNonNull(rawLineCorrelationService, "rawLineCorrelationService");
+    this.outboundMessagingCommandService =
+        Objects.requireNonNull(outboundMessagingCommandService, "outboundMessagingCommandService");
     this.helpContributors =
         List.copyOf(Objects.requireNonNull(helpContributors, "helpContributors"));
-
-    this.pendingEchoMessageState =
-        Objects.requireNonNull(pendingEchoMessageState, "pendingEchoMessageState");
     this.helpTopicHandlers = buildHelpTopicHandlers();
-  }
-
-  public void handleQuery(String nick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(query)", "Select a server first.");
-      return;
-    }
-
-    String n = nick == null ? "" : nick.trim();
-    if (n.isEmpty()) {
-      ui.appendStatus(at, "(query)", "Usage: /query <nick>");
-      return;
-    }
-
-    TargetRef pm = new TargetRef(at.serverId(), n);
-    ui.ensureTargetExists(pm);
-    ui.selectTarget(pm);
-  }
-
-  public void handleMsg(CompositeDisposable disposables, String nick, String body) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(msg)", "Select a server first.");
-      return;
-    }
-
-    String n = nick == null ? "" : nick.trim();
-    String m = body == null ? "" : body.trim();
-    if (n.isEmpty() || m.isEmpty()) {
-      ui.appendStatus(at, "(msg)", "Usage: /msg <nick> <message>");
-      return;
-    }
-
-    TargetRef pm = new TargetRef(at.serverId(), n);
-    ui.ensureTargetExists(pm);
-    ui.selectTarget(pm);
-    sendMessage(disposables, pm, m);
-  }
-
-  public void handleNotice(CompositeDisposable disposables, String target, String body) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(notice)", "Select a server first.");
-      return;
-    }
-
-    String t = target == null ? "" : target.trim();
-    String m = body == null ? "" : body.trim();
-    if (t.isEmpty() || m.isEmpty()) {
-      ui.appendStatus(at, "(notice)", "Usage: /notice <target> <message>");
-      return;
-    }
-
-    sendNotice(disposables, at, t, m);
-  }
-
-  public void handleMe(CompositeDisposable disposables, String action) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(me)", "Select a server first.");
-      return;
-    }
-
-    String a = action == null ? "" : action.trim();
-    if (a.isEmpty()) {
-      ui.appendStatus(at, "(me)", "Usage: /me <action>");
-      return;
-    }
-
-    if (at.isStatus()) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"), "(me)", "Select a channel or PM first.");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
-      return;
-    }
-
-    if (shouldUseLocalEcho(at.serverId())) {
-      String me = irc.currentNick(at.serverId()).orElse("me");
-      ui.appendAction(at, me, a, true);
-    }
-
-    disposables.add(
-        irc.sendAction(at.serverId(), at.target(), a)
-            .subscribe(
-                () -> {},
-                err ->
-                    ui.appendError(
-                        targetCoordinator.safeStatusTarget(),
-                        "(send-error)",
-                        String.valueOf(err))));
   }
 
   public void handleHelp(String topic) {
@@ -258,7 +146,7 @@ public class OutboundChatCommandService {
       return;
     }
 
-    sendMessage(disposables, at, m);
+    outboundMessagingCommandService.sendMessage(disposables, at, m);
   }
 
   private void sendRawFromStatus(CompositeDisposable disposables, String serverId, String rawLine) {
@@ -340,218 +228,6 @@ public class OutboundChatCommandService {
                 () -> {}, err -> ui.appendError(status, "(quote-error)", String.valueOf(err))));
   }
 
-  private void sendMessage(CompositeDisposable disposables, TargetRef target, String message) {
-    if (target == null) return;
-    String m = message == null ? "" : message.trim();
-    if (m.isEmpty()) return;
-
-    if (!connectionCoordinator.isConnected(target.serverId())) {
-      TargetRef status = new TargetRef(target.serverId(), "status");
-      ui.appendStatus(status, "(conn)", "Not connected");
-      if (!target.isStatus()) {
-        ui.appendStatus(target, "(conn)", "Not connected");
-      }
-      return;
-    }
-
-    List<String> lines = normalizeMessageLines(m);
-    if (lines.size() > 1) {
-      MultilineSendDecision decision = resolveMultilineSendDecision(target, lines, "(send)");
-      if (decision == MultilineSendDecision.CANCEL) {
-        return;
-      }
-      if (decision == MultilineSendDecision.SEND_AS_SPLIT_LINES) {
-        for (String line : lines) {
-          sendMessage(disposables, target, line);
-        }
-        return;
-      }
-      m = joinMessageLines(lines);
-    }
-
-    boolean useLocalEcho = shouldUseLocalEcho(target.serverId());
-    String me = irc.currentNick(target.serverId()).orElse("me");
-    final PendingEchoMessagePort.PendingOutboundChat pendingEntry;
-    if (useLocalEcho) {
-      pendingEntry = null;
-    } else {
-      pendingEntry = pendingEchoMessageState.register(target, me, m, Instant.now());
-      ui.appendPendingOutgoingChat(
-          target, pendingEntry.pendingId(), pendingEntry.createdAt(), me, m);
-    }
-
-    disposables.add(
-        irc.sendMessage(target.serverId(), target.target(), m)
-            .subscribe(
-                () -> {},
-                err -> {
-                  if (pendingEntry != null) {
-                    pendingEchoMessageState.removeById(pendingEntry.pendingId());
-                    ui.failPendingOutgoingChat(
-                        target,
-                        pendingEntry.pendingId(),
-                        Instant.now(),
-                        pendingEntry.fromNick(),
-                        pendingEntry.text(),
-                        String.valueOf(err));
-                  }
-                  ui.appendError(
-                      targetCoordinator.safeStatusTarget(), "(send-error)", String.valueOf(err));
-                }));
-
-    if (useLocalEcho) {
-      ui.appendChat(target, "(" + me + ")", m, true);
-    }
-  }
-
-  private void sendNotice(
-      CompositeDisposable disposables, TargetRef echoTarget, String target, String message) {
-    if (echoTarget == null) return;
-    String t = target == null ? "" : target.trim();
-    String m = message == null ? "" : message.trim();
-    if (t.isEmpty() || m.isEmpty()) return;
-
-    if (!connectionCoordinator.isConnected(echoTarget.serverId())) {
-      TargetRef status = new TargetRef(echoTarget.serverId(), "status");
-      ui.appendStatus(status, "(conn)", "Not connected");
-      if (!echoTarget.isStatus()) {
-        ui.appendStatus(echoTarget, "(conn)", "Not connected");
-      }
-      return;
-    }
-
-    List<String> lines = normalizeMessageLines(m);
-    if (lines.size() > 1) {
-      MultilineSendDecision decision = resolveMultilineSendDecision(echoTarget, lines, "(notice)");
-      if (decision == MultilineSendDecision.CANCEL) {
-        return;
-      }
-      if (decision == MultilineSendDecision.SEND_AS_SPLIT_LINES) {
-        for (String line : lines) {
-          sendNotice(disposables, echoTarget, t, line);
-        }
-        return;
-      }
-      m = joinMessageLines(lines);
-    }
-
-    disposables.add(
-        irc.sendNotice(echoTarget.serverId(), t, m)
-            .subscribe(
-                () -> {},
-                err ->
-                    ui.appendError(
-                        targetCoordinator.safeStatusTarget(),
-                        "(send-error)",
-                        String.valueOf(err))));
-
-    if (shouldUseLocalEcho(echoTarget.serverId())) {
-      String me = irc.currentNick(echoTarget.serverId()).orElse("me");
-      ui.appendNotice(echoTarget, "(" + me + ")", "NOTICE → " + t + ": " + m);
-    }
-  }
-
-  private MultilineSendDecision resolveMultilineSendDecision(
-      TargetRef target, List<String> lines, String statusPrefix) {
-    if (target == null || lines == null || lines.size() <= 1) {
-      return MultilineSendDecision.SEND_AS_MULTILINE;
-    }
-
-    int lineCount = lines.size();
-    long payloadUtf8Bytes = multilinePayloadUtf8Bytes(lines);
-    String reason =
-        multilineUnavailableOrLimitReason(target.serverId(), lineCount, payloadUtf8Bytes);
-    if (reason.isBlank()) {
-      return MultilineSendDecision.SEND_AS_MULTILINE;
-    }
-
-    boolean sendSplit = false;
-    try {
-      sendSplit = ui.confirmMultilineSplitFallback(target, lineCount, payloadUtf8Bytes, reason);
-    } catch (Exception ignored) {
-      sendSplit = false;
-    }
-
-    if (!sendSplit) {
-      ui.appendStatus(target, statusPrefix, "Send canceled.");
-      return MultilineSendDecision.CANCEL;
-    }
-
-    ui.appendStatus(target, statusPrefix, reason + " Sending as " + lineCount + " separate lines.");
-    return MultilineSendDecision.SEND_AS_SPLIT_LINES;
-  }
-
-  private String multilineUnavailableOrLimitReason(
-      String serverId, int lineCount, long payloadUtf8Bytes) {
-    String backendUnavailableReason = normalizedBackendAvailabilityReason(serverId);
-    if (!backendUnavailableReason.isEmpty()) {
-      return ensureTerminalPunctuation(backendUnavailableReason);
-    }
-
-    if (!irc.isMultilineAvailable(serverId)) {
-      return "IRCv3 multiline is not negotiated on this server.";
-    }
-
-    int maxLines = irc.negotiatedMultilineMaxLines(serverId);
-    if (maxLines > 0 && lineCount > maxLines) {
-      return "Message has "
-          + lineCount
-          + " lines; negotiated multiline max-lines is "
-          + maxLines
-          + ".";
-    }
-
-    long maxBytes = irc.negotiatedMultilineMaxBytes(serverId);
-    if (maxBytes > 0L && payloadUtf8Bytes > maxBytes) {
-      return "Message is "
-          + payloadUtf8Bytes
-          + " UTF-8 bytes; negotiated multiline max-bytes is "
-          + maxBytes
-          + ".";
-    }
-
-    return "";
-  }
-
-  private static List<String> normalizeMessageLines(String raw) {
-    String input = Objects.toString(raw, "");
-    if (input.isEmpty()) return List.of();
-    String normalized = input.replace("\r\n", "\n").replace('\r', '\n');
-    if (normalized.indexOf('\n') < 0) {
-      return List.of(normalized);
-    }
-    String[] parts = normalized.split("\n", -1);
-    List<String> out = new ArrayList<>(parts.length);
-    for (String part : parts) {
-      out.add(Objects.toString(part, ""));
-    }
-    return out;
-  }
-
-  private static String joinMessageLines(List<String> lines) {
-    if (lines == null || lines.isEmpty()) return "";
-    return String.join("\n", lines);
-  }
-
-  private static long multilinePayloadUtf8Bytes(List<String> lines) {
-    if (lines == null || lines.isEmpty()) return 0L;
-    long total = 0L;
-    for (int i = 0; i < lines.size(); i++) {
-      String line = Objects.toString(lines.get(i), "");
-      total = addSaturated(total, line.getBytes(StandardCharsets.UTF_8).length);
-      if (i < lines.size() - 1) {
-        total = addSaturated(total, 1L);
-      }
-    }
-    return total;
-  }
-
-  private static long addSaturated(long left, long right) {
-    if (right <= 0L) return left;
-    if (left >= Long.MAX_VALUE - right) return Long.MAX_VALUE;
-    return left + right;
-  }
-
   private PreparedRawLine prepareCorrelatedRawLine(TargetRef origin, String rawLine) {
     OutboundRawLineCorrelationService.PreparedRawLine prepared =
         rawLineCorrelationService.prepare(origin, rawLine);
@@ -567,33 +243,9 @@ public class OutboundChatCommandService {
 
   private record PreparedRawLine(String line, String label) {}
 
-  private static boolean containsCrlf(String s) {
-    return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);
-  }
-
-  private boolean shouldUseLocalEcho(String serverId) {
-    return !irc.isEchoMessageAvailable(serverId);
-  }
-
   private static String normalizeHelpTopic(String raw) {
     String s = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
     if (s.startsWith("/")) s = s.substring(1).trim();
     return s;
-  }
-
-  private String normalizedBackendAvailabilityReason(String serverId) {
-    try {
-      return Objects.toString(backendAvailability.backendAvailabilityReason(serverId), "").trim();
-    } catch (Exception ignored) {
-      return "";
-    }
-  }
-
-  private static String ensureTerminalPunctuation(String message) {
-    String text = Objects.toString(message, "").trim();
-    if (text.isEmpty()) return "";
-    char last = text.charAt(text.length() - 1);
-    if (last == '.' || last == '!' || last == '?') return text;
-    return text + ".";
   }
 }

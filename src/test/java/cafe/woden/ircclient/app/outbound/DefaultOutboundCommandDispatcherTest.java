@@ -23,6 +23,8 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundCtcpWhoisCommandService ctcp = mock(OutboundCtcpWhoisCommandService.class);
   private final OutboundDccCommandService dcc = mock(OutboundDccCommandService.class);
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
+  private final OutboundMessagingCommandService messaging =
+      mock(OutboundMessagingCommandService.class);
   private final OutboundJoinPartCommandService joinPart =
       mock(OutboundJoinPartCommandService.class);
   private final OutboundNickAwayCommandService nickAway =
@@ -56,6 +58,7 @@ class DefaultOutboundCommandDispatcherTest {
           ctcp,
           dcc,
           chat,
+          messaging,
           joinPart,
           nickAway,
           lifecycle,
@@ -131,6 +134,21 @@ class DefaultOutboundCommandDispatcherTest {
 
     dispatcher.dispatch(disposables, new ParsedInput.Away("brb"));
     verify(nickAway).handleAway(disposables, "brb");
+  }
+
+  @Test
+  void dispatchQueryMsgNoticeAndMeRouteToMessagingService() {
+    dispatcher.dispatch(disposables, new ParsedInput.Query("alice"));
+    verify(messaging).handleQuery("alice");
+
+    dispatcher.dispatch(disposables, new ParsedInput.Msg("alice", "hello"));
+    verify(messaging).handleMsg(disposables, "alice", "hello");
+
+    dispatcher.dispatch(disposables, new ParsedInput.Notice("#ircafe", "heads up"));
+    verify(messaging).handleNotice(disposables, "#ircafe", "heads up");
+
+    dispatcher.dispatch(disposables, new ParsedInput.Me("waves"));
+    verify(messaging).handleMe(disposables, "waves");
   }
 
   @Test

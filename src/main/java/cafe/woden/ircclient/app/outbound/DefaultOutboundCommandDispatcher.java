@@ -20,6 +20,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
   private final OutboundDccCommandService outboundDccCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
+  private final OutboundMessagingCommandService outboundMessagingCommandService;
   private final OutboundJoinPartCommandService outboundJoinPartCommandService;
   private final OutboundNickAwayCommandService outboundNickAwayCommandService;
   private final OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService;
@@ -44,6 +45,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
       OutboundDccCommandService outboundDccCommandService,
       OutboundChatCommandService outboundChatCommandService,
+      OutboundMessagingCommandService outboundMessagingCommandService,
       OutboundJoinPartCommandService outboundJoinPartCommandService,
       OutboundNickAwayCommandService outboundNickAwayCommandService,
       OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService,
@@ -65,6 +67,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
     this.outboundDccCommandService = outboundDccCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
+    this.outboundMessagingCommandService = outboundMessagingCommandService;
     this.outboundJoinPartCommandService = outboundJoinPartCommandService;
     this.outboundNickAwayCommandService = outboundNickAwayCommandService;
     this.outboundConnectionLifecycleCommandService = outboundConnectionLifecycleCommandService;
@@ -144,7 +147,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     register(
         map,
         ParsedInput.Query.class,
-        (d, cmd) -> outboundChatCommandService.handleQuery(cmd.nick()));
+        (d, cmd) -> outboundMessagingCommandService.handleQuery(cmd.nick()));
     register(
         map,
         ParsedInput.Whois.class,
@@ -156,15 +159,15 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     register(
         map,
         ParsedInput.Msg.class,
-        (d, cmd) -> outboundChatCommandService.handleMsg(d, cmd.nick(), cmd.body()));
+        (d, cmd) -> outboundMessagingCommandService.handleMsg(d, cmd.nick(), cmd.body()));
     register(
         map,
         ParsedInput.Notice.class,
-        (d, cmd) -> outboundChatCommandService.handleNotice(d, cmd.target(), cmd.body()));
+        (d, cmd) -> outboundMessagingCommandService.handleNotice(d, cmd.target(), cmd.body()));
     register(
         map,
         ParsedInput.Me.class,
-        (d, cmd) -> outboundChatCommandService.handleMe(d, cmd.action()));
+        (d, cmd) -> outboundMessagingCommandService.handleMe(d, cmd.action()));
     register(
         map,
         ParsedInput.Topic.class,
