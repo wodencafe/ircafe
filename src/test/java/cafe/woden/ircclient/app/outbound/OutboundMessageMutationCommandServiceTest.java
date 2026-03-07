@@ -43,7 +43,8 @@ class OutboundMessageMutationCommandServiceTest {
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
-      new OutboundRawLineCorrelationService(irc, labeledResponseRoutingState);
+      new OutboundRawLineCorrelationService(
+          outboundBackendCapabilityPolicy, labeledResponseRoutingState);
   private final OutboundMessageMutationCommandService service =
       new OutboundMessageMutationCommandService(
           irc,

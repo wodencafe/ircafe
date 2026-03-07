@@ -34,10 +34,12 @@ class OutboundModeCommandServiceTest {
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
   private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
   private final ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy =
+      mock(OutboundBackendCapabilityPolicy.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
-      new OutboundRawLineCorrelationService(irc, labeledResponseRoutingState);
+      new OutboundRawLineCorrelationService(backendCapabilityPolicy, labeledResponseRoutingState);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundModeCommandService service =
@@ -80,7 +82,7 @@ class OutboundModeCommandServiceTest {
 
     when(targetCoordinator.getActiveTarget()).thenReturn(status);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isLabeledResponseAvailable("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.supportsLabeledResponse("libera")).thenReturn(true);
     when(labeledResponseRoutingState.prepareOutgoingRaw("libera", "MODE #ircafe +o alice"))
         .thenReturn(prepared);
     when(irc.sendRaw("libera", "@label=req-1 MODE #ircafe +o alice"))

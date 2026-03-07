@@ -612,10 +612,6 @@ public final class ChannelListPanel extends JPanel {
     setBackendUiProfile(new BackendUiProfile(currentServerId(), backendUiContext));
   }
 
-  public void setIsMatrixServer(java.util.function.Predicate<String> isMatrixServer) {
-    setBackendUiContext(BackendUiContext.fromMatrixServerPredicate(isMatrixServer));
-  }
-
   public void setOnAddChannelRequest(Consumer<String> onAddChannelRequest) {
     this.onAddChannelRequest = onAddChannelRequest;
   }

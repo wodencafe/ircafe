@@ -1,37 +1,24 @@
 package cafe.woden.ircclient.app.outbound;
 
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Correlates outbound raw lines with labeled-response routing metadata when available. */
 @Component
 final class OutboundRawLineCorrelationService {
 
-  private final IrcClientService irc;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   private final LabeledResponseRoutingPort labeledResponseRoutingState;
 
-  @Autowired
   OutboundRawLineCorrelationService(
       OutboundBackendCapabilityPolicy backendCapabilityPolicy,
       LabeledResponseRoutingPort labeledResponseRoutingState) {
-    this.irc = null;
     this.backendCapabilityPolicy =
         Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
-    this.labeledResponseRoutingState =
-        Objects.requireNonNull(labeledResponseRoutingState, "labeledResponseRoutingState");
-  }
-
-  OutboundRawLineCorrelationService(
-      IrcClientService irc, LabeledResponseRoutingPort labeledResponseRoutingState) {
-    this.irc = Objects.requireNonNull(irc, "irc");
-    this.backendCapabilityPolicy = null;
     this.labeledResponseRoutingState =
         Objects.requireNonNull(labeledResponseRoutingState, "labeledResponseRoutingState");
   }
@@ -56,10 +43,7 @@ final class OutboundRawLineCorrelationService {
   }
 
   private boolean supportsLabeledResponse(String serverId) {
-    if (backendCapabilityPolicy != null) {
-      return backendCapabilityPolicy.supportsLabeledResponse(serverId);
-    }
-    return irc != null && irc.isLabeledResponseAvailable(serverId);
+    return backendCapabilityPolicy.supportsLabeledResponse(serverId);
   }
 
   static String redactIfSensitive(String raw) {

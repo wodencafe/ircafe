@@ -27,10 +27,12 @@ class OutboundNamesWhoListCommandServiceTest {
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
   private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy =
+      mock(OutboundBackendCapabilityPolicy.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
-      new OutboundRawLineCorrelationService(irc, labeledResponseRoutingState);
+      new OutboundRawLineCorrelationService(backendCapabilityPolicy, labeledResponseRoutingState);
   private final OutboundNamesWhoListCommandService service =
       new OutboundNamesWhoListCommandService(
           irc,

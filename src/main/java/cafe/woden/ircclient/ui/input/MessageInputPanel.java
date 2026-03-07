@@ -761,10 +761,6 @@ public class MessageInputPanel extends JPanel {
     setBackendUiProfile(new BackendUiProfile(activeServerId(), backendUiContext));
   }
 
-  public void setIsMatrixServer(java.util.function.Predicate<String> isMatrixServer) {
-    setBackendUiContext(BackendUiContext.fromMatrixServerPredicate(isMatrixServer));
-  }
-
   public void setActiveServerId(String serverId) {
     setBackendUiProfile(currentBackendUiProfile().withServerId(serverId));
   }

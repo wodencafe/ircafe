@@ -47,7 +47,8 @@ class OutboundUploadCommandServiceTest {
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
-      new OutboundRawLineCorrelationService(irc, labeledResponseRoutingState);
+      new OutboundRawLineCorrelationService(
+          outboundBackendCapabilityPolicy, labeledResponseRoutingState);
   private final OutboundUploadCommandService service =
       new OutboundUploadCommandService(
           irc,

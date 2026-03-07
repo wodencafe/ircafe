@@ -37,7 +37,7 @@ class OutboundSayQuoteCommandServiceTest {
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy =
       mock(OutboundBackendCapabilityPolicy.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
-      new OutboundRawLineCorrelationService(irc, labeledResponseRoutingState);
+      new OutboundRawLineCorrelationService(backendCapabilityPolicy, labeledResponseRoutingState);
   private final OutboundMessagingCommandService outboundMessagingCommandService =
       new OutboundMessagingCommandService(
           irc,
@@ -240,7 +240,7 @@ class OutboundSayQuoteCommandServiceTest {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isLabeledResponseAvailable("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.supportsLabeledResponse("libera")).thenReturn(true);
     when(labeledResponseRoutingState.prepareOutgoingRaw("libera", "MONITOR +nick"))
         .thenReturn(
             new LabeledResponseRoutingPort.PreparedRawLine(
@@ -262,7 +262,7 @@ class OutboundSayQuoteCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isLabeledResponseAvailable("libera")).thenReturn(false);
+    when(backendCapabilityPolicy.supportsLabeledResponse("libera")).thenReturn(false);
     when(irc.sendRaw("libera", "MONITOR +nick")).thenReturn(Completable.complete());
 
     service.handleQuote(disposables, "MONITOR +nick");
@@ -301,7 +301,7 @@ class OutboundSayQuoteCommandServiceTest {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isLabeledResponseAvailable("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.supportsLabeledResponse("libera")).thenReturn(true);
     when(labeledResponseRoutingState.prepareOutgoingRaw("libera", "WHO #ircafe"))
         .thenReturn(
             new LabeledResponseRoutingPort.PreparedRawLine(
