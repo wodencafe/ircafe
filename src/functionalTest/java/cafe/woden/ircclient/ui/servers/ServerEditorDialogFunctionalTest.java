@@ -16,6 +16,7 @@ import java.util.function.BooleanSupplier;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JLabel;
 import javax.swing.JPasswordField;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
@@ -146,6 +147,70 @@ class ServerEditorDialogFunctionalTest {
       onEdt(cancelBtn::doClick);
       Optional<?> result = readField(dialog, "result", Optional.class);
       assertTrue(result.isEmpty());
+    } finally {
+      onEdt(dialog::dispose);
+      flushEdt();
+    }
+  }
+
+  @Test
+  void matrixBackendUsesAccessTokenAndDisablesIrcAuthMode() throws Exception {
+    Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
+
+    ServerEditorDialog dialog = onEdtCall(() -> new ServerEditorDialog(null, "Add Server", null));
+    JTextField idField = readField(dialog, "idField", JTextField.class);
+    JTextField hostField = readField(dialog, "hostField", JTextField.class);
+    JTextField portField = readField(dialog, "portField", JTextField.class);
+    JTextField serverPassField = readField(dialog, "serverPassField", JTextField.class);
+    JComboBox<?> backendCombo = readField(dialog, "backendCombo", JComboBox.class);
+    JComboBox<?> authModeCombo = readField(dialog, "authModeCombo", JComboBox.class);
+    JCheckBox tlsBox = readField(dialog, "tlsBox", JCheckBox.class);
+    JLabel hostLabel = readField(dialog, "hostLabel", JLabel.class);
+    JLabel serverPasswordLabel = readField(dialog, "serverPasswordLabel", JLabel.class);
+    JButton saveBtn = readField(dialog, "saveBtn", JButton.class);
+
+    try {
+      onEdt(
+          () -> {
+            idField.setText("matrix");
+            hostField.setText("https://matrix.example.org");
+            backendCombo.setSelectedItem(IrcProperties.Server.Backend.MATRIX);
+          });
+      onEdt(
+          () -> {
+            assertEquals("Homeserver", hostLabel.getText());
+            assertEquals("Access token", serverPasswordLabel.getText());
+            assertEquals("443", portField.getText(), "matrix backend should default to TLS 443");
+            assertFalse(authModeCombo.isEnabled(), "Matrix backend should disable IRC auth mode");
+            assertFalse(saveBtn.isEnabled(), "matrix backend should require access token");
+          });
+
+      onEdt(tlsBox::doClick);
+      onEdt(() -> assertEquals("80", portField.getText(), "matrix plain mode should use 80"));
+      onEdt(tlsBox::doClick);
+      onEdt(() -> assertEquals("443", portField.getText(), "matrix TLS mode should use 443"));
+
+      onEdt(() -> serverPassField.setText("matrix-access-token"));
+      waitFor(() -> onEdtBoolean(saveBtn::isEnabled), Duration.ofSeconds(2));
+      onEdt(saveBtn::doClick);
+
+      Optional<?> result = readField(dialog, "result", Optional.class);
+      assertTrue(result.isPresent(), "save should produce a server result");
+      Object server = result.get();
+      Method backend = server.getClass().getMethod("backend");
+      assertEquals(IrcProperties.Server.Backend.MATRIX, backend.invoke(server));
+      Method serverPassword = server.getClass().getMethod("serverPassword");
+      assertEquals("matrix-access-token", serverPassword.invoke(server));
+
+      Method saslMethod = server.getClass().getMethod("sasl");
+      Object sasl = saslMethod.invoke(server);
+      Method saslEnabled = sasl.getClass().getMethod("enabled");
+      assertEquals(Boolean.FALSE, saslEnabled.invoke(sasl));
+
+      Method nickservMethod = server.getClass().getMethod("nickserv");
+      Object nickserv = nickservMethod.invoke(server);
+      Method nickservEnabled = nickserv.getClass().getMethod("enabled");
+      assertEquals(Boolean.FALSE, nickservEnabled.invoke(nickserv));
     } finally {
       onEdt(dialog::dispose);
       flushEdt();
