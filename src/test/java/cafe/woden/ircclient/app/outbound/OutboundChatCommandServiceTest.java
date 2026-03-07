@@ -42,6 +42,14 @@ class OutboundChatCommandServiceTest {
   private final OutboundMessagingCommandService outboundMessagingCommandService =
       new OutboundMessagingCommandService(
           irc, irc, ui, connectionCoordinator, targetCoordinator, pendingEchoMessageState);
+  private final OutboundSayQuoteCommandService outboundSayQuoteCommandService =
+      new OutboundSayQuoteCommandService(
+          irc,
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          rawLineCorrelationService,
+          outboundMessagingCommandService);
   private final OutboundUploadCommandService outboundUploadCommandService =
       mock(OutboundUploadCommandService.class);
   private final OutboundHelpContributor uploadHelpContributor =
@@ -71,13 +79,10 @@ class OutboundChatCommandServiceTest {
 
   private final OutboundChatCommandService service =
       new OutboundChatCommandService(
-          irc,
           ui,
-          connectionCoordinator,
           targetCoordinator,
-          rawLineCorrelationService,
-          List.of(uploadHelpContributor, messageMutationCommandService, readMarkerCommandService),
-          outboundMessagingCommandService);
+          outboundSayQuoteCommandService,
+          List.of(uploadHelpContributor, messageMutationCommandService, readMarkerCommandService));
 
   @AfterEach
   void tearDown() {

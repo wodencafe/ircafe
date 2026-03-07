@@ -21,6 +21,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundDccCommandService outboundDccCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
   private final OutboundMessagingCommandService outboundMessagingCommandService;
+  private final OutboundSayQuoteCommandService outboundSayQuoteCommandService;
   private final OutboundJoinPartCommandService outboundJoinPartCommandService;
   private final OutboundNickAwayCommandService outboundNickAwayCommandService;
   private final OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService;
@@ -46,6 +47,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundDccCommandService outboundDccCommandService,
       OutboundChatCommandService outboundChatCommandService,
       OutboundMessagingCommandService outboundMessagingCommandService,
+      OutboundSayQuoteCommandService outboundSayQuoteCommandService,
       OutboundJoinPartCommandService outboundJoinPartCommandService,
       OutboundNickAwayCommandService outboundNickAwayCommandService,
       OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService,
@@ -68,6 +70,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundDccCommandService = outboundDccCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
     this.outboundMessagingCommandService = outboundMessagingCommandService;
+    this.outboundSayQuoteCommandService = outboundSayQuoteCommandService;
     this.outboundJoinPartCommandService = outboundJoinPartCommandService;
     this.outboundNickAwayCommandService = outboundNickAwayCommandService;
     this.outboundConnectionLifecycleCommandService = outboundConnectionLifecycleCommandService;
@@ -367,11 +370,11 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     register(
         map,
         ParsedInput.Quote.class,
-        (d, cmd) -> outboundChatCommandService.handleQuote(d, cmd.rawLine()));
+        (d, cmd) -> outboundSayQuoteCommandService.handleQuote(d, cmd.rawLine()));
     register(
         map,
         ParsedInput.Say.class,
-        (d, cmd) -> outboundChatCommandService.handleSay(d, cmd.text()));
+        (d, cmd) -> outboundSayQuoteCommandService.handleSay(d, cmd.text()));
     register(map, ParsedInput.Unknown.class, this::handleUnknown);
 
     validateHandlerCoverage(map);
@@ -404,7 +407,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     if (userCommandAliasesBus != null && userCommandAliasesBus.unknownCommandAsRawEnabled()) {
       String rawLine = unknownCommandAsRawLine(cmd.raw());
       if (!rawLine.isBlank()) {
-        outboundChatCommandService.handleQuote(disposables, rawLine);
+        outboundSayQuoteCommandService.handleQuote(disposables, rawLine);
         return;
       }
     }

@@ -25,6 +25,8 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
   private final OutboundMessagingCommandService messaging =
       mock(OutboundMessagingCommandService.class);
+  private final OutboundSayQuoteCommandService sayQuote =
+      mock(OutboundSayQuoteCommandService.class);
   private final OutboundJoinPartCommandService joinPart =
       mock(OutboundJoinPartCommandService.class);
   private final OutboundNickAwayCommandService nickAway =
@@ -59,6 +61,7 @@ class DefaultOutboundCommandDispatcherTest {
           dcc,
           chat,
           messaging,
+          sayQuote,
           joinPart,
           nickAway,
           lifecycle,
@@ -306,6 +309,15 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
+  void dispatchSayAndQuoteRouteToSayQuoteService() {
+    dispatcher.dispatch(disposables, new ParsedInput.Say("hello world"));
+    verify(sayQuote).handleSay(disposables, "hello world");
+
+    dispatcher.dispatch(disposables, new ParsedInput.Quote("MONITOR +nick"));
+    verify(sayQuote).handleQuote(disposables, "MONITOR +nick");
+  }
+
+  @Test
   void dispatchUploadRoutesToUploadService() {
     dispatcher.dispatch(disposables, new ParsedInput.Upload("m.image", "/tmp/photo.png", "photo"));
 
@@ -330,7 +342,7 @@ class DefaultOutboundCommandDispatcherTest {
 
     dispatcher.dispatch(disposables, new ParsedInput.Unknown("/wat arg"));
 
-    verify(chat).handleQuote(disposables, "wat arg");
+    verify(sayQuote).handleQuote(disposables, "wat arg");
     verify(ui, never()).appendStatus(any(), any(), startsWith("Unknown command:"));
   }
 }
