@@ -7,7 +7,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
+import cafe.woden.ircclient.app.commands.ParsedInput;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -26,34 +28,38 @@ class QuasselBackendNamedOutboundCommandHandlerTest {
 
   @Test
   void supportsQuasselCommandNames() {
-    assertTrue(handler.supports(BackendNamedCommandNames.QUASSEL_SETUP));
-    assertTrue(handler.supports("/" + BackendNamedCommandNames.QUASSEL_NETWORK));
-    assertTrue(handler.supports(BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER));
-    assertTrue(handler.supports("QuasselSetup"));
-    assertFalse(handler.supports("join"));
+    Set<String> commandNames = handler.supportedCommandNames();
+    assertTrue(commandNames.contains(BackendNamedCommandNames.QUASSEL_SETUP));
+    assertTrue(commandNames.contains(BackendNamedCommandNames.QUASSEL_NETWORK));
+    assertTrue(commandNames.contains(BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER));
+    assertFalse(commandNames.contains("join"));
   }
 
   @Test
   void handleQuasselSetupDelegatesToService() {
-    handler.handle(disposables, BackendNamedCommandNames.QUASSEL_SETUP, "core");
+    handler.handle(
+        disposables, new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "core"));
     verify(quasselOutboundCommandService).handleQuasselSetup(disposables, "core");
   }
 
   @Test
   void handleQuasselNetworkDelegatesToService() {
-    handler.handle(disposables, BackendNamedCommandNames.QUASSEL_NETWORK, "list");
+    handler.handle(
+        disposables, new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK, "list"));
     verify(quasselOutboundCommandService).handleQuasselNetwork(disposables, "list");
   }
 
   @Test
   void handleQuasselNetworkManagerDelegatesToService() {
-    handler.handle(disposables, BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "core");
+    handler.handle(
+        disposables,
+        new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "core"));
     verify(quasselOutboundCommandService).handleQuasselNetworkManager(disposables, "core");
   }
 
   @Test
   void handleIgnoresUnknownCommands() {
-    handler.handle(disposables, "unknown", "x");
+    handler.handle(disposables, new ParsedInput.BackendNamed("unknown", "x"));
     verifyNoInteractions(quasselOutboundCommandService);
   }
 }

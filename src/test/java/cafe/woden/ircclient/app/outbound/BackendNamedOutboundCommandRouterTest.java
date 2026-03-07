@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.outbound;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,6 +12,7 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -29,16 +31,16 @@ class BackendNamedOutboundCommandRouterTest {
 
   @Test
   void routesToFirstSupportingHandler() {
+    when(first.supportedCommandNames()).thenReturn(Set.of(BackendNamedCommandNames.QUASSEL_NETWORK));
+    when(second.supportedCommandNames()).thenReturn(Set.of(BackendNamedCommandNames.QUASSEL_SETUP));
     BackendNamedOutboundCommandRouter router =
         new BackendNamedOutboundCommandRouter(List.of(first, second), targetCoordinator, ui);
     ParsedInput.BackendNamed command =
         new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "core");
-    when(first.supports(BackendNamedCommandNames.QUASSEL_SETUP)).thenReturn(false);
-    when(second.supports(BackendNamedCommandNames.QUASSEL_SETUP)).thenReturn(true);
 
     router.handle(disposables, command);
 
-    verify(second).handle(disposables, BackendNamedCommandNames.QUASSEL_SETUP, "core");
+    verify(second).handle(disposables, command);
   }
 
   @Test
@@ -66,5 +68,15 @@ class BackendNamedOutboundCommandRouterTest {
     router.handle(disposables, command);
 
     verify(ui).appendStatus(safe, "(system)", "Unknown command: /unknown");
+  }
+
+  @Test
+  void duplicateCommandRegistrationsFailFast() {
+    when(first.supportedCommandNames()).thenReturn(Set.of(BackendNamedCommandNames.QUASSEL_SETUP));
+    when(second.supportedCommandNames()).thenReturn(Set.of(BackendNamedCommandNames.QUASSEL_SETUP));
+
+    assertThrows(
+        IllegalStateException.class,
+        () -> new BackendNamedOutboundCommandRouter(List.of(first, second), targetCoordinator, ui));
   }
 }
