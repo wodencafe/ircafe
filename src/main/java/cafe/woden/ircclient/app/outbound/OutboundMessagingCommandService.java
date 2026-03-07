@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -25,6 +26,7 @@ final class OutboundMessagingCommandService {
   }
 
   private final IrcClientService irc;
+  private final IrcNegotiatedFeaturePort negotiatedFeaturePort;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
@@ -33,12 +35,15 @@ final class OutboundMessagingCommandService {
 
   OutboundMessagingCommandService(
       IrcClientService irc,
+      IrcNegotiatedFeaturePort negotiatedFeaturePort,
       OutboundBackendCapabilityPolicy backendCapabilityPolicy,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       PendingEchoMessagePort pendingEchoMessageState) {
     this.irc = Objects.requireNonNull(irc, "irc");
+    this.negotiatedFeaturePort =
+        Objects.requireNonNull(negotiatedFeaturePort, "negotiatedFeaturePort");
     this.backendCapabilityPolicy =
         Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
     this.ui = Objects.requireNonNull(ui, "ui");
@@ -297,7 +302,7 @@ final class OutboundMessagingCommandService {
       return "IRCv3 multiline is not negotiated on this server.";
     }
 
-    int maxLines = irc.negotiatedMultilineMaxLines(serverId);
+    int maxLines = negotiatedFeaturePort.negotiatedMultilineMaxLines(serverId);
     if (maxLines > 0 && lineCount > maxLines) {
       return "Message has "
           + lineCount
@@ -306,7 +311,7 @@ final class OutboundMessagingCommandService {
           + ".";
     }
 
-    long maxBytes = irc.negotiatedMultilineMaxBytes(serverId);
+    long maxBytes = negotiatedFeaturePort.negotiatedMultilineMaxBytes(serverId);
     if (maxBytes > 0L && payloadUtf8Bytes > maxBytes) {
       return "Message is "
           + payloadUtf8Bytes

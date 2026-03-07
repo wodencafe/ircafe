@@ -10,6 +10,7 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.core.Completable;
@@ -30,6 +31,7 @@ class OutboundMessagingCommandServiceTest {
   private final OutboundMessagingCommandService service =
       new OutboundMessagingCommandService(
           irc,
+          IrcNegotiatedFeaturePort.from(irc),
           backendCapabilityPolicy,
           ui,
           connectionCoordinator,
