@@ -72,6 +72,13 @@ class ServerEditorDialogFunctionalTest {
       onEdt(() -> saslMechanism.setSelectedItem("SCRAM-SHA-256"));
       onEdt(() -> assertTrue(saslPassField.isEnabled(), "SCRAM requires secret field"));
 
+      int authModePrefBeforeAuto = onEdtCall(() -> authModeCombo.getPreferredSize().width);
+      onEdt(() -> saslMechanism.setSelectedItem("AUTO"));
+      int authModePrefAfterAuto = onEdtCall(() -> authModeCombo.getPreferredSize().width);
+      assertTrue(
+          authModePrefAfterAuto >= authModePrefBeforeAuto,
+          "auth method combo should not shrink when SASL mechanism switches to AUTO");
+
       onEdt(proxyOverrideBox::doClick);
       if (!onEdtCall(proxyEnabledBox::isSelected)) {
         onEdt(proxyEnabledBox::doClick);

@@ -200,6 +200,9 @@ public class ServerEditorDialog extends JDialog {
             return label;
           }
         });
+    // Keep combo sizing stable so short selections do not collapse Auth-tab field widths.
+    authModeCombo.setPrototypeDisplayValue(AuthMode.NICKSERV);
+    saslMechanism.setPrototypeDisplayValue("ECDSA-NIST256P-CHALLENGE");
     nickservDelayJoinBox.setSelected(true);
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
     setLayout(new BorderLayout(10, 10));
