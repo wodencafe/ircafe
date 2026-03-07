@@ -27,8 +27,9 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.dcc.DccTransferStore;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.modulith.AbstractApplicationModuleIntegrationTest;
@@ -98,7 +99,8 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
   private final ConnectionCoordinator connectionCoordinator;
   private final RuntimeConfigStore runtimeConfig;
   private final ServerRegistry serverRegistry;
-  private final IrcClientService ircClientService;
+  private final IrcTargetMembershipPort ircTargetMembershipPort;
+  private final IrcMediatorInteractionPort ircMediatorInteractionPort;
   private final TrayNotificationsPort trayNotificationsPort;
   private final UiPort swingUiPort;
   private final Method onServerIrcEvent;
@@ -109,7 +111,9 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
       ConnectionCoordinator connectionCoordinator,
       RuntimeConfigStore runtimeConfig,
       ServerRegistry serverRegistry,
-      IrcClientService ircClientService,
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort ircTargetMembershipPort,
+      @Qualifier("ircMediatorInteractionPort")
+          IrcMediatorInteractionPort ircMediatorInteractionPort,
       TrayNotificationsPort trayNotificationsPort,
       @Qualifier("swingUiPort") UiPort swingUiPort)
       throws NoSuchMethodException {
@@ -118,7 +122,8 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     this.connectionCoordinator = connectionCoordinator;
     this.runtimeConfig = runtimeConfig;
     this.serverRegistry = serverRegistry;
-    this.ircClientService = ircClientService;
+    this.ircTargetMembershipPort = ircTargetMembershipPort;
+    this.ircMediatorInteractionPort = ircMediatorInteractionPort;
     this.trayNotificationsPort = trayNotificationsPort;
     this.swingUiPort = swingUiPort;
     this.onServerIrcEvent =
@@ -128,7 +133,8 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
 
   @BeforeEach
   void clearMockHistory() {
-    clearInvocations(ircClientService, swingUiPort, trayNotificationsPort);
+    clearInvocations(
+        ircTargetMembershipPort, ircMediatorInteractionPort, swingUiPort, trayNotificationsPort);
   }
 
   @Test
@@ -150,7 +156,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
 
     assertFalse(accepted);
     verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, true);
-    verify(ircClientService, atLeastOnce()).partChannel(sid, channel);
+    verify(ircTargetMembershipPort, atLeastOnce()).partChannel(sid, channel);
   }
 
   @Test
@@ -182,7 +188,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     boolean accepted = targetCoordinator.onJoinedChannel(sid, channel);
 
     assertTrue(accepted);
-    verify(ircClientService, atLeastOnce()).joinChannel(sid, channel);
+    verify(ircTargetMembershipPort, atLeastOnce()).joinChannel(sid, channel);
     verify(swingUiPort, atLeastOnce()).setChannelDisconnected(ref, false);
   }
 
@@ -207,7 +213,7 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
     String channel = "#it-replay-msgid";
     TargetRef chan = new TargetRef(sid, channel);
     String msgId = "replay-dup-1";
-    when(ircClientService.currentNick(sid)).thenReturn(Optional.of("tester"));
+    when(ircMediatorInteractionPort.currentNick(sid)).thenReturn(Optional.of("tester"));
 
     emitServerEvent(
         sid,
@@ -273,9 +279,10 @@ class ChannelLifecycleSpringIntegrationTest extends AbstractApplicationModuleInt
   }
 
   private void stubJoinAndPart(String serverId, String channel) {
-    when(ircClientService.joinChannel(serverId, channel)).thenReturn(Completable.complete());
-    when(ircClientService.partChannel(serverId, channel, null)).thenReturn(Completable.complete());
-    when(ircClientService.partChannel(serverId, channel)).thenReturn(Completable.complete());
+    when(ircTargetMembershipPort.joinChannel(serverId, channel)).thenReturn(Completable.complete());
+    when(ircTargetMembershipPort.partChannel(serverId, channel, null))
+        .thenReturn(Completable.complete());
+    when(ircTargetMembershipPort.partChannel(serverId, channel)).thenReturn(Completable.complete());
   }
 
   private String primaryServerId() {

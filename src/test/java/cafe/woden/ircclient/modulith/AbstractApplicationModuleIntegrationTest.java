@@ -14,7 +14,16 @@ import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcConnectionLifecyclePort;
+import cafe.woden.ircclient.irc.IrcCurrentNickPort;
+import cafe.woden.ircclient.irc.IrcEchoCapabilityPort;
+import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.IrcShutdownPort;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
@@ -42,8 +51,35 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
     })
 public abstract class AbstractApplicationModuleIntegrationTest {
 
+  @MockitoBean(name = "ircClientService", answers = Answers.RETURNS_DEEP_STUBS)
+  IrcBackendClientService ircClientService;
+
+  @MockitoBean(name = "ircShutdownPort")
+  IrcShutdownPort ircShutdownPort;
+
+  @MockitoBean(name = "ircCurrentNickPort", answers = Answers.RETURNS_DEEP_STUBS)
+  IrcCurrentNickPort ircCurrentNickPort;
+
+  @MockitoBean(name = "ircTargetMembershipPort", answers = Answers.RETURNS_DEEP_STUBS)
+  IrcTargetMembershipPort ircTargetMembershipPort;
+
+  @MockitoBean(name = "ircMediatorInteractionPort", answers = Answers.RETURNS_DEEP_STUBS)
+  IrcMediatorInteractionPort ircMediatorInteractionPort;
+
+  @MockitoBean(name = "ircConnectionLifecyclePort", answers = Answers.RETURNS_DEEP_STUBS)
+  IrcConnectionLifecyclePort ircConnectionLifecyclePort;
+
+  @MockitoBean(name = "ircNegotiatedFeaturePort", answers = Answers.RETURNS_DEEP_STUBS)
+  IrcNegotiatedFeaturePort ircNegotiatedFeaturePort;
+
   @MockitoBean(answers = Answers.RETURNS_DEEP_STUBS)
-  IrcClientService ircClientService;
+  IrcReadMarkerPort ircReadMarkerPort;
+
+  @MockitoBean(answers = Answers.RETURNS_DEEP_STUBS)
+  IrcTypingPort ircTypingPort;
+
+  @MockitoBean(answers = Answers.RETURNS_DEEP_STUBS)
+  IrcEchoCapabilityPort ircEchoCapabilityPort;
 
   @MockitoBean ChatHistoryTranscriptPort chatHistoryTranscriptPort;
 
