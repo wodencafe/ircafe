@@ -27,6 +27,8 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundUploadCommandService upload = mock(OutboundUploadCommandService.class);
   private final OutboundMessageMutationCommandService messageMutations =
       mock(OutboundMessageMutationCommandService.class);
+  private final OutboundReadMarkerCommandService readMarker =
+      mock(OutboundReadMarkerCommandService.class);
   private final OutboundMonitorCommandService monitor = mock(OutboundMonitorCommandService.class);
   private final OutboundIgnoreCommandService ignore = mock(OutboundIgnoreCommandService.class);
   private final LocalFilterCommandHandler filter = mock(LocalFilterCommandHandler.class);
@@ -44,6 +46,7 @@ class DefaultOutboundCommandDispatcherTest {
           quassel,
           upload,
           messageMutations,
+          readMarker,
           monitor,
           ignore,
           filter,
@@ -216,7 +219,7 @@ class DefaultOutboundCommandDispatcherTest {
   @Test
   void dispatchMarkReadRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.MarkRead());
-    verify(chat).handleMarkRead(disposables);
+    verify(readMarker).handleMarkRead(disposables);
   }
 
   @Test

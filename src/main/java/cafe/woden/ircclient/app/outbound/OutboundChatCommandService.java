@@ -932,44 +932,6 @@ public class OutboundChatCommandService {
                 () -> {}, err -> ui.appendError(status, "(list-error)", String.valueOf(err))));
   }
 
-  public void handleMarkRead(CompositeDisposable disposables) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(markread)", "Select a server first.");
-      return;
-    }
-
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    if (at.isStatus() || at.isUiOnly()) {
-      ui.appendStatus(status, "(markread)", "Select a channel or PM first.");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-
-    if (!irc.isReadMarkerAvailable(at.serverId())) {
-      ui.appendStatus(
-          status,
-          "(markread)",
-          featureUnavailableMessage(
-              at.serverId(), "read-marker is not negotiated on this server."));
-      return;
-    }
-
-    Instant now = Instant.now();
-    long nowMs = now.toEpochMilli();
-    ui.setReadMarker(at, nowMs);
-    ui.clearUnread(at);
-
-    disposables.add(
-        irc.sendReadMarker(at.serverId(), at.target(), now)
-            .subscribe(
-                () -> {}, err -> ui.appendError(status, "(markread-error)", String.valueOf(err))));
-  }
-
   public void handleHelp(String topic) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef out = (at != null) ? at : targetCoordinator.safeStatusTarget();
@@ -987,7 +949,6 @@ public class OutboundChatCommandService {
         out,
         "(help)",
         "Common: /join /part /msg /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc /quasselsetup /quasselnet");
-    appendMarkReadHelp(out);
     ui.appendStatus(
         out,
         "(help)",
@@ -1003,7 +964,6 @@ public class OutboundChatCommandService {
   private Map<String, HelpTopicHandler> buildHelpTopicHandlers() {
     LinkedHashMap<String, HelpTopicHandler> handlers = new LinkedHashMap<>();
     registerHelpTopicHandler(handlers, this::appendDccHelp, "dcc");
-    registerHelpTopicHandler(handlers, this::appendMarkReadHelp, "markread");
     for (OutboundHelpContributor contributor : helpContributors) {
       registerHelpTopicHandlers(handlers, contributor.topicHelpHandlers());
     }
@@ -1705,53 +1665,10 @@ public class OutboundChatCommandService {
     return !irc.isEchoMessageAvailable(serverId);
   }
 
-  private void appendMarkReadHelp(TargetRef out) {
-    boolean available = isReadMarkerSupportedForServer(out);
-    String sid = out == null ? "" : out.serverId();
-    ui.appendStatus(
-        out,
-        "(help)",
-        "/markread"
-            + availabilitySuffix(
-                available,
-                unavailableReasonForHelp(
-                    sid, "requires negotiated read-marker or draft/read-marker")));
-  }
-
-  private boolean isReadMarkerSupportedForServer(TargetRef target) {
-    if (target == null) return false;
-    String sid = Objects.toString(target.serverId(), "").trim();
-    if (sid.isEmpty()) return false;
-    try {
-      return irc.isReadMarkerAvailable(sid);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
   private static String normalizeHelpTopic(String raw) {
     String s = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
     if (s.startsWith("/")) s = s.substring(1).trim();
     return s;
-  }
-
-  private static String availabilitySuffix(boolean available, String unavailableReason) {
-    if (available) return "";
-    String reason = Objects.toString(unavailableReason, "").trim();
-    if (reason.isEmpty()) return " (unavailable)";
-    return " (unavailable: " + reason + ")";
-  }
-
-  private String featureUnavailableMessage(String serverId, String fallback) {
-    String backendReason = normalizedBackendAvailabilityReason(serverId);
-    if (!backendReason.isEmpty()) return ensureTerminalPunctuation(backendReason);
-    return fallback;
-  }
-
-  private String unavailableReasonForHelp(String serverId, String fallback) {
-    String backendReason = normalizedBackendAvailabilityReason(serverId);
-    if (!backendReason.isEmpty()) return backendReason;
-    return fallback;
   }
 
   private String normalizedBackendAvailabilityReason(String serverId) {

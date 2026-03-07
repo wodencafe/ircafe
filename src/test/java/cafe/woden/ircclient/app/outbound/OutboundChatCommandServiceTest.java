@@ -84,6 +84,8 @@ class OutboundChatCommandServiceTest {
           targetCoordinator,
           pendingEchoMessageState,
           rawLineCorrelationService);
+  private final OutboundReadMarkerCommandService readMarkerCommandService =
+      new OutboundReadMarkerCommandService(irc, irc, ui, connectionCoordinator, targetCoordinator);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundChatCommandService service =
@@ -94,7 +96,7 @@ class OutboundChatCommandServiceTest {
           connectionCoordinator,
           targetCoordinator,
           rawLineCorrelationService,
-          List.of(uploadHelpContributor, messageMutationCommandService),
+          List.of(uploadHelpContributor, messageMutationCommandService, readMarkerCommandService),
           commandTargetPolicy,
           runtimeConfig,
           awayRoutingState,
@@ -707,66 +709,6 @@ class OutboundChatCommandServiceTest {
     verify(ui)
         .appendStatus(
             eq(status), eq("(raw)"), argThat(s -> s != null && s.contains("{label=req-2}")));
-  }
-
-  @Test
-  void markReadSendsReadMarkerAndClearsUnreadForActiveConversation() {
-    TargetRef chan = new TargetRef("libera", "#ircafe");
-    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
-    when(irc.sendReadMarker(eq("libera"), eq("#ircafe"), any(Instant.class)))
-        .thenReturn(Completable.complete());
-
-    service.handleMarkRead(disposables);
-
-    verify(ui).setReadMarker(eq(chan), anyLong());
-    verify(ui).clearUnread(chan);
-    verify(irc).sendReadMarker(eq("libera"), eq("#ircafe"), any(Instant.class));
-  }
-
-  @Test
-  void markReadShowsCapabilityHintWhenReadMarkerUnavailable() {
-    TargetRef chan = new TargetRef("libera", "#ircafe");
-    TargetRef status = new TargetRef("libera", "status");
-    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(false);
-
-    service.handleMarkRead(disposables);
-
-    verify(ui).appendStatus(status, "(markread)", "read-marker is not negotiated on this server.");
-    verify(irc, never()).sendReadMarker(eq("libera"), eq("#ircafe"), any(Instant.class));
-  }
-
-  @Test
-  void markReadShowsBackendAvailabilityReasonWhenProvided() {
-    TargetRef chan = new TargetRef("libera", "#ircafe");
-    TargetRef status = new TargetRef("libera", "status");
-    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(false);
-    when(irc.backendAvailabilityReason("libera"))
-        .thenReturn("Quassel Core backend is not implemented yet");
-
-    service.handleMarkRead(disposables);
-
-    verify(ui).appendStatus(status, "(markread)", "Quassel Core backend is not implemented yet.");
-    verify(irc, never()).sendReadMarker(eq("libera"), eq("#ircafe"), any(Instant.class));
-  }
-
-  @Test
-  void markReadFallsBackToNegotiationReasonWhenBackendHasNoSpecificReason() {
-    TargetRef chan = new TargetRef("libera", "#ircafe");
-    TargetRef status = new TargetRef("libera", "status");
-    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isReadMarkerAvailable("libera")).thenReturn(false);
-
-    service.handleMarkRead(disposables);
-
-    verify(ui).appendStatus(status, "(markread)", "read-marker is not negotiated on this server.");
-    verify(irc, never()).sendReadMarker(eq("libera"), eq("#ircafe"), any(Instant.class));
   }
 
   @Test

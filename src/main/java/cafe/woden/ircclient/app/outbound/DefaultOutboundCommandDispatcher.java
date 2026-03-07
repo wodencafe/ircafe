@@ -23,6 +23,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final QuasselOutboundCommandService quasselOutboundCommandService;
   private final OutboundUploadCommandService outboundUploadCommandService;
   private final OutboundMessageMutationCommandService outboundMessageMutationCommandService;
+  private final OutboundReadMarkerCommandService outboundReadMarkerCommandService;
   private final OutboundMonitorCommandService outboundMonitorCommandService;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
   private final LocalFilterCommandHandler localFilterCommandService;
@@ -39,6 +40,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       QuasselOutboundCommandService quasselOutboundCommandService,
       OutboundUploadCommandService outboundUploadCommandService,
       OutboundMessageMutationCommandService outboundMessageMutationCommandService,
+      OutboundReadMarkerCommandService outboundReadMarkerCommandService,
       OutboundMonitorCommandService outboundMonitorCommandService,
       OutboundIgnoreCommandService outboundIgnoreCommandService,
       LocalFilterCommandHandler localFilterCommandService,
@@ -52,6 +54,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.quasselOutboundCommandService = quasselOutboundCommandService;
     this.outboundUploadCommandService = outboundUploadCommandService;
     this.outboundMessageMutationCommandService = outboundMessageMutationCommandService;
+    this.outboundReadMarkerCommandService = outboundReadMarkerCommandService;
     this.outboundMonitorCommandService = outboundMonitorCommandService;
     this.outboundIgnoreCommandService = outboundIgnoreCommandService;
     this.localFilterCommandService = localFilterCommandService;
@@ -292,7 +295,9 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
         (d, cmd) ->
             outboundChatCommandService.handleChatHistoryAround(d, cmd.selector(), cmd.limit()));
     register(
-        map, ParsedInput.MarkRead.class, (d, cmd) -> outboundChatCommandService.handleMarkRead(d));
+        map,
+        ParsedInput.MarkRead.class,
+        (d, cmd) -> outboundReadMarkerCommandService.handleMarkRead(d));
     register(
         map,
         ParsedInput.Help.class,
