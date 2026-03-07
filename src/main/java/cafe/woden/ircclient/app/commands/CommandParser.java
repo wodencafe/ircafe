@@ -841,15 +841,7 @@ public class CommandParser {
   private static boolean looksLikePartTarget(String token) {
     String value = token == null ? "" : token.trim();
     if (value.isEmpty()) return false;
-    if (value.startsWith("#") || value.startsWith("&")) return true;
-    return looksLikeMatrixRoomId(value);
-  }
-
-  private static boolean looksLikeMatrixRoomId(String token) {
-    String value = token == null ? "" : token.trim();
-    if (!value.startsWith("!")) return false;
-    int colon = value.indexOf(':');
-    return colon > 1 && colon < value.length() - 1;
+    return value.startsWith("#") || value.startsWith("&");
   }
 
   private static boolean matchesCommand(String line, String cmd) {

@@ -114,12 +114,17 @@ final class OutboundJoinPartCommandService {
 
     TargetRef target;
     if (chan.isEmpty()) {
-      if (!commandTargetPolicy.isChannelLikeTarget(at)) {
+      ParsedPartTarget explicitFromReason = parseExplicitPartTargetFromReason(at.serverId(), msg);
+      if (explicitFromReason != null) {
+        target = explicitFromReason.target();
+        msg = explicitFromReason.reason();
+      } else if (!commandTargetPolicy.isChannelLikeTarget(at)) {
         ui.appendStatus(
             at, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
         return;
+      } else {
+        target = at;
       }
-      target = at;
     } else {
       target = new TargetRef(at.serverId(), chan);
       if (!commandTargetPolicy.isChannelLikeTargetForServer(at.serverId(), target.target())) {
@@ -150,7 +155,23 @@ final class OutboundJoinPartCommandService {
                 err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
   }
 
+  private ParsedPartTarget parseExplicitPartTargetFromReason(String serverId, String reason) {
+    String text = reason == null ? "" : reason.trim();
+    if (text.isEmpty()) return null;
+
+    int split = text.indexOf(' ');
+    String candidate = split < 0 ? text : text.substring(0, split).trim();
+    if (!commandTargetPolicy.isChannelLikeTargetForServer(serverId, candidate)) {
+      return null;
+    }
+
+    String trailingReason = split < 0 ? "" : text.substring(split + 1).trim();
+    return new ParsedPartTarget(new TargetRef(serverId, candidate), trailingReason);
+  }
+
   private static boolean containsCrlf(String s) {
     return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);
   }
+
+  private record ParsedPartTarget(TargetRef target, String reason) {}
 }

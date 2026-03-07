@@ -48,12 +48,12 @@ class CommandParserTest {
   }
 
   @Test
-  void parsesPartWithMatrixRoomIdAsExplicitTarget() {
+  void parsesPartWithMatrixRoomIdAsReasonPayload() {
     ParsedInput in = parser.parse("/part !abc123:matrix.org later");
     assertTrue(in instanceof ParsedInput.Part);
     ParsedInput.Part part = (ParsedInput.Part) in;
-    assertEquals("!abc123:matrix.org", part.channel());
-    assertEquals("later", part.reason());
+    assertEquals("", part.channel());
+    assertEquals("!abc123:matrix.org later", part.reason());
   }
 
   @Test

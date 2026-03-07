@@ -169,6 +169,32 @@ class OutboundJoinPartCommandServiceTest {
   }
 
   @Test
+  void partWithMatrixRoomIdEncodedInReasonDetachesChannelLikeTarget() {
+    TargetRef status = new TargetRef("matrix", "status");
+    TargetRef room = new TargetRef("matrix", "!abc123:matrix.org");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+
+    service.handlePart(disposables, "", "!abc123:matrix.org later");
+
+    verify(targetCoordinator).disconnectChannel(room, "later");
+  }
+
+  @Test
+  void partWithReasonPrefixedMatrixRoomOnIrcBackendShowsUsage() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+
+    service.handlePart(disposables, "", "!abc123:matrix.org later");
+
+    verify(ui)
+        .appendStatus(
+            status, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
+    verify(targetCoordinator, never()).disconnectChannel(any(TargetRef.class), anyString());
+  }
+
+  @Test
   void partFromActiveMatrixRoomIdDetachesChannelLikeTarget() {
     TargetRef room = new TargetRef("matrix", "!abc123:matrix.org");
     when(targetCoordinator.getActiveTarget()).thenReturn(room);
@@ -178,6 +204,20 @@ class OutboundJoinPartCommandServiceTest {
     service.handlePart(disposables, "", "later");
 
     verify(targetCoordinator).disconnectChannel(room, "later");
+  }
+
+  @Test
+  void partFromActiveChannelWithReasonPrefixedMatrixRoomTargetsExplicitRoom() {
+    TargetRef activeRoom = new TargetRef("matrix", "!active:matrix.org");
+    TargetRef explicitRoom = new TargetRef("matrix", "!other:matrix.org");
+    when(targetCoordinator.getActiveTarget()).thenReturn(activeRoom);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+
+    service.handlePart(disposables, "", "!other:matrix.org later");
+
+    verify(targetCoordinator).disconnectChannel(explicitRoom, "later");
+    verify(targetCoordinator, never()).disconnectChannel(activeRoom, "!other:matrix.org later");
   }
 
   @Test
