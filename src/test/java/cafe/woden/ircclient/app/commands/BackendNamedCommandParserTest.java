@@ -2,9 +2,11 @@ package cafe.woden.ircclient.app.commands;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class BackendNamedCommandParserTest {
@@ -48,14 +50,52 @@ class BackendNamedCommandParserTest {
   @Test
   void delegatesToRegisteredHandlers() {
     BackendNamedCommandHandler custom =
-        line ->
-            BackendNamedCommandParser.matchesCommand(line, "/backendping")
-                ? new ParsedInput.Help("backendping")
-                : null;
+        new BackendNamedCommandHandler() {
+          @Override
+          public Set<String> supportedCommandNames() {
+            return Set.of("backendping");
+          }
+
+          @Override
+          public ParsedInput parse(String line, String matchedCommandName) {
+            return new ParsedInput.Help(matchedCommandName);
+          }
+        };
     BackendNamedCommandParser parser = new BackendNamedCommandParser(List.of(custom));
 
     ParsedInput parsed = parser.parse("/backendping");
     assertTrue(parsed instanceof ParsedInput.Help);
     assertEquals("backendping", ((ParsedInput.Help) parsed).topic());
+  }
+
+  @Test
+  void duplicateCommandRegistrationsFailFast() {
+    BackendNamedCommandHandler first =
+        new BackendNamedCommandHandler() {
+          @Override
+          public Set<String> supportedCommandNames() {
+            return Set.of("backendping");
+          }
+
+          @Override
+          public ParsedInput parse(String line, String matchedCommandName) {
+            return null;
+          }
+        };
+    BackendNamedCommandHandler second =
+        new BackendNamedCommandHandler() {
+          @Override
+          public Set<String> supportedCommandNames() {
+            return Set.of("backendping");
+          }
+
+          @Override
+          public ParsedInput parse(String line, String matchedCommandName) {
+            return null;
+          }
+        };
+
+    assertThrows(
+        IllegalStateException.class, () -> new BackendNamedCommandParser(List.of(first, second)));
   }
 }

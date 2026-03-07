@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.commands;
 
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /** Handles Quassel backend command aliases like /quasselsetup and /quasselnet. */
@@ -7,27 +8,23 @@ import org.springframework.stereotype.Component;
 final class QuasselBackendNamedCommandHandler implements BackendNamedCommandHandler {
 
   @Override
-  public ParsedInput parse(String line) {
-    boolean setup = BackendNamedCommandParser.matchesCommand(line, "/quasselsetup");
-    boolean setupAlias = BackendNamedCommandParser.matchesCommand(line, "/qsetup");
-    if (setup || setupAlias) {
-      String serverId =
-          setup
-              ? BackendNamedCommandParser.argAfter(line, "/quasselsetup")
-              : BackendNamedCommandParser.argAfter(line, "/qsetup");
-      return new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, serverId);
-    }
+  public Set<String> supportedCommandNames() {
+    return Set.of("quasselsetup", "qsetup", "quasselnet", "qnet");
+  }
 
-    boolean network = BackendNamedCommandParser.matchesCommand(line, "/quasselnet");
-    boolean networkAlias = BackendNamedCommandParser.matchesCommand(line, "/qnet");
-    if (network || networkAlias) {
-      String args =
-          network
-              ? BackendNamedCommandParser.argAfter(line, "/quasselnet")
-              : BackendNamedCommandParser.argAfter(line, "/qnet");
-      return new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK, args);
-    }
-
-    return null;
+  @Override
+  public ParsedInput parse(String line, String matchedCommandName) {
+    String commandToken = "/" + matchedCommandName;
+    return switch (matchedCommandName) {
+      case "quasselsetup", "qsetup" ->
+          new ParsedInput.BackendNamed(
+              BackendNamedCommandNames.QUASSEL_SETUP,
+              BackendNamedCommandParser.argAfter(line, commandToken));
+      case "quasselnet", "qnet" ->
+          new ParsedInput.BackendNamed(
+              BackendNamedCommandNames.QUASSEL_NETWORK,
+              BackendNamedCommandParser.argAfter(line, commandToken));
+      default -> null;
+    };
   }
 }
