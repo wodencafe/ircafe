@@ -1,6 +1,6 @@
 # IRCafe
 
-IRCafe is a Java 25 desktop IRC client with a Swing UI and a Spring Boot backend.
+IRCafe is a Java 25 desktop chat client with a Swing UI and a Spring Boot backend, supporting IRC, Quassel Core, and Matrix backends.
 
 <figure>
   <img width="50%" height="619" alt="Screenshot_20260301_164811" src="https://github.com/user-attachments/assets/b22feaac-3d33-469f-879b-a2efb22cca20" />
@@ -28,6 +28,13 @@ IRCafe is a Java 25 desktop IRC client with a Swing UI and a Spring Boot backend
 - Global SOCKS5 proxy plus per-server proxy override (auth, remote DNS, connect/read timeouts, proxy test).
 - Auto-join channels or PM targets and per-server perform-on-connect commands.
 - Rich slash command support for connection/session control, channel/user ops, invite workflows, monitor, ignore/soft-ignore, CTCP, DCC, CHATHISTORY, filters, and raw IRC.
+
+### Matrix Backend
+
+- Matrix transport backend with homeserver probe + token-authenticated connect flow.
+- Room and DM messaging, room joins/leaves, room directory/listing, and sync-based timeline ingestion.
+- Matrix-backed compose features mapped into IRCafe flows, including reply/react/edit/redact, typing, read markers, and history navigation.
+- Matrix support is active and tested, but full slash-command parity with IRC is still in progress.
 
 ### IRCv3 and Bouncer Support
 
@@ -275,6 +282,20 @@ Optional knobs: `irc.it.container.e2e.irc-image`, `irc.it.container.e2e.channel`
 `irc.it.container.e2e.bot-message`, `irc.it.container.e2e.app-message`,
 `irc.it.container.e2e.nick`, `irc.it.container.e2e.login`.
 
+Matrix Synapse container integration (opt-in):
+
+```bash
+# Starts a local Synapse container and validates probe/whoami/send/sync/history flows.
+./gradlew integrationTest --tests 'cafe.woden.ircclient.irc.matrix.MatrixSynapseContainerIntegrationTest' \
+  -Dmatrix.it.container.enabled=true
+```
+
+Optional knobs (property/env): `matrix.it.container.image` / `MATRIX_IT_CONTAINER_IMAGE`,
+`matrix.it.container.server-name` / `MATRIX_IT_CONTAINER_SERVER_NAME`,
+`matrix.it.container.http-port` / `MATRIX_IT_CONTAINER_HTTP_PORT`,
+`matrix.it.container.startup-timeout-seconds` / `MATRIX_IT_CONTAINER_STARTUP_TIMEOUT_SECONDS`,
+`matrix.it.container.registration-secret` / `MATRIX_IT_CONTAINER_REGISTRATION_SECRET`.
+
 When to run which tests:
 
 - Spring Modulith/jMolecules/ArchUnit or module-boundary refactors: `./gradlew architectureTest test`
@@ -326,9 +347,9 @@ IRCAFE_RUNTIME_CONFIG=/path/to/ircafe.yml java -jar build/libs/ircafe-*.jar
 java -jar build/libs/ircafe-*.jar --ircafe.runtime-config=/path/to/ircafe.yml
 ```
 
-The IRC server list uses the `irc.servers` section.
+Server definitions (IRC, Quassel Core, Matrix) use the `irc.servers` section.
 
-Example:
+IRC example:
 
 ```yaml
 irc:
@@ -354,6 +375,32 @@ irc:
 
       autoJoin:
         - "#irclient"
+```
+
+Matrix example:
+
+```yaml
+irc:
+    servers:
+    - id: "matrix-main"
+      backend: "matrix"
+      # Host can be a plain host or a full base URL (for example with a path prefix).
+      host: "https://matrix.example.org"
+      port: 443
+      tls: true
+
+      # Matrix access token (preferred here). IRCafe also falls back to sasl.password if this is blank.
+      serverPassword: "${IRCAFE_MATRIX_ACCESS_TOKEN:}"
+
+      # Optional local display identity used by IRCafe UI defaults.
+      nick: "@ircafe:example.org"
+      login: "ircafe"
+      realName: "IRCafe Matrix"
+
+      # Optional auto-join targets (room id or alias).
+      autoJoin:
+        - "!someroom:example.org"
+        - "#ircafe:example.org"
 ```
 
 You can also override UI behavior under the `ircafe.ui` prefix. For inline image previews (direct image links in chat),
