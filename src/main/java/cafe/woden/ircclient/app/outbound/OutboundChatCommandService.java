@@ -8,7 +8,6 @@ import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
-import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.nio.charset.StandardCharsets;
@@ -26,8 +25,7 @@ import org.springframework.stereotype.Component;
 /**
  * Handles outbound "chatty" slash commands extracted from {@code IrcMediator}.
  *
- * <p>Includes: /join, /part, /connect, /disconnect, /reconnect, /quit, /nick, /away, /query, /msg,
- * /notice, /me, /say, /quote.
+ * <p>Includes: /nick, /away, /query, /msg, /notice, /me, /say, /quote.
  *
  * <p>Behavior is intended to be preserved.
  */
@@ -48,10 +46,8 @@ public class OutboundChatCommandService {
   private final OutboundRawLineCorrelationService rawLineCorrelationService;
   private final List<OutboundHelpContributor> helpContributors;
 
-  private final CommandTargetPolicy commandTargetPolicy;
   private final ChatCommandRuntimeConfigPort runtimeConfig;
   private final AwayRoutingPort awayRoutingState;
-  private final JoinRoutingPort joinRoutingState;
   private final PendingEchoMessagePort pendingEchoMessageState;
   private final Map<String, HelpTopicHandler> helpTopicHandlers;
 
@@ -63,10 +59,8 @@ public class OutboundChatCommandService {
       TargetCoordinator targetCoordinator,
       OutboundRawLineCorrelationService rawLineCorrelationService,
       List<OutboundHelpContributor> helpContributors,
-      CommandTargetPolicy commandTargetPolicy,
       ChatCommandRuntimeConfigPort runtimeConfig,
       AwayRoutingPort awayRoutingState,
-      JoinRoutingPort joinRoutingState,
       PendingEchoMessagePort pendingEchoMessageState) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
@@ -79,125 +73,11 @@ public class OutboundChatCommandService {
     this.helpContributors =
         List.copyOf(Objects.requireNonNull(helpContributors, "helpContributors"));
 
-    this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
     this.awayRoutingState = Objects.requireNonNull(awayRoutingState, "awayRoutingState");
-    this.joinRoutingState = Objects.requireNonNull(joinRoutingState, "joinRoutingState");
     this.pendingEchoMessageState =
         Objects.requireNonNull(pendingEchoMessageState, "pendingEchoMessageState");
     this.helpTopicHandlers = buildHelpTopicHandlers();
-  }
-
-  public void handleJoin(CompositeDisposable disposables, String channel, String key) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(join)", "Select a server first.");
-      return;
-    }
-
-    String chan = channel == null ? "" : channel.trim();
-    String joinKey = key == null ? "" : key.trim();
-    if (chan.isEmpty()) {
-      ui.appendStatus(at, "(join)", "Usage: /join <#channel> [key]");
-      return;
-    }
-
-    // Persist for auto-join next time.
-    runtimeConfig.rememberJoinedChannel(at.serverId(), chan);
-
-    // Remember where the user initiated the join so join-failure numerics can be routed
-    // back to the correct buffer (and also to status). UI-only surfaces route to status.
-    TargetRef joinOrigin = at.isUiOnly() ? new TargetRef(at.serverId(), "status") : at;
-    joinRoutingState.rememberOrigin(at.serverId(), chan, joinOrigin);
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(conn)",
-          "Not connected (join queued in config only)");
-      return;
-    }
-
-    if (containsCrlf(chan) || containsCrlf(joinKey)) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(join)",
-          "Refusing to send multi-line /join input.");
-      return;
-    }
-
-    if (!joinKey.isEmpty()) {
-      String line = "JOIN " + chan + " " + joinKey;
-      disposables.add(
-          irc.sendRaw(at.serverId(), line)
-              .subscribe(
-                  () -> {},
-                  err ->
-                      ui.appendError(
-                          targetCoordinator.safeStatusTarget(),
-                          "(join-error)",
-                          String.valueOf(err))));
-      return;
-    }
-
-    disposables.add(
-        irc.joinChannel(at.serverId(), chan)
-            .subscribe(
-                () -> {},
-                err ->
-                    ui.appendError(
-                        targetCoordinator.safeStatusTarget(),
-                        "(join-error)",
-                        String.valueOf(err))));
-  }
-
-  public void handlePart(CompositeDisposable disposables, String channel, String reason) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(part)", "Select a server first.");
-      return;
-    }
-
-    String chan = channel == null ? "" : channel.trim();
-    String msg = reason == null ? "" : reason.trim();
-
-    // If no explicit channel was provided, we can only /part if the active target is a channel.
-    TargetRef target;
-    if (chan.isEmpty()) {
-      if (!commandTargetPolicy.isChannelLikeTarget(at)) {
-        ui.appendStatus(
-            at, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
-        return;
-      }
-      target = at;
-    } else {
-      target = new TargetRef(at.serverId(), chan);
-      if (!commandTargetPolicy.isChannelLikeTargetForServer(at.serverId(), target.target())) {
-        ui.appendStatus(at, "(part)", "Usage: /part [#channel] [reason]");
-        return;
-      }
-    }
-
-    if (target.isChannel()) {
-      targetCoordinator.disconnectChannel(target, msg);
-      return;
-    }
-
-    TargetRef status = new TargetRef(target.serverId(), "status");
-    if (!connectionCoordinator.isConnected(target.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-    if (containsCrlf(target.target()) || containsCrlf(msg)) {
-      ui.appendStatus(status, "(part)", "Refusing to send multi-line /part input.");
-      return;
-    }
-
-    disposables.add(
-        irc.partChannel(target.serverId(), target.target(), msg.isEmpty() ? null : msg)
-            .subscribe(
-                () -> ui.appendStatus(status, "(part)", "Requested leave for " + target.target()),
-                err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
   }
 
   public void handleNick(CompositeDisposable disposables, String newNick) {

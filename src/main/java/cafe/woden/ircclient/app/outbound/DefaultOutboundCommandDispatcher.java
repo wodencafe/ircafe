@@ -20,6 +20,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
   private final OutboundDccCommandService outboundDccCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
+  private final OutboundJoinPartCommandService outboundJoinPartCommandService;
   private final OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService;
   private final OutboundChatHistoryCommandService outboundChatHistoryCommandService;
   private final OutboundInviteCommandService outboundInviteCommandService;
@@ -42,6 +43,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
       OutboundDccCommandService outboundDccCommandService,
       OutboundChatCommandService outboundChatCommandService,
+      OutboundJoinPartCommandService outboundJoinPartCommandService,
       OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService,
       OutboundChatHistoryCommandService outboundChatHistoryCommandService,
       OutboundInviteCommandService outboundInviteCommandService,
@@ -61,6 +63,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
     this.outboundDccCommandService = outboundDccCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
+    this.outboundJoinPartCommandService = outboundJoinPartCommandService;
     this.outboundConnectionLifecycleCommandService = outboundConnectionLifecycleCommandService;
     this.outboundChatHistoryCommandService = outboundChatHistoryCommandService;
     this.outboundInviteCommandService = outboundInviteCommandService;
@@ -98,11 +101,11 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     register(
         map,
         ParsedInput.Join.class,
-        (d, cmd) -> outboundChatCommandService.handleJoin(d, cmd.channel(), cmd.key()));
+        (d, cmd) -> outboundJoinPartCommandService.handleJoin(d, cmd.channel(), cmd.key()));
     register(
         map,
         ParsedInput.Part.class,
-        (d, cmd) -> outboundChatCommandService.handlePart(d, cmd.channel(), cmd.reason()));
+        (d, cmd) -> outboundJoinPartCommandService.handlePart(d, cmd.channel(), cmd.reason()));
     register(
         map,
         ParsedInput.Connect.class,

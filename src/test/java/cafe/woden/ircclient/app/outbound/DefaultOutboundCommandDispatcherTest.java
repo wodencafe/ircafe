@@ -23,6 +23,8 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundCtcpWhoisCommandService ctcp = mock(OutboundCtcpWhoisCommandService.class);
   private final OutboundDccCommandService dcc = mock(OutboundDccCommandService.class);
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
+  private final OutboundJoinPartCommandService joinPart =
+      mock(OutboundJoinPartCommandService.class);
   private final OutboundConnectionLifecycleCommandService lifecycle =
       mock(OutboundConnectionLifecycleCommandService.class);
   private final OutboundChatHistoryCommandService chatHistory =
@@ -52,6 +54,7 @@ class DefaultOutboundCommandDispatcherTest {
           ctcp,
           dcc,
           chat,
+          joinPart,
           lifecycle,
           chatHistory,
           invite,
@@ -76,7 +79,13 @@ class DefaultOutboundCommandDispatcherTest {
   @Test
   void dispatchJoinRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.Join("#ircafe", "hunter2"));
-    verify(chat).handleJoin(disposables, "#ircafe", "hunter2");
+    verify(joinPart).handleJoin(disposables, "#ircafe", "hunter2");
+  }
+
+  @Test
+  void dispatchPartRoutesToJoinPartService() {
+    dispatcher.dispatch(disposables, new ParsedInput.Part("#ircafe", "later"));
+    verify(joinPart).handlePart(disposables, "#ircafe", "later");
   }
 
   @Test

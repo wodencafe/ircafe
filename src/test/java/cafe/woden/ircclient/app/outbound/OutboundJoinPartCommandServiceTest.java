@@ -1,0 +1,212 @@
+package cafe.woden.ircclient.app.outbound;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.core.ConnectionCoordinator;
+import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
+import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.JoinRoutingPort;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+
+class OutboundJoinPartCommandServiceTest {
+
+  private final IrcBackendClientService irc = mock(IrcBackendClientService.class);
+  private final UiPort ui = mock(UiPort.class);
+  private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+  private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
+  private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
+  private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
+  private final ChatCommandRuntimeConfigPort runtimeConfig =
+      mock(ChatCommandRuntimeConfigPort.class);
+  private final JoinRoutingPort joinRoutingState = mock(JoinRoutingPort.class);
+  private final OutboundJoinPartCommandService service =
+      new OutboundJoinPartCommandService(
+          irc,
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          commandTargetPolicy,
+          runtimeConfig,
+          joinRoutingState);
+  private final CompositeDisposable disposables = new CompositeDisposable();
+
+  @AfterEach
+  void tearDown() {
+    disposables.dispose();
+  }
+
+  @Test
+  void joinWithKeySendsRawJoinLine() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.sendRaw("libera", "JOIN #secret hunter2")).thenReturn(Completable.complete());
+
+    service.handleJoin(disposables, "#secret", "hunter2");
+
+    verify(runtimeConfig).rememberJoinedChannel("libera", "#secret");
+    verify(joinRoutingState).rememberOrigin("libera", "#secret", status);
+    verify(irc).sendRaw("libera", "JOIN #secret hunter2");
+  }
+
+  @Test
+  void joinWithKeyOnMatrixBackendDelegatesToRawJoin() {
+    TargetRef status = new TargetRef("matrix", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("matrix")).thenReturn(true);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+    when(irc.sendRaw("matrix", "JOIN #room:example.org hunter2"))
+        .thenReturn(Completable.complete());
+
+    service.handleJoin(disposables, "#room:example.org", "hunter2");
+
+    verify(runtimeConfig).rememberJoinedChannel("matrix", "#room:example.org");
+    verify(joinRoutingState).rememberOrigin("matrix", "#room:example.org", status);
+    verify(irc).sendRaw("matrix", "JOIN #room:example.org hunter2");
+  }
+
+  @Test
+  void joinFromUiOnlyTargetRoutesJoinOriginToStatus() {
+    TargetRef listTarget = TargetRef.channelList("libera");
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(listTarget);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.joinChannel("libera", "#ircafe")).thenReturn(Completable.complete());
+
+    service.handleJoin(disposables, "#ircafe", "");
+
+    verify(joinRoutingState).rememberOrigin("libera", "#ircafe", status);
+    verify(irc).joinChannel("libera", "#ircafe");
+  }
+
+  @Test
+  void joinOnQuasselBackendUsesRegularJoinPath() {
+    TargetRef status = new TargetRef("quassel", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(connectionCoordinator.isConnected("quassel")).thenReturn(true);
+    when(irc.joinChannel("quassel", "#ircafe")).thenReturn(Completable.complete());
+
+    service.handleJoin(disposables, "#ircafe", "");
+
+    verify(runtimeConfig).rememberJoinedChannel("quassel", "#ircafe");
+    verify(joinRoutingState).rememberOrigin("quassel", "#ircafe", status);
+    verify(irc).joinChannel("quassel", "#ircafe");
+  }
+
+  @Test
+  void partWithoutActiveTargetPromptsToSelectServer() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(null);
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+
+    service.handlePart(disposables, "", "");
+
+    verify(ui).appendStatus(status, "(part)", "Select a server first.");
+    verify(targetCoordinator, never()).disconnectChannel(any(TargetRef.class), anyString());
+  }
+
+  @Test
+  void partWithoutExplicitChannelDetachesActiveChannelWithTrimmedReason() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+
+    service.handlePart(disposables, "", "  be right back  ");
+
+    verify(targetCoordinator).disconnectChannel(chan, "be right back");
+  }
+
+  @Test
+  void partWithoutExplicitChannelRejectsNonChannelSelection() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+
+    service.handlePart(disposables, "", "bye");
+
+    verify(ui)
+        .appendStatus(
+            status, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
+    verify(targetCoordinator, never()).disconnectChannel(any(TargetRef.class), anyString());
+  }
+
+  @Test
+  void partWithExplicitChannelDetachesChannelOnActiveServer() {
+    TargetRef status = new TargetRef("libera", "status");
+    TargetRef expected = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+
+    service.handlePart(disposables, "  #ircafe ", "  later ");
+
+    verify(targetCoordinator).disconnectChannel(expected, "later");
+  }
+
+  @Test
+  void partWithMatrixRoomIdDetachesChannelLikeTarget() {
+    TargetRef status = new TargetRef("matrix", "status");
+    TargetRef room = new TargetRef("matrix", "!abc123:matrix.org");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+
+    service.handlePart(disposables, "!abc123:matrix.org", "later");
+
+    verify(targetCoordinator).disconnectChannel(room, "later");
+  }
+
+  @Test
+  void partFromActiveMatrixRoomIdDetachesChannelLikeTarget() {
+    TargetRef room = new TargetRef("matrix", "!abc123:matrix.org");
+    when(targetCoordinator.getActiveTarget()).thenReturn(room);
+    when(serverCatalog.find("matrix"))
+        .thenReturn(Optional.of(serverWithBackend("matrix", IrcProperties.Server.Backend.MATRIX)));
+
+    service.handlePart(disposables, "", "later");
+
+    verify(targetCoordinator).disconnectChannel(room, "later");
+  }
+
+  @Test
+  void partWithExplicitNonChannelShowsUsageAndDoesNotDetach() {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+
+    service.handlePart(disposables, "alice", "bye");
+
+    verify(ui).appendStatus(status, "(part)", "Usage: /part [#channel] [reason]");
+    verify(targetCoordinator, never()).disconnectChannel(any(TargetRef.class), anyString());
+  }
+
+  private static IrcProperties.Server serverWithBackend(
+      String id, IrcProperties.Server.Backend backend) {
+    return new IrcProperties.Server(
+        id,
+        "core.example.net",
+        4242,
+        false,
+        "",
+        "ircafe",
+        "ircafe",
+        "IRCafe User",
+        null,
+        null,
+        List.of(),
+        List.of(),
+        null,
+        backend);
+  }
+}
