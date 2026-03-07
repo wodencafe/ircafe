@@ -25,6 +25,7 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
@@ -83,6 +84,7 @@ public class IrcMediator implements MediatorControlPort {
   private static final long INBOUND_MSGID_DEDUP_DIAG_MIN_EMIT_MS = 10_000L;
 
   private final IrcClientService irc;
+  private final IrcTypingPort typingPort;
   private final UiPort ui;
   private final CommandParser commandParser;
   private final UserCommandAliasEngine userCommandAliasEngine;
@@ -172,6 +174,7 @@ public class IrcMediator implements MediatorControlPort {
 
   public IrcMediator(
       IrcClientService irc,
+      IrcTypingPort typingPort,
       UiPort ui,
       CommandParser commandParser,
       UserCommandAliasEngine userCommandAliasEngine,
@@ -206,6 +209,7 @@ public class IrcMediator implements MediatorControlPort {
       ApplicationEventPublisher applicationEventPublisher) {
 
     this.irc = irc;
+    this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
     this.ui = ui;
     this.commandParser = commandParser;
     this.userCommandAliasEngine = userCommandAliasEngine;
@@ -1883,7 +1887,7 @@ public class IrcMediator implements MediatorControlPort {
         }
         boolean typingAvailable = false;
         try {
-          typingAvailable = irc != null && irc.isTypingAvailable(sid);
+          typingAvailable = typingPort.isTypingAvailable(sid);
         } catch (Exception ignored) {
         }
         maybeLogTypingObserved(
