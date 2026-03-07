@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
@@ -64,7 +66,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   private final Consumer<TargetRef> activate;
   private final OutboundLineBus outboundBus;
-  private final IrcClientService irc;
+  private final IrcTypingPort typingPort;
+  private final IrcReadMarkerPort readMarkerPort;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final BiConsumer<TargetRef, String> onDraftChanged;
   private final BiConsumer<TargetRef, String> onClosed;
@@ -104,7 +107,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.chatHistoryService = chatHistoryService;
     this.activate = activate;
     this.outboundBus = outboundBus;
-    this.irc = Objects.requireNonNull(irc, "irc");
+    this.typingPort = IrcTypingPort.from(Objects.requireNonNull(irc, "irc"));
+    this.readMarkerPort = IrcReadMarkerPort.from(irc);
     this.messageActionCapabilityPolicy =
         Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.activeInputRouter = activeInputRouter;
@@ -311,9 +315,9 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   public void refreshTypingSignalAvailability() {
     boolean available = false;
-    if (target != null && !target.isStatus() && !target.isUiOnly() && irc != null) {
+    if (target != null && !target.isStatus() && !target.isUiOnly()) {
       try {
-        available = irc.isTypingAvailable(target.serverId());
+        available = typingPort.isTypingAvailable(target.serverId());
       } catch (Exception ignored) {
       }
     }
@@ -665,10 +669,9 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   private void onLocalTypingStateChanged(String state) {
     if (target == null || target.isStatus() || target.isUiOnly()) return;
-    if (irc == null) return;
     boolean typingAvailable = false;
     try {
-      typingAvailable = irc.isTypingAvailable(target.serverId());
+      typingAvailable = typingPort.isTypingAvailable(target.serverId());
     } catch (Exception ignored) {
     }
     inputPanel.setTypingSignalAvailable(typingAvailable);
@@ -676,7 +679,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       String s = normalizeTypingState(state);
       if (!"done".equals(s) && typingUnavailableWarned.compareAndSet(false, true)) {
         String reason =
-            Objects.toString(irc.typingAvailabilityReason(target.serverId()), "").trim();
+            Objects.toString(typingPort.typingAvailabilityReason(target.serverId()), "").trim();
         if (reason.isEmpty()) reason = "not negotiated / not allowed";
         log.info(
             "[{}] typing indicators are enabled, but unavailable on this server ({})",
@@ -689,7 +692,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     String s = normalizeTypingState(state);
     if (s.isEmpty()) return;
     var unused =
-        irc.sendTyping(target.serverId(), target.target(), s)
+        typingPort
+            .sendTyping(target.serverId(), target.target(), s)
             .subscribe(
                 () -> inputPanel.onLocalTypingIndicatorSent(s),
                 err -> {
@@ -747,7 +751,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   private void maybeSendReadMarker() {
     if (target == null || target.isStatus() || target.isUiOnly()) return;
-    if (irc == null || !irc.isReadMarkerAvailable(target.serverId())) return;
+    if (!readMarkerPort.isReadMarkerAvailable(target.serverId())) return;
 
     long now = System.currentTimeMillis();
     if ((now - lastReadMarkerSentAtMs) < READ_MARKER_SEND_COOLDOWN_MS) return;
@@ -755,7 +759,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     transcripts.updateReadMarker(target, now);
     var unused =
-        irc.sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now))
+        readMarkerPort
+            .sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now))
             .subscribe(() -> {}, err -> {});
   }
 }

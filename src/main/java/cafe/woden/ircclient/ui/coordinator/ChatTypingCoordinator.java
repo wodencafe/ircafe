@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.coordinator;
 
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
@@ -21,7 +22,7 @@ public final class ChatTypingCoordinator {
   private static final Logger log = LoggerFactory.getLogger(ChatTypingCoordinator.class);
 
   private final MessageInputPanel inputPanel;
-  private final IrcClientService irc;
+  private final IrcTypingPort typingPort;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final Supplier<TargetRef> activeTargetSupplier;
   private final BooleanSupplier transcriptAtBottomSupplier;
@@ -43,8 +44,30 @@ public final class ChatTypingCoordinator {
       BooleanSupplier followTailSupplier,
       Runnable scrollToBottom,
       Map<TargetRef, String> draftByTarget) {
+    this(
+        inputPanel,
+        IrcTypingPort.from(irc),
+        messageActionCapabilityPolicy,
+        activeTargetSupplier,
+        transcriptAtBottomSupplier,
+        armTailPinOnNextAppendIfAtBottom,
+        followTailSupplier,
+        scrollToBottom,
+        draftByTarget);
+  }
+
+  public ChatTypingCoordinator(
+      MessageInputPanel inputPanel,
+      IrcTypingPort typingPort,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
+      Supplier<TargetRef> activeTargetSupplier,
+      BooleanSupplier transcriptAtBottomSupplier,
+      Runnable armTailPinOnNextAppendIfAtBottom,
+      BooleanSupplier followTailSupplier,
+      Runnable scrollToBottom,
+      Map<TargetRef, String> draftByTarget) {
     this.inputPanel = Objects.requireNonNull(inputPanel, "inputPanel");
-    this.irc = irc;
+    this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
     this.messageActionCapabilityPolicy =
         Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.activeTargetSupplier =
@@ -122,11 +145,10 @@ public final class ChatTypingCoordinator {
   public void onLocalTypingStateChanged(String state) {
     TargetRef target = activeTargetSupplier.get();
     if (target == null || target.isStatus() || target.isUiOnly()) return;
-    if (irc == null) return;
 
     boolean typingAvailable = false;
     try {
-      typingAvailable = irc.isTypingAvailable(target.serverId());
+      typingAvailable = typingPort.isTypingAvailable(target.serverId());
     } catch (Exception ignored) {
     }
     inputPanel.setTypingSignalAvailable(typingAvailable);
@@ -136,7 +158,7 @@ public final class ChatTypingCoordinator {
       // Only warn once per session when the user is actively composing.
       if (!"done".equals(normalized) && typingUnavailableWarned.compareAndSet(false, true)) {
         String reason =
-            Objects.toString(irc.typingAvailabilityReason(target.serverId()), "").trim();
+            Objects.toString(typingPort.typingAvailabilityReason(target.serverId()), "").trim();
         if (reason.isEmpty()) reason = "not negotiated / not allowed";
         log.info(
             "[{}] typing indicators are enabled, but unavailable on this server ({})",
@@ -150,7 +172,8 @@ public final class ChatTypingCoordinator {
     String normalized = normalizeTypingState(state);
     if (normalized.isEmpty()) return;
     var unused =
-        irc.sendTyping(target.serverId(), target.target(), normalized)
+        typingPort
+            .sendTyping(target.serverId(), target.target(), normalized)
             .subscribe(
                 () -> inputPanel.onLocalTypingIndicatorSent(normalized),
                 err -> {
@@ -168,9 +191,9 @@ public final class ChatTypingCoordinator {
   public void refreshTypingSignalAvailabilityForActiveTarget() {
     TargetRef target = activeTargetSupplier.get();
     boolean available = false;
-    if (target != null && !target.isStatus() && !target.isUiOnly() && irc != null) {
+    if (target != null && !target.isStatus() && !target.isUiOnly()) {
       try {
-        available = irc.isTypingAvailable(target.serverId());
+        available = typingPort.isTypingAvailable(target.serverId());
       } catch (Exception ignored) {
       }
     }

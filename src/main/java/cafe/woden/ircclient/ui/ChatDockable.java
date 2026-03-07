@@ -13,6 +13,8 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
@@ -637,7 +639,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       IrcClientService irc, MessageActionCapabilityPolicy messageActionCapabilityPolicy) {
     return new ChatTypingCoordinator(
         inputPanel,
-        irc,
+        IrcTypingPort.from(irc),
         messageActionCapabilityPolicy,
         () -> activeTarget,
         this::isTranscriptAtBottom,
@@ -732,7 +734,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       ChatTranscriptStore transcripts, IrcClientService irc) {
     return new ChatReadMarkerCoordinator(
         transcripts,
-        irc,
+        IrcReadMarkerPort.from(irc),
         () -> activeTarget,
         this::scrollToTranscriptOffset,
         this::updateScrollStateFromBar,
