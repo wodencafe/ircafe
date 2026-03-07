@@ -22,8 +22,6 @@ import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
-import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
-import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort.QueryMode;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
@@ -50,8 +48,6 @@ class OutboundChatCommandServiceTest {
   private final ChatCommandRuntimeConfigPort runtimeConfig =
       mock(ChatCommandRuntimeConfigPort.class);
   private final AwayRoutingPort awayRoutingState = mock(AwayRoutingPort.class);
-  private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState =
-      mock(ChatHistoryRequestRoutingPort.class);
   private final JoinRoutingPort joinRoutingState = mock(JoinRoutingPort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
@@ -100,7 +96,6 @@ class OutboundChatCommandServiceTest {
           commandTargetPolicy,
           runtimeConfig,
           awayRoutingState,
-          chatHistoryRequestRoutingState,
           joinRoutingState,
           pendingEchoMessageState,
           pendingInviteState,
@@ -487,94 +482,6 @@ class OutboundChatCommandServiceTest {
     verify(ui)
         .failPendingOutgoingChat(
             eq(chan), eq("pending-2"), any(Instant.class), eq("me"), eq("hello"), contains("boom"));
-  }
-
-  @Test
-  void chatHistorySelectorUsesSelectorOverload() {
-    TargetRef chan = new TargetRef("libera", "#ircafe");
-    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.requestChatHistoryBefore("libera", "#ircafe", "msgid=abc123", 40))
-        .thenReturn(Completable.complete());
-
-    service.handleChatHistoryBefore(disposables, 40, "msgid=abc123");
-
-    verify(irc).requestChatHistoryBefore("libera", "#ircafe", "msgid=abc123", 40);
-    verify(chatHistoryRequestRoutingState)
-        .remember(
-            eq("libera"),
-            eq("#ircafe"),
-            eq(chan),
-            eq(40),
-            eq("msgid=abc123"),
-            any(Instant.class),
-            eq(QueryMode.BEFORE));
-  }
-
-  @Test
-  void chatHistoryLatestRoutesThroughLatestRequest() {
-    TargetRef chan = new TargetRef("libera", "#ircafe");
-    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.requestChatHistoryLatest("libera", "#ircafe", "*", 55))
-        .thenReturn(Completable.complete());
-
-    service.handleChatHistoryLatest(disposables, 55, "*");
-
-    verify(irc).requestChatHistoryLatest("libera", "#ircafe", "*", 55);
-    verify(chatHistoryRequestRoutingState)
-        .remember(
-            eq("libera"),
-            eq("#ircafe"),
-            eq(chan),
-            eq(55),
-            eq("*"),
-            any(Instant.class),
-            eq(QueryMode.LATEST));
-  }
-
-  @Test
-  void chatHistoryBetweenRoutesThroughBetweenRequest() {
-    TargetRef chan = new TargetRef("libera", "#ircafe");
-    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.requestChatHistoryBetween("libera", "#ircafe", "msgid=a", "msgid=b", 30))
-        .thenReturn(Completable.complete());
-
-    service.handleChatHistoryBetween(disposables, "msgid=a", "msgid=b", 30);
-
-    verify(irc).requestChatHistoryBetween("libera", "#ircafe", "msgid=a", "msgid=b", 30);
-    verify(chatHistoryRequestRoutingState)
-        .remember(
-            eq("libera"),
-            eq("#ircafe"),
-            eq(chan),
-            eq(30),
-            eq("msgid=a .. msgid=b"),
-            any(Instant.class),
-            eq(QueryMode.BETWEEN));
-  }
-
-  @Test
-  void chatHistoryAroundRoutesThroughAroundRequest() {
-    TargetRef chan = new TargetRef("libera", "#ircafe");
-    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
-    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.requestChatHistoryAround("libera", "#ircafe", "msgid=anchor", 45))
-        .thenReturn(Completable.complete());
-
-    service.handleChatHistoryAround(disposables, "msgid=anchor", 45);
-
-    verify(irc).requestChatHistoryAround("libera", "#ircafe", "msgid=anchor", 45);
-    verify(chatHistoryRequestRoutingState)
-        .remember(
-            eq("libera"),
-            eq("#ircafe"),
-            eq(chan),
-            eq(45),
-            eq("msgid=anchor"),
-            any(Instant.class),
-            eq(QueryMode.AROUND));
   }
 
   @Test

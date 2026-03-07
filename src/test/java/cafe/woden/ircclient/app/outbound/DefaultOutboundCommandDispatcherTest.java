@@ -23,6 +23,8 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundCtcpWhoisCommandService ctcp = mock(OutboundCtcpWhoisCommandService.class);
   private final OutboundDccCommandService dcc = mock(OutboundDccCommandService.class);
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
+  private final OutboundChatHistoryCommandService chatHistory =
+      mock(OutboundChatHistoryCommandService.class);
   private final QuasselOutboundCommandService quassel = mock(QuasselOutboundCommandService.class);
   private final OutboundUploadCommandService upload = mock(OutboundUploadCommandService.class);
   private final OutboundMessageMutationCommandService messageMutations =
@@ -43,6 +45,7 @@ class DefaultOutboundCommandDispatcherTest {
           ctcp,
           dcc,
           chat,
+          chatHistory,
           quassel,
           upload,
           messageMutations,
@@ -195,25 +198,25 @@ class DefaultOutboundCommandDispatcherTest {
   @Test
   void dispatchChatHistoryRoutesSelectorAndLimit() {
     dispatcher.dispatch(disposables, new ParsedInput.ChatHistoryBefore(80, "msgid=abc123"));
-    verify(chat).handleChatHistoryBefore(disposables, 80, "msgid=abc123");
+    verify(chatHistory).handleChatHistoryBefore(disposables, 80, "msgid=abc123");
   }
 
   @Test
   void dispatchChatHistoryLatestRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.ChatHistoryLatest(70, "*"));
-    verify(chat).handleChatHistoryLatest(disposables, 70, "*");
+    verify(chatHistory).handleChatHistoryLatest(disposables, 70, "*");
   }
 
   @Test
   void dispatchChatHistoryBetweenRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.ChatHistoryBetween("msgid=a", "msgid=b", 60));
-    verify(chat).handleChatHistoryBetween(disposables, "msgid=a", "msgid=b", 60);
+    verify(chatHistory).handleChatHistoryBetween(disposables, "msgid=a", "msgid=b", 60);
   }
 
   @Test
   void dispatchChatHistoryAroundRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.ChatHistoryAround("msgid=a", 50));
-    verify(chat).handleChatHistoryAround(disposables, "msgid=a", 50);
+    verify(chatHistory).handleChatHistoryAround(disposables, "msgid=a", 50);
   }
 
   @Test

@@ -10,7 +10,6 @@ import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
-import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
@@ -18,8 +17,6 @@ import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,9 +44,6 @@ public class OutboundChatCommandService {
     CANCEL
   }
 
-  private static final DateTimeFormatter CHATHISTORY_TS_FMT =
-      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
-
   private final IrcClientService irc;
   private final IrcBackendAvailabilityPort backendAvailability;
   private final UiPort ui;
@@ -61,7 +55,6 @@ public class OutboundChatCommandService {
   private final CommandTargetPolicy commandTargetPolicy;
   private final ChatCommandRuntimeConfigPort runtimeConfig;
   private final AwayRoutingPort awayRoutingState;
-  private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState;
   private final JoinRoutingPort joinRoutingState;
   private final PendingEchoMessagePort pendingEchoMessageState;
   private final PendingInvitePort pendingInviteState;
@@ -80,7 +73,6 @@ public class OutboundChatCommandService {
       CommandTargetPolicy commandTargetPolicy,
       ChatCommandRuntimeConfigPort runtimeConfig,
       AwayRoutingPort awayRoutingState,
-      ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState,
       JoinRoutingPort joinRoutingState,
       PendingEchoMessagePort pendingEchoMessageState,
       PendingInvitePort pendingInviteState,
@@ -100,8 +92,6 @@ public class OutboundChatCommandService {
     this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
     this.awayRoutingState = Objects.requireNonNull(awayRoutingState, "awayRoutingState");
-    this.chatHistoryRequestRoutingState =
-        Objects.requireNonNull(chatHistoryRequestRoutingState, "chatHistoryRequestRoutingState");
     this.joinRoutingState = Objects.requireNonNull(joinRoutingState, "joinRoutingState");
     this.pendingEchoMessageState =
         Objects.requireNonNull(pendingEchoMessageState, "pendingEchoMessageState");
@@ -1063,196 +1053,6 @@ public class OutboundChatCommandService {
                 () -> {}, err -> ui.appendError(status, "(raw-error)", String.valueOf(err))));
   }
 
-  public void handleChatHistoryBefore(CompositeDisposable disposables, int limit) {
-    handleChatHistoryBefore(disposables, limit, "");
-  }
-
-  public void handleChatHistoryBefore(CompositeDisposable disposables, int limit, String selector) {
-    TargetRef at = resolveChatHistoryTargetOrNull();
-    if (at == null) return;
-    TargetRef status = new TargetRef(at.serverId(), "status");
-
-    int lim = limit;
-    String selectorToken = normalizeChatHistorySelector(selector);
-    if (lim <= 0) {
-      appendChatHistoryUsage(at);
-      return;
-    }
-    if (!Objects.toString(selector, "").trim().isEmpty() && selectorToken.isEmpty()) {
-      ui.appendStatus(at, "(chathistory)", "Selector must be msgid=... or timestamp=...");
-      return;
-    }
-    lim = clampChatHistoryLimit(lim);
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-    if (selectorToken.isEmpty()) {
-      selectorToken = "timestamp=" + CHATHISTORY_TS_FMT.format(Instant.now());
-    }
-    String preview = "CHATHISTORY BEFORE " + at.target() + " " + selectorToken + " " + lim;
-    ui.appendStatus(at, "(chathistory)", "Requesting older history… limit=" + lim);
-    ui.appendStatus(at, "(chathistory)", "→ " + preview);
-
-    final String selectorFinal = selectorToken;
-    final int limitFinal = lim;
-    chatHistoryRequestRoutingState.remember(
-        at.serverId(),
-        at.target(),
-        at,
-        limitFinal,
-        selectorFinal,
-        Instant.now(),
-        ChatHistoryRequestRoutingPort.QueryMode.BEFORE);
-    disposables.add(
-        irc.requestChatHistoryBefore(at.serverId(), at.target(), selectorFinal, limitFinal)
-            .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(chathistory-error)", String.valueOf(err))));
-  }
-
-  public void handleChatHistoryLatest(CompositeDisposable disposables, int limit, String selector) {
-    TargetRef at = resolveChatHistoryTargetOrNull();
-    if (at == null) return;
-    TargetRef status = new TargetRef(at.serverId(), "status");
-
-    int lim = limit;
-    if (lim <= 0) {
-      appendChatHistoryUsage(at);
-      return;
-    }
-    lim = clampChatHistoryLimit(lim);
-
-    String selectorToken = normalizeChatHistorySelectorOrWildcard(selector);
-    if (!Objects.toString(selector, "").trim().isEmpty() && selectorToken.isEmpty()) {
-      ui.appendStatus(at, "(chathistory)", "Selector must be * or msgid=... or timestamp=...");
-      return;
-    }
-    if (selectorToken.isEmpty()) {
-      selectorToken = "*";
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-
-    String preview = "CHATHISTORY LATEST " + at.target() + " " + selectorToken + " " + lim;
-    ui.appendStatus(at, "(chathistory)", "Requesting latest/newer history… limit=" + lim);
-    ui.appendStatus(at, "(chathistory)", "→ " + preview);
-
-    final String selectorFinal = selectorToken;
-    final int limitFinal = lim;
-    chatHistoryRequestRoutingState.remember(
-        at.serverId(),
-        at.target(),
-        at,
-        limitFinal,
-        selectorFinal,
-        Instant.now(),
-        ChatHistoryRequestRoutingPort.QueryMode.LATEST);
-    disposables.add(
-        irc.requestChatHistoryLatest(at.serverId(), at.target(), selectorFinal, limitFinal)
-            .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(chathistory-error)", String.valueOf(err))));
-  }
-
-  public void handleChatHistoryAround(CompositeDisposable disposables, String selector, int limit) {
-    TargetRef at = resolveChatHistoryTargetOrNull();
-    if (at == null) return;
-    TargetRef status = new TargetRef(at.serverId(), "status");
-
-    int lim = limit;
-    if (lim <= 0) {
-      appendChatHistoryUsage(at);
-      return;
-    }
-    lim = clampChatHistoryLimit(lim);
-
-    String selectorToken = normalizeChatHistorySelector(selector);
-    if (selectorToken.isEmpty()) {
-      ui.appendStatus(at, "(chathistory)", "Around selector must be msgid=... or timestamp=...");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-
-    String preview = "CHATHISTORY AROUND " + at.target() + " " + selectorToken + " " + lim;
-    ui.appendStatus(
-        at, "(chathistory)", "Requesting message context around selector… limit=" + lim);
-    ui.appendStatus(at, "(chathistory)", "→ " + preview);
-
-    final String selectorFinal = selectorToken;
-    final int limitFinal = lim;
-    chatHistoryRequestRoutingState.remember(
-        at.serverId(),
-        at.target(),
-        at,
-        limitFinal,
-        selectorFinal,
-        Instant.now(),
-        ChatHistoryRequestRoutingPort.QueryMode.AROUND);
-    disposables.add(
-        irc.requestChatHistoryAround(at.serverId(), at.target(), selectorFinal, limitFinal)
-            .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(chathistory-error)", String.valueOf(err))));
-  }
-
-  public void handleChatHistoryBetween(
-      CompositeDisposable disposables, String startSelector, String endSelector, int limit) {
-    TargetRef at = resolveChatHistoryTargetOrNull();
-    if (at == null) return;
-    TargetRef status = new TargetRef(at.serverId(), "status");
-
-    int lim = limit;
-    if (lim <= 0) {
-      appendChatHistoryUsage(at);
-      return;
-    }
-    lim = clampChatHistoryLimit(lim);
-
-    String startToken = normalizeChatHistorySelectorOrWildcard(startSelector);
-    String endToken = normalizeChatHistorySelectorOrWildcard(endSelector);
-    if (startToken.isEmpty() || endToken.isEmpty()) {
-      ui.appendStatus(
-          at, "(chathistory)", "Between selectors must be * or msgid=... or timestamp=...");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-
-    String preview =
-        "CHATHISTORY BETWEEN " + at.target() + " " + startToken + " " + endToken + " " + lim;
-    ui.appendStatus(at, "(chathistory)", "Requesting bounded history window… limit=" + lim);
-    ui.appendStatus(at, "(chathistory)", "→ " + preview);
-
-    final String startFinal = startToken;
-    final String endFinal = endToken;
-    final int limitFinal = lim;
-    chatHistoryRequestRoutingState.remember(
-        at.serverId(),
-        at.target(),
-        at,
-        limitFinal,
-        startFinal + " .. " + endFinal,
-        Instant.now(),
-        ChatHistoryRequestRoutingPort.QueryMode.BETWEEN);
-    disposables.add(
-        irc.requestChatHistoryBetween(at.serverId(), at.target(), startFinal, endFinal, limitFinal)
-            .subscribe(
-                () -> {},
-                err -> ui.appendError(status, "(chathistory-error)", String.valueOf(err))));
-  }
-
   public void handleQuote(CompositeDisposable disposables, String rawLine) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
@@ -1602,63 +1402,6 @@ public class OutboundChatCommandService {
 
   private static boolean containsCrlf(String s) {
     return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);
-  }
-
-  private static String normalizeChatHistorySelector(String raw) {
-    String s = Objects.toString(raw, "").trim();
-    if (s.isEmpty()) return "";
-    int eq = s.indexOf('=');
-    if (eq <= 0 || eq == s.length() - 1) return "";
-    String key = s.substring(0, eq).trim().toLowerCase(Locale.ROOT);
-    String value = s.substring(eq + 1).trim();
-    if (value.isEmpty()) return "";
-    if (value.indexOf(' ') >= 0 || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0) return "";
-    if (!"msgid".equals(key) && !"timestamp".equals(key)) return "";
-    return key + "=" + value;
-  }
-
-  private static String normalizeChatHistorySelectorOrWildcard(String raw) {
-    String s = Objects.toString(raw, "").trim();
-    if ("*".equals(s)) return "*";
-    return normalizeChatHistorySelector(s);
-  }
-
-  private static int clampChatHistoryLimit(int limit) {
-    int lim = limit;
-    if (lim <= 0) lim = 50;
-    if (lim > 200) lim = 200;
-    return lim;
-  }
-
-  private TargetRef resolveChatHistoryTargetOrNull() {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(
-          targetCoordinator.safeStatusTarget(), "(chathistory)", "Select a server first.");
-      return null;
-    }
-
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    if (at.isStatus()) {
-      ui.appendStatus(status, "(chathistory)", "Select a channel or query first.");
-      return null;
-    }
-    if (at.isUiOnly()) {
-      ui.appendStatus(status, "(chathistory)", "That view does not support history requests.");
-      return null;
-    }
-    return at;
-  }
-
-  private void appendChatHistoryUsage(TargetRef at) {
-    ui.appendStatus(at, "(chathistory)", "Usage: /chathistory [limit]");
-    ui.appendStatus(
-        at, "(chathistory)", "Usage: /chathistory before <msgid=...|timestamp=...> [limit]");
-    ui.appendStatus(
-        at, "(chathistory)", "Usage: /chathistory latest [*|msgid=...|timestamp=...] [limit]");
-    ui.appendStatus(
-        at, "(chathistory)", "Usage: /chathistory around <msgid=...|timestamp=...> [limit]");
-    ui.appendStatus(at, "(chathistory)", "Usage: /chathistory between <start> <end> [limit]");
   }
 
   private boolean shouldUseLocalEcho(String serverId) {

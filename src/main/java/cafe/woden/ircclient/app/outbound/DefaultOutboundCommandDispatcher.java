@@ -20,6 +20,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
   private final OutboundDccCommandService outboundDccCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
+  private final OutboundChatHistoryCommandService outboundChatHistoryCommandService;
   private final QuasselOutboundCommandService quasselOutboundCommandService;
   private final OutboundUploadCommandService outboundUploadCommandService;
   private final OutboundMessageMutationCommandService outboundMessageMutationCommandService;
@@ -37,6 +38,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
       OutboundDccCommandService outboundDccCommandService,
       OutboundChatCommandService outboundChatCommandService,
+      OutboundChatHistoryCommandService outboundChatHistoryCommandService,
       QuasselOutboundCommandService quasselOutboundCommandService,
       OutboundUploadCommandService outboundUploadCommandService,
       OutboundMessageMutationCommandService outboundMessageMutationCommandService,
@@ -51,6 +53,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
     this.outboundDccCommandService = outboundDccCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
+    this.outboundChatHistoryCommandService = outboundChatHistoryCommandService;
     this.quasselOutboundCommandService = quasselOutboundCommandService;
     this.outboundUploadCommandService = outboundUploadCommandService;
     this.outboundMessageMutationCommandService = outboundMessageMutationCommandService;
@@ -277,23 +280,26 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
         map,
         ParsedInput.ChatHistoryBefore.class,
         (d, cmd) ->
-            outboundChatCommandService.handleChatHistoryBefore(d, cmd.limit(), cmd.selector()));
+            outboundChatHistoryCommandService.handleChatHistoryBefore(
+                d, cmd.limit(), cmd.selector()));
     register(
         map,
         ParsedInput.ChatHistoryLatest.class,
         (d, cmd) ->
-            outboundChatCommandService.handleChatHistoryLatest(d, cmd.limit(), cmd.selector()));
+            outboundChatHistoryCommandService.handleChatHistoryLatest(
+                d, cmd.limit(), cmd.selector()));
     register(
         map,
         ParsedInput.ChatHistoryBetween.class,
         (d, cmd) ->
-            outboundChatCommandService.handleChatHistoryBetween(
+            outboundChatHistoryCommandService.handleChatHistoryBetween(
                 d, cmd.startSelector(), cmd.endSelector(), cmd.limit()));
     register(
         map,
         ParsedInput.ChatHistoryAround.class,
         (d, cmd) ->
-            outboundChatCommandService.handleChatHistoryAround(d, cmd.selector(), cmd.limit()));
+            outboundChatHistoryCommandService.handleChatHistoryAround(
+                d, cmd.selector(), cmd.limit()));
     register(
         map,
         ParsedInput.MarkRead.class,
