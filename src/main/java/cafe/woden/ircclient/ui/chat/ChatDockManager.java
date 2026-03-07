@@ -180,8 +180,8 @@ public class ChatDockManager {
     if (!"draft/reply".equals(cap) && !"draft/react".equals(cap) && !"draft/unreact".equals(cap))
       return;
 
-    boolean replySupported = isDraftReplySupportedForServer(sid);
-    boolean reactSupported = isDraftReactSupportedForServer(sid);
+    boolean replySupported = messageActionCapabilityPolicy.canReply(sid);
+    boolean reactSupported = messageActionCapabilityPolicy.canReact(sid);
     normalizePinnedDraftsForServer(sid, replySupported, reactSupported);
   }
 
@@ -231,14 +231,6 @@ public class ChatDockManager {
       } catch (Exception ignored) {
       }
     }
-  }
-
-  private boolean isDraftReplySupportedForServer(String serverId) {
-    return messageActionCapabilityPolicy.canReply(serverId);
-  }
-
-  private boolean isDraftReactSupportedForServer(String serverId) {
-    return messageActionCapabilityPolicy.canReact(serverId);
   }
 
   public void openPinned(TargetRef target) {

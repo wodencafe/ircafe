@@ -606,7 +606,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy) {
-    ChatTypingCoordinator typingCoordinator = createTypingCoordinator(irc);
+    ChatTypingCoordinator typingCoordinator =
+        createTypingCoordinator(irc, messageActionCapabilityPolicy);
     ChatHistoryActionCoordinator historyActionCoordinator =
         createHistoryActionCoordinator(
             messageActionCapabilityPolicy, chatHistoryService, activationBus, outboundBus);
@@ -627,10 +628,12 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         activeTargetCoordinator);
   }
 
-  private ChatTypingCoordinator createTypingCoordinator(IrcClientService irc) {
+  private ChatTypingCoordinator createTypingCoordinator(
+      IrcClientService irc, MessageActionCapabilityPolicy messageActionCapabilityPolicy) {
     return new ChatTypingCoordinator(
         inputPanel,
         irc,
+        messageActionCapabilityPolicy,
         () -> activeTarget,
         this::isTranscriptAtBottom,
         this::armTailPinOnNextAppendIfAtBottom,

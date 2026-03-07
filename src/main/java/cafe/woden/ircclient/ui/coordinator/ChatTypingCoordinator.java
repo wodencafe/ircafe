@@ -22,6 +22,7 @@ public final class ChatTypingCoordinator {
 
   private final MessageInputPanel inputPanel;
   private final IrcClientService irc;
+  private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final Supplier<TargetRef> activeTargetSupplier;
   private final BooleanSupplier transcriptAtBottomSupplier;
   private final Runnable armTailPinOnNextAppendIfAtBottom;
@@ -35,6 +36,7 @@ public final class ChatTypingCoordinator {
   public ChatTypingCoordinator(
       MessageInputPanel inputPanel,
       IrcClientService irc,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       Supplier<TargetRef> activeTargetSupplier,
       BooleanSupplier transcriptAtBottomSupplier,
       Runnable armTailPinOnNextAppendIfAtBottom,
@@ -43,6 +45,8 @@ public final class ChatTypingCoordinator {
       Map<TargetRef, String> draftByTarget) {
     this.inputPanel = Objects.requireNonNull(inputPanel, "inputPanel");
     this.irc = irc;
+    this.messageActionCapabilityPolicy =
+        Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.activeTargetSupplier =
         Objects.requireNonNull(activeTargetSupplier, "activeTargetSupplier");
     this.transcriptAtBottomSupplier =
@@ -92,8 +96,8 @@ public final class ChatTypingCoordinator {
       return;
     }
 
-    boolean replySupported = isDraftReplySupportedForServer(sid);
-    boolean reactSupported = isDraftReactSupportedForServer(sid);
+    boolean replySupported = messageActionCapabilityPolicy.canReply(sid);
+    boolean reactSupported = messageActionCapabilityPolicy.canReact(sid);
 
     TargetRef activeTarget = activeTargetSupplier.get();
     if (activeTarget != null
@@ -178,24 +182,6 @@ public final class ChatTypingCoordinator {
     if (!inputAreaChangedHeight) return;
     if (!atBottomBefore && !followTailSupplier.getAsBoolean()) return;
     SwingUtilities.invokeLater(scrollToBottom);
-  }
-
-  private boolean isDraftReplySupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReplyAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private boolean isDraftReactSupportedForServer(String serverId) {
-    if (irc == null) return false;
-    try {
-      return irc.isDraftReactAvailable(serverId);
-    } catch (Exception ignored) {
-      return false;
-    }
   }
 
   private static String normalizeTypingState(String state) {
