@@ -22,6 +22,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundChatCommandService outboundChatCommandService;
   private final QuasselOutboundCommandService quasselOutboundCommandService;
   private final OutboundUploadCommandService outboundUploadCommandService;
+  private final OutboundMessageMutationCommandService outboundMessageMutationCommandService;
   private final OutboundMonitorCommandService outboundMonitorCommandService;
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;
   private final LocalFilterCommandHandler localFilterCommandService;
@@ -37,6 +38,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundChatCommandService outboundChatCommandService,
       QuasselOutboundCommandService quasselOutboundCommandService,
       OutboundUploadCommandService outboundUploadCommandService,
+      OutboundMessageMutationCommandService outboundMessageMutationCommandService,
       OutboundMonitorCommandService outboundMonitorCommandService,
       OutboundIgnoreCommandService outboundIgnoreCommandService,
       LocalFilterCommandHandler localFilterCommandService,
@@ -49,6 +51,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundChatCommandService = outboundChatCommandService;
     this.quasselOutboundCommandService = quasselOutboundCommandService;
     this.outboundUploadCommandService = outboundUploadCommandService;
+    this.outboundMessageMutationCommandService = outboundMessageMutationCommandService;
     this.outboundMonitorCommandService = outboundMonitorCommandService;
     this.outboundIgnoreCommandService = outboundIgnoreCommandService;
     this.localFilterCommandService = localFilterCommandService;
@@ -302,26 +305,33 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     register(
         map,
         ParsedInput.ReplyMessage.class,
-        (d, cmd) -> outboundChatCommandService.handleReplyMessage(d, cmd.messageId(), cmd.body()));
+        (d, cmd) ->
+            outboundMessageMutationCommandService.handleReplyMessage(
+                d, cmd.messageId(), cmd.body()));
     register(
         map,
         ParsedInput.ReactMessage.class,
         (d, cmd) ->
-            outboundChatCommandService.handleReactMessage(d, cmd.messageId(), cmd.reaction()));
+            outboundMessageMutationCommandService.handleReactMessage(
+                d, cmd.messageId(), cmd.reaction()));
     register(
         map,
         ParsedInput.UnreactMessage.class,
         (d, cmd) ->
-            outboundChatCommandService.handleUnreactMessage(d, cmd.messageId(), cmd.reaction()));
+            outboundMessageMutationCommandService.handleUnreactMessage(
+                d, cmd.messageId(), cmd.reaction()));
     register(
         map,
         ParsedInput.EditMessage.class,
-        (d, cmd) -> outboundChatCommandService.handleEditMessage(d, cmd.messageId(), cmd.body()));
+        (d, cmd) ->
+            outboundMessageMutationCommandService.handleEditMessage(
+                d, cmd.messageId(), cmd.body()));
     register(
         map,
         ParsedInput.RedactMessage.class,
         (d, cmd) ->
-            outboundChatCommandService.handleRedactMessage(d, cmd.messageId(), cmd.reason()));
+            outboundMessageMutationCommandService.handleRedactMessage(
+                d, cmd.messageId(), cmd.reason()));
     register(
         map,
         ParsedInput.Quote.class,

@@ -25,6 +25,8 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
   private final QuasselOutboundCommandService quassel = mock(QuasselOutboundCommandService.class);
   private final OutboundUploadCommandService upload = mock(OutboundUploadCommandService.class);
+  private final OutboundMessageMutationCommandService messageMutations =
+      mock(OutboundMessageMutationCommandService.class);
   private final OutboundMonitorCommandService monitor = mock(OutboundMonitorCommandService.class);
   private final OutboundIgnoreCommandService ignore = mock(OutboundIgnoreCommandService.class);
   private final LocalFilterCommandHandler filter = mock(LocalFilterCommandHandler.class);
@@ -41,6 +43,7 @@ class DefaultOutboundCommandDispatcherTest {
           chat,
           quassel,
           upload,
+          messageMutations,
           monitor,
           ignore,
           filter,
@@ -219,16 +222,25 @@ class DefaultOutboundCommandDispatcherTest {
   @Test
   void dispatchEditAndRedactRouteToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.EditMessage("abc123", "new body"));
-    verify(chat).handleEditMessage(disposables, "abc123", "new body");
+    verify(messageMutations).handleEditMessage(disposables, "abc123", "new body");
 
     dispatcher.dispatch(disposables, new ParsedInput.RedactMessage("abc123", "cleanup"));
-    verify(chat).handleRedactMessage(disposables, "abc123", "cleanup");
+    verify(messageMutations).handleRedactMessage(disposables, "abc123", "cleanup");
   }
 
   @Test
   void dispatchUnreactRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.UnreactMessage("abc123", ":+1:"));
-    verify(chat).handleUnreactMessage(disposables, "abc123", ":+1:");
+    verify(messageMutations).handleUnreactMessage(disposables, "abc123", ":+1:");
+  }
+
+  @Test
+  void dispatchReplyAndReactRoutesToMessageMutationService() {
+    dispatcher.dispatch(disposables, new ParsedInput.ReplyMessage("abc123", "hello"));
+    verify(messageMutations).handleReplyMessage(disposables, "abc123", "hello");
+
+    dispatcher.dispatch(disposables, new ParsedInput.ReactMessage("abc123", ":+1:"));
+    verify(messageMutations).handleReactMessage(disposables, "abc123", ":+1:");
   }
 
   @Test
