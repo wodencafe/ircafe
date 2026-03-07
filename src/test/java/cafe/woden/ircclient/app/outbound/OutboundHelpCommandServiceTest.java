@@ -11,6 +11,7 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
@@ -34,7 +35,10 @@ class OutboundHelpCommandServiceTest {
               new QuasselOutboundBackendFeatureAdapter()));
   private final OutboundBackendCapabilityPolicy outboundBackendCapabilityPolicy =
       new OutboundBackendCapabilityPolicy(
-          commandTargetPolicy, outboundBackendFeatureRegistry, irc, irc);
+          commandTargetPolicy,
+          outboundBackendFeatureRegistry,
+          IrcNegotiatedFeaturePort.from(irc),
+          irc);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);

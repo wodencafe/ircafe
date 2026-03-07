@@ -10,6 +10,7 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,10 @@ class OutboundBackendCapabilityPolicyTest {
               new QuasselOutboundBackendFeatureAdapter()));
   private final OutboundBackendCapabilityPolicy policy =
       new OutboundBackendCapabilityPolicy(
-          commandTargetPolicy, outboundBackendFeatureRegistry, irc, backendAvailability);
+          commandTargetPolicy,
+          outboundBackendFeatureRegistry,
+          IrcNegotiatedFeaturePort.from(irc),
+          backendAvailability);
 
   @Test
   void supportsMatrixSemanticUploadViaBackendAdapter() {

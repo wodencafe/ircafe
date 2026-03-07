@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import org.junit.jupiter.api.Test;
 
 class IrcMessageActionCapabilityPolicyTest {
@@ -29,7 +30,8 @@ class IrcMessageActionCapabilityPolicyTest {
     when(irc.isChatHistoryAvailable("irc")).thenReturn(false);
     when(irc.isZncPlaybackAvailable("irc")).thenReturn(true);
 
-    IrcMessageActionCapabilityPolicy policy = new IrcMessageActionCapabilityPolicy(irc, irc);
+    IrcMessageActionCapabilityPolicy policy =
+        new IrcMessageActionCapabilityPolicy(IrcNegotiatedFeaturePort.from(irc), irc);
 
     assertTrue(policy.canReply("matrix"));
     assertTrue(policy.canReact("matrix"));
@@ -55,7 +57,8 @@ class IrcMessageActionCapabilityPolicyTest {
     when(irc.isChatHistoryAvailable("broken")).thenThrow(new RuntimeException("boom"));
     when(irc.isZncPlaybackAvailable("broken")).thenThrow(new RuntimeException("boom"));
 
-    IrcMessageActionCapabilityPolicy policy = new IrcMessageActionCapabilityPolicy(irc, irc);
+    IrcMessageActionCapabilityPolicy policy =
+        new IrcMessageActionCapabilityPolicy(IrcNegotiatedFeaturePort.from(irc), irc);
 
     assertFalse(policy.canReply("broken"));
     assertFalse(policy.canLoadAroundMessage("broken"));

@@ -2,7 +2,7 @@ package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -13,13 +13,13 @@ final class OutboundBackendCapabilityPolicy {
 
   private final CommandTargetPolicy commandTargetPolicy;
   private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry;
-  private final IrcClientService irc;
+  private final IrcNegotiatedFeaturePort irc;
   private final IrcBackendAvailabilityPort backendAvailability;
 
   OutboundBackendCapabilityPolicy(
       CommandTargetPolicy commandTargetPolicy,
       OutboundBackendFeatureRegistry outboundBackendFeatureRegistry,
-      IrcClientService irc,
+      @Qualifier("ircClientService") IrcNegotiatedFeaturePort irc,
       @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability) {
     this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
     this.outboundBackendFeatureRegistry =
