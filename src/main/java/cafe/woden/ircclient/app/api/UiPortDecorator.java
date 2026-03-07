@@ -72,16 +72,6 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
-  public Flowable<String> quasselSetupRequests() {
-    return delegate.quasselSetupRequests();
-  }
-
-  @Override
-  public Flowable<String> quasselNetworkManagerRequests() {
-    return delegate.quasselNetworkManagerRequests();
-  }
-
-  @Override
   public Flowable<ParsedInput.BackendNamed> backendNamedCommandRequests() {
     return delegate.backendNamedCommandRequests();
   }

@@ -50,16 +50,6 @@ public interface UiPort {
 
   Flowable<String> disconnectServerRequests();
 
-  /** User-initiated request to open Quassel setup flow for a server. */
-  default Flowable<String> quasselSetupRequests() {
-    return Flowable.empty();
-  }
-
-  /** User-initiated request to open dialog-driven Quassel network manager for a server. */
-  default Flowable<String> quasselNetworkManagerRequests() {
-    return Flowable.empty();
-  }
-
   /** User-initiated backend-specific command requests. */
   default Flowable<ParsedInput.BackendNamed> backendNamedCommandRequests() {
     return Flowable.empty();
