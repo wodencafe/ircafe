@@ -18,15 +18,12 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
-import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
-import cafe.woden.ircclient.state.api.PendingInvitePort;
-import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
@@ -52,9 +49,6 @@ class OutboundChatCommandServiceTest {
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
-  private final PendingInvitePort pendingInviteState = mock(PendingInvitePort.class);
-  private final WhoisRoutingPort whoisRoutingState = mock(WhoisRoutingPort.class);
-  private final IgnoreListCommandPort ignoreListService = mock(IgnoreListCommandPort.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
       new OutboundRawLineCorrelationService(irc, labeledResponseRoutingState);
   private final OutboundUploadCommandService outboundUploadCommandService =
@@ -97,10 +91,7 @@ class OutboundChatCommandServiceTest {
           runtimeConfig,
           awayRoutingState,
           joinRoutingState,
-          pendingEchoMessageState,
-          pendingInviteState,
-          whoisRoutingState,
-          ignoreListService);
+          pendingEchoMessageState);
 
   @AfterEach
   void tearDown() {
@@ -741,111 +732,6 @@ class OutboundChatCommandServiceTest {
     service.handleHelp("upload");
 
     verify(outboundUploadCommandService).appendUploadHelp(chan);
-  }
-
-  @Test
-  void inviteBlockAddsMaskAndRemovesInviteWhenNickIsPresent() {
-    TargetRef status = new TargetRef("libera", "status");
-    PendingInvitePort.PendingInvite invite =
-        new PendingInvitePort.PendingInvite(
-            12L,
-            Instant.parse("2026-02-16T00:00:00Z"),
-            Instant.parse("2026-02-16T00:00:00Z"),
-            "libera",
-            "#ircafe",
-            "alice",
-            "me",
-            "",
-            true,
-            1);
-    when(targetCoordinator.getActiveTarget()).thenReturn(status);
-    when(pendingInviteState.latestForServer("libera")).thenReturn(invite);
-    when(ignoreListService.addMask("libera", "alice")).thenReturn(true);
-
-    service.handleInviteBlock("last");
-
-    verify(ignoreListService).addMask("libera", "alice");
-    verify(pendingInviteState).remove(12L);
-    verify(ui).appendStatus(status, "(invite)", "Blocked invites from alice (alice!*@*).");
-  }
-
-  @Test
-  void inviteBlockReportsAlreadyBlockingWhenMaskAlreadyExists() {
-    TargetRef status = new TargetRef("libera", "status");
-    PendingInvitePort.PendingInvite invite =
-        new PendingInvitePort.PendingInvite(
-            27L,
-            Instant.parse("2026-02-16T00:00:00Z"),
-            Instant.parse("2026-02-16T00:00:00Z"),
-            "libera",
-            "#ircafe",
-            "alice",
-            "me",
-            "",
-            true,
-            1);
-    when(targetCoordinator.getActiveTarget()).thenReturn(status);
-    when(pendingInviteState.latestForServer("libera")).thenReturn(invite);
-    when(ignoreListService.addMask("libera", "alice")).thenReturn(false);
-
-    service.handleInviteBlock("last");
-
-    verify(ignoreListService).addMask("libera", "alice");
-    verify(pendingInviteState).remove(27L);
-    verify(ui).appendStatus(status, "(invite)", "Already blocking alice (alice!*@*).");
-  }
-
-  @Test
-  void inviteBlockRejectsServerInviteWithoutNick() {
-    TargetRef status = new TargetRef("libera", "status");
-    PendingInvitePort.PendingInvite invite =
-        new PendingInvitePort.PendingInvite(
-            31L,
-            Instant.parse("2026-02-16T00:00:00Z"),
-            Instant.parse("2026-02-16T00:00:00Z"),
-            "libera",
-            "#ircafe",
-            "server",
-            "me",
-            "",
-            true,
-            1);
-    when(targetCoordinator.getActiveTarget()).thenReturn(status);
-    when(pendingInviteState.latestForServer("libera")).thenReturn(invite);
-
-    service.handleInviteBlock("last");
-
-    verify(ignoreListService, never()).addMask(anyString(), anyString());
-    verify(pendingInviteState, never()).remove(anyLong());
-    verify(ui).appendStatus(status, "(invite)", "No inviter nick available for invite #31.");
-  }
-
-  @Test
-  void inviteAutoJoinToggleFlipsCurrentState() {
-    TargetRef status = new TargetRef("libera", "status");
-    when(targetCoordinator.getActiveTarget()).thenReturn(status);
-    when(pendingInviteState.inviteAutoJoinEnabled()).thenReturn(false);
-
-    service.handleInviteAutoJoin("toggle");
-
-    verify(pendingInviteState).setInviteAutoJoinEnabled(true);
-    verify(runtimeConfig).rememberInviteAutoJoinEnabled(true);
-    verify(ui).appendStatus(status, "(invite)", "Invite auto-join is now enabled.");
-  }
-
-  @Test
-  void inviteAutoJoinStatusMentionsAjinviteAlias() {
-    TargetRef status = new TargetRef("libera", "status");
-    when(targetCoordinator.getActiveTarget()).thenReturn(status);
-    when(pendingInviteState.inviteAutoJoinEnabled()).thenReturn(true);
-
-    service.handleInviteAutoJoin("status");
-
-    verify(ui)
-        .appendStatus(
-            status,
-            "(invite)",
-            "Invite auto-join is enabled. Use /inviteautojoin on|off or /ajinvite.");
   }
 
   private static IrcProperties.Server serverWithBackend(

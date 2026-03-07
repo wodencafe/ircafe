@@ -25,6 +25,7 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
   private final OutboundChatHistoryCommandService chatHistory =
       mock(OutboundChatHistoryCommandService.class);
+  private final OutboundInviteCommandService invite = mock(OutboundInviteCommandService.class);
   private final QuasselOutboundCommandService quassel = mock(QuasselOutboundCommandService.class);
   private final OutboundUploadCommandService upload = mock(OutboundUploadCommandService.class);
   private final OutboundMessageMutationCommandService messageMutations =
@@ -46,6 +47,7 @@ class DefaultOutboundCommandDispatcherTest {
           dcc,
           chat,
           chatHistory,
+          invite,
           quassel,
           upload,
           messageMutations,
@@ -140,28 +142,28 @@ class DefaultOutboundCommandDispatcherTest {
   @Test
   void dispatchInviteRoutesToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.Invite("bob", "#ircafe"));
-    verify(chat).handleInvite(disposables, "bob", "#ircafe");
+    verify(invite).handleInvite(disposables, "bob", "#ircafe");
   }
 
   @Test
   void dispatchInviteActionCommandsRouteToChatService() {
     dispatcher.dispatch(disposables, new ParsedInput.InviteList("libera"));
-    verify(chat).handleInviteList("libera");
+    verify(invite).handleInviteList("libera");
 
     dispatcher.dispatch(disposables, new ParsedInput.InviteJoin("12"));
-    verify(chat).handleInviteJoin(disposables, "12");
+    verify(invite).handleInviteJoin(disposables, "12");
 
     dispatcher.dispatch(disposables, new ParsedInput.InviteIgnore("12"));
-    verify(chat).handleInviteIgnore("12");
+    verify(invite).handleInviteIgnore("12");
 
     dispatcher.dispatch(disposables, new ParsedInput.InviteWhois("12"));
-    verify(chat).handleInviteWhois(disposables, "12");
+    verify(invite).handleInviteWhois(disposables, "12");
 
     dispatcher.dispatch(disposables, new ParsedInput.InviteBlock("12"));
-    verify(chat).handleInviteBlock("12");
+    verify(invite).handleInviteBlock("12");
 
     dispatcher.dispatch(disposables, new ParsedInput.InviteAutoJoin("on"));
-    verify(chat).handleInviteAutoJoin("on");
+    verify(invite).handleInviteAutoJoin("on");
   }
 
   @Test

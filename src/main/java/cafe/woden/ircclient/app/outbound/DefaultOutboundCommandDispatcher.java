@@ -21,6 +21,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundDccCommandService outboundDccCommandService;
   private final OutboundChatCommandService outboundChatCommandService;
   private final OutboundChatHistoryCommandService outboundChatHistoryCommandService;
+  private final OutboundInviteCommandService outboundInviteCommandService;
   private final QuasselOutboundCommandService quasselOutboundCommandService;
   private final OutboundUploadCommandService outboundUploadCommandService;
   private final OutboundMessageMutationCommandService outboundMessageMutationCommandService;
@@ -39,6 +40,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundDccCommandService outboundDccCommandService,
       OutboundChatCommandService outboundChatCommandService,
       OutboundChatHistoryCommandService outboundChatHistoryCommandService,
+      OutboundInviteCommandService outboundInviteCommandService,
       QuasselOutboundCommandService quasselOutboundCommandService,
       OutboundUploadCommandService outboundUploadCommandService,
       OutboundMessageMutationCommandService outboundMessageMutationCommandService,
@@ -54,6 +56,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundDccCommandService = outboundDccCommandService;
     this.outboundChatCommandService = outboundChatCommandService;
     this.outboundChatHistoryCommandService = outboundChatHistoryCommandService;
+    this.outboundInviteCommandService = outboundInviteCommandService;
     this.quasselOutboundCommandService = quasselOutboundCommandService;
     this.outboundUploadCommandService = outboundUploadCommandService;
     this.outboundMessageMutationCommandService = outboundMessageMutationCommandService;
@@ -159,31 +162,31 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     register(
         map,
         ParsedInput.Invite.class,
-        (d, cmd) -> outboundChatCommandService.handleInvite(d, cmd.nick(), cmd.channel()));
+        (d, cmd) -> outboundInviteCommandService.handleInvite(d, cmd.nick(), cmd.channel()));
     register(
         map,
         ParsedInput.InviteList.class,
-        (d, cmd) -> outboundChatCommandService.handleInviteList(cmd.serverId()));
+        (d, cmd) -> outboundInviteCommandService.handleInviteList(cmd.serverId()));
     register(
         map,
         ParsedInput.InviteJoin.class,
-        (d, cmd) -> outboundChatCommandService.handleInviteJoin(d, cmd.inviteToken()));
+        (d, cmd) -> outboundInviteCommandService.handleInviteJoin(d, cmd.inviteToken()));
     register(
         map,
         ParsedInput.InviteIgnore.class,
-        (d, cmd) -> outboundChatCommandService.handleInviteIgnore(cmd.inviteToken()));
+        (d, cmd) -> outboundInviteCommandService.handleInviteIgnore(cmd.inviteToken()));
     register(
         map,
         ParsedInput.InviteWhois.class,
-        (d, cmd) -> outboundChatCommandService.handleInviteWhois(d, cmd.inviteToken()));
+        (d, cmd) -> outboundInviteCommandService.handleInviteWhois(d, cmd.inviteToken()));
     register(
         map,
         ParsedInput.InviteBlock.class,
-        (d, cmd) -> outboundChatCommandService.handleInviteBlock(cmd.inviteToken()));
+        (d, cmd) -> outboundInviteCommandService.handleInviteBlock(cmd.inviteToken()));
     register(
         map,
         ParsedInput.InviteAutoJoin.class,
-        (d, cmd) -> outboundChatCommandService.handleInviteAutoJoin(cmd.mode()));
+        (d, cmd) -> outboundInviteCommandService.handleInviteAutoJoin(cmd.mode()));
     register(
         map,
         ParsedInput.Names.class,
