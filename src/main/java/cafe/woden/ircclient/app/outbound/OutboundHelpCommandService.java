@@ -3,7 +3,6 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.model.TargetRef;
-import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -12,31 +11,27 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import org.springframework.stereotype.Component;
 
-/** Handles outbound /help and delegates /say and /quote flow. */
+/** Handles outbound /help command flow. */
 @Component
-public class OutboundChatCommandService {
+final class OutboundHelpCommandService {
 
   private final UiPort ui;
   private final TargetCoordinator targetCoordinator;
-  private final OutboundSayQuoteCommandService outboundSayQuoteCommandService;
   private final List<OutboundHelpContributor> helpContributors;
   private final Map<String, HelpTopicHandler> helpTopicHandlers;
 
-  public OutboundChatCommandService(
+  OutboundHelpCommandService(
       UiPort ui,
       TargetCoordinator targetCoordinator,
-      OutboundSayQuoteCommandService outboundSayQuoteCommandService,
       List<OutboundHelpContributor> helpContributors) {
     this.ui = Objects.requireNonNull(ui, "ui");
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.outboundSayQuoteCommandService =
-        Objects.requireNonNull(outboundSayQuoteCommandService, "outboundSayQuoteCommandService");
     this.helpContributors =
         List.copyOf(Objects.requireNonNull(helpContributors, "helpContributors"));
     this.helpTopicHandlers = buildHelpTopicHandlers();
   }
 
-  public void handleHelp(String topic) {
+  void handleHelp(String topic) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef out = (at != null) ? at : targetCoordinator.safeStatusTarget();
     String t = normalizeHelpTopic(topic);
@@ -63,14 +58,6 @@ public class OutboundChatCommandService {
         out,
         "(help)",
         "Tip: /help edit, /help redact, /help markread, or /help upload for focused details.");
-  }
-
-  public void handleSay(CompositeDisposable disposables, String msg) {
-    outboundSayQuoteCommandService.handleSay(disposables, msg);
-  }
-
-  public void handleQuote(CompositeDisposable disposables, String rawLine) {
-    outboundSayQuoteCommandService.handleQuote(disposables, rawLine);
   }
 
   private Map<String, HelpTopicHandler> buildHelpTopicHandlers() {

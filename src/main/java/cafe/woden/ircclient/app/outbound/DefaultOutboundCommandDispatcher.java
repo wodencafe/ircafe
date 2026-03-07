@@ -19,7 +19,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
   private final OutboundModeCommandService outboundModeCommandService;
   private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
   private final OutboundDccCommandService outboundDccCommandService;
-  private final OutboundChatCommandService outboundChatCommandService;
+  private final OutboundHelpCommandService outboundHelpCommandService;
   private final OutboundMessagingCommandService outboundMessagingCommandService;
   private final OutboundSayQuoteCommandService outboundSayQuoteCommandService;
   private final OutboundJoinPartCommandService outboundJoinPartCommandService;
@@ -45,7 +45,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
       OutboundModeCommandService outboundModeCommandService,
       OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
       OutboundDccCommandService outboundDccCommandService,
-      OutboundChatCommandService outboundChatCommandService,
+      OutboundHelpCommandService outboundHelpCommandService,
       OutboundMessagingCommandService outboundMessagingCommandService,
       OutboundSayQuoteCommandService outboundSayQuoteCommandService,
       OutboundJoinPartCommandService outboundJoinPartCommandService,
@@ -68,7 +68,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     this.outboundModeCommandService = outboundModeCommandService;
     this.outboundCtcpWhoisCommandService = outboundCtcpWhoisCommandService;
     this.outboundDccCommandService = outboundDccCommandService;
-    this.outboundChatCommandService = outboundChatCommandService;
+    this.outboundHelpCommandService = outboundHelpCommandService;
     this.outboundMessagingCommandService = outboundMessagingCommandService;
     this.outboundSayQuoteCommandService = outboundSayQuoteCommandService;
     this.outboundJoinPartCommandService = outboundJoinPartCommandService;
@@ -331,7 +331,7 @@ public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatch
     register(
         map,
         ParsedInput.Help.class,
-        (d, cmd) -> outboundChatCommandService.handleHelp(cmd.topic()));
+        (d, cmd) -> outboundHelpCommandService.handleHelp(cmd.topic()));
     register(
         map,
         ParsedInput.Upload.class,

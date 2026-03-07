@@ -22,7 +22,7 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundModeCommandService mode = mock(OutboundModeCommandService.class);
   private final OutboundCtcpWhoisCommandService ctcp = mock(OutboundCtcpWhoisCommandService.class);
   private final OutboundDccCommandService dcc = mock(OutboundDccCommandService.class);
-  private final OutboundChatCommandService chat = mock(OutboundChatCommandService.class);
+  private final OutboundHelpCommandService help = mock(OutboundHelpCommandService.class);
   private final OutboundMessagingCommandService messaging =
       mock(OutboundMessagingCommandService.class);
   private final OutboundSayQuoteCommandService sayQuote =
@@ -59,7 +59,7 @@ class DefaultOutboundCommandDispatcherTest {
           mode,
           ctcp,
           dcc,
-          chat,
+          help,
           messaging,
           sayQuote,
           joinPart,
@@ -303,9 +303,9 @@ class DefaultOutboundCommandDispatcherTest {
   }
 
   @Test
-  void dispatchHelpRoutesToChatService() {
+  void dispatchHelpRoutesToHelpService() {
     dispatcher.dispatch(disposables, new ParsedInput.Help("edit"));
-    verify(chat).handleHelp("edit");
+    verify(help).handleHelp("edit");
   }
 
   @Test
