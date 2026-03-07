@@ -47,7 +47,7 @@ final class OutboundHelpCommandService {
     ui.appendStatus(
         out,
         "(help)",
-        "Common: /join /part /msg /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc /quasselsetup /quasselnet");
+        "Common: /join /part /msg /notice /me /query /whois /names /list /topic /monitor /chathistory /quote /dcc");
     ui.appendStatus(
         out,
         "(help)",

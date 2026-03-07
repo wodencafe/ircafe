@@ -42,6 +42,8 @@ class DefaultOutboundCommandDispatcherTest {
   private final OutboundTopicKickCommandService topicKick =
       mock(OutboundTopicKickCommandService.class);
   private final QuasselOutboundCommandService quassel = mock(QuasselOutboundCommandService.class);
+  private final BackendNamedOutboundCommandRouter backendNamedRouter =
+      mock(BackendNamedOutboundCommandRouter.class);
   private final OutboundUploadCommandService upload = mock(OutboundUploadCommandService.class);
   private final OutboundMessageMutationCommandService messageMutations =
       mock(OutboundMessageMutationCommandService.class);
@@ -56,7 +58,7 @@ class DefaultOutboundCommandDispatcherTest {
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final List<OutboundCommandRegistrar> commandRegistrars =
       List.of(
-          new LifecycleBackendOutboundCommandRegistrar(joinPart, lifecycle, quassel),
+          new LifecycleBackendOutboundCommandRegistrar(joinPart, lifecycle, backendNamedRouter),
           new IdentityMessagingOutboundCommandRegistrar(nickAway, messaging, ctcp),
           new ChannelModeOutboundCommandRegistrar(topicKick, invite, namesWhoList, monitor, mode),
           new IgnoreCtcpOutboundCommandRegistrar(ignore, filter, ctcp, dcc),
@@ -144,14 +146,16 @@ class DefaultOutboundCommandDispatcherTest {
 
   @Test
   void dispatchQuasselSetupRoutesToQuasselService() {
-    dispatcher.dispatch(disposables, new ParsedInput.QuasselSetup("quassel"));
-    verify(quassel).handleQuasselSetup(disposables, "quassel");
+    ParsedInput.BackendNamed command = new ParsedInput.BackendNamed("quasselsetup", "quassel");
+    dispatcher.dispatch(disposables, command);
+    verify(backendNamedRouter).handle(disposables, command);
   }
 
   @Test
   void dispatchQuasselNetworkRoutesToQuasselService() {
-    dispatcher.dispatch(disposables, new ParsedInput.QuasselNetwork("list"));
-    verify(quassel).handleQuasselNetwork(disposables, "list");
+    ParsedInput.BackendNamed command = new ParsedInput.BackendNamed("quasselnet", "list");
+    dispatcher.dispatch(disposables, command);
+    verify(backendNamedRouter).handle(disposables, command);
   }
 
   @Test

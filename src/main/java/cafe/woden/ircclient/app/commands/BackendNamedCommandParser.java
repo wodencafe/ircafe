@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.app.commands;
 
+import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 /**
@@ -10,27 +12,25 @@ import org.springframework.stereotype.Component;
 @Component
 public class BackendNamedCommandParser {
 
-  public ParsedInput parse(String line) {
-    if (matchesCommand(line, "/quasselsetup") || matchesCommand(line, "/qsetup")) {
-      String serverId =
-          matchesCommand(line, "/quasselsetup")
-              ? argAfter(line, "/quasselsetup")
-              : argAfter(line, "/qsetup");
-      return new ParsedInput.QuasselSetup(serverId);
-    }
+  private final List<BackendNamedCommandHandler> handlers;
 
-    if (matchesCommand(line, "/quasselnet") || matchesCommand(line, "/qnet")) {
-      String args =
-          matchesCommand(line, "/quasselnet")
-              ? argAfter(line, "/quasselnet")
-              : argAfter(line, "/qnet");
-      return new ParsedInput.QuasselNetwork(args);
+  public BackendNamedCommandParser(List<BackendNamedCommandHandler> handlers) {
+    this.handlers = List.copyOf(Objects.requireNonNull(handlers, "handlers"));
+  }
+
+  public ParsedInput parse(String line) {
+    String raw = Objects.toString(line, "").trim();
+    if (raw.isEmpty()) return null;
+
+    for (BackendNamedCommandHandler handler : handlers) {
+      ParsedInput parsed = handler.parse(raw);
+      if (parsed != null) return parsed;
     }
 
     return null;
   }
 
-  private static String argAfter(String line, String cmd) {
+  static String argAfter(String line, String cmd) {
     if (line == null || cmd == null) return "";
     if (line.equalsIgnoreCase(cmd)) return "";
     if (line.length() <= cmd.length()) return "";
@@ -38,7 +38,7 @@ public class BackendNamedCommandParser {
     return rest.trim();
   }
 
-  private static boolean matchesCommand(String line, String command) {
+  static boolean matchesCommand(String line, String command) {
     if (line == null || command == null || line.isBlank() || command.isBlank()) return false;
     if (line.equalsIgnoreCase(command)) return true;
     return line.regionMatches(true, 0, command, 0, command.length())

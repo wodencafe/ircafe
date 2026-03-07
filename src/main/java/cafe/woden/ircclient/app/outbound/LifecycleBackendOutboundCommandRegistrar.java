@@ -10,19 +10,20 @@ final class LifecycleBackendOutboundCommandRegistrar implements OutboundCommandR
 
   private final OutboundJoinPartCommandService outboundJoinPartCommandService;
   private final OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService;
-  private final QuasselOutboundCommandService quasselOutboundCommandService;
+  private final BackendNamedOutboundCommandRouter backendNamedOutboundCommandRouter;
 
   LifecycleBackendOutboundCommandRegistrar(
       OutboundJoinPartCommandService outboundJoinPartCommandService,
       OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService,
-      QuasselOutboundCommandService quasselOutboundCommandService) {
+      BackendNamedOutboundCommandRouter backendNamedOutboundCommandRouter) {
     this.outboundJoinPartCommandService =
         Objects.requireNonNull(outboundJoinPartCommandService, "outboundJoinPartCommandService");
     this.outboundConnectionLifecycleCommandService =
         Objects.requireNonNull(
             outboundConnectionLifecycleCommandService, "outboundConnectionLifecycleCommandService");
-    this.quasselOutboundCommandService =
-        Objects.requireNonNull(quasselOutboundCommandService, "quasselOutboundCommandService");
+    this.backendNamedOutboundCommandRouter =
+        Objects.requireNonNull(
+            backendNamedOutboundCommandRouter, "backendNamedOutboundCommandRouter");
   }
 
   @Override
@@ -43,11 +44,8 @@ final class LifecycleBackendOutboundCommandRegistrar implements OutboundCommandR
         ParsedInput.Reconnect.class,
         (d, cmd) -> outboundConnectionLifecycleCommandService.handleReconnect(cmd.target()));
     registry.register(
-        ParsedInput.QuasselSetup.class,
-        (d, cmd) -> quasselOutboundCommandService.handleQuasselSetup(d, cmd.serverId()));
-    registry.register(
-        ParsedInput.QuasselNetwork.class,
-        (d, cmd) -> quasselOutboundCommandService.handleQuasselNetwork(d, cmd.args()));
+        ParsedInput.BackendNamed.class,
+        (d, cmd) -> backendNamedOutboundCommandRouter.handle(d, cmd));
     registry.register(
         ParsedInput.Quit.class,
         (d, cmd) -> outboundConnectionLifecycleCommandService.handleQuit(cmd.reason()));
