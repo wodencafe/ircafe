@@ -23,8 +23,8 @@ import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.IrcTypingPort;
@@ -63,6 +63,7 @@ import java.util.function.Consumer;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -85,7 +86,7 @@ public class IrcMediator implements MediatorControlPort {
   private static final Duration INBOUND_MSGID_DEDUP_COUNTER_TTL = Duration.ofHours(6);
   private static final long INBOUND_MSGID_DEDUP_DIAG_MIN_EMIT_MS = 10_000L;
 
-  private final IrcClientService irc;
+  private final IrcMediatorInteractionPort irc;
   private final IrcTypingPort typingPort;
   private final IrcReadMarkerPort readMarkerPort;
   private final IrcNegotiatedFeaturePort negotiatedFeaturePort;
@@ -177,7 +178,7 @@ public class IrcMediator implements MediatorControlPort {
   }
 
   public IrcMediator(
-      IrcClientService irc,
+      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort irc,
       IrcTypingPort typingPort,
       IrcReadMarkerPort readMarkerPort,
       IrcNegotiatedFeaturePort negotiatedFeaturePort,

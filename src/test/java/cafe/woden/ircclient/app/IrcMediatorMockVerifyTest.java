@@ -36,8 +36,8 @@ import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.IrcTypingPort;
@@ -71,7 +71,7 @@ import org.springframework.context.ApplicationEventPublisher;
 
 class IrcMediatorMockVerifyTest {
 
-  private final IrcClientService irc = mock(IrcClientService.class);
+  private final IrcMediatorInteractionPort irc = mock(IrcMediatorInteractionPort.class);
   private final IrcTypingPort typingPort = mock(IrcTypingPort.class);
   private final IrcReadMarkerPort readMarkerPort = mock(IrcReadMarkerPort.class);
   private final IrcNegotiatedFeaturePort negotiatedFeaturePort =
