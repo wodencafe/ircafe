@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -55,7 +56,7 @@ public class OutboundChatCommandService {
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
   private final OutboundRawLineCorrelationService rawLineCorrelationService;
-  private final OutboundUploadCommandService outboundUploadCommandService;
+  private final List<OutboundHelpContributor> helpContributors;
 
   private final CommandTargetPolicy commandTargetPolicy;
   private final ChatCommandRuntimeConfigPort runtimeConfig;
@@ -75,7 +76,7 @@ public class OutboundChatCommandService {
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       OutboundRawLineCorrelationService rawLineCorrelationService,
-      OutboundUploadCommandService outboundUploadCommandService,
+      List<OutboundHelpContributor> helpContributors,
       CommandTargetPolicy commandTargetPolicy,
       ChatCommandRuntimeConfigPort runtimeConfig,
       AwayRoutingPort awayRoutingState,
@@ -93,8 +94,8 @@ public class OutboundChatCommandService {
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
     this.rawLineCorrelationService =
         Objects.requireNonNull(rawLineCorrelationService, "rawLineCorrelationService");
-    this.outboundUploadCommandService =
-        Objects.requireNonNull(outboundUploadCommandService, "outboundUploadCommandService");
+    this.helpContributors =
+        List.copyOf(Objects.requireNonNull(helpContributors, "helpContributors"));
 
     this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
@@ -991,7 +992,7 @@ public class OutboundChatCommandService {
         out,
         "(help)",
         "Invites: /invites /invjoin (/join -i) /invignore /invwhois /invblock /inviteautojoin (/ajinvite)");
-    outboundUploadCommandService.appendUploadHelp(out);
+    helpContributors.forEach(contributor -> contributor.appendGeneralHelp(out));
     ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
     ui.appendStatus(
         out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
@@ -999,12 +1000,6 @@ public class OutboundChatCommandService {
         out, "(help)", "/unreact <msgid> <reaction-token> (requires draft/unreact + draft/reply)");
     appendEditHelp(out);
     appendRedactHelp(out);
-    ui.appendStatus(
-        out, "(help)", "/quasselsetup [serverId] (complete pending Quassel Core setup)");
-    ui.appendStatus(
-        out,
-        "(help)",
-        "/quasselnet [serverId] list|connect|disconnect|remove|add|edit ... (manage Quassel networks)");
     ui.appendStatus(out, "(help)", "Tip: /help dcc for direct-chat/file-transfer commands.");
     ui.appendStatus(
         out,
@@ -1018,7 +1013,9 @@ public class OutboundChatCommandService {
     registerHelpTopicHandler(handlers, this::appendRedactHelp, "redact", "delete");
     registerHelpTopicHandler(handlers, this::appendDccHelp, "dcc");
     registerHelpTopicHandler(handlers, this::appendMarkReadHelp, "markread");
-    registerHelpTopicHandler(handlers, outboundUploadCommandService::appendUploadHelp, "upload");
+    for (OutboundHelpContributor contributor : helpContributors) {
+      registerHelpTopicHandlers(handlers, contributor.topicHelpHandlers());
+    }
     return Map.copyOf(handlers);
   }
 
@@ -1029,6 +1026,18 @@ public class OutboundChatCommandService {
       String topic = normalizeHelpTopic(rawTopic);
       if (!topic.isEmpty()) {
         handlers.put(topic, handler);
+      }
+    }
+  }
+
+  private static void registerHelpTopicHandlers(
+      Map<String, HelpTopicHandler> handlers, Map<String, Consumer<TargetRef>> topicHandlers) {
+    if (handlers == null || topicHandlers == null || topicHandlers.isEmpty()) return;
+    for (Map.Entry<String, Consumer<TargetRef>> entry : topicHandlers.entrySet()) {
+      String topic = normalizeHelpTopic(entry.getKey());
+      Consumer<TargetRef> consumer = entry.getValue();
+      if (!topic.isEmpty() && consumer != null) {
+        handlers.put(topic, consumer::accept);
       }
     }
   }

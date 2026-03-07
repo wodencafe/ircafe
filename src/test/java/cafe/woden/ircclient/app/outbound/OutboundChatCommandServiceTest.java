@@ -33,7 +33,9 @@ import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -61,6 +63,18 @@ class OutboundChatCommandServiceTest {
       new OutboundRawLineCorrelationService(irc, labeledResponseRoutingState);
   private final OutboundUploadCommandService outboundUploadCommandService =
       mock(OutboundUploadCommandService.class);
+  private final OutboundHelpContributor uploadHelpContributor =
+      new OutboundHelpContributor() {
+        @Override
+        public void appendGeneralHelp(TargetRef out) {
+          outboundUploadCommandService.appendUploadHelp(out);
+        }
+
+        @Override
+        public Map<String, Consumer<TargetRef>> topicHelpHandlers() {
+          return Map.of("upload", outboundUploadCommandService::appendUploadHelp);
+        }
+      };
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundChatCommandService service =
@@ -71,7 +85,7 @@ class OutboundChatCommandServiceTest {
           connectionCoordinator,
           targetCoordinator,
           rawLineCorrelationService,
-          outboundUploadCommandService,
+          List.of(uploadHelpContributor),
           commandTargetPolicy,
           runtimeConfig,
           awayRoutingState,

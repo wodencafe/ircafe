@@ -6,12 +6,14 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import org.springframework.stereotype.Component;
 
 /** Handles semantic /upload command flow and backend translation dispatch. */
 @Component
-final class OutboundUploadCommandService {
+final class OutboundUploadCommandService implements OutboundHelpContributor {
 
   private final IrcClientService irc;
   private final UiPort ui;
@@ -40,6 +42,16 @@ final class OutboundUploadCommandService {
 
   void appendUploadHelp(TargetRef out) {
     matrixOutboundCommandService.appendUploadHelp(out);
+  }
+
+  @Override
+  public void appendGeneralHelp(TargetRef out) {
+    appendUploadHelp(out);
+  }
+
+  @Override
+  public Map<String, Consumer<TargetRef>> topicHelpHandlers() {
+    return Map.of("upload", this::appendUploadHelp);
   }
 
   void handleUpload(CompositeDisposable disposables, String msgType, String path, String caption) {

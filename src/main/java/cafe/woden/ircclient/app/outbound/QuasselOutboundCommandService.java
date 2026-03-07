@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 
 /** Handles Quassel-specific outbound commands and manager workflows. */
 @Component
-final class QuasselOutboundCommandService {
+final class QuasselOutboundCommandService implements OutboundHelpContributor {
 
   private final QuasselCoreControlPort quasselControl;
   private final UiPort ui;
@@ -42,6 +42,16 @@ final class QuasselOutboundCommandService {
     this.quasselCommandSupport =
         Objects.requireNonNull(quasselCommandSupport, "quasselCommandSupport");
     this.quasselNetworkVerbHandlers = buildQuasselNetworkVerbHandlers();
+  }
+
+  @Override
+  public void appendGeneralHelp(TargetRef out) {
+    ui.appendStatus(
+        out, "(help)", "/quasselsetup [serverId] (complete pending Quassel Core setup)");
+    ui.appendStatus(
+        out,
+        "(help)",
+        "/quasselnet [serverId] list|connect|disconnect|remove|add|edit ... (manage Quassel networks)");
   }
 
   public void handleQuasselSetup(CompositeDisposable disposables, String serverId) {
