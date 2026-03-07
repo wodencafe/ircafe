@@ -15,7 +15,6 @@ import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
-import cafe.woden.ircclient.irc.IrcBackendModePort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -24,6 +23,7 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
@@ -209,7 +209,7 @@ class ChatDockableWiringSmokeTest {
     TargetActivationBus activationBus = new TargetActivationBus();
     OutboundLineBus outboundBus = new OutboundLineBus();
     IrcClientService irc = mock(IrcClientService.class);
-    IrcBackendModePort backendModePort = mock(IrcBackendModePort.class);
+    BackendUiProfileProvider backendUiProfileProvider = mock(BackendUiProfileProvider.class);
     MessageActionCapabilityPolicy messageActionCapabilityPolicy =
         mock(MessageActionCapabilityPolicy.class);
     ActiveInputRouter activeInputRouter = new ActiveInputRouter();
@@ -247,7 +247,7 @@ class ChatDockableWiringSmokeTest {
                     activationBus,
                     outboundBus,
                     irc,
-                    backendModePort,
+                    backendUiProfileProvider,
                     messageActionCapabilityPolicy,
                     activeInputRouter,
                     ignoreListService,

@@ -1,12 +1,12 @@
 package cafe.woden.ircclient.ui.chat;
 
-import cafe.woden.ircclient.irc.IrcBackendModePort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.SwingEdt;
+import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
@@ -29,7 +29,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.SwingUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -48,7 +47,7 @@ public class ChatDockManager {
   private final SpellcheckSettingsBus spellcheckSettingsBus;
   private final OutboundLineBus outboundBus;
   private final IrcClientService irc;
-  private final IrcBackendModePort backendModePort;
+  private final BackendUiProfileProvider backendUiProfileProvider;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final ActiveInputRouter activeInputRouter;
   private final CommandHistoryStore commandHistoryStore;
@@ -83,7 +82,7 @@ public class ChatDockManager {
       SpellcheckSettingsBus spellcheckSettingsBus,
       OutboundLineBus outboundBus,
       IrcClientService irc,
-      @Qualifier("ircClientService") IrcBackendModePort backendModePort,
+      BackendUiProfileProvider backendUiProfileProvider,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ActiveInputRouter activeInputRouter,
       ChatHistoryService chatHistoryService,
@@ -96,7 +95,7 @@ public class ChatDockManager {
     this.spellcheckSettingsBus = spellcheckSettingsBus;
     this.outboundBus = outboundBus;
     this.irc = irc;
-    this.backendModePort = backendModePort;
+    this.backendUiProfileProvider = backendUiProfileProvider;
     this.messageActionCapabilityPolicy =
         java.util.Objects.requireNonNull(
             messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
@@ -370,7 +369,7 @@ public class ChatDockManager {
             outboundBus,
             irc,
             messageActionCapabilityPolicy,
-            backendModePort,
+            backendUiProfileProvider::profileForServer,
             activeInputRouter,
             (t, draft) -> {
               if (t == null) return;

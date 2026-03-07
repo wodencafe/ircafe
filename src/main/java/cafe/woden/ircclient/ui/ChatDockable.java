@@ -12,7 +12,6 @@ import cafe.woden.ircclient.diagnostics.SpringRuntimeEventsService;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
-import cafe.woden.ircclient.irc.IrcBackendModePort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -27,6 +26,7 @@ import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import cafe.woden.ircclient.ui.backend.BackendUiProfile;
+import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
@@ -196,7 +196,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
       IrcClientService irc,
-      @Qualifier("ircClientService") IrcBackendModePort backendModePort,
+      BackendUiProfileProvider backendUiProfileProvider,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ActiveInputRouter activeInputRouter,
       IgnoreListService ignoreListService,
@@ -251,7 +251,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.nickContextMenu = createNickContextMenu(nickContextMenuFactory);
     this.nickContextCoordinator =
         createNickContextCoordinator(ignoreListService, ignoreStatusService, userListStore);
-    BackendUiContext backendUiContext = BackendUiContext.fromBackendModePort(backendModePort);
+    BackendUiContext backendUiContext = backendUiProfileProvider.backendUiContext();
 
     // Show something harmless on startup; first selection will swap it.
     setDocument(new DefaultStyledDocument());
@@ -292,7 +292,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     // Input panel is embedded in the main chat dock so input is always coupled with the transcript.
     this.inputPanel =
         new MessageInputPanel(settingsBus, commandHistoryStore, spellcheckSettingsBus);
-    this.inputPanel.setBackendUiProfile(new BackendUiProfile("", backendUiContext));
+    this.inputPanel.setBackendUiProfile(backendUiProfileProvider.profileForServer(""));
     add(inputPanel, BorderLayout.SOUTH);
     MessageActionCapabilityPolicy capabilityPolicy =
         Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");

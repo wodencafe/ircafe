@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.ui.chat;
 
-import cafe.woden.ircclient.irc.IrcBackendModePort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -26,6 +25,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.IntConsumer;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
@@ -94,7 +94,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       OutboundLineBus outboundBus,
       IrcClientService irc,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
-      IrcBackendModePort backendModePort,
+      Function<String, BackendUiProfile> backendUiProfileProvider,
       ActiveInputRouter activeInputRouter,
       BiConsumer<TargetRef, String> onDraftChanged,
       BiConsumer<TargetRef, String> onClosed) {
@@ -158,8 +158,11 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     // Input panel embedded in the pinned view.
     this.inputPanel = new MessageInputPanel(settingsBus, historyStore, spellcheckSettingsBus);
-    this.inputPanel.setBackendUiProfile(
-        BackendUiProfile.fromBackendModePort(backendModePort, target.serverId()));
+    BackendUiProfile initialProfile =
+        backendUiProfileProvider == null
+            ? BackendUiProfile.ircOnly(target.serverId())
+            : backendUiProfileProvider.apply(target.serverId());
+    this.inputPanel.setBackendUiProfile(initialProfile);
     add(inputPanel, BorderLayout.SOUTH);
 
     // Persist draft text continuously so closing/undocking doesn't lose the latest draft.
