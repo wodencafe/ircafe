@@ -15,6 +15,7 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
@@ -55,7 +56,7 @@ class OutboundUploadCommandServiceTest {
           outboundBackendCapabilityPolicy, labeledResponseRoutingState);
   private final OutboundUploadCommandService service =
       new OutboundUploadCommandService(
-          irc,
+          IrcTargetMembershipPort.from(irc),
           ui,
           connectionCoordinator,
           targetCoordinator,

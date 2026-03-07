@@ -14,6 +14,7 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
@@ -36,7 +37,7 @@ class OutboundJoinPartCommandServiceTest {
   private final JoinRoutingPort joinRoutingState = mock(JoinRoutingPort.class);
   private final OutboundJoinPartCommandService service =
       new OutboundJoinPartCommandService(
-          irc,
+          IrcTargetMembershipPort.from(irc),
           ui,
           connectionCoordinator,
           targetCoordinator,

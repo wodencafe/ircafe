@@ -3,12 +3,13 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,7 +21,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class OutboundModeCommandService {
 
-  private final IrcClientService irc;
+  private final IrcTargetMembershipPort targetMembership;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
@@ -29,14 +30,14 @@ public class OutboundModeCommandService {
   private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
   public OutboundModeCommandService(
-      IrcClientService irc,
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       CommandTargetPolicy commandTargetPolicy,
       ModeRoutingPort modeRoutingState,
       OutboundRawLineCorrelationService rawLineCorrelationService) {
-    this.irc = irc;
+    this.targetMembership = targetMembership;
     this.ui = ui;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
@@ -98,7 +99,8 @@ public class OutboundModeCommandService {
     ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
     disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
+        targetMembership
+            .sendRaw(at.serverId(), prepared.line())
             .subscribe(
                 () -> {},
                 err ->
@@ -179,7 +181,8 @@ public class OutboundModeCommandService {
       ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
       disposables.add(
-          irc.sendRaw(at.serverId(), prepared.line())
+          targetMembership
+              .sendRaw(at.serverId(), prepared.line())
               .subscribe(
                   () -> {},
                   err ->
@@ -237,7 +240,8 @@ public class OutboundModeCommandService {
       ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
       disposables.add(
-          irc.sendRaw(at.serverId(), prepared.line())
+          targetMembership
+              .sendRaw(at.serverId(), prepared.line())
               .subscribe(
                   () -> {},
                   err ->

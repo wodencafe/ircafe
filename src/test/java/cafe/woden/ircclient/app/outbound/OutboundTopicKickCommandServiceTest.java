@@ -9,6 +9,7 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
@@ -32,7 +33,7 @@ class OutboundTopicKickCommandServiceTest {
       new OutboundRawLineCorrelationService(backendCapabilityPolicy, labeledResponseRoutingState);
   private final OutboundTopicKickCommandService service =
       new OutboundTopicKickCommandService(
-          irc,
+          IrcTargetMembershipPort.from(irc),
           ui,
           connectionCoordinator,
           targetCoordinator,

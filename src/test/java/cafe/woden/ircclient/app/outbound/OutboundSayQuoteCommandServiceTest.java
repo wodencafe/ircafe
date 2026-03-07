@@ -17,6 +17,7 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.irc.IrcEchoCapabilityPort;
 import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
@@ -52,7 +53,7 @@ class OutboundSayQuoteCommandServiceTest {
           pendingEchoMessageState);
   private final OutboundSayQuoteCommandService service =
       new OutboundSayQuoteCommandService(
-          irc,
+          IrcTargetMembershipPort.from(irc),
           ui,
           connectionCoordinator,
           targetCoordinator,

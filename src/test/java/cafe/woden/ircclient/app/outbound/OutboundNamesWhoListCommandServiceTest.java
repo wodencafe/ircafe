@@ -10,6 +10,7 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import io.reactivex.rxjava3.core.Completable;
@@ -35,7 +36,7 @@ class OutboundNamesWhoListCommandServiceTest {
       new OutboundRawLineCorrelationService(backendCapabilityPolicy, labeledResponseRoutingState);
   private final OutboundNamesWhoListCommandService service =
       new OutboundNamesWhoListCommandService(
-          irc,
+          IrcTargetMembershipPort.from(irc),
           ui,
           connectionCoordinator,
           targetCoordinator,

@@ -3,19 +3,20 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles semantic /upload command flow and backend translation dispatch. */
 @Component
 final class OutboundUploadCommandService implements OutboundHelpContributor {
 
-  private final IrcClientService irc;
+  private final IrcTargetMembershipPort targetMembership;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
@@ -23,13 +24,13 @@ final class OutboundUploadCommandService implements OutboundHelpContributor {
   private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
   OutboundUploadCommandService(
-      IrcClientService irc,
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       MatrixOutboundCommandService matrixOutboundCommandService,
       OutboundRawLineCorrelationService rawLineCorrelationService) {
-    this.irc = Objects.requireNonNull(irc, "irc");
+    this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
@@ -90,7 +91,8 @@ final class OutboundUploadCommandService implements OutboundHelpContributor {
         rawLineCorrelationService.prepare(at, line);
 
     disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
+        targetMembership
+            .sendRaw(at.serverId(), prepared.line())
             .subscribe(
                 () -> {},
                 err ->

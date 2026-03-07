@@ -3,17 +3,18 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /say and /quote command flow. */
 @Component
 final class OutboundSayQuoteCommandService {
 
-  private final IrcClientService irc;
+  private final IrcTargetMembershipPort targetMembership;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
@@ -21,13 +22,13 @@ final class OutboundSayQuoteCommandService {
   private final OutboundMessagingCommandService outboundMessagingCommandService;
 
   OutboundSayQuoteCommandService(
-      IrcClientService irc,
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       OutboundRawLineCorrelationService rawLineCorrelationService,
       OutboundMessagingCommandService outboundMessagingCommandService) {
-    this.irc = Objects.requireNonNull(irc, "irc");
+    this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
@@ -93,7 +94,8 @@ final class OutboundSayQuoteCommandService {
     ui.appendStatus(status, "(quote)", "→ " + withLabelHint(echo, prepared.label()));
 
     disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
+        targetMembership
+            .sendRaw(at.serverId(), prepared.line())
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(quote-error)", String.valueOf(err))));
   }
@@ -130,7 +132,8 @@ final class OutboundSayQuoteCommandService {
                 OutboundRawLineCorrelationService.redactIfSensitive(line), prepared.label()));
 
     disposables.add(
-        irc.sendRaw(sid, prepared.line())
+        targetMembership
+            .sendRaw(sid, prepared.line())
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(raw-error)", String.valueOf(err))));
   }

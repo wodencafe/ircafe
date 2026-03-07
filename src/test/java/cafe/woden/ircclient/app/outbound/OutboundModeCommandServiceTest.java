@@ -13,7 +13,7 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test;
 
 class OutboundModeCommandServiceTest {
 
-  private final IrcClientService irc = mock(IrcClientService.class);
+  private final IrcTargetMembershipPort irc = mock(IrcTargetMembershipPort.class);
   private final UiPort ui = mock(UiPort.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);

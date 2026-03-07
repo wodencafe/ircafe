@@ -3,17 +3,18 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /names, /who, and /list command flow. */
 @Component
 final class OutboundNamesWhoListCommandService {
 
-  private final IrcClientService irc;
+  private final IrcTargetMembershipPort targetMembership;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
@@ -21,13 +22,13 @@ final class OutboundNamesWhoListCommandService {
   private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
   OutboundNamesWhoListCommandService(
-      IrcClientService irc,
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       CommandTargetPolicy commandTargetPolicy,
       OutboundRawLineCorrelationService rawLineCorrelationService) {
-    this.irc = Objects.requireNonNull(irc, "irc");
+    this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
@@ -70,7 +71,8 @@ final class OutboundNamesWhoListCommandService {
     ui.appendStatus(out, "(names)", "Requesting NAMES for " + ch + "...");
 
     disposables.add(
-        irc.requestNames(at.serverId(), ch)
+        targetMembership
+            .requestNames(at.serverId(), ch)
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(names-error)", String.valueOf(err))));
   }
@@ -121,7 +123,8 @@ final class OutboundNamesWhoListCommandService {
     ui.appendStatus(out, "(who)", "→ " + withLabelHint(line, prepared.label()));
 
     disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
+        targetMembership
+            .sendRaw(at.serverId(), prepared.line())
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(who-error)", String.valueOf(err))));
   }
@@ -161,7 +164,8 @@ final class OutboundNamesWhoListCommandService {
     ui.appendStatus(status, "(list)", "→ " + withLabelHint(line, prepared.label()));
 
     disposables.add(
-        irc.sendRaw(at.serverId(), prepared.line())
+        targetMembership
+            .sendRaw(at.serverId(), prepared.line())
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(list-error)", String.valueOf(err))));
   }

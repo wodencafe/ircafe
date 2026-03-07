@@ -3,8 +3,8 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEchoCapabilityPort;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -12,13 +12,14 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles reply/reaction/edit/redaction outbound command flows. */
 @Component
 final class OutboundMessageMutationCommandService implements OutboundHelpContributor {
 
-  private final IrcClientService irc;
+  private final IrcTargetMembershipPort targetMembership;
   private final IrcEchoCapabilityPort echoCapabilityPort;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   private final UiPort ui;
@@ -28,7 +29,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
   private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
   OutboundMessageMutationCommandService(
-      IrcClientService irc,
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       IrcEchoCapabilityPort echoCapabilityPort,
       OutboundBackendCapabilityPolicy backendCapabilityPolicy,
       UiPort ui,
@@ -36,7 +37,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       TargetCoordinator targetCoordinator,
       PendingEchoMessagePort pendingEchoMessageState,
       OutboundRawLineCorrelationService rawLineCorrelationService) {
-    this.irc = Objects.requireNonNull(irc, "irc");
+    this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
     this.echoCapabilityPort = Objects.requireNonNull(echoCapabilityPort, "echoCapabilityPort");
     this.backendCapabilityPolicy =
         Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
@@ -265,7 +266,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
       return;
     }
 
-    String me = irc.currentNick(target.serverId()).orElse("me");
+    String me = targetMembership.currentNick(target.serverId()).orElse("me");
     boolean useLocalEcho = shouldUseLocalEcho(target.serverId());
     final PendingEchoMessagePort.PendingOutboundChat pendingEntry;
     if (useLocalEcho) {
@@ -282,7 +283,8 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
         rawLineCorrelationService.prepare(target, rawLine);
 
     disposables.add(
-        irc.sendRaw(target.serverId(), prepared.line())
+        targetMembership
+            .sendRaw(target.serverId(), prepared.line())
             .subscribe(
                 () -> {},
                 err -> {
@@ -331,14 +333,15 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
     OutboundRawLineCorrelationService.PreparedRawLine prepared =
         rawLineCorrelationService.prepare(target, rawLine);
 
-    String me = irc.currentNick(target.serverId()).orElse("me");
+    String me = targetMembership.currentNick(target.serverId()).orElse("me");
     Instant now = Instant.now();
     if (shouldUseLocalEcho(target.serverId())) {
       ui.applyMessageReaction(target, now, me, msgId, react);
     }
 
     disposables.add(
-        irc.sendRaw(target.serverId(), prepared.line())
+        targetMembership
+            .sendRaw(target.serverId(), prepared.line())
             .subscribe(
                 () -> {},
                 err ->
@@ -374,14 +377,15 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
     OutboundRawLineCorrelationService.PreparedRawLine prepared =
         rawLineCorrelationService.prepare(target, rawLine);
 
-    String me = irc.currentNick(target.serverId()).orElse("me");
+    String me = targetMembership.currentNick(target.serverId()).orElse("me");
     Instant now = Instant.now();
     if (shouldUseLocalEcho(target.serverId())) {
       ui.removeMessageReaction(target, now, me, msgId, react);
     }
 
     disposables.add(
-        irc.sendRaw(target.serverId(), prepared.line())
+        targetMembership
+            .sendRaw(target.serverId(), prepared.line())
             .subscribe(
                 () -> {},
                 err ->
@@ -415,14 +419,15 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
     OutboundRawLineCorrelationService.PreparedRawLine prepared =
         rawLineCorrelationService.prepare(target, rawLine);
 
-    String me = irc.currentNick(target.serverId()).orElse("me");
+    String me = targetMembership.currentNick(target.serverId()).orElse("me");
     Instant now = Instant.now();
     if (shouldUseLocalEcho(target.serverId())) {
       ui.applyMessageEdit(target, now, me, msgId, text, "", java.util.Map.of("draft/edit", msgId));
     }
 
     disposables.add(
-        irc.sendRaw(target.serverId(), prepared.line())
+        targetMembership
+            .sendRaw(target.serverId(), prepared.line())
             .subscribe(
                 () -> {},
                 err ->
@@ -455,14 +460,15 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
     OutboundRawLineCorrelationService.PreparedRawLine prepared =
         rawLineCorrelationService.prepare(target, rawLine);
 
-    String me = irc.currentNick(target.serverId()).orElse("me");
+    String me = targetMembership.currentNick(target.serverId()).orElse("me");
     Instant now = Instant.now();
     if (shouldUseLocalEcho(target.serverId())) {
       ui.applyMessageRedaction(target, now, me, msgId, "", java.util.Map.of("draft/delete", msgId));
     }
 
     disposables.add(
-        irc.sendRaw(target.serverId(), prepared.line())
+        targetMembership
+            .sendRaw(target.serverId(), prepared.line())
             .subscribe(
                 () -> {},
                 err ->

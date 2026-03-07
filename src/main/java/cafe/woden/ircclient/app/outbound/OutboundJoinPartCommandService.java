@@ -4,18 +4,19 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
-import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /join and /part command flow. */
 @Component
 final class OutboundJoinPartCommandService {
 
-  private final IrcClientService irc;
+  private final IrcTargetMembershipPort targetMembership;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
@@ -24,14 +25,14 @@ final class OutboundJoinPartCommandService {
   private final JoinRoutingPort joinRoutingState;
 
   OutboundJoinPartCommandService(
-      IrcClientService irc,
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       CommandTargetPolicy commandTargetPolicy,
       ChatCommandRuntimeConfigPort runtimeConfig,
       JoinRoutingPort joinRoutingState) {
-    this.irc = Objects.requireNonNull(irc, "irc");
+    this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
@@ -80,7 +81,8 @@ final class OutboundJoinPartCommandService {
     if (!joinKey.isEmpty()) {
       String line = "JOIN " + chan + " " + joinKey;
       disposables.add(
-          irc.sendRaw(at.serverId(), line)
+          targetMembership
+              .sendRaw(at.serverId(), line)
               .subscribe(
                   () -> {},
                   err ->
@@ -92,7 +94,8 @@ final class OutboundJoinPartCommandService {
     }
 
     disposables.add(
-        irc.joinChannel(at.serverId(), chan)
+        targetMembership
+            .joinChannel(at.serverId(), chan)
             .subscribe(
                 () -> {},
                 err ->
@@ -149,7 +152,8 @@ final class OutboundJoinPartCommandService {
     }
 
     disposables.add(
-        irc.partChannel(target.serverId(), target.target(), msg.isEmpty() ? null : msg)
+        targetMembership
+            .partChannel(target.serverId(), target.target(), msg.isEmpty() ? null : msg)
             .subscribe(
                 () -> ui.appendStatus(status, "(part)", "Requested leave for " + target.target()),
                 err -> ui.appendError(status, "(part-error)", String.valueOf(err))));

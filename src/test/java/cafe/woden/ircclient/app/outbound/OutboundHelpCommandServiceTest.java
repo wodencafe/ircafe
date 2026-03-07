@@ -14,6 +14,7 @@ import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.irc.IrcEchoCapabilityPort;
 import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
@@ -63,7 +64,7 @@ class OutboundHelpCommandServiceTest {
       };
   private final OutboundMessageMutationCommandService messageMutationCommandService =
       new OutboundMessageMutationCommandService(
-          irc,
+          IrcTargetMembershipPort.from(irc),
           IrcEchoCapabilityPort.from(irc),
           outboundBackendCapabilityPolicy,
           ui,
