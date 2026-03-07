@@ -20,6 +20,7 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
@@ -188,7 +189,7 @@ class TargetCoordinatorHistoryResetTest {
     return new TargetCoordinator(
         ui,
         mock(UserListStore.class),
-        irc,
+        IrcTargetMembershipPort.from(irc),
         irc,
         mock(ServerRegistry.class),
         runtimeConfig,

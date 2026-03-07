@@ -10,8 +10,8 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
@@ -43,7 +43,7 @@ public class TargetCoordinator implements ActiveTargetPort {
 
   private final UiPort ui;
   private final UserListStore userListStore;
-  private final IrcClientService irc;
+  private final IrcTargetMembershipPort targetMembership;
   private final IrcBouncerPlaybackPort bouncerPlayback;
   private final ServerRegistry serverRegistry;
   private final RuntimeConfigStore runtimeConfig;
@@ -76,7 +76,7 @@ public class TargetCoordinator implements ActiveTargetPort {
   public TargetCoordinator(
       UiPort ui,
       UserListStore userListStore,
-      IrcClientService irc,
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
       ServerRegistry serverRegistry,
       RuntimeConfigStore runtimeConfig,
@@ -92,7 +92,7 @@ public class TargetCoordinator implements ActiveTargetPort {
           ScheduledExecutorService usersRefreshExec) {
     this.ui = Objects.requireNonNull(ui, "ui");
     this.userListStore = Objects.requireNonNull(userListStore, "userListStore");
-    this.irc = Objects.requireNonNull(irc, "irc");
+    this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
     this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
@@ -452,7 +452,8 @@ public class TargetCoordinator implements ActiveTargetPort {
     if (!shouldPart) return;
     channelsClosedByUser.add(target);
     disposables.add(
-        irc.partChannel(sid, target.target(), null)
+        targetMembership
+            .partChannel(sid, target.target(), null)
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
   }
@@ -489,7 +490,8 @@ public class TargetCoordinator implements ActiveTargetPort {
     }
 
     disposables.add(
-        irc.partChannel(sid, target.target(), msg.isEmpty() ? null : msg)
+        targetMembership
+            .partChannel(sid, target.target(), msg.isEmpty() ? null : msg)
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
   }
@@ -554,7 +556,8 @@ public class TargetCoordinator implements ActiveTargetPort {
     }
 
     disposables.add(
-        irc.joinChannel(sid, target.target())
+        targetMembership
+            .joinChannel(sid, target.target())
             .subscribe(
                 () -> {},
                 err -> {
@@ -648,7 +651,8 @@ public class TargetCoordinator implements ActiveTargetPort {
 
       if (connectionCoordinator.isConnected(sid)) {
         disposables.add(
-            irc.partChannel(sid, ch)
+            targetMembership
+                .partChannel(sid, ch)
                 .subscribe(
                     () -> {}, err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
       }
@@ -681,12 +685,12 @@ public class TargetCoordinator implements ActiveTargetPort {
       return Completable.error(new IllegalArgumentException("serverId/channel is blank"));
     }
     if (bouncerPlayback.isSojuBouncerAvailable(sid)) {
-      return irc.partChannel(sid, ch, "detach");
+      return targetMembership.partChannel(sid, ch, "detach");
     }
     if (bouncerPlayback.isZncBouncerDetected(sid)) {
-      return irc.sendRaw(sid, "DETACH " + ch);
+      return targetMembership.sendRaw(sid, "DETACH " + ch);
     }
-    return irc.partChannel(sid, ch, null);
+    return targetMembership.partChannel(sid, ch, null);
   }
 
   private void applyTargetContext(TargetRef target) {
@@ -741,7 +745,8 @@ public class TargetCoordinator implements ActiveTargetPort {
         updateEnrichmentFromRoster(target.serverId(), target.target(), cached);
         if (cached.isEmpty() && connectionCoordinator.isConnected(target.serverId())) {
           disposables.add(
-              irc.requestNames(target.serverId(), target.target())
+              targetMembership
+                  .requestNames(target.serverId(), target.target())
                   .subscribe(
                       () -> {},
                       err ->
@@ -753,7 +758,8 @@ public class TargetCoordinator implements ActiveTargetPort {
       ui.setStatusBarCounts(0, 0);
       ui.setUsersNicks(List.of());
     }
-    irc.currentNick(target.serverId())
+    targetMembership
+        .currentNick(target.serverId())
         .ifPresent(nick -> ui.setChatCurrentNick(target.serverId(), nick));
 
     ui.clearUnread(target);
@@ -777,7 +783,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     java.util.ArrayList<String> userhostCandidates = new java.util.ArrayList<>();
     java.util.ArrayList<String> whoisUnknownAccountCandidates = new java.util.ArrayList<>();
 
-    String self = irc.currentNick(sid).orElse("");
+    String self = targetMembership.currentNick(sid).orElse("");
 
     for (IrcEvent.NickInfo ni : nicks) {
       if (ni == null) continue;
