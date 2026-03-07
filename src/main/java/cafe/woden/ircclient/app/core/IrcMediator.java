@@ -25,6 +25,7 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
@@ -87,6 +88,7 @@ public class IrcMediator implements MediatorControlPort {
   private final IrcClientService irc;
   private final IrcTypingPort typingPort;
   private final IrcReadMarkerPort readMarkerPort;
+  private final IrcNegotiatedFeaturePort negotiatedFeaturePort;
   private final UiPort ui;
   private final CommandParser commandParser;
   private final UserCommandAliasEngine userCommandAliasEngine;
@@ -178,6 +180,7 @@ public class IrcMediator implements MediatorControlPort {
       IrcClientService irc,
       IrcTypingPort typingPort,
       IrcReadMarkerPort readMarkerPort,
+      IrcNegotiatedFeaturePort negotiatedFeaturePort,
       UiPort ui,
       CommandParser commandParser,
       UserCommandAliasEngine userCommandAliasEngine,
@@ -214,6 +217,8 @@ public class IrcMediator implements MediatorControlPort {
     this.irc = irc;
     this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
     this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
+    this.negotiatedFeaturePort =
+        Objects.requireNonNull(negotiatedFeaturePort, "negotiatedFeaturePort");
     this.ui = ui;
     this.commandParser = commandParser;
     this.userCommandAliasEngine = userCommandAliasEngine;
@@ -1922,7 +1927,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.MessageReactObserved ev -> {
-        if (!irc.isDraftReactAvailable(sid)) return;
+        if (!negotiatedFeaturePort.isDraftReactAvailable(sid)) return;
         TargetRef dest = resolveIrcv3Target(sid, ev.target(), ev.from(), status);
         String from = Objects.toString(ev.from(), "").trim();
         if (from.isEmpty()) return;
@@ -1933,7 +1938,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.MessageUnreactObserved ev -> {
-        if (!irc.isDraftUnreactAvailable(sid)) return;
+        if (!negotiatedFeaturePort.isDraftUnreactAvailable(sid)) return;
         TargetRef dest = resolveIrcv3Target(sid, ev.target(), ev.from(), status);
         String from = Objects.toString(ev.from(), "").trim();
         if (from.isEmpty()) return;
@@ -1944,7 +1949,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.MessageRedactionObserved ev -> {
-        if (!irc.isMessageRedactionAvailable(sid)) return;
+        if (!negotiatedFeaturePort.isMessageRedactionAvailable(sid)) return;
         TargetRef dest = resolveIrcv3Target(sid, ev.target(), ev.from(), status);
         String from = Objects.toString(ev.from(), "").trim();
         String targetMsgId = Objects.toString(ev.messageId(), "").trim();
@@ -2517,7 +2522,7 @@ public class IrcMediator implements MediatorControlPort {
       Map<String, String> ircv3Tags) {
     if (sid == null || sid.isBlank()) return false;
     if (target == null || target.isUiOnly()) return false;
-    if (!irc.isMessageEditAvailable(sid)) return false;
+    if (!negotiatedFeaturePort.isMessageEditAvailable(sid)) return false;
 
     String targetMsgId = firstIrcv3TagValue(ircv3Tags, "draft/edit", "+draft/edit");
     if (targetMsgId.isBlank()) return false;

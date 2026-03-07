@@ -38,6 +38,7 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
@@ -73,6 +74,8 @@ class IrcMediatorMockVerifyTest {
   private final IrcClientService irc = mock(IrcClientService.class);
   private final IrcTypingPort typingPort = mock(IrcTypingPort.class);
   private final IrcReadMarkerPort readMarkerPort = mock(IrcReadMarkerPort.class);
+  private final IrcNegotiatedFeaturePort negotiatedFeaturePort =
+      mock(IrcNegotiatedFeaturePort.class);
   private final UiPort ui = mock(UiPort.class);
   private final CommandParser commandParser = mock(CommandParser.class);
   private final UserCommandAliasEngine userCommandAliasEngine = mock(UserCommandAliasEngine.class);
@@ -123,6 +126,7 @@ class IrcMediatorMockVerifyTest {
           irc,
           typingPort,
           readMarkerPort,
+          negotiatedFeaturePort,
           ui,
           commandParser,
           userCommandAliasEngine,
