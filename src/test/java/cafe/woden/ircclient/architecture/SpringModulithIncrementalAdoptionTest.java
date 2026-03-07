@@ -43,6 +43,11 @@ import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.matrix.MatrixIrcClientService;
+import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
+import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
+import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.logging.LoggingTargetLogMaintenancePortAdapter;
 import cafe.woden.ircclient.logging.history.LoggingAppHistoryPortsAdapter;
 import cafe.woden.ircclient.model.TargetRef;
@@ -172,6 +177,15 @@ class SpringModulithIncrementalAdoptionTest {
     ApplicationModule dccModule = moduleFor(modules, DccTransferStore.class);
     assertThat(dccModule).isNotEqualTo(appModule);
     assertThat(dccModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.dcc");
+
+    ApplicationModule ircModule = moduleFor(modules, IrcClientService.class);
+    assertThat(ircModule).isNotEqualTo(appModule);
+    assertThat(moduleFor(modules, MatrixIrcClientService.class)).isEqualTo(ircModule);
+    assertThat(ircModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.irc");
+    assertNamedInterfaceContains(ircModule, "matrix", MatrixIrcClientService.class);
+    assertNamedInterfaceContains(ircModule, "soju", SojuAutoConnectStore.class);
+    assertNamedInterfaceContains(ircModule, "znc", ZncAutoConnectStore.class);
+    assertNamedInterfaceContains(ircModule, "enrichment", UserInfoEnrichmentService.class);
 
     ApplicationModule ignoreModule = moduleFor(modules, InboundIgnorePolicy.class);
     assertThat(ignoreModule).isNotEqualTo(appModule);

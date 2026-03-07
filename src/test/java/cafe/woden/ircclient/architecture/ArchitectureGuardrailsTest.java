@@ -223,6 +223,17 @@ class ArchitectureGuardrailsTest {
               "application code should depend on IrcClientService, not transport-specific adapters");
 
   @ArchTest
+  static final ArchRule non_irc_modules_should_not_depend_on_matrix_transport_internals =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("cafe.woden.ircclient.irc..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("cafe.woden.ircclient.irc.matrix..")
+          .because(
+              "matrix transport internals should stay behind the irc module boundary and be accessed via irc ports");
+
+  @ArchTest
   static final ArchRule non_app_modules_should_not_depend_on_app_core_directly =
       noClasses()
           .that()
