@@ -993,13 +993,6 @@ public class OutboundChatCommandService {
         "(help)",
         "Invites: /invites /invjoin (/join -i) /invignore /invwhois /invblock /inviteautojoin (/ajinvite)");
     helpContributors.forEach(contributor -> contributor.appendGeneralHelp(out));
-    ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
-    ui.appendStatus(
-        out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
-    ui.appendStatus(
-        out, "(help)", "/unreact <msgid> <reaction-token> (requires draft/unreact + draft/reply)");
-    appendEditHelp(out);
-    appendRedactHelp(out);
     ui.appendStatus(out, "(help)", "Tip: /help dcc for direct-chat/file-transfer commands.");
     ui.appendStatus(
         out,
@@ -1009,8 +1002,6 @@ public class OutboundChatCommandService {
 
   private Map<String, HelpTopicHandler> buildHelpTopicHandlers() {
     LinkedHashMap<String, HelpTopicHandler> handlers = new LinkedHashMap<>();
-    registerHelpTopicHandler(handlers, this::appendEditHelp, "edit");
-    registerHelpTopicHandler(handlers, this::appendRedactHelp, "redact", "delete");
     registerHelpTopicHandler(handlers, this::appendDccHelp, "dcc");
     registerHelpTopicHandler(handlers, this::appendMarkReadHelp, "markread");
     for (OutboundHelpContributor contributor : helpContributors) {
@@ -1714,19 +1705,6 @@ public class OutboundChatCommandService {
     return !irc.isEchoMessageAvailable(serverId);
   }
 
-  private void appendEditHelp(TargetRef out) {
-    boolean available = isMessageEditSupportedForServer(out);
-    String sid = out == null ? "" : out.serverId();
-    ui.appendStatus(
-        out,
-        "(help)",
-        "/edit <msgid> <message>"
-            + availabilitySuffix(
-                available,
-                unavailableReasonForHelp(
-                    sid, "requires negotiated draft/message-edit or message-edit")));
-  }
-
   private void appendMarkReadHelp(TargetRef out) {
     boolean available = isReadMarkerSupportedForServer(out);
     String sid = out == null ? "" : out.serverId();
@@ -1738,41 +1716,6 @@ public class OutboundChatCommandService {
                 available,
                 unavailableReasonForHelp(
                     sid, "requires negotiated read-marker or draft/read-marker")));
-  }
-
-  private void appendRedactHelp(TargetRef out) {
-    boolean available = isMessageRedactionSupportedForServer(out);
-    String sid = out == null ? "" : out.serverId();
-    ui.appendStatus(
-        out,
-        "(help)",
-        "/redact <msgid> [reason] (alias: /delete)"
-            + availabilitySuffix(
-                available,
-                unavailableReasonForHelp(
-                    sid, "requires negotiated draft/message-redaction or message-redaction")));
-  }
-
-  private boolean isMessageEditSupportedForServer(TargetRef target) {
-    if (target == null) return false;
-    String sid = Objects.toString(target.serverId(), "").trim();
-    if (sid.isEmpty()) return false;
-    try {
-      return irc.isMessageEditAvailable(sid);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private boolean isMessageRedactionSupportedForServer(TargetRef target) {
-    if (target == null) return false;
-    String sid = Objects.toString(target.serverId(), "").trim();
-    if (sid.isEmpty()) return false;
-    try {
-      return irc.isMessageRedactionAvailable(sid);
-    } catch (Exception ignored) {
-      return false;
-    }
   }
 
   private boolean isReadMarkerSupportedForServer(TargetRef target) {

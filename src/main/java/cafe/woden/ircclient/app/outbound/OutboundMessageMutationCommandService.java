@@ -9,13 +9,15 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles reply/reaction/edit/redaction outbound command flows. */
 @Component
-final class OutboundMessageMutationCommandService {
+final class OutboundMessageMutationCommandService implements OutboundHelpContributor {
 
   private final IrcClientService irc;
   private final IrcBackendAvailabilityPort backendAvailability;
@@ -43,6 +45,28 @@ final class OutboundMessageMutationCommandService {
         Objects.requireNonNull(pendingEchoMessageState, "pendingEchoMessageState");
     this.rawLineCorrelationService =
         Objects.requireNonNull(rawLineCorrelationService, "rawLineCorrelationService");
+  }
+
+  @Override
+  public void appendGeneralHelp(TargetRef out) {
+    ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
+    ui.appendStatus(
+        out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
+    ui.appendStatus(
+        out, "(help)", "/unreact <msgid> <reaction-token> (requires draft/unreact + draft/reply)");
+    appendEditHelp(out);
+    appendRedactHelp(out);
+  }
+
+  @Override
+  public Map<String, Consumer<TargetRef>> topicHelpHandlers() {
+    return Map.of(
+        "edit",
+        this::appendEditHelp,
+        "redact",
+        this::appendRedactHelp,
+        "delete",
+        this::appendRedactHelp);
   }
 
   void handleReplyMessage(CompositeDisposable disposables, String messageId, String body) {
@@ -447,6 +471,37 @@ final class OutboundMessageMutationCommandService {
     return input != null && (input.indexOf('\n') >= 0 || input.indexOf('\r') >= 0);
   }
 
+  private void appendEditHelp(TargetRef out) {
+    TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
+    String serverId = target.serverId();
+    boolean available = irc.isMessageEditAvailable(serverId);
+    ui.appendStatus(
+        target,
+        "(help)",
+        "/edit <msgid> <message>"
+            + (available
+                ? ""
+                : unavailableSuffix(
+                    unavailableReasonForHelp(
+                        serverId, "requires negotiated draft/message-edit or message-edit"))));
+  }
+
+  private void appendRedactHelp(TargetRef out) {
+    TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
+    String serverId = target.serverId();
+    boolean available = irc.isMessageRedactionAvailable(serverId);
+    ui.appendStatus(
+        target,
+        "(help)",
+        "/redact <msgid> [reason] (alias: /delete)"
+            + (available
+                ? ""
+                : unavailableSuffix(
+                    unavailableReasonForHelp(
+                        serverId,
+                        "requires negotiated draft/message-redaction or message-redaction"))));
+  }
+
   private boolean shouldUseLocalEcho(String serverId) {
     return !irc.isEchoMessageAvailable(serverId);
   }
@@ -457,6 +512,25 @@ final class OutboundMessageMutationCommandService {
       return reason.endsWith(".") ? reason : (reason + ".");
     }
     return fallback;
+  }
+
+  private String unavailableReasonForHelp(String serverId, String fallback) {
+    String backendReason = normalizedBackendAvailabilityReason(serverId);
+    if (!backendReason.isEmpty()) return backendReason;
+    return fallback;
+  }
+
+  private String normalizedBackendAvailabilityReason(String serverId) {
+    try {
+      return Objects.toString(backendAvailability.backendAvailabilityReason(serverId), "").trim();
+    } catch (Exception ignored) {
+      return "";
+    }
+  }
+
+  private static String unavailableSuffix(String reason) {
+    if (reason == null || reason.isBlank()) return "";
+    return " (unavailable: " + reason + ")";
   }
 
   private boolean isOwnMessageInBuffer(TargetRef target, String messageId) {

@@ -75,6 +75,15 @@ class OutboundChatCommandServiceTest {
           return Map.of("upload", outboundUploadCommandService::appendUploadHelp);
         }
       };
+  private final OutboundMessageMutationCommandService messageMutationCommandService =
+      new OutboundMessageMutationCommandService(
+          irc,
+          irc,
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          pendingEchoMessageState,
+          rawLineCorrelationService);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundChatCommandService service =
@@ -85,7 +94,7 @@ class OutboundChatCommandServiceTest {
           connectionCoordinator,
           targetCoordinator,
           rawLineCorrelationService,
-          List.of(uploadHelpContributor),
+          List.of(uploadHelpContributor, messageMutationCommandService),
           commandTargetPolicy,
           runtimeConfig,
           awayRoutingState,
