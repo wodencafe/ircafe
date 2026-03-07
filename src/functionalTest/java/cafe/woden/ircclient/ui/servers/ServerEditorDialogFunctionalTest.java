@@ -2,9 +2,12 @@ package cafe.woden.ircclient.ui.servers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.GraphicsEnvironment;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -18,6 +21,8 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Assumptions;
@@ -217,10 +222,50 @@ class ServerEditorDialogFunctionalTest {
     }
   }
 
+  @Test
+  void proxyTabUsesScrollPaneToAvoidClipping() throws Exception {
+    Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
+
+    ServerEditorDialog dialog = onEdtCall(() -> new ServerEditorDialog(null, "Add Server", null));
+    try {
+      JTabbedPane tabs = onEdtCall(() -> findDescendant(dialog, JTabbedPane.class));
+      assertNotNull(tabs, "server dialog should contain tabs");
+
+      int proxyTabIndex = onEdtCall(() -> tabs.indexOfTab("Proxy"));
+      assertTrue(proxyTabIndex >= 0, "proxy tab should be present");
+
+      Component proxyTabComponent = onEdtCall(() -> tabs.getComponentAt(proxyTabIndex));
+      assertTrue(
+          proxyTabComponent instanceof JScrollPane,
+          "proxy tab should be scrollable so fields do not clip");
+
+      JScrollPane proxyScroll = (JScrollPane) proxyTabComponent;
+      assertEquals(
+          JScrollPane.HORIZONTAL_SCROLLBAR_NEVER,
+          onEdtCall(proxyScroll::getHorizontalScrollBarPolicy));
+      assertNotNull(onEdtCall(() -> proxyScroll.getViewport().getView()));
+    } finally {
+      onEdt(dialog::dispose);
+      flushEdt();
+    }
+  }
+
   private static <T> T readField(Object target, String fieldName, Class<T> type) throws Exception {
     Field field = target.getClass().getDeclaredField(fieldName);
     field.setAccessible(true);
     return type.cast(field.get(target));
+  }
+
+  private static <T extends Component> T findDescendant(Container root, Class<T> type) {
+    if (root == null || type == null) return null;
+    for (Component child : root.getComponents()) {
+      if (type.isInstance(child)) return type.cast(child);
+      if (child instanceof Container nested) {
+        T found = findDescendant(nested, type);
+        if (found != null) return found;
+      }
+    }
+    return null;
   }
 
   private static void waitFor(BooleanSupplier condition, Duration timeout) throws Exception {

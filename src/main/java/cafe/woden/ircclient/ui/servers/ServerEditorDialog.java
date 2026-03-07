@@ -218,7 +218,7 @@ public class ServerEditorDialog extends JDialog {
     tabs.addTab("Auth", buildSaslPanel());
     tabs.addTab("Auto-Join", buildAutoJoinPanel());
     tabs.addTab("Perform", buildPerformPanel());
-    tabs.addTab("Proxy", buildProxyPanel());
+    tabs.addTab("Proxy", wrapScrollTab(buildProxyPanel()));
     add(tabs, BorderLayout.CENTER);
 
     JPanel actions = new JPanel();
@@ -404,6 +404,14 @@ public class ServerEditorDialog extends JDialog {
     setPreferredSize(new Dimension(640, 520));
     pack();
     setLocationRelativeTo(parent);
+  }
+
+  private static JComponent wrapScrollTab(JComponent content) {
+    JScrollPane scroll = new JScrollPane(content);
+    scroll.setBorder(BorderFactory.createEmptyBorder());
+    scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+    scroll.getVerticalScrollBar().setUnitIncrement(16);
+    return scroll;
   }
 
   private JPanel buildProxyPanel() {
