@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.ui.coordinator;
 
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
@@ -40,23 +39,6 @@ public final class ChatReadMarkerCoordinator {
 
   public ChatReadMarkerCoordinator(
       ChatTranscriptStore transcripts,
-      IrcClientService irc,
-      Supplier<TargetRef> activeTargetSupplier,
-      IntConsumer scrollToTranscriptOffset,
-      Runnable updateScrollStateFromBar,
-      BooleanSupplier transcriptAtBottomSupplier) {
-    this(
-        transcripts,
-        IrcReadMarkerPort.from(irc),
-        activeTargetSupplier,
-        scrollToTranscriptOffset,
-        updateScrollStateFromBar,
-        transcriptAtBottomSupplier,
-        System::currentTimeMillis);
-  }
-
-  public ChatReadMarkerCoordinator(
-      ChatTranscriptStore transcripts,
       IrcReadMarkerPort readMarkerPort,
       Supplier<TargetRef> activeTargetSupplier,
       IntConsumer scrollToTranscriptOffset,
@@ -70,24 +52,6 @@ public final class ChatReadMarkerCoordinator {
         updateScrollStateFromBar,
         transcriptAtBottomSupplier,
         System::currentTimeMillis);
-  }
-
-  public ChatReadMarkerCoordinator(
-      ChatTranscriptStore transcripts,
-      IrcClientService irc,
-      Supplier<TargetRef> activeTargetSupplier,
-      IntConsumer scrollToTranscriptOffset,
-      Runnable updateScrollStateFromBar,
-      BooleanSupplier transcriptAtBottomSupplier,
-      LongSupplier currentTimeMillis) {
-    this(
-        transcripts,
-        IrcReadMarkerPort.from(irc),
-        activeTargetSupplier,
-        scrollToTranscriptOffset,
-        updateScrollStateFromBar,
-        transcriptAtBottomSupplier,
-        currentTimeMillis);
   }
 
   public ChatReadMarkerCoordinator(

@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.ui.coordinator;
 
-import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
@@ -33,28 +32,6 @@ public final class ChatTypingCoordinator {
 
   // Diagnostics: avoid spamming logs if the server doesn't support typing.
   private final AtomicBoolean typingUnavailableWarned = new AtomicBoolean(false);
-
-  public ChatTypingCoordinator(
-      MessageInputPanel inputPanel,
-      IrcClientService irc,
-      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
-      Supplier<TargetRef> activeTargetSupplier,
-      BooleanSupplier transcriptAtBottomSupplier,
-      Runnable armTailPinOnNextAppendIfAtBottom,
-      BooleanSupplier followTailSupplier,
-      Runnable scrollToBottom,
-      Map<TargetRef, String> draftByTarget) {
-    this(
-        inputPanel,
-        IrcTypingPort.from(irc),
-        messageActionCapabilityPolicy,
-        activeTargetSupplier,
-        transcriptAtBottomSupplier,
-        armTailPinOnNextAppendIfAtBottom,
-        followTailSupplier,
-        scrollToBottom,
-        draftByTarget);
-  }
 
   public ChatTypingCoordinator(
       MessageInputPanel inputPanel,

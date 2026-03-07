@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import io.reactivex.rxjava3.core.Completable;
@@ -35,7 +36,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            irc,
+            IrcTypingPort.from(irc),
             capabilityPolicy,
             () -> channel,
             () -> true,
@@ -63,7 +64,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            irc,
+            IrcTypingPort.from(irc),
             capabilityPolicy,
             () -> active,
             () -> true,
@@ -93,7 +94,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            irc,
+            IrcTypingPort.from(irc),
             capabilityPolicy,
             () -> channel,
             () -> true,
@@ -127,7 +128,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            irc,
+            IrcTypingPort.from(irc),
             capabilityPolicy,
             () -> channel,
             () -> false,
@@ -157,7 +158,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            irc,
+            IrcTypingPort.from(irc),
             capabilityPolicy,
             () -> channel,
             () -> false,
@@ -187,7 +188,7 @@ class ChatTypingCoordinatorTest {
     ChatTypingCoordinator coordinator =
         new ChatTypingCoordinator(
             inputPanel,
-            irc,
+            IrcTypingPort.from(irc),
             capabilityPolicy,
             () -> channel,
             () -> false,
