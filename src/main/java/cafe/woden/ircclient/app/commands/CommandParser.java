@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.commands;
 
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 /**
@@ -11,9 +12,14 @@ import org.springframework.stereotype.Component;
 public class CommandParser {
 
   private final FilterCommandParser filterCommandParser;
+  private final BackendNamedCommandParser backendNamedCommandParser;
 
-  public CommandParser(FilterCommandParser filterCommandParser) {
-    this.filterCommandParser = filterCommandParser;
+  public CommandParser(
+      FilterCommandParser filterCommandParser,
+      BackendNamedCommandParser backendNamedCommandParser) {
+    this.filterCommandParser = Objects.requireNonNull(filterCommandParser, "filterCommandParser");
+    this.backendNamedCommandParser =
+        Objects.requireNonNull(backendNamedCommandParser, "backendNamedCommandParser");
   }
 
   public ParsedInput parse(String raw) {
@@ -78,21 +84,8 @@ public class CommandParser {
       return new ParsedInput.Reconnect(target);
     }
 
-    if (matchesCommand(line, "/quasselsetup") || matchesCommand(line, "/qsetup")) {
-      String serverId =
-          matchesCommand(line, "/quasselsetup")
-              ? argAfter(line, "/quasselsetup")
-              : argAfter(line, "/qsetup");
-      return new ParsedInput.QuasselSetup(serverId);
-    }
-
-    if (matchesCommand(line, "/quasselnet") || matchesCommand(line, "/qnet")) {
-      String args =
-          matchesCommand(line, "/quasselnet")
-              ? argAfter(line, "/quasselnet")
-              : argAfter(line, "/qnet");
-      return new ParsedInput.QuasselNetwork(args);
-    }
+    ParsedInput backendNamed = backendNamedCommandParser.parse(line);
+    if (backendNamed != null) return backendNamed;
 
     if (matchesCommand(line, "/quit")) {
       String reason = argAfter(line, "/quit");

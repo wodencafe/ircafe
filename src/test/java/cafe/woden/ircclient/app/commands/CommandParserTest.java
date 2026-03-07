@@ -6,7 +6,8 @@ import org.junit.jupiter.api.Test;
 
 class CommandParserTest {
 
-  private final CommandParser parser = new CommandParser(new FilterCommandParser());
+  private final CommandParser parser =
+      new CommandParser(new FilterCommandParser(), new BackendNamedCommandParser());
 
   @Test
   void parsesJoinWithOptionalKey() {
