@@ -24,6 +24,14 @@ interface OutboundBackendFeatureAdapter {
     return irc != null && irc.isMonitorAvailable(serverId);
   }
 
+  default boolean supportsLabeledResponse(IrcClientService irc, String serverId) {
+    return irc != null && irc.isLabeledResponseAvailable(serverId);
+  }
+
+  default boolean supportsMultiline(IrcClientService irc, String serverId) {
+    return irc != null && irc.isMultilineAvailable(serverId);
+  }
+
   default boolean supportsDraftReply(IrcClientService irc, String serverId) {
     return irc != null && irc.isDraftReplyAvailable(serverId);
   }

@@ -5,10 +5,8 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
@@ -28,7 +26,7 @@ public class OutboundModeCommandService {
   private final TargetCoordinator targetCoordinator;
   private final CommandTargetPolicy commandTargetPolicy;
   private final ModeRoutingPort modeRoutingState;
-  private final LabeledResponseRoutingPort labeledResponseRoutingState;
+  private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
   public OutboundModeCommandService(
       IrcClientService irc,
@@ -37,14 +35,14 @@ public class OutboundModeCommandService {
       TargetCoordinator targetCoordinator,
       CommandTargetPolicy commandTargetPolicy,
       ModeRoutingPort modeRoutingState,
-      LabeledResponseRoutingPort labeledResponseRoutingState) {
+      OutboundRawLineCorrelationService rawLineCorrelationService) {
     this.irc = irc;
     this.ui = ui;
     this.connectionCoordinator = connectionCoordinator;
     this.targetCoordinator = targetCoordinator;
     this.commandTargetPolicy = commandTargetPolicy;
     this.modeRoutingState = modeRoutingState;
-    this.labeledResponseRoutingState = labeledResponseRoutingState;
+    this.rawLineCorrelationService = rawLineCorrelationService;
   }
 
   public void handleMode(CompositeDisposable disposables, String first, String rest) {
@@ -94,7 +92,8 @@ public class OutboundModeCommandService {
       modeRoutingState.putPendingModeTarget(at.serverId(), channel, out);
     }
 
-    PreparedRawLine prepared = prepareCorrelatedRawLine(out, line);
+    OutboundRawLineCorrelationService.PreparedRawLine prepared =
+        prepareCorrelatedRawLine(out, line);
     ui.ensureTargetExists(out);
     ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
@@ -175,7 +174,8 @@ public class OutboundModeCommandService {
       if (n.isEmpty()) continue;
 
       String line = "MODE " + ch + " " + mode + " " + n;
-      PreparedRawLine prepared = prepareCorrelatedRawLine(out, line);
+      OutboundRawLineCorrelationService.PreparedRawLine prepared =
+          prepareCorrelatedRawLine(out, line);
       ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
       disposables.add(
@@ -232,7 +232,8 @@ public class OutboundModeCommandService {
       String mask = looksLikeMask(raw) ? raw : (raw + "!*@*");
 
       String line = "MODE " + ch + " " + mode + " " + mask;
-      PreparedRawLine prepared = prepareCorrelatedRawLine(out, line);
+      OutboundRawLineCorrelationService.PreparedRawLine prepared =
+          prepareCorrelatedRawLine(out, line);
       ui.appendStatus(out, "(mode)", "→ " + withLabelHint(line, prepared.label()));
 
       disposables.add(
@@ -247,22 +248,9 @@ public class OutboundModeCommandService {
     }
   }
 
-  private PreparedRawLine prepareCorrelatedRawLine(TargetRef origin, String rawLine) {
-    String line = rawLine == null ? "" : rawLine.trim();
-    if (line.isEmpty() || origin == null) return new PreparedRawLine(line, "");
-    if (!irc.isLabeledResponseAvailable(origin.serverId())) return new PreparedRawLine(line, "");
-
-    LabeledResponseRoutingPort.PreparedRawLine prepared =
-        labeledResponseRoutingState.prepareOutgoingRaw(origin.serverId(), line);
-    String sendLine =
-        (prepared == null || prepared.line() == null || prepared.line().isBlank())
-            ? line
-            : prepared.line();
-    String label = (prepared == null) ? "" : Objects.toString(prepared.label(), "").trim();
-    if (!label.isEmpty()) {
-      labeledResponseRoutingState.remember(origin.serverId(), label, origin, line, Instant.now());
-    }
-    return new PreparedRawLine(sendLine, label);
+  private OutboundRawLineCorrelationService.PreparedRawLine prepareCorrelatedRawLine(
+      TargetRef origin, String rawLine) {
+    return rawLineCorrelationService.prepare(origin, rawLine);
   }
 
   private static String withLabelHint(String preview, String label) {
@@ -271,8 +259,6 @@ public class OutboundModeCommandService {
     if (l.isEmpty()) return p;
     return p + " {label=" + l + "}";
   }
-
-  private record PreparedRawLine(String line, String label) {}
 
   private static boolean looksLikeMask(String s) {
     if (s == null) return false;

@@ -36,6 +36,8 @@ class OutboundModeCommandServiceTest {
   private final ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
+  private final OutboundRawLineCorrelationService rawLineCorrelationService =
+      new OutboundRawLineCorrelationService(irc, labeledResponseRoutingState);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundModeCommandService service =
@@ -46,7 +48,7 @@ class OutboundModeCommandServiceTest {
           targetCoordinator,
           commandTargetPolicy,
           modeRoutingState,
-          labeledResponseRoutingState);
+          rawLineCorrelationService);
 
   @AfterEach
   void tearDown() {

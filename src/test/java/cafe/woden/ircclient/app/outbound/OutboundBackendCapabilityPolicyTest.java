@@ -35,8 +35,10 @@ class OutboundBackendCapabilityPolicyTest {
     when(serverCatalog.find("matrix"))
         .thenReturn(Optional.of(server("matrix", IrcProperties.Server.Backend.MATRIX)));
     when(irc.isDraftReplyAvailable("matrix")).thenReturn(true);
+    when(irc.isMultilineAvailable("matrix")).thenReturn(true);
 
     assertTrue(policy.supportsDraftReply("matrix"));
+    assertTrue(policy.supportsMultiline("matrix"));
     assertTrue(policy.supportsSemanticUpload("matrix"));
     assertFalse(policy.supportsQuasselCoreCommands("matrix"));
   }
@@ -46,8 +48,10 @@ class OutboundBackendCapabilityPolicyTest {
     when(serverCatalog.find("quassel"))
         .thenReturn(Optional.of(server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
     when(irc.isReadMarkerAvailable("quassel")).thenReturn(true);
+    when(irc.isLabeledResponseAvailable("quassel")).thenReturn(true);
 
     assertTrue(policy.supportsReadMarker("quassel"));
+    assertTrue(policy.supportsLabeledResponse("quassel"));
     assertTrue(policy.supportsQuasselCoreCommands("quassel"));
     assertFalse(policy.supportsSemanticUpload("quassel"));
   }

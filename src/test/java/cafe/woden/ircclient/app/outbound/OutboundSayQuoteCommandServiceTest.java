@@ -34,11 +34,18 @@ class OutboundSayQuoteCommandServiceTest {
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy =
+      mock(OutboundBackendCapabilityPolicy.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
       new OutboundRawLineCorrelationService(irc, labeledResponseRoutingState);
   private final OutboundMessagingCommandService outboundMessagingCommandService =
       new OutboundMessagingCommandService(
-          irc, irc, ui, connectionCoordinator, targetCoordinator, pendingEchoMessageState);
+          irc,
+          backendCapabilityPolicy,
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          pendingEchoMessageState);
   private final OutboundSayQuoteCommandService service =
       new OutboundSayQuoteCommandService(
           irc,
@@ -110,7 +117,8 @@ class OutboundSayQuoteCommandServiceTest {
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.isMultilineAvailable("libera")).thenReturn(false);
+    when(backendCapabilityPolicy.featureUnavailableMessage("libera", "")).thenReturn("");
+    when(backendCapabilityPolicy.supportsMultiline("libera")).thenReturn(false);
     when(ui.confirmMultilineSplitFallback(
             chan, 2, 17L, "IRCv3 multiline is not negotiated on this server."))
         .thenReturn(true);
@@ -130,7 +138,8 @@ class OutboundSayQuoteCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isMultilineAvailable("libera")).thenReturn(false);
+    when(backendCapabilityPolicy.featureUnavailableMessage("libera", "")).thenReturn("");
+    when(backendCapabilityPolicy.supportsMultiline("libera")).thenReturn(false);
     when(ui.confirmMultilineSplitFallback(
             chan, 2, 17L, "IRCv3 multiline is not negotiated on this server."))
         .thenReturn(false);
@@ -146,8 +155,8 @@ class OutboundSayQuoteCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.backendAvailabilityReason("libera"))
-        .thenReturn("Quassel Core backend is not implemented yet");
+    when(backendCapabilityPolicy.featureUnavailableMessage("libera", ""))
+        .thenReturn("Quassel Core backend is not implemented yet.");
     when(ui.confirmMultilineSplitFallback(
             chan, 2, 17L, "Quassel Core backend is not implemented yet."))
         .thenReturn(false);
@@ -167,7 +176,8 @@ class OutboundSayQuoteCommandServiceTest {
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.isMultilineAvailable("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.featureUnavailableMessage("libera", "")).thenReturn("");
+    when(backendCapabilityPolicy.supportsMultiline("libera")).thenReturn(true);
     when(irc.negotiatedMultilineMaxLines("libera")).thenReturn(1);
     when(ui.confirmMultilineSplitFallback(eq(chan), eq(2), eq(17L), contains("max-lines is 1")))
         .thenReturn(true);
@@ -188,7 +198,8 @@ class OutboundSayQuoteCommandServiceTest {
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.isMultilineAvailable("libera")).thenReturn(true);
+    when(backendCapabilityPolicy.featureUnavailableMessage("libera", "")).thenReturn("");
+    when(backendCapabilityPolicy.supportsMultiline("libera")).thenReturn(true);
     when(irc.negotiatedMultilineMaxLines("libera")).thenReturn(5);
     when(irc.negotiatedMultilineMaxBytes("libera")).thenReturn(4096L);
     when(irc.sendMessage("libera", "#ircafe", "line one\nline two"))

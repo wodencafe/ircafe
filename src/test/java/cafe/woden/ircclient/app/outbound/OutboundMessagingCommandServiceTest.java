@@ -25,9 +25,16 @@ class OutboundMessagingCommandServiceTest {
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy =
+      mock(OutboundBackendCapabilityPolicy.class);
   private final OutboundMessagingCommandService service =
       new OutboundMessagingCommandService(
-          irc, irc, ui, connectionCoordinator, targetCoordinator, pendingEchoMessageState);
+          irc,
+          backendCapabilityPolicy,
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          pendingEchoMessageState);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   @AfterEach

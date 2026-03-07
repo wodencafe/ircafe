@@ -64,6 +64,22 @@ final class OutboundBackendCapabilityPolicy {
         .supportsMonitor(irc, sid);
   }
 
+  boolean supportsLabeledResponse(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+    return outboundBackendFeatureRegistry
+        .adapterFor(backendForServer(sid))
+        .supportsLabeledResponse(irc, sid);
+  }
+
+  boolean supportsMultiline(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+    return outboundBackendFeatureRegistry
+        .adapterFor(backendForServer(sid))
+        .supportsMultiline(irc, sid);
+  }
+
   boolean supportsDraftReply(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;

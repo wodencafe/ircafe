@@ -3,7 +3,6 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
@@ -13,7 +12,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /query, /msg, /notice, /me and shared message send flow. */
@@ -27,7 +25,7 @@ final class OutboundMessagingCommandService {
   }
 
   private final IrcClientService irc;
-  private final IrcBackendAvailabilityPort backendAvailability;
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
@@ -35,13 +33,14 @@ final class OutboundMessagingCommandService {
 
   OutboundMessagingCommandService(
       IrcClientService irc,
-      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       PendingEchoMessagePort pendingEchoMessageState) {
     this.irc = Objects.requireNonNull(irc, "irc");
-    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
+    this.backendCapabilityPolicy =
+        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
@@ -288,12 +287,13 @@ final class OutboundMessagingCommandService {
 
   private String multilineUnavailableOrLimitReason(
       String serverId, int lineCount, long payloadUtf8Bytes) {
-    String backendUnavailableReason = normalizedBackendAvailabilityReason(serverId);
-    if (!backendUnavailableReason.isEmpty()) {
-      return ensureTerminalPunctuation(backendUnavailableReason);
+    String backendUnavailableReason =
+        backendCapabilityPolicy.featureUnavailableMessage(serverId, "");
+    if (!backendUnavailableReason.isBlank()) {
+      return backendUnavailableReason;
     }
 
-    if (!irc.isMultilineAvailable(serverId)) {
+    if (!backendCapabilityPolicy.supportsMultiline(serverId)) {
       return "IRCv3 multiline is not negotiated on this server.";
     }
 
@@ -359,21 +359,5 @@ final class OutboundMessagingCommandService {
 
   private boolean shouldUseLocalEcho(String serverId) {
     return !irc.isEchoMessageAvailable(serverId);
-  }
-
-  private String normalizedBackendAvailabilityReason(String serverId) {
-    try {
-      return Objects.toString(backendAvailability.backendAvailabilityReason(serverId), "").trim();
-    } catch (Exception ignored) {
-      return "";
-    }
-  }
-
-  private static String ensureTerminalPunctuation(String message) {
-    String text = Objects.toString(message, "").trim();
-    if (text.isEmpty()) return "";
-    char last = text.charAt(text.length() - 1);
-    if (last == '.' || last == '!' || last == '?') return text;
-    return text + ".";
   }
 }
