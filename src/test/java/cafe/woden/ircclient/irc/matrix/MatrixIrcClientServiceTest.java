@@ -32,6 +32,7 @@ class MatrixIrcClientServiceTest {
 
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
   private final MatrixHomeserverProbe homeserverProbe = mock(MatrixHomeserverProbe.class);
+  private final MatrixLoginClient loginClient = mock(MatrixLoginClient.class);
   private final MatrixDisplayNameClient displayNameClient = mock(MatrixDisplayNameClient.class);
   private final MatrixUserProfileClient userProfileClient = mock(MatrixUserProfileClient.class);
   private final MatrixPresenceClient presenceClient = mock(MatrixPresenceClient.class);
@@ -52,6 +53,7 @@ class MatrixIrcClientServiceTest {
       new MatrixIrcClientService(
           serverCatalog,
           homeserverProbe,
+          loginClient,
           displayNameClient,
           userProfileClient,
           presenceClient,
@@ -252,6 +254,58 @@ class MatrixIrcClientServiceTest {
     assertDoesNotThrow(() -> service.connect("matrix").blockingAwait());
     assertEquals(Optional.of("@alice:matrix.example.org"), service.currentNick("matrix"));
     assertEquals("", service.backendAvailabilityReason("matrix"));
+  }
+
+  @Test
+  void connectSupportsMatrixUsernamePasswordAuthMode() {
+    IrcProperties.Server server =
+        serverWithMatrixPasswordAuth(
+            "matrix", "matrix.example.org", 8448, true, "alice", "matrix-password");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(loginClient.loginWithPassword("matrix", server, "alice", "matrix-password"))
+        .thenReturn(
+            MatrixLoginClient.LoginResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/login"),
+                "@alice:matrix.example.org",
+                "password-login-token"));
+
+    assertDoesNotThrow(() -> service.connect("matrix").blockingAwait());
+    assertEquals(Optional.of("@alice:matrix.example.org"), service.currentNick("matrix"));
+    verify(loginClient, times(1))
+        .loginWithPassword("matrix", server, "alice", "matrix-password");
+    verify(homeserverProbe, times(0)).whoami(eq("matrix"), eq(server), anyString());
+  }
+
+  @Test
+  void connectWithMatrixUsernamePasswordAuthFailureReportsAuthenticationDetail() {
+    IrcProperties.Server server =
+        serverWithMatrixPasswordAuth(
+            "matrix", "matrix.example.org", 8448, true, "alice", "matrix-password");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(loginClient.loginWithPassword("matrix", server, "alice", "matrix-password"))
+        .thenReturn(
+            MatrixLoginClient.LoginResult.failed(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/login"),
+                "HTTP 403 from login endpoint"));
+
+    BackendNotAvailableException err =
+        assertThrows(
+            BackendNotAvailableException.class, () -> service.connect("matrix").blockingAwait());
+
+    assertEquals("connect", err.operation());
+    assertTrue(
+        service
+            .backendAvailabilityReason("matrix")
+            .contains("authentication failed at https://matrix.example.org:8448"));
+    assertTrue(err.getMessage().contains("HTTP 403 from login endpoint"));
   }
 
   @Test
@@ -5751,6 +5805,25 @@ class MatrixIrcClientServiceTest {
         "ircafe",
         "IRCafe User",
         new IrcProperties.Server.Sasl(true, "alice", saslToken, "PLAIN", true),
+        null,
+        List.of(),
+        List.of(),
+        null,
+        IrcProperties.Server.Backend.MATRIX);
+  }
+
+  private static IrcProperties.Server serverWithMatrixPasswordAuth(
+      String id, String host, int port, boolean tls, String username, String password) {
+    return new IrcProperties.Server(
+        id,
+        host,
+        port,
+        tls,
+        "",
+        "ircafe",
+        "",
+        "IRCafe User",
+        new IrcProperties.Server.Sasl(true, username, password, "MATRIX_PASSWORD", true),
         null,
         List.of(),
         List.of(),

@@ -88,9 +88,26 @@ public class ServerEditorDialog extends JDialog {
     }
   }
 
+  private enum MatrixAuthMode {
+    ACCESS_TOKEN("Access token"),
+    USERNAME_PASSWORD("Username + password");
+
+    private final String label;
+
+    MatrixAuthMode(String label) {
+      this.label = label;
+    }
+
+    @Override
+    public String toString() {
+      return label;
+    }
+  }
+
   private static final String AUTH_CARD_DISABLED = "auth-disabled";
   private static final String AUTH_CARD_SASL = "auth-sasl";
   private static final String AUTH_CARD_NICKSERV = "auth-nickserv";
+  private static final String MATRIX_PASSWORD_AUTH_MECHANISM = "MATRIX_PASSWORD";
   private static final String AUTH_DISABLED_HINT_TEXT =
       "No authentication on connect. Use this for networks that don't require account auth.";
   private static final String SASL_CONTINUE_ON_FAILURE_TEXT =
@@ -98,13 +115,20 @@ public class ServerEditorDialog extends JDialog {
   private static final String NICKSERV_DELAY_JOIN_TEXT =
       "Delay channel auto-join until identification succeeds";
   private static final String MATRIX_AUTH_DISABLED_HINT_TEXT =
-      "Matrix backend uses access token authentication from the Connection tab."
+      "Matrix backend authentication is configured here."
           + " IRC SASL/NickServ settings are ignored.";
 
   private final JComboBox<AuthMode> authModeCombo =
       new JComboBox<>(new AuthMode[] {AuthMode.DISABLED, AuthMode.SASL, AuthMode.NICKSERV});
+  private final JLabel authModeLabel = new JLabel("Method");
   private final JPanel authModeCardPanel = new JPanel(new CardLayout());
   private final JLabel authDisabledHintLabel = new JLabel();
+  private final JLabel matrixAuthModeLabel = new JLabel("Matrix auth");
+  private final JLabel matrixAuthUserLabel = new JLabel("Username");
+  private final JComboBox<MatrixAuthMode> matrixAuthModeCombo =
+      new JComboBox<>(new MatrixAuthMode[] {MatrixAuthMode.ACCESS_TOKEN, MatrixAuthMode.USERNAME_PASSWORD});
+  private final JTextField matrixAuthUserField = new JTextField();
+  private final JLabel matrixAuthHintLabel = new JLabel();
 
   private final JTextField saslUserField = new JTextField();
 
@@ -206,6 +230,7 @@ public class ServerEditorDialog extends JDialog {
         });
     // Keep combo sizing stable so short selections do not collapse Auth-tab field widths.
     authModeCombo.setPrototypeDisplayValue(AuthMode.NICKSERV);
+    matrixAuthModeCombo.setPrototypeDisplayValue(MatrixAuthMode.USERNAME_PASSWORD);
     saslMechanism.setPrototypeDisplayValue("ECDSA-NIST256P-CHALLENGE");
     nickservDelayJoinBox.setSelected(true);
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
@@ -269,6 +294,11 @@ public class ServerEditorDialog extends JDialog {
                 || seed.nickserv().delayJoinUntilIdentified());
       }
       setAuthMode(seedAuthMode(seed));
+      setMatrixAuthMode(seedMatrixAuthMode(seed));
+      if (seed.backend() == IrcProperties.Server.Backend.MATRIX && isMatrixPasswordAuthMode(seed.sasl())) {
+        matrixAuthUserField.setText(Objects.toString(seed.sasl().username(), ""));
+        serverPassField.setText(Objects.toString(seed.sasl().password(), ""));
+      }
 
       List<String> autoJoinSeed = seed.autoJoin() == null ? List.of() : seed.autoJoin();
       autoJoinArea.setText(String.join("\n", AutoJoinEntryCodec.channelEntries(autoJoinSeed)));
@@ -284,6 +314,7 @@ public class ServerEditorDialog extends JDialog {
       portField.setText("6697");
       portAuto = true;
       setAuthMode(AuthMode.DISABLED);
+      setMatrixAuthMode(MatrixAuthMode.ACCESS_TOKEN);
 
       seedProxy(null);
     }
@@ -297,6 +328,7 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(nickField, "IRCafeUser");
     applyFieldStyle(loginField, "ircafe");
     applyFieldStyle(realNameField, "IRCafe User");
+    applyFieldStyle(matrixAuthUserField, "alice");
     applyFieldStyle(saslUserField, "account");
     applyFieldStyle(saslPassField, "password / key");
     applyFieldStyle(nickservServiceField, "NickServ");
@@ -321,6 +353,7 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(proxyConnectTimeoutMsField, "20000");
     applyFieldStyle(proxyReadTimeoutMsField, "30000");
     appendStyle(backendCombo, "arc:10");
+    appendStyle(matrixAuthModeCombo, "arc:10");
     autoJoinArea.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#channel\n#another");
     autoJoinPmArea.putClientProperty(
         FlatClientProperties.PLACEHOLDER_TEXT, "NickServ\nfriend_nick");
@@ -363,6 +396,11 @@ public class ServerEditorDialog extends JDialog {
             });
 
     authModeCombo.addActionListener(e -> updateAuthModeUi());
+    matrixAuthModeCombo.addActionListener(
+        e -> {
+          updateMatrixAuthUi();
+          updateValidation();
+        });
     saslMechanism.addActionListener(e -> updateAuthModeUi());
     nickservDelayJoinBox.addActionListener(e -> updateValidation());
     backendCombo.addActionListener(
@@ -385,6 +423,7 @@ public class ServerEditorDialog extends JDialog {
     hostField.getDocument().addDocumentListener(vdl);
     // portField already has a listener for portAuto; it also calls updateValidation().
     serverPassField.getDocument().addDocumentListener(vdl);
+    matrixAuthUserField.getDocument().addDocumentListener(vdl);
     nickField.getDocument().addDocumentListener(vdl);
     loginField.getDocument().addDocumentListener(vdl);
     realNameField.getDocument().addDocumentListener(vdl);
@@ -818,12 +857,22 @@ public class ServerEditorDialog extends JDialog {
     JPanel p =
         new JPanel(
             new MigLayout(
-                "insets 8, fill, wrap 2", "[right]12[grow,fill,min:0]", "[]8[grow,fill,min:0]"));
+                "insets 8, fillx, wrap 2, hidemode 3",
+                "[right]12[grow,fill,min:0]",
+                "[]6[]6[]6[]8[grow,fill,min:0]"));
 
+    p.add(matrixAuthModeLabel);
+    p.add(matrixAuthModeCombo, "growx, wmin 0, wrap");
+    p.add(matrixAuthUserLabel);
+    p.add(matrixAuthUserField, "growx, wmin 0, wrap");
     p.add(serverPasswordLabel);
     p.add(serverPassField, "growx, wmin 0, wrap");
-    p.add(new JLabel("Method"));
+    p.add(authModeLabel);
     p.add(authModeCombo, "growx, wmin 0, wrap");
+    matrixAuthHintLabel.putClientProperty(
+        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
+    matrixAuthHintLabel.setText(" ");
+    p.add(matrixAuthHintLabel, "span 2, growx, wmin 0, wrap");
 
     authModeCardPanel.add(buildAuthDisabledCard(), AUTH_CARD_DISABLED);
     authModeCardPanel.add(buildAuthSaslCard(), AUTH_CARD_SASL);
@@ -952,6 +1001,16 @@ public class ServerEditorDialog extends JDialog {
     authModeCombo.setSelectedItem(mode == null ? AuthMode.DISABLED : mode);
   }
 
+  private MatrixAuthMode selectedMatrixAuthMode() {
+    Object selected = matrixAuthModeCombo.getSelectedItem();
+    if (selected instanceof MatrixAuthMode mode) return mode;
+    return MatrixAuthMode.ACCESS_TOKEN;
+  }
+
+  private void setMatrixAuthMode(MatrixAuthMode mode) {
+    matrixAuthModeCombo.setSelectedItem(mode == null ? MatrixAuthMode.ACCESS_TOKEN : mode);
+  }
+
   private static AuthMode seedAuthMode(IrcProperties.Server seed) {
     if (seed == null) return AuthMode.DISABLED;
     boolean saslEnabled = seed.sasl() != null && seed.sasl().enabled();
@@ -959,6 +1018,21 @@ public class ServerEditorDialog extends JDialog {
     if (saslEnabled) return AuthMode.SASL;
     if (nickservEnabled) return AuthMode.NICKSERV;
     return AuthMode.DISABLED;
+  }
+
+  private static MatrixAuthMode seedMatrixAuthMode(IrcProperties.Server seed) {
+    if (seed == null || seed.backend() != IrcProperties.Server.Backend.MATRIX) {
+      return MatrixAuthMode.ACCESS_TOKEN;
+    }
+    return isMatrixPasswordAuthMode(seed.sasl())
+        ? MatrixAuthMode.USERNAME_PASSWORD
+        : MatrixAuthMode.ACCESS_TOKEN;
+  }
+
+  private static boolean isMatrixPasswordAuthMode(IrcProperties.Server.Sasl sasl) {
+    if (sasl == null || !sasl.enabled()) return false;
+    String mechanism = Objects.toString(sasl.mechanism(), "").trim();
+    return MATRIX_PASSWORD_AUTH_MECHANISM.equalsIgnoreCase(mechanism);
   }
 
   private void showAuthCard(AuthMode mode) {
@@ -977,6 +1051,7 @@ public class ServerEditorDialog extends JDialog {
       authModeCombo.setSelectedItem(mode);
     }
     showAuthCard(mode);
+    updateMatrixAuthUi();
     updateSaslEnabled();
     updateNickservEnabled();
     updateValidation();
@@ -1021,18 +1096,19 @@ public class ServerEditorDialog extends JDialog {
       applyFieldStyle(realNameField, "display name (optional)");
     } else if (backend == IrcProperties.Server.Backend.MATRIX) {
       hostLabel.setText("Homeserver");
-      serverPasswordLabel.setText("Access token");
+      serverPasswordLabel.setText("Credential");
       nickLabel.setText("Nick (optional)");
       loginLabel.setText("User ID (optional)");
       realNameLabel.setText("Display name (optional)");
       tlsBox.setText("Use TLS (HTTPS)");
       connectionBackendHintLabel.setText(
-          "Matrix backend connects to this homeserver and authenticates with an access token."
+          "Matrix backend connects to this homeserver and authenticates with either access token"
+              + " or username/password."
               + " Defaults: 443 TLS, 80 plain. SASL/NickServ below are ignored.");
       authModeCombo.setEnabled(false);
       authModeCombo.setSelectedItem(AuthMode.DISABLED);
       authDisabledHintLabel.setText(asHtml(MATRIX_AUTH_DISABLED_HINT_TEXT));
-      applyFieldStyle(serverPassField, "matrix access token");
+      applyFieldStyle(serverPassField, "matrix access token / password");
       applyFieldStyle(hostField, "https://matrix.example.org");
       applyFieldStyle(loginField, "@alice:matrix.example.org");
       applyFieldStyle(nickField, "IRCafeUser (optional)");
@@ -1053,7 +1129,59 @@ public class ServerEditorDialog extends JDialog {
       applyFieldStyle(nickField, "IRCafeUser");
       applyFieldStyle(realNameField, "IRCafe User");
     }
+    updateMatrixAuthUi();
     updateValidation();
+  }
+
+  private void updateMatrixAuthUi() {
+    boolean matrixBackend = isMatrixBackendSelected();
+    boolean ircBackend = selectedBackend() == IrcProperties.Server.Backend.IRC;
+
+    authModeLabel.setVisible(ircBackend);
+    authModeCombo.setVisible(ircBackend);
+    authModeCardPanel.setVisible(!matrixBackend);
+    matrixAuthModeLabel.setVisible(matrixBackend);
+    matrixAuthModeCombo.setVisible(matrixBackend);
+    matrixAuthHintLabel.setVisible(matrixBackend);
+    if (!matrixBackend) {
+      matrixAuthUserLabel.setVisible(false);
+      matrixAuthUserField.setVisible(false);
+      matrixAuthUserField.setEnabled(false);
+      matrixAuthHintLabel.setText(" ");
+      matrixAuthHintLabel.setToolTipText(null);
+      java.awt.Container parent = authModeLabel.getParent();
+      if (parent != null) {
+        parent.revalidate();
+        parent.repaint();
+      }
+      return;
+    }
+
+    MatrixAuthMode mode = selectedMatrixAuthMode();
+    boolean usernamePassword = mode == MatrixAuthMode.USERNAME_PASSWORD;
+    matrixAuthUserLabel.setVisible(usernamePassword);
+    matrixAuthUserField.setVisible(usernamePassword);
+    matrixAuthUserField.setEnabled(usernamePassword);
+
+    String hint;
+    if (usernamePassword) {
+      serverPasswordLabel.setText("Password");
+      applyFieldStyle(serverPassField, "matrix account password");
+      hint =
+          "Username/password mode signs in via /login. Username and password are required.";
+    } else {
+      serverPasswordLabel.setText("Access token");
+      applyFieldStyle(serverPassField, "matrix access token");
+      hint = "Access-token mode uses the token directly for Matrix API requests.";
+    }
+
+    matrixAuthHintLabel.setText(asHtml(hint));
+    matrixAuthHintLabel.setToolTipText(hint);
+    java.awt.Container parent = authModeLabel.getParent();
+    if (parent != null) {
+      parent.revalidate();
+      parent.repaint();
+    }
   }
 
   private void updateSaslEnabled() {
@@ -1195,9 +1323,19 @@ public class ServerEditorDialog extends JDialog {
     setError(portField, portBad);
     ok &= !portBad;
 
-    boolean accessTokenBad = matrixBackend && trim(serverPasswordValue()).isEmpty();
-    setError(serverPassField, accessTokenBad);
-    ok &= !accessTokenBad;
+    MatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
+    boolean matrixPasswordMode = matrixBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
+    boolean matrixCredentialBad = matrixBackend && trim(serverPasswordValue()).isEmpty();
+    setError(serverPassField, matrixCredentialBad);
+    ok &= !matrixCredentialBad;
+
+    boolean matrixAuthUserBad = matrixPasswordMode && trim(matrixAuthUserField.getText()).isEmpty();
+    if (matrixBackend) {
+      setError(matrixAuthUserField, matrixAuthUserBad);
+      ok &= !matrixAuthUserBad;
+    } else {
+      clearOutline(matrixAuthUserField);
+    }
 
     boolean loginBad = false;
     setError(loginField, loginBad);
@@ -1426,8 +1564,15 @@ public class ServerEditorDialog extends JDialog {
 
     boolean tls = tlsBox.isSelected();
     String serverPassword = serverPasswordValue();
+    MatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
+    boolean matrixPasswordMode = matrixBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
+    String matrixAuthUser = trim(matrixAuthUserField.getText());
     if (matrixBackend && trim(serverPassword).isEmpty()) {
-      throw new IllegalArgumentException("Matrix access token is required");
+      throw new IllegalArgumentException(
+          matrixPasswordMode ? "Matrix password is required" : "Matrix access token is required");
+    }
+    if (matrixPasswordMode && matrixAuthUser.isEmpty()) {
+      throw new IllegalArgumentException("Matrix username is required");
     }
     if (containsCrlf(serverPassword)) {
       throw new IllegalArgumentException("Server/Core password must not contain newlines");
@@ -1439,7 +1584,8 @@ public class ServerEditorDialog extends JDialog {
     }
 
     String login = trim(loginField.getText());
-    if (login.isEmpty()) login = nick;
+    if (login.isEmpty() && matrixPasswordMode) login = matrixAuthUser;
+    if (login.isEmpty() && !matrixBackend) login = nick;
     if (login.isEmpty() && quasselBackend) login = "quassel-user";
 
     String realName = trim(realNameField.getText());
@@ -1455,7 +1601,12 @@ public class ServerEditorDialog extends JDialog {
     }
 
     IrcProperties.Server.Sasl sasl;
-    if (authMode == AuthMode.SASL) {
+    if (matrixPasswordMode) {
+      sasl =
+          new IrcProperties.Server.Sasl(
+              true, matrixAuthUser, serverPassword, MATRIX_PASSWORD_AUTH_MECHANISM, true);
+      serverPassword = "";
+    } else if (authMode == AuthMode.SASL) {
       String u = trim(saslUserField.getText());
       // JPasswordField stores secret as a char[]. Convert only when building the immutable config
       // object.

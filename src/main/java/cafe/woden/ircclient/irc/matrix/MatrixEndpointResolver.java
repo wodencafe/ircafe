@@ -47,6 +47,12 @@ final class MatrixEndpointResolver {
     return rebuild(apiBase, path);
   }
 
+  public static URI loginUri(IrcProperties.Server server) {
+    URI apiBase = clientApiBaseUri(server);
+    String path = appendPath(apiBase.getPath(), "login");
+    return rebuild(apiBase, path);
+  }
+
   public static URI userProfileUri(IrcProperties.Server server, String userId) {
     URI apiBase = clientApiBaseUri(server);
     String uid = validatePathSegment(userId, "userId");

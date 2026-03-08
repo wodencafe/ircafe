@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Service;
 
-/** Matrix backend with homeserver probe + token-authenticated session bootstrap. */
+/** Matrix backend with homeserver probe + token or username/password session bootstrap. */
 @Service
 @InfrastructureLayer
 public class MatrixIrcClientService implements IrcBackendClientService {
@@ -57,11 +57,13 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private static final int SYNC_TIMEOUT_MS = 0;
   private static final int UNREACT_LOOKUP_HISTORY_PAGE_LIMIT = 200;
   private static final int UNREACT_LOOKUP_MAX_PAGES = 10;
+  private static final String MATRIX_PASSWORD_AUTH_MECHANISM = "MATRIX_PASSWORD";
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
 
   private final ServerCatalog serverCatalog;
   private final MatrixHomeserverProbe homeserverProbe;
+  private final MatrixLoginClient loginClient;
   private final MatrixDisplayNameClient displayNameClient;
   private final MatrixUserProfileClient userProfileClient;
   private final MatrixPresenceClient presenceClient;
@@ -91,6 +93,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   public MatrixIrcClientService(
       ServerCatalog serverCatalog,
       MatrixHomeserverProbe homeserverProbe,
+      MatrixLoginClient loginClient,
       MatrixDisplayNameClient displayNameClient,
       MatrixUserProfileClient userProfileClient,
       MatrixPresenceClient presenceClient,
@@ -107,6 +110,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       MatrixSyncClient syncClient) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     this.homeserverProbe = Objects.requireNonNull(homeserverProbe, "homeserverProbe");
+    this.loginClient = Objects.requireNonNull(loginClient, "loginClient");
     this.displayNameClient = Objects.requireNonNull(displayNameClient, "displayNameClient");
     this.userProfileClient = Objects.requireNonNull(userProfileClient, "userProfileClient");
     this.presenceClient = Objects.requireNonNull(presenceClient, "presenceClient");
@@ -200,19 +204,53 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                     sid, "homeserver probe failed at " + probe.endpoint() + ": " + probe.detail());
               }
 
-              String accessToken = configuredAccessToken(server);
-              if (accessToken.isEmpty()) {
-                throw connectUnavailable(sid, "Matrix access token is blank (set server password)");
-              }
+              String accessToken;
+              String userId;
+              MatrixPasswordAuth matrixPasswordAuth = configuredMatrixPasswordAuth(server);
+              if (matrixPasswordAuth != null) {
+                if (matrixPasswordAuth.username().isEmpty()) {
+                  throw connectUnavailable(
+                      sid,
+                      "Matrix username is blank (set Auth method to Access token or provide username)");
+                }
+                if (matrixPasswordAuth.password().isBlank()) {
+                  throw connectUnavailable(
+                      sid,
+                      "Matrix password is blank (set Auth method to Access token or provide password)");
+                }
+                MatrixLoginClient.LoginResult loginResult =
+                    loginClient.loginWithPassword(
+                        sid, server, matrixPasswordAuth.username(), matrixPasswordAuth.password());
+                if (!loginResult.authenticated()) {
+                  throw connectUnavailable(
+                      sid,
+                      "authentication failed at "
+                          + loginResult.endpoint()
+                          + ": "
+                          + loginResult.detail());
+                }
+                accessToken = normalize(loginResult.accessToken());
+                userId = normalize(loginResult.userId());
+                if (accessToken.isEmpty()) {
+                  throw connectUnavailable(
+                      sid, "authentication succeeded but access_token was blank");
+                }
+              } else {
+                accessToken = configuredAccessToken(server);
+                if (accessToken.isEmpty()) {
+                  throw connectUnavailable(
+                      sid,
+                      "Matrix access token is blank (set server password or Matrix username/password)");
+                }
 
-              MatrixHomeserverProbe.WhoamiResult whoami =
-                  homeserverProbe.whoami(sid, server, accessToken);
-              if (!whoami.authenticated()) {
-                throw connectUnavailable(
-                    sid, "authentication failed at " + whoami.endpoint() + ": " + whoami.detail());
+                MatrixHomeserverProbe.WhoamiResult whoami =
+                    homeserverProbe.whoami(sid, server, accessToken);
+                if (!whoami.authenticated()) {
+                  throw connectUnavailable(
+                      sid, "authentication failed at " + whoami.endpoint() + ": " + whoami.detail());
+                }
+                userId = normalize(whoami.userId());
               }
-
-              String userId = normalize(whoami.userId());
               if (userId.isEmpty()) {
                 throw connectUnavailable(sid, "authentication succeeded but user_id was blank");
               }
@@ -1227,12 +1265,25 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     return "invalid Matrix homeserver configuration: " + message;
   }
 
+  private static MatrixPasswordAuth configuredMatrixPasswordAuth(IrcProperties.Server server) {
+    if (server == null) return null;
+    IrcProperties.Server.Sasl sasl = server.sasl();
+    if (!isMatrixPasswordAuth(sasl)) return null;
+    return new MatrixPasswordAuth(normalize(sasl.username()), Objects.toString(sasl.password(), ""));
+  }
+
+  private static boolean isMatrixPasswordAuth(IrcProperties.Server.Sasl sasl) {
+    if (sasl == null || !sasl.enabled()) return false;
+    String mechanism = normalize(sasl.mechanism()).toUpperCase(Locale.ROOT);
+    return MATRIX_PASSWORD_AUTH_MECHANISM.equals(mechanism);
+  }
+
   private static String configuredAccessToken(IrcProperties.Server server) {
     if (server == null) return "";
     String token = normalize(server.serverPassword());
     if (!token.isEmpty()) return token;
     IrcProperties.Server.Sasl sasl = server.sasl();
-    if (sasl == null) return "";
+    if (sasl == null || isMatrixPasswordAuth(sasl)) return "";
     return normalize(sasl.password());
   }
 
@@ -3039,6 +3090,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private static String normalize(String value) {
     return Objects.toString(value, "").trim();
   }
+
+  private record MatrixPasswordAuth(String username, String password) {}
 
   private record RawCommand(String command, List<String> arguments) {
     private RawCommand {
