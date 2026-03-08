@@ -22,6 +22,7 @@ import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeQuasselNetworkNodeMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerNodeMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTargetNodeMenuBuilder;
@@ -97,9 +98,13 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       Inputs in, ServerTreeRequestStreams requestStreams) {
     return new ServerTreeContextMenuBuilder(
         ServerTreeContextMenuBuilder.routingContext(
-            in.uiHooks()::isServerNode, in.nodeClassifier()::isInterceptorsGroupNode),
+            in.uiHooks()::isServerNode,
+            in.nodeClassifier()::isInterceptorsGroupNode,
+            in.isQuasselNetworkNode(),
+            in.isQuasselEmptyStateNode()),
         createServerNodeMenuContext(in),
-        createTargetNodeMenuContext(in, requestStreams));
+        createTargetNodeMenuContext(in, requestStreams),
+        createQuasselNetworkNodeMenuContext(in));
   }
 
   private static ServerTreeServerNodeMenuBuilder.Context createServerNodeMenuContext(Inputs in) {
@@ -167,6 +172,14 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         in.interceptorActions()::setInterceptorEnabled,
         in.interceptorActions()::promptRenameInterceptor,
         in.interceptorActions()::confirmDeleteInterceptor);
+  }
+
+  private static ServerTreeQuasselNetworkNodeMenuBuilder.Context
+      createQuasselNetworkNodeMenuContext(Inputs in) {
+    return ServerTreeQuasselNetworkNodeMenuBuilder.context(
+        in.uiHooks()::openPinnedChat,
+        Objects.requireNonNull(in.requestEmitter(), "requestEmitter")::emitOpenQuasselSetup,
+        in.requestEmitter()::emitOpenQuasselNetworkManager);
   }
 
   private static java.util.Optional<cafe.woden.ircclient.config.ServerEntry> serverEntry(
@@ -396,5 +409,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       Predicate<TargetRef> isChannelMuted,
       BiConsumer<TargetRef, Boolean> setChannelMuted,
       ServerTreeRequestStreams requestStreams,
-      Predicate<TargetRef> canEditChannelModes) {}
+      Predicate<TargetRef> canEditChannelModes,
+      Predicate<javax.swing.tree.DefaultMutableTreeNode> isQuasselNetworkNode,
+      Predicate<javax.swing.tree.DefaultMutableTreeNode> isQuasselEmptyStateNode) {}
 }

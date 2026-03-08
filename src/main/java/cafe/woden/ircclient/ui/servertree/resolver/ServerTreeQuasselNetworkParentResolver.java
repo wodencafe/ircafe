@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.servertree.resolver;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -15,12 +16,15 @@ import javax.swing.tree.DefaultTreeModel;
 /** Resolves per-network parent containers for Quassel-qualified targets in the server tree. */
 public final class ServerTreeQuasselNetworkParentResolver {
 
+  private static final String EMPTY_STATE_LABEL = "No Quassel networks configured";
+
   private record NetworkNodes(
       DefaultMutableTreeNode networkNode,
       DefaultMutableTreeNode channelListNode,
       DefaultMutableTreeNode privateMessagesNode) {}
 
   private final Map<String, Map<String, NetworkNodes>> networkNodesByServer = new HashMap<>();
+  private final Map<String, DefaultMutableTreeNode> emptyStateNodesByServer = new HashMap<>();
   private final Map<TargetRef, DefaultMutableTreeNode> leaves;
   private final DefaultTreeModel model;
   private final Predicate<String> isQuasselServer;
@@ -64,13 +68,41 @@ public final class ServerTreeQuasselNetworkParentResolver {
     return null;
   }
 
+  public void initializeServer(String serverId, ServerNodes serverNodes) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty() || serverNodes == null || serverNodes.serverNode == null) return;
+    if (!isQuasselServer.test(sid)) return;
+    maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
+  }
+
+  public boolean isQuasselNetworkNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    if (!(node.getUserObject() instanceof ServerTreeQuasselNetworkNodeData data)) return false;
+    if (data.emptyState()) return false;
+    return !data.serverId().isBlank() && !data.networkToken().isBlank();
+  }
+
+  public boolean isQuasselEmptyStateNode(DefaultMutableTreeNode node) {
+    if (node == null) return false;
+    if (!(node.getUserObject() instanceof ServerTreeQuasselNetworkNodeData data)) return false;
+    return data.emptyState();
+  }
+
+  public TargetRef channelListRefForNetworkNode(DefaultMutableTreeNode node) {
+    if (!isQuasselNetworkNode(node)) return null;
+    ServerTreeQuasselNetworkNodeData data = (ServerTreeQuasselNetworkNodeData) node.getUserObject();
+    return TargetRef.channelList(data.serverId(), data.networkToken());
+  }
+
   public void forgetServer(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return;
     networkNodesByServer.remove(sid);
+    emptyStateNodesByServer.remove(sid);
   }
 
   private NetworkNodes ensureNetworkNodes(String serverId, String token, ServerNodes serverNodes) {
+    removeEmptyStateNodeIfPresent(serverId, serverNodes.serverNode);
     Map<String, NetworkNodes> byToken =
         networkNodesByServer.computeIfAbsent(serverId, ignored -> new LinkedHashMap<>());
     NetworkNodes existing = byToken.get(token);
@@ -81,7 +113,9 @@ public final class ServerTreeQuasselNetworkParentResolver {
       return existing;
     }
 
-    DefaultMutableTreeNode networkNode = new DefaultMutableTreeNode(token);
+    DefaultMutableTreeNode networkNode =
+        new DefaultMutableTreeNode(
+            ServerTreeQuasselNetworkNodeData.network(serverId, token, friendlyNetworkLabel(token)));
     int networkInsertIdx = networkInsertIndex(serverNodes);
     serverNodes.serverNode.insert(networkNode, networkInsertIdx);
     model.nodesWereInserted(serverNodes.serverNode, new int[] {networkInsertIdx});
@@ -109,6 +143,36 @@ public final class ServerTreeQuasselNetworkParentResolver {
     return created;
   }
 
+  private void maybeEnsureEmptyStateNode(String serverId, DefaultMutableTreeNode serverNode) {
+    if (serverNode == null) return;
+    Map<String, NetworkNodes> byToken = networkNodesByServer.get(serverId);
+    if (byToken != null && !byToken.isEmpty()) return;
+    DefaultMutableTreeNode existing = emptyStateNodesByServer.get(serverId);
+    if (existing != null && existing.getParent() == serverNode) return;
+    if (existing != null) {
+      detachNodeIfNeeded(existing);
+    }
+
+    DefaultMutableTreeNode emptyNode =
+        new DefaultMutableTreeNode(
+            ServerTreeQuasselNetworkNodeData.emptyState(serverId, EMPTY_STATE_LABEL));
+    int idx = networkInsertIndex(serverNode);
+    serverNode.insert(emptyNode, idx);
+    model.nodesWereInserted(serverNode, new int[] {idx});
+    emptyStateNodesByServer.put(serverId, emptyNode);
+  }
+
+  private void removeEmptyStateNodeIfPresent(String serverId, DefaultMutableTreeNode serverNode) {
+    DefaultMutableTreeNode emptyNode = emptyStateNodesByServer.get(serverId);
+    if (emptyNode == null) return;
+    if (emptyNode.getParent() != serverNode) {
+      emptyStateNodesByServer.remove(serverId);
+      return;
+    }
+    detachNodeIfNeeded(emptyNode);
+    emptyStateNodesByServer.remove(serverId);
+  }
+
   private DefaultMutableTreeNode aliasServerChannelListToKnownNetwork(String serverId) {
     Map<String, NetworkNodes> byToken = networkNodesByServer.get(normalizeServerId(serverId));
     if (byToken == null || byToken.isEmpty()) return null;
@@ -134,8 +198,30 @@ public final class ServerTreeQuasselNetworkParentResolver {
 
   private static int networkInsertIndex(ServerNodes serverNodes) {
     if (serverNodes == null || serverNodes.serverNode == null) return 0;
-    int insertIdx = serverNodes.serverNode.getChildCount();
-    int privateMessagesIdx = serverNodes.serverNode.getIndex(serverNodes.pmNode);
+    return networkInsertIndex(serverNodes.serverNode, serverNodes.pmNode);
+  }
+
+  private static int networkInsertIndex(DefaultMutableTreeNode serverNode) {
+    if (serverNode == null) return 0;
+    DefaultMutableTreeNode privateMessagesNode = null;
+    for (int i = 0; i < serverNode.getChildCount(); i++) {
+      Object child = serverNode.getChildAt(i);
+      if (!(child instanceof DefaultMutableTreeNode childNode)) continue;
+      Object userObject = childNode.getUserObject();
+      if (userObject instanceof String label
+          && "Private Messages".equalsIgnoreCase(Objects.toString(label, "").trim())) {
+        privateMessagesNode = childNode;
+        break;
+      }
+    }
+    return networkInsertIndex(serverNode, privateMessagesNode);
+  }
+
+  private static int networkInsertIndex(
+      DefaultMutableTreeNode serverNode, DefaultMutableTreeNode privateMessagesNode) {
+    if (serverNode == null) return 0;
+    int insertIdx = serverNode.getChildCount();
+    int privateMessagesIdx = serverNode.getIndex(privateMessagesNode);
     if (privateMessagesIdx >= 0) {
       insertIdx = Math.min(insertIdx, privateMessagesIdx);
     }
@@ -155,5 +241,26 @@ public final class ServerTreeQuasselNetworkParentResolver {
   private static String normalizeServerId(String serverId) {
     String value = Objects.toString(serverId, "").trim();
     return value;
+  }
+
+  private static String friendlyNetworkLabel(String token) {
+    String raw = normalizeToken(token);
+    if (raw.isEmpty()) return "Network";
+    if (raw.chars().allMatch(Character::isDigit)) {
+      return "Network " + raw;
+    }
+    String spaced = raw.replace('-', ' ').replace('_', ' ').trim();
+    if (spaced.isEmpty()) return raw;
+    String[] words = spaced.split("\\s+");
+    StringBuilder label = new StringBuilder();
+    for (String word : words) {
+      if (word.isEmpty()) continue;
+      if (!label.isEmpty()) label.append(' ');
+      label.append(Character.toUpperCase(word.charAt(0)));
+      if (word.length() > 1) {
+        label.append(word.substring(1));
+      }
+    }
+    return label.isEmpty() ? raw : label.toString();
   }
 }

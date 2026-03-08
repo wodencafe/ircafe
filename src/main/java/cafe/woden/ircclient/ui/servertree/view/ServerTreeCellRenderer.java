@@ -5,6 +5,7 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.icons.SvgIcons.Palette;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeTypingTargetPolicy;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import java.awt.AlphaComposite;
@@ -16,6 +17,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Polygon;
 import java.awt.RenderingHints;
+import java.util.Enumeration;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.IntSupplier;
@@ -76,6 +78,10 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     boolean isPrivateMessagesGroupNode(DefaultMutableTreeNode node);
 
     String backendIdForNetworksGroupNode(DefaultMutableTreeNode node);
+
+    boolean isQuasselNetworkNode(DefaultMutableTreeNode node);
+
+    boolean isQuasselEmptyStateNode(DefaultMutableTreeNode node);
   }
 
   public static Context context(
@@ -101,7 +107,9 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       Predicate<DefaultMutableTreeNode> isIrcRootNode,
       Predicate<DefaultMutableTreeNode> isApplicationRootNode,
       Predicate<DefaultMutableTreeNode> isPrivateMessagesGroupNode,
-      Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode) {
+      Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode,
+      Predicate<DefaultMutableTreeNode> isQuasselNetworkNode,
+      Predicate<DefaultMutableTreeNode> isQuasselEmptyStateNode) {
     Objects.requireNonNull(
         serverTreeNotificationBadgesEnabled, "serverTreeNotificationBadgesEnabled");
     Objects.requireNonNull(unreadBadgeScalePercent, "unreadBadgeScalePercent");
@@ -126,6 +134,8 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
     Objects.requireNonNull(isApplicationRootNode, "isApplicationRootNode");
     Objects.requireNonNull(isPrivateMessagesGroupNode, "isPrivateMessagesGroupNode");
     Objects.requireNonNull(backendIdForNetworksGroupNode, "backendIdForNetworksGroupNode");
+    Objects.requireNonNull(isQuasselNetworkNode, "isQuasselNetworkNode");
+    Objects.requireNonNull(isQuasselEmptyStateNode, "isQuasselEmptyStateNode");
     return new Context() {
       @Override
       public boolean serverTreeNotificationBadgesEnabled() {
@@ -240,6 +250,16 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
       @Override
       public String backendIdForNetworksGroupNode(DefaultMutableTreeNode node) {
         return backendIdForNetworksGroupNode.apply(node);
+      }
+
+      @Override
+      public boolean isQuasselNetworkNode(DefaultMutableTreeNode node) {
+        return isQuasselNetworkNode.test(node);
+      }
+
+      @Override
+      public boolean isQuasselEmptyStateNode(DefaultMutableTreeNode node) {
+        return isQuasselEmptyStateNode.test(node);
       }
     };
   }
@@ -415,6 +435,28 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
                     System.currentTimeMillis(), TYPING_ACTIVITY_PULSE_MS, TYPING_ACTIVITY_FADE_MS);
           }
         }
+      } else if (userObject instanceof ServerTreeQuasselNetworkNodeData networkNodeData
+          && (context.isQuasselNetworkNode(node) || context.isQuasselEmptyStateNode(node))) {
+        setText(networkNodeData.label());
+        int[] rollup = rollupUnreadCounts(node);
+        if (context.serverTreeNotificationBadgesEnabled() && !networkNodeData.emptyState()) {
+          unreadBadgeCount = rollup[0];
+          highlightBadgeCount = rollup[1];
+        }
+        int style = (highlightBadgeCount > 0 || unreadBadgeCount > 0) ? Font.BOLD : Font.PLAIN;
+        if (networkNodeData.emptyState()) {
+          style |= Font.ITALIC;
+        }
+        setFont(base.deriveFont(style));
+        ConnectionState state = context.connectionStateForServer(networkNodeData.serverId());
+        String iconName = ServerTreeConnectionStateViewModel.serverNodeIconName(state);
+        Palette palette =
+            networkNodeData.emptyState()
+                ? Palette.TREE_DISABLED
+                : ServerTreeConnectionStateViewModel.serverNodeIconPalette(state);
+        Icon icon = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, palette);
+        setIcon(icon);
+        setDisabledIcon(SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED));
       } else if (userObject instanceof String id && context.isServerNode(node)) {
         setText(context.serverNodeDisplayLabel(id));
         if (context.isEphemeralServer(id)) {
@@ -535,6 +577,22 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
   private boolean isNetworksGroupNode(DefaultMutableTreeNode node) {
     String backendId = context.backendIdForNetworksGroupNode(node);
     return backendId != null && !backendId.isBlank();
+  }
+
+  private static int[] rollupUnreadCounts(DefaultMutableTreeNode rootNode) {
+    if (rootNode == null) return new int[] {0, 0};
+    int unread = 0;
+    int highlight = 0;
+    Enumeration<?> walk = rootNode.depthFirstEnumeration();
+    while (walk.hasMoreElements()) {
+      Object next = walk.nextElement();
+      if (!(next instanceof DefaultMutableTreeNode node) || node == rootNode) continue;
+      Object userObject = node.getUserObject();
+      if (!(userObject instanceof ServerTreeNodeData data)) continue;
+      unread += Math.max(0, data.unread);
+      highlight += Math.max(0, data.highlightUnread);
+    }
+    return new int[] {unread, highlight};
   }
 
   private ServerTreeTypingIndicatorStyle typingStyle() {

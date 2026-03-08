@@ -68,6 +68,8 @@ class ServerTreeViewInteractionCollaboratorsFactoryTest {
                 __ -> false,
                 (ref, enabled) -> {},
                 mock(ServerTreeRequestStreams.class),
+                __ -> false,
+                __ -> false,
                 __ -> false));
 
     assertNotNull(collaborators.tooltipProvider());

@@ -4,10 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
 import java.util.HashMap;
 import java.util.Map;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -37,7 +39,13 @@ class ServerTreeQuasselNetworkParentResolverTest {
     ServerTreeNodeData channelListData = (ServerTreeNodeData) parent.getUserObject();
     assertEquals(TargetRef.channelList("quassel", "libera"), channelListData.ref);
     assertEquals("Channel List", channelListData.label);
-    assertEquals("libera", ((DefaultMutableTreeNode) parent.getParent()).getUserObject());
+    Object networkUserObject = ((DefaultMutableTreeNode) parent.getParent()).getUserObject();
+    assertTrue(networkUserObject instanceof ServerTreeQuasselNetworkNodeData);
+    ServerTreeQuasselNetworkNodeData networkNodeData =
+        (ServerTreeQuasselNetworkNodeData) networkUserObject;
+    assertEquals("quassel", networkNodeData.serverId());
+    assertEquals("libera", networkNodeData.networkToken());
+    assertEquals("Libera", networkNodeData.label());
   }
 
   @Test
@@ -108,6 +116,33 @@ class ServerTreeQuasselNetworkParentResolverTest {
     ServerTreeNodeData aliasedData = (ServerTreeNodeData) aliasedNode.getUserObject();
     assertEquals(TargetRef.channelList("quassel", "libera"), aliasedData.ref);
     assertNull(legacyChannelListNode.getParent());
+  }
+
+  @Test
+  void initializesEmptyStateNodeForQuasselServer() {
+    Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+    DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));
+    ServerTreeQuasselNetworkParentResolver resolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            sid -> "quassel".equalsIgnoreCase(sid),
+            "Channel List",
+            "Private Messages");
+    ServerNodes serverNodes = serverNodes("quassel");
+
+    resolver.initializeServer("quassel", serverNodes);
+
+    assertEquals(3, serverNodes.serverNode.getChildCount());
+    boolean foundEmptyState = false;
+    for (int i = 0; i < serverNodes.serverNode.getChildCount(); i++) {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) serverNodes.serverNode.getChildAt(i);
+      if (resolver.isQuasselEmptyStateNode(child)) {
+        foundEmptyState = true;
+        break;
+      }
+    }
+    assertTrue(foundEmptyState);
   }
 
   private static ServerNodes serverNodes(String serverId) {

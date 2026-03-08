@@ -71,11 +71,26 @@ class ServerTreeSelectionPersistencePolicyTest {
     assertNull(policy.selectedTargetForPersistence());
   }
 
+  @Test
+  void returnsSyntheticTargetWhenSelectedNodeMapsToOne() {
+    StubContext context = new StubContext();
+    DefaultMutableTreeNode networkNode = new DefaultMutableTreeNode("network");
+    context.selectedNode = networkNode;
+    context.serverIdByNode.put(networkNode, "quassel");
+    context.syntheticByNode.put(networkNode, TargetRef.channelList("quassel", "libera"));
+
+    ServerTreeSelectionPersistencePolicy policy = new ServerTreeSelectionPersistencePolicy(context);
+
+    assertEquals(TargetRef.channelList("quassel", "libera"), policy.selectedTargetForPersistence());
+  }
+
   private static final class StubContext implements ServerTreeSelectionPersistencePolicy.Context {
     private TargetRef lastBroadcast = null;
     private TargetRef selectedTarget = null;
     private DefaultMutableTreeNode selectedNode = null;
     private final java.util.Map<DefaultMutableTreeNode, String> serverIdByNode =
+        new java.util.HashMap<>();
+    private final java.util.Map<DefaultMutableTreeNode, TargetRef> syntheticByNode =
         new java.util.HashMap<>();
     private final Set<DefaultMutableTreeNode> monitorNodes = new HashSet<>();
     private final Set<DefaultMutableTreeNode> interceptorsNodes = new HashSet<>();
@@ -108,6 +123,11 @@ class ServerTreeSelectionPersistencePolicyTest {
     @Override
     public boolean isInterceptorsGroupNode(DefaultMutableTreeNode node) {
       return interceptorsNodes.contains(node);
+    }
+
+    @Override
+    public TargetRef syntheticTargetForNode(DefaultMutableTreeNode node) {
+      return syntheticByNode.get(node);
     }
   }
 }
