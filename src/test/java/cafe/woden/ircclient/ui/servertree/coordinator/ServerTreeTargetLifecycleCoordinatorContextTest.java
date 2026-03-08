@@ -49,6 +49,8 @@ class ServerTreeTargetLifecycleCoordinatorContextTest {
     AtomicReference<String> sortedChannelsServer = new AtomicReference<>();
     AtomicReference<String> emittedManagedChannelsServer = new AtomicReference<>();
     AtomicReference<DefaultMutableTreeNode> expandedNode = new AtomicReference<>();
+    AtomicReference<TargetRef> backendParentRef = new AtomicReference<>();
+    AtomicReference<ServerNodes> backendParentServerNodes = new AtomicReference<>();
     AtomicBoolean reloadRootCalled = new AtomicBoolean(false);
 
     ServerTreeTargetLifecycleCoordinator.Context context =
@@ -68,6 +70,11 @@ class ServerTreeTargetLifecycleCoordinatorContextTest {
             ref -> RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
             id -> builtInLayout,
             id -> rootSiblingOrder,
+            (ref, serverNodes) -> {
+              backendParentRef.set(ref);
+              backendParentServerNodes.set(serverNodes);
+              return serverNodes == null ? null : serverNodes.pmNode;
+            },
             serverNodes ->
                 serverNodes.channelListRef == null
                     ? null
@@ -116,6 +123,9 @@ class ServerTreeTargetLifecycleCoordinatorContextTest {
         context.builtInLayoutNodeKindForRef(channelRef));
     assertSame(builtInLayout, context.builtInLayout(serverId));
     assertSame(rootSiblingOrder, context.rootSiblingOrder(serverId));
+    assertSame(nodes.pmNode, context.backendSpecificParent(channelRef, nodes));
+    assertSame(channelRef, backendParentRef.get());
+    assertSame(nodes, backendParentServerNodes.get());
     assertEquals("Channel List", context.ensureChannelListNode(nodes).getUserObject().toString());
 
     context.applyBuiltInLayoutToTree(nodes, builtInLayout);

@@ -33,6 +33,8 @@ public final class TargetRef {
   public static final String APPLICATION_SPRING_TARGET = "__app_spring__";
   public static final String APPLICATION_TERMINAL_TARGET = "__app_terminal__";
   public static final String LOG_VIEWER_TARGET = "__log_viewer__";
+  public static final String NETWORK_QUALIFIER_PREFIX = "{net:";
+  public static final String NETWORK_QUALIFIER_SUFFIX = "}";
 
   private final String serverId;
   private final String target;
@@ -52,6 +54,10 @@ public final class TargetRef {
 
   public static TargetRef channelList(String serverId) {
     return new TargetRef(serverId, CHANNEL_LIST_TARGET);
+  }
+
+  public static TargetRef channelList(String serverId, String networkToken) {
+    return new TargetRef(serverId, withNetworkQualifier(CHANNEL_LIST_TARGET, networkToken));
   }
 
   public static TargetRef weechatFilters(String serverId) {
@@ -136,35 +142,35 @@ public final class TargetRef {
   }
 
   public boolean isStatus() {
-    return "status".equals(key);
+    return matchesBuiltInKey("status");
   }
 
   public boolean isNotifications() {
-    return NOTIFICATIONS_TARGET.equals(key);
+    return matchesBuiltInKey(NOTIFICATIONS_TARGET);
   }
 
   public boolean isChannelList() {
-    return CHANNEL_LIST_TARGET.equals(key);
+    return matchesBuiltInKey(CHANNEL_LIST_TARGET);
   }
 
   public boolean isWeechatFilters() {
-    return WEECHAT_FILTERS_TARGET.equals(key);
+    return matchesBuiltInKey(WEECHAT_FILTERS_TARGET);
   }
 
   public boolean isIgnores() {
-    return IGNORES_TARGET.equals(key);
+    return matchesBuiltInKey(IGNORES_TARGET);
   }
 
   public boolean isDccTransfers() {
-    return DCC_TRANSFERS_TARGET.equals(key);
+    return matchesBuiltInKey(DCC_TRANSFERS_TARGET);
   }
 
   public boolean isMonitorGroup() {
-    return MONITOR_GROUP_TARGET.equals(key);
+    return matchesBuiltInKey(MONITOR_GROUP_TARGET);
   }
 
   public boolean isInterceptorsGroup() {
-    return INTERCEPTORS_GROUP_TARGET.equals(key);
+    return matchesBuiltInKey(INTERCEPTORS_GROUP_TARGET);
   }
 
   public boolean isInterceptor() {
@@ -182,31 +188,31 @@ public final class TargetRef {
   }
 
   public boolean isApplicationUnhandledErrors() {
-    return APPLICATION_UNHANDLED_ERRORS_TARGET.equals(key);
+    return matchesBuiltInKey(APPLICATION_UNHANDLED_ERRORS_TARGET);
   }
 
   public boolean isApplicationAssertjSwing() {
-    return APPLICATION_ASSERTJ_SWING_TARGET.equals(key);
+    return matchesBuiltInKey(APPLICATION_ASSERTJ_SWING_TARGET);
   }
 
   public boolean isApplicationJhiccup() {
-    return APPLICATION_JHICCUP_TARGET.equals(key);
+    return matchesBuiltInKey(APPLICATION_JHICCUP_TARGET);
   }
 
   public boolean isApplicationInboundDedup() {
-    return APPLICATION_INBOUND_DEDUP_TARGET.equals(key);
+    return matchesBuiltInKey(APPLICATION_INBOUND_DEDUP_TARGET);
   }
 
   public boolean isApplicationJfr() {
-    return APPLICATION_JFR_TARGET.equals(key);
+    return matchesBuiltInKey(APPLICATION_JFR_TARGET);
   }
 
   public boolean isApplicationSpring() {
-    return APPLICATION_SPRING_TARGET.equals(key);
+    return matchesBuiltInKey(APPLICATION_SPRING_TARGET);
   }
 
   public boolean isApplicationTerminal() {
-    return APPLICATION_TERMINAL_TARGET.equals(key);
+    return matchesBuiltInKey(APPLICATION_TERMINAL_TARGET);
   }
 
   public boolean isApplicationUi() {
@@ -221,7 +227,19 @@ public final class TargetRef {
   }
 
   public boolean isLogViewer() {
-    return LOG_VIEWER_TARGET.equals(key);
+    return matchesBuiltInKey(LOG_VIEWER_TARGET);
+  }
+
+  public String baseTarget() {
+    return parseQualifiedTarget(target).baseTarget();
+  }
+
+  public String networkQualifierToken() {
+    return parseQualifiedTarget(target).networkToken();
+  }
+
+  public boolean hasNetworkQualifier() {
+    return !networkQualifierToken().isEmpty();
   }
 
   public boolean isUiOnly() {
@@ -262,6 +280,21 @@ public final class TargetRef {
   private static String foldKey(String target) {
     String t = norm(target);
     if (t.isEmpty()) return "";
+    QualifiedTarget qualified = parseQualifiedTarget(t);
+    if (!qualified.networkToken().isEmpty()) {
+      String foldedBase = foldKeyBase(qualified.baseTarget());
+      if (foldedBase.isEmpty()) return "";
+      return foldedBase
+          + NETWORK_QUALIFIER_PREFIX
+          + qualified.networkToken()
+          + NETWORK_QUALIFIER_SUFFIX;
+    }
+    return foldKeyBase(t);
+  }
+
+  private static String foldKeyBase(String target) {
+    String t = norm(target);
+    if (t.isEmpty()) return "";
     if (NOTIFICATIONS_TARGET.equals(t)) return NOTIFICATIONS_TARGET;
     if (CHANNEL_LIST_TARGET.equals(t)) return CHANNEL_LIST_TARGET;
     if (WEECHAT_FILTERS_TARGET.equals(t)) return WEECHAT_FILTERS_TARGET;
@@ -282,6 +315,46 @@ public final class TargetRef {
     if (LOG_VIEWER_TARGET.equals(t)) return LOG_VIEWER_TARGET;
     return t.toLowerCase(Locale.ROOT);
   }
+
+  private boolean matchesBuiltInKey(String expectedKey) {
+    if (Objects.equals(expectedKey, key)) return true;
+    QualifiedTarget parsed = parseQualifiedTarget(target);
+    if (parsed.networkToken().isEmpty()) return false;
+    return Objects.equals(expectedKey, foldKeyBase(parsed.baseTarget()));
+  }
+
+  public static QualifiedTarget parseQualifiedTarget(String target) {
+    String raw = norm(target);
+    if (raw.isEmpty()) return new QualifiedTarget("", "", "");
+    if (raw.endsWith(NETWORK_QUALIFIER_SUFFIX)) {
+      int marker = raw.lastIndexOf(NETWORK_QUALIFIER_PREFIX);
+      if (marker > 0) {
+        int tokenStart = marker + NETWORK_QUALIFIER_PREFIX.length();
+        int tokenEnd = raw.length() - NETWORK_QUALIFIER_SUFFIX.length();
+        if (tokenEnd > tokenStart) {
+          String base = raw.substring(0, marker).trim();
+          String token = raw.substring(tokenStart, tokenEnd).trim().toLowerCase(Locale.ROOT);
+          if (!base.isEmpty() && !token.isEmpty()) {
+            return new QualifiedTarget(raw, base, token);
+          }
+        }
+      }
+    }
+    return new QualifiedTarget(raw, raw, "");
+  }
+
+  public static String withNetworkQualifier(String target, String networkToken) {
+    String base = norm(target);
+    if (base.isEmpty()) throw new IllegalArgumentException("target must not be blank");
+    String token = norm(networkToken).toLowerCase(Locale.ROOT);
+    if (token.isEmpty()) return base;
+    if (token.indexOf('{') >= 0 || token.indexOf('}') >= 0) {
+      throw new IllegalArgumentException("networkToken must not contain braces");
+    }
+    return base + NETWORK_QUALIFIER_PREFIX + token + NETWORK_QUALIFIER_SUFFIX;
+  }
+
+  public record QualifiedTarget(String rawTarget, String baseTarget, String networkToken) {}
 
   @Override
   public boolean equals(Object o) {

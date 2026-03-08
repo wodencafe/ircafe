@@ -44,6 +44,7 @@ class ServerTreeTargetLifecycleCoordinatorFactoryTest {
                 __ -> RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
                 __ -> RuntimeConfigStore.ServerTreeBuiltInLayout.defaults(),
                 __ -> RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults(),
+                (__1, __2) -> null,
                 __ -> null,
                 (ServerNodes __1, RuntimeConfigStore.ServerTreeBuiltInLayout __2) -> {},
                 (ServerNodes __1, RuntimeConfigStore.ServerTreeRootSiblingOrder __2) -> {},

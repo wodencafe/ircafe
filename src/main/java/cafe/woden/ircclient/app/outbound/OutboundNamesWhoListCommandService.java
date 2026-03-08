@@ -150,7 +150,10 @@ final class OutboundNamesWhoListCommandService {
       return;
     }
 
-    TargetRef channelList = TargetRef.channelList(at.serverId());
+    TargetRef channelList =
+        at.hasNetworkQualifier()
+            ? TargetRef.channelList(at.serverId(), at.networkQualifierToken())
+            : TargetRef.channelList(at.serverId());
     ui.ensureTargetExists(channelList);
     ui.beginChannelList(
         at.serverId(),

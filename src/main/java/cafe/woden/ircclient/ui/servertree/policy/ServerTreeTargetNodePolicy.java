@@ -56,6 +56,6 @@ public final class ServerTreeTargetNodePolicy {
     if (ref.isWeechatFilters()) return weechatFiltersLabel;
     if (ref.isIgnores()) return ignoresLabel;
     if (ref.isDccTransfers()) return dccTransfersLabel;
-    return ref.target();
+    return ref.baseTarget();
   }
 }

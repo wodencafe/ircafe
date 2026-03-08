@@ -282,24 +282,26 @@ public final class ServerTreeChannelStateCoordinator {
       String serverId) {
     String sid = context.normalizeServerId(serverId);
     if (sid.isEmpty()) return List.of();
-    DefaultMutableTreeNode channelListNode = context.channelListNode(sid);
-    if (channelListNode == null) return List.of();
+    List<DefaultMutableTreeNode> channelListNodes = channelListNodesForServer(sid);
+    if (channelListNodes.isEmpty()) return List.of();
 
     Map<String, Boolean> autoByChannel = channelAutoReattachByServer.getOrDefault(sid, Map.of());
     ArrayList<ServerTreeDockable.ManagedChannelEntry> out = new ArrayList<>();
 
-    for (int i = 0; i < channelListNode.getChildCount(); i++) {
-      DefaultMutableTreeNode child = (DefaultMutableTreeNode) channelListNode.getChildAt(i);
-      Object userObject = child.getUserObject();
-      if (!(userObject instanceof ServerTreeNodeData nodeData)) continue;
-      if (nodeData.ref == null || !nodeData.ref.isChannel()) continue;
-      String channel = Objects.toString(nodeData.ref.target(), "").trim();
-      if (channel.isEmpty()) continue;
-      boolean autoReattach = autoByChannel.getOrDefault(foldChannelKey(channel), Boolean.TRUE);
-      int notifications = Math.max(0, nodeData.unread) + Math.max(0, nodeData.highlightUnread);
-      out.add(
-          new ServerTreeDockable.ManagedChannelEntry(
-              channel, nodeData.detached, autoReattach, notifications));
+    for (DefaultMutableTreeNode channelListNode : channelListNodes) {
+      for (int i = 0; i < channelListNode.getChildCount(); i++) {
+        DefaultMutableTreeNode child = (DefaultMutableTreeNode) channelListNode.getChildAt(i);
+        Object userObject = child.getUserObject();
+        if (!(userObject instanceof ServerTreeNodeData nodeData)) continue;
+        if (nodeData.ref == null || !nodeData.ref.isChannel()) continue;
+        String channel = Objects.toString(nodeData.ref.target(), "").trim();
+        if (channel.isEmpty()) continue;
+        boolean autoReattach = autoByChannel.getOrDefault(foldChannelKey(channel), Boolean.TRUE);
+        int notifications = Math.max(0, nodeData.unread) + Math.max(0, nodeData.highlightUnread);
+        out.add(
+            new ServerTreeDockable.ManagedChannelEntry(
+                channel, nodeData.detached, autoReattach, notifications));
+      }
     }
     return out.isEmpty() ? List.of() : List.copyOf(out);
   }
@@ -307,7 +309,16 @@ public final class ServerTreeChannelStateCoordinator {
   public void sortChannelsUnderChannelList(String serverId) {
     String sid = context.normalizeServerId(serverId);
     if (sid.isEmpty()) return;
-    DefaultMutableTreeNode channelListNode = context.channelListNode(sid);
+    List<DefaultMutableTreeNode> channelListNodes = channelListNodesForServer(sid);
+    if (channelListNodes.isEmpty()) return;
+
+    for (DefaultMutableTreeNode channelListNode : channelListNodes) {
+      sortChannelsUnderChannelListNode(sid, channelListNode);
+    }
+  }
+
+  private void sortChannelsUnderChannelListNode(
+      String sid, DefaultMutableTreeNode channelListNode) {
     if (channelListNode == null) return;
 
     ArrayList<DefaultMutableTreeNode> channelNodes = new ArrayList<>();
@@ -429,23 +440,69 @@ public final class ServerTreeChannelStateCoordinator {
   public void persistCustomOrderFromTree(String serverId) {
     String sid = context.normalizeServerId(serverId);
     if (sid.isEmpty()) return;
-    DefaultMutableTreeNode channelListNode = context.channelListNode(sid);
-    if (channelListNode == null) return;
+    List<DefaultMutableTreeNode> channelListNodes = channelListNodesForServer(sid);
+    if (channelListNodes.isEmpty()) return;
 
     ArrayList<String> customOrder = new ArrayList<>();
-    for (int i = 0; i < channelListNode.getChildCount(); i++) {
-      DefaultMutableTreeNode child = (DefaultMutableTreeNode) channelListNode.getChildAt(i);
-      Object userObject = child.getUserObject();
-      if (!(userObject instanceof ServerTreeNodeData nodeData)) continue;
-      if (nodeData.ref == null || !nodeData.ref.isChannel()) continue;
-      String channel = Objects.toString(nodeData.ref.target(), "").trim();
-      if (channel.isEmpty()) continue;
-      if (containsIgnoreCase(customOrder, channel)) continue;
-      customOrder.add(channel);
+    for (DefaultMutableTreeNode channelListNode : channelListNodes) {
+      for (int i = 0; i < channelListNode.getChildCount(); i++) {
+        DefaultMutableTreeNode child = (DefaultMutableTreeNode) channelListNode.getChildAt(i);
+        Object userObject = child.getUserObject();
+        if (!(userObject instanceof ServerTreeNodeData nodeData)) continue;
+        if (nodeData.ref == null || !nodeData.ref.isChannel()) continue;
+        String channel = Objects.toString(nodeData.ref.target(), "").trim();
+        if (channel.isEmpty()) continue;
+        if (containsIgnoreCase(customOrder, channel)) continue;
+        customOrder.add(channel);
+      }
     }
     channelCustomOrderByServer.put(sid, customOrder);
     if (runtimeConfig != null) {
       runtimeConfig.rememberServerTreeChannelCustomOrder(sid, customOrder);
+    }
+  }
+
+  private List<DefaultMutableTreeNode> channelListNodesForServer(String serverId) {
+    String sid = context.normalizeServerId(serverId);
+    if (sid.isEmpty()) return List.of();
+    DefaultMutableTreeNode primary = context.channelListNode(sid);
+    if (primary == null) return List.of();
+
+    DefaultMutableTreeNode serverNode = resolveOwningServerNode(primary, sid);
+    if (serverNode == null) return List.of(primary);
+
+    ArrayList<DefaultMutableTreeNode> out = new ArrayList<>();
+    collectChannelListNodes(serverNode, out);
+    if (out.isEmpty()) out.add(primary);
+    return List.copyOf(out);
+  }
+
+  private static DefaultMutableTreeNode resolveOwningServerNode(
+      DefaultMutableTreeNode node, String serverId) {
+    DefaultMutableTreeNode current = node;
+    String sid = Objects.toString(serverId, "").trim();
+    while (current != null) {
+      Object userObject = current.getUserObject();
+      if (userObject instanceof String s && s.trim().equalsIgnoreCase(sid)) {
+        return current;
+      }
+      current =
+          current.getParent() instanceof DefaultMutableTreeNode parentNode ? parentNode : null;
+    }
+    return null;
+  }
+
+  private static void collectChannelListNodes(
+      DefaultMutableTreeNode parent, List<DefaultMutableTreeNode> out) {
+    if (parent == null || out == null) return;
+    Object userObject = parent.getUserObject();
+    if (userObject instanceof ServerTreeNodeData nodeData
+        && nodeData.ref != null
+        && nodeData.ref.isChannelList()) {
+      out.add(parent);
+    }
+    for (int i = 0; i < parent.getChildCount(); i++) {
+      collectChannelListNodes((DefaultMutableTreeNode) parent.getChildAt(i), out);
     }
   }
 
