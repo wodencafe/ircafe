@@ -62,6 +62,8 @@ public class SwingUiPort implements UiPort {
   private final ActiveInputRouter activeInputRouter;
   private final FlowableProcessor<String> quasselNetworkManagerRequestsFromApp =
       PublishProcessor.<String>create().toSerialized();
+  private final Object quasselNetworkTooltipLock = new Object();
+  private final Map<String, Map<String, String>> quasselNetworkTooltipByServer = new HashMap<>();
 
   // Avoid rebuilding nick completions on every metadata refresh (away/account/hostmask) by
   // skipping completion updates if the nick *set* hasn't changed.
@@ -183,6 +185,7 @@ public class SwingUiPort implements UiPort {
     this.outboundBus = outboundBus;
     this.chatDockManager = chatDockManager;
     this.activeInputRouter = activeInputRouter;
+    this.serverTree.setQuasselNetworkTooltipProvider(this::quasselNetworkTooltip);
   }
 
   @Override
@@ -708,6 +711,7 @@ public class SwingUiPort implements UiPort {
           String sid = Objects.toString(serverId, "").trim();
           List<cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary>
               safeNetworks = networks == null ? List.of() : List.copyOf(networks);
+          cacheQuasselNetworkSummaries(sid, safeNetworks);
 
           while (true) {
             javax.swing.DefaultListModel<QuasselNetworkChoice> model =
@@ -1026,6 +1030,79 @@ public class SwingUiPort implements UiPort {
             ? Integer.toString(summary.networkId())
             : Objects.toString(summary.networkName(), "").trim();
     return token.isEmpty() ? ("network-" + summary.networkId()) : token;
+  }
+
+  private String quasselNetworkTooltip(String serverId, String networkToken) {
+    String sid = Objects.toString(serverId, "").trim();
+    String token = normalizeNetworkToken(networkToken);
+    if (sid.isEmpty() || token.isEmpty()) return "";
+    synchronized (quasselNetworkTooltipLock) {
+      Map<String, String> byToken = quasselNetworkTooltipByServer.get(sid);
+      if (byToken == null || byToken.isEmpty()) return "";
+      return Objects.toString(byToken.getOrDefault(token, ""), "");
+    }
+  }
+
+  private void cacheQuasselNetworkSummaries(
+      String serverId,
+      List<cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    Map<String, String> byToken = new HashMap<>();
+    if (networks != null) {
+      for (cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary summary :
+          networks) {
+        if (summary == null) continue;
+        String tooltip = renderQuasselNetworkChoiceLabel(summary);
+        if (tooltip.isBlank()) continue;
+        for (String candidate : networkTokenCandidates(summary)) {
+          if (!candidate.isBlank()) {
+            byToken.put(candidate, tooltip);
+          }
+        }
+      }
+    }
+    synchronized (quasselNetworkTooltipLock) {
+      if (byToken.isEmpty()) {
+        quasselNetworkTooltipByServer.remove(sid);
+      } else {
+        quasselNetworkTooltipByServer.put(sid, Map.copyOf(byToken));
+      }
+    }
+  }
+
+  private static List<String> networkTokenCandidates(
+      cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary summary) {
+    if (summary == null) return List.of();
+    ArrayList<String> out = new ArrayList<>(6);
+    String idToken = summary.networkId() >= 0 ? Integer.toString(summary.networkId()) : "";
+    String name = Objects.toString(summary.networkName(), "").trim();
+    String choiceToken = networkChoiceToken(summary);
+    addTokenCandidate(out, idToken);
+    addTokenCandidate(out, name);
+    addTokenCandidate(out, name.toLowerCase(Locale.ROOT));
+    addTokenCandidate(out, sanitizeNetworkToken(name));
+    addTokenCandidate(out, sanitizeNetworkToken(choiceToken));
+    addTokenCandidate(out, choiceToken);
+    return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private static void addTokenCandidate(List<String> out, String value) {
+    String token = normalizeNetworkToken(value);
+    if (token.isEmpty() || out.contains(token)) return;
+    out.add(token);
+  }
+
+  private static String normalizeNetworkToken(String value) {
+    return Objects.toString(value, "").trim().toLowerCase(Locale.ROOT);
+  }
+
+  private static String sanitizeNetworkToken(String value) {
+    String raw = normalizeNetworkToken(value);
+    if (raw.isEmpty()) return "";
+    String token = raw.replaceAll("[^a-z0-9._-]+", "-");
+    token = token.replaceAll("^-+", "").replaceAll("-+$", "");
+    return token;
   }
 
   @Override

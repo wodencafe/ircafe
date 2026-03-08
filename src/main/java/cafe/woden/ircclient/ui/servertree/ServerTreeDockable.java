@@ -122,6 +122,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import javax.swing.Action;
@@ -343,6 +344,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private volatile boolean serverTreeNotificationBadgesEnabled = true;
   private volatile Color unreadChannelTextColor = null;
   private volatile Color highlightChannelTextColor = null;
+  private volatile BiFunction<String, String, String> quasselNetworkTooltipProvider =
+      (serverId, networkToken) -> "";
   private boolean startupSelectionCompleted = false;
 
   public ServerTreeDockable(
@@ -864,7 +867,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 requestStreams,
                 channelTargetOperations::canEditChannelModesForTarget,
                 quasselNetworkParentResolver::isQuasselNetworkNode,
-                quasselNetworkParentResolver::isQuasselEmptyStateNode));
+                quasselNetworkParentResolver::isQuasselEmptyStateNode,
+                this::quasselNetworkTooltip));
 
     this.tooltipResolver = viewInteractionCollaborators.tooltipResolver();
     this.contextMenuBuilder = viewInteractionCollaborators.contextMenuBuilder();
@@ -1329,6 +1333,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return requestApi.quasselNetworkManagerRequests();
   }
 
+  public void setQuasselNetworkTooltipProvider(
+      BiFunction<String, String, String> quasselNetworkTooltipProvider) {
+    this.quasselNetworkTooltipProvider =
+        quasselNetworkTooltipProvider == null
+            ? (serverId, networkToken) -> ""
+            : quasselNetworkTooltipProvider;
+  }
+
   public void setPinnedDockableProvider(Function<TargetRef, Dockable> provider) {
     requestApi.setPinnedDockableProvider(provider);
   }
@@ -1622,6 +1634,16 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private TreePath defaultSelectionPath() {
     return expansionStateManager.defaultSelectionPath();
+  }
+
+  private String quasselNetworkTooltip(String serverId, String networkToken) {
+    BiFunction<String, String, String> provider = quasselNetworkTooltipProvider;
+    if (provider == null) return "";
+    String sid = Objects.toString(serverId, "").trim();
+    String token = Objects.toString(networkToken, "").trim();
+    if (sid.isEmpty() || token.isEmpty()) return "";
+    String tip = provider.apply(sid, token);
+    return Objects.toString(tip, "").trim();
   }
 
   private boolean isApplicationJfrActive() {

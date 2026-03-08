@@ -473,6 +473,72 @@ class QuasselOutboundCommandServiceTest {
     verify(ui, never()).promptQuasselNetworkManagerAction(anyString(), anyList());
   }
 
+  @Test
+  void quasselNetworkManagerDirectConnectExecutesWithoutPromptReopen() {
+    TargetRef status = new TargetRef("quassel", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(serverCatalog.find("quassel"))
+        .thenReturn(
+            Optional.of(serverWithBackend("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(irc.quasselCoreConnectNetwork("quassel", "2")).thenReturn(Completable.complete());
+
+    service.handleQuasselNetworkManager(disposables, "quassel connect 2");
+
+    verify(irc).quasselCoreConnectNetwork("quassel", "2");
+    verify(ui, never()).promptQuasselNetworkManagerAction(anyString(), anyList());
+  }
+
+  @Test
+  void quasselNetworkManagerDirectDisconnectExecutesWithoutPromptReopen() {
+    TargetRef status = new TargetRef("quassel", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(serverCatalog.find("quassel"))
+        .thenReturn(
+            Optional.of(serverWithBackend("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(irc.quasselCoreDisconnectNetwork("quassel", "2")).thenReturn(Completable.complete());
+
+    service.handleQuasselNetworkManager(disposables, "quassel disconnect 2");
+
+    verify(irc).quasselCoreDisconnectNetwork("quassel", "2");
+    verify(ui, never()).promptQuasselNetworkManagerAction(anyString(), anyList());
+  }
+
+  @Test
+  void quasselNetworkManagerDirectRemoveExecutesWithoutPromptReopen() {
+    TargetRef status = new TargetRef("quassel", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(serverCatalog.find("quassel"))
+        .thenReturn(
+            Optional.of(serverWithBackend("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(irc.quasselCoreRemoveNetwork("quassel", "2")).thenReturn(Completable.complete());
+
+    service.handleQuasselNetworkManager(disposables, "quassel remove 2");
+
+    verify(irc).quasselCoreRemoveNetwork("quassel", "2");
+    verify(ui, never()).promptQuasselNetworkManagerAction(anyString(), anyList());
+  }
+
+  @Test
+  void quasselNetworkManagerDirectAddOpensManagerPrompt() {
+    TargetRef status = new TargetRef("quassel", "status");
+    QuasselCoreControlPort.QuasselCoreNetworkSummary summary =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
+            2, "libera", false, true, 1, "irc.libera.chat", 6697, true, Map.of());
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(serverCatalog.find("quassel"))
+        .thenReturn(
+            Optional.of(serverWithBackend("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(irc.quasselCoreNetworks("quassel")).thenReturn(List.of(summary));
+    when(ui.promptQuasselNetworkManagerAction(eq("quassel"), anyList()))
+        .thenReturn(Optional.empty());
+
+    service.handleQuasselNetworkManager(disposables, "quassel add");
+
+    verify(irc).quasselCoreNetworks("quassel");
+    verify(ui).promptQuasselNetworkManagerAction(eq("quassel"), anyList());
+    verify(irc, never()).quasselCoreCreateNetwork(anyString(), any());
+  }
+
   private static IrcProperties.Server serverWithBackend(
       String id, IrcProperties.Server.Backend backend) {
     return new IrcProperties.Server(

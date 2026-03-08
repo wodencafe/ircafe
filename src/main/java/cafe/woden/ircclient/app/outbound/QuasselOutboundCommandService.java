@@ -158,8 +158,10 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
     handler.handle(disposables, sid, status, tokens, cursor, verb);
   }
 
-  public void handleQuasselNetworkManager(CompositeDisposable disposables, String serverId) {
-    String sid = normalizeConnectionTargetServerId(serverId);
+  public void handleQuasselNetworkManager(CompositeDisposable disposables, String args) {
+    List<String> tokens = tokenizeWhitespaceArgs(args);
+    String serverHint = tokens.isEmpty() ? "" : tokens.get(0);
+    String sid = normalizeConnectionTargetServerId(serverHint);
     TargetRef safe = targetCoordinator.safeStatusTarget();
     if (sid.isBlank()) {
       ui.appendStatus(
@@ -170,7 +172,14 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
     if (!ensureQuasselServerBackend(sid, status, "(qnet-ui)")) {
       return;
     }
-    openQuasselNetworkManagerPrompt(disposables, sid, status);
+
+    Optional<QuasselNetworkManagerAction> directAction =
+        parseDirectQuasselNetworkManagerAction(tokens);
+    if (directAction.isEmpty()) {
+      openQuasselNetworkManagerPrompt(disposables, sid, status);
+      return;
+    }
+    processQuasselNetworkManagerAction(disposables, sid, status, directAction.orElseThrow(), false);
   }
 
   private void openQuasselNetworkManagerPrompt(
@@ -183,26 +192,27 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
       return;
     }
     QuasselNetworkManagerAction action = maybeAction.orElseThrow();
-    processQuasselNetworkManagerAction(disposables, serverId, status, action);
+    processQuasselNetworkManagerAction(disposables, serverId, status, action, true);
   }
 
   private void processQuasselNetworkManagerAction(
       CompositeDisposable disposables,
       String serverId,
       TargetRef status,
-      QuasselNetworkManagerAction action) {
+      QuasselNetworkManagerAction action,
+      boolean reopenPrompt) {
     if (action == null || action.operation() == null) {
-      openQuasselNetworkManagerPrompt(disposables, serverId, status);
+      maybeReopenQuasselNetworkManagerPrompt(disposables, serverId, status, reopenPrompt);
       return;
     }
 
     switch (action.operation()) {
-      case REFRESH -> openQuasselNetworkManagerPrompt(disposables, serverId, status);
+      case REFRESH -> maybeReopenQuasselNetworkManagerPrompt(disposables, serverId, status, true);
       case CONNECT -> {
         String network = Objects.toString(action.networkIdOrName(), "").trim();
         if (network.isEmpty()) {
           ui.appendStatus(status, "(qnet-ui)", "Select a network first.");
-          openQuasselNetworkManagerPrompt(disposables, serverId, status);
+          maybeReopenQuasselNetworkManagerPrompt(disposables, serverId, status, reopenPrompt);
           return;
         }
         disposables.add(
@@ -214,18 +224,20 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
                           status,
                           "(qnet-ui)",
                           "Requested connect for Quassel network '" + network + "'.");
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
+                      maybeReopenQuasselNetworkManagerPrompt(
+                          disposables, serverId, status, reopenPrompt);
                     },
                     err -> {
                       ui.appendError(status, "(qnet-ui-error)", String.valueOf(err));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
+                      maybeReopenQuasselNetworkManagerPrompt(
+                          disposables, serverId, status, reopenPrompt);
                     }));
       }
       case DISCONNECT -> {
         String network = Objects.toString(action.networkIdOrName(), "").trim();
         if (network.isEmpty()) {
           ui.appendStatus(status, "(qnet-ui)", "Select a network first.");
-          openQuasselNetworkManagerPrompt(disposables, serverId, status);
+          maybeReopenQuasselNetworkManagerPrompt(disposables, serverId, status, reopenPrompt);
           return;
         }
         disposables.add(
@@ -237,18 +249,20 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
                           status,
                           "(qnet-ui)",
                           "Requested disconnect for Quassel network '" + network + "'.");
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
+                      maybeReopenQuasselNetworkManagerPrompt(
+                          disposables, serverId, status, reopenPrompt);
                     },
                     err -> {
                       ui.appendError(status, "(qnet-ui-error)", String.valueOf(err));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
+                      maybeReopenQuasselNetworkManagerPrompt(
+                          disposables, serverId, status, reopenPrompt);
                     }));
       }
       case REMOVE -> {
         String network = Objects.toString(action.networkIdOrName(), "").trim();
         if (network.isEmpty()) {
           ui.appendStatus(status, "(qnet-ui)", "Select a network first.");
-          openQuasselNetworkManagerPrompt(disposables, serverId, status);
+          maybeReopenQuasselNetworkManagerPrompt(disposables, serverId, status, reopenPrompt);
           return;
         }
         disposables.add(
@@ -260,17 +274,19 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
                           status,
                           "(qnet-ui)",
                           "Requested removal of Quassel network '" + network + "'.");
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
+                      maybeReopenQuasselNetworkManagerPrompt(
+                          disposables, serverId, status, reopenPrompt);
                     },
                     err -> {
                       ui.appendError(status, "(qnet-ui-error)", String.valueOf(err));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
+                      maybeReopenQuasselNetworkManagerPrompt(
+                          disposables, serverId, status, reopenPrompt);
                     }));
       }
       case ADD -> {
         QuasselCoreControlPort.QuasselCoreNetworkCreateRequest request = action.createRequest();
         if (request == null) {
-          openQuasselNetworkManagerPrompt(disposables, serverId, status);
+          maybeReopenQuasselNetworkManagerPrompt(disposables, serverId, status, true);
           return;
         }
         disposables.add(
@@ -288,11 +304,13 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
                               + ":"
                               + request.serverPort()
                               + (request.useTls() ? " (tls)" : " (plain)"));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
+                      maybeReopenQuasselNetworkManagerPrompt(
+                          disposables, serverId, status, reopenPrompt);
                     },
                     err -> {
                       ui.appendError(status, "(qnet-ui-error)", String.valueOf(err));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
+                      maybeReopenQuasselNetworkManagerPrompt(
+                          disposables, serverId, status, reopenPrompt);
                     }));
       }
       case EDIT -> {
@@ -300,7 +318,7 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
         QuasselCoreControlPort.QuasselCoreNetworkUpdateRequest request = action.updateRequest();
         if (network.isEmpty() || request == null) {
           ui.appendStatus(status, "(qnet-ui)", "Select a network first.");
-          openQuasselNetworkManagerPrompt(disposables, serverId, status);
+          maybeReopenQuasselNetworkManagerPrompt(disposables, serverId, status, reopenPrompt);
           return;
         }
         disposables.add(
@@ -318,14 +336,47 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
                               + ":"
                               + request.serverPort()
                               + (request.useTls() ? " (tls)" : " (plain)"));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
+                      maybeReopenQuasselNetworkManagerPrompt(
+                          disposables, serverId, status, reopenPrompt);
                     },
                     err -> {
                       ui.appendError(status, "(qnet-ui-error)", String.valueOf(err));
-                      openQuasselNetworkManagerPrompt(disposables, serverId, status);
+                      maybeReopenQuasselNetworkManagerPrompt(
+                          disposables, serverId, status, reopenPrompt);
                     }));
       }
     }
+  }
+
+  private Optional<QuasselNetworkManagerAction> parseDirectQuasselNetworkManagerAction(
+      List<String> tokens) {
+    if (tokens == null || tokens.size() < 2) return Optional.empty();
+    String verb = Objects.toString(tokens.get(1), "").trim().toLowerCase(Locale.ROOT);
+    if (verb.isEmpty()) return Optional.empty();
+
+    if ("add".equals(verb)) {
+      return Optional.of(QuasselNetworkManagerAction.add(null));
+    }
+
+    if (("connect".equals(verb) || "disconnect".equals(verb) || "remove".equals(verb))
+        && tokens.size() >= 3) {
+      String network = Objects.toString(tokens.get(2), "").trim();
+      if (network.isEmpty()) return Optional.empty();
+      return switch (verb) {
+        case "connect" -> Optional.of(QuasselNetworkManagerAction.connect(network));
+        case "disconnect" -> Optional.of(QuasselNetworkManagerAction.disconnect(network));
+        case "remove" -> Optional.of(QuasselNetworkManagerAction.remove(network));
+        default -> Optional.empty();
+      };
+    }
+
+    return Optional.empty();
+  }
+
+  private void maybeReopenQuasselNetworkManagerPrompt(
+      CompositeDisposable disposables, String serverId, TargetRef status, boolean reopenPrompt) {
+    if (!reopenPrompt) return;
+    openQuasselNetworkManagerPrompt(disposables, serverId, status);
   }
 
   private String normalizeConnectionTargetServerId(String target) {

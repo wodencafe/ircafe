@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.servertree.view;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.ui.servertree.ServerTreeBouncerBackends;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import java.awt.event.MouseEvent;
 import java.util.Objects;
@@ -46,6 +47,10 @@ public final class ServerTreeTooltipProvider {
 
     boolean isServerNode(DefaultMutableTreeNode node);
 
+    boolean isQuasselNetworkNode(DefaultMutableTreeNode node);
+
+    boolean isQuasselEmptyStateNode(DefaultMutableTreeNode node);
+
     ConnectionState connectionStateForServer(String serverId);
 
     boolean desiredOnlineForServer(String serverId);
@@ -63,6 +68,8 @@ public final class ServerTreeTooltipProvider {
     boolean isApplicationJfrActive();
 
     boolean isBouncerControlStatusNode(ServerTreeNodeData nodeData);
+
+    String quasselNetworkTooltip(String serverId, String networkToken);
   }
 
   public static Context context(
@@ -75,6 +82,8 @@ public final class ServerTreeTooltipProvider {
       Predicate<DefaultMutableTreeNode> isMonitorGroupNode,
       Predicate<DefaultMutableTreeNode> isOtherGroupNode,
       Predicate<DefaultMutableTreeNode> isServerNode,
+      Predicate<DefaultMutableTreeNode> isQuasselNetworkNode,
+      Predicate<DefaultMutableTreeNode> isQuasselEmptyStateNode,
       Function<String, ConnectionState> connectionStateForServer,
       Function<String, Boolean> desiredOnlineForServer,
       Function<String, String> connectionDiagnosticsTipForServer,
@@ -83,7 +92,8 @@ public final class ServerTreeTooltipProvider {
       Function<String, String> serverDisplayName,
       TriPredicate<String, String, String> isAutoConnectEnabled,
       Supplier<Boolean> isApplicationJfrActive,
-      Predicate<ServerTreeNodeData> isBouncerControlStatusNode) {
+      Predicate<ServerTreeNodeData> isBouncerControlStatusNode,
+      BiFunction<String, String, String> quasselNetworkTooltip) {
     Objects.requireNonNull(serverIdAt, "serverIdAt");
     Objects.requireNonNull(serverPathForId, "serverPathForId");
     Objects.requireNonNull(isIrcRootNode, "isIrcRootNode");
@@ -93,6 +103,8 @@ public final class ServerTreeTooltipProvider {
     Objects.requireNonNull(isMonitorGroupNode, "isMonitorGroupNode");
     Objects.requireNonNull(isOtherGroupNode, "isOtherGroupNode");
     Objects.requireNonNull(isServerNode, "isServerNode");
+    Objects.requireNonNull(isQuasselNetworkNode, "isQuasselNetworkNode");
+    Objects.requireNonNull(isQuasselEmptyStateNode, "isQuasselEmptyStateNode");
     Objects.requireNonNull(connectionStateForServer, "connectionStateForServer");
     Objects.requireNonNull(desiredOnlineForServer, "desiredOnlineForServer");
     Objects.requireNonNull(connectionDiagnosticsTipForServer, "connectionDiagnosticsTipForServer");
@@ -102,6 +114,7 @@ public final class ServerTreeTooltipProvider {
     Objects.requireNonNull(isAutoConnectEnabled, "isAutoConnectEnabled");
     Objects.requireNonNull(isApplicationJfrActive, "isApplicationJfrActive");
     Objects.requireNonNull(isBouncerControlStatusNode, "isBouncerControlStatusNode");
+    Objects.requireNonNull(quasselNetworkTooltip, "quasselNetworkTooltip");
     return new Context() {
       @Override
       public String serverIdAt(int x, int y) {
@@ -149,6 +162,16 @@ public final class ServerTreeTooltipProvider {
       }
 
       @Override
+      public boolean isQuasselNetworkNode(DefaultMutableTreeNode node) {
+        return isQuasselNetworkNode.test(node);
+      }
+
+      @Override
+      public boolean isQuasselEmptyStateNode(DefaultMutableTreeNode node) {
+        return isQuasselEmptyStateNode.test(node);
+      }
+
+      @Override
       public ConnectionState connectionStateForServer(String serverId) {
         return connectionStateForServer.apply(serverId);
       }
@@ -191,6 +214,11 @@ public final class ServerTreeTooltipProvider {
       @Override
       public boolean isBouncerControlStatusNode(ServerTreeNodeData nodeData) {
         return isBouncerControlStatusNode.test(nodeData);
+      }
+
+      @Override
+      public String quasselNetworkTooltip(String serverId, String networkToken) {
+        return quasselNetworkTooltip.apply(serverId, networkToken);
       }
     };
   }
@@ -242,6 +270,19 @@ public final class ServerTreeTooltipProvider {
     }
 
     Object uo = node.getUserObject();
+    if (uo instanceof ServerTreeQuasselNetworkNodeData networkNodeData) {
+      if (context.isQuasselEmptyStateNode(node) || networkNodeData.emptyState()) {
+        return "No Quassel networks are configured yet. Right-click and choose Add Quassel Network…";
+      }
+      if (context.isQuasselNetworkNode(node)) {
+        String sid = Objects.toString(networkNodeData.serverId(), "").trim();
+        String token = Objects.toString(networkNodeData.networkToken(), "").trim();
+        String tip = Objects.toString(context.quasselNetworkTooltip(sid, token), "").trim();
+        if (!tip.isEmpty()) return tip;
+        return "Quassel network \"" + networkNodeData.label() + "\" (token: " + token + ").";
+      }
+    }
+
     if (uo instanceof ServerTreeNodeData nd && nd.ref != null) {
       String nodeTip = tooltipForNodeData(nd);
       if (nodeTip != null) {

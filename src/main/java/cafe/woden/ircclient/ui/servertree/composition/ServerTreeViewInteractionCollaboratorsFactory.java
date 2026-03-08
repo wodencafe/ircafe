@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import javax.swing.Action;
@@ -80,6 +81,8 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             in.nodeClassifier()::isMonitorGroupNode,
             in.nodeClassifier()::isOtherGroupNode,
             in.uiHooks()::isServerNode,
+            in.isQuasselNetworkNode(),
+            in.isQuasselEmptyStateNode(),
             in.uiHooks()::connectionStateForServer,
             Objects.requireNonNull(in.runtimeState(), "runtimeState")::desiredOnlineForServer,
             in.runtimeState()::connectionDiagnosticsTipForServer,
@@ -91,7 +94,8 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             (backendId, originId, networkKey) ->
                 isAutoConnectEnabled(in, backendId, originId, networkKey),
             Objects.requireNonNull(in.isApplicationJfrActive(), "isApplicationJfrActive"),
-            nodeData -> isBouncerControlStatusNode(nodeData, in)));
+            nodeData -> isBouncerControlStatusNode(nodeData, in),
+            in.quasselNetworkTooltip()));
   }
 
   private static ServerTreeContextMenuBuilder createContextMenuBuilder(
@@ -178,8 +182,35 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       createQuasselNetworkNodeMenuContext(Inputs in) {
     return ServerTreeQuasselNetworkNodeMenuBuilder.context(
         in.uiHooks()::openPinnedChat,
+        (serverId, networkToken) ->
+            in.requestEmitter()
+                .emitOpenQuasselNetworkManager(
+                    encodeQuasselNetworkManagerAction(serverId, "connect", networkToken)),
+        (serverId, networkToken) ->
+            in.requestEmitter()
+                .emitOpenQuasselNetworkManager(
+                    encodeQuasselNetworkManagerAction(serverId, "disconnect", networkToken)),
+        (serverId, networkToken) ->
+            in.requestEmitter()
+                .emitOpenQuasselNetworkManager(
+                    encodeQuasselNetworkManagerAction(serverId, "remove", networkToken)),
+        serverId ->
+            in.requestEmitter()
+                .emitOpenQuasselNetworkManager(
+                    encodeQuasselNetworkManagerAction(serverId, "add", "")),
         Objects.requireNonNull(in.requestEmitter(), "requestEmitter")::emitOpenQuasselSetup,
         in.requestEmitter()::emitOpenQuasselNetworkManager);
+  }
+
+  private static String encodeQuasselNetworkManagerAction(
+      String serverId, String verb, String networkToken) {
+    String sid = Objects.toString(serverId, "").trim();
+    String op = Objects.toString(verb, "").trim().toLowerCase(java.util.Locale.ROOT);
+    String token = Objects.toString(networkToken, "").trim();
+    if (sid.isEmpty()) return "";
+    if (op.isEmpty()) return sid;
+    if (token.isEmpty()) return sid + " " + op;
+    return sid + " " + op + " " + token;
   }
 
   private static java.util.Optional<cafe.woden.ircclient.config.ServerEntry> serverEntry(
@@ -411,5 +442,6 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerTreeRequestStreams requestStreams,
       Predicate<TargetRef> canEditChannelModes,
       Predicate<javax.swing.tree.DefaultMutableTreeNode> isQuasselNetworkNode,
-      Predicate<javax.swing.tree.DefaultMutableTreeNode> isQuasselEmptyStateNode) {}
+      Predicate<javax.swing.tree.DefaultMutableTreeNode> isQuasselEmptyStateNode,
+      BiFunction<String, String, String> quasselNetworkTooltip) {}
 }
