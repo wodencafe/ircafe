@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ignore;
 import cafe.woden.ircclient.ignore.api.IgnoreLevels;
 import cafe.woden.ircclient.ignore.api.IgnoreTextPatternMode;
 import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.util.List;
@@ -133,6 +134,10 @@ public class IgnoreStatusService {
 
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return new Status(false, false, false, "");
+    String baseSid = TargetRef.parseQualifiedTarget(sid).baseTarget();
+    if (baseSid.isBlank()) {
+      baseSid = sid;
+    }
 
     long nowEpochMs = System.currentTimeMillis();
     if (ignoreListService != null) {
@@ -147,7 +152,7 @@ public class IgnoreStatusService {
     // Prefer a useful hostmask: explicit hostmask wins, otherwise try learned hostmask.
     if (!IgnoreMaskMatcher.isUsefulHostmask(hm) && userListStore != null && !n.isEmpty()) {
       try {
-        String learned = userListStore.getLearnedHostmask(sid, n);
+        String learned = userListStore.getLearnedHostmask(baseSid, n);
         String lhm = Objects.toString(learned, "").trim();
         if (IgnoreMaskMatcher.isUsefulHostmask(lhm)) hm = lhm;
       } catch (Exception ignored) {

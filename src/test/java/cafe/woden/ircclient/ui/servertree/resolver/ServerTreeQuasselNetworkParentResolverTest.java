@@ -29,7 +29,11 @@ class ServerTreeQuasselNetworkParentResolverTest {
             model,
             sid -> "quassel".equalsIgnoreCase(sid),
             "Channel List",
-            "Private Messages");
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
 
     ServerNodes serverNodes = serverNodes("quassel");
     TargetRef channel = new TargetRef("quassel", "#ircafe{net:libera}");
@@ -59,7 +63,11 @@ class ServerTreeQuasselNetworkParentResolverTest {
             model,
             sid -> "quassel".equalsIgnoreCase(sid),
             "Channel List",
-            "Private Messages");
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
 
     ServerNodes serverNodes = serverNodes("quassel");
     DefaultMutableTreeNode firstParent =
@@ -74,6 +82,35 @@ class ServerTreeQuasselNetworkParentResolverTest {
   }
 
   @Test
+  void routesQualifiedIgnoresToNetworkOtherNode() {
+    Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+    DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));
+    ServerTreeQuasselNetworkParentResolver resolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            sid -> "quassel".equalsIgnoreCase(sid),
+            "Channel List",
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
+
+    ServerNodes serverNodes = serverNodes("quassel");
+    resolver.resolveParent(new TargetRef("quassel", "#one{net:libera}"), serverNodes);
+    TargetRef ignores = TargetRef.ignores("quassel", "libera");
+
+    DefaultMutableTreeNode parent = resolver.resolveParent(ignores, serverNodes);
+    assertNotNull(parent);
+    assertTrue(parent.getUserObject() instanceof ServerTreeNodeData);
+    ServerTreeNodeData parentData = (ServerTreeNodeData) parent.getUserObject();
+    assertEquals("Other", parentData.label);
+    assertNotNull(leaves.get(ignores));
+    assertSame(parent, leaves.get(ignores).getParent());
+  }
+
+  @Test
   void ignoresUnqualifiedAndNonQuasselTargets() {
     Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
     DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));
@@ -83,7 +120,11 @@ class ServerTreeQuasselNetworkParentResolverTest {
             model,
             sid -> "quassel".equalsIgnoreCase(sid),
             "Channel List",
-            "Private Messages");
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
 
     assertNull(resolver.resolveParent(new TargetRef("quassel", "#ircafe"), serverNodes("quassel")));
     assertNull(
@@ -101,7 +142,11 @@ class ServerTreeQuasselNetworkParentResolverTest {
             model,
             sid -> "quassel".equalsIgnoreCase(sid),
             "Channel List",
-            "Private Messages");
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
 
     ServerNodes serverNodes = serverNodes("quassel");
     TargetRef legacyRef = TargetRef.channelList("quassel");
@@ -129,7 +174,11 @@ class ServerTreeQuasselNetworkParentResolverTest {
             model,
             sid -> "quassel".equalsIgnoreCase(sid),
             "Channel List",
-            "Private Messages");
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
     ServerNodes serverNodes = serverNodes("quassel");
 
     resolver.initializeServer("quassel", serverNodes);
@@ -156,7 +205,11 @@ class ServerTreeQuasselNetworkParentResolverTest {
             model,
             sid -> "quassel".equalsIgnoreCase(sid),
             "Channel List",
-            "Private Messages");
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
     ServerNodes serverNodes = serverNodes("quassel");
     resolver.initializeServer("quassel", serverNodes);
 
@@ -189,7 +242,11 @@ class ServerTreeQuasselNetworkParentResolverTest {
             model,
             sid -> "quassel".equalsIgnoreCase(sid),
             "Channel List",
-            "Private Messages");
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
     ServerNodes serverNodes = serverNodes("quassel");
     resolver.initializeServer("quassel", serverNodes);
 
@@ -227,7 +284,11 @@ class ServerTreeQuasselNetworkParentResolverTest {
             model,
             sid -> "quassel".equalsIgnoreCase(sid),
             "Channel List",
-            "Private Messages");
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
     ServerNodes serverNodes = serverNodes("quassel");
     resolver.initializeServer("quassel", serverNodes);
 
@@ -253,7 +314,7 @@ class ServerTreeQuasselNetworkParentResolverTest {
   }
 
   @Test
-  void syncServerNetworksMovesOtherUnderNetworkWhenNoCoreScopedChildren() {
+  void syncServerNetworksDetachesRootOtherWhenNetworksPresent() {
     Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
     DefaultMutableTreeNode root = new DefaultMutableTreeNode("root");
     DefaultTreeModel model = new DefaultTreeModel(root);
@@ -263,7 +324,11 @@ class ServerTreeQuasselNetworkParentResolverTest {
             model,
             sid -> "quassel".equalsIgnoreCase(sid),
             "Channel List",
-            "Private Messages");
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
     ServerNodes serverNodes = serverNodes("quassel");
     root.add(serverNodes.serverNode);
     resolver.initializeServer("quassel", serverNodes);
@@ -275,13 +340,11 @@ class ServerTreeQuasselNetworkParentResolverTest {
             new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
                 "2", "Libera", true, true)));
 
-    DefaultMutableTreeNode network = networkNodeByToken(serverNodes.serverNode, "2");
-    assertNotNull(network);
-    assertSame(network, serverNodes.otherNode.getParent());
+    assertNull(serverNodes.otherNode.getParent());
   }
 
   @Test
-  void syncServerNetworksKeepsOtherAtRootWhenCoreScopedChildrenExist() {
+  void syncServerNetworksRestoresRootOtherWhenNetworksRemoved() {
     Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
     DefaultMutableTreeNode root = new DefaultMutableTreeNode("root");
     DefaultTreeModel model = new DefaultTreeModel(root);
@@ -291,11 +354,13 @@ class ServerTreeQuasselNetworkParentResolverTest {
             model,
             sid -> "quassel".equalsIgnoreCase(sid),
             "Channel List",
-            "Private Messages");
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
     ServerNodes serverNodes = serverNodes("quassel");
     root.add(serverNodes.serverNode);
-    serverNodes.otherNode.add(
-        new DefaultMutableTreeNode(new ServerTreeNodeData(serverNodes.statusRef, "Server")));
     resolver.initializeServer("quassel", serverNodes);
 
     resolver.syncServerNetworks(
@@ -304,6 +369,10 @@ class ServerTreeQuasselNetworkParentResolverTest {
         List.of(
             new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
                 "2", "Libera", true, true)));
+
+    assertNull(serverNodes.otherNode.getParent());
+
+    resolver.syncServerNetworks("quassel", serverNodes, List.of());
 
     assertSame(serverNodes.serverNode, serverNodes.otherNode.getParent());
   }

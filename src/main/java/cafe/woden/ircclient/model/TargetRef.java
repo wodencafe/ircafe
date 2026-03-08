@@ -52,6 +52,10 @@ public final class TargetRef {
     return new TargetRef(serverId, NOTIFICATIONS_TARGET);
   }
 
+  public static TargetRef notifications(String serverId, String networkToken) {
+    return new TargetRef(serverId, withNetworkQualifier(NOTIFICATIONS_TARGET, networkToken));
+  }
+
   public static TargetRef channelList(String serverId) {
     return new TargetRef(serverId, CHANNEL_LIST_TARGET);
   }
@@ -64,8 +68,16 @@ public final class TargetRef {
     return new TargetRef(serverId, WEECHAT_FILTERS_TARGET);
   }
 
+  public static TargetRef weechatFilters(String serverId, String networkToken) {
+    return new TargetRef(serverId, withNetworkQualifier(WEECHAT_FILTERS_TARGET, networkToken));
+  }
+
   public static TargetRef ignores(String serverId) {
     return new TargetRef(serverId, IGNORES_TARGET);
+  }
+
+  public static TargetRef ignores(String serverId, String networkToken) {
+    return new TargetRef(serverId, withNetworkQualifier(IGNORES_TARGET, networkToken));
   }
 
   public static TargetRef dccTransfers(String serverId) {
@@ -76,14 +88,28 @@ public final class TargetRef {
     return new TargetRef(serverId, MONITOR_GROUP_TARGET);
   }
 
+  public static TargetRef monitorGroup(String serverId, String networkToken) {
+    return new TargetRef(serverId, withNetworkQualifier(MONITOR_GROUP_TARGET, networkToken));
+  }
+
   public static TargetRef interceptorsGroup(String serverId) {
     return new TargetRef(serverId, INTERCEPTORS_GROUP_TARGET);
+  }
+
+  public static TargetRef interceptorsGroup(String serverId, String networkToken) {
+    return new TargetRef(serverId, withNetworkQualifier(INTERCEPTORS_GROUP_TARGET, networkToken));
   }
 
   public static TargetRef interceptor(String serverId, String interceptorId) {
     String id = norm(interceptorId);
     if (id.isEmpty()) throw new IllegalArgumentException("interceptorId must not be blank");
     return new TargetRef(serverId, INTERCEPTOR_PREFIX + id);
+  }
+
+  public static TargetRef interceptor(String serverId, String interceptorId, String networkToken) {
+    String id = norm(interceptorId);
+    if (id.isEmpty()) throw new IllegalArgumentException("interceptorId must not be blank");
+    return new TargetRef(serverId, withNetworkQualifier(INTERCEPTOR_PREFIX + id, networkToken));
   }
 
   public static TargetRef applicationUnhandledErrors() {
@@ -178,9 +204,11 @@ public final class TargetRef {
   }
 
   public String interceptorId() {
-    if (!isInterceptor()) return "";
-    if (target.length() <= INTERCEPTOR_PREFIX.length()) return "";
-    return target.substring(INTERCEPTOR_PREFIX.length()).trim();
+    QualifiedTarget parsed = parseQualifiedTarget(target);
+    String base = parsed.baseTarget();
+    if (!base.startsWith(INTERCEPTOR_PREFIX)) return "";
+    if (base.length() <= INTERCEPTOR_PREFIX.length()) return "";
+    return base.substring(INTERCEPTOR_PREFIX.length()).trim();
   }
 
   public boolean isApplicationServer() {

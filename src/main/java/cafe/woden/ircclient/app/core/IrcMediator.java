@@ -490,7 +490,15 @@ public class IrcMediator implements MediatorControlPort {
     String ch = Objects.toString(inboundChannel, "").trim();
     String text = Objects.toString(inboundText, "");
     List<String> levelList = (levels == null || levels.length == 0) ? List.of() : List.of(levels);
-    return inboundIgnorePolicy.decide(sid, f, null, isCtcp, levelList, ch, text);
+    String scopeServerId = inboundIgnoreScopeServerId(sid, ch);
+    return inboundIgnorePolicy.decide(scopeServerId, f, null, isCtcp, levelList, ch, text);
+  }
+
+  private static String inboundIgnoreScopeServerId(String serverId, String inboundChannel) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return "";
+    String token = TargetRef.parseQualifiedTarget(inboundChannel).networkToken();
+    return token.isEmpty() ? sid : TargetRef.withNetworkQualifier(sid, token);
   }
 
   private void handleNoticeOrSpoiler(

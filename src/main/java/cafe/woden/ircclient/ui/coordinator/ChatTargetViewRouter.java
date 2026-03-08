@@ -155,7 +155,7 @@ public final class ChatTargetViewRouter {
       return TargetViewType.UI_ONLY;
     }
     if (target.isIgnores()) {
-      showIgnoresCard(target.serverId());
+      showIgnoresCard(target);
       return TargetViewType.UI_ONLY;
     }
     if (target.isDccTransfers()) {
@@ -243,9 +243,9 @@ public final class ChatTargetViewRouter {
     }
   }
 
-  private void showIgnoresCard(String serverId) {
+  private void showIgnoresCard(TargetRef target) {
     try {
-      ignoresPanel.setServerId(serverId);
+      ignoresPanel.setTarget(target);
       showCard(CARD_IGNORES);
     } catch (Exception ignored) {
     }

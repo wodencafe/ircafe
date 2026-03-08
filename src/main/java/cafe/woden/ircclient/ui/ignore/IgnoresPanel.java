@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.ignore;
 
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import java.awt.BorderLayout;
 import java.util.Objects;
@@ -16,8 +17,8 @@ public final class IgnoresPanel extends JPanel {
 
   private final JLabel serverLabel = new JLabel("Server: (none)");
   private final JButton openButton = new JButton("Open Ignore Lists...");
-  private String serverId = "";
-  private Consumer<String> openIgnoreDialogHandler = sid -> {};
+  private TargetRef targetRef;
+  private Consumer<TargetRef> openIgnoreDialogHandler = ref -> {};
 
   public IgnoresPanel() {
     super(new BorderLayout());
@@ -34,9 +35,11 @@ public final class IgnoresPanel extends JPanel {
     openButton.setEnabled(false);
     openButton.addActionListener(
         e -> {
-          String sid = Objects.toString(serverId, "").trim();
+          TargetRef ref = targetRef;
+          if (ref == null) return;
+          String sid = Objects.toString(ref.serverId(), "").trim();
           if (!isValidServerId(sid)) return;
-          openIgnoreDialogHandler.accept(sid);
+          openIgnoreDialogHandler.accept(ref);
         });
 
     JPanel stack = new JPanel();
@@ -53,18 +56,34 @@ public final class IgnoresPanel extends JPanel {
   }
 
   public void setServerId(String serverId) {
-    this.serverId = Objects.toString(serverId, "").trim();
-    if (this.serverId.isEmpty()) {
+    String sid = Objects.toString(serverId, "").trim();
+    setTarget(sid.isEmpty() ? null : TargetRef.ignores(sid));
+  }
+
+  public void setTarget(TargetRef targetRef) {
+    this.targetRef = targetRef;
+    if (targetRef == null) {
       serverLabel.setText("Server: (none)");
       openButton.setEnabled(false);
       return;
     }
-    serverLabel.setText("Server: " + this.serverId);
-    openButton.setEnabled(isValidServerId(this.serverId));
+    String sid = Objects.toString(targetRef.serverId(), "").trim();
+    String token = Objects.toString(targetRef.networkQualifierToken(), "").trim();
+    if (sid.isEmpty()) {
+      serverLabel.setText("Server: (none)");
+      openButton.setEnabled(false);
+      return;
+    }
+    if (token.isEmpty()) {
+      serverLabel.setText("Server: " + sid);
+    } else {
+      serverLabel.setText("Server: " + sid + " (network: " + token + ")");
+    }
+    openButton.setEnabled(isValidServerId(sid));
   }
 
-  public void setOnOpenIgnoreDialog(Consumer<String> handler) {
-    this.openIgnoreDialogHandler = handler == null ? sid -> {} : handler;
+  public void setOnOpenIgnoreDialog(Consumer<TargetRef> handler) {
+    this.openIgnoreDialogHandler = handler == null ? ref -> {} : handler;
   }
 
   private static boolean isValidServerId(String rawServerId) {

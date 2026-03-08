@@ -702,7 +702,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             nodeBadgeUpdater::refreshAutoConnectBadges);
     this.quasselNetworkParentResolver =
         new ServerTreeQuasselNetworkParentResolver(
-            leaves, model, this::isQuasselServer, CHANNEL_LIST_LABEL, PRIVATE_MESSAGES_LABEL);
+            leaves,
+            model,
+            this::isQuasselServer,
+            CHANNEL_LIST_LABEL,
+            PRIVATE_MESSAGES_LABEL,
+            OTHER_GROUP_LABEL,
+            MONITOR_GROUP_LABEL,
+            INTERCEPTORS_GROUP_LABEL,
+            IGNORES_LABEL);
     this.selectionFallbackPolicy =
         new ServerTreeSelectionFallbackPolicy(
             ServerTreeSelectionFallbackPolicy.context(

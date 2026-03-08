@@ -33,7 +33,11 @@ public final class ServerTreeQuasselNetworkParentResolver {
   private record NetworkNodes(
       DefaultMutableTreeNode networkNode,
       DefaultMutableTreeNode channelListNode,
-      DefaultMutableTreeNode privateMessagesNode) {}
+      DefaultMutableTreeNode privateMessagesNode,
+      DefaultMutableTreeNode otherNode,
+      DefaultMutableTreeNode monitorNode,
+      DefaultMutableTreeNode interceptorsNode,
+      DefaultMutableTreeNode ignoresNode) {}
 
   private final Map<String, Map<String, NetworkNodes>> networkNodesByServer = new HashMap<>();
   private final Map<String, DefaultMutableTreeNode> emptyStateNodesByServer = new HashMap<>();
@@ -42,18 +46,30 @@ public final class ServerTreeQuasselNetworkParentResolver {
   private final Predicate<String> isQuasselServer;
   private final String channelListLabel;
   private final String privateMessagesLabel;
+  private final String otherGroupLabel;
+  private final String monitorGroupLabel;
+  private final String interceptorsGroupLabel;
+  private final String ignoresLabel;
 
   public ServerTreeQuasselNetworkParentResolver(
       Map<TargetRef, DefaultMutableTreeNode> leaves,
       DefaultTreeModel model,
       Predicate<String> isQuasselServer,
       String channelListLabel,
-      String privateMessagesLabel) {
+      String privateMessagesLabel,
+      String otherGroupLabel,
+      String monitorGroupLabel,
+      String interceptorsGroupLabel,
+      String ignoresLabel) {
     this.leaves = Objects.requireNonNull(leaves, "leaves");
     this.model = Objects.requireNonNull(model, "model");
     this.isQuasselServer = Objects.requireNonNull(isQuasselServer, "isQuasselServer");
     this.channelListLabel = Objects.toString(channelListLabel, "Channel List");
     this.privateMessagesLabel = Objects.toString(privateMessagesLabel, "Private Messages");
+    this.otherGroupLabel = Objects.toString(otherGroupLabel, "Other");
+    this.monitorGroupLabel = Objects.toString(monitorGroupLabel, "Monitor");
+    this.interceptorsGroupLabel = Objects.toString(interceptorsGroupLabel, "Interceptors");
+    this.ignoresLabel = Objects.toString(ignoresLabel, "Ignores");
   }
 
   public DefaultMutableTreeNode resolveParent(TargetRef ref, ServerNodes serverNodes) {
@@ -67,18 +83,38 @@ public final class ServerTreeQuasselNetworkParentResolver {
       if (aliased == null) return null;
       return (DefaultMutableTreeNode) aliased.getParent();
     }
-    if (token.isEmpty()) return null;
+    if (token.isEmpty()) {
+      NetworkNodes first = firstNetworkNodes(serverId);
+      if (first == null) return null;
+      if (ref.isIgnores()) {
+        DefaultMutableTreeNode aliased = aliasServerIgnoresToKnownNetwork(serverId);
+        if (aliased != null) {
+          return (DefaultMutableTreeNode) aliased.getParent();
+        }
+        return first.otherNode();
+      }
+      if (ref.isMonitorGroup()) return first.monitorNode();
+      if (ref.isInterceptorsGroup() || ref.isInterceptor()) return first.interceptorsNode();
+      return null;
+    }
 
     NetworkNodes networkNodes =
         ensureNetworkNodes(serverId, token, serverNodes, friendlyNetworkLabel(token), null, null);
     aliasServerChannelListToKnownNetwork(serverId);
-    rehomeOtherNodeForQuassel(serverId, serverNodes);
+    aliasServerIgnoresToKnownNetwork(serverId);
+    syncRootOtherNodeVisibility(serverId, serverNodes);
     if (ref.isChannel()) return networkNodes.channelListNode();
     if (isPrivateMessageTarget(ref)) return networkNodes.privateMessagesNode();
     if (ref.isChannelList()) {
       leaves.put(ref, networkNodes.channelListNode());
       return networkNodes.networkNode();
     }
+    if (ref.isIgnores()) {
+      leaves.put(ref, networkNodes.ignoresNode());
+      return networkNodes.otherNode();
+    }
+    if (ref.isMonitorGroup()) return networkNodes.monitorNode();
+    if (ref.isInterceptorsGroup() || ref.isInterceptor()) return networkNodes.interceptorsNode();
     return null;
   }
 
@@ -103,7 +139,8 @@ public final class ServerTreeQuasselNetworkParentResolver {
       removeStaleNetworkNodes(sid, Set.of());
       maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
       clearLegacyChannelListAlias(sid);
-      rehomeOtherNodeForQuassel(sid, serverNodes);
+      clearLegacyIgnoresAlias(sid);
+      syncRootOtherNodeVisibility(sid, serverNodes);
       return;
     }
 
@@ -120,11 +157,13 @@ public final class ServerTreeQuasselNetworkParentResolver {
     if (remaining == null || remaining.isEmpty()) {
       maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
       clearLegacyChannelListAlias(sid);
-      rehomeOtherNodeForQuassel(sid, serverNodes);
+      clearLegacyIgnoresAlias(sid);
+      syncRootOtherNodeVisibility(sid, serverNodes);
       return;
     }
     aliasServerChannelListToKnownNetwork(sid);
-    rehomeOtherNodeForQuassel(sid, serverNodes);
+    aliasServerIgnoresToKnownNetwork(sid);
+    syncRootOtherNodeVisibility(sid, serverNodes);
   }
 
   public void initializeServer(String serverId, ServerNodes serverNodes) {
@@ -132,7 +171,7 @@ public final class ServerTreeQuasselNetworkParentResolver {
     if (sid.isEmpty() || serverNodes == null || serverNodes.serverNode == null) return;
     if (!isQuasselServer.test(sid)) return;
     maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
-    rehomeOtherNodeForQuassel(sid, serverNodes);
+    syncRootOtherNodeVisibility(sid, serverNodes);
   }
 
   public boolean isQuasselNetworkNode(DefaultMutableTreeNode node) {
@@ -160,6 +199,7 @@ public final class ServerTreeQuasselNetworkParentResolver {
     networkNodesByServer.remove(sid);
     emptyStateNodesByServer.remove(sid);
     clearLegacyChannelListAlias(sid);
+    clearLegacyIgnoresAlias(sid);
   }
 
   private NetworkNodes ensureNetworkNodes(
@@ -176,7 +216,15 @@ public final class ServerTreeQuasselNetworkParentResolver {
     if (existing != null
         && existing.networkNode().getParent() == serverNodes.serverNode
         && existing.channelListNode().getParent() == existing.networkNode()
-        && existing.privateMessagesNode().getParent() == existing.networkNode()) {
+        && existing.privateMessagesNode().getParent() == existing.networkNode()
+        && existing.otherNode() != null
+        && existing.otherNode().getParent() == existing.networkNode()
+        && existing.monitorNode() != null
+        && existing.monitorNode().getParent() == existing.otherNode()
+        && existing.interceptorsNode() != null
+        && existing.interceptorsNode().getParent() == existing.otherNode()
+        && existing.ignoresNode() != null
+        && existing.ignoresNode().getParent() == existing.otherNode()) {
       updateNetworkNodeDataIfNeeded(
           existing.networkNode(), serverId, token, label, connected, enabled);
       return existing;
@@ -208,7 +256,45 @@ public final class ServerTreeQuasselNetworkParentResolver {
     networkNode.insert(privateMessagesNode, privateMessagesIdx);
     model.nodesWereInserted(networkNode, new int[] {privateMessagesIdx});
 
-    NetworkNodes created = new NetworkNodes(networkNode, channelListNode, privateMessagesNode);
+    DefaultMutableTreeNode otherNode =
+        new DefaultMutableTreeNode(new ServerTreeNodeData(null, otherGroupLabel));
+    int otherIdx = networkNode.getChildCount();
+    networkNode.insert(otherNode, otherIdx);
+    model.nodesWereInserted(networkNode, new int[] {otherIdx});
+
+    TargetRef ignoresRef = TargetRef.ignores(serverId, token);
+    DefaultMutableTreeNode ignoresNode = leaves.get(ignoresRef);
+    if (ignoresNode == null) {
+      ignoresNode = new DefaultMutableTreeNode(new ServerTreeNodeData(ignoresRef, ignoresLabel));
+    } else {
+      detachNodeIfNeeded(ignoresNode);
+    }
+    int ignoresIdx = otherNode.getChildCount();
+    otherNode.insert(ignoresNode, ignoresIdx);
+    model.nodesWereInserted(otherNode, new int[] {ignoresIdx});
+    leaves.put(ignoresRef, ignoresNode);
+
+    DefaultMutableTreeNode monitorNode =
+        new DefaultMutableTreeNode(new ServerTreeNodeData(null, monitorGroupLabel));
+    int monitorIdx = otherNode.getChildCount();
+    otherNode.insert(monitorNode, monitorIdx);
+    model.nodesWereInserted(otherNode, new int[] {monitorIdx});
+
+    DefaultMutableTreeNode interceptorsNode =
+        new DefaultMutableTreeNode(new ServerTreeNodeData(null, interceptorsGroupLabel));
+    int interceptorsIdx = otherNode.getChildCount();
+    otherNode.insert(interceptorsNode, interceptorsIdx);
+    model.nodesWereInserted(otherNode, new int[] {interceptorsIdx});
+
+    NetworkNodes created =
+        new NetworkNodes(
+            networkNode,
+            channelListNode,
+            privateMessagesNode,
+            otherNode,
+            monitorNode,
+            interceptorsNode,
+            ignoresNode);
     byToken.put(token, created);
     return created;
   }
@@ -333,54 +419,58 @@ public final class ServerTreeQuasselNetworkParentResolver {
     leaves.remove(TargetRef.channelList(sid));
   }
 
-  private void rehomeOtherNodeForQuassel(String serverId, ServerNodes serverNodes) {
+  private DefaultMutableTreeNode aliasServerIgnoresToKnownNetwork(String serverId) {
+    Map<String, NetworkNodes> byToken = networkNodesByServer.get(normalizeServerId(serverId));
+    TargetRef serverIgnoresRef = TargetRef.ignores(serverId);
+    if (byToken == null || byToken.isEmpty()) {
+      leaves.remove(serverIgnoresRef);
+      return null;
+    }
+    NetworkNodes first = firstNetworkNodes(serverId);
+    if (first == null || first.ignoresNode() == null) return null;
+
+    DefaultMutableTreeNode existingServerIgnores = leaves.get(serverIgnoresRef);
+    if (existingServerIgnores != null && existingServerIgnores != first.ignoresNode()) {
+      detachNodeIfNeeded(existingServerIgnores);
+    }
+    leaves.put(serverIgnoresRef, first.ignoresNode());
+    return first.ignoresNode();
+  }
+
+  private void clearLegacyIgnoresAlias(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    leaves.remove(TargetRef.ignores(sid));
+  }
+
+  private NetworkNodes firstNetworkNodes(String serverId) {
+    Map<String, NetworkNodes> byToken = networkNodesByServer.get(normalizeServerId(serverId));
+    if (byToken == null || byToken.isEmpty()) return null;
+    return byToken.values().iterator().next();
+  }
+
+  private void syncRootOtherNodeVisibility(String serverId, ServerNodes serverNodes) {
     if (serverNodes == null || serverNodes.serverNode == null || serverNodes.otherNode == null) {
       return;
     }
-    DefaultMutableTreeNode serverNode = serverNodes.serverNode;
-    DefaultMutableTreeNode otherNode = serverNodes.otherNode;
     Map<String, NetworkNodes> byToken = networkNodesByServer.get(normalizeServerId(serverId));
     boolean hasNetworks = byToken != null && !byToken.isEmpty();
-    boolean hasCoreScopedChildren = otherNodeHasCoreScopedChildren(serverNodes, otherNode);
+    DefaultMutableTreeNode otherNode = serverNodes.otherNode;
+    DefaultMutableTreeNode serverNode = serverNodes.serverNode;
 
-    DefaultMutableTreeNode desiredParent = serverNode;
-    if (hasNetworks && !hasCoreScopedChildren) {
-      NetworkNodes first = byToken.values().iterator().next();
-      if (first != null && first.networkNode() != null) {
-        desiredParent = first.networkNode();
+    if (hasNetworks) {
+      if (otherNode.getParent() != null) {
+        detachNodeIfNeeded(otherNode);
       }
+      return;
     }
-    if (otherNode.getParent() == desiredParent) return;
-
-    detachNodeIfNeeded(otherNode);
-    int insertIdx = desiredParent.getChildCount();
-    desiredParent.insert(otherNode, insertIdx);
-    notifyNodeInserted(desiredParent, insertIdx);
-  }
-
-  private static boolean otherNodeHasCoreScopedChildren(
-      ServerNodes serverNodes, DefaultMutableTreeNode otherNode) {
-    if (serverNodes == null || otherNode == null) return false;
-    for (int i = 0; i < otherNode.getChildCount(); i++) {
-      Object child = otherNode.getChildAt(i);
-      if (!(child instanceof DefaultMutableTreeNode childNode)) {
-        return true;
-      }
-      if (childNode == serverNodes.monitorNode || childNode == serverNodes.interceptorsNode) {
-        return true;
-      }
-      Object userObject = childNode.getUserObject();
-      if (!(userObject instanceof ServerTreeNodeData nodeData) || nodeData.ref == null) {
-        return true;
-      }
-      TargetRef ref = nodeData.ref;
-      if (ref.equals(serverNodes.statusRef)
-          || ref.equals(serverNodes.notificationsRef)
-          || ref.equals(serverNodes.logViewerRef)) {
-        return true;
-      }
+    if (otherNode.getParent() == serverNode) return;
+    if (otherNode.getParent() != null) {
+      detachNodeIfNeeded(otherNode);
     }
-    return false;
+    int insertIdx = networkInsertIndex(serverNodes);
+    serverNode.insert(otherNode, insertIdx);
+    notifyNodeInserted(serverNode, insertIdx);
   }
 
   private void detachNodeIfNeeded(DefaultMutableTreeNode node) {

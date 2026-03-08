@@ -46,7 +46,7 @@ public final class ChatNickContextCoordinator {
     TargetRef activeTarget = activeTargetSupplier.get();
     if (activeTarget == null) return null;
 
-    String sid = Objects.toString(activeTarget.serverId(), "").trim();
+    String sid = ignoreScopeServerId(activeTarget);
     if (sid.isEmpty()) return null;
 
     String normalizedNick = nick.trim();
@@ -69,7 +69,7 @@ public final class ChatNickContextCoordinator {
   public void promptIgnore(TargetRef target, String nick, boolean removing, boolean soft) {
     if (ignoreListService == null) return;
     if (target == null) return;
-    String sid = Objects.toString(target.serverId(), "").trim();
+    String sid = ignoreScopeServerId(target);
     if (sid.isEmpty()) return;
 
     String normalizedNick = Objects.toString(nick, "").trim();
@@ -173,5 +173,13 @@ public final class ChatNickContextCoordinator {
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace("\"", "&quot;");
+  }
+
+  private static String ignoreScopeServerId(TargetRef target) {
+    if (target == null) return "";
+    String sid = Objects.toString(target.serverId(), "").trim();
+    if (sid.isEmpty()) return "";
+    String token = Objects.toString(target.networkQualifierToken(), "").trim();
+    return token.isEmpty() ? sid : TargetRef.withNetworkQualifier(sid, token);
   }
 }

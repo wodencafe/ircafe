@@ -40,4 +40,14 @@ class TargetRefChannelSemanticsTest {
     assertEquals("#ircafe", ref.baseTarget());
     assertEquals("libera", ref.networkQualifierToken());
   }
+
+  @Test
+  void qualifiedIgnoresTargetIsUiOnlyAndKeepsBaseBuiltIn() {
+    TargetRef ref = TargetRef.ignores("quassel", "libera");
+
+    assertTrue(ref.isIgnores());
+    assertTrue(ref.isUiOnly());
+    assertEquals(TargetRef.IGNORES_TARGET, ref.baseTarget());
+    assertEquals("libera", ref.networkQualifierToken());
+  }
 }

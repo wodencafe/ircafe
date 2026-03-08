@@ -421,7 +421,7 @@ class ChatTargetViewRouterTest {
     ChatTargetViewRouter.TargetViewType viewType = router.route(TargetRef.ignores("libera"));
 
     assertEquals(ChatTargetViewRouter.TargetViewType.UI_ONLY, viewType);
-    verify(ignoresPanel).setServerId("libera");
+    verify(ignoresPanel).setTarget(TargetRef.ignores("libera"));
   }
 
   private static JPanel createCardDeck() {
