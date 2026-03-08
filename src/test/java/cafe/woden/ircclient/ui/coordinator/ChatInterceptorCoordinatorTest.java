@@ -58,7 +58,7 @@ class ChatInterceptorCoordinatorTest {
     coordinator.onActiveTargetChanged(
         TargetRef.interceptor("libera", "audit"), new TargetRef("libera", "#ircafe"));
 
-    verify(interceptorPanel).setInterceptorTarget("", "");
+    verify(interceptorPanel).setInterceptorTarget("", "", "");
   }
 
   @Test
@@ -73,7 +73,7 @@ class ChatInterceptorCoordinatorTest {
     coordinator.onActiveTargetChanged(
         TargetRef.interceptor("libera", "audit"), TargetRef.interceptor("libera", "other"));
 
-    verify(interceptorPanel, never()).setInterceptorTarget(anyString(), anyString());
+    verify(interceptorPanel, never()).setInterceptorTarget(anyString(), anyString(), anyString());
   }
 
   @Test
@@ -99,7 +99,7 @@ class ChatInterceptorCoordinatorTest {
     flushEdt();
 
     assertEquals(1, dockTitleRefreshes.get());
-    verify(interceptorPanel).setInterceptorTarget("libera", "audit");
+    verify(interceptorPanel).setInterceptorTarget("libera", "", "audit");
     disposables.dispose();
   }
 
@@ -127,7 +127,34 @@ class ChatInterceptorCoordinatorTest {
     flushEdt();
 
     assertEquals(0, dockTitleRefreshes.get());
-    verify(interceptorPanel, never()).setInterceptorTarget(anyString(), anyString());
+    verify(interceptorPanel, never()).setInterceptorTarget(anyString(), anyString(), anyString());
+    disposables.dispose();
+  }
+
+  @Test
+  void bindMatchesQualifiedInterceptorScopeServerId() throws Exception {
+    InterceptorStore interceptorStore = mock(InterceptorStore.class);
+    InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    FlowableProcessor<InterceptorStore.Change> changes =
+        PublishProcessor.<InterceptorStore.Change>create().toSerialized();
+    when(interceptorStore.changes()).thenReturn(changes.onBackpressureBuffer());
+    AtomicInteger dockTitleRefreshes = new AtomicInteger();
+
+    ChatInterceptorCoordinator coordinator =
+        new ChatInterceptorCoordinator(
+            interceptorStore,
+            interceptorPanel,
+            () -> TargetRef.interceptor("quassel", "audit", "libera"),
+            dockTitleRefreshes::incrementAndGet,
+            ref -> {});
+    CompositeDisposable disposables = new CompositeDisposable();
+
+    coordinator.bind(disposables);
+    changes.onNext(new InterceptorStore.Change("quassel{net:libera}", "audit"));
+    flushEdt();
+
+    assertEquals(1, dockTitleRefreshes.get());
+    verify(interceptorPanel).setInterceptorTarget("quassel", "libera", "audit");
     disposables.dispose();
   }
 

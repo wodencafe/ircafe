@@ -211,7 +211,8 @@ class ServerEditorDialogFunctionalTest {
             assertEquals(0, matrixAuthModeCombo.getSelectedIndex());
             assertEquals("443", portField.getText(), "matrix backend should default to TLS 443");
             assertFalse(authModeCombo.isEnabled(), "Matrix backend should disable IRC auth mode");
-            assertFalse(authModeCombo.isVisible(), "Matrix backend should hide IRC auth method row");
+            assertFalse(
+                authModeCombo.isVisible(), "Matrix backend should hide IRC auth method row");
             assertFalse(saveBtn.isEnabled(), "matrix backend should require access token");
           });
 

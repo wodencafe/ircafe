@@ -126,7 +126,8 @@ public class ServerEditorDialog extends JDialog {
   private final JLabel matrixAuthModeLabel = new JLabel("Matrix auth");
   private final JLabel matrixAuthUserLabel = new JLabel("Username");
   private final JComboBox<MatrixAuthMode> matrixAuthModeCombo =
-      new JComboBox<>(new MatrixAuthMode[] {MatrixAuthMode.ACCESS_TOKEN, MatrixAuthMode.USERNAME_PASSWORD});
+      new JComboBox<>(
+          new MatrixAuthMode[] {MatrixAuthMode.ACCESS_TOKEN, MatrixAuthMode.USERNAME_PASSWORD});
   private final JTextField matrixAuthUserField = new JTextField();
   private final JLabel matrixAuthHintLabel = new JLabel();
 
@@ -295,7 +296,8 @@ public class ServerEditorDialog extends JDialog {
       }
       setAuthMode(seedAuthMode(seed));
       setMatrixAuthMode(seedMatrixAuthMode(seed));
-      if (seed.backend() == IrcProperties.Server.Backend.MATRIX && isMatrixPasswordAuthMode(seed.sasl())) {
+      if (seed.backend() == IrcProperties.Server.Backend.MATRIX
+          && isMatrixPasswordAuthMode(seed.sasl())) {
         matrixAuthUserField.setText(Objects.toString(seed.sasl().username(), ""));
         serverPassField.setText(Objects.toString(seed.sasl().password(), ""));
       }
@@ -1167,8 +1169,7 @@ public class ServerEditorDialog extends JDialog {
     if (usernamePassword) {
       serverPasswordLabel.setText("Password");
       applyFieldStyle(serverPassField, "matrix account password");
-      hint =
-          "Username/password mode signs in via /login. Username and password are required.";
+      hint = "Username/password mode signs in via /login. Username and password are required.";
     } else {
       serverPasswordLabel.setText("Access token");
       applyFieldStyle(serverPassField, "matrix access token");
@@ -1324,7 +1325,8 @@ public class ServerEditorDialog extends JDialog {
     ok &= !portBad;
 
     MatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
-    boolean matrixPasswordMode = matrixBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
+    boolean matrixPasswordMode =
+        matrixBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
     boolean matrixCredentialBad = matrixBackend && trim(serverPasswordValue()).isEmpty();
     setError(serverPassField, matrixCredentialBad);
     ok &= !matrixCredentialBad;
@@ -1565,7 +1567,8 @@ public class ServerEditorDialog extends JDialog {
     boolean tls = tlsBox.isSelected();
     String serverPassword = serverPasswordValue();
     MatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
-    boolean matrixPasswordMode = matrixBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
+    boolean matrixPasswordMode =
+        matrixBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
     String matrixAuthUser = trim(matrixAuthUserField.getText());
     if (matrixBackend && trim(serverPassword).isEmpty()) {
       throw new IllegalArgumentException(

@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.servertree.composition;
 import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.TargetRef;
@@ -421,7 +422,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
   private static InterceptorDefinition interceptorDefinition(
       InterceptorStore interceptorStore, TargetRef target) {
     if (interceptorStore == null || target == null || !target.isInterceptor()) return null;
-    String serverId = Objects.toString(target.serverId(), "").trim();
+    String serverId = InterceptorScope.scopedServerIdForTarget(target);
     String interceptorId = Objects.toString(target.interceptorId(), "").trim();
     if (serverId.isEmpty() || interceptorId.isEmpty()) return null;
     return interceptorStore.interceptor(serverId, interceptorId);

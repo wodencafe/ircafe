@@ -160,7 +160,49 @@ class ChatTargetViewRouterTest {
         router.route(TargetRef.interceptor("libera", "audit-rules"));
 
     assertEquals(ChatTargetViewRouter.TargetViewType.UI_ONLY, viewType);
-    verify(interceptorPanel).setInterceptorTarget("libera", "audit-rules");
+    verify(interceptorPanel).setInterceptorTarget("libera", "", "audit-rules");
+  }
+
+  @Test
+  void routeQualifiedInterceptorTargetDelegatesWithNetworkToken() {
+    NotificationsPanel notificationsPanel = mock(NotificationsPanel.class);
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    IgnoresPanel ignoresPanel = mock(IgnoresPanel.class);
+    DccTransfersPanel dccTransfersPanel = mock(DccTransfersPanel.class);
+    MonitorPanel monitorPanel = mock(MonitorPanel.class);
+    LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
+    InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    RuntimeEventsPanel appUnhandledErrorsPanel = mock(RuntimeEventsPanel.class);
+    RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
+    RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
+    InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
+    RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
+
+    ChatTargetViewRouter router =
+        new ChatTargetViewRouter(
+            createCardDeck(),
+            notificationsPanel,
+            channelListPanel,
+            ignoresPanel,
+            dccTransfersPanel,
+            monitorPanel,
+            logViewerPanel,
+            interceptorPanel,
+            appUnhandledErrorsPanel,
+            appAssertjPanel,
+            appJhiccupPanel,
+            appInboundDedupPanel,
+            appJfrPanel,
+            appSpringPanel,
+            sid -> {},
+            sid -> {});
+
+    ChatTargetViewRouter.TargetViewType viewType =
+        router.route(TargetRef.interceptor("quassel", "audit-rules", "libera"));
+
+    assertEquals(ChatTargetViewRouter.TargetViewType.UI_ONLY, viewType);
+    verify(interceptorPanel).setInterceptorTarget("quassel", "libera", "audit-rules");
   }
 
   @Test

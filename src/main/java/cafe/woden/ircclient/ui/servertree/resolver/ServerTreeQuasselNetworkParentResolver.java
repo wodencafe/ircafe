@@ -93,8 +93,15 @@ public final class ServerTreeQuasselNetworkParentResolver {
         }
         return first.otherNode();
       }
-      if (ref.isMonitorGroup()) return first.monitorNode();
-      if (ref.isInterceptorsGroup() || ref.isInterceptor()) return first.interceptorsNode();
+      if (ref.isMonitorGroup()) {
+        DefaultMutableTreeNode aliased = aliasServerMonitorGroupToKnownNetwork(serverId);
+        return aliased != null ? aliased : first.monitorNode();
+      }
+      if (ref.isInterceptorsGroup()) {
+        DefaultMutableTreeNode aliased = aliasServerInterceptorsGroupToKnownNetwork(serverId);
+        return aliased != null ? aliased : first.interceptorsNode();
+      }
+      if (ref.isInterceptor()) return first.interceptorsNode();
       return null;
     }
 
@@ -102,6 +109,8 @@ public final class ServerTreeQuasselNetworkParentResolver {
         ensureNetworkNodes(serverId, token, serverNodes, friendlyNetworkLabel(token), null, null);
     aliasServerChannelListToKnownNetwork(serverId);
     aliasServerIgnoresToKnownNetwork(serverId);
+    aliasServerMonitorGroupToKnownNetwork(serverId);
+    aliasServerInterceptorsGroupToKnownNetwork(serverId);
     syncRootOtherNodeVisibility(serverId, serverNodes);
     if (ref.isChannel()) return networkNodes.channelListNode();
     if (isPrivateMessageTarget(ref)) return networkNodes.privateMessagesNode();
@@ -140,6 +149,8 @@ public final class ServerTreeQuasselNetworkParentResolver {
       maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
       clearLegacyChannelListAlias(sid);
       clearLegacyIgnoresAlias(sid);
+      clearLegacyMonitorAlias(sid);
+      clearLegacyInterceptorsAlias(sid);
       syncRootOtherNodeVisibility(sid, serverNodes);
       return;
     }
@@ -158,11 +169,15 @@ public final class ServerTreeQuasselNetworkParentResolver {
       maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
       clearLegacyChannelListAlias(sid);
       clearLegacyIgnoresAlias(sid);
+      clearLegacyMonitorAlias(sid);
+      clearLegacyInterceptorsAlias(sid);
       syncRootOtherNodeVisibility(sid, serverNodes);
       return;
     }
     aliasServerChannelListToKnownNetwork(sid);
     aliasServerIgnoresToKnownNetwork(sid);
+    aliasServerMonitorGroupToKnownNetwork(sid);
+    aliasServerInterceptorsGroupToKnownNetwork(sid);
     syncRootOtherNodeVisibility(sid, serverNodes);
   }
 
@@ -200,6 +215,8 @@ public final class ServerTreeQuasselNetworkParentResolver {
     emptyStateNodesByServer.remove(sid);
     clearLegacyChannelListAlias(sid);
     clearLegacyIgnoresAlias(sid);
+    clearLegacyMonitorAlias(sid);
+    clearLegacyInterceptorsAlias(sid);
   }
 
   private NetworkNodes ensureNetworkNodes(
@@ -227,6 +244,10 @@ public final class ServerTreeQuasselNetworkParentResolver {
         && existing.ignoresNode().getParent() == existing.otherNode()) {
       updateNetworkNodeDataIfNeeded(
           existing.networkNode(), serverId, token, label, connected, enabled);
+      leaves.put(TargetRef.channelList(serverId, token), existing.channelListNode());
+      leaves.put(TargetRef.ignores(serverId, token), existing.ignoresNode());
+      leaves.put(TargetRef.monitorGroup(serverId, token), existing.monitorNode());
+      leaves.put(TargetRef.interceptorsGroup(serverId, token), existing.interceptorsNode());
       return existing;
     }
 
@@ -274,17 +295,21 @@ public final class ServerTreeQuasselNetworkParentResolver {
     model.nodesWereInserted(otherNode, new int[] {ignoresIdx});
     leaves.put(ignoresRef, ignoresNode);
 
+    TargetRef monitorRef = TargetRef.monitorGroup(serverId, token);
     DefaultMutableTreeNode monitorNode =
-        new DefaultMutableTreeNode(new ServerTreeNodeData(null, monitorGroupLabel));
+        new DefaultMutableTreeNode(new ServerTreeNodeData(monitorRef, monitorGroupLabel));
     int monitorIdx = otherNode.getChildCount();
     otherNode.insert(monitorNode, monitorIdx);
     model.nodesWereInserted(otherNode, new int[] {monitorIdx});
+    leaves.put(monitorRef, monitorNode);
 
+    TargetRef interceptorsRef = TargetRef.interceptorsGroup(serverId, token);
     DefaultMutableTreeNode interceptorsNode =
-        new DefaultMutableTreeNode(new ServerTreeNodeData(null, interceptorsGroupLabel));
+        new DefaultMutableTreeNode(new ServerTreeNodeData(interceptorsRef, interceptorsGroupLabel));
     int interceptorsIdx = otherNode.getChildCount();
     otherNode.insert(interceptorsNode, interceptorsIdx);
     model.nodesWereInserted(otherNode, new int[] {interceptorsIdx});
+    leaves.put(interceptorsRef, interceptorsNode);
 
     NetworkNodes created =
         new NetworkNodes(
@@ -443,6 +468,46 @@ public final class ServerTreeQuasselNetworkParentResolver {
     leaves.remove(TargetRef.ignores(sid));
   }
 
+  private DefaultMutableTreeNode aliasServerMonitorGroupToKnownNetwork(String serverId) {
+    Map<String, NetworkNodes> byToken = networkNodesByServer.get(normalizeServerId(serverId));
+    TargetRef serverMonitorRef = TargetRef.monitorGroup(serverId);
+    if (byToken == null || byToken.isEmpty()) {
+      leaves.remove(serverMonitorRef);
+      return null;
+    }
+    NetworkNodes first = firstNetworkNodes(serverId);
+    if (first == null || first.monitorNode() == null) return null;
+
+    leaves.put(serverMonitorRef, first.monitorNode());
+    return first.monitorNode();
+  }
+
+  private void clearLegacyMonitorAlias(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    leaves.remove(TargetRef.monitorGroup(sid));
+  }
+
+  private DefaultMutableTreeNode aliasServerInterceptorsGroupToKnownNetwork(String serverId) {
+    Map<String, NetworkNodes> byToken = networkNodesByServer.get(normalizeServerId(serverId));
+    TargetRef serverInterceptorsRef = TargetRef.interceptorsGroup(serverId);
+    if (byToken == null || byToken.isEmpty()) {
+      leaves.remove(serverInterceptorsRef);
+      return null;
+    }
+    NetworkNodes first = firstNetworkNodes(serverId);
+    if (first == null || first.interceptorsNode() == null) return null;
+
+    leaves.put(serverInterceptorsRef, first.interceptorsNode());
+    return first.interceptorsNode();
+  }
+
+  private void clearLegacyInterceptorsAlias(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    leaves.remove(TargetRef.interceptorsGroup(sid));
+  }
+
   private NetworkNodes firstNetworkNodes(String serverId) {
     Map<String, NetworkNodes> byToken = networkNodesByServer.get(normalizeServerId(serverId));
     if (byToken == null || byToken.isEmpty()) return null;
@@ -453,7 +518,8 @@ public final class ServerTreeQuasselNetworkParentResolver {
     if (serverNodes == null || serverNodes.serverNode == null || serverNodes.otherNode == null) {
       return;
     }
-    Map<String, NetworkNodes> byToken = networkNodesByServer.get(normalizeServerId(serverId));
+    String sid = normalizeServerId(serverId);
+    Map<String, NetworkNodes> byToken = networkNodesByServer.get(sid);
     boolean hasNetworks = byToken != null && !byToken.isEmpty();
     DefaultMutableTreeNode otherNode = serverNodes.otherNode;
     DefaultMutableTreeNode serverNode = serverNodes.serverNode;
@@ -471,6 +537,8 @@ public final class ServerTreeQuasselNetworkParentResolver {
     int insertIdx = networkInsertIndex(serverNodes);
     serverNode.insert(otherNode, insertIdx);
     notifyNodeInserted(serverNode, insertIdx);
+    leaves.put(TargetRef.monitorGroup(sid), serverNodes.monitorNode);
+    leaves.put(TargetRef.interceptorsGroup(sid), serverNodes.interceptorsNode);
   }
 
   private void detachNodeIfNeeded(DefaultMutableTreeNode node) {

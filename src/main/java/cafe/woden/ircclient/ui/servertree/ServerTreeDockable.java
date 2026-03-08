@@ -9,6 +9,7 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
+import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
@@ -1630,7 +1631,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private boolean isInterceptorEnabled(TargetRef ref) {
     if (ref == null || !ref.isInterceptor()) return true;
     if (interceptorStore == null) return true;
-    String sid = Objects.toString(ref.serverId(), "").trim();
+    String sid = InterceptorScope.scopedServerIdForTarget(ref);
     String iid = Objects.toString(ref.interceptorId(), "").trim();
     if (sid.isEmpty() || iid.isEmpty()) return true;
     InterceptorDefinition def = interceptorStore.interceptor(sid, iid);
@@ -1919,7 +1920,37 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private ServerNodes addServerRoot(String serverId) {
     ServerNodes serverNodes = serverLifecycleFacade.addServerRoot(serverId);
     quasselNetworkParentResolver.initializeServer(serverId, serverNodes);
+    ensureInterceptorNodesForServer(serverId);
     return serverNodes;
+  }
+
+  private void ensureInterceptorNodesForServer(String serverId) {
+    if (interceptorStore == null || targetLifecycleCoordinator == null) return;
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+
+    Set<String> scopeServerIds = new HashSet<>();
+    for (InterceptorStore.ScopedInterceptorRef scoped :
+        interceptorStore.listInterceptorRefsForBaseServer(sid)) {
+      if (scoped == null) continue;
+      String scopeServerId = InterceptorScope.normalizeScopeServerId(scoped.serverId());
+      String interceptorId = Objects.toString(scoped.interceptorId(), "").trim();
+      if (scopeServerId.isEmpty() || interceptorId.isEmpty()) continue;
+
+      TargetRef ref = InterceptorScope.interceptorRef(scopeServerId, interceptorId);
+      if (ref == null) continue;
+      targetLifecycleCoordinator.ensureNode(ref);
+      interceptorActions.refreshInterceptorNodeLabel(scopeServerId, interceptorId);
+      scopeServerIds.add(scopeServerId);
+    }
+
+    if (scopeServerIds.isEmpty()) {
+      interceptorActions.refreshInterceptorGroupCount(sid);
+      return;
+    }
+    for (String scopeServerId : scopeServerIds) {
+      interceptorActions.refreshInterceptorGroupCount(scopeServerId);
+    }
   }
 
   private void updateBouncerControlLabels(Map<String, Set<String>> nextBouncerControlByBackendId) {

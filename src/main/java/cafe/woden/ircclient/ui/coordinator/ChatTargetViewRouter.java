@@ -199,11 +199,12 @@ public final class ChatTargetViewRouter {
       return TargetViewType.UI_ONLY;
     }
     if (target.isInterceptorsGroup()) {
-      showInterceptorCard(target.serverId(), "");
+      showInterceptorCard(target.serverId(), target.networkQualifierToken(), "");
       return TargetViewType.UI_ONLY;
     }
     if (target.isInterceptor()) {
-      showInterceptorCard(target.serverId(), target.interceptorId());
+      showInterceptorCard(
+          target.serverId(), target.networkQualifierToken(), target.interceptorId());
       return TargetViewType.UI_ONLY;
     }
 
@@ -324,9 +325,9 @@ public final class ChatTargetViewRouter {
     }
   }
 
-  private void showInterceptorCard(String serverId, String interceptorId) {
+  private void showInterceptorCard(String serverId, String networkToken, String interceptorId) {
     try {
-      interceptorPanel.setInterceptorTarget(serverId, interceptorId);
+      interceptorPanel.setInterceptorTarget(serverId, networkToken, interceptorId);
       showCard(CARD_INTERCEPTOR);
     } catch (Exception ignored) {
     }

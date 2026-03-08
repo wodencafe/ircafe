@@ -3,7 +3,10 @@ package cafe.woden.ircclient.ui.servertree.view;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.interceptors.InterceptorScope;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import java.util.Locale;
 import java.util.Objects;
@@ -394,17 +397,30 @@ public final class ServerTreeServerNodeMenuBuilder {
   }
 
   JPopupMenu buildInterceptorsGroupMenu(DefaultMutableTreeNode node) {
-    String serverId = context.owningServerIdForNode(node);
-    if (serverId.isEmpty()) return null;
+    String scopeServerId = interceptorScopeServerIdForNode(node);
+    if (scopeServerId.isEmpty()) return null;
 
     JPopupMenu menu = new JPopupMenu();
     JMenuItem addInterceptor = new JMenuItem("Add Interceptor...");
     addInterceptor.setIcon(SvgIcons.action("plus", 16));
     addInterceptor.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
     addInterceptor.setEnabled(context.interceptorStoreAvailable());
-    addInterceptor.addActionListener(ev -> context.promptAndAddInterceptor(serverId));
+    addInterceptor.addActionListener(ev -> context.promptAndAddInterceptor(scopeServerId));
     menu.add(addInterceptor);
     return menu;
+  }
+
+  private String interceptorScopeServerIdForNode(DefaultMutableTreeNode node) {
+    if (node == null) return "";
+    Object userObject = node.getUserObject();
+    if (userObject instanceof ServerTreeNodeData nodeData) {
+      TargetRef ref = nodeData.ref;
+      if (ref != null && ref.isInterceptorsGroup()) {
+        return InterceptorScope.scopedServerIdForTarget(ref);
+      }
+    }
+    String serverId = context.owningServerIdForNode(node);
+    return InterceptorScope.normalizeScopeServerId(serverId);
   }
 
   private void addEphemeralAutoConnectToggleIfNeeded(JPopupMenu menu, String serverId) {

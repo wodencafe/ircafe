@@ -95,6 +95,11 @@ public final class ServerTreeTargetSelectionCoordinator {
 
   private void selectGroupTarget(TargetRef ref, boolean monitor) {
     context.ensureNode(ref);
+    DefaultMutableTreeNode exactNode = context.leafNode(ref);
+    if (exactNode != null) {
+      context.selectNode(exactNode);
+      return;
+    }
     String serverId = ServerTreeConventions.normalizeServerId(ref.serverId());
     DefaultMutableTreeNode node =
         monitor ? context.monitorGroupNode(serverId) : context.interceptorsGroupNode(serverId);

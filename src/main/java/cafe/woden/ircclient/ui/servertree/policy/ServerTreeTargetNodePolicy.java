@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.policy;
 
+import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
@@ -44,9 +45,10 @@ public final class ServerTreeTargetNodePolicy {
     if (ref == null) return "";
     if (ref.isNotifications()) return notificationsLabel;
     if (ref.isInterceptor()) {
+      String scopeServerId = InterceptorScope.scopedServerIdForTarget(ref);
       String name =
           interceptorStore != null
-              ? interceptorStore.interceptorName(ref.serverId(), ref.interceptorId())
+              ? interceptorStore.interceptorName(scopeServerId, ref.interceptorId())
               : "";
       String normalized = Objects.toString(name, "").trim();
       return normalized.isEmpty() ? interceptorLabel : normalized;

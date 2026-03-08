@@ -111,6 +111,31 @@ class ServerTreeQuasselNetworkParentResolverTest {
   }
 
   @Test
+  void mapsQualifiedMonitorAndInterceptorsGroupLeavesPerNetwork() {
+    Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+    DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));
+    ServerTreeQuasselNetworkParentResolver resolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            sid -> "quassel".equalsIgnoreCase(sid),
+            "Channel List",
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
+
+    ServerNodes serverNodes = serverNodes("quassel");
+    resolver.resolveParent(new TargetRef("quassel", "#one{net:libera}"), serverNodes);
+
+    assertNotNull(leaves.get(TargetRef.monitorGroup("quassel", "libera")));
+    assertNotNull(leaves.get(TargetRef.interceptorsGroup("quassel", "libera")));
+    assertNotNull(leaves.get(TargetRef.monitorGroup("quassel")));
+    assertNotNull(leaves.get(TargetRef.interceptorsGroup("quassel")));
+  }
+
+  @Test
   void ignoresUnqualifiedAndNonQuasselTargets() {
     Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
     DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));

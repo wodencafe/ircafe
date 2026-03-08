@@ -110,14 +110,20 @@ public final class ServerTreeServerNodeBuilder {
       leaves.put(dccTransfersRef, dccTransfersLeaf);
     }
 
+    TargetRef monitorGroupRef = TargetRef.monitorGroup(id);
+    TargetRef interceptorsGroupRef = TargetRef.interceptorsGroup(id);
+
     ServerTreeNodeData interceptorsData =
-        new ServerTreeNodeData(null, Objects.toString(spec.interceptorsGroupLabel(), ""));
+        new ServerTreeNodeData(
+            interceptorsGroupRef, Objects.toString(spec.interceptorsGroupLabel(), ""));
     interceptorsData.unread = Math.max(0, spec.interceptorGroupHitCount());
 
     ServerTreeNodeData monitorData =
-        new ServerTreeNodeData(null, Objects.toString(spec.monitorGroupLabel(), ""));
+        new ServerTreeNodeData(monitorGroupRef, Objects.toString(spec.monitorGroupLabel(), ""));
     DefaultMutableTreeNode monitorNode = new DefaultMutableTreeNode(monitorData);
     DefaultMutableTreeNode interceptorsNode = new DefaultMutableTreeNode(interceptorsData);
+    leaves.put(monitorGroupRef, monitorNode);
+    leaves.put(interceptorsGroupRef, interceptorsNode);
 
     List<InterceptorDefinition> definitions =
         spec.interceptors() == null ? List.of() : spec.interceptors();

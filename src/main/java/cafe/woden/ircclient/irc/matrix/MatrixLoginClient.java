@@ -91,7 +91,8 @@ final class MatrixLoginClient {
     return Objects.toString(value, "").trim();
   }
 
-  record LoginResult(boolean authenticated, URI endpoint, String userId, String accessToken, String detail) {
+  record LoginResult(
+      boolean authenticated, URI endpoint, String userId, String accessToken, String detail) {
     static LoginResult authenticated(URI endpoint, String userId, String accessToken) {
       return new LoginResult(
           true,

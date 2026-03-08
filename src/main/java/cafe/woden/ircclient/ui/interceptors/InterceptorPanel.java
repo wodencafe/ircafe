@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.interceptors;
 
 import cafe.woden.ircclient.app.api.InterceptorEventType;
 import cafe.woden.ircclient.interceptors.InterceptorHit;
+import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.BuiltInSound;
 import cafe.woden.ircclient.model.InterceptorDefinition;
@@ -205,7 +206,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   }
 
   public void setInterceptorTarget(String serverId, String interceptorId) {
-    this.serverId = Objects.toString(serverId, "").trim();
+    setInterceptorTarget(serverId, "", interceptorId);
+  }
+
+  public void setInterceptorTarget(String serverId, String networkToken, String interceptorId) {
+    this.serverId = InterceptorScope.scopedServerId(serverId, networkToken);
     this.interceptorId = Objects.toString(interceptorId, "").trim();
     refreshFromStore();
   }
@@ -1065,7 +1070,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     createInterceptorButton.setIcon(SvgIcons.action("plus", 16));
     createInterceptorButton.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
     createInterceptorButton.setMargin(new Insets(2, 8, 2, 8));
-    createInterceptorButton.setToolTipText("Create a new interceptor for this server");
+    createInterceptorButton.setToolTipText("Create a new interceptor for this server/network");
     createInterceptorButton.setFocusable(false);
     configureIconButton(testSound, "play", "Test selected sound");
     configureIconButton(browseSoundCustomPath, "folder-open", "Browse/import custom sound file");
@@ -1111,8 +1116,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
       status.setText("Created interceptor: " + created.name());
 
       Consumer<TargetRef> cb = onSelectTarget;
+      TargetRef createdRef = InterceptorScope.interceptorRef(sid, created.id());
       if (cb != null) {
-        cb.accept(TargetRef.interceptor(sid, created.id()));
+        if (createdRef != null) {
+          cb.accept(createdRef);
+        }
       } else {
         setInterceptorTarget(sid, created.id());
       }
@@ -1418,7 +1426,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
             && Objects.toString(interceptorId, "").trim().isBlank();
     if (interceptorsOverview) {
       title.setText("Interceptors");
-      subtitle.setText("Automation rules for IRC events on this server.");
+      subtitle.setText("Automation rules for IRC events on this server/network.");
       setEmptyStateContent(
           "Interceptors",
           "<html><div style='text-align:center;'>"
@@ -1519,7 +1527,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
     loading = true;
     title.setText("Interceptor - " + def.name());
-    subtitle.setText(def.scopeAnyServer() ? "Scope: any server" : "Scope: this server");
+    subtitle.setText(def.scopeAnyServer() ? "Scope: any server" : "Scope: this server/network");
     setEmptyStateContent("", "", false);
     setEditorTabsVisible(true);
 

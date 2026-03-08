@@ -275,8 +275,7 @@ class MatrixIrcClientServiceTest {
 
     assertDoesNotThrow(() -> service.connect("matrix").blockingAwait());
     assertEquals(Optional.of("@alice:matrix.example.org"), service.currentNick("matrix"));
-    verify(loginClient, times(1))
-        .loginWithPassword("matrix", server, "alice", "matrix-password");
+    verify(loginClient, times(1)).loginWithPassword("matrix", server, "alice", "matrix-password");
     verify(homeserverProbe, times(0)).whoami(eq("matrix"), eq(server), anyString());
   }
 

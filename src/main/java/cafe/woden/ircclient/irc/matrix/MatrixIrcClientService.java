@@ -247,7 +247,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                     homeserverProbe.whoami(sid, server, accessToken);
                 if (!whoami.authenticated()) {
                   throw connectUnavailable(
-                      sid, "authentication failed at " + whoami.endpoint() + ": " + whoami.detail());
+                      sid,
+                      "authentication failed at " + whoami.endpoint() + ": " + whoami.detail());
                 }
                 userId = normalize(whoami.userId());
               }
@@ -1269,7 +1270,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     if (server == null) return null;
     IrcProperties.Server.Sasl sasl = server.sasl();
     if (!isMatrixPasswordAuth(sasl)) return null;
-    return new MatrixPasswordAuth(normalize(sasl.username()), Objects.toString(sasl.password(), ""));
+    return new MatrixPasswordAuth(
+        normalize(sasl.username()), Objects.toString(sasl.password(), ""));
   }
 
   private static boolean isMatrixPasswordAuth(IrcProperties.Server.Sasl sasl) {

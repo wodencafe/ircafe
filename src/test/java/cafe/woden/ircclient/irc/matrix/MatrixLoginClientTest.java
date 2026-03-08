@@ -29,8 +29,7 @@ class MatrixLoginClientTest {
     when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
     try (TestServer server =
         TestServer.start(
-            200,
-            "{\"access_token\":\"secret-token\",\"user_id\":\"@alice:matrix.example.org\"}")) {
+            200, "{\"access_token\":\"secret-token\",\"user_id\":\"@alice:matrix.example.org\"}")) {
       MatrixLoginClient.LoginResult result =
           loginClient.loginWithPassword(
               "matrix",
@@ -82,8 +81,7 @@ class MatrixLoginClientTest {
   @Test
   void loginWithPasswordReportsFailureWhenAccessTokenMissing() throws Exception {
     when(proxyResolver.planForServer("matrix")).thenReturn(directPlan());
-    try (TestServer server =
-        TestServer.start(200, "{\"user_id\":\"@alice:matrix.example.org\"}")) {
+    try (TestServer server = TestServer.start(200, "{\"user_id\":\"@alice:matrix.example.org\"}")) {
       MatrixLoginClient.LoginResult result =
           loginClient.loginWithPassword(
               "matrix",
