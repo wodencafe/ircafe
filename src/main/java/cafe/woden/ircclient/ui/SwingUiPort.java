@@ -281,15 +281,26 @@ public class SwingUiPort implements UiPort {
             .onBackpressureBuffer();
     return Flowable.mergeArray(
             setupRequests.map(
-                sid ->
-                    new ParsedInput.BackendNamed(
-                        BackendNamedCommandNames.QUASSEL_SETUP, normalizeBackendCommandArgs(sid))),
+                sid -> {
+                  String normalized = normalizeBackendCommandArgs(sid);
+                  revealBackendStatusTarget(normalized);
+                  return new ParsedInput.BackendNamed(
+                      BackendNamedCommandNames.QUASSEL_SETUP, normalized);
+                }),
             networkManagerRequests.map(
                 sid ->
                     new ParsedInput.BackendNamed(
                         BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER,
                         normalizeBackendCommandArgs(sid))))
         .onBackpressureBuffer();
+  }
+
+  private void revealBackendStatusTarget(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    TargetRef status = new TargetRef(sid, "status");
+    ensureTargetExists(status);
+    selectTarget(status);
   }
 
   @Override

@@ -73,6 +73,11 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
             status,
             "(qsetup)",
             "No pending Quassel setup is cached yet. Connecting to check setup state…");
+        ui.appendStatus(
+            status,
+            "(qsetup)",
+            "If connect fails with ClientLogin rejected, the core is likely already configured. "
+                + "Update this server's Login and Server Password, then reconnect.");
         connectionCoordinator.connectOne(sid);
         return;
       }
@@ -93,12 +98,14 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
       ui.appendStatus(status, "(qsetup)", "Quassel Core setup canceled.");
       return;
     }
+    QuasselCoreControlPort.QuasselCoreSetupRequest request = maybeRequest.orElseThrow();
 
     disposables.add(
         quasselControl
-            .submitQuasselCoreSetup(sid, maybeRequest.orElseThrow())
+            .submitQuasselCoreSetup(sid, request)
             .subscribe(
                 () -> {
+                  connectionCoordinator.syncQuasselSetupCredentials(sid, request);
                   connectionCoordinator.markQuasselSetupSubmitted(sid);
                   ui.appendStatus(
                       status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
@@ -362,7 +369,8 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
   }
 
   private boolean ensureQuasselServerBackend(String serverId, TargetRef out, String statusTag) {
-    return quasselCommandSupport.ensureQuasselServerBackend(serverId, out, statusTag, ui);
+    TargetRef fallback = targetCoordinator.safeStatusTarget();
+    return quasselCommandSupport.ensureQuasselServerBackend(serverId, out, fallback, statusTag, ui);
   }
 
   private String renderQuasselNetworkSummary(

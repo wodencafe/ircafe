@@ -23,6 +23,7 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JList;
+import javax.swing.JPasswordField;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Assumptions;
@@ -168,7 +169,7 @@ class ServersDialogFunctionalTest {
     JTextField idField = readField(window, "idField", JTextField.class);
     JTextField hostField = readField(window, "hostField", JTextField.class);
     JTextField loginField = readField(window, "loginField", JTextField.class);
-    JTextField serverPassField = readField(window, "serverPassField", JTextField.class);
+    JPasswordField serverPassField = readField(window, "serverPassField", JPasswordField.class);
     JTextField portField = readField(window, "portField", JTextField.class);
     JCheckBox tlsBox = readField(window, "tlsBox", JCheckBox.class);
     JComboBox<?> backendCombo = readField(window, "backendCombo", JComboBox.class);

@@ -77,6 +77,7 @@ public class ConnectionCoordinator {
   private final Map<String, IrcProperties.Server> configuredServerConfigsById = new HashMap<>();
   private final Map<String, Long> restoreRunByServer = new HashMap<>();
   private final AtomicLong restoreRunSequence = new AtomicLong();
+  private final Set<String> suppressStartupQuasselSetupPromptServers = new HashSet<>();
   private final Map<String, Set<String>> observedJoinedChannelKeysByServer =
       new ConcurrentHashMap<>();
 
@@ -128,6 +129,7 @@ public class ConnectionCoordinator {
   void shutdown() {
     disposables.dispose();
     restoreRunByServer.clear();
+    suppressStartupQuasselSetupPromptServers.clear();
   }
 
   public boolean isConnected(String serverId) {
@@ -199,7 +201,7 @@ public class ConnectionCoordinator {
         runtimeConfig != null ? runtimeConfig.readServerAutoConnectOnStartByServer() : Map.of();
     for (String sid : serverIds) {
       if (!isStartupAutoConnectEnabled(autoConnectByServer, sid)) continue;
-      requestConnect(sid, false, false);
+      requestConnect(sid, false, false, true);
     }
     updateConnectionUi();
   }
@@ -251,6 +253,7 @@ public class ConnectionCoordinator {
 
     TargetRef status = new TargetRef(sid, "status");
     ui.ensureTargetExists(status);
+    suppressStartupQuasselSetupPromptServers.remove(sid);
     setDesiredOnline(sid, true);
     setNextRetryAtMs(sid, null);
 
@@ -289,6 +292,48 @@ public class ConnectionCoordinator {
     quasselSetupLifecycleState.markSetupSubmitted(serverId);
   }
 
+  public void syncQuasselSetupCredentials(
+      String serverId, QuasselCoreControlPort.QuasselCoreSetupRequest request) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty() || request == null) return;
+
+    String login = Objects.toString(request.adminUser(), "").trim();
+    String password = Objects.toString(request.adminPassword(), "");
+    if (login.isEmpty() || password.isBlank()) return;
+
+    Optional<IrcProperties.Server> current;
+    try {
+      current = serverRegistry.find(sid);
+    } catch (Exception ignored) {
+      return;
+    }
+    if (current == null || current.isEmpty()) return;
+    IrcProperties.Server existing = current.orElseThrow();
+    if (existing.backend() != IrcProperties.Server.Backend.QUASSEL_CORE) return;
+
+    String existingLogin = Objects.toString(existing.login(), "").trim();
+    String existingPassword = Objects.toString(existing.serverPassword(), "");
+    if (existingLogin.equals(login) && existingPassword.equals(password)) return;
+
+    IrcProperties.Server updated =
+        new IrcProperties.Server(
+            existing.id(),
+            existing.host(),
+            existing.port(),
+            existing.tls(),
+            password,
+            existing.nick(),
+            login,
+            existing.realName(),
+            existing.sasl(),
+            existing.nickserv(),
+            existing.autoJoin(),
+            existing.perform(),
+            existing.proxy(),
+            existing.backend());
+    serverRegistry.upsert(updated);
+  }
+
   private static boolean isStartupAutoConnectEnabled(
       Map<String, Boolean> autoConnectByServer, String serverId) {
     if (autoConnectByServer == null || autoConnectByServer.isEmpty()) return true;
@@ -317,12 +362,26 @@ public class ConnectionCoordinator {
   }
 
   private void requestConnect(String sid, boolean announceQueued) {
-    requestConnect(sid, announceQueued, true);
+    requestConnect(sid, announceQueued, true, false);
   }
 
   private void requestConnect(String sid, boolean announceQueued, boolean refreshUiNow) {
+    requestConnect(sid, announceQueued, refreshUiNow, false);
+  }
+
+  private void requestConnect(
+      String sid,
+      boolean announceQueued,
+      boolean refreshUiNow,
+      boolean suppressStartupQuasselSetupPrompt) {
     String id = Objects.toString(sid, "").trim();
     if (id.isEmpty()) return;
+
+    if (suppressStartupQuasselSetupPrompt) {
+      suppressStartupQuasselSetupPromptServers.add(id);
+    } else {
+      suppressStartupQuasselSetupPromptServers.remove(id);
+    }
 
     TargetRef status = new TargetRef(id, "status");
     ui.ensureTargetExists(status);
@@ -372,6 +431,7 @@ public class ConnectionCoordinator {
     String id = Objects.toString(sid, "").trim();
     if (id.isEmpty()) return;
 
+    suppressStartupQuasselSetupPromptServers.remove(id);
     TargetRef status = new TargetRef(id, "status");
     ui.ensureTargetExists(status);
     setDesiredOnline(id, false);
@@ -434,6 +494,7 @@ public class ConnectionCoordinator {
       setDesiredOnline(sid, false);
       clearConnectionDiagnostics(sid);
       restoreRunByServer.remove(sid);
+      suppressStartupQuasselSetupPromptServers.remove(sid);
       quasselSetupLifecycleState.clearServer(sid);
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
         String fallback = current.stream().findFirst().orElse("default");
@@ -749,14 +810,24 @@ public class ConnectionCoordinator {
         setState(sid, ConnectionState.DISCONNECTED);
         quasselSetupLifecycleState.markSetupPending(sid);
         message = "Quassel Core setup is required before this connection can log in.";
-        String notice =
-            "Quassel setup required for server '"
-                + sid
-                + "'. Opening setup dialog now. If you close it, run /quasselsetup "
-                + sid
-                + " or use Run/Complete Quassel Setup... from the server menu.";
-        ui.enqueueStatusNotice(notice, status);
-        promptQuasselSetup = true;
+        boolean suppressPrompt = suppressStartupQuasselSetupPromptServers.remove(sid);
+        if (suppressPrompt) {
+          ui.appendStatus(
+              status,
+              "(qsetup)",
+              "Quassel setup required. Run /quasselsetup "
+                  + sid
+                  + " or use Run/Complete Quassel Setup... from the server menu.");
+        } else {
+          String notice =
+              "Quassel setup required for server '"
+                  + sid
+                  + "'. Opening setup dialog now. If you close it, run /quasselsetup "
+                  + sid
+                  + " or use Run/Complete Quassel Setup... from the server menu.";
+          ui.enqueueStatusNotice(notice, status);
+          promptQuasselSetup = true;
+        }
       }
       default -> {
         return ConnectivityChange.NONE;
@@ -796,12 +867,14 @@ public class ConnectionCoordinator {
     if (maybeRequest == null || maybeRequest.isEmpty()) {
       return;
     }
+    QuasselCoreControlPort.QuasselCoreSetupRequest request = maybeRequest.orElseThrow();
 
     disposables.add(
         quasselControl
-            .submitQuasselCoreSetup(sid, maybeRequest.orElseThrow())
+            .submitQuasselCoreSetup(sid, request)
             .subscribe(
                 () -> {
+                  syncQuasselSetupCredentials(sid, request);
                   markQuasselSetupSubmitted(sid);
                   ui.appendStatus(
                       status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");

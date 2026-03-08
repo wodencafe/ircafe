@@ -371,6 +371,21 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void connectionFeaturesEventIsForwardedToConnectivityCoordinator() throws Exception {
+    TargetRef active = new TargetRef("quassel", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    IrcEvent.ConnectionFeaturesUpdated updated =
+        new IrcEvent.ConnectionFeaturesUpdated(
+            Instant.now(),
+            "quassel-phase=setup-required;detail=core is not configured for client logins");
+
+    invokeOnServerIrcEvent(new ServerIrcEvent("quassel", updated));
+
+    verify(connectionCoordinator).handleConnectivityEvent("quassel", updated, active);
+    verify(targetCoordinator).refreshInputEnabledForActiveTarget();
+  }
+
+  @Test
   void modeSnapshotObservedRoutesToHandlerWithoutModeInterceptorIngest() throws Exception {
     IrcEvent.ChannelModeObserved snapshot =
         new IrcEvent.ChannelModeObserved(

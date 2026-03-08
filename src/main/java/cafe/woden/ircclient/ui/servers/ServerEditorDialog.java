@@ -57,7 +57,7 @@ public class ServerEditorDialog extends JDialog {
   private final JTextField hostField = new JTextField();
   private final JTextField portField = new JTextField();
   private final JCheckBox tlsBox = new JCheckBox("Use TLS (SSL)");
-  private final JTextField serverPassField = new JTextField();
+  private final JPasswordField serverPassField = new JPasswordField();
   private final JCheckBox autoConnectOnStartBox =
       new JCheckBox("Auto-connect this server on startup");
   private final JLabel hostLabel = new JLabel("Host");
@@ -303,6 +303,8 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(nickservPassField, "password");
     // FlatLaf: show the standard "reveal" (eye) button inside password fields.
     // Using the string key avoids any compile-time dependency on FlatLaf constants.
+    serverPassField.putClientProperty("JPasswordField.showRevealButton", true);
+    appendStyle(serverPassField, "showRevealButton:true");
     saslPassField.putClientProperty("JPasswordField.showRevealButton", true);
     // FlatLaf also supports a STYLE flag; keep both for compatibility.
     appendStyle(saslPassField, "showRevealButton:true");
@@ -781,13 +783,12 @@ public class ServerEditorDialog extends JDialog {
     portRow.add(tlsBox, pg);
 
     addRow(p, g, 3, "Port", portRow);
-    addRow(p, g, 4, serverPasswordLabel, serverPassField);
-    addRow(p, g, 5, "Startup", autoConnectOnStartBox);
+    addRow(p, g, 4, "Startup", autoConnectOnStartBox);
     connectionBackendHintLabel.putClientProperty(
         FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    addRow(p, g, 6, "Backend hint", connectionBackendHintLabel);
+    addRow(p, g, 5, "Backend hint", connectionBackendHintLabel);
 
-    g.gridy = 8;
+    g.gridy = 7;
     g.gridx = 0;
     g.gridwidth = 2;
     g.weighty = 1.0;
@@ -819,6 +820,8 @@ public class ServerEditorDialog extends JDialog {
             new MigLayout(
                 "insets 8, fill, wrap 2", "[right]12[grow,fill,min:0]", "[]8[grow,fill,min:0]"));
 
+    p.add(serverPasswordLabel);
+    p.add(serverPassField, "growx, wmin 0, wrap");
     p.add(new JLabel("Method"));
     p.add(authModeCombo, "growx, wmin 0, wrap");
 
@@ -1192,7 +1195,7 @@ public class ServerEditorDialog extends JDialog {
     setError(portField, portBad);
     ok &= !portBad;
 
-    boolean accessTokenBad = matrixBackend && trim(serverPassField.getText()).isEmpty();
+    boolean accessTokenBad = matrixBackend && trim(serverPasswordValue()).isEmpty();
     setError(serverPassField, accessTokenBad);
     ok &= !accessTokenBad;
 
@@ -1422,7 +1425,7 @@ public class ServerEditorDialog extends JDialog {
     boolean ircBackend = backend == IrcProperties.Server.Backend.IRC;
 
     boolean tls = tlsBox.isSelected();
-    String serverPassword = Objects.toString(serverPassField.getText(), "");
+    String serverPassword = serverPasswordValue();
     if (matrixBackend && trim(serverPassword).isEmpty()) {
       throw new IllegalArgumentException("Matrix access token is required");
     }
@@ -1561,6 +1564,11 @@ public class ServerEditorDialog extends JDialog {
         perform,
         proxyOverride,
         backend);
+  }
+
+  private String serverPasswordValue() {
+    // JPasswordField stores secret as char[]; convert only at validation/save boundaries.
+    return new String(serverPassField.getPassword());
   }
 
   private static String backendLabel(IrcProperties.Server.Backend backend) {

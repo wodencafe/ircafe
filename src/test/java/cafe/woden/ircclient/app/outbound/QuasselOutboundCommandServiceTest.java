@@ -84,6 +84,7 @@ class QuasselOutboundCommandServiceTest {
 
     verify(ui).promptQuasselCoreSetup("quassel", prompt);
     verify(irc).submitQuasselCoreSetup("quassel", request);
+    verify(connectionCoordinator).syncQuasselSetupCredentials("quassel", request);
     verify(connectionCoordinator).markQuasselSetupSubmitted("quassel");
     verify(ui).appendStatus(status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
     verify(connectionCoordinator).connectOne("quassel");
@@ -129,6 +130,8 @@ class QuasselOutboundCommandServiceTest {
             status,
             "(qsetup)",
             "No pending Quassel setup is cached yet. Connecting to check setup state…");
+    verify(ui)
+        .appendStatus(eq(status), eq("(qsetup)"), contains("core is likely already configured"));
     verify(irc, never()).submitQuasselCoreSetup(anyString(), any());
     verify(connectionCoordinator).connectOne("quassel");
   }
@@ -164,6 +167,22 @@ class QuasselOutboundCommandServiceTest {
             eq(status), eq("(qsetup)"), contains("does not use the Quassel Core backend"));
     verify(irc, never()).isQuasselCoreSetupPending(anyString());
     verify(irc, never()).submitQuasselCoreSetup(anyString(), any());
+  }
+
+  @Test
+  void quasselSetupUnknownServerMirrorsStatusToSafeTarget() {
+    TargetRef safe = new TargetRef("active", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(safe);
+    when(serverCatalog.find("testlocal")).thenReturn(Optional.empty());
+
+    service.handleQuasselSetup(disposables, "testlocal");
+
+    verify(ui)
+        .appendStatus(
+            new TargetRef("testlocal", "status"), "(qsetup)", "Unknown server 'testlocal'.");
+    verify(ui).appendStatus(safe, "(qsetup)", "Unknown server 'testlocal'.");
+    verify(irc, never()).isQuasselCoreSetupPending(anyString());
+    verify(connectionCoordinator, never()).connectOne(anyString());
   }
 
   @Test

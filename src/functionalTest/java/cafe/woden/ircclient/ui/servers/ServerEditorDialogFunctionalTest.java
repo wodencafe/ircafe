@@ -52,10 +52,25 @@ class ServerEditorDialogFunctionalTest {
     JTextField hostField = readField(dialog, "hostField", JTextField.class);
     JTextField nickField = readField(dialog, "nickField", JTextField.class);
     JTextField loginField = readField(dialog, "loginField", JTextField.class);
-    JTextField serverPassField = readField(dialog, "serverPassField", JTextField.class);
+    JPasswordField serverPassField = readField(dialog, "serverPassField", JPasswordField.class);
     JButton saveBtn = readField(dialog, "saveBtn", JButton.class);
 
     try {
+      JTabbedPane tabs = onEdtCall(() -> findDescendant(dialog, JTabbedPane.class));
+      assertNotNull(tabs, "server dialog should contain tabs");
+      int authTabIndex = onEdtCall(() -> tabs.indexOfTab("Auth"));
+      int connectionTabIndex = onEdtCall(() -> tabs.indexOfTab("Connection"));
+      assertTrue(authTabIndex >= 0, "auth tab should be present");
+      assertTrue(connectionTabIndex >= 0, "connection tab should be present");
+      Component authTabComponent = onEdtCall(() -> tabs.getComponentAt(authTabIndex));
+      Component connectionTabComponent = onEdtCall(() -> tabs.getComponentAt(connectionTabIndex));
+      assertTrue(
+          onEdtCall(() -> isDescendant(authTabComponent, serverPassField)),
+          "server/core password field should be on Auth tab");
+      assertFalse(
+          onEdtCall(() -> isDescendant(connectionTabComponent, serverPassField)),
+          "server/core password field should not live on Connection tab");
+
       onEdt(() -> assertEquals("6697", portField.getText(), "tls default should set secure port"));
       onEdt(
           () ->
@@ -166,7 +181,7 @@ class ServerEditorDialogFunctionalTest {
     JTextField idField = readField(dialog, "idField", JTextField.class);
     JTextField hostField = readField(dialog, "hostField", JTextField.class);
     JTextField portField = readField(dialog, "portField", JTextField.class);
-    JTextField serverPassField = readField(dialog, "serverPassField", JTextField.class);
+    JPasswordField serverPassField = readField(dialog, "serverPassField", JPasswordField.class);
     JComboBox<?> backendCombo = readField(dialog, "backendCombo", JComboBox.class);
     JComboBox<?> authModeCombo = readField(dialog, "authModeCombo", JComboBox.class);
     JCheckBox tlsBox = readField(dialog, "tlsBox", JCheckBox.class);
@@ -266,6 +281,16 @@ class ServerEditorDialogFunctionalTest {
       }
     }
     return null;
+  }
+
+  private static boolean isDescendant(Component root, Component target) {
+    if (root == null || target == null) return false;
+    if (root == target) return true;
+    if (!(root instanceof Container container)) return false;
+    for (Component child : container.getComponents()) {
+      if (isDescendant(child, target)) return true;
+    }
+    return false;
   }
 
   private static void waitFor(BooleanSupplier condition, Duration timeout) throws Exception {

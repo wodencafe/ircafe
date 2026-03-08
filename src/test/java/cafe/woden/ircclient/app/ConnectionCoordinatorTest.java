@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -33,6 +34,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class ConnectionCoordinatorTest {
 
@@ -551,6 +553,15 @@ class ConnectionCoordinatorTest {
     TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
+    when(serverRegistry.find("quassel"))
+        .thenReturn(
+            Optional.of(
+                server(
+                    "quassel",
+                    "localhost",
+                    4242,
+                    false,
+                    IrcProperties.Server.Backend.QUASSEL_CORE)));
     when(serverCatalog.containsId("quassel")).thenReturn(true);
     when(irc.connect("quassel")).thenReturn(Completable.never());
     when(irc.isQuasselCoreSetupPending("quassel")).thenReturn(true);
@@ -599,7 +610,61 @@ class ConnectionCoordinatorTest {
             eq("(qsetup)"),
             argThat(text -> text != null && text.contains("Opening Quassel Network Manager")));
     verify(ui).openQuasselNetworkManager("quassel");
+    ArgumentCaptor<IrcProperties.Server> updatedServerCaptor =
+        ArgumentCaptor.forClass(IrcProperties.Server.class);
+    verify(serverRegistry).upsert(updatedServerCaptor.capture());
+    assertEquals("admin", updatedServerCaptor.getValue().login());
+    assertEquals("secret", updatedServerCaptor.getValue().serverPassword());
     verify(irc, times(2)).connect("quassel");
+  }
+
+  @Test
+  void startupAutoConnectSetupRequiredDoesNotAutoPromptDialog() {
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
+    when(serverCatalog.containsId("quassel")).thenReturn(true);
+    when(runtimeConfig.readServerAutoConnectOnStartByServer()).thenReturn(Map.of("quassel", true));
+    when(irc.connect("quassel")).thenReturn(Completable.never());
+    when(irc.isQuasselCoreSetupPending("quassel")).thenReturn(true);
+    QuasselCoreControlPort.QuasselCoreSetupPrompt prompt =
+        new QuasselCoreControlPort.QuasselCoreSetupPrompt(
+            "quassel", "setup required", List.of("SQLite"), List.of("Database"), Map.of());
+    when(irc.quasselCoreSetupPrompt("quassel")).thenReturn(Optional.of(prompt));
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            IrcConnectionLifecyclePort.from(irc),
+            irc,
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    coordinator.connectAutoConnectOnStartServers();
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(
+            Instant.now(),
+            "quassel-phase=setup-required;detail=Quassel Core setup is required before login"),
+        null);
+
+    TargetRef status = new TargetRef("quassel", "status");
+    verify(ui, never()).promptQuasselCoreSetup(anyString(), any());
+    verify(ui)
+        .appendStatus(
+            eq(status),
+            eq("(qsetup)"),
+            argThat(text -> text != null && text.contains("/quasselsetup quassel")));
+    verify(ui, atLeastOnce()).setServerDesiredOnline("quassel", false);
   }
 
   @Test
