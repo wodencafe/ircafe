@@ -252,6 +252,62 @@ class ServerTreeQuasselNetworkParentResolverTest {
     assertEquals(Boolean.FALSE, data.enabled());
   }
 
+  @Test
+  void syncServerNetworksMovesOtherUnderNetworkWhenNoCoreScopedChildren() {
+    Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+    DefaultMutableTreeNode root = new DefaultMutableTreeNode("root");
+    DefaultTreeModel model = new DefaultTreeModel(root);
+    ServerTreeQuasselNetworkParentResolver resolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            sid -> "quassel".equalsIgnoreCase(sid),
+            "Channel List",
+            "Private Messages");
+    ServerNodes serverNodes = serverNodes("quassel");
+    root.add(serverNodes.serverNode);
+    resolver.initializeServer("quassel", serverNodes);
+
+    resolver.syncServerNetworks(
+        "quassel",
+        serverNodes,
+        List.of(
+            new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
+                "2", "Libera", true, true)));
+
+    DefaultMutableTreeNode network = networkNodeByToken(serverNodes.serverNode, "2");
+    assertNotNull(network);
+    assertSame(network, serverNodes.otherNode.getParent());
+  }
+
+  @Test
+  void syncServerNetworksKeepsOtherAtRootWhenCoreScopedChildrenExist() {
+    Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+    DefaultMutableTreeNode root = new DefaultMutableTreeNode("root");
+    DefaultTreeModel model = new DefaultTreeModel(root);
+    ServerTreeQuasselNetworkParentResolver resolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            sid -> "quassel".equalsIgnoreCase(sid),
+            "Channel List",
+            "Private Messages");
+    ServerNodes serverNodes = serverNodes("quassel");
+    root.add(serverNodes.serverNode);
+    serverNodes.otherNode.add(
+        new DefaultMutableTreeNode(new ServerTreeNodeData(serverNodes.statusRef, "Server")));
+    resolver.initializeServer("quassel", serverNodes);
+
+    resolver.syncServerNetworks(
+        "quassel",
+        serverNodes,
+        List.of(
+            new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
+                "2", "Libera", true, true)));
+
+    assertSame(serverNodes.serverNode, serverNodes.otherNode.getParent());
+  }
+
   private static DefaultMutableTreeNode networkNodeByToken(
       DefaultMutableTreeNode serverNode, String token) {
     if (serverNode == null) return null;
