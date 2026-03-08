@@ -8,22 +8,37 @@ public final class ServerTreeQuasselNetworkNodeData {
   private final String serverId;
   private final String networkToken;
   private final String label;
+  private final Boolean connected;
+  private final Boolean enabled;
   private final boolean emptyState;
 
   public static ServerTreeQuasselNetworkNodeData network(
       String serverId, String networkToken, String label) {
-    return new ServerTreeQuasselNetworkNodeData(serverId, networkToken, label, false);
+    return network(serverId, networkToken, label, null, null);
+  }
+
+  public static ServerTreeQuasselNetworkNodeData network(
+      String serverId, String networkToken, String label, Boolean connected, Boolean enabled) {
+    return new ServerTreeQuasselNetworkNodeData(
+        serverId, networkToken, label, connected, enabled, false);
   }
 
   public static ServerTreeQuasselNetworkNodeData emptyState(String serverId, String label) {
-    return new ServerTreeQuasselNetworkNodeData(serverId, "", label, true);
+    return new ServerTreeQuasselNetworkNodeData(serverId, "", label, null, null, true);
   }
 
   private ServerTreeQuasselNetworkNodeData(
-      String serverId, String networkToken, String label, boolean emptyState) {
+      String serverId,
+      String networkToken,
+      String label,
+      Boolean connected,
+      Boolean enabled,
+      boolean emptyState) {
     this.serverId = normalizeServerId(serverId);
     this.networkToken = normalizeToken(networkToken);
     this.label = Objects.toString(label, "").trim();
+    this.connected = connected;
+    this.enabled = enabled;
     this.emptyState = emptyState;
   }
 
@@ -37,6 +52,14 @@ public final class ServerTreeQuasselNetworkNodeData {
 
   public String label() {
     return label;
+  }
+
+  public Boolean connected() {
+    return connected;
+  }
+
+  public Boolean enabled() {
+    return enabled;
   }
 
   public boolean emptyState() {

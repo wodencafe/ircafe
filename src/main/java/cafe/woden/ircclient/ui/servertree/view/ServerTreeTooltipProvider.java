@@ -279,7 +279,21 @@ public final class ServerTreeTooltipProvider {
         String token = Objects.toString(networkNodeData.networkToken(), "").trim();
         String tip = Objects.toString(context.quasselNetworkTooltip(sid, token), "").trim();
         if (!tip.isEmpty()) return tip;
-        return "Quassel network \"" + networkNodeData.label() + "\" (token: " + token + ").";
+        String state =
+            Boolean.FALSE.equals(networkNodeData.enabled())
+                ? "disabled"
+                : Boolean.TRUE.equals(networkNodeData.connected())
+                    ? "connected"
+                    : Boolean.FALSE.equals(networkNodeData.connected())
+                        ? "disconnected"
+                        : "status unknown";
+        return "Quassel network \""
+            + networkNodeData.label()
+            + "\" ("
+            + state
+            + ", token: "
+            + token
+            + ").";
       }
     }
 

@@ -11,6 +11,11 @@ import javax.swing.JPopupMenu;
 /** Builds context menus for Quassel network container and empty-state tree nodes. */
 public final class ServerTreeQuasselNetworkNodeMenuBuilder {
 
+  @FunctionalInterface
+  public interface TriPredicate<A, B, C> {
+    boolean test(A first, B second, C third);
+  }
+
   public interface Context {
     void openPinnedChat(TargetRef ref);
 
@@ -21,6 +26,8 @@ public final class ServerTreeQuasselNetworkNodeMenuBuilder {
     void removeQuasselNetwork(String serverId, String networkToken);
 
     void addQuasselNetwork(String serverId);
+
+    boolean confirmRemoveQuasselNetwork(String serverId, String networkToken, String networkLabel);
 
     void openQuasselSetup(String serverId);
 
@@ -33,6 +40,7 @@ public final class ServerTreeQuasselNetworkNodeMenuBuilder {
       java.util.function.BiConsumer<String, String> disconnectQuasselNetwork,
       java.util.function.BiConsumer<String, String> removeQuasselNetwork,
       Consumer<String> addQuasselNetwork,
+      TriPredicate<String, String, String> confirmRemoveQuasselNetwork,
       Consumer<String> openQuasselSetup,
       Consumer<String> openQuasselNetworkManager) {
     Objects.requireNonNull(openPinnedChat, "openPinnedChat");
@@ -40,6 +48,7 @@ public final class ServerTreeQuasselNetworkNodeMenuBuilder {
     Objects.requireNonNull(disconnectQuasselNetwork, "disconnectQuasselNetwork");
     Objects.requireNonNull(removeQuasselNetwork, "removeQuasselNetwork");
     Objects.requireNonNull(addQuasselNetwork, "addQuasselNetwork");
+    Objects.requireNonNull(confirmRemoveQuasselNetwork, "confirmRemoveQuasselNetwork");
     Objects.requireNonNull(openQuasselSetup, "openQuasselSetup");
     Objects.requireNonNull(openQuasselNetworkManager, "openQuasselNetworkManager");
     return new Context() {
@@ -66,6 +75,12 @@ public final class ServerTreeQuasselNetworkNodeMenuBuilder {
       @Override
       public void addQuasselNetwork(String serverId) {
         addQuasselNetwork.accept(serverId);
+      }
+
+      @Override
+      public boolean confirmRemoveQuasselNetwork(
+          String serverId, String networkToken, String networkLabel) {
+        return confirmRemoveQuasselNetwork.test(serverId, networkToken, networkLabel);
       }
 
       @Override
@@ -105,19 +120,32 @@ public final class ServerTreeQuasselNetworkNodeMenuBuilder {
       JMenuItem connect = new JMenuItem("Connect \"" + label + "\"");
       connect.setIcon(SvgIcons.action("plus", 16));
       connect.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
+      boolean networkTokenKnown = !networkToken.isEmpty();
+      boolean networkEnabled = !Boolean.FALSE.equals(nodeData.enabled());
+      boolean connected = Boolean.TRUE.equals(nodeData.connected());
+      boolean disconnected = Boolean.FALSE.equals(nodeData.connected());
+      connect.setEnabled(networkTokenKnown && networkEnabled && !connected);
       connect.addActionListener(ev -> context.connectQuasselNetwork(serverId, networkToken));
       menu.add(connect);
 
       JMenuItem disconnect = new JMenuItem("Disconnect \"" + label + "\"");
       disconnect.setIcon(SvgIcons.action("exit", 16));
       disconnect.setDisabledIcon(SvgIcons.actionDisabled("exit", 16));
+      disconnect.setEnabled(networkTokenKnown && networkEnabled && !disconnected);
       disconnect.addActionListener(ev -> context.disconnectQuasselNetwork(serverId, networkToken));
       menu.add(disconnect);
 
       JMenuItem remove = new JMenuItem("Remove \"" + label + "\"");
       remove.setIcon(SvgIcons.action("close", 16));
       remove.setDisabledIcon(SvgIcons.actionDisabled("close", 16));
-      remove.addActionListener(ev -> context.removeQuasselNetwork(serverId, networkToken));
+      remove.setEnabled(networkTokenKnown);
+      remove.addActionListener(
+          ev -> {
+            if (!context.confirmRemoveQuasselNetwork(serverId, networkToken, label)) {
+              return;
+            }
+            context.removeQuasselNetwork(serverId, networkToken);
+          });
       menu.add(remove);
       menu.addSeparator();
     } else {

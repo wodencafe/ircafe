@@ -198,6 +198,8 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             in.requestEmitter()
                 .emitOpenQuasselNetworkManager(
                     encodeQuasselNetworkManagerAction(serverId, "add", "")),
+        (serverId, networkToken, networkLabel) ->
+            confirmRemoveQuasselNetwork(in, networkToken, networkLabel),
         Objects.requireNonNull(in.requestEmitter(), "requestEmitter")::emitOpenQuasselSetup,
         in.requestEmitter()::emitOpenQuasselNetworkManager);
   }
@@ -211,6 +213,26 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
     if (op.isEmpty()) return sid;
     if (token.isEmpty()) return sid + " " + op;
     return sid + " " + op + " " + token;
+  }
+
+  private static boolean confirmRemoveQuasselNetwork(
+      Inputs in, String networkToken, String networkLabel) {
+    String token = Objects.toString(networkToken, "").trim();
+    String label = Objects.toString(networkLabel, "").trim();
+    String display = label.isEmpty() ? token : label;
+    if (display.isEmpty()) display = "this network";
+    Component owner = in.ownerComponent();
+    int choice =
+        JOptionPane.showConfirmDialog(
+            owner,
+            "Remove Quassel network \""
+                + display
+                + "\"?\n\n"
+                + "This removes it from Quassel Core configuration.",
+            "Remove Quassel Network",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE);
+    return choice == JOptionPane.YES_OPTION;
   }
 
   private static java.util.Optional<cafe.woden.ircclient.config.ServerEntry> serverEntry(

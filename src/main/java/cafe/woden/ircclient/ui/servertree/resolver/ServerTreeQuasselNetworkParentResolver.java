@@ -6,9 +6,12 @@ import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Predicate;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -17,6 +20,15 @@ import javax.swing.tree.DefaultTreeModel;
 public final class ServerTreeQuasselNetworkParentResolver {
 
   private static final String EMPTY_STATE_LABEL = "No Quassel networks configured";
+
+  /** Snapshot of one Quassel network used to sync network nodes in the tree. */
+  public record NetworkPresentation(
+      String token, String label, Boolean connected, Boolean enabled) {
+    public NetworkPresentation {
+      token = normalizeToken(token);
+      label = Objects.toString(label, "").trim();
+    }
+  }
 
   private record NetworkNodes(
       DefaultMutableTreeNode networkNode,
@@ -57,7 +69,8 @@ public final class ServerTreeQuasselNetworkParentResolver {
     }
     if (token.isEmpty()) return null;
 
-    NetworkNodes networkNodes = ensureNetworkNodes(serverId, token, serverNodes);
+    NetworkNodes networkNodes =
+        ensureNetworkNodes(serverId, token, serverNodes, friendlyNetworkLabel(token), null, null);
     aliasServerChannelListToKnownNetwork(serverId);
     if (ref.isChannel()) return networkNodes.channelListNode();
     if (isPrivateMessageTarget(ref)) return networkNodes.privateMessagesNode();
@@ -66,6 +79,48 @@ public final class ServerTreeQuasselNetworkParentResolver {
       return networkNodes.networkNode();
     }
     return null;
+  }
+
+  public void syncServerNetworks(
+      String serverId, ServerNodes serverNodes, List<NetworkPresentation> networks) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty() || serverNodes == null || serverNodes.serverNode == null) return;
+    if (!isQuasselServer.test(sid)) return;
+
+    LinkedHashMap<String, NetworkPresentation> desiredByToken = new LinkedHashMap<>();
+    if (networks != null) {
+      for (NetworkPresentation raw : networks) {
+        if (raw == null) continue;
+        String token = normalizeToken(raw.token());
+        if (token.isEmpty()) continue;
+        desiredByToken.putIfAbsent(
+            token, new NetworkPresentation(token, raw.label(), raw.connected(), raw.enabled()));
+      }
+    }
+
+    if (desiredByToken.isEmpty()) {
+      removeStaleNetworkNodes(sid, Set.of());
+      maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
+      clearLegacyChannelListAlias(sid);
+      return;
+    }
+
+    removeEmptyStateNodeIfPresent(sid, serverNodes.serverNode);
+    for (Map.Entry<String, NetworkPresentation> entry : desiredByToken.entrySet()) {
+      String token = entry.getKey();
+      NetworkPresentation network = entry.getValue();
+      ensureNetworkNodes(
+          sid, token, serverNodes, network.label(), network.connected(), network.enabled());
+    }
+
+    removeStaleNetworkNodes(sid, desiredByToken.keySet());
+    Map<String, NetworkNodes> remaining = networkNodesByServer.get(sid);
+    if (remaining == null || remaining.isEmpty()) {
+      maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
+      clearLegacyChannelListAlias(sid);
+      return;
+    }
+    aliasServerChannelListToKnownNetwork(sid);
   }
 
   public void initializeServer(String serverId, ServerNodes serverNodes) {
@@ -99,9 +154,16 @@ public final class ServerTreeQuasselNetworkParentResolver {
     if (sid.isEmpty()) return;
     networkNodesByServer.remove(sid);
     emptyStateNodesByServer.remove(sid);
+    clearLegacyChannelListAlias(sid);
   }
 
-  private NetworkNodes ensureNetworkNodes(String serverId, String token, ServerNodes serverNodes) {
+  private NetworkNodes ensureNetworkNodes(
+      String serverId,
+      String token,
+      ServerNodes serverNodes,
+      String label,
+      Boolean connected,
+      Boolean enabled) {
     removeEmptyStateNodeIfPresent(serverId, serverNodes.serverNode);
     Map<String, NetworkNodes> byToken =
         networkNodesByServer.computeIfAbsent(serverId, ignored -> new LinkedHashMap<>());
@@ -110,12 +172,15 @@ public final class ServerTreeQuasselNetworkParentResolver {
         && existing.networkNode().getParent() == serverNodes.serverNode
         && existing.channelListNode().getParent() == existing.networkNode()
         && existing.privateMessagesNode().getParent() == existing.networkNode()) {
+      updateNetworkNodeDataIfNeeded(
+          existing.networkNode(), serverId, token, label, connected, enabled);
       return existing;
     }
 
     DefaultMutableTreeNode networkNode =
         new DefaultMutableTreeNode(
-            ServerTreeQuasselNetworkNodeData.network(serverId, token, friendlyNetworkLabel(token)));
+            ServerTreeQuasselNetworkNodeData.network(
+                serverId, token, resolveNetworkLabel(token, label), connected, enabled));
     int networkInsertIdx = networkInsertIndex(serverNodes);
     serverNodes.serverNode.insert(networkNode, networkInsertIdx);
     model.nodesWereInserted(serverNodes.serverNode, new int[] {networkInsertIdx});
@@ -141,6 +206,72 @@ public final class ServerTreeQuasselNetworkParentResolver {
     NetworkNodes created = new NetworkNodes(networkNode, channelListNode, privateMessagesNode);
     byToken.put(token, created);
     return created;
+  }
+
+  private void updateNetworkNodeDataIfNeeded(
+      DefaultMutableTreeNode networkNode,
+      String serverId,
+      String token,
+      String label,
+      Boolean connected,
+      Boolean enabled) {
+    if (networkNode == null) return;
+    Object userObject = networkNode.getUserObject();
+    if (!(userObject instanceof ServerTreeQuasselNetworkNodeData existing)) return;
+
+    String nextLabel = resolveNetworkLabel(token, label);
+    boolean unchanged =
+        Objects.equals(existing.serverId(), serverId)
+            && Objects.equals(existing.networkToken(), token)
+            && Objects.equals(existing.label(), nextLabel)
+            && Objects.equals(existing.connected(), connected)
+            && Objects.equals(existing.enabled(), enabled)
+            && !existing.emptyState();
+    if (unchanged) return;
+
+    networkNode.setUserObject(
+        ServerTreeQuasselNetworkNodeData.network(serverId, token, nextLabel, connected, enabled));
+    model.nodeChanged(networkNode);
+  }
+
+  private void removeStaleNetworkNodes(String serverId, Set<String> desiredTokens) {
+    Map<String, NetworkNodes> byToken = networkNodesByServer.get(serverId);
+    if (byToken == null || byToken.isEmpty()) return;
+
+    Set<String> wanted = desiredTokens == null ? Set.of() : new LinkedHashSet<>(desiredTokens);
+    LinkedHashMap<String, NetworkNodes> retained = new LinkedHashMap<>();
+    for (Map.Entry<String, NetworkNodes> entry : byToken.entrySet()) {
+      String token = entry.getKey();
+      NetworkNodes nodes = entry.getValue();
+      if (wanted.contains(token)) {
+        retained.put(token, nodes);
+        continue;
+      }
+      if (nodes != null && nodes.networkNode() != null) {
+        pruneLeafMappings(nodes.networkNode());
+        detachNodeIfNeeded(nodes.networkNode());
+      }
+    }
+
+    if (retained.isEmpty()) {
+      networkNodesByServer.remove(serverId);
+    } else {
+      networkNodesByServer.put(serverId, retained);
+    }
+  }
+
+  private void pruneLeafMappings(DefaultMutableTreeNode node) {
+    if (node == null) return;
+    Object userObject = node.getUserObject();
+    if (userObject instanceof ServerTreeNodeData nodeData && nodeData.ref != null) {
+      leaves.remove(nodeData.ref);
+    }
+    for (int i = 0; i < node.getChildCount(); i++) {
+      Object child = node.getChildAt(i);
+      if (child instanceof DefaultMutableTreeNode childNode) {
+        pruneLeafMappings(childNode);
+      }
+    }
   }
 
   private void maybeEnsureEmptyStateNode(String serverId, DefaultMutableTreeNode serverNode) {
@@ -175,17 +306,26 @@ public final class ServerTreeQuasselNetworkParentResolver {
 
   private DefaultMutableTreeNode aliasServerChannelListToKnownNetwork(String serverId) {
     Map<String, NetworkNodes> byToken = networkNodesByServer.get(normalizeServerId(serverId));
-    if (byToken == null || byToken.isEmpty()) return null;
+    TargetRef serverChannelListRef = TargetRef.channelList(serverId);
+    if (byToken == null || byToken.isEmpty()) {
+      leaves.remove(serverChannelListRef);
+      return null;
+    }
     NetworkNodes first = byToken.values().iterator().next();
     if (first == null || first.channelListNode() == null) return null;
 
-    TargetRef serverChannelListRef = TargetRef.channelList(serverId);
     DefaultMutableTreeNode existingServerChannelList = leaves.get(serverChannelListRef);
     if (existingServerChannelList != null && existingServerChannelList != first.channelListNode()) {
       detachNodeIfNeeded(existingServerChannelList);
     }
     leaves.put(serverChannelListRef, first.channelListNode());
     return first.channelListNode();
+  }
+
+  private void clearLegacyChannelListAlias(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    leaves.remove(TargetRef.channelList(sid));
   }
 
   private void detachNodeIfNeeded(DefaultMutableTreeNode node) {
@@ -234,13 +374,17 @@ public final class ServerTreeQuasselNetworkParentResolver {
   }
 
   private static String normalizeToken(String token) {
-    String value = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
-    return value;
+    return Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
   }
 
   private static String normalizeServerId(String serverId) {
-    String value = Objects.toString(serverId, "").trim();
-    return value;
+    return Objects.toString(serverId, "").trim();
+  }
+
+  private static String resolveNetworkLabel(String token, String label) {
+    String explicit = Objects.toString(label, "").trim();
+    if (!explicit.isEmpty()) return explicit;
+    return friendlyNetworkLabel(token);
   }
 
   private static String friendlyNetworkLabel(String token) {

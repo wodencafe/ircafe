@@ -11,6 +11,7 @@ import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -143,6 +144,127 @@ class ServerTreeQuasselNetworkParentResolverTest {
       }
     }
     assertTrue(foundEmptyState);
+  }
+
+  @Test
+  void syncServerNetworksUsesRealNamesAndConnectionState() {
+    Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+    DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));
+    ServerTreeQuasselNetworkParentResolver resolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            sid -> "quassel".equalsIgnoreCase(sid),
+            "Channel List",
+            "Private Messages");
+    ServerNodes serverNodes = serverNodes("quassel");
+    resolver.initializeServer("quassel", serverNodes);
+
+    resolver.syncServerNetworks(
+        "quassel",
+        serverNodes,
+        List.of(
+            new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
+                "2", "Libera Chat", true, true),
+            new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
+                "oftc", "OFTC", false, true)));
+
+    DefaultMutableTreeNode liberaNode = networkNodeByToken(serverNodes.serverNode, "2");
+    assertNotNull(liberaNode);
+    ServerTreeQuasselNetworkNodeData liberaData =
+        (ServerTreeQuasselNetworkNodeData) liberaNode.getUserObject();
+    assertEquals("Libera Chat", liberaData.label());
+    assertEquals(Boolean.TRUE, liberaData.connected());
+    assertEquals(Boolean.TRUE, liberaData.enabled());
+    assertTrue(resolver.isQuasselNetworkNode(liberaNode));
+  }
+
+  @Test
+  void syncServerNetworksRemovesStaleNodesAndRestoresEmptyState() {
+    Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+    DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));
+    ServerTreeQuasselNetworkParentResolver resolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            sid -> "quassel".equalsIgnoreCase(sid),
+            "Channel List",
+            "Private Messages");
+    ServerNodes serverNodes = serverNodes("quassel");
+    resolver.initializeServer("quassel", serverNodes);
+
+    resolver.syncServerNetworks(
+        "quassel",
+        serverNodes,
+        List.of(
+            new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
+                "2", "Libera", true, true)));
+    assertNotNull(networkNodeByToken(serverNodes.serverNode, "2"));
+    assertNotNull(leaves.get(TargetRef.channelList("quassel", "2")));
+
+    resolver.syncServerNetworks("quassel", serverNodes, List.of());
+
+    assertNull(networkNodeByToken(serverNodes.serverNode, "2"));
+    assertNull(leaves.get(TargetRef.channelList("quassel", "2")));
+    boolean foundEmptyState = false;
+    for (int i = 0; i < serverNodes.serverNode.getChildCount(); i++) {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) serverNodes.serverNode.getChildAt(i);
+      if (resolver.isQuasselEmptyStateNode(child)) {
+        foundEmptyState = true;
+        break;
+      }
+    }
+    assertTrue(foundEmptyState);
+  }
+
+  @Test
+  void syncServerNetworksUpdatesExistingNodeState() {
+    Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+    DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));
+    ServerTreeQuasselNetworkParentResolver resolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            sid -> "quassel".equalsIgnoreCase(sid),
+            "Channel List",
+            "Private Messages");
+    ServerNodes serverNodes = serverNodes("quassel");
+    resolver.initializeServer("quassel", serverNodes);
+
+    resolver.syncServerNetworks(
+        "quassel",
+        serverNodes,
+        List.of(
+            new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
+                "2", "Libera", false, true)));
+    resolver.syncServerNetworks(
+        "quassel",
+        serverNodes,
+        List.of(
+            new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
+                "2", "Libera Updated", true, false)));
+
+    DefaultMutableTreeNode node = networkNodeByToken(serverNodes.serverNode, "2");
+    assertNotNull(node);
+    ServerTreeQuasselNetworkNodeData data = (ServerTreeQuasselNetworkNodeData) node.getUserObject();
+    assertEquals("Libera Updated", data.label());
+    assertEquals(Boolean.TRUE, data.connected());
+    assertEquals(Boolean.FALSE, data.enabled());
+  }
+
+  private static DefaultMutableTreeNode networkNodeByToken(
+      DefaultMutableTreeNode serverNode, String token) {
+    if (serverNode == null) return null;
+    String want = token == null ? "" : token.trim().toLowerCase(java.util.Locale.ROOT);
+    for (int i = 0; i < serverNode.getChildCount(); i++) {
+      Object child = serverNode.getChildAt(i);
+      if (!(child instanceof DefaultMutableTreeNode childNode)) continue;
+      Object userObject = childNode.getUserObject();
+      if (!(userObject instanceof ServerTreeQuasselNetworkNodeData data)) continue;
+      if (data.emptyState()) continue;
+      if (want.equals(data.networkToken())) return childNode;
+    }
+    return null;
   }
 
   private static ServerNodes serverNodes(String serverId) {

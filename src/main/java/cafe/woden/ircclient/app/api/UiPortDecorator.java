@@ -271,6 +271,12 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void syncQuasselNetworks(
+      String serverId, List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {
+    delegate.syncQuasselNetworks(serverId, networks);
+  }
+
+  @Override
   public void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled) {
     delegate.setConnectionControlsEnabled(connectEnabled, disconnectEnabled);
   }

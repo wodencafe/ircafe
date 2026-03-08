@@ -1341,6 +1341,27 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             : quasselNetworkTooltipProvider;
   }
 
+  public void syncQuasselNetworks(
+      String serverId, List<ServerTreeQuasselNetworkParentResolver.NetworkPresentation> networks) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    List<ServerTreeQuasselNetworkParentResolver.NetworkPresentation> safeNetworks =
+        networks == null ? List.of() : List.copyOf(networks);
+
+    Runnable sync =
+        () -> {
+          ServerNodes serverNodes = serverNodeResolver.serverNodesForServer(sid);
+          if (serverNodes == null) return;
+          quasselNetworkParentResolver.syncServerNetworks(sid, serverNodes, safeNetworks);
+          tree.repaint();
+        };
+    if (SwingUtilities.isEventDispatchThread()) {
+      sync.run();
+    } else {
+      SwingUtilities.invokeLater(sync);
+    }
+  }
+
   public void setPinnedDockableProvider(Function<TargetRef, Dockable> provider) {
     requestApi.setPinnedDockableProvider(provider);
   }

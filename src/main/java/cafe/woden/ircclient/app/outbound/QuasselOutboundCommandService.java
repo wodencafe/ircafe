@@ -186,8 +186,11 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
       CompositeDisposable disposables, String serverId, TargetRef status) {
     List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
         quasselControl.quasselCoreNetworks(serverId);
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> safeNetworks =
+        networks == null ? List.of() : List.copyOf(networks);
+    ui.syncQuasselNetworks(serverId, safeNetworks);
     Optional<QuasselNetworkManagerAction> maybeAction =
-        ui.promptQuasselNetworkManagerAction(serverId, networks);
+        ui.promptQuasselNetworkManagerAction(serverId, safeNetworks);
     if (maybeAction.isEmpty()) {
       return;
     }
@@ -224,6 +227,7 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
                           status,
                           "(qnet-ui)",
                           "Requested connect for Quassel network '" + network + "'.");
+                      syncQuasselNetworksToUi(serverId);
                       maybeReopenQuasselNetworkManagerPrompt(
                           disposables, serverId, status, reopenPrompt);
                     },
@@ -249,6 +253,7 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
                           status,
                           "(qnet-ui)",
                           "Requested disconnect for Quassel network '" + network + "'.");
+                      syncQuasselNetworksToUi(serverId);
                       maybeReopenQuasselNetworkManagerPrompt(
                           disposables, serverId, status, reopenPrompt);
                     },
@@ -274,6 +279,7 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
                           status,
                           "(qnet-ui)",
                           "Requested removal of Quassel network '" + network + "'.");
+                      syncQuasselNetworksToUi(serverId);
                       maybeReopenQuasselNetworkManagerPrompt(
                           disposables, serverId, status, reopenPrompt);
                     },
@@ -304,6 +310,7 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
                               + ":"
                               + request.serverPort()
                               + (request.useTls() ? " (tls)" : " (plain)"));
+                      syncQuasselNetworksToUi(serverId);
                       maybeReopenQuasselNetworkManagerPrompt(
                           disposables, serverId, status, reopenPrompt);
                     },
@@ -336,6 +343,7 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
                               + ":"
                               + request.serverPort()
                               + (request.useTls() ? " (tls)" : " (plain)"));
+                      syncQuasselNetworksToUi(serverId);
                       maybeReopenQuasselNetworkManagerPrompt(
                           disposables, serverId, status, reopenPrompt);
                     },
@@ -377,6 +385,14 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
       CompositeDisposable disposables, String serverId, TargetRef status, boolean reopenPrompt) {
     if (!reopenPrompt) return;
     openQuasselNetworkManagerPrompt(disposables, serverId, status);
+  }
+
+  private void syncQuasselNetworksToUi(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
+        quasselControl.quasselCoreNetworks(sid);
+    ui.syncQuasselNetworks(sid, networks == null ? List.of() : List.copyOf(networks));
   }
 
   private String normalizeConnectionTargetServerId(String target) {
@@ -458,6 +474,7 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
     }
     List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
         quasselControl.quasselCoreNetworks(serverId);
+    ui.syncQuasselNetworks(serverId, networks == null ? List.of() : List.copyOf(networks));
     if (networks.isEmpty()) {
       ui.appendStatus(
           status,
@@ -488,11 +505,13 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
           quasselControl
               .quasselCoreConnectNetwork(serverId, network)
               .subscribe(
-                  () ->
-                      ui.appendStatus(
-                          status,
-                          "(qnet)",
-                          "Requested connect for Quassel network '" + network + "'."),
+                  () -> {
+                    ui.appendStatus(
+                        status,
+                        "(qnet)",
+                        "Requested connect for Quassel network '" + network + "'.");
+                    syncQuasselNetworksToUi(serverId);
+                  },
                   err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
       return;
     }
@@ -501,11 +520,13 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
           quasselControl
               .quasselCoreDisconnectNetwork(serverId, network)
               .subscribe(
-                  () ->
-                      ui.appendStatus(
-                          status,
-                          "(qnet)",
-                          "Requested disconnect for Quassel network '" + network + "'."),
+                  () -> {
+                    ui.appendStatus(
+                        status,
+                        "(qnet)",
+                        "Requested disconnect for Quassel network '" + network + "'.");
+                    syncQuasselNetworksToUi(serverId);
+                  },
                   err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
       return;
     }
@@ -513,11 +534,11 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
         quasselControl
             .quasselCoreRemoveNetwork(serverId, network)
             .subscribe(
-                () ->
-                    ui.appendStatus(
-                        status,
-                        "(qnet)",
-                        "Requested removal of Quassel network '" + network + "'."),
+                () -> {
+                  ui.appendStatus(
+                      status, "(qnet)", "Requested removal of Quassel network '" + network + "'.");
+                  syncQuasselNetworksToUi(serverId);
+                },
                 err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
   }
 
@@ -567,17 +588,19 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
         quasselControl
             .quasselCoreCreateNetwork(serverId, request)
             .subscribe(
-                () ->
-                    ui.appendStatus(
-                        status,
-                        "(qnet)",
-                        "Requested Quassel network create: "
-                            + networkName
-                            + " -> "
-                            + serverHost
-                            + ":"
-                            + requestedPort
-                            + (requestedTls ? " (tls)" : " (plain)")),
+                () -> {
+                  ui.appendStatus(
+                      status,
+                      "(qnet)",
+                      "Requested Quassel network create: "
+                          + networkName
+                          + " -> "
+                          + serverHost
+                          + ":"
+                          + requestedPort
+                          + (requestedTls ? " (tls)" : " (plain)"));
+                  syncQuasselNetworksToUi(serverId);
+                },
                 err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
   }
 
@@ -627,17 +650,19 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
         quasselControl
             .quasselCoreUpdateNetwork(serverId, network, request)
             .subscribe(
-                () ->
-                    ui.appendStatus(
-                        status,
-                        "(qnet)",
-                        "Requested update for Quassel network '"
-                            + network
-                            + "': "
-                            + serverHost
-                            + ":"
-                            + requestedPort
-                            + (requestedTls ? " (tls)" : " (plain)")),
+                () -> {
+                  ui.appendStatus(
+                      status,
+                      "(qnet)",
+                      "Requested update for Quassel network '"
+                          + network
+                          + "': "
+                          + serverHost
+                          + ":"
+                          + requestedPort
+                          + (requestedTls ? " (tls)" : " (plain)"));
+                  syncQuasselNetworksToUi(serverId);
+                },
                 err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
   }
 

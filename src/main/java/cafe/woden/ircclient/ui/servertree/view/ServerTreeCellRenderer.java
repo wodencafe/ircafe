@@ -447,13 +447,28 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
         if (networkNodeData.emptyState()) {
           style |= Font.ITALIC;
         }
+        if (Boolean.FALSE.equals(networkNodeData.enabled())) {
+          style |= Font.ITALIC;
+        }
         setFont(base.deriveFont(style));
-        ConnectionState state = context.connectionStateForServer(networkNodeData.serverId());
-        String iconName = ServerTreeConnectionStateViewModel.serverNodeIconName(state);
-        Palette palette =
-            networkNodeData.emptyState()
-                ? Palette.TREE_DISABLED
-                : ServerTreeConnectionStateViewModel.serverNodeIconPalette(state);
+        String iconName;
+        Palette palette;
+        if (networkNodeData.emptyState()) {
+          iconName = "dock-left";
+          palette = Palette.TREE_DISABLED;
+        } else if (Boolean.FALSE.equals(networkNodeData.enabled())) {
+          iconName = "pause";
+          palette = Palette.TREE_DISABLED;
+        } else {
+          ConnectionState state =
+              networkNodeData.connected() == null
+                  ? context.connectionStateForServer(networkNodeData.serverId())
+                  : (Boolean.TRUE.equals(networkNodeData.connected())
+                      ? ConnectionState.CONNECTED
+                      : ConnectionState.DISCONNECTED);
+          iconName = ServerTreeConnectionStateViewModel.serverNodeIconName(state);
+          palette = ServerTreeConnectionStateViewModel.serverNodeIconPalette(state);
+        }
         Icon icon = SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, palette);
         setIcon(icon);
         setDisabledIcon(SvgIcons.icon(iconName, TREE_NODE_ICON_SIZE, Palette.TREE_DISABLED));

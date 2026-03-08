@@ -716,6 +716,10 @@ class ConnectionCoordinatorTest {
 
     when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
     when(serverCatalog.containsId("quassel")).thenReturn(true);
+    QuasselCoreControlPort.QuasselCoreNetworkSummary summary =
+        new QuasselCoreControlPort.QuasselCoreNetworkSummary(
+            2, "libera", true, true, 1, "irc.libera.chat", 6697, true, Map.of());
+    when(irc.quasselCoreNetworks("quassel")).thenReturn(List.of(summary));
 
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
@@ -748,6 +752,15 @@ class ConnectionCoordinatorTest {
             any(Instant.class),
             eq("(conn)"),
             eq("Quassel sync complete; connection ready."));
+    verify(ui)
+        .syncQuasselNetworks(
+            eq("quassel"),
+            argThat(
+                networks ->
+                    networks != null
+                        && networks.size() == 1
+                        && networks.get(0) != null
+                        && networks.get(0).networkId() == 2));
   }
 
   @Test

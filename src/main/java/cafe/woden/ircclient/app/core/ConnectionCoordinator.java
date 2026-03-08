@@ -845,10 +845,23 @@ public class ConnectionCoordinator {
     if (promptQuasselSetup) {
       maybePromptQuasselSetup(sid, status);
     }
+    if ("sync-ready".equals(phase)) {
+      syncQuasselNetworksToUi(sid);
+    }
     maybeOpenQuasselNetworkManagerAfterSetup(sid, phase, status);
 
     updateConnectionUi();
     return ConnectivityChange.CHANGED;
+  }
+
+  private void syncQuasselNetworksToUi(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
+        quasselControl.quasselCoreNetworks(sid);
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> safeNetworks =
+        networks == null ? List.of() : List.copyOf(networks);
+    ui.syncQuasselNetworks(sid, safeNetworks);
   }
 
   private void maybePromptQuasselSetup(String serverId, TargetRef status) {

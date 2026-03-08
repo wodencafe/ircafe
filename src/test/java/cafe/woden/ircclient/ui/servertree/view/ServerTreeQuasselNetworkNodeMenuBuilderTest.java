@@ -1,8 +1,10 @@
 package cafe.woden.ircclient.ui.servertree.view;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
@@ -20,6 +22,7 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
     List<String> connectRequests = new ArrayList<>();
     List<String> disconnectRequests = new ArrayList<>();
     List<String> removeRequests = new ArrayList<>();
+    List<String> removeConfirmRequests = new ArrayList<>();
     List<String> addRequests = new ArrayList<>();
     List<String> setupRequests = new ArrayList<>();
     List<String> managerRequests = new ArrayList<>();
@@ -31,6 +34,10 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
                 (sid, token) -> disconnectRequests.add(sid + ":" + token),
                 (sid, token) -> removeRequests.add(sid + ":" + token),
                 addRequests::add,
+                (sid, token, label) -> {
+                  removeConfirmRequests.add(sid + ":" + token + ":" + label);
+                  return true;
+                },
                 setupRequests::add,
                 managerRequests::add));
     ServerTreeQuasselNetworkNodeData nodeData =
@@ -52,9 +59,64 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
     assertEquals(List.of("quassel:libera"), connectRequests);
     assertEquals(List.of("quassel:libera"), disconnectRequests);
     assertEquals(List.of("quassel:libera"), removeRequests);
+    assertEquals(List.of("quassel:libera:Libera"), removeConfirmRequests);
     assertEquals(List.of(), addRequests);
     assertEquals(List.of("quassel"), managerRequests);
     assertEquals(List.of("quassel"), setupRequests);
+  }
+
+  @Test
+  void networkMenuDisablesConnectWhenAlreadyConnectedAndSupportsRemoveConfirmation() {
+    List<String> removeRequests = new ArrayList<>();
+    ServerTreeQuasselNetworkNodeMenuBuilder builder =
+        new ServerTreeQuasselNetworkNodeMenuBuilder(
+            ServerTreeQuasselNetworkNodeMenuBuilder.context(
+                ref -> {},
+                (sid, token) -> {},
+                (sid, token) -> {},
+                (sid, token) -> removeRequests.add(sid + ":" + token),
+                sid -> {},
+                (sid, token, label) -> false,
+                sid -> {},
+                sid -> {}));
+    ServerTreeQuasselNetworkNodeData nodeData =
+        ServerTreeQuasselNetworkNodeData.network("quassel", "libera", "Libera", true, true);
+
+    JPopupMenu menu = builder.buildNetworkNodeMenu(nodeData);
+
+    assertNotNull(menu);
+    JMenuItem connect = (JMenuItem) menu.getComponent(1);
+    JMenuItem disconnect = (JMenuItem) menu.getComponent(2);
+    JMenuItem remove = (JMenuItem) menu.getComponent(3);
+    assertFalse(connect.isEnabled());
+    assertTrue(disconnect.isEnabled());
+    assertTrue(remove.isEnabled());
+
+    remove.doClick();
+    assertTrue(removeRequests.isEmpty());
+  }
+
+  @Test
+  void networkMenuDisablesConnectAndDisconnectWhenNetworkDisabled() {
+    ServerTreeQuasselNetworkNodeMenuBuilder builder =
+        new ServerTreeQuasselNetworkNodeMenuBuilder(
+            ServerTreeQuasselNetworkNodeMenuBuilder.context(
+                ref -> {},
+                (sid, token) -> {},
+                (sid, token) -> {},
+                (sid, token) -> {},
+                sid -> {},
+                (sid, token, label) -> true,
+                sid -> {},
+                sid -> {}));
+    ServerTreeQuasselNetworkNodeData nodeData =
+        ServerTreeQuasselNetworkNodeData.network("quassel", "libera", "Libera", false, false);
+
+    JPopupMenu menu = builder.buildNetworkNodeMenu(nodeData);
+
+    assertNotNull(menu);
+    assertFalse(((JMenuItem) menu.getComponent(1)).isEnabled());
+    assertFalse(((JMenuItem) menu.getComponent(2)).isEnabled());
   }
 
   @Test
@@ -70,6 +132,7 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
                 (sid, token) -> {},
                 (sid, token) -> {},
                 addRequests::add,
+                (sid, token, label) -> true,
                 setupRequests::add,
                 managerRequests::add));
     ServerTreeQuasselNetworkNodeData nodeData =
@@ -99,6 +162,7 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
                 (sid, token) -> {},
                 (sid, token) -> {},
                 sid -> {},
+                (sid, token, label) -> true,
                 sid -> {},
                 sid -> {}));
     ServerTreeQuasselNetworkNodeData nodeData =

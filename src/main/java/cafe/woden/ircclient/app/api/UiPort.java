@@ -224,6 +224,10 @@ public interface UiPort {
     return Optional.empty();
   }
 
+  /** Sync best-effort Quassel network snapshots into UI surfaces (for example server tree). */
+  default void syncQuasselNetworks(
+      String serverId, List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {}
+
   void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled);
 
   void setConnectionStatusText(String text);

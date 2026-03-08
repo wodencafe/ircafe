@@ -21,6 +21,7 @@ import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
+import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeQuasselNetworkParentResolver;
 import cafe.woden.ircclient.ui.shell.StatusBar;
 import com.formdev.flatlaf.FlatClientProperties;
 import io.reactivex.rxjava3.core.Flowable;
@@ -29,6 +30,7 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -311,6 +313,20 @@ public class SwingUiPort implements UiPort {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
     quasselNetworkManagerRequestsFromApp.onNext(sid);
+  }
+
+  @Override
+  public void syncQuasselNetworks(
+      String serverId,
+      List<cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    List<cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary> safeNetworks =
+        networks == null ? List.of() : List.copyOf(networks);
+    cacheQuasselNetworkSummaries(sid, safeNetworks);
+    List<ServerTreeQuasselNetworkParentResolver.NetworkPresentation> presentations =
+        toNetworkPresentations(safeNetworks);
+    onEdt(() -> serverTree.syncQuasselNetworks(sid, presentations));
   }
 
   private static String normalizeBackendCommandArgs(String args) {
@@ -711,7 +727,7 @@ public class SwingUiPort implements UiPort {
           String sid = Objects.toString(serverId, "").trim();
           List<cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary>
               safeNetworks = networks == null ? List.of() : List.copyOf(networks);
-          cacheQuasselNetworkSummaries(sid, safeNetworks);
+          syncQuasselNetworks(sid, safeNetworks);
 
           while (true) {
             javax.swing.DefaultListModel<QuasselNetworkChoice> model =
@@ -1030,6 +1046,27 @@ public class SwingUiPort implements UiPort {
             ? Integer.toString(summary.networkId())
             : Objects.toString(summary.networkName(), "").trim();
     return token.isEmpty() ? ("network-" + summary.networkId()) : token;
+  }
+
+  private static List<ServerTreeQuasselNetworkParentResolver.NetworkPresentation>
+      toNetworkPresentations(
+          List<cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary>
+              networks) {
+    if (networks == null || networks.isEmpty()) return List.of();
+    LinkedHashMap<String, ServerTreeQuasselNetworkParentResolver.NetworkPresentation> byToken =
+        new LinkedHashMap<>();
+    for (cafe.woden.ircclient.irc.QuasselCoreControlPort.QuasselCoreNetworkSummary summary :
+        networks) {
+      if (summary == null) continue;
+      String token = normalizeNetworkToken(networkChoiceToken(summary));
+      if (token.isEmpty() || byToken.containsKey(token)) continue;
+      String label = Objects.toString(summary.networkName(), "").trim();
+      byToken.put(
+          token,
+          new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
+              token, label, summary.connected(), summary.enabled()));
+    }
+    return byToken.isEmpty() ? List.of() : List.copyOf(byToken.values());
   }
 
   private String quasselNetworkTooltip(String serverId, String networkToken) {
