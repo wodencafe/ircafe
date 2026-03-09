@@ -420,6 +420,10 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(InboundIgnorePolicy.class, ApplicationLayer.class);
 
     assertAnnotated(SwingUiPort.class, InterfaceLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.ui.ChatDockable", InterfaceLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.ui.CommandHistoryStore", InterfaceLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.ui.NickContextMenuFactory", InterfaceLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.ui.UserListDockable", InterfaceLayer.class);
     assertAnnotated(BackendRoutingIrcClientService.class, InfrastructureLayer.class);
     assertAnnotated(BouncerIrcConnectionPortAdapter.class, InfrastructureLayer.class);
     assertAnnotated(IrcConnectionLifecyclePortAdapter.class, InfrastructureLayer.class);

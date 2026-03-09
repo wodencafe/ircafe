@@ -39,9 +39,11 @@ import java.util.Objects;
 import java.util.Set;
 import javax.swing.*;
 import org.springframework.context.annotation.Lazy;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 @Lazy
 public class UserListDockable extends JPanel implements Dockable, Scrollable {
   public static final String ID = "users";

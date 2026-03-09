@@ -79,6 +79,7 @@ import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -91,6 +92,7 @@ import org.springframework.stereotype.Component;
  * docks) can share them.
  */
 @Component
+@InterfaceLayer
 @Lazy
 public class ChatDockable extends ChatViewPanel implements Dockable {
 

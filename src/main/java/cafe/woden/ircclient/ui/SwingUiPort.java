@@ -46,8 +46,8 @@ import org.springframework.stereotype.Component;
 
 /** Adapter that exposes the Swing UI to the application layer. */
 @Component
-@Lazy
 @InterfaceLayer
+@Lazy
 public class SwingUiPort implements UiPort {
   private final ServerTreeDockable serverTree;
   private final ChatDockable chat;
