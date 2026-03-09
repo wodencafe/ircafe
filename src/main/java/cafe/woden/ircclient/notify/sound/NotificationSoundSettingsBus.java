@@ -4,11 +4,13 @@ import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.model.BuiltInSound;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
 @Lazy
+@ApplicationLayer
 public class NotificationSoundSettingsBus {
 
   public static final String PROP_NOTIFICATION_SOUND_SETTINGS = "notificationSoundSettings";

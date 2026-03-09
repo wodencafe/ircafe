@@ -6,6 +6,7 @@ import cafe.woden.ircclient.config.ZncProperties;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Component;
  * case-insensitively.
  */
 @Component
+@ApplicationLayer
 public class ZncAutoConnectStore extends AbstractBouncerAutoConnectStore {
 
   public ZncAutoConnectStore(ZncProperties props, RuntimeConfigStore runtimeConfig) {

@@ -1,11 +1,13 @@
 package cafe.woden.ircclient.irc;
 
 import io.reactivex.rxjava3.core.Completable;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Spring adapter exposing typing capability/send behavior via a narrow port. */
 @Component("ircTypingPort")
+@InfrastructureLayer
 public class IrcTypingPortAdapter implements IrcTypingPort {
 
   private final IrcTypingPort delegate;

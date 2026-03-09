@@ -3,6 +3,7 @@ package cafe.woden.ircclient.irc;
 import java.lang.reflect.Field;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.pircbotx.InputParser;
 import org.pircbotx.PircBotX;
 import org.slf4j.Logger;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
  * setname}, {@code chghost}, typing/reply/react/read-marker tags, and CAP updates).
  */
 @Component
+@InfrastructureLayer
 public class PircbotxInputParserHookInstaller {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxInputParserHookInstaller.class);

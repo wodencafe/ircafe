@@ -6,6 +6,7 @@ import cafe.woden.ircclient.config.SojuProperties;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Component;
  * <p>Network names are canonicalized using Soju's name sanitizer and compared case-insensitively.
  */
 @Component
+@ApplicationLayer
 public class SojuAutoConnectStore extends AbstractBouncerAutoConnectStore {
 
   public SojuAutoConnectStore(SojuProperties props, RuntimeConfigStore runtimeConfig) {

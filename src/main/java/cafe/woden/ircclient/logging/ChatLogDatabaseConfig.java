@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -44,6 +45,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 @Configuration
 @ConditionalOnProperty(prefix = "ircafe.logging", name = "enabled", havingValue = "true")
+@InfrastructureLayer
 public class ChatLogDatabaseConfig {
 
   private static final Logger log = LoggerFactory.getLogger(ChatLogDatabaseConfig.class);

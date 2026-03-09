@@ -9,12 +9,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 @Component
+@InfrastructureLayer
 public class ChannelMetadataStore implements ChannelMetadataPort {
 
   private static final Logger log = LoggerFactory.getLogger(ChannelMetadataStore.class);

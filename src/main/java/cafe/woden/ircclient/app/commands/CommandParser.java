@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.commands;
 
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Component;
  * <p>Unknown commands return {@link ParsedInput.Unknown}.
  */
 @Component
+@ApplicationLayer
 public class CommandParser {
 
   private final FilterCommandParser filterCommandParser;

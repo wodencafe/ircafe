@@ -12,6 +12,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -20,6 +21,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 @Configuration
+@InfrastructureLayer
 public class ChannelMetadataDatabaseConfig {
 
   private static final Logger log = LoggerFactory.getLogger(ChannelMetadataDatabaseConfig.class);

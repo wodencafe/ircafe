@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
  * mediator, IRC service) can react.
  */
 @Component
+@ApplicationLayer
 public class ServerRegistry {
 
   private final RuntimeConfigStore runtimeConfig;

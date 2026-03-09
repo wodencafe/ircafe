@@ -6,12 +6,14 @@ import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.util.List;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /** Publishes the current user-command alias list. */
 @Component
 @Lazy
+@ApplicationLayer
 public class UserCommandAliasesBus {
 
   public static final String PROP_USER_COMMAND_ALIASES = "userCommandAliases";

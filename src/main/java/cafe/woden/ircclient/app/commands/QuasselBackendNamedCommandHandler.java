@@ -1,10 +1,12 @@
 package cafe.woden.ircclient.app.commands;
 
 import java.util.Set;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles Quassel backend command aliases like /quasselsetup and /quasselnet. */
 @Component
+@ApplicationLayer
 final class QuasselBackendNamedCommandHandler implements BackendNamedCommandHandler {
 
   @Override

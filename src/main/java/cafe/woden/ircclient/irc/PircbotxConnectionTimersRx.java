@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.pircbotx.PircBotX;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +33,7 @@ import org.springframework.stereotype.Component;
  * PircbotxBridgeListener} don't need their own executor plumbing.
  */
 @Component
+@InfrastructureLayer
 final class PircbotxConnectionTimersRx {
   private static final Logger log = LoggerFactory.getLogger(PircbotxConnectionTimersRx.class);
 

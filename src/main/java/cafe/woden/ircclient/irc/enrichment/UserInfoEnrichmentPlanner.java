@@ -17,6 +17,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Component;
  * <p>Execution (sending IRC commands and handling replies) is handled elsewhere.
  */
 @Component
+@ApplicationLayer
 public final class UserInfoEnrichmentPlanner {
   // USERHOST typically allows up to 5 nick arguments.
   public static final int ABSOLUTE_MAX_USERHOST_NICKS_PER_CMD = 5;

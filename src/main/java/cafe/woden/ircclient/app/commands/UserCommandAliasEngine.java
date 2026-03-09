@@ -17,11 +17,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Expands user-defined slash-command aliases before regular command parsing. */
 @Component
+@ApplicationLayer
 public class UserCommandAliasEngine {
 
   private static final int MAX_EXPANSION_DEPTH = 8;

@@ -10,9 +10,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@ApplicationLayer
 public class UserListStore {
 
   private static final int MAX_LEARNED_NICKS_PER_SERVER = 20_000;

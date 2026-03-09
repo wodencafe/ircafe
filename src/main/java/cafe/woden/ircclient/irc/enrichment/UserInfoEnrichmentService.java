@@ -26,6 +26,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -46,6 +47,7 @@ import org.springframework.stereotype.Component;
  * <p>Probe planning is delegated to {@link UserInfoEnrichmentPlanner}.
  */
 @Component
+@ApplicationLayer
 public class UserInfoEnrichmentService {
   private static final Logger log = LoggerFactory.getLogger(UserInfoEnrichmentService.class);
 

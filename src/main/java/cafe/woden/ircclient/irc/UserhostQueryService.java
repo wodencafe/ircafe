@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -35,6 +36,7 @@ import org.springframework.stereotype.Component;
  * parsed by the IRC event layer (RPL 302) and used to enrich cached user info.
  */
 @Component
+@ApplicationLayer
 public class UserhostQueryService {
   private static final Logger log = LoggerFactory.getLogger(UserhostQueryService.class);
 

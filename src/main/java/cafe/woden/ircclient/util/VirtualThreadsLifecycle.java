@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.util;
 
 import jakarta.annotation.PreDestroy;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Lazy(false)
+@ApplicationLayer
 final class VirtualThreadsLifecycle {
 
   @PreDestroy

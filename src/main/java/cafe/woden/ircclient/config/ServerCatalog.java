@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  * EphemeralServerRegistry} so connection code can treat both as first-class.
  */
 @Component
+@ApplicationLayer
 public class ServerCatalog {
 
   private final ServerRegistry serverRegistry;

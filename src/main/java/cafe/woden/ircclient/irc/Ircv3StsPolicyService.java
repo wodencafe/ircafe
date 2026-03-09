@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Component;
  * upgraded to TLS. - If policy includes a port, it overrides the configured port.
  */
 @Component
+@InfrastructureLayer
 public class Ircv3StsPolicyService {
 
   private static final Logger log = LoggerFactory.getLogger(Ircv3StsPolicyService.class);
