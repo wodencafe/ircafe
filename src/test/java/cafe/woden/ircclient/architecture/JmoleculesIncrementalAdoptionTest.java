@@ -415,6 +415,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(NotificationRuleMatcher.class, ApplicationLayer.class);
     assertAnnotated(IrcEventNotificationRulesBus.class, ApplicationLayer.class);
     assertAnnotated(DccTransferStore.class, ApplicationLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.model.AwayStatusStore", ApplicationLayer.class);
     assertAnnotated(IgnoreListService.class, ApplicationLayer.class);
     assertAnnotated(IgnoreStatusService.class, ApplicationLayer.class);
     assertAnnotated(InboundIgnorePolicy.class, ApplicationLayer.class);
@@ -424,6 +425,8 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotatedByName("cafe.woden.ircclient.ui.CommandHistoryStore", InterfaceLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.ui.NickContextMenuFactory", InterfaceLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.ui.UserListDockable", InterfaceLayer.class);
+    assertAnnotatedByName(
+        "cafe.woden.ircclient.ui.servertree.ServerTreeDockable", InterfaceLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.ui.chat.embed.LinkPreviewResolverConfig", InterfaceLayer.class);
     assertAnnotated(BackendRoutingIrcClientService.class, InfrastructureLayer.class);

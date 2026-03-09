@@ -139,9 +139,11 @@ import javax.swing.Timer;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 
 @org.springframework.stereotype.Component
+@InterfaceLayer
 @Lazy
 public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   // UI label for the per-server "status" transcript target.
