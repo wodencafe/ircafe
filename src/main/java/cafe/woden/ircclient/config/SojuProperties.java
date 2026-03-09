@@ -3,10 +3,12 @@ package cafe.woden.ircclient.config;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /** Soju bouncer integration settings. */
 @ConfigurationProperties(prefix = "ircafe.soju")
+@InfrastructureLayer
 public record SojuProperties(Map<String, Map<String, Boolean>> autoConnect, Discovery discovery) {
 
   public SojuProperties {

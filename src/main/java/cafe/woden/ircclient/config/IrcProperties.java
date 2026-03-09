@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
@@ -14,6 +15,7 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  * <p>Supports multiple servers via {@code irc.servers}.
  */
 @ConfigurationProperties(prefix = "irc")
+@InfrastructureLayer
 public record IrcProperties(Client client, List<Server> servers) {
 
   /**
