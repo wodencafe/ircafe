@@ -17,10 +17,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.context.annotation.Lazy;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /** Evaluates whether inline image/link loading is allowed for a message URL. */
 @Component
+@InterfaceLayer
 @Lazy
 public class EmbedLoadPolicyMatcher {
 

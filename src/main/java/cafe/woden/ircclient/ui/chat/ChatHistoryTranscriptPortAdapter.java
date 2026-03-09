@@ -12,9 +12,11 @@ import java.util.OptionalLong;
 import java.util.function.BooleanSupplier;
 import javax.swing.text.StyledDocument;
 import org.springframework.context.annotation.Lazy;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 @Lazy
 public class ChatHistoryTranscriptPortAdapter implements ChatHistoryTranscriptPort {
 

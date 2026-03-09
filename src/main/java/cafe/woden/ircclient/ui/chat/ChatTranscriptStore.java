@@ -49,9 +49,11 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import org.springframework.context.annotation.Lazy;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 @Lazy
 public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 

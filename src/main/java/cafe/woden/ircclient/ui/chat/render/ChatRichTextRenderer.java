@@ -16,6 +16,7 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import org.springframework.context.annotation.Lazy;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Component;
  * </ul>
  */
 @Component
+@InterfaceLayer
 @Lazy
 public class ChatRichTextRenderer {
 

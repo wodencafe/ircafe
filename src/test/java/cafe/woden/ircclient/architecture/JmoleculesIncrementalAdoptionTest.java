@@ -424,6 +424,8 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotatedByName("cafe.woden.ircclient.ui.CommandHistoryStore", InterfaceLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.ui.NickContextMenuFactory", InterfaceLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.ui.UserListDockable", InterfaceLayer.class);
+    assertAnnotatedByName(
+        "cafe.woden.ircclient.ui.chat.embed.LinkPreviewResolverConfig", InterfaceLayer.class);
     assertAnnotated(BackendRoutingIrcClientService.class, InfrastructureLayer.class);
     assertAnnotated(BouncerIrcConnectionPortAdapter.class, InfrastructureLayer.class);
     assertAnnotated(IrcConnectionLifecyclePortAdapter.class, InfrastructureLayer.class);
@@ -663,6 +665,11 @@ class JmoleculesIncrementalAdoptionTest {
   @Test
   void componentEntryPointsInUiTerminalRemainInterfaceLayerAnnotated() {
     assertComponentPackageAnnotated("cafe.woden.ircclient.ui.terminal", InterfaceLayer.class);
+  }
+
+  @Test
+  void componentEntryPointsInUiChatRemainInterfaceLayerAnnotated() {
+    assertComponentPackageAnnotated("cafe.woden.ircclient.ui.chat", InterfaceLayer.class);
   }
 
   private static void assertComponentPackageAnnotated(

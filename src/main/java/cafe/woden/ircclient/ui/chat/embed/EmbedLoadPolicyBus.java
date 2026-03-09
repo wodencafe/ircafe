@@ -3,10 +3,12 @@ package cafe.woden.ircclient.ui.chat.embed;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import java.util.Objects;
 import org.springframework.context.annotation.Lazy;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /** Holds the active embed/link loading policy snapshot for runtime checks. */
 @Component
+@InterfaceLayer
 @Lazy
 public class EmbedLoadPolicyBus {
 
