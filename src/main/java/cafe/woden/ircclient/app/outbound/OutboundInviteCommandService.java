@@ -15,11 +15,13 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound invite command flow: /invite and pending invite actions. */
 @Component
+@ApplicationLayer
 final class OutboundInviteCommandService {
 
   private final IrcMediatorInteractionPort mediatorIrc;

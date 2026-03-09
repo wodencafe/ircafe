@@ -2,10 +2,12 @@ package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Registers channel moderation, invite, and mode/list commands. */
 @Component
+@ApplicationLayer
 final class ChannelModeOutboundCommandRegistrar implements OutboundCommandRegistrar {
 
   private final OutboundTopicKickCommandService outboundTopicKickCommandService;

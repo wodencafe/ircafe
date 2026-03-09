@@ -18,6 +18,7 @@ import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -28,6 +29,7 @@ import org.springframework.stereotype.Component;
  * <p>Behavior is intended to be preserved.
  */
 @Component
+@ApplicationLayer
 public class OutboundIgnoreCommandService {
 
   private static final Pattern DURATION_PART = Pattern.compile("(\\d+)([a-z]*)");

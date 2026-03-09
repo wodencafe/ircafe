@@ -5,6 +5,7 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import java.util.Optional;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  * servers.
  */
 @Component
+@ApplicationLayer
 public class CommandTargetPolicy {
 
   private final ServerCatalog serverCatalog;

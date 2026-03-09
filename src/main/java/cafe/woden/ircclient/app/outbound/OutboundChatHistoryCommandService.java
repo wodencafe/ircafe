@@ -14,10 +14,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /chathistory command flow and targeted /help chathistory output. */
 @Component
+@ApplicationLayer
 final class OutboundChatHistoryCommandService implements OutboundHelpContributor {
 
   private static final DateTimeFormatter CHATHISTORY_TS_FMT =

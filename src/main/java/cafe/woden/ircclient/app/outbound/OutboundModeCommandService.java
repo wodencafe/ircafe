@@ -9,6 +9,7 @@ import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
  * routing. Behavior is intended to be preserved.
  */
 @Component
+@ApplicationLayer
 public class OutboundModeCommandService {
 
   private final IrcTargetMembershipPort targetMembership;

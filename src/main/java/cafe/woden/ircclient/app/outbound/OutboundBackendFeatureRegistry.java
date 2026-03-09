@@ -4,10 +4,12 @@ import cafe.woden.ircclient.config.IrcProperties;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Registry for backend-specific outbound feature adapters. */
 @Component
+@ApplicationLayer
 final class OutboundBackendFeatureRegistry {
 
   private static final OutboundBackendFeatureAdapter DEFAULT_ADAPTER =

@@ -20,11 +20,13 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles Quassel-specific outbound commands and manager workflows. */
 @Component
+@ApplicationLayer
 final class QuasselOutboundCommandService implements OutboundHelpContributor {
   private static final Logger log = LoggerFactory.getLogger(QuasselOutboundCommandService.class);
   private static final long NETWORK_OBSERVE_TIMEOUT_MS = 3_000L;

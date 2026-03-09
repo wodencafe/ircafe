@@ -2,6 +2,7 @@ package cafe.woden.ircclient.app;
 
 import java.util.List;
 import java.util.Set;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
  * an injectable formatter rather than static helpers.
  */
 @Component
+@ApplicationLayer
 public final class ModeFormattingService {
 
   private static final Logger log = LoggerFactory.getLogger(ModeFormattingService.class);

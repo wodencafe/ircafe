@@ -2,10 +2,12 @@ package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Registers ignore/filter and CTCP/DCC command handlers. */
 @Component
+@ApplicationLayer
 final class IgnoreCtcpOutboundCommandRegistrar implements OutboundCommandRegistrar {
 
   private final OutboundIgnoreCommandService outboundIgnoreCommandService;

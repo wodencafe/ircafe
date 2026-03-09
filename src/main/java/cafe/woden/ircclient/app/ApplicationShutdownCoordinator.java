@@ -5,6 +5,7 @@ import cafe.woden.ircclient.util.VirtualThreads;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -14,6 +15,7 @@ import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.stereotype.Component;
 
 @Component
+@ApplicationLayer
 public class ApplicationShutdownCoordinator {
   private static final Logger log = LoggerFactory.getLogger(ApplicationShutdownCoordinator.class);
 

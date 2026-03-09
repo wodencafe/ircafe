@@ -10,11 +10,13 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /join and /part command flow. */
 @Component
+@ApplicationLayer
 final class OutboundJoinPartCommandService {
 
   private final IrcTargetMembershipPort targetMembership;

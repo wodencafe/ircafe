@@ -8,9 +8,11 @@ import cafe.woden.ircclient.model.TargetRef;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@ApplicationLayer
 final class QuasselOutboundCommandSupport {
   private final ServerCatalog serverCatalog;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;

@@ -5,10 +5,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Router for backend-specific message mutation outbound command handlers. */
 @Component
+@ApplicationLayer
 final class MessageMutationOutboundCommandsRouter {
 
   private final Map<IrcProperties.Server.Backend, MessageMutationOutboundCommands> handlers;

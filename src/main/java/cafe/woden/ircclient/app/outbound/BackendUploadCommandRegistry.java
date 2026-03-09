@@ -5,10 +5,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Strategy registry for backend-specific semantic /upload translators. */
 @Component
+@ApplicationLayer
 final class BackendUploadCommandRegistry {
 
   private final Map<IrcProperties.Server.Backend, UploadCommandTranslationHandler>

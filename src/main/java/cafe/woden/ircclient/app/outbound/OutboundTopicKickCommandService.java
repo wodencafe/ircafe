@@ -7,11 +7,13 @@ import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /topic and /kick command flow. */
 @Component
+@ApplicationLayer
 final class OutboundTopicKickCommandService {
 
   private final IrcTargetMembershipPort targetMembership;

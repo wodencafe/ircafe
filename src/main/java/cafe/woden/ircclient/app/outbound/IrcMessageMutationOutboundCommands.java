@@ -2,10 +2,12 @@ package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.model.TargetRef;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** IRC backend payload shaping for message mutation commands. */
 @Component
+@ApplicationLayer
 final class IrcMessageMutationOutboundCommands implements MessageMutationOutboundCommands {
 
   @Override

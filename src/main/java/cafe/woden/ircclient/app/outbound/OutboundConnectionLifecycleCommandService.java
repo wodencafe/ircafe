@@ -5,10 +5,12 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /connect, /disconnect, /reconnect, and /quit command flow. */
 @Component
+@ApplicationLayer
 final class OutboundConnectionLifecycleCommandService {
 
   private final UiPort ui;
