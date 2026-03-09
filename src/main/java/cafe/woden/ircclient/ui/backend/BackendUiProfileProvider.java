@@ -3,10 +3,12 @@ package cafe.woden.ircclient.ui.backend;
 import cafe.woden.ircclient.irc.IrcBackendModePort;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /** Central provider for backend-aware UI profiles scoped by server id. */
 @Component
+@InterfaceLayer
 public class BackendUiProfileProvider {
 
   private final BackendUiContext backendUiContext;

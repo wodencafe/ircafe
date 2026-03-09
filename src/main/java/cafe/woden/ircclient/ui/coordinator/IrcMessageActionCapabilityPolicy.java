@@ -5,10 +5,12 @@ import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /** Negotiated-feature backed capability policy for transcript message actions. */
 @Component
+@InterfaceLayer
 public final class IrcMessageActionCapabilityPolicy implements MessageActionCapabilityPolicy {
   private final IrcNegotiatedFeaturePort irc;
   private final IrcBouncerPlaybackPort bouncerPlayback;
