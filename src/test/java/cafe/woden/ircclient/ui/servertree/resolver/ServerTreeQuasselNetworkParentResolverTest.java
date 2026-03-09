@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.ui.servertree.resolver;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -82,6 +84,34 @@ class ServerTreeQuasselNetworkParentResolverTest {
   }
 
   @Test
+  void routesUnqualifiedPrivateMessageToFirstNetworkPrivateMessagesNode() {
+    Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+    DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));
+    ServerTreeQuasselNetworkParentResolver resolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            sid -> "quassel".equalsIgnoreCase(sid),
+            "Channel List",
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
+
+    ServerNodes serverNodes = serverNodes("quassel");
+    DefaultMutableTreeNode firstParent =
+        resolver.resolveParent(new TargetRef("quassel", "#one{net:libera}"), serverNodes);
+    DefaultMutableTreeNode parent =
+        resolver.resolveParent(new TargetRef("quassel", "alice"), serverNodes);
+
+    assertNotNull(firstParent);
+    assertNotNull(parent);
+    assertEquals("Private Messages", parent.getUserObject());
+    assertSame(firstParent.getParent(), parent.getParent());
+  }
+
+  @Test
   void routesQualifiedIgnoresToNetworkOtherNode() {
     Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
     DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));
@@ -133,6 +163,12 @@ class ServerTreeQuasselNetworkParentResolverTest {
     assertNotNull(leaves.get(TargetRef.interceptorsGroup("quassel", "libera")));
     assertNotNull(leaves.get(TargetRef.monitorGroup("quassel")));
     assertNotNull(leaves.get(TargetRef.interceptorsGroup("quassel")));
+    assertSame(
+        leaves.get(TargetRef.monitorGroup("quassel", "libera")),
+        leaves.get(TargetRef.monitorGroup("quassel")));
+    assertSame(
+        leaves.get(TargetRef.interceptorsGroup("quassel", "libera")),
+        leaves.get(TargetRef.interceptorsGroup("quassel")));
   }
 
   @Test
@@ -339,7 +375,7 @@ class ServerTreeQuasselNetworkParentResolverTest {
   }
 
   @Test
-  void syncServerNetworksDetachesRootOtherWhenNetworksPresent() {
+  void syncServerNetworksKeepsRootOtherWhenNetworksPresent() {
     Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
     DefaultMutableTreeNode root = new DefaultMutableTreeNode("root");
     DefaultTreeModel model = new DefaultTreeModel(root);
@@ -365,11 +401,11 @@ class ServerTreeQuasselNetworkParentResolverTest {
             new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
                 "2", "Libera", true, true)));
 
-    assertNull(serverNodes.otherNode.getParent());
+    assertSame(serverNodes.serverNode, serverNodes.otherNode.getParent());
   }
 
   @Test
-  void syncServerNetworksRestoresRootOtherWhenNetworksRemoved() {
+  void syncServerNetworksKeepsRootOtherWhenNetworksRemoved() {
     Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
     DefaultMutableTreeNode root = new DefaultMutableTreeNode("root");
     DefaultTreeModel model = new DefaultTreeModel(root);
@@ -395,11 +431,62 @@ class ServerTreeQuasselNetworkParentResolverTest {
             new ServerTreeQuasselNetworkParentResolver.NetworkPresentation(
                 "2", "Libera", true, true)));
 
-    assertNull(serverNodes.otherNode.getParent());
+    assertSame(serverNodes.serverNode, serverNodes.otherNode.getParent());
 
     resolver.syncServerNetworks("quassel", serverNodes, List.of());
 
     assertSame(serverNodes.serverNode, serverNodes.otherNode.getParent());
+  }
+
+  @Test
+  void initializeServerDoesNotShowEmptyStateWhenDisconnected() {
+    Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+    DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));
+    ServerTreeQuasselNetworkParentResolver resolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            sid -> "quassel".equalsIgnoreCase(sid),
+            "Channel List",
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
+    ServerNodes serverNodes = serverNodes("quassel");
+
+    resolver.initializeServer("quassel", serverNodes, false);
+
+    boolean foundEmptyState = false;
+    for (int i = 0; i < serverNodes.serverNode.getChildCount(); i++) {
+      DefaultMutableTreeNode child = (DefaultMutableTreeNode) serverNodes.serverNode.getChildAt(i);
+      if (resolver.isQuasselEmptyStateNode(child)) {
+        foundEmptyState = true;
+        break;
+      }
+    }
+    assertFalse(foundEmptyState);
+  }
+
+  @Test
+  void syncServerNetworksHandlesMissingRootPrivateMessagesNode() {
+    Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
+    DefaultTreeModel model = new DefaultTreeModel(new DefaultMutableTreeNode("root"));
+    ServerTreeQuasselNetworkParentResolver resolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            sid -> "quassel".equalsIgnoreCase(sid),
+            "Channel List",
+            "Private Messages",
+            "Other",
+            "Monitor",
+            "Interceptors",
+            "Ignores");
+    ServerNodes serverNodes = serverNodesWithoutPrivateMessages("quassel");
+
+    assertDoesNotThrow(() -> resolver.initializeServer("quassel", serverNodes));
+    assertDoesNotThrow(() -> resolver.syncServerNetworks("quassel", serverNodes, List.of()));
   }
 
   private static DefaultMutableTreeNode networkNodeByToken(
@@ -426,6 +513,25 @@ class ServerTreeQuasselNetworkParentResolverTest {
     return new ServerNodes(
         serverNode,
         pmNode,
+        otherNode,
+        new DefaultMutableTreeNode("Monitor"),
+        new DefaultMutableTreeNode("Interceptors"),
+        new TargetRef(serverId, "status"),
+        TargetRef.notifications(serverId),
+        TargetRef.logViewer(serverId),
+        TargetRef.channelList(serverId),
+        TargetRef.weechatFilters(serverId),
+        TargetRef.ignores(serverId),
+        TargetRef.dccTransfers(serverId));
+  }
+
+  private static ServerNodes serverNodesWithoutPrivateMessages(String serverId) {
+    DefaultMutableTreeNode serverNode = new DefaultMutableTreeNode(serverId);
+    DefaultMutableTreeNode otherNode = new DefaultMutableTreeNode("Other");
+    serverNode.add(otherNode);
+    return new ServerNodes(
+        serverNode,
+        null,
         otherNode,
         new DefaultMutableTreeNode("Monitor"),
         new DefaultMutableTreeNode("Interceptors"),

@@ -380,6 +380,50 @@ class ConnectionCoordinatorTest {
   }
 
   @Test
+  void connectedEventOnQuasselRestoresPrivateMessagesButSkipsPersistedChannels() {
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
+    when(serverRegistry.find("quassel"))
+        .thenReturn(
+            Optional.of(
+                server(
+                    "quassel",
+                    "core.example.net",
+                    4242,
+                    false,
+                    IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(serverCatalog.containsId("quassel")).thenReturn(true);
+    when(runtimeConfig.readPrivateMessageTargets("quassel")).thenReturn(List.of("Alice"));
+    when(runtimeConfig.readKnownChannels("quassel")).thenReturn(List.of("#ircafe"));
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            IrcConnectionLifecyclePort.from(irc),
+            irc,
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    coordinator.handleConnectivityEvent(
+        "quassel", new IrcEvent.Connected(Instant.now(), "core.local", 4242, "quassel"), null);
+
+    verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("quassel", "Alice"));
+    verify(ui, never()).ensureTargetExists(new TargetRef("quassel", "#ircafe"));
+    verify(ui, never()).setChannelDisconnected(new TargetRef("quassel", "#ircafe"), true);
+    verify(runtimeConfig, never()).readKnownChannels("quassel");
+  }
+
+  @Test
   void connectedEventSkipsKnownCorruptPersistedPrivateMessageTargets() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     UiPort ui = mock(UiPort.class);
@@ -616,6 +660,43 @@ class ConnectionCoordinatorTest {
     assertEquals("admin", updatedServerCaptor.getValue().login());
     assertEquals("secret", updatedServerCaptor.getValue().serverPassword());
     verify(irc, times(2)).connect("quassel");
+  }
+
+  @Test
+  void queuedQuasselNetworkManagerOpensOnSyncReadyAfterConnect() {
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
+    when(serverCatalog.containsId("quassel")).thenReturn(true);
+    when(irc.connect("quassel")).thenReturn(Completable.never());
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            IrcConnectionLifecyclePort.from(irc),
+            irc,
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+
+    coordinator.queueOpenQuasselNetworkManagerOnSyncReady("quassel");
+    coordinator.connectOne("quassel");
+    coordinator.handleConnectivityEvent(
+        "quassel",
+        new IrcEvent.ConnectionFeaturesUpdated(Instant.now(), "quassel-phase=sync-ready"),
+        null);
+
+    TargetRef status = new TargetRef("quassel", "status");
+    verify(ui).appendStatus(status, "(qnet-ui)", "Connected. Opening Quassel Network Manager…");
+    verify(ui).openQuasselNetworkManager("quassel");
   }
 
   @Test
@@ -914,6 +995,43 @@ class ConnectionCoordinatorTest {
     verify(ui, atLeastOnce()).setChannelDisconnected(new TargetRef("libera", "#ircafe"), true);
     verify(ui, atLeastOnce()).ensureTargetExists(new TargetRef("libera", "#java"));
     verify(ui, atLeastOnce()).setChannelDisconnected(new TargetRef("libera", "#java"), true);
+  }
+
+  @Test
+  void constructorSkipsRestoringJoinedChannelsForQuasselServers() {
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("quassel"));
+    when(serverRegistry.find("quassel"))
+        .thenReturn(
+            Optional.of(
+                server(
+                    "quassel",
+                    "core.example.net",
+                    4242,
+                    false,
+                    IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(runtimeConfig.readKnownChannels("quassel")).thenReturn(List.of("#ircafe"));
+
+    new ConnectionCoordinator(
+        IrcConnectionLifecyclePort.from(irc),
+        irc,
+        irc,
+        ui,
+        serverRegistry,
+        serverCatalog,
+        runtimeConfig,
+        LOG_PROPS,
+        trayNotificationService);
+
+    verify(ui, never()).ensureTargetExists(new TargetRef("quassel", "#ircafe"));
+    verify(ui, never()).setChannelDisconnected(new TargetRef("quassel", "#ircafe"), true);
+    verify(runtimeConfig, never()).readKnownChannels("quassel");
   }
 
   private static IrcProperties.Server server(

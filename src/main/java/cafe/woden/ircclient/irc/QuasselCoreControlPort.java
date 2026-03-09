@@ -66,6 +66,13 @@ public interface QuasselCoreControlPort {
   }
 
   /**
+   * @return true when an established Quassel Core client session exists for this server.
+   */
+  default boolean hasEstablishedQuasselCoreSession(String serverId) {
+    return false;
+  }
+
+  /**
    * @return setup metadata for Quassel Core initial setup, when available.
    */
   default Optional<QuasselCoreSetupPrompt> quasselCoreSetupPrompt(String serverId) {

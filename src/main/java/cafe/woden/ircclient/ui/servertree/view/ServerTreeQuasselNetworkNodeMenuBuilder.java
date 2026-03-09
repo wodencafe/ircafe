@@ -5,11 +5,17 @@ import cafe.woden.ircclient.ui.icons.SvgIcons;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Builds context menus for Quassel network container and empty-state tree nodes. */
 public final class ServerTreeQuasselNetworkNodeMenuBuilder {
+
+  private static final Logger log =
+      LoggerFactory.getLogger(ServerTreeQuasselNetworkNodeMenuBuilder.class);
 
   @FunctionalInterface
   public interface TriPredicate<A, B, C> {
@@ -32,6 +38,8 @@ public final class ServerTreeQuasselNetworkNodeMenuBuilder {
     void openQuasselSetup(String serverId);
 
     void openQuasselNetworkManager(String serverId);
+
+    boolean isQuasselSetupPending(String serverId);
   }
 
   public static Context context(
@@ -42,7 +50,8 @@ public final class ServerTreeQuasselNetworkNodeMenuBuilder {
       Consumer<String> addQuasselNetwork,
       TriPredicate<String, String, String> confirmRemoveQuasselNetwork,
       Consumer<String> openQuasselSetup,
-      Consumer<String> openQuasselNetworkManager) {
+      Consumer<String> openQuasselNetworkManager,
+      Function<String, Boolean> isQuasselSetupPending) {
     Objects.requireNonNull(openPinnedChat, "openPinnedChat");
     Objects.requireNonNull(connectQuasselNetwork, "connectQuasselNetwork");
     Objects.requireNonNull(disconnectQuasselNetwork, "disconnectQuasselNetwork");
@@ -51,6 +60,7 @@ public final class ServerTreeQuasselNetworkNodeMenuBuilder {
     Objects.requireNonNull(confirmRemoveQuasselNetwork, "confirmRemoveQuasselNetwork");
     Objects.requireNonNull(openQuasselSetup, "openQuasselSetup");
     Objects.requireNonNull(openQuasselNetworkManager, "openQuasselNetworkManager");
+    Objects.requireNonNull(isQuasselSetupPending, "isQuasselSetupPending");
     return new Context() {
       @Override
       public void openPinnedChat(TargetRef ref) {
@@ -91,6 +101,11 @@ public final class ServerTreeQuasselNetworkNodeMenuBuilder {
       @Override
       public void openQuasselNetworkManager(String serverId) {
         openQuasselNetworkManager.accept(serverId);
+      }
+
+      @Override
+      public boolean isQuasselSetupPending(String serverId) {
+        return Boolean.TRUE.equals(isQuasselSetupPending.apply(serverId));
       }
     };
   }
@@ -160,14 +175,22 @@ public final class ServerTreeQuasselNetworkNodeMenuBuilder {
     JMenuItem manageNetworks = new JMenuItem("Manage Quassel Networks...");
     manageNetworks.setIcon(SvgIcons.action("edit", 16));
     manageNetworks.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
-    manageNetworks.addActionListener(ev -> context.openQuasselNetworkManager(serverId));
+    manageNetworks.addActionListener(
+        ev -> {
+          log.info(
+              "server-tree menu: Manage Quassel Networks clicked for serverId={} from network-node",
+              serverId);
+          context.openQuasselNetworkManager(serverId);
+        });
     menu.add(manageNetworks);
 
-    JMenuItem setup = new JMenuItem("Run Quassel Setup...");
-    setup.setIcon(SvgIcons.action("edit", 16));
-    setup.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
-    setup.addActionListener(ev -> context.openQuasselSetup(serverId));
-    menu.add(setup);
+    if (context.isQuasselSetupPending(serverId)) {
+      JMenuItem setup = new JMenuItem("Complete Quassel Setup...");
+      setup.setIcon(SvgIcons.action("edit", 16));
+      setup.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
+      setup.addActionListener(ev -> context.openQuasselSetup(serverId));
+      menu.add(setup);
+    }
 
     return menu;
   }

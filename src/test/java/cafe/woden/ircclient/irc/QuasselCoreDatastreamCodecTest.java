@@ -146,6 +146,81 @@ class QuasselCoreDatastreamCodecTest {
   }
 
   @Test
+  void writesNetworkInfoIdentityAsIntVariant() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+    codec.writeSignalProxySync(
+        out,
+        "Network",
+        "5",
+        "requestSetNetworkInfo",
+        List.of(
+            new QuasselCoreDatastreamCodec.UserTypeValue(
+                "NetworkInfo", Map.of("NetworkId", 5, "IdentityId", 1, "NetworkName", "libera"))));
+
+    byte[] frame = out.toByteArray();
+    byte[] payload = java.util.Arrays.copyOfRange(frame, 4, frame.length);
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        QuasselCoreDatastreamCodec.decodeSignalProxyPayload(payload);
+    assertEquals("requestSetNetworkInfo", decoded.slotName());
+    assertEquals(1, decoded.params().size());
+    Map<?, ?> networkInfo = assertInstanceOf(Map.class, decoded.params().get(0));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> map = (Map<String, Object>) networkInfo;
+    assertEquals(1, ((Number) map.get("IdentityId")).intValue());
+  }
+
+  @Test
+  void writesNetworkInfoIdentityAsIdentityUserTypeVariant() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+    codec.writeSignalProxySync(
+        out,
+        "Network",
+        "5",
+        "requestSetNetworkInfo",
+        List.of(
+            new QuasselCoreDatastreamCodec.UserTypeValue(
+                "NetworkInfo",
+                Map.of(
+                    "NetworkId", new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", 5),
+                    "Identity", new QuasselCoreDatastreamCodec.UserTypeValue("IdentityId", 1),
+                    "NetworkName", "libera"))));
+
+    byte[] frame = out.toByteArray();
+    byte[] payload = java.util.Arrays.copyOfRange(frame, 4, frame.length);
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        QuasselCoreDatastreamCodec.decodeSignalProxyPayload(payload);
+    assertEquals("requestSetNetworkInfo", decoded.slotName());
+    assertEquals(1, decoded.params().size());
+    Map<?, ?> networkInfo = assertInstanceOf(Map.class, decoded.params().get(0));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> map = (Map<String, Object>) networkInfo;
+    assertEquals(1, ((Number) map.get("Identity")).intValue());
+  }
+
+  @Test
+  void writesSignalProxyInitRequestFrame() throws Exception {
+    QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+    codec.writeSignalProxyInitRequest(out, "Network", "5", List.of());
+
+    byte[] frame = out.toByteArray();
+    byte[] payload = java.util.Arrays.copyOfRange(frame, 4, frame.length);
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        QuasselCoreDatastreamCodec.decodeSignalProxyPayload(payload);
+
+    assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_INIT_REQUEST, decoded.requestType());
+    assertEquals("Network", decoded.className());
+    assertEquals("5", decoded.objectName());
+    assertTrue(decoded.slotName().isEmpty());
+    assertTrue(decoded.params().isEmpty());
+  }
+
+  @Test
   void writesSignalProxyHeartbeatProbeFrame() throws Exception {
     QuasselCoreDatastreamCodec codec = new QuasselCoreDatastreamCodec();
     ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -261,5 +336,125 @@ class QuasselCoreDatastreamCodecTest {
     @SuppressWarnings("unchecked")
     Map<String, Object> state = (Map<String, Object>) decoded.params().get(0);
     assertEquals("libera", state.get("networkName"));
+  }
+
+  @Test
+  void decodesUnknownSyncClassParams() throws Exception {
+    byte[] payload =
+        QuasselCoreDatastreamCodec.encodeSignalProxyPayload(
+            List.of(
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC,
+                "NetworkConfig".getBytes(StandardCharsets.UTF_8),
+                "global".getBytes(StandardCharsets.UTF_8),
+                "sync()".getBytes(StandardCharsets.UTF_8),
+                Map.of("networkId", 11, "networkName", "libera")));
+
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        QuasselCoreDatastreamCodec.decodeSignalProxyPayload(payload);
+
+    assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC, decoded.requestType());
+    assertEquals("NetworkConfig", decoded.className());
+    assertEquals("global", decoded.objectName());
+    assertEquals("sync()", decoded.slotName());
+    assertEquals(1, decoded.params().size());
+    @SuppressWarnings("unchecked")
+    Map<String, Object> state = (Map<String, Object>) decoded.params().get(0);
+    assertEquals(11, ((Number) state.get("networkId")).intValue());
+    assertEquals("libera", state.get("networkName"));
+  }
+
+  @Test
+  void decodesUnknownNetworkRpcSlotParams() throws Exception {
+    byte[] payload =
+        QuasselCoreDatastreamCodec.encodeSignalProxyPayload(
+            List.of(
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL,
+                "2networkCreated(NetworkId)".getBytes(StandardCharsets.UTF_8),
+                new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", 9)));
+
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        QuasselCoreDatastreamCodec.decodeSignalProxyPayload(payload);
+
+    assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL, decoded.requestType());
+    assertEquals("2networkCreated(NetworkId)", decoded.slotName());
+    assertEquals(1, decoded.params().size());
+    assertEquals(9, ((Number) decoded.params().get(0)).intValue());
+  }
+
+  @Test
+  void decodesUnknownIdentityRpcSlotParams() throws Exception {
+    byte[] payload =
+        QuasselCoreDatastreamCodec.encodeSignalProxyPayload(
+            List.of(
+                QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL,
+                "2identityCreated(Identity)".getBytes(StandardCharsets.UTF_8),
+                new QuasselCoreDatastreamCodec.UserTypeValue(
+                    "Identity",
+                    Map.of(
+                        "identityId",
+                        new QuasselCoreDatastreamCodec.UserTypeValue("IdentityId", 3),
+                        "identityName",
+                        "ircafe"))));
+
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        QuasselCoreDatastreamCodec.decodeSignalProxyPayload(payload);
+
+    assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_RPC_CALL, decoded.requestType());
+    assertEquals("2identityCreated(Identity)", decoded.slotName());
+    assertEquals(1, decoded.params().size());
+    Object first = decoded.params().get(0);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> identityMap =
+        first instanceof QuasselCoreDatastreamCodec.UserTypeValue userType
+            ? (Map<String, Object>) userType.value()
+            : (Map<String, Object>) assertInstanceOf(Map.class, first);
+    assertEquals("ircafe", identityMap.get("identityName"));
+  }
+
+  @Test
+  void decodesSyncPayloadWhenVariantParamIsNull() throws Exception {
+    ByteArrayOutputStream payload = new ByteArrayOutputStream();
+    writeInt32(payload, 5);
+    writeVariantInt(payload, QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC);
+    writeVariantQByteArray(payload, "Network");
+    writeVariantQByteArray(payload, "5");
+    writeVariantQByteArray(payload, "sync()");
+    writeVariantNullQString(payload);
+
+    QuasselCoreDatastreamCodec.SignalProxyMessage decoded =
+        QuasselCoreDatastreamCodec.decodeSignalProxyPayload(payload.toByteArray());
+
+    assertEquals(QuasselCoreDatastreamCodec.SIGNAL_PROXY_SYNC, decoded.requestType());
+    assertEquals("Network", decoded.className());
+    assertEquals("5", decoded.objectName());
+    assertEquals("sync()", decoded.slotName());
+    assertEquals(1, decoded.params().size());
+    assertEquals(null, decoded.params().get(0));
+  }
+
+  private static void writeVariantInt(ByteArrayOutputStream out, int value) {
+    writeInt32(out, 2);
+    out.write(0);
+    writeInt32(out, value);
+  }
+
+  private static void writeVariantQByteArray(ByteArrayOutputStream out, String value) {
+    byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+    writeInt32(out, 12);
+    out.write(0);
+    writeInt32(out, bytes.length);
+    out.writeBytes(bytes);
+  }
+
+  private static void writeVariantNullQString(ByteArrayOutputStream out) {
+    writeInt32(out, 10);
+    out.write(1);
+  }
+
+  private static void writeInt32(ByteArrayOutputStream out, int value) {
+    out.write((value >>> 24) & 0xFF);
+    out.write((value >>> 16) & 0xFF);
+    out.write((value >>> 8) & 0xFF);
+    out.write(value & 0xFF);
   }
 }

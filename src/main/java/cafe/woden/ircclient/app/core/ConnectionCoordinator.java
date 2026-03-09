@@ -31,6 +31,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.SwingUtilities;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -39,6 +41,7 @@ import org.springframework.stereotype.Component;
 @Lazy
 @ApplicationLayer
 public class ConnectionCoordinator {
+  private static final Logger log = LoggerFactory.getLogger(ConnectionCoordinator.class);
   private static final Scheduler EDT_SCHEDULER = Schedulers.from(SwingUtilities::invokeLater);
   private static final int TARGET_RESTORE_CHUNK_SIZE = 48;
 
@@ -78,6 +81,7 @@ public class ConnectionCoordinator {
   private final Map<String, Long> restoreRunByServer = new HashMap<>();
   private final AtomicLong restoreRunSequence = new AtomicLong();
   private final Set<String> suppressStartupQuasselSetupPromptServers = new HashSet<>();
+  private final Set<String> openQuasselNetworkManagerOnSyncReadyServers = new HashSet<>();
   private final Map<String, Set<String>> observedJoinedChannelKeysByServer =
       new ConcurrentHashMap<>();
 
@@ -119,7 +123,9 @@ public class ConnectionCoordinator {
     }
     for (String sid : configuredServers) {
       ui.setServerConnectionState(sid, ConnectionState.DISCONNECTED);
-      restoreJoinedChannelTargets(sid);
+      if (!isQuasselCoreServer(sid)) {
+        restoreJoinedChannelTargets(sid);
+      }
     }
 
     updateConnectionUi();
@@ -130,6 +136,7 @@ public class ConnectionCoordinator {
     disposables.dispose();
     restoreRunByServer.clear();
     suppressStartupQuasselSetupPromptServers.clear();
+    openQuasselNetworkManagerOnSyncReadyServers.clear();
   }
 
   public boolean isConnected(String serverId) {
@@ -208,6 +215,11 @@ public class ConnectionCoordinator {
 
   public void connectOne(String serverId) {
     String sid = normalizedKnownServerId(serverId, "(conn)");
+    log.info(
+        "connectOne requested: rawServerId={}, normalizedServerId={}, currentState={}",
+        serverId,
+        sid,
+        sid == null ? null : stateOf(sid));
     if (sid == null) return;
     requestConnect(sid, true);
   }
@@ -249,6 +261,11 @@ public class ConnectionCoordinator {
 
   public void reconnectOne(String serverId) {
     String sid = normalizedKnownServerId(serverId, "(reconnect)");
+    log.info(
+        "reconnectOne requested: rawServerId={}, normalizedServerId={}, currentState={}",
+        serverId,
+        sid,
+        sid == null ? null : stateOf(sid));
     if (sid == null) return;
 
     TargetRef status = new TargetRef(sid, "status");
@@ -275,9 +292,11 @@ public class ConnectionCoordinator {
         reconnect
             .observeOn(EDT_SCHEDULER)
             .subscribe(
-                () -> {},
+                () -> log.info("reconnectOne completed successfully: serverId={}", sid),
                 err -> {
                   String rendered = renderError(err);
+                  log.warn(
+                      "reconnectOne failed: serverId={}, renderedError={}", sid, rendered, err);
                   ui.appendError(status, "(reconnect-error)", rendered);
                   setLastError(sid, rendered);
                   if (err instanceof BackendNotAvailableException) {
@@ -290,6 +309,12 @@ public class ConnectionCoordinator {
 
   public void markQuasselSetupSubmitted(String serverId) {
     quasselSetupLifecycleState.markSetupSubmitted(serverId);
+  }
+
+  public void queueOpenQuasselNetworkManagerOnSyncReady(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    openQuasselNetworkManagerOnSyncReadyServers.add(sid);
   }
 
   public void syncQuasselSetupCredentials(
@@ -334,6 +359,30 @@ public class ConnectionCoordinator {
     serverRegistry.upsert(updated);
   }
 
+  private boolean isQuasselCoreServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return false;
+
+    try {
+      Optional<IrcProperties.Server> current = serverRegistry.find(sid);
+      if (current != null && current.isPresent()) {
+        return current.orElseThrow().backend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+      }
+    } catch (Exception ignored) {
+    }
+
+    IrcProperties.Server configured = configuredServerConfigsById.get(sid);
+    if (configured != null) {
+      return configured.backend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+    }
+    for (Map.Entry<String, IrcProperties.Server> entry : configuredServerConfigsById.entrySet()) {
+      if (entry == null || entry.getValue() == null) continue;
+      if (!sid.equalsIgnoreCase(Objects.toString(entry.getKey(), "").trim())) continue;
+      return entry.getValue().backend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+    }
+    return false;
+  }
+
   private static boolean isStartupAutoConnectEnabled(
       Map<String, Boolean> autoConnectByServer, String serverId) {
     if (autoConnectByServer == null || autoConnectByServer.isEmpty()) return true;
@@ -355,6 +404,7 @@ public class ConnectionCoordinator {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return null;
     if (!serverCatalog.containsId(sid)) {
+      log.info("Unknown server id in {}: {}", tag, sid);
       ui.appendError(new TargetRef("default", "status"), tag, "Unknown server: " + sid);
       return null;
     }
@@ -389,14 +439,23 @@ public class ConnectionCoordinator {
     setNextRetryAtMs(id, null);
 
     ConnectionState current = stateOf(id);
+    log.info(
+        "requestConnect: serverId={}, announceQueued={}, refreshUiNow={}, suppressStartupPrompt={}, currentState={}",
+        id,
+        announceQueued,
+        refreshUiNow,
+        suppressStartupQuasselSetupPrompt,
+        current);
     if (current == ConnectionState.CONNECTED
         || current == ConnectionState.CONNECTING
         || current == ConnectionState.RECONNECTING) {
+      log.info("requestConnect ignored due to state: serverId={}, currentState={}", id, current);
       if (refreshUiNow) updateConnectionUi();
       return;
     }
 
     if (current == ConnectionState.DISCONNECTING) {
+      log.info("requestConnect queued while disconnecting: serverId={}", id);
       if (announceQueued) {
         ui.appendStatus(status, "(conn)", "Connect requested; waiting for disconnect to finish…");
       }
@@ -411,9 +470,14 @@ public class ConnectionCoordinator {
         irc.connect(id)
             .observeOn(EDT_SCHEDULER)
             .subscribe(
-                () -> {},
+                () -> log.info("requestConnect connect call completed: serverId={}", id),
                 err -> {
                   String rendered = renderError(err);
+                  log.warn(
+                      "requestConnect connect call failed: serverId={}, renderedError={}",
+                      id,
+                      rendered,
+                      err);
                   ui.appendError(status, "(conn-error)", rendered);
                   ui.appendStatus(status, "(conn)", "Connect failed");
                   setLastError(id, rendered);
@@ -495,6 +559,7 @@ public class ConnectionCoordinator {
       clearConnectionDiagnostics(sid);
       restoreRunByServer.remove(sid);
       suppressStartupQuasselSetupPromptServers.remove(sid);
+      openQuasselNetworkManagerOnSyncReadyServers.remove(sid);
       quasselSetupLifecycleState.clearServer(sid);
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
         String fallback = current.stream().findFirst().orElse("default");
@@ -522,6 +587,7 @@ public class ConnectionCoordinator {
       ui.ensureTargetExists(new TargetRef(sid, "status"));
       setDesiredOnline(sid, false);
       clearConnectionDiagnostics(sid);
+      openQuasselNetworkManagerOnSyncReadyServers.remove(sid);
       quasselSetupLifecycleState.clearServer(sid);
       ui.setServerConnectionState(sid, ConnectionState.DISCONNECTED);
     }
@@ -848,7 +914,7 @@ public class ConnectionCoordinator {
     if ("sync-ready".equals(phase)) {
       syncQuasselNetworksToUi(sid);
     }
-    maybeOpenQuasselNetworkManagerAfterSetup(sid, phase, status);
+    maybeOpenQuasselNetworkManagerAfterSyncReady(sid, phase, status);
 
     updateConnectionUi();
     return ConnectivityChange.CHANGED;
@@ -896,12 +962,20 @@ public class ConnectionCoordinator {
                 err -> ui.appendError(status, "(qsetup-error)", String.valueOf(err))));
   }
 
-  private void maybeOpenQuasselNetworkManagerAfterSetup(
+  private void maybeOpenQuasselNetworkManagerAfterSyncReady(
       String serverId, String phase, TargetRef status) {
     if (!"sync-ready".equals(phase)) return;
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
-    if (!quasselSetupLifecycleState.consumeOpenNetworkManagerOnSyncReady(sid)) return;
+    boolean queuedFromSetup = quasselSetupLifecycleState.consumeOpenNetworkManagerOnSyncReady(sid);
+    boolean queuedFromManager = openQuasselNetworkManagerOnSyncReadyServers.remove(sid);
+    if (!queuedFromSetup && !queuedFromManager) return;
+
+    if (queuedFromManager) {
+      ui.appendStatus(status, "(qnet-ui)", "Connected. Opening Quassel Network Manager…");
+      ui.openQuasselNetworkManager(sid);
+      return;
+    }
 
     int networkCount = quasselControl.quasselCoreNetworks(sid).size();
     if (networkCount <= 0) {
@@ -972,11 +1046,13 @@ public class ConnectionCoordinator {
       privateTargets = filtered.isEmpty() ? List.of() : List.copyOf(filtered);
     }
 
-    List<String> joinedChannels;
-    try {
-      joinedChannels = normalizeUniqueTargets(runtimeConfig.readKnownChannels(serverId));
-    } catch (Exception ignored) {
-      joinedChannels = List.of();
+    List<String> joinedChannels = List.of();
+    if (!isQuasselCoreServer(serverId)) {
+      try {
+        joinedChannels = normalizeUniqueTargets(runtimeConfig.readKnownChannels(serverId));
+      } catch (Exception ignored) {
+        joinedChannels = List.of();
+      }
     }
     return new PersistedTargetRestore(privateTargets, joinedChannels);
   }
@@ -988,7 +1064,9 @@ public class ConnectionCoordinator {
     }
     PersistedTargetRestore safe = snapshot == null ? PersistedTargetRestore.EMPTY : snapshot;
     restorePrivateMessageTargetsChunked(serverId, runId, safe.privateTargets(), 0);
-    restoreJoinedChannelTargetsChunked(serverId, runId, safe.joinedChannels(), 0);
+    if (!isQuasselCoreServer(serverId)) {
+      restoreJoinedChannelTargetsChunked(serverId, runId, safe.joinedChannels(), 0);
+    }
   }
 
   private boolean isCurrentRestoreRun(String serverId, long runId) {
@@ -1025,6 +1103,9 @@ public class ConnectionCoordinator {
 
   private void restoreJoinedChannelTargetsChunked(
       String serverId, long runId, List<String> channels, int startIndex) {
+    if (isQuasselCoreServer(serverId)) {
+      return;
+    }
     if (!isCurrentRestoreRun(serverId, runId)) {
       return;
     }
@@ -1091,7 +1172,7 @@ public class ConnectionCoordinator {
   }
 
   private void restoreJoinedChannelTargets(String serverId) {
-    if (runtimeConfig == null) {
+    if (runtimeConfig == null || isQuasselCoreServer(serverId)) {
       return;
     }
     List<String> channels = runtimeConfig.readKnownChannels(serverId);

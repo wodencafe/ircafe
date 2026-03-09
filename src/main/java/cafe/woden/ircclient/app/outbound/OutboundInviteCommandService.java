@@ -3,6 +3,7 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer;
@@ -160,7 +161,9 @@ final class OutboundInviteCommandService {
       return;
     }
 
-    runtimeConfig.rememberJoinedChannel(invite.serverId(), invite.channel());
+    if (shouldPersistJoinedChannel(invite.serverId())) {
+      runtimeConfig.rememberJoinedChannel(invite.serverId(), invite.channel());
+    }
     ui.appendStatus(
         status, "(invite)", "Joining " + invite.channel() + " from invite #" + invite.id() + "...");
 
@@ -350,5 +353,10 @@ final class OutboundInviteCommandService {
 
   private static boolean containsCrlf(String s) {
     return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);
+  }
+
+  private boolean shouldPersistJoinedChannel(String serverId) {
+    return commandTargetPolicy.backendForServer(serverId)
+        != IrcProperties.Server.Backend.QUASSEL_CORE;
   }
 }

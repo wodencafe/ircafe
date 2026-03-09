@@ -6,6 +6,7 @@ import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
@@ -380,6 +381,33 @@ public class TargetCoordinator implements ActiveTargetPort {
     ui.setInputEnabled(connectionCoordinator.isConnected(activeTarget.serverId()));
   }
 
+  /**
+   * Marks a channel as attached when we observe live channel activity.
+   *
+   * <p>This is primarily used for backends that can surface channel traffic without an explicit
+   * join event during initial sync. User-detached channels remain detached.
+   */
+  public void onChannelActivityObserved(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) return;
+
+    TargetRef target = new TargetRef(sid, ch);
+    if (!target.isChannel()) return;
+
+    ensureTargetExists(target);
+    if (detachedChannelsByUserOrKick.contains(target) || bouncerDetachedChannels.contains(target)) {
+      return;
+    }
+    if (!ui.isChannelDisconnected(target)) return;
+
+    ui.setChannelDisconnected(target, false);
+    if (Objects.equals(activeTarget, target)) {
+      applyTargetContext(target);
+      ui.setChatActiveTarget(target);
+    }
+  }
+
   @Override
   public TargetRef safeStatusTarget() {
     if (activeTarget != null && !activeTarget.isApplicationServer()) {
@@ -544,7 +572,9 @@ public class TargetCoordinator implements ActiveTargetPort {
     ensureTargetExists(target);
 
     channelsClosedByUser.remove(target);
-    runtimeConfig.rememberJoinedChannel(sid, target.target());
+    if (!isQuasselCoreServer(sid)) {
+      runtimeConfig.rememberJoinedChannel(sid, target.target());
+    }
     detachedChannelsByUserOrKick.remove(target);
     bouncerDetachedChannels.remove(target);
     // Keep detached until JOIN is confirmed by the server.
@@ -676,6 +706,18 @@ public class TargetCoordinator implements ActiveTargetPort {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
     return bouncerPlayback.isSojuBouncerAvailable(sid) || bouncerPlayback.isZncBouncerDetected(sid);
+  }
+
+  private boolean isQuasselCoreServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return false;
+    try {
+      var configured = serverRegistry.find(sid);
+      if (configured == null || configured.isEmpty()) return false;
+      return configured.orElseThrow().backend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 
   private Completable bouncerDetach(String serverId, String channel) {

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
@@ -22,6 +23,7 @@ import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -90,6 +92,40 @@ class OutboundInviteCommandServiceTest {
     verify(runtimeConfig).rememberJoinedChannel("libera", "#ircafe");
     verify(irc).joinChannel("libera", "#ircafe");
     verify(pendingInviteState).remove(12L);
+  }
+
+  @Test
+  void inviteJoinOnQuasselDoesNotPersistJoinedChannelLocally() {
+    TargetRef status = new TargetRef("quassel", "status");
+    PendingInvitePort.PendingInvite invite = pendingInvite(13L, "alice", "quassel");
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(pendingInviteState.get(13L)).thenReturn(invite);
+    when(connectionCoordinator.isConnected("quassel")).thenReturn(true);
+    when(serverCatalog.find("quassel"))
+        .thenReturn(
+            Optional.of(
+                new IrcProperties.Server(
+                    "quassel",
+                    "core.example.net",
+                    4242,
+                    false,
+                    "",
+                    "ircafe",
+                    "ircafe",
+                    "IRCafe User",
+                    null,
+                    null,
+                    List.of(),
+                    List.of(),
+                    null,
+                    IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(irc.joinChannel("quassel", "#ircafe")).thenReturn(Completable.complete());
+
+    service.handleInviteJoin(disposables, "13");
+
+    verify(runtimeConfig, never()).rememberJoinedChannel("quassel", "#ircafe");
+    verify(irc).joinChannel("quassel", "#ircafe");
+    verify(pendingInviteState).remove(13L);
   }
 
   @Test
@@ -191,8 +227,13 @@ class OutboundInviteCommandServiceTest {
   }
 
   private static PendingInvitePort.PendingInvite pendingInvite(long id, String inviterNick) {
+    return pendingInvite(id, inviterNick, "libera");
+  }
+
+  private static PendingInvitePort.PendingInvite pendingInvite(
+      long id, String inviterNick, String serverId) {
     Instant now = Instant.parse("2026-02-16T00:00:00Z");
     return new PendingInvitePort.PendingInvite(
-        id, now, now, "libera", "#ircafe", inviterNick, "me", "", true, 1);
+        id, now, now, serverId, "#ircafe", inviterNick, "me", "", true, 1);
   }
 }

@@ -264,6 +264,11 @@ public class BackendRoutingIrcClientService
   }
 
   @Override
+  public boolean hasEstablishedQuasselCoreSession(String serverId) {
+    return routeActiveOrConfigured(serverId).hasEstablishedQuasselCoreSession(serverId);
+  }
+
+  @Override
   public Optional<QuasselCoreSetupPrompt> quasselCoreSetupPrompt(String serverId) {
     return routeActiveOrConfigured(serverId).quasselCoreSetupPrompt(serverId);
   }

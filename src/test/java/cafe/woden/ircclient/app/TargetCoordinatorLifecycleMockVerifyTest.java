@@ -12,6 +12,7 @@ import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
@@ -22,6 +23,8 @@ import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
@@ -91,17 +94,101 @@ class TargetCoordinatorLifecycleMockVerifyTest {
     verify(irc, never()).partChannel("libera", "#ircafe");
   }
 
+  @Test
+  void joinOnQuasselServerDoesNotPersistJoinedChannel() {
+    UiPort ui = mock(UiPort.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    when(serverRegistry.find("quassel"))
+        .thenReturn(
+            Optional.of(
+                new IrcProperties.Server(
+                    "quassel",
+                    "core.example.net",
+                    4242,
+                    false,
+                    "",
+                    "ircafe",
+                    "ircafe",
+                    "IRCafe User",
+                    null,
+                    null,
+                    List.of(),
+                    List.of(),
+                    null,
+                    IrcProperties.Server.Backend.QUASSEL_CORE)));
+    TargetCoordinator coordinator =
+        newCoordinator(ui, irc, connectionCoordinator, runtimeConfig, serverRegistry);
+    TargetRef channel = new TargetRef("quassel", "#ircafe{net:5}");
+
+    when(connectionCoordinator.isConnected("quassel")).thenReturn(true);
+    when(irc.joinChannel("quassel", "#ircafe{net:5}")).thenReturn(Completable.complete());
+
+    coordinator.joinChannel(channel);
+
+    verify(runtimeConfig, never()).rememberJoinedChannel("quassel", "#ircafe{net:5}");
+    verify(irc).joinChannel("quassel", "#ircafe{net:5}");
+    verify(ui).setChannelDisconnected(channel, true);
+  }
+
+  @Test
+  void observedChannelActivityClearsDisconnectedStateForAttachedChannel() {
+    UiPort ui = mock(UiPort.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+    TargetRef channel = new TargetRef("quassel", "#ircafe{net:5}");
+
+    when(ui.isChannelDisconnected(channel)).thenReturn(true);
+
+    coordinator.onChannelActivityObserved("quassel", "#ircafe{net:5}");
+
+    verify(ui).setChannelDisconnected(channel, false);
+    verify(irc, never()).partChannel("quassel", "#ircafe{net:5}", null);
+  }
+
+  @Test
+  void observedChannelActivityDoesNotReattachUserDetachedChannel() {
+    UiPort ui = mock(UiPort.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+    TargetRef channel = new TargetRef("quassel", "#ircafe{net:5}");
+
+    when(connectionCoordinator.isConnected("quassel")).thenReturn(true);
+    when(irc.partChannel("quassel", "#ircafe{net:5}", null)).thenReturn(Completable.complete());
+
+    coordinator.disconnectChannel(channel);
+    coordinator.onChannelActivityObserved("quassel", "#ircafe{net:5}");
+
+    verify(ui, never()).setChannelDisconnected(channel, false);
+  }
+
   private static TargetCoordinator newCoordinator(
       UiPort ui,
       IrcBackendClientService irc,
       ConnectionCoordinator connectionCoordinator,
       RuntimeConfigStore runtimeConfig) {
+    return newCoordinator(
+        ui, irc, connectionCoordinator, runtimeConfig, mock(ServerRegistry.class));
+  }
+
+  private static TargetCoordinator newCoordinator(
+      UiPort ui,
+      IrcBackendClientService irc,
+      ConnectionCoordinator connectionCoordinator,
+      RuntimeConfigStore runtimeConfig,
+      ServerRegistry serverRegistry) {
     return new TargetCoordinator(
         ui,
         mock(UserListStore.class),
         IrcTargetMembershipPort.from(irc),
         irc,
-        mock(ServerRegistry.class),
+        serverRegistry,
         runtimeConfig,
         connectionCoordinator,
         mock(IgnoreListQueryPort.class),

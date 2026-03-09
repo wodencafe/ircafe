@@ -126,6 +126,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         Objects.requireNonNull(in.openServerInfoDialog(), "openServerInfoDialog"),
         Objects.requireNonNull(in.requestEmitter(), "requestEmitter")::emitOpenQuasselSetup,
         in.requestEmitter()::emitOpenQuasselNetworkManager,
+        serverId -> isQuasselSetupPending(in.runtimeState(), serverId),
         () -> in.interceptorStore() != null,
         in.interceptorActions()::promptAndAddInterceptor,
         () -> in.serverDialogs() != null,
@@ -202,7 +203,8 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         (serverId, networkToken, networkLabel) ->
             confirmRemoveQuasselNetwork(in, networkToken, networkLabel),
         Objects.requireNonNull(in.requestEmitter(), "requestEmitter")::emitOpenQuasselSetup,
-        in.requestEmitter()::emitOpenQuasselNetworkManager);
+        in.requestEmitter()::emitOpenQuasselNetworkManager,
+        serverId -> isQuasselSetupPending(in.runtimeState(), serverId));
   }
 
   private static String encodeQuasselNetworkManagerAction(
@@ -385,6 +387,17 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             .trim();
     if (modeSpec.isEmpty()) return;
     requestStreams.emitChannelModeSetRequest(target, modeSpec);
+  }
+
+  private static boolean isQuasselSetupPending(
+      ServerTreeRuntimeState runtimeState, String serverId) {
+    if (runtimeState == null) return false;
+    String diagnostics =
+        Objects.toString(runtimeState.connectionDiagnosticsTipForServer(serverId), "")
+            .toLowerCase(java.util.Locale.ROOT);
+    return diagnostics.contains("setup required")
+        || diagnostics.contains("setup is required")
+        || diagnostics.contains("not configured for client logins");
   }
 
   private static boolean isBouncerControlStatusNode(ServerTreeNodeData nodeData, Inputs inputs) {

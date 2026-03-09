@@ -13,12 +13,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /** Performs Quassel datastream handshake/authentication (ClientInit + ClientLogin). */
 @Component
 @InfrastructureLayer
 public class QuasselCoreAuthHandshake {
+  private static final Logger log = LoggerFactory.getLogger(QuasselCoreAuthHandshake.class);
   private static final int MAX_HANDSHAKE_MESSAGES = 16;
 
   private final QuasselCoreDatastreamCodec datastreamCodec;
@@ -45,6 +48,7 @@ public class QuasselCoreAuthHandshake {
           datastreamCodec.readHandshakeMessage(in);
       String type = Objects.toString(message.messageType(), "").trim();
       Map<String, Object> fields = message.fields();
+      log.info("Quassel handshake message: type={}, fieldKeys={}", type, fields.keySet());
 
       if ("ClientInitReject".equals(type)) {
         throw new IllegalStateException(
@@ -52,6 +56,10 @@ public class QuasselCoreAuthHandshake {
       }
 
       if ("ClientInitAck".equals(type)) {
+        log.info(
+            "Quassel ClientInitAck: coreConfigured={}, fields={}",
+            isCoreConfigured(fields),
+            fields);
         if (!isCoreConfigured(fields)) {
           throw coreSetupRequired(fields, "core is not configured for client logins");
         }
@@ -61,11 +69,13 @@ public class QuasselCoreAuthHandshake {
       }
 
       if ("ClientLoginReject".equals(type)) {
+        log.info("Quassel ClientLoginReject fields={}", fields);
         throw new IllegalStateException(
             renderHandshakeError(fields, "ClientLogin rejected by core"));
       }
 
       if ("ClientLoginAck".equals(type)) {
+        log.info("Quassel ClientLoginAck fields={}", fields);
         continue;
       }
 
@@ -77,7 +87,18 @@ public class QuasselCoreAuthHandshake {
         int primaryNetworkId = networkIds.isEmpty() ? -1 : networkIds.get(0);
         Map<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> initialBuffers =
             extractBufferInfos(fields);
-        return new AuthResult(authUser, primaryNetworkId, networkIds, initialBuffers);
+        Map<Integer, Map<String, Object>> initialIdentities = extractIdentityStates(fields);
+        log.info(
+            "Quassel SessionInit summary: authUser={}, primaryNetworkId={}, networkIds={}, initialBufferCount={}, initialIdentityCount={}, sessionStateKeys={}, fields={}",
+            authUser,
+            primaryNetworkId,
+            networkIds,
+            initialBuffers.size(),
+            initialIdentities.size(),
+            extractSessionStateKeys(fields),
+            fields);
+        return new AuthResult(
+            authUser, primaryNetworkId, networkIds, initialBuffers, initialIdentities);
       }
 
       if ("CoreSetupAck".equals(type)
@@ -141,6 +162,7 @@ public class QuasselCoreAuthHandshake {
           datastreamCodec.readHandshakeMessage(in);
       String type = Objects.toString(message.messageType(), "").trim();
       Map<String, Object> fields = message.fields();
+      log.info("Quassel setup handshake message: type={}, fieldKeys={}", type, fields.keySet());
 
       if ("ClientInitReject".equals(type)) {
         throw new IllegalStateException(
@@ -148,6 +170,10 @@ public class QuasselCoreAuthHandshake {
       }
 
       if ("ClientInitAck".equals(type)) {
+        log.info(
+            "Quassel setup ClientInitAck: coreConfigured={}, fields={}",
+            isCoreConfigured(fields),
+            fields);
         if (isCoreConfigured(fields)) {
           throw new IllegalStateException("Quassel Core is already configured");
         }
@@ -164,6 +190,7 @@ public class QuasselCoreAuthHandshake {
       }
 
       if ("CoreSetupData".equals(type)) {
+        log.info("Quassel setup CoreSetupData fields={}", fields);
         // Some cores explicitly send CoreSetupData after ClientInitAck.
         if (!setupSent) {
           sendCoreSetupData(
@@ -180,11 +207,13 @@ public class QuasselCoreAuthHandshake {
       }
 
       if ("CoreSetupReject".equals(type)) {
+        log.info("Quassel setup CoreSetupReject fields={}", fields);
         throw new IllegalStateException(
             renderHandshakeError(fields, "Quassel Core setup rejected"));
       }
 
       if ("CoreSetupAck".equals(type)) {
+        log.info("Quassel setup CoreSetupAck fields={}", fields);
         return;
       }
 
@@ -314,6 +343,22 @@ public class QuasselCoreAuthHandshake {
   }
 
   @SuppressWarnings("unchecked")
+  private static List<String> extractSessionStateKeys(Map<String, Object> fields) {
+    if (fields == null || fields.isEmpty()) return List.of();
+    Object stateRaw = fields.get("SessionState");
+    if (!(stateRaw instanceof Map<?, ?> stateMap)) {
+      return List.of();
+    }
+    ArrayList<String> keys = new ArrayList<>(stateMap.size());
+    for (Object rawKey : stateMap.keySet()) {
+      String key = Objects.toString(rawKey, "").trim();
+      if (!key.isEmpty()) keys.add(key);
+    }
+    if (keys.isEmpty()) return List.of();
+    return Collections.unmodifiableList(keys);
+  }
+
+  @SuppressWarnings("unchecked")
   private static Map<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> extractBufferInfos(
       Map<String, Object> fields) {
     Object stateRaw = fields.get("SessionState");
@@ -334,6 +379,62 @@ public class QuasselCoreAuthHandshake {
     }
     if (out.isEmpty()) return Map.of();
     return Collections.unmodifiableMap(out);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<Integer, Map<String, Object>> extractIdentityStates(
+      Map<String, Object> fields) {
+    Object stateRaw = fields.get("SessionState");
+    if (!(stateRaw instanceof Map<?, ?> stateMap)) {
+      return Map.of();
+    }
+    Object identitiesRaw = stateMap.get("Identities");
+    if (!(identitiesRaw instanceof List<?> identitiesList)) {
+      return Map.of();
+    }
+
+    LinkedHashMap<Integer, Map<String, Object>> out = new LinkedHashMap<>();
+    for (Object value : identitiesList) {
+      if (!(value instanceof Map<?, ?> identityMap) || identityMap.isEmpty()) continue;
+      int identityId = identityIdFromMap(identityMap);
+      if (identityId < 0) continue;
+      LinkedHashMap<String, Object> normalized = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : identityMap.entrySet()) {
+        if (entry == null) continue;
+        String key = Objects.toString(entry.getKey(), "").trim();
+        if (key.isEmpty()) continue;
+        normalized.put(key, entry.getValue());
+      }
+      out.put(identityId, Collections.unmodifiableMap(normalized));
+    }
+    if (out.isEmpty()) return Map.of();
+    return Collections.unmodifiableMap(out);
+  }
+
+  private static int identityIdFromMap(Map<?, ?> map) {
+    if (map == null || map.isEmpty()) return -1;
+    Object raw =
+        firstNonNull(
+            map.get("identityId"),
+            map.get("identityid"),
+            map.get("IdentityId"),
+            map.get("IDENTITYID"));
+    if (raw instanceof Number n) return n.intValue();
+    String text = Objects.toString(raw, "").trim();
+    if (text.isEmpty()) return -1;
+    try {
+      return Integer.parseInt(text);
+    } catch (NumberFormatException ignored) {
+      return -1;
+    }
+  }
+
+  private static Object firstNonNull(Object... values) {
+    if (values == null || values.length == 0) return null;
+    for (Object value : values) {
+      if (value != null) return value;
+    }
+    return null;
   }
 
   static String configuredAuthUser(IrcProperties.Server server) {
@@ -360,7 +461,28 @@ public class QuasselCoreAuthHandshake {
       String authUser,
       int primaryNetworkId,
       List<Integer> networkIds,
-      Map<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> initialBuffers) {}
+      Map<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> initialBuffers,
+      Map<Integer, Map<String, Object>> initialIdentities) {
+    public AuthResult {
+      networkIds = networkIds == null || networkIds.isEmpty() ? List.of() : List.copyOf(networkIds);
+      initialBuffers =
+          initialBuffers == null || initialBuffers.isEmpty()
+              ? Map.of()
+              : Collections.unmodifiableMap(new LinkedHashMap<>(initialBuffers));
+      initialIdentities =
+          initialIdentities == null || initialIdentities.isEmpty()
+              ? Map.of()
+              : Collections.unmodifiableMap(new LinkedHashMap<>(initialIdentities));
+    }
+
+    public AuthResult(
+        String authUser,
+        int primaryNetworkId,
+        List<Integer> networkIds,
+        Map<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> initialBuffers) {
+      this(authUser, primaryNetworkId, networkIds, initialBuffers, Map.of());
+    }
+  }
 
   /** User-provided parameters for Quassel Core initial setup. */
   public record CoreSetupRequest(

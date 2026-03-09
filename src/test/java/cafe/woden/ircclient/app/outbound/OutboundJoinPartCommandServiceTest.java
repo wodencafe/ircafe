@@ -101,11 +101,14 @@ class OutboundJoinPartCommandServiceTest {
     TargetRef status = new TargetRef("quassel", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);
     when(connectionCoordinator.isConnected("quassel")).thenReturn(true);
+    when(serverCatalog.find("quassel"))
+        .thenReturn(
+            Optional.of(serverWithBackend("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
     when(irc.joinChannel("quassel", "#ircafe")).thenReturn(Completable.complete());
 
     service.handleJoin(disposables, "#ircafe", "");
 
-    verify(runtimeConfig).rememberJoinedChannel("quassel", "#ircafe");
+    verify(runtimeConfig, never()).rememberJoinedChannel("quassel", "#ircafe");
     verify(joinRoutingState).rememberOrigin("quassel", "#ircafe", status);
     verify(irc).joinChannel("quassel", "#ircafe");
   }

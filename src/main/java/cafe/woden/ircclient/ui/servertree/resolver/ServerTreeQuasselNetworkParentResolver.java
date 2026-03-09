@@ -101,6 +101,9 @@ public final class ServerTreeQuasselNetworkParentResolver {
         DefaultMutableTreeNode aliased = aliasServerInterceptorsGroupToKnownNetwork(serverId);
         return aliased != null ? aliased : first.interceptorsNode();
       }
+      if (isPrivateMessageTarget(ref)) {
+        return first.privateMessagesNode();
+      }
       if (ref.isInterceptor()) return first.interceptorsNode();
       return null;
     }
@@ -111,7 +114,7 @@ public final class ServerTreeQuasselNetworkParentResolver {
     aliasServerIgnoresToKnownNetwork(serverId);
     aliasServerMonitorGroupToKnownNetwork(serverId);
     aliasServerInterceptorsGroupToKnownNetwork(serverId);
-    syncRootOtherNodeVisibility(serverId, serverNodes);
+    syncRootOtherNodeVisibility(serverNodes);
     if (ref.isChannel()) return networkNodes.channelListNode();
     if (isPrivateMessageTarget(ref)) return networkNodes.privateMessagesNode();
     if (ref.isChannelList()) {
@@ -129,6 +132,14 @@ public final class ServerTreeQuasselNetworkParentResolver {
 
   public void syncServerNetworks(
       String serverId, ServerNodes serverNodes, List<NetworkPresentation> networks) {
+    syncServerNetworks(serverId, serverNodes, networks, true);
+  }
+
+  public void syncServerNetworks(
+      String serverId,
+      ServerNodes serverNodes,
+      List<NetworkPresentation> networks,
+      boolean connected) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty() || serverNodes == null || serverNodes.serverNode == null) return;
     if (!isQuasselServer.test(sid)) return;
@@ -146,12 +157,16 @@ public final class ServerTreeQuasselNetworkParentResolver {
 
     if (desiredByToken.isEmpty()) {
       removeStaleNetworkNodes(sid, Set.of());
-      maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
+      if (connected) {
+        maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
+      } else {
+        removeEmptyStateNodeIfPresent(sid, serverNodes.serverNode);
+      }
       clearLegacyChannelListAlias(sid);
       clearLegacyIgnoresAlias(sid);
       clearLegacyMonitorAlias(sid);
       clearLegacyInterceptorsAlias(sid);
-      syncRootOtherNodeVisibility(sid, serverNodes);
+      syncRootOtherNodeVisibility(serverNodes);
       return;
     }
 
@@ -171,22 +186,30 @@ public final class ServerTreeQuasselNetworkParentResolver {
       clearLegacyIgnoresAlias(sid);
       clearLegacyMonitorAlias(sid);
       clearLegacyInterceptorsAlias(sid);
-      syncRootOtherNodeVisibility(sid, serverNodes);
+      syncRootOtherNodeVisibility(serverNodes);
       return;
     }
     aliasServerChannelListToKnownNetwork(sid);
     aliasServerIgnoresToKnownNetwork(sid);
     aliasServerMonitorGroupToKnownNetwork(sid);
     aliasServerInterceptorsGroupToKnownNetwork(sid);
-    syncRootOtherNodeVisibility(sid, serverNodes);
+    syncRootOtherNodeVisibility(serverNodes);
   }
 
   public void initializeServer(String serverId, ServerNodes serverNodes) {
+    initializeServer(serverId, serverNodes, true);
+  }
+
+  public void initializeServer(String serverId, ServerNodes serverNodes, boolean connected) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty() || serverNodes == null || serverNodes.serverNode == null) return;
     if (!isQuasselServer.test(sid)) return;
-    maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
-    syncRootOtherNodeVisibility(sid, serverNodes);
+    if (connected) {
+      maybeEnsureEmptyStateNode(sid, serverNodes.serverNode);
+    } else {
+      removeEmptyStateNodeIfPresent(sid, serverNodes.serverNode);
+    }
+    syncRootOtherNodeVisibility(serverNodes);
   }
 
   public boolean isQuasselNetworkNode(DefaultMutableTreeNode node) {
@@ -514,22 +537,12 @@ public final class ServerTreeQuasselNetworkParentResolver {
     return byToken.values().iterator().next();
   }
 
-  private void syncRootOtherNodeVisibility(String serverId, ServerNodes serverNodes) {
+  private void syncRootOtherNodeVisibility(ServerNodes serverNodes) {
     if (serverNodes == null || serverNodes.serverNode == null || serverNodes.otherNode == null) {
       return;
     }
-    String sid = normalizeServerId(serverId);
-    Map<String, NetworkNodes> byToken = networkNodesByServer.get(sid);
-    boolean hasNetworks = byToken != null && !byToken.isEmpty();
     DefaultMutableTreeNode otherNode = serverNodes.otherNode;
     DefaultMutableTreeNode serverNode = serverNodes.serverNode;
-
-    if (hasNetworks) {
-      if (otherNode.getParent() != null) {
-        detachNodeIfNeeded(otherNode);
-      }
-      return;
-    }
     if (otherNode.getParent() == serverNode) return;
     if (otherNode.getParent() != null) {
       detachNodeIfNeeded(otherNode);
@@ -537,8 +550,6 @@ public final class ServerTreeQuasselNetworkParentResolver {
     int insertIdx = networkInsertIndex(serverNodes);
     serverNode.insert(otherNode, insertIdx);
     notifyNodeInserted(serverNode, insertIdx);
-    leaves.put(TargetRef.monitorGroup(sid), serverNodes.monitorNode);
-    leaves.put(TargetRef.interceptorsGroup(sid), serverNodes.interceptorsNode);
   }
 
   private void detachNodeIfNeeded(DefaultMutableTreeNode node) {
@@ -599,7 +610,8 @@ public final class ServerTreeQuasselNetworkParentResolver {
       DefaultMutableTreeNode serverNode, DefaultMutableTreeNode privateMessagesNode) {
     if (serverNode == null) return 0;
     int insertIdx = serverNode.getChildCount();
-    int privateMessagesIdx = serverNode.getIndex(privateMessagesNode);
+    int privateMessagesIdx =
+        privateMessagesNode == null ? -1 : serverNode.getIndex(privateMessagesNode);
     if (privateMessagesIdx >= 0) {
       insertIdx = Math.min(insertIdx, privateMessagesIdx);
     }

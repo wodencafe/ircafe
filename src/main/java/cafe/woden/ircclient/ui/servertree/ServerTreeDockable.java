@@ -759,6 +759,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             this::applyBuiltInLayoutToTree,
             this::applyRootSiblingOrderToTree,
             statusLabelManager::statusLeafLabelForServer,
+            this::isQuasselServer,
             nodeVisibilityApi::isDccTransfersNodesVisible,
             leaves::get);
     this.uiLeafVisibilitySynchronizer =
@@ -1361,7 +1362,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         () -> {
           ServerNodes serverNodes = serverNodeResolver.serverNodesForServer(sid);
           if (serverNodes == null) return;
-          quasselNetworkParentResolver.syncServerNetworks(sid, serverNodes, safeNetworks);
+          boolean connected =
+              runtimeState.connectionStateForServer(sid) == ConnectionState.CONNECTED;
+          quasselNetworkParentResolver.syncServerNetworks(
+              sid, serverNodes, safeNetworks, connected);
           tree.repaint();
         };
     if (SwingUtilities.isEventDispatchThread()) {
@@ -1919,7 +1923,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private ServerNodes addServerRoot(String serverId) {
     ServerNodes serverNodes = serverLifecycleFacade.addServerRoot(serverId);
-    quasselNetworkParentResolver.initializeServer(serverId, serverNodes);
+    String sid = normalizeServerId(serverId);
+    boolean connected = runtimeState.connectionStateForServer(sid) == ConnectionState.CONNECTED;
+    quasselNetworkParentResolver.initializeServer(serverId, serverNodes, connected);
+    serverLeafVisibilityCoordinator.syncUiLeafVisibilityForServer(sid);
     ensureInterceptorNodesForServer(serverId);
     return serverNodes;
   }

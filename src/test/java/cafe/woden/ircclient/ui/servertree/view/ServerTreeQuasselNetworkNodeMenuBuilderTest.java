@@ -39,7 +39,8 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
                   return true;
                 },
                 setupRequests::add,
-                managerRequests::add));
+                managerRequests::add,
+                sid -> true));
     ServerTreeQuasselNetworkNodeData nodeData =
         ServerTreeQuasselNetworkNodeData.network("quassel", "libera", "Libera");
 
@@ -78,7 +79,8 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
                 sid -> {},
                 (sid, token, label) -> false,
                 sid -> {},
-                sid -> {}));
+                sid -> {},
+                sid -> false));
     ServerTreeQuasselNetworkNodeData nodeData =
         ServerTreeQuasselNetworkNodeData.network("quassel", "libera", "Libera", true, true);
 
@@ -108,7 +110,8 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
                 sid -> {},
                 (sid, token, label) -> true,
                 sid -> {},
-                sid -> {}));
+                sid -> {},
+                sid -> false));
     ServerTreeQuasselNetworkNodeData nodeData =
         ServerTreeQuasselNetworkNodeData.network("quassel", "libera", "Libera", false, false);
 
@@ -134,7 +137,8 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
                 addRequests::add,
                 (sid, token, label) -> true,
                 setupRequests::add,
-                managerRequests::add));
+                managerRequests::add,
+                sid -> true));
     ServerTreeQuasselNetworkNodeData nodeData =
         ServerTreeQuasselNetworkNodeData.emptyState("quassel", "No Quassel networks configured");
 
@@ -164,10 +168,49 @@ class ServerTreeQuasselNetworkNodeMenuBuilderTest {
                 sid -> {},
                 (sid, token, label) -> true,
                 sid -> {},
-                sid -> {}));
+                sid -> {},
+                sid -> false));
     ServerTreeQuasselNetworkNodeData nodeData =
         ServerTreeQuasselNetworkNodeData.network(" ", "libera", "Libera");
 
     assertNull(builder.buildNetworkNodeMenu(nodeData));
+  }
+
+  @Test
+  void omitsSetupActionWhenSetupNotPending() {
+    ServerTreeQuasselNetworkNodeMenuBuilder builder =
+        new ServerTreeQuasselNetworkNodeMenuBuilder(
+            ServerTreeQuasselNetworkNodeMenuBuilder.context(
+                ref -> {},
+                (sid, token) -> {},
+                (sid, token) -> {},
+                (sid, token) -> {},
+                sid -> {},
+                (sid, token, label) -> true,
+                sid -> {},
+                sid -> {},
+                sid -> false));
+    ServerTreeQuasselNetworkNodeMenuBuilder pendingBuilder =
+        new ServerTreeQuasselNetworkNodeMenuBuilder(
+            ServerTreeQuasselNetworkNodeMenuBuilder.context(
+                ref -> {},
+                (sid, token) -> {},
+                (sid, token) -> {},
+                (sid, token) -> {},
+                sid -> {},
+                (sid, token, label) -> true,
+                sid -> {},
+                sid -> {},
+                sid -> true));
+    ServerTreeQuasselNetworkNodeData nodeData =
+        ServerTreeQuasselNetworkNodeData.network("quassel", "libera", "Libera");
+
+    JPopupMenu menu = builder.buildNetworkNodeMenu(nodeData);
+    JPopupMenu pendingMenu = pendingBuilder.buildNetworkNodeMenu(nodeData);
+
+    assertNotNull(menu);
+    assertNotNull(pendingMenu);
+    assertEquals(6, menu.getComponentCount());
+    assertEquals(7, pendingMenu.getComponentCount());
   }
 }

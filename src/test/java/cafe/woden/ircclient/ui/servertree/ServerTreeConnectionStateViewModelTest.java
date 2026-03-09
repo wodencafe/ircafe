@@ -10,6 +10,17 @@ import org.junit.jupiter.api.Test;
 class ServerTreeConnectionStateViewModelTest {
 
   @Test
+  void canConnectAllowsDisconnectedAndDisconnectingStates() {
+    assertTrue(ServerTreeConnectionStateViewModel.canConnect(ConnectionState.DISCONNECTED));
+    assertTrue(ServerTreeConnectionStateViewModel.canConnect(ConnectionState.DISCONNECTING));
+
+    assertFalse(ServerTreeConnectionStateViewModel.canConnect(ConnectionState.CONNECTING));
+    assertFalse(ServerTreeConnectionStateViewModel.canConnect(ConnectionState.CONNECTED));
+    assertFalse(ServerTreeConnectionStateViewModel.canConnect(ConnectionState.RECONNECTING));
+    assertTrue(ServerTreeConnectionStateViewModel.canConnect(null));
+  }
+
+  @Test
   void canDisconnectIncludesConnectingStateForConnectCancel() {
     assertTrue(ServerTreeConnectionStateViewModel.canDisconnect(ConnectionState.CONNECTING));
     assertTrue(ServerTreeConnectionStateViewModel.canDisconnect(ConnectionState.CONNECTED));

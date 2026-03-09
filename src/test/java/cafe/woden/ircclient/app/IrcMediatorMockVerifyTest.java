@@ -34,6 +34,7 @@ import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
@@ -735,6 +736,27 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void channelRedirectOnQuasselSkipsPersistingJoinedChannel() throws Exception {
+    TargetRef origin = new TargetRef("quassel", "status");
+    when(joinRoutingState.recentOriginIfFresh("quassel", "#old", Duration.ofSeconds(15)))
+        .thenReturn(origin);
+    when(serverRegistry.find("quassel"))
+        .thenReturn(
+            Optional.of(serverWithBackend("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "quassel",
+            new IrcEvent.ChannelRedirected(
+                Instant.now(), "#old", "#new", 470, "Forwarding to another channel")));
+
+    verify(joinRoutingState).rememberOrigin("quassel", "#new", origin);
+    verify(joinRoutingState).clear("quassel", "#old");
+    verify(runtimeConfig, never()).rememberJoinedChannel("quassel", "#new");
+    verify(targetCoordinator).joinChannel(new TargetRef("quassel", "#new"));
+  }
+
+  @Test
   void noSuchNickServerResponseFailsMatchingPendingPmAndAppendsPmError() throws Exception {
     TargetRef pm = new TargetRef("libera", "ghost");
     Instant at = Instant.parse("2026-03-02T18:53:57Z");
@@ -797,5 +819,24 @@ class IrcMediatorMockVerifyTest {
     Method method = IrcMediator.class.getDeclaredMethod("onServerIrcEvent", ServerIrcEvent.class);
     method.setAccessible(true);
     method.invoke(mediator, event);
+  }
+
+  private static IrcProperties.Server serverWithBackend(
+      String id, IrcProperties.Server.Backend backend) {
+    return new IrcProperties.Server(
+        id,
+        "core.example.net",
+        4242,
+        false,
+        "",
+        "ircafe",
+        "ircafe",
+        "IRCafe User",
+        null,
+        null,
+        List.of(),
+        List.of(),
+        null,
+        backend);
   }
 }
