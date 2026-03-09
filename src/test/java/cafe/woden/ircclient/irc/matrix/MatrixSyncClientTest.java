@@ -44,6 +44,14 @@ class MatrixSyncClientTest {
           "rooms":{
             "join":{
               "!room:matrix.example.org":{
+                "state":{
+                  "events":[
+                    {
+                      "type":"m.room.canonical_alias",
+                      "content":{"alias":"#libera_##ircafe:matrix.example.org"}
+                    }
+                  ]
+                },
                 "timeline":{
                   "events":[
                     {
@@ -202,6 +210,9 @@ class MatrixSyncClientTest {
       assertEquals(1710000003500L, redaction.originServerTs());
       assertEquals(
           "@bob:matrix.example.org", result.directPeerByRoom().get("!room:matrix.example.org"));
+      assertEquals(
+          "#libera_##ircafe:matrix.example.org",
+          result.roomAliasByRoom().get("!room:matrix.example.org"));
       assertEquals(1, result.typingEvents().size());
       assertEquals("!room:matrix.example.org", result.typingEvents().get(0).roomId());
       assertEquals(
@@ -238,6 +249,7 @@ class MatrixSyncClientTest {
       assertTrue(result.reactionEvents().isEmpty());
       assertTrue(result.redactionEvents().isEmpty());
       assertTrue(result.directPeerByRoom().isEmpty());
+      assertTrue(result.roomAliasByRoom().isEmpty());
       assertTrue(result.typingEvents().isEmpty());
       assertTrue(result.readReceipts().isEmpty());
     }
@@ -356,6 +368,7 @@ class MatrixSyncClientTest {
     assertTrue(result.reactionEvents().isEmpty());
     assertTrue(result.redactionEvents().isEmpty());
     assertTrue(result.directPeerByRoom().isEmpty());
+    assertTrue(result.roomAliasByRoom().isEmpty());
     assertTrue(result.typingEvents().isEmpty());
     assertTrue(result.readReceipts().isEmpty());
   }

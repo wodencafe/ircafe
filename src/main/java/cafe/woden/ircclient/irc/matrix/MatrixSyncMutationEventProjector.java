@@ -94,11 +94,13 @@ final class MatrixSyncMutationEventProjector {
                     TAG_DRAFT_EDIT,
                     targetMessageId)));
       } else {
+        String target = signalTargetForRoom(session, roomId);
+        if (target.isEmpty()) continue;
         emit(
             sid,
             new IrcEvent.ChannelMessage(
                 at,
-                roomId,
+                target,
                 sender,
                 body,
                 messageId,

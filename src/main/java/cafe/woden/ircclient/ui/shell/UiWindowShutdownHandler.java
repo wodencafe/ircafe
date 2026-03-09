@@ -1,11 +1,11 @@
 package cafe.woden.ircclient.ui.shell;
 
 import java.awt.Window;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
-import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /** Ensures Swing/AWT windows are disposed when the Spring context is shutting down. */

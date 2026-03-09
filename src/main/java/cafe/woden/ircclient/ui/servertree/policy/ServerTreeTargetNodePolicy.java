@@ -87,11 +87,28 @@ public final class ServerTreeTargetNodePolicy {
 
   private static String extractBridgedIrcChannel(String localAlias) {
     String alias = Objects.toString(localAlias, "").trim();
-    if (alias.length() < 8) return "";
-    String lower = alias.toLowerCase(java.util.Locale.ROOT);
-    if (!lower.startsWith("#irc_")) return "";
+    if (alias.length() < 6 || !alias.startsWith("#")) return "";
     int marker = alias.indexOf("_#");
-    if (marker < 0 || marker >= alias.length() - 1) return "";
-    return alias.substring(marker + 1);
+    if (marker < 2 || marker >= alias.length() - 1) return "";
+    if (!looksLikeBridgePrefix(alias.substring(1, marker))) return "";
+    String channel = alias.substring(marker + 1);
+    return channel.startsWith("#") ? channel : "";
+  }
+
+  private static boolean looksLikeBridgePrefix(String prefix) {
+    String value = Objects.toString(prefix, "").trim();
+    if (value.isEmpty()) return false;
+    for (int i = 0; i < value.length(); i++) {
+      char ch = value.charAt(i);
+      boolean allowed =
+          (ch >= 'a' && ch <= 'z')
+              || (ch >= 'A' && ch <= 'Z')
+              || (ch >= '0' && ch <= '9')
+              || ch == '_'
+              || ch == '-'
+              || ch == '.';
+      if (!allowed) return false;
+    }
+    return true;
   }
 }

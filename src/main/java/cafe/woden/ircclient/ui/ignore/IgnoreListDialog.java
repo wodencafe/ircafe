@@ -39,8 +39,8 @@ import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
-import org.springframework.context.annotation.Lazy;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component

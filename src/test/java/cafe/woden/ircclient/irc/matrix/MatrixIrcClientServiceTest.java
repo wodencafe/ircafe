@@ -797,7 +797,7 @@ class MatrixIrcClientServiceTest {
         .joinRoom("matrix", server, "secret-token", "#ircafe:matrix.example.org");
     IrcEvent.JoinedChannel joined =
         assertInstanceOf(IrcEvent.JoinedChannel.class, events.values().get(3).event());
-    assertEquals("!room:matrix.example.org", joined.channel());
+    assertEquals("#ircafe:matrix.example.org", joined.channel());
   }
 
   @Test
@@ -841,7 +841,7 @@ class MatrixIrcClientServiceTest {
         .leaveRoom("matrix", server, "secret-token", "!room:matrix.example.org");
     IrcEvent.LeftChannel left =
         assertInstanceOf(IrcEvent.LeftChannel.class, events.values().get(4).event());
-    assertEquals("!room:matrix.example.org", left.channel());
+    assertEquals("#ircafe:matrix.example.org", left.channel());
     assertEquals("bye", left.reason());
   }
 
@@ -886,7 +886,7 @@ class MatrixIrcClientServiceTest {
         .leaveRoom("matrix", server, "secret-token", "!room:matrix.example.org");
     IrcEvent.LeftChannel left =
         assertInstanceOf(IrcEvent.LeftChannel.class, events.values().get(3).event());
-    assertEquals("!room:matrix.example.org", left.channel());
+    assertEquals("#ircafe:matrix.example.org", left.channel());
     assertEquals("bye", left.reason());
   }
 
@@ -1738,6 +1738,69 @@ class MatrixIrcClientServiceTest {
     assertEquals("!room:matrix.example.org", parted.channel());
     assertEquals("@bob:matrix.example.org", parted.nick());
     assertEquals("left the room", parted.reason());
+  }
+
+  @Test
+  void connectUsesSyncedRoomAliasForMatrixRoomTargets() {
+    IrcProperties.Server server =
+        server("matrix", "matrix.example.org", 8448, true, "secret-token");
+    when(serverCatalog.require("matrix")).thenReturn(server);
+    when(homeserverProbe.probe("matrix", server))
+        .thenReturn(
+            MatrixHomeserverProbe.ProbeResult.reachable(
+                URI.create("https://matrix.example.org:8448/_matrix/client/versions"), 1));
+    when(homeserverProbe.whoami("matrix", server, "secret-token"))
+        .thenReturn(
+            MatrixHomeserverProbe.WhoamiResult.authenticated(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/account/whoami"),
+                "@alice:matrix.example.org",
+                "DEV1"));
+    when(syncClient.sync(eq("matrix"), eq(server), eq("secret-token"), anyString(), eq(0)))
+        .thenReturn(
+            MatrixSyncClient.SyncResult.success(
+                URI.create("https://matrix.example.org:8448/_matrix/client/v3/sync?timeout=0"),
+                "next-sync-token",
+                List.of(
+                    new MatrixSyncClient.RoomTimelineEvent(
+                        "!room:matrix.example.org",
+                        "@bob:matrix.example.org",
+                        "$timeline-1",
+                        "m.text",
+                        "hello alias",
+                        1710000001000L)),
+                List.of(
+                    new MatrixSyncClient.RoomMembershipEvent(
+                        "!room:matrix.example.org",
+                        "@charlie:matrix.example.org",
+                        "@charlie:matrix.example.org",
+                        "$join",
+                        "join",
+                        "leave",
+                        "Charlie",
+                        "",
+                        "",
+                        1710000002000L)),
+                List.of(),
+                List.of(),
+                List.of(),
+                Map.of(),
+                Map.of("!room:matrix.example.org", "#libera_##ircafe:matrix.example.org"),
+                List.of(),
+                List.of()));
+    var events = service.events().test();
+
+    service.connect("matrix").blockingAwait();
+    events.awaitCount(5);
+
+    IrcEvent.ChannelMessage message =
+        assertInstanceOf(IrcEvent.ChannelMessage.class, events.values().get(3).event());
+    assertEquals("#libera_##ircafe:matrix.example.org", message.channel());
+    assertEquals("hello alias", message.text());
+
+    IrcEvent.UserJoinedChannel joined =
+        assertInstanceOf(IrcEvent.UserJoinedChannel.class, events.values().get(4).event());
+    assertEquals("#libera_##ircafe:matrix.example.org", joined.channel());
+    assertEquals("@charlie:matrix.example.org", joined.nick());
   }
 
   @Test
@@ -3841,7 +3904,7 @@ class MatrixIrcClientServiceTest {
         .joinRoom("matrix", server, "secret-token", "#ircafe:matrix.example.org");
     IrcEvent.JoinedChannel joined =
         assertInstanceOf(IrcEvent.JoinedChannel.class, events.values().get(3).event());
-    assertEquals("!room:matrix.example.org", joined.channel());
+    assertEquals("#ircafe:matrix.example.org", joined.channel());
   }
 
   @Test

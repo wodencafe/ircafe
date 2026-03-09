@@ -411,10 +411,14 @@ public class MatrixIrcClientService implements IrcBackendClientService {
               }
 
               List<IrcEvent.NickInfo> nicks = toNickInfos(result.members());
+              String target = normalize(session.targetForRoom(roomId));
+              if (target.isEmpty()) {
+                target = roomId;
+              }
               bus.onNext(
                   new ServerIrcEvent(
                       sid,
-                      new IrcEvent.NickListUpdated(Instant.now(), roomId, nicks, nicks.size(), 0)));
+                      new IrcEvent.NickListUpdated(Instant.now(), target, nicks, nicks.size(), 0)));
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -450,11 +454,16 @@ public class MatrixIrcClientService implements IrcBackendClientService {
               if (!looksLikeMatrixRoomId(roomId)) {
                 throw new IllegalStateException("Matrix join succeeded but room_id was invalid");
               }
+              String joinedTarget = roomId;
               if (looksLikeMatrixRoomAlias(roomIdOrAlias)) {
                 session.rememberJoinedAlias(roomIdOrAlias, roomId);
+                String preferredTarget = normalize(session.targetForRoom(roomId));
+                if (!preferredTarget.isEmpty()) {
+                  joinedTarget = preferredTarget;
+                }
               }
               bus.onNext(
-                  new ServerIrcEvent(sid, new IrcEvent.JoinedChannel(Instant.now(), roomId)));
+                  new ServerIrcEvent(sid, new IrcEvent.JoinedChannel(Instant.now(), joinedTarget)));
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -535,11 +544,15 @@ public class MatrixIrcClientService implements IrcBackendClientService {
                 throw new IllegalStateException(
                     "Matrix leave failed at " + result.endpoint() + ": " + result.detail());
               }
+              String target = normalize(session.targetForRoom(roomId));
+              if (target.isEmpty()) {
+                target = roomId;
+              }
               session.forgetJoinedRoom(roomId);
 
               bus.onNext(
                   new ServerIrcEvent(
-                      sid, new IrcEvent.LeftChannel(Instant.now(), roomId, normalize(reason))));
+                      sid, new IrcEvent.LeftChannel(Instant.now(), target, normalize(reason))));
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -3014,6 +3027,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       session.sinceToken.set(nextBatch);
     }
     session.rememberDirectRooms(result.directPeerByRoom());
+    session.rememberJoinedAliasesByRoom(result.roomAliasByRoom());
     emitSyncTimelineEvents(serverId, session, result.events());
     emitSyncMembershipEvents(serverId, session, result.membershipEvents());
     emitSyncMutationEvents(

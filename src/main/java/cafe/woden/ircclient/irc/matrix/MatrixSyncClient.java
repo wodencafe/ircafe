@@ -78,6 +78,7 @@ final class MatrixSyncClient {
       List<RoomReactionEvent> reactionEvents = parseRoomReactionEvents(root);
       List<RoomRedactionEvent> redactionEvents = parseRoomRedactionEvents(root);
       Map<String, String> directPeerByRoom = parseDirectRoomMappings(root);
+      Map<String, String> roomAliasByRoom = parseJoinedRoomAliases(root);
       List<TypingEvent> typingEvents = parseTypingEvents(root);
       List<ReadReceiptEvent> readReceipts = parseReadReceiptEvents(root);
       return SyncResult.success(
@@ -89,6 +90,7 @@ final class MatrixSyncClient {
           reactionEvents,
           redactionEvents,
           directPeerByRoom,
+          roomAliasByRoom,
           typingEvents,
           readReceipts);
     } catch (IOException ex) {
@@ -560,6 +562,81 @@ final class MatrixSyncClient {
     return receipts.isEmpty() ? List.of() : List.copyOf(receipts);
   }
 
+  private static Map<String, String> parseJoinedRoomAliases(JsonNode root) {
+    Map<String, String> aliasByRoom = new HashMap<>();
+    JsonNode joinedRooms = root.path("rooms").path("join");
+    if (!joinedRooms.isObject()) {
+      return Map.of();
+    }
+
+    joinedRooms
+        .fields()
+        .forEachRemaining(
+            roomEntry -> {
+              if (roomEntry == null) return;
+              String roomId = normalize(roomEntry.getKey());
+              if (!looksLikeMatrixRoomId(roomId)) return;
+              JsonNode roomNode = roomEntry.getValue();
+              String alias = joinedRoomAlias(roomNode);
+              if (looksLikeMatrixRoomAlias(alias)) {
+                aliasByRoom.put(roomId, alias);
+              }
+            });
+
+    return aliasByRoom.isEmpty() ? Map.of() : Map.copyOf(aliasByRoom);
+  }
+
+  private static String joinedRoomAlias(JsonNode roomNode) {
+    if (roomNode == null || roomNode.isNull()) {
+      return "";
+    }
+    String fromState = aliasFromStateEvents(roomNode.path("state").path("events"));
+    if (!fromState.isEmpty()) return fromState;
+    return aliasFromStateEvents(roomNode.path("timeline").path("events"));
+  }
+
+  private static String aliasFromStateEvents(JsonNode events) {
+    if (events == null || !events.isArray()) {
+      return "";
+    }
+    for (JsonNode event : events) {
+      if (event == null || event.isNull()) continue;
+      String type = normalize(event.path("type").asText(""));
+      JsonNode content = event.path("content");
+      if ("m.room.canonical_alias".equals(type)) {
+        String alias = normalize(content.path("alias").asText(""));
+        if (looksLikeMatrixRoomAlias(alias)) {
+          return alias;
+        }
+        String altAlias = firstRoomAlias(content.path("alt_aliases"));
+        if (!altAlias.isEmpty()) {
+          return altAlias;
+        }
+        continue;
+      }
+      if ("m.room.aliases".equals(type)) {
+        String alias = firstRoomAlias(content.path("aliases"));
+        if (!alias.isEmpty()) {
+          return alias;
+        }
+      }
+    }
+    return "";
+  }
+
+  private static String firstRoomAlias(JsonNode aliases) {
+    if (aliases == null || !aliases.isArray()) {
+      return "";
+    }
+    for (JsonNode aliasNode : aliases) {
+      String alias = normalize(aliasNode == null ? "" : aliasNode.asText(""));
+      if (looksLikeMatrixRoomAlias(alias)) {
+        return alias;
+      }
+    }
+    return "";
+  }
+
   private static boolean isReadReceiptType(String type) {
     String token = normalize(type);
     return "m.read".equals(token) || "m.read.private".equals(token);
@@ -583,6 +660,13 @@ final class MatrixSyncClient {
     return colon > 1 && colon < value.length() - 1;
   }
 
+  private static boolean looksLikeMatrixRoomAlias(String token) {
+    String value = normalize(token);
+    if (!value.startsWith("#")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
+  }
+
   record SyncResult(
       boolean success,
       URI endpoint,
@@ -593,6 +677,7 @@ final class MatrixSyncClient {
       List<RoomReactionEvent> reactionEvents,
       List<RoomRedactionEvent> redactionEvents,
       Map<String, String> directPeerByRoom,
+      Map<String, String> roomAliasByRoom,
       List<TypingEvent> typingEvents,
       List<ReadReceiptEvent> readReceipts,
       String detail) {
@@ -672,6 +757,32 @@ final class MatrixSyncClient {
         Map<String, String> directPeerByRoom,
         List<TypingEvent> typingEvents,
         List<ReadReceiptEvent> readReceipts) {
+      return success(
+          endpoint,
+          nextBatch,
+          events,
+          membershipEvents,
+          messageEditEvents,
+          reactionEvents,
+          redactionEvents,
+          directPeerByRoom,
+          Map.of(),
+          typingEvents,
+          readReceipts);
+    }
+
+    static SyncResult success(
+        URI endpoint,
+        String nextBatch,
+        List<RoomTimelineEvent> events,
+        List<RoomMembershipEvent> membershipEvents,
+        List<RoomMessageEditEvent> messageEditEvents,
+        List<RoomReactionEvent> reactionEvents,
+        List<RoomRedactionEvent> redactionEvents,
+        Map<String, String> directPeerByRoom,
+        Map<String, String> roomAliasByRoom,
+        List<TypingEvent> typingEvents,
+        List<ReadReceiptEvent> readReceipts) {
       List<RoomTimelineEvent> safeEvents = events == null ? List.of() : List.copyOf(events);
       List<RoomMembershipEvent> safeMembershipEvents =
           membershipEvents == null ? List.of() : List.copyOf(membershipEvents);
@@ -683,6 +794,8 @@ final class MatrixSyncClient {
           redactionEvents == null ? List.of() : List.copyOf(redactionEvents);
       Map<String, String> safeDirectPeerByRoom =
           directPeerByRoom == null ? Map.of() : Map.copyOf(directPeerByRoom);
+      Map<String, String> safeRoomAliasByRoom =
+          roomAliasByRoom == null ? Map.of() : Map.copyOf(roomAliasByRoom);
       List<TypingEvent> safeTypingEvents =
           typingEvents == null ? List.of() : List.copyOf(typingEvents);
       List<ReadReceiptEvent> safeReadReceipts =
@@ -697,6 +810,7 @@ final class MatrixSyncClient {
           safeReactionEvents,
           safeRedactionEvents,
           safeDirectPeerByRoom,
+          safeRoomAliasByRoom,
           safeTypingEvents,
           safeReadReceipts,
           "");
@@ -716,6 +830,7 @@ final class MatrixSyncClient {
           List.of(),
           List.of(),
           List.of(),
+          Map.of(),
           Map.of(),
           List.of(),
           List.of(),

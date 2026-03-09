@@ -63,8 +63,7 @@ class UiModuleIntegrationTest {
     String[] uiPortBeans = applicationContext.getBeanNamesForType(SwingUiPort.class, true, false);
     assertEquals("swingUiPort", uiPortBeans[0]);
 
-    String[] mainFrameBeans =
-        applicationContext.getBeanNamesForType(MainFrame.class, true, false);
+    String[] mainFrameBeans = applicationContext.getBeanNamesForType(MainFrame.class, true, false);
     assertTrue(mainFrameBeans.length == 1 && !mainFrameBeans[0].isBlank());
   }
 }

@@ -42,10 +42,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.SwingUtilities;
 import kotlin.Unit;
 import kotlin.jvm.functions.Function1;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /**

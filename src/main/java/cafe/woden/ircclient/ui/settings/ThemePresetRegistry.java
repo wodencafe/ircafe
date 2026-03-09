@@ -2,8 +2,8 @@ package cafe.woden.ircclient.ui.settings;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import org.springframework.context.annotation.Lazy;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component

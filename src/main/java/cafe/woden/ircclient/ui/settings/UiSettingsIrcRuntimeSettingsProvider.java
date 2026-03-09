@@ -2,8 +2,8 @@ package cafe.woden.ircclient.ui.settings;
 
 import cafe.woden.ircclient.irc.IrcRuntimeSettings;
 import cafe.woden.ircclient.irc.IrcRuntimeSettingsProvider;
-import org.springframework.context.annotation.Lazy;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component

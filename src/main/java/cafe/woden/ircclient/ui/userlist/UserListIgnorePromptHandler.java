@@ -9,8 +9,8 @@ import java.awt.Window;
 import java.util.Objects;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component

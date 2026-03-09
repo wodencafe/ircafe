@@ -79,6 +79,9 @@ class ServerTreeTargetNodePolicyTest {
         "#woden",
         policy.leafLabel(new TargetRef("matrix", "#irc_libera_#woden:matrix.example.org")));
     assertEquals(
+        "##ircafe",
+        policy.leafLabel(new TargetRef("matrix", "#libera_##ircafe:matrix.example.org")));
+    assertEquals(
         "@zimmedon", policy.leafLabel(new TargetRef("matrix", "@zimmedon:matrix.example.org")));
     assertEquals(
         "!abc123", policy.leafLabel(new TargetRef("matrix", "!abc123:matrix.example.org")));

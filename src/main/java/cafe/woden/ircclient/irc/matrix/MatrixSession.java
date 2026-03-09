@@ -65,8 +65,25 @@ final class MatrixSession {
     String alias = normalize(roomAlias);
     String rid = normalize(roomId);
     if (alias.isEmpty() || rid.isEmpty()) return;
-    joinedRoomByAlias.put(alias, rid);
-    joinedAliasByRoom.put(rid, alias);
+    String priorAlias = normalize(joinedAliasByRoom.put(rid, alias));
+    if (!priorAlias.isEmpty() && !priorAlias.equals(alias)) {
+      joinedRoomByAlias.remove(priorAlias, rid);
+    }
+    String priorRoom = normalize(joinedRoomByAlias.put(alias, rid));
+    if (!priorRoom.isEmpty() && !priorRoom.equals(rid)) {
+      joinedAliasByRoom.remove(priorRoom, alias);
+    }
+  }
+
+  void rememberJoinedAliasesByRoom(Map<String, String> roomAliasByRoom) {
+    if (roomAliasByRoom == null || roomAliasByRoom.isEmpty()) return;
+    for (Map.Entry<String, String> entry : roomAliasByRoom.entrySet()) {
+      if (entry == null) continue;
+      String rid = normalize(entry.getKey());
+      String alias = normalize(entry.getValue());
+      if (rid.isEmpty() || alias.isEmpty()) continue;
+      rememberJoinedAlias(alias, rid);
+    }
   }
 
   String roomForAlias(String roomAlias) {

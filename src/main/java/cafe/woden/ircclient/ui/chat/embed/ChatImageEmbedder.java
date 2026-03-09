@@ -12,8 +12,8 @@ import java.util.Objects;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
-import org.springframework.context.annotation.Lazy;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /** Appends inline image previews to a transcript {@link StyledDocument}. */

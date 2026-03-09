@@ -14,8 +14,8 @@ import io.reactivex.rxjava3.core.Flowable;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.support.AopUtils;
-import org.springframework.boot.ApplicationRunner;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.ApplicationContext;
 import org.springframework.modulith.test.ApplicationModuleTest;
 import org.springframework.test.context.TestPropertySource;
@@ -59,10 +59,12 @@ class IrcModuleIntegrationTest {
       ApplicationContext applicationContext,
       BackendRoutingIrcClientService backendRoutingIrcClientService,
       @Qualifier("ircClientService") IrcClientService ircClientService,
-      @Qualifier("ircConnectionLifecyclePort") IrcConnectionLifecyclePort ircConnectionLifecyclePort,
+      @Qualifier("ircConnectionLifecyclePort")
+          IrcConnectionLifecyclePort ircConnectionLifecyclePort,
       @Qualifier("ircCurrentNickPort") IrcCurrentNickPort ircCurrentNickPort,
       @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort ircTargetMembershipPort,
-      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort ircMediatorInteractionPort,
+      @Qualifier("ircMediatorInteractionPort")
+          IrcMediatorInteractionPort ircMediatorInteractionPort,
       IrcReadMarkerPort ircReadMarkerPort,
       IrcTypingPort ircTypingPort,
       @Qualifier("ircShutdownPort") IrcShutdownPort ircShutdownPort,
@@ -127,7 +129,8 @@ class IrcModuleIntegrationTest {
     assertEquals(1, applicationContext.getBeansOfType(IrcReadMarkerPort.class).size());
     assertEquals(1, applicationContext.getBeansOfType(IrcTypingPort.class).size());
     assertEquals(1, applicationContext.getBeansOfType(IrcShutdownPort.class).size());
-    assertEquals(1, applicationContext.getBeansOfType(BouncerIrcConnectionPortAdapter.class).size());
+    assertEquals(
+        1, applicationContext.getBeansOfType(BouncerIrcConnectionPortAdapter.class).size());
 
     assertNotNull(backendRoutingIrcClientService);
     assertSame(backendRoutingIrcClientService, ircClientService);
@@ -141,12 +144,14 @@ class IrcModuleIntegrationTest {
     assertNotNull(bouncerIrcConnectionPortAdapter);
 
     assertEquals(
-        IrcConnectionLifecyclePortAdapter.class, AopUtils.getTargetClass(ircConnectionLifecyclePort));
+        IrcConnectionLifecyclePortAdapter.class,
+        AopUtils.getTargetClass(ircConnectionLifecyclePort));
     assertEquals(IrcCurrentNickPortAdapter.class, AopUtils.getTargetClass(ircCurrentNickPort));
     assertEquals(
         IrcTargetMembershipPortAdapter.class, AopUtils.getTargetClass(ircTargetMembershipPort));
     assertEquals(
-        IrcMediatorInteractionPortAdapter.class, AopUtils.getTargetClass(ircMediatorInteractionPort));
+        IrcMediatorInteractionPortAdapter.class,
+        AopUtils.getTargetClass(ircMediatorInteractionPort));
     assertEquals(IrcReadMarkerPortAdapter.class, AopUtils.getTargetClass(ircReadMarkerPort));
     assertEquals(IrcTypingPortAdapter.class, AopUtils.getTargetClass(ircTypingPort));
     assertEquals(IrcShutdownPortAdapter.class, AopUtils.getTargetClass(ircShutdownPort));
@@ -155,6 +160,10 @@ class IrcModuleIntegrationTest {
   @Test
   void backendRoutingExposesMergedEmptyEventStreamsFromStubBackends() {
     ircClientService.events().test().assertNoValues().assertComplete();
-    backendRoutingIrcClientService.quasselCoreNetworkEvents().test().assertNoValues().assertComplete();
+    backendRoutingIrcClientService
+        .quasselCoreNetworkEvents()
+        .test()
+        .assertNoValues()
+        .assertComplete();
   }
 }

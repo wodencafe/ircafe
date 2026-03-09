@@ -7,8 +7,8 @@ import javax.swing.UIManager;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
-import org.springframework.context.annotation.Lazy;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component

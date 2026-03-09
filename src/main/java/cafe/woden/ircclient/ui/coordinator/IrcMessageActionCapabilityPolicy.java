@@ -4,8 +4,8 @@ import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Negotiated-feature backed capability policy for transcript message actions. */

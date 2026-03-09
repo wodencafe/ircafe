@@ -9,8 +9,8 @@ import java.util.Objects;
 import java.util.Optional;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
-import org.springframework.context.annotation.Lazy;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component

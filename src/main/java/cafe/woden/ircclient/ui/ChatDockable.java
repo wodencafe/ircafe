@@ -77,9 +77,9 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
-import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /**

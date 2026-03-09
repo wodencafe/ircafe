@@ -42,10 +42,10 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
 import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
+import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventDispatcher;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
-import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
 import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.GenericBouncerEphemeralNetworkImporter;
@@ -94,8 +94,8 @@ import cafe.woden.ircclient.irc.Ircv3StsPolicyService;
 import cafe.woden.ircclient.irc.NoOpPlaybackCursorProvider;
 import cafe.woden.ircclient.irc.PircbotxBotFactory;
 import cafe.woden.ircclient.irc.PircbotxInputParserHookInstaller;
-import cafe.woden.ircclient.irc.PlaybackCursorProviderConfig;
 import cafe.woden.ircclient.irc.PircbotxIrcClientService;
+import cafe.woden.ircclient.irc.PlaybackCursorProviderConfig;
 import cafe.woden.ircclient.irc.QuasselCoreIrcClientService;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.UserListStore;
@@ -122,14 +122,14 @@ import cafe.woden.ircclient.net.NetHeartbeatBootstrap;
 import cafe.woden.ircclient.net.NetProxyBootstrap;
 import cafe.woden.ircclient.net.NetTlsBootstrap;
 import cafe.woden.ircclient.net.ServerProxyResolver;
-import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
-import cafe.woden.ircclient.notify.pushy.PushySettingsBus;
-import cafe.woden.ircclient.notify.sound.NotificationSoundService;
-import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
 import cafe.woden.ircclient.notifications.IrcEventNotificationRulesBus;
 import cafe.woden.ircclient.notifications.IrcEventNotificationService;
 import cafe.woden.ircclient.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
+import cafe.woden.ircclient.notify.pushy.PushySettingsBus;
+import cafe.woden.ircclient.notify.sound.NotificationSoundService;
+import cafe.woden.ircclient.notify.sound.NotificationSoundSettingsBus;
 import cafe.woden.ircclient.perform.PerformOnConnectService;
 import cafe.woden.ircclient.state.AwayRoutingState;
 import cafe.woden.ircclient.state.ChannelFlagModeState;
@@ -262,8 +262,7 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.BackendNamedOutboundCommandRouter",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.BackendUploadCommandRegistry",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.BackendUploadCommandRegistry", ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.ChannelModeOutboundCommandRegistrar",
         ApplicationLayer.class);
@@ -283,8 +282,7 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.UnknownOutboundCommandRegistrar",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundBackendFeatureRegistry",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.OutboundBackendFeatureRegistry", ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundBackendCapabilityPolicy",
         ApplicationLayer.class);
@@ -309,11 +307,9 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.MatrixOutboundBackendFeatureAdapter",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupport",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupport", ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.MatrixUploadCommandTranslationHandler",
         ApplicationLayer.class);
@@ -327,20 +323,15 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.OutboundCtcpWhoisCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundDccCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.OutboundDccCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundHelpCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.OutboundHelpCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundInviteCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.OutboundInviteCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundJoinPartCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.OutboundJoinPartCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundMessageMutationCommandService",
         ApplicationLayer.class);
@@ -348,17 +339,14 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.OutboundMessagingCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundModeCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.OutboundModeCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundMonitorCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.OutboundMonitorCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundNamesWhoListCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundNickAwayCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.OutboundNickAwayCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundRawLineCorrelationService",
         ApplicationLayer.class);
@@ -366,14 +354,12 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.OutboundReadMarkerCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundSayQuoteCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.OutboundSayQuoteCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundTopicKickCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundUploadCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.OutboundUploadCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.QuasselBackendNamedOutboundCommandHandler",
         ApplicationLayer.class);
@@ -384,11 +370,9 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.QuasselOutboundBackendFeatureAdapter",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.QuasselOutboundCommandService",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.QuasselOutboundCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.QuasselOutboundCommandSupport",
-        ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.QuasselOutboundCommandSupport", ApplicationLayer.class);
     assertAnnotated(LocalFilterCommandHandler.class, ApplicationLayer.class);
     assertAnnotated(PerformOnConnectService.class, ApplicationLayer.class);
     assertAnnotated(IrcHeartbeatMaintenanceService.class, ApplicationLayer.class);
@@ -450,14 +434,12 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.irc.PircbotxConnectionTimersRx", InfrastructureLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.irc.ZncPlaybackCaptureLifecycle", InfrastructureLayer.class);
-    assertAnnotatedByName(
-        "cafe.woden.ircclient.config.ExecutorConfig", InfrastructureLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.config.ExecutorConfig", InfrastructureLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.config.IgnoreProperties", InfrastructureLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.config.IrcProperties", InfrastructureLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.config.LogProperties", InfrastructureLayer.class);
-    assertAnnotatedByName(
-        "cafe.woden.ircclient.config.PushyProperties", InfrastructureLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.config.PushyProperties", InfrastructureLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.config.SojuProperties", InfrastructureLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.config.UiProperties", InfrastructureLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.config.ZncProperties", InfrastructureLayer.class);
@@ -466,8 +448,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotatedByName(
         "cafe.woden.ircclient.logging.ChatLogMaintenanceConfig", InfrastructureLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.logging.ChatLogPlaybackCursorProvider",
-        InfrastructureLayer.class);
+        "cafe.woden.ircclient.logging.ChatLogPlaybackCursorProvider", InfrastructureLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.logging.ChatLogWriterConfig", InfrastructureLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.logging.LogLineFactory", InfrastructureLayer.class);
@@ -480,8 +461,7 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.logging.channelmeta.ChannelMetadataDatabaseConfig",
         InfrastructureLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.logging.channelmeta.ChannelMetadataStore",
-        InfrastructureLayer.class);
+        "cafe.woden.ircclient.logging.channelmeta.ChannelMetadataStore", InfrastructureLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.logging.history.ChatHistoryBatchBus", InfrastructureLayer.class);
     assertAnnotatedByName(
@@ -490,8 +470,7 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.logging.history.ChatHistoryIngestorConfig",
         InfrastructureLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.logging.history.ChatHistoryServiceConfig",
-        InfrastructureLayer.class);
+        "cafe.woden.ircclient.logging.history.ChatHistoryServiceConfig", InfrastructureLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.logging.history.DbChatHistoryIngestor", InfrastructureLayer.class);
     assertAnnotatedByName(

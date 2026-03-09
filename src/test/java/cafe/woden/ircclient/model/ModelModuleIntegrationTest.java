@@ -26,7 +26,8 @@ class ModelModuleIntegrationTest {
   private final ApplicationContext applicationContext;
   private final AwayStatusStore awayStatusStore;
 
-  ModelModuleIntegrationTest(ApplicationContext applicationContext, AwayStatusStore awayStatusStore) {
+  ModelModuleIntegrationTest(
+      ApplicationContext applicationContext, AwayStatusStore awayStatusStore) {
     this.applicationContext = applicationContext;
     this.awayStatusStore = awayStatusStore;
   }
