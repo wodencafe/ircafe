@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * spring.config.import}.
  */
 @ConfigurationProperties(prefix = "ircafe.ui")
+@InfrastructureLayer
 public record UiProperties(
     String theme,
     String accentColor,

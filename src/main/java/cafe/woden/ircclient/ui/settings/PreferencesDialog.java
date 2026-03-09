@@ -137,9 +137,11 @@ import javax.swing.table.TableColumn;
 import net.miginfocom.swing.MigLayout;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 @Lazy
 public class PreferencesDialog {
   private static final String DENSITY_TOOLTIP =

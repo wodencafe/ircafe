@@ -442,6 +442,17 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotatedByName(
         "cafe.woden.ircclient.irc.ZncPlaybackCaptureLifecycle", InfrastructureLayer.class);
     assertAnnotatedByName(
+        "cafe.woden.ircclient.config.ExecutorConfig", InfrastructureLayer.class);
+    assertAnnotatedByName(
+        "cafe.woden.ircclient.config.IgnoreProperties", InfrastructureLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.config.IrcProperties", InfrastructureLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.config.LogProperties", InfrastructureLayer.class);
+    assertAnnotatedByName(
+        "cafe.woden.ircclient.config.PushyProperties", InfrastructureLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.config.SojuProperties", InfrastructureLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.config.UiProperties", InfrastructureLayer.class);
+    assertAnnotatedByName("cafe.woden.ircclient.config.ZncProperties", InfrastructureLayer.class);
+    assertAnnotatedByName(
         "cafe.woden.ircclient.logging.ChatLogDatabaseConfig", InfrastructureLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.logging.ChatLogMaintenanceConfig", InfrastructureLayer.class);
@@ -599,6 +610,16 @@ class JmoleculesIncrementalAdoptionTest {
     assertComponentPackageAnnotated("cafe.woden.ircclient.util", ApplicationLayer.class);
   }
 
+  @Test
+  void componentEntryPointsInUiSettingsRemainInterfaceLayerAnnotated() {
+    assertComponentPackageAnnotated("cafe.woden.ircclient.ui.settings", InterfaceLayer.class);
+  }
+
+  @Test
+  void componentEntryPointsInUiFilterRemainInterfaceLayerAnnotated() {
+    assertComponentPackageAnnotated("cafe.woden.ircclient.ui.filter", InterfaceLayer.class);
+  }
+
   private static void assertComponentPackageAnnotated(
       String basePackage, Class<? extends Annotation> marker) {
     ClassPathScanningCandidateComponentProvider scanner =
@@ -613,6 +634,9 @@ class JmoleculesIncrementalAdoptionTest {
       }
       try {
         Class<?> type = Class.forName(className);
+        if (!isMainSourceType(type)) {
+          continue;
+        }
         assertAnnotated(type, marker);
       } catch (ClassNotFoundException e) {
         fail("Could not load component class " + className, e);
@@ -633,5 +657,13 @@ class JmoleculesIncrementalAdoptionTest {
     assertTrue(
         type.isAnnotationPresent(marker),
         () -> type.getName() + " must be annotated with @" + marker.getSimpleName());
+  }
+
+  private static boolean isMainSourceType(Class<?> type) {
+    var codeSource = type.getProtectionDomain().getCodeSource();
+    if (codeSource == null || codeSource.getLocation() == null) {
+      return true;
+    }
+    return !codeSource.getLocation().getPath().contains("/test/");
   }
 }

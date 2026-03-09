@@ -4,10 +4,12 @@ import cafe.woden.ircclient.config.UiProperties;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import org.springframework.context.annotation.Lazy;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /** Mutable runtime holder for the selected embed card style preset. */
 @Component
+@InterfaceLayer
 @Lazy
 public class EmbedCardStyleBus {
 

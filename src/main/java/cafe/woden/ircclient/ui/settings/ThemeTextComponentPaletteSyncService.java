@@ -7,11 +7,13 @@ import java.awt.Window;
 import java.util.Locale;
 import javax.swing.JComboBox;
 import javax.swing.text.JTextComponent;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 
 @org.springframework.stereotype.Component
+@InterfaceLayer
 @Lazy
 class ThemeTextComponentPaletteSyncService {
 

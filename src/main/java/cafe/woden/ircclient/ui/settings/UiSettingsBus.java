@@ -8,9 +8,11 @@ import java.beans.PropertyChangeSupport;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.context.annotation.Lazy;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 @Lazy
 public class UiSettingsBus {
 

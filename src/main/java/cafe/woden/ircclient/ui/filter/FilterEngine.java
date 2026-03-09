@@ -25,6 +25,7 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Component;
  * <p>Filters are UI-only: they never delete or prevent logging.
  */
 @Component
+@InterfaceLayer
 public class FilterEngine implements PropertyChangeListener {
 
   private static final Logger log = LoggerFactory.getLogger(FilterEngine.class);

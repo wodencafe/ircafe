@@ -4,10 +4,12 @@ import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
 import java.beans.PropertyChangeListener;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /** UI-side adapter that exposes UiSettingsBus through the app-owned settings port. */
 @Component
+@InterfaceLayer
 public class UiSettingsPortAdapter implements UiSettingsPort {
 
   private final UiSettingsBus bus;
