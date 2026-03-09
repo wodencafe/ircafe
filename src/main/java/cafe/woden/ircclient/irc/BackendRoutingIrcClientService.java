@@ -42,6 +42,7 @@ public class BackendRoutingIrcClientService
   private final Map<String, IrcProperties.Server.Backend> activeBackendByServer =
       new ConcurrentHashMap<>();
   private final Flowable<ServerIrcEvent> mergedEvents;
+  private final Flowable<QuasselCoreNetworkSnapshotEvent> mergedQuasselNetworkEvents;
 
   public BackendRoutingIrcClientService(
       ServerCatalog serverCatalog, List<IrcBackendClientService> backendServices) {
@@ -77,11 +78,15 @@ public class BackendRoutingIrcClientService
     this.backends = List.copyOf(map.values());
 
     ArrayList<Flowable<ServerIrcEvent>> streams = new ArrayList<>(backends.size());
+    ArrayList<Flowable<QuasselCoreNetworkSnapshotEvent>> quasselNetworkStreams =
+        new ArrayList<>(backends.size());
     for (IrcBackendClientService backend : backends) {
       IrcProperties.Server.Backend backendType = backend.backend();
       streams.add(backend.events().doOnNext(event -> noteBackendOwnership(backendType, event)));
+      quasselNetworkStreams.add(backend.quasselCoreNetworkEvents());
     }
     this.mergedEvents = Flowable.merge(streams).onBackpressureBuffer();
+    this.mergedQuasselNetworkEvents = Flowable.merge(quasselNetworkStreams).onBackpressureBuffer();
   }
 
   @Override
@@ -281,6 +286,11 @@ public class BackendRoutingIrcClientService
   @Override
   public List<QuasselCoreNetworkSummary> quasselCoreNetworks(String serverId) {
     return routeActiveOrConfigured(serverId).quasselCoreNetworks(serverId);
+  }
+
+  @Override
+  public Flowable<QuasselCoreNetworkSnapshotEvent> quasselCoreNetworkEvents() {
+    return mergedQuasselNetworkEvents;
   }
 
   @Override

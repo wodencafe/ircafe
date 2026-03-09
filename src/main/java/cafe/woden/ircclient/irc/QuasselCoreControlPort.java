@@ -1,8 +1,10 @@
 package cafe.woden.ircclient.irc;
 
 import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Flowable;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /** Quassel Core setup/network administration extension operations. */
@@ -35,6 +37,16 @@ public interface QuasselCoreControlPort {
       int serverPort,
       boolean useTls,
       Map<String, Object> rawState) {}
+
+  /** Network snapshot update emitted when Quassel network state changes for a server session. */
+  record QuasselCoreNetworkSnapshotEvent(
+      String serverId, List<QuasselCoreNetworkSummary> networks, String source) {
+    public QuasselCoreNetworkSnapshotEvent {
+      serverId = Objects.toString(serverId, "").trim();
+      networks = networks == null ? List.of() : List.copyOf(networks);
+      source = Objects.toString(source, "").trim();
+    }
+  }
 
   /** User-provided values for creating a Quassel upstream network entry. */
   record QuasselCoreNetworkCreateRequest(
@@ -92,6 +104,15 @@ public interface QuasselCoreControlPort {
    */
   default List<QuasselCoreNetworkSummary> quasselCoreNetworks(String serverId) {
     return List.of();
+  }
+
+  /**
+   * Emits Quassel network snapshot changes from live session updates.
+   *
+   * <p>Events are best effort and may be coalesced.
+   */
+  default Flowable<QuasselCoreNetworkSnapshotEvent> quasselCoreNetworkEvents() {
+    return Flowable.empty();
   }
 
   /** Request an upstream Quassel network connect by id or network name/token. */

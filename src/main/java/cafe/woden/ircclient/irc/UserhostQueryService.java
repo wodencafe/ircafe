@@ -1,7 +1,10 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.time.Instant;
@@ -18,7 +21,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,8 +48,9 @@ public class UserhostQueryService {
   private final IrcClientService irc;
   private final ObjectProvider<IrcRuntimeSettingsProvider> settingsProvider;
   private final ScheduledExecutorService exec;
+  private final Scheduler timerScheduler;
   private final Object scheduleLock = new Object();
-  private ScheduledFuture<?> scheduledTick;
+  private Disposable scheduledTick;
   private long scheduledAtEpochMs = Long.MAX_VALUE;
 
   private final ConcurrentHashMap<String, ServerState> stateByServer = new ConcurrentHashMap<>();
@@ -59,13 +62,14 @@ public class UserhostQueryService {
     this.irc = irc;
     this.settingsProvider = settingsProvider;
     this.exec = exec;
+    this.timerScheduler = Schedulers.from(exec);
   }
 
   @PreDestroy
   void shutdown() {
     synchronized (scheduleLock) {
       if (scheduledTick != null) {
-        scheduledTick.cancel(false);
+        scheduledTick.dispose();
         scheduledTick = null;
       }
       scheduledAtEpochMs = Long.MAX_VALUE;
@@ -247,15 +251,25 @@ public class UserhostQueryService {
     synchronized (scheduleLock) {
       if (exec.isShutdown()) return;
 
-      if (scheduledTick != null && !scheduledTick.isDone()) {
+      if (scheduledTick != null && !scheduledTick.isDisposed()) {
         if (targetEpochMs >= scheduledAtEpochMs) {
           return;
         }
-        scheduledTick.cancel(false);
+        scheduledTick.dispose();
       }
 
       scheduledAtEpochMs = targetEpochMs;
-      scheduledTick = exec.schedule(this::runScheduledTick, safeDelayMs, TimeUnit.MILLISECONDS);
+      scheduledTick =
+          Completable.timer(safeDelayMs, TimeUnit.MILLISECONDS, timerScheduler)
+              .subscribe(
+                  this::runScheduledTick,
+                  err -> {
+                    synchronized (scheduleLock) {
+                      scheduledTick = null;
+                      scheduledAtEpochMs = Long.MAX_VALUE;
+                    }
+                    log.debug("UserhostQueryService timer scheduling failed", err);
+                  });
     }
   }
 

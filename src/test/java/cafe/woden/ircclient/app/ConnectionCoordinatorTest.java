@@ -648,12 +648,12 @@ class ConnectionCoordinatorTest {
     verify(ui).promptQuasselCoreSetup("quassel", prompt);
     verify(irc).submitQuasselCoreSetup("quassel", request);
     verify(ui).appendStatus(status, "(qsetup)", "Quassel Core setup submitted. Reconnecting…");
-    verify(ui)
+    verify(ui, timeout(2_000))
         .appendStatus(
             eq(status),
             eq("(qsetup)"),
             argThat(text -> text != null && text.contains("Opening Quassel Network Manager")));
-    verify(ui).openQuasselNetworkManager("quassel");
+    verify(ui, timeout(2_000)).openQuasselNetworkManager("quassel");
     ArgumentCaptor<IrcProperties.Server> updatedServerCaptor =
         ArgumentCaptor.forClass(IrcProperties.Server.class);
     verify(serverRegistry).upsert(updatedServerCaptor.capture());
@@ -833,7 +833,7 @@ class ConnectionCoordinatorTest {
             any(Instant.class),
             eq("(conn)"),
             eq("Quassel sync complete; connection ready."));
-    verify(ui)
+    verify(ui, timeout(2_000))
         .syncQuasselNetworks(
             eq("quassel"),
             argThat(

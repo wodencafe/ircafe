@@ -923,11 +923,17 @@ public class ConnectionCoordinator {
   private void syncQuasselNetworksToUi(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return;
-    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
-        quasselControl.quasselCoreNetworks(sid);
-    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> safeNetworks =
-        networks == null ? List.of() : List.copyOf(networks);
-    ui.syncQuasselNetworks(sid, safeNetworks);
+    disposables.add(
+        io.reactivex.rxjava3.core.Single.fromCallable(() -> quasselNetworkSnapshot(sid))
+            .subscribeOn(Schedulers.io())
+            .observeOn(EDT_SCHEDULER)
+            .subscribe(
+                safeNetworks -> ui.syncQuasselNetworks(sid, safeNetworks),
+                err ->
+                    log.debug(
+                        "Unable to refresh Quassel network snapshot on sync-ready: serverId={}",
+                        sid,
+                        err)));
   }
 
   private void maybePromptQuasselSetup(String serverId, TargetRef status) {
@@ -977,17 +983,45 @@ public class ConnectionCoordinator {
       return;
     }
 
-    int networkCount = quasselControl.quasselCoreNetworks(sid).size();
-    if (networkCount <= 0) {
-      ui.appendStatus(
-          status,
-          "(qsetup)",
-          "Quassel setup complete. Opening Quassel Network Manager to add your first network…");
-    } else {
-      ui.appendStatus(
-          status, "(qsetup)", "Quassel setup complete. Opening Quassel Network Manager…");
-    }
-    ui.openQuasselNetworkManager(sid);
+    disposables.add(
+        io.reactivex.rxjava3.core.Single.fromCallable(() -> quasselNetworkSnapshot(sid))
+            .subscribeOn(Schedulers.io())
+            .observeOn(EDT_SCHEDULER)
+            .subscribe(
+                networks -> {
+                  if (networks.isEmpty()) {
+                    ui.appendStatus(
+                        status,
+                        "(qsetup)",
+                        "Quassel setup complete. Opening Quassel Network Manager to add your first network…");
+                  } else {
+                    ui.appendStatus(
+                        status,
+                        "(qsetup)",
+                        "Quassel setup complete. Opening Quassel Network Manager…");
+                  }
+                  ui.openQuasselNetworkManager(sid);
+                },
+                err -> {
+                  log.debug(
+                      "Unable to read Quassel network snapshot before opening manager: serverId={}",
+                      sid,
+                      err);
+                  ui.appendStatus(
+                      status,
+                      "(qsetup)",
+                      "Quassel setup complete. Opening Quassel Network Manager…");
+                  ui.openQuasselNetworkManager(sid);
+                }));
+  }
+
+  private List<QuasselCoreControlPort.QuasselCoreNetworkSummary> quasselNetworkSnapshot(
+      String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return List.of();
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
+        quasselControl.quasselCoreNetworks(sid);
+    return networks == null ? List.of() : List.copyOf(networks);
   }
 
   private void restorePrivateMessageTargets(String serverId) {

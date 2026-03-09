@@ -6,6 +6,7 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
+import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -16,6 +17,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -336,14 +338,21 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
         disposables.add(
             quasselControl
                 .quasselCoreRemoveNetwork(serverId, network)
+                .andThen(
+                    awaitQuasselNetworkRemovedByEvents(
+                        serverId, status, targetNetworkId, network, NETWORK_OBSERVE_TIMEOUT_MS))
                 .subscribe(
-                    () -> {
-                      awaitQuasselNetworkRemoved(
-                          serverId, status, targetNetworkId, network, NETWORK_OBSERVE_TIMEOUT_MS);
+                    observed -> {
                       ui.appendStatus(
                           status,
                           "(qnet-ui)",
                           "Requested removal of Quassel network '" + network + "'.");
+                      if (!observed) {
+                        ui.appendStatus(
+                            status,
+                            "(qnet-ui)",
+                            "Removal request sent, but core has not reported the updated network list yet.");
+                      }
                       syncQuasselNetworksToUi(serverId);
                       maybeReopenQuasselNetworkManagerPrompt(
                           disposables, serverId, status, reopenPrompt);
@@ -376,15 +385,15 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
         disposables.add(
             quasselControl
                 .quasselCoreCreateNetwork(serverId, request)
+                .andThen(
+                    awaitQuasselNetworkObservedByEvents(
+                        serverId,
+                        status,
+                        request.networkName(),
+                        baselineNetworkIds,
+                        NETWORK_OBSERVE_TIMEOUT_MS))
                 .subscribe(
-                    () -> {
-                      boolean observed =
-                          awaitQuasselNetworkObserved(
-                              serverId,
-                              status,
-                              request.networkName(),
-                              baselineNetworkIds,
-                              NETWORK_OBSERVE_TIMEOUT_MS);
+                    observed -> {
                       ui.appendStatus(
                           status,
                           "(qnet-ui)",
@@ -493,7 +502,7 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
     ui.syncQuasselNetworks(sid, networks == null ? List.of() : List.copyOf(networks));
   }
 
-  private boolean awaitQuasselNetworkObserved(
+  private Single<Boolean> awaitQuasselNetworkObservedByEvents(
       String serverId,
       TargetRef status,
       String expectedNetworkName,
@@ -501,13 +510,13 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
       long timeoutMs) {
     String sid = Objects.toString(serverId, "").trim();
     String wanted = Objects.toString(expectedNetworkName, "").trim();
-    if (sid.isEmpty() || timeoutMs <= 0L) return false;
+    if (sid.isEmpty() || timeoutMs <= 0L) return Single.just(false);
     Set<Integer> baselineIds =
         baselineNetworkIds == null ? Set.of() : Set.copyOf(baselineNetworkIds);
 
     appendQnetDebug(
         status,
-        "Awaiting network observation after create: server="
+        "Awaiting network observation after create via events: server="
             + sid
             + ", expected='"
             + wanted
@@ -515,76 +524,41 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
             + timeoutMs
             + ", baselineIds="
             + baselineIds);
-    long deadlineNs = System.nanoTime() + (timeoutMs * 1_000_000L);
-    int polls = 0;
-    while (System.nanoTime() < deadlineNs) {
-      polls++;
-      List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
-          quasselControl.quasselCoreNetworks(sid);
-      if (polls == 1 || polls % 20 == 0) {
-        log.info(
-            "Await Quassel network observation poll: serverId={}, expectedNetwork={}, poll={}, connected={}, networks={}",
-            sid,
-            wanted,
-            polls,
-            connectionCoordinator.isConnected(sid),
-            summarizeNetworkSnapshot(networks));
-      }
-      if (networks != null) {
-        for (QuasselCoreControlPort.QuasselCoreNetworkSummary summary : networks) {
-          if (summary == null) continue;
-          int networkId = summary.networkId();
-          String name = Objects.toString(summary.networkName(), "").trim();
-          if (!wanted.isEmpty() && name.equalsIgnoreCase(wanted)) {
-            appendQnetDebug(
-                status,
-                "Observed network after create in poll "
-                    + polls
-                    + ": "
-                    + summarizeNetworkSnapshot(networks));
-            return true;
-          }
-          if (networkId >= 0 && !baselineIds.contains(networkId)) {
-            appendQnetDebug(
-                status,
-                "Observed newly-added network id after create in poll "
-                    + polls
-                    + ": "
-                    + networkId
-                    + " (name='"
-                    + name
-                    + "') snapshot="
-                    + summarizeNetworkSnapshot(networks));
-            return true;
-          }
-        }
-      }
-      try {
-        Thread.sleep(50L);
-      } catch (InterruptedException interrupted) {
-        Thread.currentThread().interrupt();
-        appendQnetDebug(status, "Network observation wait interrupted.");
-        return false;
-      }
-    }
-    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> finalSnapshot =
+
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> initialSnapshot =
         quasselControl.quasselCoreNetworks(sid);
-    appendQnetDebug(
-        status,
-        "Network not observed after create; final snapshot: "
-            + summarizeNetworkSnapshot(finalSnapshot));
-    log.info(
-        "Await Quassel network observation timed out: serverId={}, expectedNetwork={}, baselineNetworkIds={}, polls={}, connected={}, finalNetworks={}",
-        sid,
-        wanted,
-        baselineIds,
-        polls,
-        connectionCoordinator.isConnected(sid),
-        summarizeNetworkSnapshot(finalSnapshot));
-    return false;
+    if (isObservedNetworkSnapshot(initialSnapshot, wanted, baselineIds)) {
+      return Single.just(true);
+    }
+
+    var events = quasselControl.quasselCoreNetworkEvents();
+    if (events == null) {
+      appendQnetDebug(status, "Quassel network event stream unavailable; skipping event wait.");
+      return Single.just(false);
+    }
+
+    return events
+        .filter(event -> sid.equals(Objects.toString(event.serverId(), "").trim()))
+        .map(QuasselCoreControlPort.QuasselCoreNetworkSnapshotEvent::networks)
+        .filter(networks -> isObservedNetworkSnapshot(networks, wanted, baselineIds))
+        .firstElement()
+        .timeout(timeoutMs, TimeUnit.MILLISECONDS)
+        .map(ignored -> true)
+        .onErrorReturnItem(false)
+        .defaultIfEmpty(false)
+        .doOnSuccess(
+            observed -> {
+              if (observed) return;
+              List<QuasselCoreControlPort.QuasselCoreNetworkSummary> finalSnapshot =
+                  quasselControl.quasselCoreNetworks(sid);
+              appendQnetDebug(
+                  status,
+                  "Network not observed after create; final snapshot: "
+                      + summarizeNetworkSnapshot(finalSnapshot));
+            });
   }
 
-  private boolean awaitQuasselNetworkRemoved(
+  private Single<Boolean> awaitQuasselNetworkRemovedByEvents(
       String serverId,
       TargetRef status,
       Integer targetNetworkId,
@@ -592,58 +566,73 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
       long timeoutMs) {
     String sid = Objects.toString(serverId, "").trim();
     String wanted = Objects.toString(targetNetworkNameOrId, "").trim();
-    if (sid.isEmpty() || timeoutMs <= 0L) return false;
-    if (targetNetworkId == null && wanted.isEmpty()) return false;
+    if (sid.isEmpty() || timeoutMs <= 0L) return Single.just(false);
+    if (targetNetworkId == null && wanted.isEmpty()) return Single.just(false);
 
-    long deadlineNs = System.nanoTime() + (timeoutMs * 1_000_000L);
-    int polls = 0;
-    while (System.nanoTime() < deadlineNs) {
-      polls++;
-      List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks =
-          quasselControl.quasselCoreNetworks(sid);
-      boolean present = false;
-      if (networks != null) {
-        for (QuasselCoreControlPort.QuasselCoreNetworkSummary summary : networks) {
-          if (summary == null) continue;
-          int networkId = summary.networkId();
-          String name = Objects.toString(summary.networkName(), "").trim();
-          if (targetNetworkId != null && networkId == targetNetworkId.intValue()) {
-            present = true;
-            break;
-          }
-          if (!wanted.isEmpty() && name.equalsIgnoreCase(wanted)) {
-            present = true;
-            break;
-          }
-        }
-      }
-      if (!present) {
-        appendQnetDebug(
-            status,
-            "Observed network removal in poll "
-                + polls
-                + " for target id="
-                + targetNetworkId
-                + ", token='"
-                + wanted
-                + "'.");
-        return true;
-      }
-      try {
-        Thread.sleep(50L);
-      } catch (InterruptedException interrupted) {
-        Thread.currentThread().interrupt();
-        appendQnetDebug(status, "Network removal observation wait interrupted.");
-        return false;
-      }
+    List<QuasselCoreControlPort.QuasselCoreNetworkSummary> initialSnapshot =
+        quasselControl.quasselCoreNetworks(sid);
+    if (!isNetworkStillPresent(initialSnapshot, targetNetworkId, wanted)) {
+      return Single.just(true);
     }
-    appendQnetDebug(
-        status,
-        "Network removal not observed within timeout for target id="
-            + targetNetworkId
-            + ", token='"
-            + wanted
-            + "'.");
+
+    var events = quasselControl.quasselCoreNetworkEvents();
+    if (events == null) {
+      appendQnetDebug(status, "Quassel network event stream unavailable; skipping event wait.");
+      return Single.just(false);
+    }
+
+    return events
+        .filter(event -> sid.equals(Objects.toString(event.serverId(), "").trim()))
+        .map(QuasselCoreControlPort.QuasselCoreNetworkSnapshotEvent::networks)
+        .filter(networks -> !isNetworkStillPresent(networks, targetNetworkId, wanted))
+        .firstElement()
+        .timeout(timeoutMs, TimeUnit.MILLISECONDS)
+        .map(ignored -> true)
+        .onErrorReturnItem(false)
+        .defaultIfEmpty(false)
+        .doOnSuccess(
+            observed -> {
+              if (observed) return;
+              appendQnetDebug(
+                  status,
+                  "Network removal not observed within timeout for target id="
+                      + targetNetworkId
+                      + ", token='"
+                      + wanted
+                      + "'.");
+            });
+  }
+
+  private static boolean isObservedNetworkSnapshot(
+      List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks,
+      String expectedNetworkName,
+      Set<Integer> baselineNetworkIds) {
+    String wanted = Objects.toString(expectedNetworkName, "").trim();
+    Set<Integer> baseline = baselineNetworkIds == null ? Set.of() : Set.copyOf(baselineNetworkIds);
+    if (networks == null || networks.isEmpty()) return false;
+    for (QuasselCoreControlPort.QuasselCoreNetworkSummary summary : networks) {
+      if (summary == null) continue;
+      int networkId = summary.networkId();
+      String name = Objects.toString(summary.networkName(), "").trim();
+      if (!wanted.isEmpty() && name.equalsIgnoreCase(wanted)) return true;
+      if (networkId >= 0 && !baseline.contains(networkId)) return true;
+    }
+    return false;
+  }
+
+  private static boolean isNetworkStillPresent(
+      List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks,
+      Integer targetNetworkId,
+      String targetNetworkNameOrId) {
+    String wanted = Objects.toString(targetNetworkNameOrId, "").trim();
+    if (networks == null || networks.isEmpty()) return false;
+    for (QuasselCoreControlPort.QuasselCoreNetworkSummary summary : networks) {
+      if (summary == null) continue;
+      int networkId = summary.networkId();
+      String name = Objects.toString(summary.networkName(), "").trim();
+      if (targetNetworkId != null && networkId == targetNetworkId.intValue()) return true;
+      if (!wanted.isEmpty() && name.equalsIgnoreCase(wanted)) return true;
+    }
     return false;
   }
 
@@ -786,12 +775,19 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
     disposables.add(
         quasselControl
             .quasselCoreRemoveNetwork(serverId, network)
+            .andThen(
+                awaitQuasselNetworkRemovedByEvents(
+                    serverId, status, targetNetworkId, network, NETWORK_OBSERVE_TIMEOUT_MS))
             .subscribe(
-                () -> {
-                  awaitQuasselNetworkRemoved(
-                      serverId, status, targetNetworkId, network, NETWORK_OBSERVE_TIMEOUT_MS);
+                observed -> {
                   ui.appendStatus(
                       status, "(qnet)", "Requested removal of Quassel network '" + network + "'.");
+                  if (!observed) {
+                    ui.appendStatus(
+                        status,
+                        "(qnet)",
+                        "Removal request sent, but core has not reported the updated network list yet.");
+                  }
                   syncQuasselNetworksToUi(serverId);
                 },
                 err -> ui.appendError(status, "(qnet-error)", String.valueOf(err))));
@@ -854,15 +850,15 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
     disposables.add(
         quasselControl
             .quasselCoreCreateNetwork(serverId, request)
+            .andThen(
+                awaitQuasselNetworkObservedByEvents(
+                    serverId,
+                    status,
+                    request.networkName(),
+                    baselineNetworkIds,
+                    NETWORK_OBSERVE_TIMEOUT_MS))
             .subscribe(
-                () -> {
-                  boolean observed =
-                      awaitQuasselNetworkObserved(
-                          serverId,
-                          status,
-                          request.networkName(),
-                          baselineNetworkIds,
-                          NETWORK_OBSERVE_TIMEOUT_MS);
+                observed -> {
                   ui.appendStatus(
                       status,
                       "(qnet)",

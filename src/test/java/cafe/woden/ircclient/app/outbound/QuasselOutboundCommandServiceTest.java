@@ -26,6 +26,7 @@ import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +62,7 @@ class QuasselOutboundCommandServiceTest {
   @BeforeEach
   void setUp() {
     when(connectionCoordinator.isConnected(anyString())).thenReturn(true);
+    when(irc.quasselCoreNetworkEvents()).thenReturn(Flowable.empty());
   }
 
   @AfterEach
