@@ -45,6 +45,7 @@ import kotlin.jvm.functions.Function1;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -55,6 +56,7 @@ import org.springframework.stereotype.Component;
  * paths fail, we try {@code two-slices} before a final beep fallback.
  */
 @Component
+@InterfaceLayer
 public class TrayNotificationService implements TrayNotificationsPort {
   private static final Logger log = LoggerFactory.getLogger(TrayNotificationService.class);
 

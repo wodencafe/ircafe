@@ -650,6 +650,12 @@ class JmoleculesIncrementalAdoptionTest {
     assertComponentPackageAnnotated("cafe.woden.ircclient.ui.shell", InterfaceLayer.class);
   }
 
+  @Test
+  void componentEntryPointsInUiTrayRemainInterfaceLayerAnnotated() {
+    assertComponentPackageAnnotated("cafe.woden.ircclient.ui.tray", InterfaceLayer.class);
+    assertComponentPackageAnnotated("cafe.woden.ircclient.ui.tray.dbus", InterfaceLayer.class);
+  }
+
   private static void assertComponentPackageAnnotated(
       String basePackage, Class<? extends Annotation> marker) {
     ClassPathScanningCandidateComponentProvider scanner =
