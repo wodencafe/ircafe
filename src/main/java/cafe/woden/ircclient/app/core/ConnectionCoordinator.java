@@ -215,7 +215,7 @@ public class ConnectionCoordinator {
 
   public void connectOne(String serverId) {
     String sid = normalizedKnownServerId(serverId, "(conn)");
-    log.info(
+    log.debug(
         "connectOne requested: rawServerId={}, normalizedServerId={}, currentState={}",
         serverId,
         sid,
@@ -261,7 +261,7 @@ public class ConnectionCoordinator {
 
   public void reconnectOne(String serverId) {
     String sid = normalizedKnownServerId(serverId, "(reconnect)");
-    log.info(
+    log.debug(
         "reconnectOne requested: rawServerId={}, normalizedServerId={}, currentState={}",
         serverId,
         sid,
@@ -292,7 +292,7 @@ public class ConnectionCoordinator {
         reconnect
             .observeOn(EDT_SCHEDULER)
             .subscribe(
-                () -> log.info("reconnectOne completed successfully: serverId={}", sid),
+                () -> log.debug("reconnectOne completed successfully: serverId={}", sid),
                 err -> {
                   String rendered = renderError(err);
                   log.warn(
@@ -404,7 +404,7 @@ public class ConnectionCoordinator {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return null;
     if (!serverCatalog.containsId(sid)) {
-      log.info("Unknown server id in {}: {}", tag, sid);
+      log.debug("Unknown server id in {}: {}", tag, sid);
       ui.appendError(new TargetRef("default", "status"), tag, "Unknown server: " + sid);
       return null;
     }
@@ -439,7 +439,7 @@ public class ConnectionCoordinator {
     setNextRetryAtMs(id, null);
 
     ConnectionState current = stateOf(id);
-    log.info(
+    log.debug(
         "requestConnect: serverId={}, announceQueued={}, refreshUiNow={}, suppressStartupPrompt={}, currentState={}",
         id,
         announceQueued,
@@ -449,13 +449,13 @@ public class ConnectionCoordinator {
     if (current == ConnectionState.CONNECTED
         || current == ConnectionState.CONNECTING
         || current == ConnectionState.RECONNECTING) {
-      log.info("requestConnect ignored due to state: serverId={}, currentState={}", id, current);
+      log.debug("requestConnect ignored due to state: serverId={}, currentState={}", id, current);
       if (refreshUiNow) updateConnectionUi();
       return;
     }
 
     if (current == ConnectionState.DISCONNECTING) {
-      log.info("requestConnect queued while disconnecting: serverId={}", id);
+      log.debug("requestConnect queued while disconnecting: serverId={}", id);
       if (announceQueued) {
         ui.appendStatus(status, "(conn)", "Connect requested; waiting for disconnect to finish…");
       }
@@ -470,7 +470,7 @@ public class ConnectionCoordinator {
         irc.connect(id)
             .observeOn(EDT_SCHEDULER)
             .subscribe(
-                () -> log.info("requestConnect connect call completed: serverId={}", id),
+                () -> log.debug("requestConnect connect call completed: serverId={}", id),
                 err -> {
                   String rendered = renderError(err);
                   log.warn(

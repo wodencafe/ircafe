@@ -992,7 +992,7 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
   private void appendQnetDebug(TargetRef status, String message) {
     String line = Objects.toString(message, "").trim();
     if (line.isEmpty()) return;
-    log.info("{}", line);
+    log.debug("{}", line);
     if (status != null) {
       ui.appendStatus(status, "(qnet-debug)", line);
     }

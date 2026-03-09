@@ -333,7 +333,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               QuasselSession session = requireEstablishedSession(sid, "quassel connect network");
               int networkId =
                   resolveQuasselNetworkId(session, sid, networkIdOrName, "quassel connect network");
-              log.info(
+              log.debug(
                   "Quassel connect network request: serverId={}, networkToken='{}', resolvedNetworkId={}, slot={}",
                   sid,
                   Objects.toString(networkIdOrName, ""),
@@ -342,7 +342,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               QuasselCoreNetworkSummary targetSummary =
                   findNetworkSummaryById(snapshotQuasselCoreNetworks(session), networkId);
               if (targetSummary == null) {
-                log.warn(
+                log.debug(
                     "Quassel connect target summary missing from current snapshot: serverId={}, networkId={}, knownNetworkIds={}, displayNames={}, stateKeys={}",
                     sid,
                     networkId,
@@ -350,7 +350,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
                     session.networkDisplayByNetworkId,
                     session.networkStateByNetworkId.keySet());
               } else {
-                log.info(
+                log.debug(
                     "Quassel connect target summary: serverId={}, networkId={}, networkName={}, connected={}, enabled={}, identityId={}, host={}, port={}, tls={}, rawState={}",
                     sid,
                     networkId,
@@ -365,7 +365,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               }
               boolean repairConfirmed = maybeRepairNetworkIdentityBeforeConnect(session, networkId);
               if (!repairConfirmed) {
-                log.warn(
+                log.debug(
                     "Skipping Quassel connect because identity repair is not confirmed yet: serverId={}, networkId={}",
                     sid,
                     networkId);
@@ -388,7 +388,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               int networkId =
                   resolveQuasselNetworkId(
                       session, sid, networkIdOrName, "quassel disconnect network");
-              log.info(
+              log.debug(
                   "Quassel disconnect network request: serverId={}, networkToken='{}', resolvedNetworkId={}, slot={}",
                   sid,
                   Objects.toString(networkIdOrName, ""),
@@ -411,7 +411,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               QuasselSession session = requireEstablishedSession(sid, "quassel create network");
               QuasselCoreNetworkCreateRequest req =
                   normalizeQuasselCoreCreateRequest(Objects.requireNonNull(request, "request"));
-              log.info(
+              log.debug(
                   "Quassel create network preflight: serverId={}, requestedIdentityId={}, knownIdentityIds={}, identityStateKeys={}, identityNames={}, authNetworkIds={}",
                   sid,
                   req.identityId(),
@@ -425,7 +425,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
                 maybeCreateDefaultIdentityForNetwork(session, sid, req);
               }
               int identityId = resolveQuasselIdentityId(session, req.identityId());
-              log.info(
+              log.debug(
                   "Quassel create network request: serverId={}, networkName={}, host={}, port={}, tls={}, verifyTls={}, autoJoinCount={}, requestedIdentityId={}, resolvedIdentityId={}",
                   sid,
                   req.networkName(),
@@ -1677,7 +1677,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         } catch (SocketTimeoutException timeout) {
           continue;
         } catch (EOFException eof) {
-          log.info("Quassel read loop EOF: serverId={}", sid);
+          log.debug("Quassel read loop EOF: serverId={}", sid);
           availabilityReasonByServer.put(sid, "Quassel Core connection closed");
           emitDisconnectedOnce(session, "Quassel Core connection closed");
           scheduleReconnectIfEligible(session, "Quassel Core connection closed");
@@ -1718,7 +1718,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       throws Exception {
     if (message == null) return;
     int requestType = message.requestType();
-    log.info(
+    log.debug(
         "Quassel inbound signal: serverId={}, requestType={}, className={}, objectName={}, slotName={}, paramCount={}",
         session == null ? "" : session.serverId,
         requestType,
@@ -1786,13 +1786,13 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private void handleRpcCall(QuasselSession session, String slotName, List<Object> params) {
     String slot = Objects.toString(slotName, "").trim();
     if (slot.isEmpty()) return;
-    log.info(
+    log.debug(
         "Received Quassel RPC slot: serverId={}, slot={}, paramCount={}",
         session == null ? "" : session.serverId,
         slot,
         params == null ? 0 : params.size());
     if (slot.toLowerCase(Locale.ROOT).contains("network")) {
-      log.info(
+      log.debug(
           "Received Quassel network-related RPC slot: serverId={}, slot={}, params={}",
           session == null ? "" : session.serverId,
           slot,
@@ -1852,7 +1852,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
 
     boolean remove = slot.contains("remove") || slot.contains("deleted");
     boolean createLike = !remove && (slot.contains("create") || slot.contains("added"));
-    log.info(
+    log.debug(
         "Observing Quassel network lifecycle RPC: serverId={}, slot={}, remove={}, params={}",
         session.serverId,
         slotName,
@@ -1870,7 +1870,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     if (slot.isEmpty() || !slot.contains("identity")) return;
     boolean remove = slot.contains("remove") || slot.contains("deleted");
     if (params == null || params.isEmpty()) {
-      log.info(
+      log.debug(
           "Observed identity lifecycle RPC with no params: serverId={}, slot={}, remove={}",
           session.serverId,
           slotName,
@@ -1905,7 +1905,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
           } else {
             observeKnownIdentity(session, identityId, "");
           }
-          log.info(
+          log.debug(
               "Observed identity lifecycle RPC id user-type: serverId={}, slot={}, remove={}, identityId={}",
               session.serverId,
               slotName,
@@ -1930,7 +1930,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
           trimMapToMaxSize(session.identityStateByIdentityId, MAX_NETWORK_IDENTITIES_PER_SESSION);
         }
       }
-      log.info(
+      log.debug(
           "Observed identity lifecycle RPC map: serverId={}, slot={}, remove={}, identityId={}, identityName={}, map={}",
           session.serverId,
           slotName,
@@ -1964,14 +1964,14 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         int networkId = tryParseInt(value);
         if (networkId < 0) return;
         if (remove) {
-          log.info(
+          log.debug(
               "Quassel network lifecycle RPC removed network by id: serverId={}, networkId={}",
               session.serverId,
               networkId);
           forgetKnownNetwork(session, networkId);
         } else {
           String observedName = createLike ? claimPendingCreatedNetworkName(session) : "";
-          log.info(
+          log.debug(
               "Quassel network lifecycle RPC observed network by id: serverId={}, networkId={}, nameHint={}",
               session.serverId,
               networkId,
@@ -1987,7 +1987,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     if (raw instanceof Map<?, ?> map) {
       int networkId = networkIdFromStateMap(map, -1);
       if (remove && networkId >= 0) {
-        log.info(
+        log.debug(
             "Quassel network lifecycle RPC removed network by map: serverId={}, networkId={}, map={}",
             session.serverId,
             networkId,
@@ -2000,7 +2000,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               mapValueIgnoreCase(map, "networkName"),
               mapValueIgnoreCase(map, "networkname"),
               mapValueIgnoreCase(map, "name"));
-      log.info(
+      log.debug(
           "Quassel network lifecycle RPC observed network map: serverId={}, networkId={}, networkName={}, map={}",
           session.serverId,
           networkId,
@@ -2026,7 +2026,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private void handleDisplayStatusMessage(String serverId, String network, String text) {
     String net = Objects.toString(network, "").trim();
     String rawLine = Objects.toString(text, "").trim();
-    log.info(
+    log.debug(
         "Quassel display status message: serverId={}, network={}, text={}", serverId, net, rawLine);
     String messageLine = rawLine;
     if (messageLine.isEmpty()) {
@@ -2048,7 +2048,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     String classToken = Objects.toString(className, "").trim();
     String slotToken = Objects.toString(slotName, "").trim();
     List<Object> values = params == null ? List.of() : params;
-    log.info(
+    log.debug(
         "Received Quassel sync/init envelope: serverId={}, requestType={}, className={}, objectName={}, slotName={}, paramCount={}",
         session == null ? "" : session.serverId,
         requestType,
@@ -2057,7 +2057,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         slotToken,
         values.size());
     if (classToken.toLowerCase(Locale.ROOT).contains("network")) {
-      log.info(
+      log.debug(
           "Received network-related sync/init envelope: serverId={}, requestType={}, className={}, objectName={}, slotName={}, params={}",
           session == null ? "" : session.serverId,
           requestType,
@@ -2147,7 +2147,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       collectPotentialNetworkStateMaps(value, candidates);
     }
     if (candidates.isEmpty()) {
-      log.info(
+      log.debug(
           "Network-related sync envelope had no map payloads to inspect: serverId={}, className={}, objectName={}, slotName={}, params={}",
           session.serverId,
           className,
@@ -2178,7 +2178,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       observeNetworkCapabilities(session, networkId, candidate);
       observeNetworkMonitorSupport(session, networkId, candidate);
       applied++;
-      log.info(
+      log.debug(
           "Applied network state from unknown sync class: serverId={}, className={}, objectName={}, slotName={}, networkId={}, networkName={}, state={}",
           session.serverId,
           className,
@@ -2190,7 +2190,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
 
     if (applied == 0) {
-      log.info(
+      log.debug(
           "Network-related sync envelope maps were inspected but no network states were derived: serverId={}, className={}, objectName={}, slotName={}, mapCount={}",
           session.serverId,
           className,
@@ -2354,7 +2354,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
           session.identityStateByIdentityId.put(identityId, normalizeObjectMap(map));
           trimMapToMaxSize(session.identityStateByIdentityId, MAX_NETWORK_IDENTITIES_PER_SESSION);
         }
-        log.info(
+        log.debug(
             "Observed identity state from {} sync: serverId={}, objectName={}, slotName={}, identityId={}, identityName={}, map={}",
             sourceClass,
             session.serverId,
@@ -2384,7 +2384,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         int identityId = tryParseInt(value);
         if (identityId >= 0) {
           observeKnownIdentity(session, identityId, "");
-          log.info(
+          log.debug(
               "Observed identity id from {} sync user-type: serverId={}, objectName={}, slotName={}, identityId={}",
               sourceClass,
               session.serverId,
@@ -2465,7 +2465,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     if (session == null || values == null || values.isEmpty()) return;
     for (Object value : values) {
       if (!(value instanceof Map<?, ?> map) || map.isEmpty()) continue;
-      log.info(
+      log.debug(
           "Quassel CoreInfo sync observed: serverId={}, objectName={}, slotName={}, keys={}, map={}",
           session.serverId,
           objectName,
@@ -2493,7 +2493,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         session.identityStateByIdentityId.put(identityId, normalizeObjectMap(map));
         trimMapToMaxSize(session.identityStateByIdentityId, MAX_NETWORK_IDENTITIES_PER_SESSION);
       }
-      log.info(
+      log.debug(
           "Quassel Identity sync observed: serverId={}, objectName={}, identityId={}, identityName={}, map={}",
           session.serverId,
           objectName,
@@ -2512,7 +2512,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       int networkId = networkIdFromStateMap(map, objectNetworkId);
       String networkName =
           firstNonBlank(map.get("networkName"), map.get("networkname"), map.get("name"));
-      log.info(
+      log.debug(
           "Quassel NetworkInfo sync observed: serverId={}, objectName={}, networkId={}, networkName={}, map={}",
           session == null ? "" : session.serverId,
           objectName,
@@ -4610,7 +4610,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       session.identityNameByIdentityId.putIfAbsent(identityId, "");
     }
     if (added || (!name.isEmpty() && !name.equals(previousName))) {
-      log.info(
+      log.debug(
           "Observed Quassel identity: serverId={}, identityId={}, identityName='{}', knownIdentityIds={}",
           session.serverId,
           identityId,
@@ -4872,7 +4872,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         int parsed = parseNetworkIdentityId(state);
         if (parsed >= 0) return parsed;
       }
-      log.info(
+      log.debug(
           "Falling back to default Quassel identity id=1: serverId={}, requestedIdentityId={}, knownIdentityIds={}, identityStateKeys={}, networkStateKeys={}",
           session.serverId,
           requestedIdentityId,
@@ -5581,7 +5581,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
 
     OutputStream out = socket.getOutputStream();
-    log.info(
+    log.debug(
         "Sending Quassel network sync call: serverId={}, className={}, objectName={}, slotName={}, paramCount=0",
         session.serverId,
         NETWORK_CLASS,
@@ -5614,7 +5614,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
             session.networkDisplayByNetworkId.get(networkId),
             "network-" + networkId);
     boolean enabled = parseNetworkEnabled(existing);
-    log.info(
+    log.debug(
         "Quassel connect preflight state: serverId={}, networkId={}, configuredIdentityId={}, identityKnown={}, identityStateUsable={}, knownIdentityIds={}, identityNames={}, identityStateKeys={}, networkName={}, endpointHost={}, endpointPort={}, endpointTls={}, enabled={}, knownNetworkIds={}, networkStateKeys={}, rawState={}",
         session.serverId,
         networkId,
@@ -5633,7 +5633,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         session.networkStateByNetworkId.keySet(),
         summarizeNetworkInfoForLog(existing));
     if (identityKnown && identityStateUsable) {
-      log.info(
+      log.debug(
           "Skipping network identity repair before connect because identity is already known and state looks usable: serverId={}, networkId={}, identityId={}",
           session.serverId,
           networkId,
@@ -5643,14 +5643,14 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
 
     int replacementIdentityId = resolveQuasselIdentityId(session, null);
     if (replacementIdentityId < 0) {
-      log.warn(
+      log.debug(
           "Skipping network identity repair before connect because no replacement identity id is available: serverId={}, networkId={}",
           session.serverId,
           networkId);
       return true;
     }
 
-    log.warn(
+    log.debug(
         "Quassel connect preflight found invalid/unknown identity or unusable identity state: serverId={}, networkId={}, configuredIdentityId={}, identityKnown={}, identityStateUsable={}, knownIdentityIds={}, replacementIdentityId={}, networkName={}, endpointHost={}, endpointPort={}, endpointTls={}, rawState={}",
         session.serverId,
         networkId,
@@ -5665,7 +5665,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         endpoint.useTls(),
         summarizeNetworkInfoForLog(existing));
     if (endpoint.host().isBlank()) {
-      log.warn(
+      log.debug(
           "Skipping network identity repair before connect due to missing host in network state: serverId={}, networkId={}",
           session.serverId,
           networkId);
@@ -5683,7 +5683,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
             replacementIdentityId,
             enabled);
     sendUpdateNetworkRequest(session, networkId, normalizeQuasselCoreUpdateRequest(repairRequest));
-    log.info(
+    log.debug(
         "Submitted pre-connect network identity repair: serverId={}, networkId={}, identityId={}, host={}, port={}, tls={}, enabled={}",
         session.serverId,
         networkId,
@@ -5698,7 +5698,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         awaitNetworkStateSnapshotForIdentity(session, networkId, replacementIdentityId, 2_500L);
     int confirmedIdentityId = parseNetworkIdentityId(repaired);
     if (confirmedIdentityId != replacementIdentityId) {
-      log.warn(
+      log.debug(
           "Quassel connect preflight identity repair not yet confirmed by core: serverId={}, networkId={}, expectedIdentityId={}, confirmedIdentityId={}, state={}",
           session.serverId,
           networkId,
@@ -5715,7 +5715,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               true,
               replacementIdentityId,
               List.of());
-      log.warn(
+      log.debug(
           "Attempting createNetwork fallback to force identity repair: serverId={}, networkId={}, networkName={}, identityId={}",
           session.serverId,
           networkId,
@@ -5728,7 +5728,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
           awaitNetworkStateSnapshotForIdentity(session, networkId, replacementIdentityId, 2_000L);
       int fallbackConfirmedIdentityId = parseNetworkIdentityId(fallbackSnapshot);
       if (fallbackConfirmedIdentityId != replacementIdentityId) {
-        log.warn(
+        log.debug(
             "Quassel createNetwork fallback did not confirm identity repair: serverId={}, networkId={}, expectedIdentityId={}, confirmedIdentityId={}, state={}",
             session.serverId,
             networkId,
@@ -5737,14 +5737,14 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
             summarizeNetworkInfoForLog(fallbackSnapshot));
         return false;
       }
-      log.info(
+      log.debug(
           "Quassel createNetwork fallback confirmed identity repair: serverId={}, networkId={}, confirmedIdentityId={}",
           session.serverId,
           networkId,
           fallbackConfirmedIdentityId);
       return true;
     }
-    log.info(
+    log.debug(
         "Post-repair network state snapshot: serverId={}, networkId={}, configuredIdentityId={}, state={}",
         session.serverId,
         networkId,
@@ -5761,7 +5761,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       return existing;
     }
 
-    log.info(
+    log.debug(
         "Quassel connect preflight requesting init-data refresh for network state: serverId={}, networkId={}, knownNetworkIds={}, networkStateKeys={}",
         session.serverId,
         networkId,
@@ -5769,7 +5769,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         session.networkStateByNetworkId.keySet());
     requestNetworkInitState(session, networkId);
     Map<String, Object> refreshed = awaitNetworkStateSnapshot(session, networkId, 800L);
-    log.info(
+    log.debug(
         "Quassel connect preflight init-data refresh result: serverId={}, networkId={}, refreshedStateLooksUsable={}, refreshedState={}",
         session.serverId,
         networkId,
@@ -5792,7 +5792,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     Socket socket = session.socketRef.get();
     if (socket == null) return;
     OutputStream out = socket.getOutputStream();
-    log.info(
+    log.debug(
         "Sending Quassel init request: serverId={}, className={}, objectName={}",
         session.serverId,
         clazz,
@@ -5966,7 +5966,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       throws Exception {
     if (session == null) return;
     if (hasKnownIdentity(session)) {
-      log.info(
+      log.debug(
           "Skipping create identity bootstrap because identities are already known: serverId={}, knownIdentityIds={}, identityNames={}",
           serverId,
           session.knownIdentityIds,
@@ -5975,7 +5975,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
     int objectIdentityId = firstKnownIdentityId(session);
     if (objectIdentityId >= 0) {
-      log.info(
+      log.debug(
           "Skipping create identity bootstrap because firstKnownIdentityId returned {}: serverId={}",
           objectIdentityId,
           serverId);
@@ -5983,20 +5983,20 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
 
     Map<String, Object> identityPayload = buildDefaultIdentityPayload(session, request);
-    log.info(
+    log.debug(
         "No known Quassel identity observed before network create. Sending create identity RPC: serverId={}, payload={}",
         serverId,
         summarizeNetworkInfoForLog(identityPayload));
     sendCreateIdentityRequest(session, identityPayload);
     int observedIdentity = awaitObservedIdentityId(session, 1_500L);
     if (observedIdentity >= 0) {
-      log.info(
+      log.debug(
           "Observed identity id {} after create identity RPC on serverId={}.",
           observedIdentity,
           serverId);
       return;
     }
-    log.info(
+    log.debug(
         "No identity observed after create identity RPC on serverId={}. Continuing with fallback identity resolution.",
         serverId);
   }
@@ -6111,7 +6111,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       params.add(request.autoJoinChannels());
     }
 
-    log.info(
+    log.debug(
         "Sending Quassel create network RPC: slot={}, networkName={}, host={}, port={}, tls={}, verifyTls={}, autoJoinChannels={}",
         slot,
         request.networkName(),
@@ -6121,7 +6121,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         request.verifyTls(),
         request.autoJoinChannels());
     QuasselCoreAuthHandshake.AuthResult auth = session.authResult.get();
-    log.info(
+    log.debug(
         "Create-network session context: serverId={}, slot={}, knownNetworkIds={}, knownIdentityIds={}, authPrimaryNetworkId={}, authNetworkIds={}, authInitialBufferCount={}, networkStateKeys={}, networkDisplayKeys={}, networkTokenKeys={}, identityStateKeys={}, identityNames={}, payload={}",
         session.serverId,
         slot,
@@ -6163,7 +6163,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       return;
     }
 
-    log.info(
+    log.debug(
         "No network observed after create RPC {} for serverId={}, networkName={}. Retrying once with legacy slot {}.",
         RPC_CREATE_NETWORK_SLOT,
         session.serverId,
@@ -6172,13 +6172,13 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     sendCreateNetworkRequest(session, identityId, request, RPC_CREATE_NETWORK_SLOT_LEGACY, false);
     if (awaitObservedNetworkAfterCreate(
         session, request.networkName(), baselineNetworkIds, 1_000L)) {
-      log.info(
+      log.debug(
           "Network '{}' observed after legacy create retry on serverId={}.",
           request.networkName(),
           session.serverId);
       return;
     }
-    log.info(
+    log.debug(
         "Network '{}' still not observed after legacy create retry on serverId={}.",
         request.networkName(),
         session.serverId);
@@ -6288,7 +6288,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
 
     OutputStream out = socket.getOutputStream();
     synchronized (session.writeLock) {
-      log.info(
+      log.debug(
           "Sending Quassel network sync call: serverId={}, className={}, objectName={}, slotName={}, paramCount=1, payload=NetworkInfo(identityId={}, summary={})",
           session.serverId,
           NETWORK_CLASS,
