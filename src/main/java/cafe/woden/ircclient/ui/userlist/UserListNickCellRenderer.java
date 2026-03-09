@@ -55,8 +55,13 @@ public final class UserListNickCellRenderer extends DefaultListCellRenderer {
     NickInfo nickInfo = (value instanceof NickInfo n) ? n : null;
 
     String nick = nickInfo == null ? "" : Objects.toString(nickInfo.nick(), "");
+    String realName = nickInfo == null ? "" : Objects.toString(nickInfo.realName(), "").trim();
     String prefix = nickInfo == null ? "" : Objects.toString(nickInfo.prefix(), "");
-    String display = prefix + nick;
+    String renderedNick = nick;
+    if (looksLikeMatrixUserId(nick) && !realName.isEmpty() && !realName.equalsIgnoreCase(nick)) {
+      renderedNick = realName + " (" + nick + ")";
+    }
+    String display = prefix + renderedNick;
 
     IgnoreMark mark = ignoreMarkLookup.apply(nickInfo);
     if (mark == null) {
@@ -124,5 +129,12 @@ public final class UserListNickCellRenderer extends DefaultListCellRenderer {
       case LOGGED_OUT -> SvgIcons.icon("account-out", ACCOUNT_ICON_SIZE, Palette.QUIET);
       default -> SvgIcons.icon("account-unknown", ACCOUNT_ICON_SIZE, Palette.QUIET);
     };
+  }
+
+  private static boolean looksLikeMatrixUserId(String token) {
+    String value = Objects.toString(token, "").trim();
+    if (!value.startsWith("@")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
   }
 }

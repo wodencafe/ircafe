@@ -64,4 +64,31 @@ class UserListNickCellRendererTest {
 
     assertEquals(Color.ORANGE, label.getForeground());
   }
+
+  @Test
+  void rendererShowsMatrixDisplayNameWhenAvailable() {
+    NickColorService nickColors = mock(NickColorService.class);
+    when(nickColors.enabled()).thenReturn(false);
+    UserListNickCellRenderer renderer =
+        new UserListNickCellRenderer(
+            nickColors,
+            __ -> new UserListNickCellRenderer.IgnoreMark(false, false),
+            __ -> 0f,
+            __ -> false);
+
+    NickInfo nickInfo =
+        new NickInfo(
+            "@alice:matrix.example.org",
+            "",
+            "@alice:matrix.example.org",
+            AwayState.HERE,
+            null,
+            AccountState.UNKNOWN,
+            null,
+            "Alice");
+    JLabel label =
+        (JLabel) renderer.getListCellRendererComponent(new JList<>(), nickInfo, 0, false, false);
+
+    assertTrue(label.getText().contains("Alice (@alice:matrix.example.org)"));
+  }
 }

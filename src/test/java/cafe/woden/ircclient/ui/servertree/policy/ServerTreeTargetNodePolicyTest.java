@@ -61,4 +61,26 @@ class ServerTreeTargetNodePolicyTest {
     assertEquals(
         "Audit Rule", policy.leafLabel(TargetRef.interceptor("quassel", "audit", "libera")));
   }
+
+  @Test
+  void leafLabelSimplifiesMatrixAddressTargets() {
+    ServerTreeTargetNodePolicy policy =
+        new ServerTreeTargetNodePolicy(
+            null,
+            "Notifications",
+            "Interceptor",
+            "Log Viewer",
+            "Channel List",
+            "Filters",
+            "Ignores",
+            "DCC Transfers");
+
+    assertEquals(
+        "#woden",
+        policy.leafLabel(new TargetRef("matrix", "#irc_libera_#woden:matrix.example.org")));
+    assertEquals(
+        "@zimmedon", policy.leafLabel(new TargetRef("matrix", "@zimmedon:matrix.example.org")));
+    assertEquals(
+        "!abc123", policy.leafLabel(new TargetRef("matrix", "!abc123:matrix.example.org")));
+  }
 }

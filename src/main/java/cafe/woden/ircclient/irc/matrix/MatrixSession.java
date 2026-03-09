@@ -22,6 +22,7 @@ final class MatrixSession {
   private final Map<String, String> directRoomByPeer = new ConcurrentHashMap<>();
   private final Map<String, String> directPeerByRoom = new ConcurrentHashMap<>();
   private final Map<String, String> joinedRoomByAlias = new ConcurrentHashMap<>();
+  private final Map<String, String> joinedAliasByRoom = new ConcurrentHashMap<>();
   private final Map<String, HistoryCursor> historyCursorByRoom = new ConcurrentHashMap<>();
   private final Map<String, String> latestEventByRoom = new ConcurrentHashMap<>();
   private final Map<String, LinkedHashMap<String, Long>> messageTimestampByIdByRoom =
@@ -65,6 +66,7 @@ final class MatrixSession {
     String rid = normalize(roomId);
     if (alias.isEmpty() || rid.isEmpty()) return;
     joinedRoomByAlias.put(alias, rid);
+    joinedAliasByRoom.put(rid, alias);
   }
 
   String roomForAlias(String roomAlias) {
@@ -75,6 +77,7 @@ final class MatrixSession {
     String rid = normalize(roomId);
     if (rid.isEmpty()) return;
     joinedRoomByAlias.entrySet().removeIf(entry -> rid.equals(normalize(entry.getValue())));
+    joinedAliasByRoom.remove(rid);
     historyCursorByRoom.remove(rid);
     latestEventByRoom.remove(rid);
     messageTimestampByIdByRoom.remove(rid);
@@ -187,6 +190,16 @@ final class MatrixSession {
 
   String latestRoomEventId(String roomId) {
     return normalize(latestEventByRoom.get(normalize(roomId)));
+  }
+
+  String targetForRoom(String roomId) {
+    String rid = normalize(roomId);
+    if (rid.isEmpty()) return "";
+    String peer = normalize(directPeerByRoom.get(rid));
+    if (!peer.isEmpty()) return peer;
+    String alias = normalize(joinedAliasByRoom.get(rid));
+    if (!alias.isEmpty()) return alias;
+    return rid;
   }
 
   long roomEventTimestampMs(String roomId, String eventId) {

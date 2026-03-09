@@ -21,6 +21,8 @@ final class MatrixSyncTimelineEventProjector {
 
     String peerForRoom(String roomId);
 
+    String targetForRoom(String roomId);
+
     void rememberRoomEvent(String roomId, String eventId, long timestampMs);
   }
 
@@ -55,6 +57,10 @@ final class MatrixSyncTimelineEventProjector {
       String peerUserId = session == null ? "" : session.peerForRoom(roomId);
       boolean directMessageRoom = !peerUserId.isEmpty();
       boolean fromSelf = session != null && sender.equals(session.userId());
+      String roomTarget = session == null ? roomId : normalize(session.targetForRoom(roomId));
+      if (roomTarget.isEmpty()) {
+        roomTarget = roomId;
+      }
 
       if (directMessageRoom) {
         String normalizedType = msgType.isEmpty() ? "m.text" : msgType;
@@ -100,7 +106,7 @@ final class MatrixSyncTimelineEventProjector {
                 withTag(Map.of(TAG_MATRIX_MSGTYPE, "m.emote"), TAG_MATRIX_MEDIA_URL, mediaUrl),
                 TAG_DRAFT_REPLY,
                 replyToMessageId);
-        emit(sid, new IrcEvent.ChannelAction(at, roomId, sender, body, messageId, tags));
+        emit(sid, new IrcEvent.ChannelAction(at, roomTarget, sender, body, messageId, tags));
         continue;
       }
 
@@ -110,7 +116,7 @@ final class MatrixSyncTimelineEventProjector {
                 withTag(Map.of(TAG_MATRIX_MSGTYPE, "m.notice"), TAG_MATRIX_MEDIA_URL, mediaUrl),
                 TAG_DRAFT_REPLY,
                 replyToMessageId);
-        emit(sid, new IrcEvent.Notice(at, sender, roomId, body, messageId, tags));
+        emit(sid, new IrcEvent.Notice(at, sender, roomTarget, body, messageId, tags));
         continue;
       }
 
@@ -120,7 +126,7 @@ final class MatrixSyncTimelineEventProjector {
               withTag(Map.of(TAG_MATRIX_MSGTYPE, normalizedType), TAG_MATRIX_MEDIA_URL, mediaUrl),
               TAG_DRAFT_REPLY,
               replyToMessageId);
-      emit(sid, new IrcEvent.ChannelMessage(at, roomId, sender, body, messageId, tags));
+      emit(sid, new IrcEvent.ChannelMessage(at, roomTarget, sender, body, messageId, tags));
     }
   }
 

@@ -20,6 +20,8 @@ final class MatrixLocalEchoEmitter {
     String userId();
 
     void rememberLatestRoomEvent(String roomId, String eventId);
+
+    String targetForRoom(String roomId);
   }
 
   private final Consumer<ServerIrcEvent> eventEmitter;
@@ -35,6 +37,8 @@ final class MatrixLocalEchoEmitter {
     String sender = normalize(session.userId());
     String rid = normalize(roomId);
     if (sid.isEmpty() || sender.isEmpty() || rid.isEmpty()) return;
+    String target = normalize(session.targetForRoom(rid));
+    if (target.isEmpty()) target = rid;
 
     String raw = Objects.toString(text, "");
     Instant now = Instant.now();
@@ -46,14 +50,14 @@ final class MatrixLocalEchoEmitter {
       emit(
           sid,
           new IrcEvent.ChannelAction(
-              now, rid, sender, action, mid, Map.of(TAG_MATRIX_MSGTYPE, "m.emote")));
+              now, target, sender, action, mid, Map.of(TAG_MATRIX_MSGTYPE, "m.emote")));
       return;
     }
 
     emit(
         sid,
         new IrcEvent.ChannelMessage(
-            now, rid, sender, raw, mid, Map.of(TAG_MATRIX_MSGTYPE, "m.text")));
+            now, target, sender, raw, mid, Map.of(TAG_MATRIX_MSGTYPE, "m.text")));
   }
 
   void emitPrivateMessage(
@@ -105,6 +109,8 @@ final class MatrixLocalEchoEmitter {
     String type = normalize(msgType);
     String mediaRef = normalize(mediaUrl);
     if (sid.isEmpty() || sender.isEmpty() || rid.isEmpty() || type.isEmpty()) return;
+    String target = normalize(session.targetForRoom(rid));
+    if (target.isEmpty()) target = rid;
 
     String raw = Objects.toString(text, "");
     String rendered = raw.trim().isEmpty() ? mediaRef : raw;
@@ -114,7 +120,7 @@ final class MatrixLocalEchoEmitter {
 
     Map<String, String> tags =
         withTag(Map.of(TAG_MATRIX_MSGTYPE, type), TAG_MATRIX_MEDIA_URL, mediaRef);
-    emit(sid, new IrcEvent.ChannelMessage(now, rid, sender, rendered, mid, tags));
+    emit(sid, new IrcEvent.ChannelMessage(now, target, sender, rendered, mid, tags));
   }
 
   void emitPrivateMediaMessage(
@@ -168,6 +174,12 @@ final class MatrixLocalEchoEmitter {
       roomId = noticeTarget;
     }
     session.rememberLatestRoomEvent(roomId, mid);
+    if (looksLikeMatrixRoomId(noticeTarget)) {
+      String preferred = normalize(session.targetForRoom(noticeTarget));
+      if (!preferred.isEmpty()) {
+        noticeTarget = preferred;
+      }
+    }
 
     emit(sid, new IrcEvent.Notice(Instant.now(), sender, noticeTarget, raw, mid, safeTags));
   }

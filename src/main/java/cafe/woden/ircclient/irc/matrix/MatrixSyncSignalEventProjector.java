@@ -18,6 +18,8 @@ final class MatrixSyncSignalEventProjector {
 
     String peerForRoom(String roomId);
 
+    String targetForRoom(String roomId);
+
     Set<String> replaceTypingUsers(String roomId, Set<String> users);
 
     boolean shouldEmitReadMarker(String roomId, long markerTsMs);
@@ -162,11 +164,9 @@ final class MatrixSyncSignalEventProjector {
   private static String signalTargetForRoom(SessionView session, String roomId) {
     String rid = normalize(roomId);
     if (rid.isEmpty()) return "";
-    String peer = session == null ? "" : session.peerForRoom(rid);
-    if (!peer.isEmpty()) {
-      return peer;
-    }
-    return rid;
+    if (session == null) return rid;
+    String target = normalize(session.targetForRoom(rid));
+    return target.isEmpty() ? rid : target;
   }
 
   private static boolean looksLikeMatrixUserId(String token) {

@@ -1078,7 +1078,7 @@ class MatrixIrcClientServiceTest {
 
     IrcEvent.ChannelMessage echoed =
         assertInstanceOf(IrcEvent.ChannelMessage.class, events.values().get(3).event());
-    assertEquals("!room:matrix.example.org", echoed.channel());
+    assertEquals("#ircafe:matrix.example.org", echoed.channel());
     assertEquals("hello alias", echoed.text());
   }
 
@@ -1190,7 +1190,7 @@ class MatrixIrcClientServiceTest {
 
     IrcEvent.Notice echoed =
         assertInstanceOf(IrcEvent.Notice.class, events.values().get(3).event());
-    assertEquals("!room:matrix.example.org", echoed.target());
+    assertEquals("#ircafe:matrix.example.org", echoed.target());
     assertEquals("notice alias", echoed.text());
   }
 

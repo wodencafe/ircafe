@@ -1401,6 +1401,11 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       }
 
       @Override
+      public String targetForRoom(String roomId) {
+        return session.targetForRoom(roomId);
+      }
+
+      @Override
       public Set<String> replaceTypingUsers(String roomId, Set<String> users) {
         return session.replaceTypingUsers(roomId, users);
       }
@@ -1427,6 +1432,11 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       }
 
       @Override
+      public String targetForRoom(String roomId) {
+        return session.targetForRoom(roomId);
+      }
+
+      @Override
       public void rememberRoomEvent(String roomId, String eventId, long timestampMs) {
         session.rememberRoomEvent(roomId, eventId, timestampMs);
       }
@@ -1445,6 +1455,11 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       @Override
       public String peerForRoom(String roomId) {
         return session.peerForRoom(roomId);
+      }
+
+      @Override
+      public String targetForRoom(String roomId) {
+        return session.targetForRoom(roomId);
       }
 
       @Override
@@ -1485,6 +1500,11 @@ public class MatrixIrcClientService implements IrcBackendClientService {
       @Override
       public void rememberLatestRoomEvent(String roomId, String eventId) {
         session.rememberLatestRoomEvent(roomId, eventId);
+      }
+
+      @Override
+      public String targetForRoom(String roomId) {
+        return session.targetForRoom(roomId);
       }
     };
   }
