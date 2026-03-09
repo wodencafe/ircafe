@@ -10,9 +10,11 @@ import java.util.Objects;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 public final class UserListIgnorePromptHandler {
   private final IgnoreListService ignoreListService;
   private final IgnoreStatusService ignoreStatusService;
