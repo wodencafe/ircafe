@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.bus;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
  * command lines.
  */
 @Component
+@InterfaceLayer
 @Lazy
 public class OutboundLineBus {
 
