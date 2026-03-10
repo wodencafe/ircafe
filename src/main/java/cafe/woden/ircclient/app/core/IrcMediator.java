@@ -2945,8 +2945,9 @@ public class IrcMediator implements MediatorControlPort {
     if (serverId == null || from == null) return false;
     String me = irc.currentNick(serverId).orElse(null);
     if (me == null || me.isBlank()) return false;
+    String meNorm = normalizeNickForCompare(me);
     String fromNorm = normalizeNickForCompare(from);
-    return fromNorm != null && fromNorm.equalsIgnoreCase(me);
+    return fromNorm != null && meNorm != null && fromNorm.equalsIgnoreCase(meNorm);
   }
 
   private void markPrivateMessagePeerOnline(String serverId, String rawNick) {

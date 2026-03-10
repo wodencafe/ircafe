@@ -347,6 +347,64 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void matrixSelfEchoChannelMessageResolvesPendingUsingNormalizedSelfCheck() throws Exception {
+    TargetRef chan = new TargetRef("matrix", "#ircafe:matrix.example.org");
+    TargetRef active = new TargetRef("matrix", "#other:matrix.example.org");
+    Instant at = Instant.parse("2026-03-10T16:09:00Z");
+    PendingEchoMessagePort.PendingOutboundChat pending =
+        new PendingEchoMessagePort.PendingOutboundChat(
+            "pending-matrix-1", chan, "@alice:matrix.example.org", "hello matrix", at);
+
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    when(irc.currentNick("matrix")).thenReturn(Optional.of("@alice:matrix.example.org"));
+    when(pendingEchoMessageState.consumeByTargetAndText(
+            eq(chan), eq("@alice:matrix.example.org"), eq("hello matrix")))
+        .thenReturn(Optional.of(pending));
+    when(ui.resolvePendingOutgoingChat(
+            eq(chan),
+            eq("pending-matrix-1"),
+            eq(at),
+            eq("@alice:matrix.example.org"),
+            eq("hello matrix"),
+            eq("$m-event-1"),
+            eq(Map.of("msgid", "$m-event-1"))))
+        .thenReturn(true);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "matrix",
+            new IrcEvent.ChannelMessage(
+                at,
+                "#ircafe:matrix.example.org",
+                "@alice:matrix.example.org",
+                "hello matrix",
+                "$m-event-1",
+                Map.of("msgid", "$m-event-1"))));
+
+    verify(pendingEchoMessageState)
+        .consumeByTargetAndText(eq(chan), eq("@alice:matrix.example.org"), eq("hello matrix"));
+    verify(ui)
+        .resolvePendingOutgoingChat(
+            eq(chan),
+            eq("pending-matrix-1"),
+            eq(at),
+            eq("@alice:matrix.example.org"),
+            eq("hello matrix"),
+            eq("$m-event-1"),
+            eq(Map.of("msgid", "$m-event-1")));
+    verify(ui, never())
+        .appendChatAt(
+            eq(chan),
+            any(),
+            eq("@alice:matrix.example.org"),
+            eq("hello matrix"),
+            eq(false),
+            eq("$m-event-1"),
+            eq(Map.of("msgid", "$m-event-1")),
+            any());
+  }
+
+  @Test
   void privateMessageFromPeerClearsTypingIndicatorAsDone() throws Exception {
     TargetRef pm = new TargetRef("libera", "alice");
     when(targetCoordinator.allowPrivateAutoOpenFromInbound(eq(pm), eq(false))).thenReturn(false);
