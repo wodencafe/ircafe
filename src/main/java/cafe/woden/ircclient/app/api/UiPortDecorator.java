@@ -207,6 +207,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void refreshMatrixTranscriptDisplayName(String serverId, String matrixUserId) {
+    delegate.refreshMatrixTranscriptDisplayName(serverId, matrixUserId);
+  }
+
+  @Override
   public void beginChannelList(String serverId, String banner) {
     delegate.beginChannelList(serverId, banner);
   }

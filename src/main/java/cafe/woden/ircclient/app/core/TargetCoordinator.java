@@ -333,16 +333,20 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     String nick = Objects.toString(ev.nick(), "").trim();
     if (nick.isEmpty()) return false;
+    String realName = Objects.toString(ev.realName(), "").trim();
+    boolean matrixDisplayNameObserved = looksLikeMatrixUserId(nick) && !realName.isEmpty();
 
     java.util.Set<String> changedChannels =
         userListStore.updateRealNameAcrossChannels(sid, nick, ev.realName());
+    if (matrixDisplayNameObserved) {
+      ui.refreshMatrixTranscriptDisplayName(sid, nick);
+    }
     TargetRef at = activeTarget;
     boolean activeMatrixIdentityRefresh =
         at != null
             && Objects.equals(at.serverId(), sid)
             && at.isChannel()
-            && looksLikeMatrixUserId(nick)
-            && !Objects.toString(ev.realName(), "").trim().isEmpty();
+            && matrixDisplayNameObserved;
     if (at != null
         && Objects.equals(at.serverId(), sid)
         && at.isChannel()

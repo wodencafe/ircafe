@@ -496,6 +496,64 @@ class ChatTranscriptStoreTest {
     assertEquals(0, store.refreshMatrixDisplayNames(ref));
   }
 
+  @Test
+  void refreshMatrixDisplayNameAcrossServerRelabelsOnlyMatchingMatrixUserId() throws Exception {
+    UserListStore userListStore = new UserListStore();
+    ChatTranscriptStore store = newStoreWithTranscriptCapAndUserList(0, userListStore);
+    TargetRef roomA = new TargetRef("matrix", "#room-a:matrix.example.org");
+    TargetRef roomB = new TargetRef("matrix", "#room-b:matrix.example.org");
+    TargetRef otherServer = new TargetRef("other", "#room:other.example.org");
+
+    store.appendChatFromHistory(
+        roomA,
+        "@alice:matrix.example.org",
+        "hello a",
+        false,
+        1_000L,
+        "m-a",
+        Map.of("msgid", "m-a"));
+    store.appendChatFromHistory(
+        roomB,
+        "@alice:matrix.example.org",
+        "hello b",
+        false,
+        1_100L,
+        "m-b",
+        Map.of("msgid", "m-b"));
+    store.appendChatFromHistory(
+        roomB,
+        "@bob:matrix.example.org",
+        "hello bob",
+        false,
+        1_200L,
+        "m-bob",
+        Map.of("msgid", "m-bob"));
+    store.appendChatFromHistory(
+        otherServer,
+        "@alice:matrix.example.org",
+        "hello other",
+        false,
+        1_300L,
+        "m-other",
+        Map.of("msgid", "m-other"));
+
+    userListStore.updateRealNameAcrossChannels("matrix", "@alice:matrix.example.org", "Alice");
+
+    int changed = store.refreshMatrixDisplayNameAcrossServer("matrix", "@alice:matrix.example.org");
+    assertEquals(2, changed);
+
+    String textA = transcriptText(store.document(roomA));
+    assertTrue(textA.contains("Alice: hello a"));
+    assertFalse(textA.contains("@alice:matrix.example.org: hello a"));
+
+    String textB = transcriptText(store.document(roomB));
+    assertTrue(textB.contains("Alice: hello b"));
+    assertTrue(textB.contains("@bob:matrix.example.org: hello bob"));
+
+    String textOther = transcriptText(store.document(otherServer));
+    assertTrue(textOther.contains("@alice:matrix.example.org: hello other"));
+  }
+
   private static ChatTranscriptStore newStore() {
     ChatStyles styles = new ChatStyles(null);
     ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);

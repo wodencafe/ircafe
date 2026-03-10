@@ -17,14 +17,17 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
+import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
@@ -120,7 +123,13 @@ class TargetCoordinatorLifecycleMockVerifyTest {
                     null,
                     IrcProperties.Server.Backend.QUASSEL_CORE)));
     TargetCoordinator coordinator =
-        newCoordinator(ui, irc, connectionCoordinator, runtimeConfig, serverRegistry);
+        newCoordinator(
+            ui,
+            mock(UserListStore.class),
+            irc,
+            connectionCoordinator,
+            runtimeConfig,
+            serverRegistry);
     TargetRef channel = new TargetRef("quassel", "#ircafe{net:5}");
 
     when(connectionCoordinator.isConnected("quassel")).thenReturn(true);
@@ -168,24 +177,67 @@ class TargetCoordinatorLifecycleMockVerifyTest {
     verify(ui, never()).setChannelDisconnected(channel, false);
   }
 
-  private static TargetCoordinator newCoordinator(
-      UiPort ui,
-      IrcBackendClientService irc,
-      ConnectionCoordinator connectionCoordinator,
-      RuntimeConfigStore runtimeConfig) {
-    return newCoordinator(
-        ui, irc, connectionCoordinator, runtimeConfig, mock(ServerRegistry.class));
+  @Test
+  void matrixSetNameObservationRefreshesTranscriptLabelsWithoutRosterDelta() {
+    UiPort ui = mock(UiPort.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator =
+        newCoordinator(ui, userListStore, irc, connectionCoordinator, runtimeConfig);
+
+    IrcEvent.UserSetNameObserved event =
+        new IrcEvent.UserSetNameObserved(
+            Instant.now(),
+            "@bob:matrix.example.org",
+            "Bob",
+            IrcEvent.UserSetNameObserved.Source.EXTENDED_JOIN);
+
+    when(userListStore.updateRealNameAcrossChannels("matrix", "@bob:matrix.example.org", "Bob"))
+        .thenReturn(Set.of());
+    when(userListStore.isNickPresentOnServer("matrix", "@bob:matrix.example.org"))
+        .thenReturn(false);
+
+    coordinator.onUserSetNameObserved("matrix", event);
+
+    verify(ui).refreshMatrixTranscriptDisplayName("matrix", "@bob:matrix.example.org");
   }
 
   private static TargetCoordinator newCoordinator(
       UiPort ui,
       IrcBackendClientService irc,
       ConnectionCoordinator connectionCoordinator,
+      RuntimeConfigStore runtimeConfig) {
+    return newCoordinator(
+        ui,
+        mock(UserListStore.class),
+        irc,
+        connectionCoordinator,
+        runtimeConfig,
+        mock(ServerRegistry.class));
+  }
+
+  private static TargetCoordinator newCoordinator(
+      UiPort ui,
+      UserListStore userListStore,
+      IrcBackendClientService irc,
+      ConnectionCoordinator connectionCoordinator,
+      RuntimeConfigStore runtimeConfig) {
+    return newCoordinator(
+        ui, userListStore, irc, connectionCoordinator, runtimeConfig, mock(ServerRegistry.class));
+  }
+
+  private static TargetCoordinator newCoordinator(
+      UiPort ui,
+      UserListStore userListStore,
+      IrcBackendClientService irc,
+      ConnectionCoordinator connectionCoordinator,
       RuntimeConfigStore runtimeConfig,
       ServerRegistry serverRegistry) {
     return new TargetCoordinator(
         ui,
-        mock(UserListStore.class),
+        userListStore,
         IrcTargetMembershipPort.from(irc),
         irc,
         serverRegistry,

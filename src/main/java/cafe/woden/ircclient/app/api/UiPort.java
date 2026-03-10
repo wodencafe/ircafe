@@ -162,6 +162,9 @@ public interface UiPort {
 
   void setUsersNicks(List<NickInfo> nicks);
 
+  /** Re-render already-visible Matrix sender labels for one Matrix user id on a server. */
+  default void refreshMatrixTranscriptDisplayName(String serverId, String matrixUserId) {}
+
   /** Reset/prepare the per-server channel list view for a new /LIST response stream. */
   default void beginChannelList(String serverId, String banner) {}
 

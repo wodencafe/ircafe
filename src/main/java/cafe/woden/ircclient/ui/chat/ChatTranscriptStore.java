@@ -1220,7 +1220,35 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
    * @return number of sender-label runs updated
    */
   public synchronized int refreshMatrixDisplayNames(TargetRef ref) {
+    return refreshMatrixDisplayNames(ref, "");
+  }
+
+  /**
+   * Re-renders already-inserted Matrix sender labels for a specific Matrix user ID across all open
+   * transcripts on one server.
+   *
+   * @return number of sender-label runs updated
+   */
+  public synchronized int refreshMatrixDisplayNameAcrossServer(
+      String serverId, String matrixUserId) {
+    String sid = Objects.toString(serverId, "").trim();
+    String userId = Objects.toString(matrixUserId, "").trim();
+    if (sid.isEmpty() || !looksLikeMatrixUserId(userId)) return 0;
+
+    int updated = 0;
+    java.util.ArrayList<TargetRef> refs = new java.util.ArrayList<>(docs.keySet());
+    for (TargetRef ref : refs) {
+      if (ref == null) continue;
+      if (!Objects.equals(ref.serverId(), sid)) continue;
+      updated += refreshMatrixDisplayNames(ref, userId);
+    }
+    return updated;
+  }
+
+  private int refreshMatrixDisplayNames(TargetRef ref, String matrixUserIdFilter) {
     if (ref == null) return 0;
+    String userIdFilter = Objects.toString(matrixUserIdFilter, "").trim();
+    if (!userIdFilter.isEmpty() && !looksLikeMatrixUserId(userIdFilter)) return 0;
     StyledDocument doc = docs.get(ref);
     if (doc == null) return 0;
 
@@ -1249,6 +1277,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       String rawFrom = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_FROM), "").trim();
       if (!looksLikeMatrixUserId(rawFrom)) {
+        off = end;
+        continue;
+      }
+      if (!userIdFilter.isEmpty() && !rawFrom.equalsIgnoreCase(userIdFilter)) {
         off = end;
         continue;
       }

@@ -538,6 +538,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public void refreshMatrixTranscriptDisplayName(String serverId, String matrixUserId) {
+    onEdt(() -> transcripts.refreshMatrixDisplayNameAcrossServer(serverId, matrixUserId));
+  }
+
+  @Override
   public void beginChannelList(String serverId, String banner) {
     onEdt(
         () -> {
