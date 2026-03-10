@@ -481,6 +481,7 @@ public class SwingUiPort implements UiPort {
           java.util.List<String> names;
           int hash = 1;
           int size = 0;
+          boolean refreshMatrixTranscriptNames = false;
           if (nicks == null || nicks.isEmpty()) {
             names = java.util.List.of();
           } else {
@@ -493,8 +494,22 @@ public class SwingUiPort implements UiPort {
               String lower = nick.toLowerCase(Locale.ROOT);
               hash = 31 * hash + lower.hashCode();
               size++;
+
+              if (!refreshMatrixTranscriptNames && looksLikeMatrixUserId(nick)) {
+                String realName = Objects.toString(ni.realName(), "").trim();
+                if (!realName.isEmpty() && !realName.equalsIgnoreCase(nick)) {
+                  refreshMatrixTranscriptNames = true;
+                }
+              }
             }
             names = java.util.List.copyOf(tmp);
+          }
+
+          if (refreshMatrixTranscriptNames) {
+            TargetRef usersTarget = users.activeTarget();
+            if (usersTarget != null && usersTarget.isChannel()) {
+              transcripts.refreshMatrixDisplayNames(usersTarget);
+            }
           }
 
           boolean sameNickSet =
@@ -512,6 +527,13 @@ public class SwingUiPort implements UiPort {
             }
           }
         });
+  }
+
+  private static boolean looksLikeMatrixUserId(String token) {
+    String value = Objects.toString(token, "").trim();
+    if (!value.startsWith("@")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
   }
 
   @Override

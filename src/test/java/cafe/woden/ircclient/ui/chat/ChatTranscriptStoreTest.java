@@ -453,6 +453,49 @@ class ChatTranscriptStoreTest {
     assertFalse(text.contains("@irc_libera_wodencafe:matrix.zimmedon.com: hi all"));
   }
 
+  @Test
+  void refreshMatrixDisplayNamesRelabelsExistingHistoryLinesAfterRosterSnapshotArrives()
+      throws Exception {
+    UserListStore userListStore = new UserListStore();
+    TargetRef ref = new TargetRef("matrix", "#ircafe:matrix.example.org");
+    ChatTranscriptStore store = newStoreWithTranscriptCapAndUserList(0, userListStore);
+
+    store.appendChatFromHistory(
+        ref,
+        "@irc_libera_wodencafe:matrix.zimmedon.com",
+        "hi from local scrollback",
+        false,
+        12_500L,
+        "m-refresh",
+        Map.of("msgid", "m-refresh"));
+
+    String before = transcriptText(store.document(ref));
+    assertTrue(
+        before.contains("@irc_libera_wodencafe:matrix.zimmedon.com: hi from local scrollback"));
+
+    userListStore.put(
+        "matrix",
+        "#ircafe:matrix.example.org",
+        List.of(
+            new NickInfo(
+                "@irc_libera_wodencafe:matrix.zimmedon.com",
+                "",
+                "",
+                AwayState.UNKNOWN,
+                null,
+                AccountState.UNKNOWN,
+                null,
+                "wodencafe")));
+
+    assertEquals(1, store.refreshMatrixDisplayNames(ref));
+
+    String after = transcriptText(store.document(ref));
+    assertTrue(after.contains("wodencafe: hi from local scrollback"));
+    assertFalse(
+        after.contains("@irc_libera_wodencafe:matrix.zimmedon.com: hi from local scrollback"));
+    assertEquals(0, store.refreshMatrixDisplayNames(ref));
+  }
+
   private static ChatTranscriptStore newStore() {
     ChatStyles styles = new ChatStyles(null);
     ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);

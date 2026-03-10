@@ -158,6 +158,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
   }
 
+  private record FromRunReplacement(
+      int startOffset, int endOffset, String replacementText, AttributeSet attrs) {}
+
   private LineMeta buildLineMeta(
       TargetRef ref,
       LogKind kind,
@@ -1205,6 +1208,98 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       case "verbose", "display-name-and-user-id", "displayname-and-userid", "full" -> "verbose";
       default -> "compact";
     };
+  }
+
+  /**
+   * Re-renders already-inserted Matrix sender labels in this transcript using the latest roster
+   * real-name knowledge.
+   *
+   * <p>This is used after startup roster refreshes so initial persisted scrollback rows can switch
+   * from raw Matrix IDs to display names without waiting for new message traffic.
+   *
+   * @return number of sender-label runs updated
+   */
+  public synchronized int refreshMatrixDisplayNames(TargetRef ref) {
+    if (ref == null) return 0;
+    StyledDocument doc = docs.get(ref);
+    if (doc == null) return 0;
+
+    int len = doc.getLength();
+    if (len <= 0) return 0;
+
+    java.util.ArrayList<FromRunReplacement> replacements = new java.util.ArrayList<>();
+    int off = 0;
+    while (off < len) {
+      Element el = doc.getCharacterElement(off);
+      if (el == null) break;
+
+      int start = Math.max(0, Math.min(el.getStartOffset(), len));
+      int end = Math.max(start, Math.min(el.getEndOffset(), len));
+      if (end <= start) {
+        off++;
+        continue;
+      }
+
+      AttributeSet attrs = el.getAttributes();
+      String styleId = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_STYLE), "").trim();
+      if (!isMatrixTranscriptFromStyle(styleId)) {
+        off = end;
+        continue;
+      }
+
+      String rawFrom = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_FROM), "").trim();
+      if (!looksLikeMatrixUserId(rawFrom)) {
+        off = end;
+        continue;
+      }
+
+      String renderedFrom = renderTranscriptFrom(ref, rawFrom);
+      if (renderedFrom.isBlank() || renderedFrom.equalsIgnoreCase(rawFrom)) {
+        off = end;
+        continue;
+      }
+
+      String existing;
+      try {
+        existing = doc.getText(start, end - start);
+      } catch (Exception ignored) {
+        off = end;
+        continue;
+      }
+
+      String replacement = renderedFrom + matrixFromSuffix(styleId, existing);
+      if (!existing.equals(replacement)) {
+        replacements.add(
+            new FromRunReplacement(start, end, replacement, new SimpleAttributeSet(attrs)));
+      }
+      off = end;
+    }
+
+    for (int i = replacements.size() - 1; i >= 0; i--) {
+      FromRunReplacement rep = replacements.get(i);
+      int removeLen = Math.max(0, rep.endOffset() - rep.startOffset());
+      try {
+        doc.remove(rep.startOffset(), removeLen);
+        doc.insertString(rep.startOffset(), rep.replacementText(), rep.attrs());
+      } catch (Exception ignored) {
+      }
+    }
+    return replacements.size();
+  }
+
+  private static boolean isMatrixTranscriptFromStyle(String styleId) {
+    return ChatStyles.STYLE_FROM.equals(styleId)
+        || ChatStyles.STYLE_NOTICE_FROM.equals(styleId)
+        || ChatStyles.STYLE_ACTION_FROM.equals(styleId);
+  }
+
+  private static String matrixFromSuffix(String styleId, String existingText) {
+    if (ChatStyles.STYLE_ACTION_FROM.equals(styleId)) return "";
+
+    String existing = Objects.toString(existingText, "");
+    if (existing.endsWith(": ")) return ": ";
+    if (existing.endsWith(":")) return ":";
+    return ": ";
   }
 
   private void rememberMessagePreview(TranscriptState st, LineMeta meta, String from, String text) {

@@ -311,6 +311,10 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
     list.repaint();
   }
 
+  public TargetRef activeTarget() {
+    return active;
+  }
+
   public void setNicks(List<NickInfo> nicks) {
     nickKeys.clear();
     nickIndexByKey.clear();
