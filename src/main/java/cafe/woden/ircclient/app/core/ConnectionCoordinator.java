@@ -14,6 +14,7 @@ import cafe.woden.ircclient.irc.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
@@ -925,7 +926,7 @@ public class ConnectionCoordinator {
     if (sid.isEmpty()) return;
     disposables.add(
         io.reactivex.rxjava3.core.Single.fromCallable(() -> quasselNetworkSnapshot(sid))
-            .subscribeOn(Schedulers.io())
+            .subscribeOn(RxVirtualSchedulers.io())
             .observeOn(EDT_SCHEDULER)
             .subscribe(
                 safeNetworks -> ui.syncQuasselNetworks(sid, safeNetworks),
@@ -985,7 +986,7 @@ public class ConnectionCoordinator {
 
     disposables.add(
         io.reactivex.rxjava3.core.Single.fromCallable(() -> quasselNetworkSnapshot(sid))
-            .subscribeOn(Schedulers.io())
+            .subscribeOn(RxVirtualSchedulers.io())
             .observeOn(EDT_SCHEDULER)
             .subscribe(
                 networks -> {
@@ -1050,7 +1051,7 @@ public class ConnectionCoordinator {
 
     disposables.add(
         io.reactivex.rxjava3.core.Single.fromCallable(() -> loadPersistedTargetsSnapshot(sid))
-            .subscribeOn(Schedulers.io())
+            .subscribeOn(RxVirtualSchedulers.io())
             .observeOn(EDT_SCHEDULER)
             .subscribe(
                 snapshot -> applyPersistedTargetsSnapshot(sid, runId, snapshot),

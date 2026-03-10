@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.application;
 
 import cafe.woden.ircclient.diagnostics.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.util.VirtualThreads;
 import io.reactivex.rxjava3.core.Flowable;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
@@ -20,6 +21,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -54,6 +56,8 @@ public final class InboundDedupDiagnosticsPanel extends JPanel {
 
   private static final int ACTION_ICON_SIZE = 16;
   private static final Dimension ACTION_BUTTON_SIZE = new Dimension(28, 28);
+  private static final ExecutorService SUPPORT_EXPORT_EXECUTOR =
+      VirtualThreads.newThreadPerTaskExecutor("ircafe-inbound-dedup-export");
 
   private final RuntimeEventsPanel eventsPanel;
   private final java.util.function.Supplier<List<RuntimeDiagnosticEvent>> sourceEventsSupplier;
@@ -115,7 +119,7 @@ public final class InboundDedupDiagnosticsPanel extends JPanel {
       return;
     }
     setExportInProgress(true);
-    CompletableFuture.supplyAsync(() -> createSupportBundle(rows))
+    CompletableFuture.supplyAsync(() -> createSupportBundle(rows), SUPPORT_EXPORT_EXECUTOR)
         .whenComplete(
             (report, error) ->
                 SwingUtilities.invokeLater(
