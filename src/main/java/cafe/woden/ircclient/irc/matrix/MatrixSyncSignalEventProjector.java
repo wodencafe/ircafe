@@ -76,7 +76,7 @@ final class MatrixSyncSignalEventProjector {
         emit(
             sid,
             new IrcEvent.UserSetNameObserved(
-                at, userId, displayName, IrcEvent.UserSetNameObserved.Source.SETNAME));
+                at, userId, displayName, IrcEvent.UserSetNameObserved.Source.EXTENDED_JOIN));
       }
     }
   }

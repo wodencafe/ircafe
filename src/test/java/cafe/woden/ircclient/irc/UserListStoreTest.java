@@ -87,6 +87,31 @@ class UserListStoreTest {
   }
 
   @Test
+  void getLearnedRealNameUsesRosterDisplayNameWhenNoSetnameEventSeen() {
+    UserListStore store = new UserListStore();
+    String serverId = "matrix";
+    String room = "#ircafe:matrix.example.org";
+
+    store.put(
+        serverId,
+        room,
+        List.of(
+            new NickInfo(
+                "@irc_libera_wodencafe:matrix.zimmedon.com",
+                "",
+                "",
+                AwayState.UNKNOWN,
+                null,
+                AccountState.UNKNOWN,
+                null,
+                "wodencafe")));
+
+    assertEquals(
+        "wodencafe",
+        store.getLearnedRealName(serverId, "@irc_libera_wodencafe:matrix.zimmedon.com"));
+  }
+
+  @Test
   void channelsContainingNickReturnsOnlyChannelsThatContainThatNick() {
     UserListStore store = new UserListStore();
     String serverId = "libera";

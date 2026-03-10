@@ -11,6 +11,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.irc.IrcEvent.AccountState;
+import cafe.woden.ircclient.irc.IrcEvent.AwayState;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
@@ -415,6 +417,40 @@ class ChatTranscriptStoreTest {
             .getAttributes()
             .getAttribute(ChatStyles.ATTR_META_FROM);
     assertEquals("@alice:matrix.example.org", String.valueOf(metaFrom));
+  }
+
+  @Test
+  void appendChatAtRendersMatrixDisplayNameFromRosterSnapshotWithoutSetnameEvents()
+      throws Exception {
+    UserListStore userListStore = new UserListStore();
+    TargetRef ref = new TargetRef("matrix", "#ircafe:matrix.example.org");
+    userListStore.put(
+        "matrix",
+        "#ircafe:matrix.example.org",
+        List.of(
+            new NickInfo(
+                "@irc_libera_wodencafe:matrix.zimmedon.com",
+                "",
+                "",
+                AwayState.UNKNOWN,
+                null,
+                AccountState.UNKNOWN,
+                null,
+                "wodencafe")));
+
+    ChatTranscriptStore store = newStoreWithTranscriptCapAndUserList(0, userListStore);
+    store.appendChatAt(
+        ref,
+        "@irc_libera_wodencafe:matrix.zimmedon.com",
+        "hi all",
+        false,
+        12_000L,
+        "m-2",
+        Map.of("msgid", "m-2"));
+
+    String text = transcriptText(store.document(ref));
+    assertTrue(text.contains("wodencafe: hi all"));
+    assertFalse(text.contains("@irc_libera_wodencafe:matrix.zimmedon.com: hi all"));
   }
 
   private static ChatTranscriptStore newStore() {

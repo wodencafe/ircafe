@@ -1727,11 +1727,13 @@ class MatrixIrcClientServiceTest {
         assertInstanceOf(IrcEvent.UserSetNameObserved.class, events.values().get(4).event());
     assertEquals("@bob:matrix.example.org", firstSetName.nick());
     assertEquals("Bob", firstSetName.realName());
+    assertEquals(IrcEvent.UserSetNameObserved.Source.EXTENDED_JOIN, firstSetName.source());
 
     IrcEvent.UserSetNameObserved secondSetName =
         assertInstanceOf(IrcEvent.UserSetNameObserved.class, events.values().get(5).event());
     assertEquals("@bob:matrix.example.org", secondSetName.nick());
     assertEquals("Bobby", secondSetName.realName());
+    assertEquals(IrcEvent.UserSetNameObserved.Source.EXTENDED_JOIN, secondSetName.source());
 
     IrcEvent.UserPartedChannel parted =
         assertInstanceOf(IrcEvent.UserPartedChannel.class, events.values().get(6).event());

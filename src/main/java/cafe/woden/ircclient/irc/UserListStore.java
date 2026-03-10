@@ -153,9 +153,37 @@ public class UserListStore {
     if (nk.isEmpty()) return null;
 
     Map<String, String> byNick = realNameByServerAndNickLower.get(sid);
-    if (byNick == null) return null;
-    String realName = normalizeRealName(byNick.get(nk));
-    return realName == null || realName.isBlank() ? null : realName;
+    String realName = byNick == null ? null : normalizeRealName(byNick.get(nk));
+    if (realName != null && !realName.isBlank()) return realName;
+
+    String discovered = findRealNameInActiveRosters(sid, nk);
+    if (discovered == null || discovered.isBlank()) return null;
+
+    realNameByServerAndNickLower
+        .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
+        .put(nk, discovered);
+    pruneLearnedNickCaches(sid);
+    return discovered;
+  }
+
+  private String findRealNameInActiveRosters(String serverId, String nickLower) {
+    Map<String, List<NickInfo>> byChannel = usersByServerAndChannel.get(serverId);
+    if (byChannel == null || byChannel.isEmpty()) return null;
+    String want = norm(nickLower);
+    if (want.isEmpty()) return null;
+
+    for (List<NickInfo> roster : byChannel.values()) {
+      if (roster == null || roster.isEmpty()) continue;
+      for (NickInfo ni : roster) {
+        if (ni == null) continue;
+        if (!want.equals(nickKey(ni.nick()))) continue;
+        String rn = normalizeRealName(ni.realName());
+        if (rn != null && !rn.isBlank()) {
+          return rn;
+        }
+      }
+    }
+    return null;
   }
 
   private static String normalizeAwayMessage(AwayState state, String msg) {
@@ -391,6 +419,22 @@ public class UserListStore {
     lowerNickSetByServerAndChannel
         .computeIfAbsent(sid, k -> new ConcurrentHashMap<>())
         .put(ch, lower);
+
+    // Learn real names from roster snapshots so callers can resolve display names quickly
+    // without waiting for explicit setname/membership delta events.
+    if (!safe.isEmpty()) {
+      Map<String, String> learnedRealNames =
+          realNameByServerAndNickLower.computeIfAbsent(sid, k -> new ConcurrentHashMap<>());
+      for (NickInfo ni : safe) {
+        if (ni == null) continue;
+        String nk = nickKey(ni.nick());
+        if (nk.isEmpty()) continue;
+        String rn = normalizeRealName(ni.realName());
+        if (rn != null && !rn.isBlank()) {
+          learnedRealNames.put(nk, rn);
+        }
+      }
+    }
     pruneLearnedNickCaches(sid);
   }
 
