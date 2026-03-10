@@ -162,7 +162,8 @@ class ChatTranscriptStoreContrastTest {
     when(settingsBus.get()).thenAnswer(invocation -> settings.get());
 
     ChatTranscriptStore store =
-        new ChatTranscriptStore(styles, renderer, null, null, null, null, null, settingsBus, null);
+        new ChatTranscriptStore(
+            styles, renderer, null, null, null, null, null, settingsBus, null, null);
     return new Fixture(store, settings);
   }
 
@@ -174,7 +175,7 @@ class ChatTranscriptStoreContrastTest {
     ChatStyles styles = new ChatStyles(chatThemeSettingsBus);
     ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);
     ChatTranscriptStore store =
-        new ChatTranscriptStore(styles, renderer, null, null, null, null, null, null, null);
+        new ChatTranscriptStore(styles, renderer, null, null, null, null, null, null, null, null);
     return new ThemeFixture(store, styles, chatThemeSettingsBus);
   }
 

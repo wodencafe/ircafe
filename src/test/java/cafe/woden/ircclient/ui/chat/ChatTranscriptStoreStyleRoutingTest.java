@@ -16,7 +16,7 @@ class ChatTranscriptStoreStyleRoutingTest {
     ChatStyles styles = new ChatStyles(null);
     ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);
     ChatTranscriptStore store =
-        new ChatTranscriptStore(styles, renderer, null, null, null, null, null, null, null);
+        new ChatTranscriptStore(styles, renderer, null, null, null, null, null, null, null, null);
     TargetRef ref = new TargetRef("srv", "#chan");
 
     store.appendChatAt(ref, "alice", "chat-style-token", false, 1_000L);

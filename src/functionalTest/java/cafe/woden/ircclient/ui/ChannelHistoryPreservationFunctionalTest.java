@@ -180,7 +180,8 @@ class ChannelHistoryPreservationFunctionalTest {
     ChatStyles chatStyles = new ChatStyles(chatThemeBus);
     ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, chatStyles, null);
     ChatTranscriptStore transcripts =
-        new ChatTranscriptStore(chatStyles, renderer, null, null, null, null, null, null, null);
+        new ChatTranscriptStore(
+            chatStyles, renderer, null, null, null, null, null, null, null, null);
 
     ChatDockable chat = mock(ChatDockable.class);
     MentionPatternRegistry mentions = mock(MentionPatternRegistry.class);

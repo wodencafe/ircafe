@@ -146,6 +146,18 @@ public class UserListStore {
     return hm.isEmpty() ? null : hm;
   }
 
+  public String getLearnedRealName(String serverId, String nick) {
+    String sid = norm(serverId);
+    if (sid.isEmpty()) return null;
+    String nk = nickKey(nick);
+    if (nk.isEmpty()) return null;
+
+    Map<String, String> byNick = realNameByServerAndNickLower.get(sid);
+    if (byNick == null) return null;
+    String realName = normalizeRealName(byNick.get(nk));
+    return realName == null || realName.isBlank() ? null : realName;
+  }
+
   private static String normalizeAwayMessage(AwayState state, String msg) {
     if (state == null || state != AwayState.AWAY) return null;
     String m = norm(msg);

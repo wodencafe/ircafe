@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.chat;
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
 import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.app.api.PresenceKind;
+import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.model.FilterAction;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
@@ -79,6 +80,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private final UiSettingsBus uiSettings;
   private final NickColorSettingsBus nickColorSettings;
   private final FilterEngine filterEngine;
+  private final UserListStore userListStore;
 
   private final PropertyChangeListener nickColorSettingsListener = this::onNickColorSettingsChanged;
 
@@ -107,7 +109,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       ChatImageEmbedder imageEmbeds,
       ChatLinkPreviewEmbedder linkPreviews,
       UiSettingsBus uiSettings,
-      FilterEngine filterEngine) {
+      FilterEngine filterEngine,
+      UserListStore userListStore) {
     this.styles = styles;
     this.renderer = renderer;
     this.ts = ts;
@@ -117,6 +120,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     this.linkPreviews = linkPreviews;
     this.uiSettings = uiSettings;
     this.filterEngine = filterEngine;
+    this.userListStore = userListStore;
 
     if (this.nickColorSettings != null) {
       this.nickColorSettings.addListener(nickColorSettingsListener);
@@ -1159,6 +1163,50 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     return "* " + f + " " + a;
   }
 
+  private String renderTranscriptFrom(TargetRef ref, String from) {
+    String raw = Objects.toString(from, "").trim();
+    if (raw.isEmpty()) return raw;
+    if (!looksLikeMatrixUserId(raw)) return raw;
+    if (userListStore == null || ref == null) return raw;
+
+    String sid = Objects.toString(ref.serverId(), "").trim();
+    if (sid.isEmpty()) return raw;
+
+    String realName = Objects.toString(userListStore.getLearnedRealName(sid, raw), "").trim();
+    if (realName.isEmpty() || realName.equalsIgnoreCase(raw)) return raw;
+
+    return "verbose".equals(matrixTranscriptNameDisplayMode())
+        ? realName + " (" + raw + ")"
+        : realName;
+  }
+
+  private String matrixTranscriptNameDisplayMode() {
+    try {
+      UiSettings s = uiSettings != null ? uiSettings.get() : null;
+      return normalizeMatrixUserListNameDisplayMode(
+          s == null ? "" : s.matrixUserListNameDisplayMode());
+    } catch (Exception ignored) {
+      return "compact";
+    }
+  }
+
+  private static boolean looksLikeMatrixUserId(String token) {
+    String value = Objects.toString(token, "").trim();
+    if (!value.startsWith("@")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
+  }
+
+  private static String normalizeMatrixUserListNameDisplayMode(String raw) {
+    String value = Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT);
+    if (value.isEmpty()) return "compact";
+    return switch (value) {
+      case "compact", "display-name-only", "displayname", "name-only" -> "compact";
+      case "verbose", "display-name-and-user-id", "displayname-and-userid", "full" -> "verbose";
+      default -> "compact";
+    };
+  }
+
   private void rememberMessagePreview(TranscriptState st, LineMeta meta, String from, String text) {
     if (st == null || meta == null) return;
     String msgId = normalizeMessageId(meta.messageId());
@@ -1989,6 +2037,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
 
     Long epochMs = (meta != null) ? meta.epochMs() : null;
+    String renderedFrom = renderTranscriptFrom(ref, from);
     SimpleAttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
     SimpleAttributeSet fromStyle2 =
         withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
@@ -2032,8 +2081,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         doc.insertString(doc.getLength(), prefix, tsStyle);
       }
 
-      if (from != null && !from.isBlank()) {
-        doc.insertString(doc.getLength(), from + ": ", fromStyle2);
+      if (renderedFrom != null && !renderedFrom.isBlank()) {
+        doc.insertString(doc.getLength(), renderedFrom + ": ", fromStyle2);
       }
 
       AttributeSet base = msgStyle2;
@@ -2055,7 +2104,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       int lineEndOffset = doc.getLength();
       doc.insertString(doc.getLength(), "\n", tsStyle);
-      rememberMessagePreview(stateByTarget.get(ref), meta, from, text);
+      rememberMessagePreview(stateByTarget.get(ref), meta, renderedFrom, text);
 
       if (!allowEmbeds) {
         enforceTranscriptLineCap(ref, doc);
@@ -2557,12 +2606,13 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         fs = withFilterMatch(fs, m);
         ms = withFilterMatch(ms, m);
       }
+      String renderedFrom = renderTranscriptFrom(ref, from);
 
       doc.insertString(pos, "* ", ms);
       pos += 2;
-      if (from != null && !from.isBlank()) {
-        doc.insertString(pos, from, fs);
-        pos += from.length();
+      if (renderedFrom != null && !renderedFrom.isBlank()) {
+        doc.insertString(pos, renderedFrom, fs);
+        pos += renderedFrom.length();
         doc.insertString(pos, " ", ms);
         pos += 1;
       }
@@ -2576,7 +2626,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       doc.insertString(pos, "\n", tsStyle);
       pos += 1;
-      rememberMessagePreview(stateByTarget.get(ref), meta, from, a);
+      rememberMessagePreview(stateByTarget.get(ref), meta, renderedFrom, a);
     } catch (Exception ignored) {
     }
 
@@ -2766,7 +2816,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     pos = ensureAtLineStartForInsert(doc, pos);
 
     String msg = text == null ? "" : text;
-    String fromLabel = from == null ? "" : from;
+    String fromLabel = renderTranscriptFrom(ref, from);
     if (!fromLabel.isBlank()) {
       if (fromLabel.endsWith(":")) {
         fromLabel = fromLabel + " ";
@@ -2887,6 +2937,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     final int insertionStart = pos;
 
     Long epochMs = (meta != null) ? meta.epochMs() : null;
+    String renderedFrom = renderTranscriptFrom(ref, from);
     SimpleAttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
     SimpleAttributeSet fromStyle2 =
         withLineMeta(fromStyle != null ? fromStyle : styles.from(), meta);
@@ -2932,8 +2983,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         pos += prefix.length();
       }
 
-      if (from != null && !from.isBlank()) {
-        String prefix = from + ": ";
+      if (renderedFrom != null && !renderedFrom.isBlank()) {
+        String prefix = renderedFrom + ": ";
         doc.insertString(pos, prefix, fromStyle2);
         pos += prefix.length();
       }
@@ -2948,7 +2999,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       doc.insertString(pos, "\n", tsStyle);
       pos += 1;
-      rememberMessagePreview(stateByTarget.get(ref), meta, from, text);
+      rememberMessagePreview(stateByTarget.get(ref), meta, renderedFrom, text);
 
       if (allowEmbeds) {
         // (Embeds are intentionally skipped here; rich inserts during history prefill can be
@@ -3174,7 +3225,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     SimpleAttributeSet msgRefStyle = withLineMeta(styles.link(), meta);
     msgRefStyle.addAttribute(ChatStyles.ATTR_MSG_REF, targetMsgId);
 
-    String from = Objects.toString(fromNick, "").trim();
+    String from = renderTranscriptFrom(ref, fromNick);
     String prefix = from.isEmpty() ? "-> Reply to " : ("-> " + from + " replied to ");
     String preview = previewForMessageId(st, targetMsgId);
 
@@ -3253,7 +3304,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     if (kind == LogKind.ACTION) {
       insertActionLineInternalAt(ref, lineStart, from, text, outgoingLocalEcho, meta);
-      rememberMessagePreview(stateByTarget.get(ref), meta, from, text);
+      rememberMessagePreview(stateByTarget.get(ref), meta, renderTranscriptFrom(ref, from), text);
       return true;
     }
 
@@ -3271,7 +3322,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     SimpleAttributeSet ms = withLineMeta(msgStyle, meta);
     applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
     insertLineInternalAt(ref, lineStart, from, text, fs, ms, false, meta);
-    rememberMessagePreview(stateByTarget.get(ref), meta, from, text);
+    rememberMessagePreview(stateByTarget.get(ref), meta, renderTranscriptFrom(ref, from), text);
     return true;
   }
 
@@ -3325,12 +3376,13 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       SimpleAttributeSet ms = new SimpleAttributeSet(msgStyle);
       SimpleAttributeSet fs = withLineMeta(fromStyle, meta);
       applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
+      String renderedFrom = renderTranscriptFrom(ref, from);
 
       doc.insertString(pos, "* ", ms);
       pos += 2;
-      if (from != null && !from.isBlank()) {
-        doc.insertString(pos, from, fs);
-        pos += from.length();
+      if (renderedFrom != null && !renderedFrom.isBlank()) {
+        doc.insertString(pos, renderedFrom, fs);
+        pos += renderedFrom.length();
         doc.insertString(pos, " ", ms);
         pos += 1;
       }
@@ -3998,7 +4050,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     ensureAtLineStart(doc);
 
     String msg = text == null ? "" : text;
-    String fromLabel = from == null ? "" : from;
+    String fromLabel = renderTranscriptFrom(ref, from);
     if (!fromLabel.isBlank()) {
       if (fromLabel.endsWith(":")) {
         fromLabel = fromLabel + " ";
@@ -4084,7 +4136,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     ensureAtLineStart(doc);
 
     String msg = text == null ? "" : text;
-    String fromLabel = from == null ? "" : from;
+    String fromLabel = renderTranscriptFrom(ref, from);
     if (!fromLabel.isBlank()) {
       if (fromLabel.endsWith(":")) {
         fromLabel = fromLabel + " ";
@@ -4218,7 +4270,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
             fromStyle = nickColors.forNick(from, fromStyle);
           }
           fromStyle = withExistingMeta(fromStyle, as);
-          String prefix = from + ": ";
+          String renderedFrom = renderTranscriptFrom(ref, from);
+          String prefix = renderedFrom + ": ";
           doc.insertString(pos, prefix, fromStyle);
           pos += prefix.length();
         }
@@ -4441,10 +4494,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         fs = withFilterMatch(fs, m);
         ms = withFilterMatch(ms, m);
       }
+      String renderedFrom = renderTranscriptFrom(ref, from);
 
       doc.insertString(doc.getLength(), "* ", ms);
-      if (from != null && !from.isBlank()) {
-        doc.insertString(doc.getLength(), from, fs);
+      if (renderedFrom != null && !renderedFrom.isBlank()) {
+        doc.insertString(doc.getLength(), renderedFrom, fs);
         doc.insertString(doc.getLength(), " ", ms);
       }
 
@@ -4456,7 +4510,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
       int lineEndOffset = doc.getLength();
       doc.insertString(doc.getLength(), "\n", tsStyle);
-      rememberMessagePreview(stateByTarget.get(ref), meta, from, a);
+      rememberMessagePreview(stateByTarget.get(ref), meta, renderedFrom, a);
 
       if (!allowEmbeds) {
         enforceTranscriptLineCap(ref, doc);

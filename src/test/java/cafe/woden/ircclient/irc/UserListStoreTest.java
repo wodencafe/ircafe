@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.irc.IrcEvent.AccountState;
@@ -68,6 +69,21 @@ class UserListStoreTest {
 
     NickInfo merged = store.get(serverId, "#ircafe").get(0);
     assertEquals("Alice Liddell", merged.realName());
+  }
+
+  @Test
+  void getLearnedRealNameReturnsCaseInsensitiveCachedValue() {
+    UserListStore store = new UserListStore();
+    String serverId = "matrix";
+
+    store.put(
+        serverId,
+        "#ircafe:matrix.example.org",
+        List.of(new NickInfo("@alice:matrix.example.org", "", "")));
+    store.updateRealNameAcrossChannels(serverId, "@alice:matrix.example.org", "Alice");
+
+    assertEquals("Alice", store.getLearnedRealName(serverId, "@ALICE:matrix.example.org"));
+    assertNull(store.getLearnedRealName(serverId, "@bob:matrix.example.org"));
   }
 
   @Test

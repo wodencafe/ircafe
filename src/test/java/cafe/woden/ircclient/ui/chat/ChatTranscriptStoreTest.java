@@ -11,6 +11,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
+import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
 import cafe.woden.ircclient.ui.chat.embed.ChatLinkPreviewEmbedder;
@@ -317,7 +319,7 @@ class ChatTranscriptStoreTest {
 
     ChatTranscriptStore store =
         new ChatTranscriptStore(
-            styles, renderer, null, null, null, imageEmbeds, linkPreviews, settingsBus, null);
+            styles, renderer, null, null, null, imageEmbeds, linkPreviews, settingsBus, null, null);
     TargetRef ref = new TargetRef("srv", "#chan");
 
     store.appendChatAt(ref, "alice", "https://blocked.example/a.png", false, 9_000L);
@@ -342,7 +344,7 @@ class ChatTranscriptStoreTest {
 
     ChatTranscriptStore store =
         new ChatTranscriptStore(
-            styles, renderer, null, null, null, imageEmbeds, linkPreviews, null, null);
+            styles, renderer, null, null, null, imageEmbeds, linkPreviews, null, null, null);
     TargetRef ref = new TargetRef("srv", "#chan");
     store.appendChat(ref, "alice", "line");
 
@@ -382,10 +384,44 @@ class ChatTranscriptStoreTest {
     assertEquals(0, inlineComponentCount(doc, OutgoingSendIndicator.ConfirmedDot.class));
   }
 
+  @Test
+  void appendChatAtRendersMatrixDisplayNameInCompactModeAndPreservesRawMetaFrom() throws Exception {
+    UserListStore userListStore = new UserListStore();
+    TargetRef ref = new TargetRef("matrix", "#ircafe:matrix.example.org");
+    userListStore.put(
+        "matrix",
+        "#ircafe:matrix.example.org",
+        List.of(new NickInfo("@alice:matrix.example.org", "", "")));
+    userListStore.updateRealNameAcrossChannels("matrix", "@alice:matrix.example.org", "Alice");
+
+    ChatTranscriptStore store = newStoreWithTranscriptCapAndUserList(0, userListStore);
+    store.appendChatAt(
+        ref,
+        "@alice:matrix.example.org",
+        "hello matrix",
+        false,
+        11_000L,
+        "m-1",
+        Map.of("msgid", "m-1"));
+
+    StyledDocument doc = store.document(ref);
+    String text = transcriptText(doc);
+    assertTrue(text.contains("Alice: hello matrix"));
+    assertFalse(text.contains("@alice:matrix.example.org: hello matrix"));
+
+    Element firstLine = doc.getDefaultRootElement().getElement(0);
+    Object metaFrom =
+        doc.getCharacterElement(firstLine.getStartOffset())
+            .getAttributes()
+            .getAttribute(ChatStyles.ATTR_META_FROM);
+    assertEquals("@alice:matrix.example.org", String.valueOf(metaFrom));
+  }
+
   private static ChatTranscriptStore newStore() {
     ChatStyles styles = new ChatStyles(null);
     ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);
-    return new ChatTranscriptStore(styles, renderer, null, null, null, null, null, null, null);
+    return new ChatTranscriptStore(
+        styles, renderer, null, null, null, null, null, null, null, null);
   }
 
   private static ChatTranscriptStore newStoreWithTranscriptCap(int maxLines) {
@@ -394,7 +430,7 @@ class ChatTranscriptStoreTest {
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(settingsWithTranscriptCap(maxLines));
     return new ChatTranscriptStore(
-        styles, renderer, null, null, null, null, null, settingsBus, null);
+        styles, renderer, null, null, null, null, null, settingsBus, null, null);
   }
 
   private static ChatTranscriptStore newStoreWithTranscriptCapAndDeliveryIndicators(
@@ -404,7 +440,17 @@ class ChatTranscriptStoreTest {
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(settingsWithTranscriptCap(maxLines, enabled));
     return new ChatTranscriptStore(
-        styles, renderer, null, null, null, null, null, settingsBus, null);
+        styles, renderer, null, null, null, null, null, settingsBus, null, null);
+  }
+
+  private static ChatTranscriptStore newStoreWithTranscriptCapAndUserList(
+      int maxLines, UserListStore userListStore) {
+    ChatStyles styles = new ChatStyles(null);
+    ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);
+    UiSettingsBus settingsBus = mock(UiSettingsBus.class);
+    when(settingsBus.get()).thenReturn(settingsWithTranscriptCap(maxLines));
+    return new ChatTranscriptStore(
+        styles, renderer, null, null, null, null, null, settingsBus, null, userListStore);
   }
 
   private static UiSettings settingsWithTranscriptCap(int maxLines) {
