@@ -174,6 +174,7 @@ final class MatrixSyncClient {
 
   private static List<RoomMembershipEvent> parseRoomMembershipEvents(JsonNode root) {
     List<RoomMembershipEvent> events = new ArrayList<>();
+    Set<String> seenEventKeys = new LinkedHashSet<>();
     JsonNode joinedRooms = root.path("rooms").path("join");
     if (!joinedRooms.isObject()) {
       return List.of();
@@ -187,49 +188,94 @@ final class MatrixSyncClient {
               String roomId = normalize(roomEntry.getKey());
               if (roomId.isEmpty()) return;
 
-              JsonNode timelineEvents = roomEntry.getValue().path("timeline").path("events");
-              if (!timelineEvents.isArray()) return;
-
-              for (JsonNode event : timelineEvents) {
-                if (event == null || event.isNull()) continue;
-                String type = normalize(event.path("type").asText(""));
-                if (!"m.room.member".equals(type)) continue;
-
-                String userId = normalize(event.path("state_key").asText(""));
-                if (!looksLikeMatrixUserId(userId)) continue;
-
-                JsonNode content = event.path("content");
-                String sender = normalize(event.path("sender").asText(""));
-                String eventId = normalize(event.path("event_id").asText(""));
-                String membership = normalize(content.path("membership").asText(""));
-                if (membership.isEmpty()) continue;
-                String displayName = normalize(content.path("displayname").asText(""));
-                String reason = Objects.toString(content.path("reason").asText(""), "");
-                long originServerTs = event.path("origin_server_ts").asLong(0L);
-
-                JsonNode prevContent = event.path("unsigned").path("prev_content");
-                if (!prevContent.isObject()) {
-                  prevContent = event.path("prev_content");
-                }
-                String prevMembership = normalize(prevContent.path("membership").asText(""));
-                String prevDisplayName = normalize(prevContent.path("displayname").asText(""));
-
-                events.add(
-                    new RoomMembershipEvent(
-                        roomId,
-                        userId,
-                        sender,
-                        eventId,
-                        membership,
-                        prevMembership,
-                        displayName,
-                        prevDisplayName,
-                        reason,
-                        originServerTs));
-              }
+              JsonNode roomNode = roomEntry.getValue();
+              collectRoomMembershipEvents(
+                  roomId, roomNode.path("timeline").path("events"), false, seenEventKeys, events);
+              collectRoomMembershipEvents(
+                  roomId, roomNode.path("state").path("events"), true, seenEventKeys, events);
             });
 
     return events.isEmpty() ? List.of() : List.copyOf(events);
+  }
+
+  private static void collectRoomMembershipEvents(
+      String roomId,
+      JsonNode membershipEvents,
+      boolean fromStateSnapshot,
+      Set<String> seenEventKeys,
+      List<RoomMembershipEvent> out) {
+    if (membershipEvents == null || !membershipEvents.isArray()) return;
+    if (out == null) return;
+
+    for (JsonNode event : membershipEvents) {
+      if (event == null || event.isNull()) continue;
+      String type = normalize(event.path("type").asText(""));
+      if (!"m.room.member".equals(type)) continue;
+
+      String userId = normalize(event.path("state_key").asText(""));
+      if (!looksLikeMatrixUserId(userId)) continue;
+
+      JsonNode content = event.path("content");
+      String sender = normalize(event.path("sender").asText(""));
+      String eventId = normalize(event.path("event_id").asText(""));
+      String membership = normalize(content.path("membership").asText(""));
+      if (membership.isEmpty()) continue;
+      String displayName = normalize(content.path("displayname").asText(""));
+      String reason = Objects.toString(content.path("reason").asText(""), "");
+      long originServerTs = event.path("origin_server_ts").asLong(0L);
+
+      JsonNode prevContent = event.path("unsigned").path("prev_content");
+      if (!prevContent.isObject()) {
+        prevContent = event.path("prev_content");
+      }
+      String prevMembership = normalize(prevContent.path("membership").asText(""));
+      String prevDisplayName = normalize(prevContent.path("displayname").asText(""));
+      if (fromStateSnapshot && prevMembership.isEmpty()) {
+        // Joined-room state snapshots represent current membership, not a join/part transition.
+        prevMembership = membership;
+      }
+
+      String key =
+          membershipEventDedupeKey(
+              roomId, userId, eventId, membership, displayName, originServerTs, fromStateSnapshot);
+      if (!seenEventKeys.add(key)) continue;
+
+      out.add(
+          new RoomMembershipEvent(
+              roomId,
+              userId,
+              sender,
+              eventId,
+              membership,
+              prevMembership,
+              displayName,
+              prevDisplayName,
+              reason,
+              originServerTs));
+    }
+  }
+
+  private static String membershipEventDedupeKey(
+      String roomId,
+      String userId,
+      String eventId,
+      String membership,
+      String displayName,
+      long originServerTs,
+      boolean fromStateSnapshot) {
+    String eid = normalize(eventId);
+    if (!eid.isEmpty()) return "id:" + eid;
+    return (fromStateSnapshot ? "state" : "timeline")
+        + ":"
+        + normalize(roomId)
+        + "|"
+        + normalize(userId)
+        + "|"
+        + normalize(membership)
+        + "|"
+        + normalize(displayName)
+        + "|"
+        + originServerTs;
   }
 
   private static List<RoomMessageEditEvent> parseRoomMessageEditEvents(JsonNode root) {

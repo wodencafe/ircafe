@@ -505,11 +505,12 @@ public class SwingUiPort implements UiPort {
             names = java.util.List.copyOf(tmp);
           }
 
-          if (refreshMatrixTranscriptNames) {
-            TargetRef usersTarget = users.activeTarget();
-            if (usersTarget != null && usersTarget.isChannel()) {
-              transcripts.refreshMatrixDisplayNames(usersTarget);
-            }
+          TargetRef usersTarget = users.activeTarget();
+          boolean emptyUserList = nicks == null || nicks.isEmpty();
+          if ((refreshMatrixTranscriptNames || emptyUserList)
+              && usersTarget != null
+              && usersTarget.isChannel()) {
+            transcripts.refreshMatrixDisplayNames(usersTarget);
           }
 
           boolean sameNickSet =

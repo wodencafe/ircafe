@@ -49,6 +49,14 @@ class MatrixSyncClientTest {
                     {
                       "type":"m.room.canonical_alias",
                       "content":{"alias":"#libera_##ircafe:matrix.example.org"}
+                    },
+                    {
+                      "type":"m.room.member",
+                      "event_id":"$state-member1",
+                      "sender":"@charlie:matrix.example.org",
+                      "state_key":"@charlie:matrix.example.org",
+                      "origin_server_ts":1710000000500,
+                      "content":{"membership":"join","displayname":"Charlie"}
                     }
                   ]
                 },
@@ -173,8 +181,8 @@ class MatrixSyncClientTest {
       assertEquals("waves", second.body());
       assertEquals("$event0", second.replyToEventId());
       assertEquals(1710000001000L, second.originServerTs());
-      assertEquals(1, result.membershipEvents().size());
-      MatrixSyncClient.RoomMembershipEvent membership = result.membershipEvents().getFirst();
+      assertEquals(2, result.membershipEvents().size());
+      MatrixSyncClient.RoomMembershipEvent membership = result.membershipEvents().get(0);
       assertEquals("!room:matrix.example.org", membership.roomId());
       assertEquals("@bob:matrix.example.org", membership.userId());
       assertEquals("$member1", membership.eventId());
@@ -183,6 +191,16 @@ class MatrixSyncClientTest {
       assertEquals("Bob", membership.displayName());
       assertEquals("Old Bob", membership.prevDisplayName());
       assertEquals(1710000002000L, membership.originServerTs());
+
+      MatrixSyncClient.RoomMembershipEvent stateMembership = result.membershipEvents().get(1);
+      assertEquals("!room:matrix.example.org", stateMembership.roomId());
+      assertEquals("@charlie:matrix.example.org", stateMembership.userId());
+      assertEquals("$state-member1", stateMembership.eventId());
+      assertEquals("join", stateMembership.membership());
+      assertEquals("join", stateMembership.prevMembership());
+      assertEquals("Charlie", stateMembership.displayName());
+      assertEquals("", stateMembership.prevDisplayName());
+      assertEquals(1710000000500L, stateMembership.originServerTs());
       assertEquals(1, result.messageEditEvents().size());
       MatrixSyncClient.RoomMessageEditEvent edit = result.messageEditEvents().getFirst();
       assertEquals("!room:matrix.example.org", edit.roomId());

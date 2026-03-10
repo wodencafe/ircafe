@@ -336,11 +336,18 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     java.util.Set<String> changedChannels =
         userListStore.updateRealNameAcrossChannels(sid, nick, ev.realName());
-    if (activeTarget != null
-        && Objects.equals(activeTarget.serverId(), sid)
-        && activeTarget.isChannel()
-        && changedChannels.contains(activeTarget.key())) {
-      scheduleActiveUsersRefresh(sid, activeTarget.target());
+    TargetRef at = activeTarget;
+    boolean activeMatrixIdentityRefresh =
+        at != null
+            && Objects.equals(at.serverId(), sid)
+            && at.isChannel()
+            && looksLikeMatrixUserId(nick)
+            && !Objects.toString(ev.realName(), "").trim().isEmpty();
+    if (at != null
+        && Objects.equals(at.serverId(), sid)
+        && at.isChannel()
+        && (changedChannels.contains(at.key()) || activeMatrixIdentityRefresh)) {
+      scheduleActiveUsersRefresh(sid, at.target());
     }
 
     return !changedChannels.isEmpty() || userListStore.isNickPresentOnServer(sid, nick);
@@ -981,6 +988,13 @@ public class TargetCoordinator implements ActiveTargetPort {
     boolean identUnknown = ident.isEmpty() || "*".equals(ident);
     boolean hostUnknown = host.isEmpty() || "*".equals(host);
     return !(identUnknown && hostUnknown);
+  }
+
+  private static boolean looksLikeMatrixUserId(String token) {
+    String value = Objects.toString(token, "").trim();
+    if (!value.startsWith("@")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
   }
 
   private void scheduleActiveUsersRefresh(String serverId, String channel) {
