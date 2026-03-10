@@ -935,6 +935,8 @@ public class PreferencesDialog {
         buildTypingIndicatorsSendSignalDisplayCheckbox(current);
     JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle =
         buildTypingTreeIndicatorStyleCombo(current);
+    JComboBox<MatrixUserListNameDisplayModeOption> matrixUserListNameDisplayMode =
+        buildMatrixUserListNameDisplayModeCombo(current);
     JCheckBox serverTreeNotificationBadgesEnabled =
         buildServerTreeNotificationBadgesCheckbox(current);
     JSpinner serverTreeUnreadBadgeScalePercent = buildServerTreeUnreadBadgeScalePercentSpinner();
@@ -1007,6 +1009,7 @@ public class PreferencesDialog {
             typingIndicatorsTranscriptDisplayEnabled,
             typingIndicatorsSendSignalDisplayEnabled,
             typingTreeIndicatorStyle,
+            matrixUserListNameDisplayMode,
             serverTreeNotificationBadgesEnabled,
             serverTreeUnreadBadgeScalePercent,
             ircv3Capabilities);
@@ -1304,6 +1307,8 @@ public class PreferencesDialog {
               typingIndicatorsSendSignalDisplayEnabled.isSelected();
           String typingIndicatorsTreeStyleV =
               typingTreeIndicatorStyleValue(typingTreeIndicatorStyle);
+          String matrixUserListNameDisplayModeV =
+              matrixUserListNameDisplayModeValue(matrixUserListNameDisplayMode);
           boolean serverTreeNotificationBadgesEnabledV =
               serverTreeNotificationBadgesEnabled.isSelected();
           int serverTreeUnreadBadgeScalePercentV =
@@ -1703,7 +1708,8 @@ public class PreferencesDialog {
                   notificationRulesV,
                   serverTreeUnreadChannelColorV,
                   serverTreeHighlightChannelColorV,
-                  preserveDockLayoutBetweenSessionsV);
+                  preserveDockLayoutBetweenSessionsV,
+                  matrixUserListNameDisplayModeV);
           SpellcheckSettings nextSpellcheck =
               new SpellcheckSettings(
                   spellcheckEnabledV,
@@ -1865,6 +1871,8 @@ public class PreferencesDialog {
             runtimeConfig.rememberTypingIndicatorsTreeEnabled(next.typingIndicatorsTreeEnabled());
             runtimeConfig.rememberTypingIndicatorsUsersListEnabled(
                 next.typingIndicatorsUsersListEnabled());
+            runtimeConfig.rememberMatrixUserListNameDisplayMode(
+                next.matrixUserListNameDisplayMode());
             runtimeConfig.rememberTypingIndicatorsTranscriptEnabled(
                 next.typingIndicatorsTranscriptEnabled());
             runtimeConfig.rememberTypingIndicatorsSendSignalEnabled(
@@ -4161,6 +4169,44 @@ public class PreferencesDialog {
     return combo;
   }
 
+  private JComboBox<MatrixUserListNameDisplayModeOption> buildMatrixUserListNameDisplayModeCombo(
+      UiSettings current) {
+    MatrixUserListNameDisplayModeOption[] options =
+        new MatrixUserListNameDisplayModeOption[] {
+          new MatrixUserListNameDisplayModeOption("compact", "Display name only (compact)"),
+          new MatrixUserListNameDisplayModeOption(
+              "verbose", "Display name + Matrix user ID (verbose)")
+        };
+    JComboBox<MatrixUserListNameDisplayModeOption> combo = new JComboBox<>(options);
+    combo.setToolTipText(
+        "Controls how Matrix users are shown in the channel user list (display name only or display name with Matrix user ID).");
+    combo.setRenderer(
+        new DefaultListCellRenderer() {
+          @Override
+          public java.awt.Component getListCellRendererComponent(
+              JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+            JLabel c =
+                (JLabel)
+                    super.getListCellRendererComponent(
+                        list, value, index, isSelected, cellHasFocus);
+            if (value instanceof MatrixUserListNameDisplayModeOption o) {
+              c.setText(o.label());
+            }
+            return c;
+          }
+        });
+
+    String configured = current != null ? current.matrixUserListNameDisplayMode() : null;
+    String normalized = UiSettings.normalizeMatrixUserListNameDisplayMode(configured);
+    for (MatrixUserListNameDisplayModeOption option : options) {
+      if (option.id().equalsIgnoreCase(normalized)) {
+        combo.setSelectedItem(option);
+        break;
+      }
+    }
+    return combo;
+  }
+
   private JCheckBox buildServerTreeNotificationBadgesCheckbox(UiSettings current) {
     JCheckBox cb = new JCheckBox("Show unread/highlight badges in the server tree");
     cb.setSelected(current.serverTreeNotificationBadgesEnabled());
@@ -4448,6 +4494,15 @@ public class PreferencesDialog {
       return UiSettings.normalizeTypingTreeIndicatorStyle(o.id());
     }
     return "dots";
+  }
+
+  private static String matrixUserListNameDisplayModeValue(
+      JComboBox<MatrixUserListNameDisplayModeOption> combo) {
+    Object selected = combo != null ? combo.getSelectedItem() : null;
+    if (selected instanceof MatrixUserListNameDisplayModeOption o) {
+      return UiSettings.normalizeMatrixUserListNameDisplayMode(o.id());
+    }
+    return "compact";
   }
 
   private static String spellcheckLanguageTagValue(JComboBox<SpellcheckLanguageOption> combo) {
@@ -6605,6 +6660,7 @@ public class PreferencesDialog {
       JCheckBox typingIndicatorsTranscriptDisplayEnabled,
       JCheckBox typingIndicatorsSendSignalDisplayEnabled,
       JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle,
+      JComboBox<MatrixUserListNameDisplayModeOption> matrixUserListNameDisplayMode,
       JCheckBox serverTreeNotificationBadgesEnabled,
       JSpinner serverTreeUnreadBadgeScalePercent,
       Ircv3CapabilitiesControls ircv3Capabilities) {
@@ -6658,6 +6714,11 @@ public class PreferencesDialog {
     displaysRow.add(typingIndicatorsTranscriptDisplayEnabled, "growx, wmin 0");
     displaysRow.add(typingIndicatorsSendSignalDisplayEnabled, "growx, wmin 0");
     typingRow.add(displaysRow, "growx, wmin 0");
+    JPanel matrixNamesRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[grow,fill]", "[]"));
+    matrixNamesRow.setOpaque(false);
+    matrixNamesRow.add(new JLabel("Matrix user list names"));
+    matrixNamesRow.add(matrixUserListNameDisplayMode, "growx, wmin 220");
+    typingRow.add(matrixNamesRow, "growx, wmin 0");
     typingRow.add(serverTreeNotificationBadgesEnabled, "growx, wmin 0");
     JPanel badgeScaleRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[]6[]", "[]"));
     badgeScaleRow.setOpaque(false);
@@ -6669,6 +6730,7 @@ public class PreferencesDialog {
     typingImpact.setText(
         "Send controls your outbound typing state; Display controls incoming typing state from others.\n"
             + "Display toggles control where typing hints render: server tree, user list, transcript, and send telemetry arrows.\n"
+            + "Matrix user list names controls whether Matrix users render as display name only or as display name + Matrix user ID.\n"
             + "Server tree marker style controls the channel typing activity indicator.\n"
             + "Show unread/highlight badges toggles server tree notification count badges.\n"
             + "Unread badge size scales channel unread/highlight count badges in the server tree.");
@@ -10219,6 +10281,8 @@ public class PreferencesDialog {
       JTextArea jhiccupArgs) {}
 
   private record TypingTreeIndicatorStyleOption(String id, String label) {}
+
+  private record MatrixUserListNameDisplayModeOption(String id, String label) {}
 
   private record SpellcheckLanguageOption(String id, String label) {}
 

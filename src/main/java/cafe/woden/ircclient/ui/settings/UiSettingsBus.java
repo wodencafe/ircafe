@@ -289,7 +289,8 @@ public class UiSettingsBus {
             notificationRules,
             props.serverTreeUnreadChannelColor(),
             props.serverTreeHighlightChannelColor(),
-            props.layout() != null && Boolean.TRUE.equals(props.layout().preserveDockLayout()));
+            props.layout() != null && Boolean.TRUE.equals(props.layout().preserveDockLayout()),
+            props.matrixUserListNameDisplayMode());
   }
 
   public UiSettings get() {

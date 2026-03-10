@@ -90,7 +90,8 @@ public record UiSettings(
     List<NotificationRule> notificationRules,
     String serverTreeUnreadChannelColor,
     String serverTreeHighlightChannelColor,
-    boolean preserveDockLayoutBetweenSessions) {
+    boolean preserveDockLayoutBetweenSessions,
+    String matrixUserListNameDisplayMode) {
 
   public UiSettings {
     // Preferred default theme (A): Darcula.
@@ -122,6 +123,8 @@ public record UiSettings(
 
     if (timestampFormat == null || timestampFormat.isBlank()) timestampFormat = "HH:mm:ss";
     typingIndicatorsTreeStyle = normalizeTypingTreeIndicatorStyle(typingIndicatorsTreeStyle);
+    matrixUserListNameDisplayMode =
+        normalizeMatrixUserListNameDisplayMode(matrixUserListNameDisplayMode);
 
     if (chatHistoryInitialLoadLines < 0) chatHistoryInitialLoadLines = 0;
     if (chatHistoryPageSize <= 0) chatHistoryPageSize = 200;
@@ -325,7 +328,8 @@ public record UiSettings(
         List.of(),
         null,
         null,
-        false);
+        false,
+        "compact");
   }
 
   static String normalizeHexOrDefault(String raw, String fallback) {
@@ -373,6 +377,16 @@ public record UiSettings(
       case "keyboard", "kbd" -> "keyboard";
       case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> "glow-dot";
       default -> "dots";
+    };
+  }
+
+  static String normalizeMatrixUserListNameDisplayMode(String raw) {
+    String s = raw == null ? "" : raw.trim().toLowerCase(java.util.Locale.ROOT);
+    if (s.isEmpty()) return "compact";
+    return switch (s) {
+      case "compact", "display-name-only", "displayname", "name-only" -> "compact";
+      case "verbose", "display-name-and-user-id", "displayname-and-userid", "full" -> "verbose";
+      default -> "compact";
     };
   }
 
@@ -458,7 +472,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withChatFontFamily(String family) {
@@ -543,7 +558,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withChatFontSize(int size) {
@@ -628,7 +644,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withImageEmbedsEnabled(boolean enabled) {
@@ -713,7 +730,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withImageEmbedsCollapsedByDefault(boolean collapsed) {
@@ -798,7 +816,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withImageEmbedsMaxWidthPx(int maxWidthPx) {
@@ -883,7 +902,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withImageEmbedsMaxHeightPx(int maxHeightPx) {
@@ -968,7 +988,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withLinkPreviewsEnabled(boolean enabled) {
@@ -1053,7 +1074,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withLinkPreviewsCollapsedByDefault(boolean collapsed) {
@@ -1138,7 +1160,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withPresenceFoldsEnabled(boolean enabled) {
@@ -1223,7 +1246,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withTypingIndicatorsEnabled(boolean enabled) {
@@ -1308,7 +1332,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withTypingIndicatorsReceiveEnabled(boolean enabled) {
@@ -1393,7 +1418,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withTypingIndicatorsTreeEnabled(boolean enabled) {
@@ -1478,7 +1504,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withTypingIndicatorsUsersListEnabled(boolean enabled) {
@@ -1563,7 +1590,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withTypingIndicatorsTranscriptEnabled(boolean enabled) {
@@ -1648,7 +1676,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withTypingIndicatorsSendSignalEnabled(boolean enabled) {
@@ -1733,7 +1762,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withTimestampsEnabled(boolean enabled) {
@@ -1818,7 +1848,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withTimestampFormat(String format) {
@@ -1903,7 +1934,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withTimestampsIncludeChatMessages(boolean enabled) {
@@ -1988,7 +2020,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withTimestampsIncludePresenceMessages(boolean enabled) {
@@ -2073,7 +2106,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   @Deprecated
@@ -2163,7 +2197,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withMemoryUsageRefreshIntervalMs(int refreshIntervalMs) {
@@ -2248,7 +2283,8 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 
   public UiSettings withAutoConnectOnStart(boolean enabled) {
@@ -2333,6 +2369,7 @@ public record UiSettings(
         notificationRules,
         serverTreeUnreadChannelColor,
         serverTreeHighlightChannelColor,
-        preserveDockLayoutBetweenSessions);
+        preserveDockLayoutBetweenSessions,
+        matrixUserListNameDisplayMode);
   }
 }

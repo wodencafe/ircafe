@@ -494,7 +494,8 @@ class ChatTranscriptStoreTest {
         List.of(),
         null,
         null,
-        false);
+        false,
+        "compact");
   }
 
   private static String transcriptText(StyledDocument doc) throws Exception {

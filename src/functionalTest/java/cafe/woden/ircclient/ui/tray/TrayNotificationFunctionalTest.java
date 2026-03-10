@@ -204,7 +204,8 @@ class TrayNotificationFunctionalTest {
         List.<NotificationRule>of(),
         null,
         null,
-        false);
+        false,
+        "compact");
   }
 
   private static void waitFor(BooleanSupplier condition, Duration timeout) throws Exception {

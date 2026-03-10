@@ -4701,6 +4701,23 @@ public class RuntimeConfigStore
     rememberTypingIndicatorDisplayBoolean("typingIndicatorsUsersListEnabled", enabled);
   }
 
+  public synchronized void rememberMatrixUserListNameDisplayMode(String mode) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String normalized = UiProperties.normalizeMatrixUserListNameDisplayMode(mode);
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("matrixUserListNameDisplayMode", normalized);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist Matrix user list name display mode to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberTypingIndicatorsTranscriptEnabled(boolean enabled) {
     rememberTypingIndicatorDisplayBoolean("typingIndicatorsTranscriptEnabled", enabled);
   }
