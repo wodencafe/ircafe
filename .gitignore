@@ -1,5 +1,7 @@
 HELP.md
 .gradle
+.gradle-local/
+.gradle-docker/
 build/
 Ircafe.app/
 !gradle/wrapper/gradle-wrapper.jar

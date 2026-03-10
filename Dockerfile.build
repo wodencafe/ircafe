@@ -1,0 +1,5 @@
+# syntax=docker/dockerfile:1
+# Pinned builder image for reproducible local Docker-based Gradle runs.
+FROM eclipse-temurin:25-jdk@sha256:acab08ae09273ee938c1da6111ed60ff51ab0ab18325e4b1b81178039059f86e
+
+WORKDIR /workspace

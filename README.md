@@ -132,6 +132,43 @@ IRCafe is a Java 25 desktop chat client with a Swing UI and a Spring Boot backen
 ## Requirements
 
 - Java 25 (Only if running as a jar)
+- GNU Make + Docker (only if using Makefile Docker shortcuts)
+
+## Makefile shortcuts (optional)
+
+The repository includes a root `Makefile` with convenience commands that call Gradle directly.
+
+```bash
+make help
+make build
+make test
+make check
+```
+
+Run any Gradle task(s) via:
+
+```bash
+make gradle TASKS="bootRun"
+make gradle TASKS="integrationTest --tests 'cafe.woden.ircclient.irc.QuasselCoreContainerIntegrationTest'"
+```
+
+Build/test in Docker (no local JDK install required):
+
+```bash
+make docker-image
+make docker-build
+make docker-check
+make docker-gradle TASKS="test"
+# Also available: make docker-lint, make docker-integration-test, make docker-architecture-test, make docker-functional-test
+```
+
+Notes:
+
+- Local Make targets default `GRADLE_USER_HOME` to `./.gradle-local` (override with `LOCAL_GRADLE_USER_HOME=/path`).
+- Docker shortcuts run `./gradlew` inside a local image built from versioned `Dockerfile.build`.
+- `Dockerfile.build` pins `eclipse-temurin:25-jdk` by digest for reproducible toolchain resolution.
+- Docker targets auto-build the image if missing (override with `DOCKER_IMAGE=...` if needed).
+- A persistent repo-local cache directory (`./.gradle-docker`) is used for Docker Gradle cache reuse between runs.
 
 ## Run from source
 
