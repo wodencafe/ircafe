@@ -6,6 +6,7 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ChannelFlagModeStatePort;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import cafe.woden.ircclient.state.api.RecentStatusModePort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
  * IrcMediator}.
  */
 @Component
+@ApplicationLayer
 public class InboundModeEventHandler {
   private static final Logger log = LoggerFactory.getLogger(InboundModeEventHandler.class);
   private final UiPort ui;

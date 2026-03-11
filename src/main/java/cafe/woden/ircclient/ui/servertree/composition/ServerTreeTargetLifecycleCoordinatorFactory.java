@@ -55,6 +55,7 @@ public final class ServerTreeTargetLifecycleCoordinatorFactory {
             Objects.requireNonNull(in.builtInLayoutNodeKindForRef(), "builtInLayoutNodeKindForRef"),
             Objects.requireNonNull(in.builtInLayout(), "builtInLayout"),
             Objects.requireNonNull(in.rootSiblingOrder(), "rootSiblingOrder"),
+            Objects.requireNonNull(in.backendSpecificParent(), "backendSpecificParent"),
             Objects.requireNonNull(in.ensureChannelListNode(), "ensureChannelListNode"),
             Objects.requireNonNull(in.applyBuiltInLayoutToTree(), "applyBuiltInLayoutToTree"),
             Objects.requireNonNull(in.applyRootSiblingOrderToTree(), "applyRootSiblingOrderToTree"),
@@ -97,6 +98,8 @@ public final class ServerTreeTargetLifecycleCoordinatorFactory {
           builtInLayoutNodeKindForRef,
       Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayout,
       Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> rootSiblingOrder,
+      java.util.function.BiFunction<TargetRef, ServerNodes, DefaultMutableTreeNode>
+          backendSpecificParent,
       Function<ServerNodes, DefaultMutableTreeNode> ensureChannelListNode,
       BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeBuiltInLayout> applyBuiltInLayoutToTree,
       BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder>

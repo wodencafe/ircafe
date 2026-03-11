@@ -10,7 +10,7 @@ public final class ServerTreeConnectionStateViewModel {
 
   public static boolean canConnect(ConnectionState state) {
     ConnectionState st = state == null ? ConnectionState.DISCONNECTED : state;
-    return st == ConnectionState.DISCONNECTED;
+    return st == ConnectionState.DISCONNECTED || st == ConnectionState.DISCONNECTING;
   }
 
   public static boolean canDisconnect(ConnectionState state) {

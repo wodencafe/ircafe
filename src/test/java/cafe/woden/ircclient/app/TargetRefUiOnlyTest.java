@@ -31,6 +31,15 @@ class TargetRefUiOnlyTest {
   }
 
   @Test
+  void qualifiedInterceptorTargetParsesIdWithoutNetworkSuffix() {
+    TargetRef ref = TargetRef.interceptor("srv", "abc-123", "libera");
+    assertTrue(ref.isInterceptor());
+    assertTrue(ref.isUiOnly());
+    assertEquals("abc-123", ref.interceptorId());
+    assertEquals("libera", ref.networkQualifierToken());
+  }
+
+  @Test
   void monitorGroupTargetIsUiOnly() {
     TargetRef ref = TargetRef.monitorGroup("srv");
     assertTrue(ref.isMonitorGroup());

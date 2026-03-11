@@ -968,6 +968,7 @@ class MatrixSynapseContainerIntegrationTest {
     return new MatrixIrcClientService(
         serverCatalog,
         new MatrixHomeserverProbe(proxyResolver),
+        new MatrixLoginClient(proxyResolver),
         new MatrixDisplayNameClient(proxyResolver),
         new MatrixUserProfileClient(proxyResolver),
         new MatrixPresenceClient(proxyResolver),

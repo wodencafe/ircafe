@@ -78,6 +78,7 @@ final class MatrixSyncClient {
       List<RoomReactionEvent> reactionEvents = parseRoomReactionEvents(root);
       List<RoomRedactionEvent> redactionEvents = parseRoomRedactionEvents(root);
       Map<String, String> directPeerByRoom = parseDirectRoomMappings(root);
+      Map<String, String> roomAliasByRoom = parseJoinedRoomAliases(root);
       List<TypingEvent> typingEvents = parseTypingEvents(root);
       List<ReadReceiptEvent> readReceipts = parseReadReceiptEvents(root);
       return SyncResult.success(
@@ -89,6 +90,7 @@ final class MatrixSyncClient {
           reactionEvents,
           redactionEvents,
           directPeerByRoom,
+          roomAliasByRoom,
           typingEvents,
           readReceipts);
     } catch (IOException ex) {
@@ -172,6 +174,7 @@ final class MatrixSyncClient {
 
   private static List<RoomMembershipEvent> parseRoomMembershipEvents(JsonNode root) {
     List<RoomMembershipEvent> events = new ArrayList<>();
+    Set<String> seenEventKeys = new LinkedHashSet<>();
     JsonNode joinedRooms = root.path("rooms").path("join");
     if (!joinedRooms.isObject()) {
       return List.of();
@@ -185,49 +188,94 @@ final class MatrixSyncClient {
               String roomId = normalize(roomEntry.getKey());
               if (roomId.isEmpty()) return;
 
-              JsonNode timelineEvents = roomEntry.getValue().path("timeline").path("events");
-              if (!timelineEvents.isArray()) return;
-
-              for (JsonNode event : timelineEvents) {
-                if (event == null || event.isNull()) continue;
-                String type = normalize(event.path("type").asText(""));
-                if (!"m.room.member".equals(type)) continue;
-
-                String userId = normalize(event.path("state_key").asText(""));
-                if (!looksLikeMatrixUserId(userId)) continue;
-
-                JsonNode content = event.path("content");
-                String sender = normalize(event.path("sender").asText(""));
-                String eventId = normalize(event.path("event_id").asText(""));
-                String membership = normalize(content.path("membership").asText(""));
-                if (membership.isEmpty()) continue;
-                String displayName = normalize(content.path("displayname").asText(""));
-                String reason = Objects.toString(content.path("reason").asText(""), "");
-                long originServerTs = event.path("origin_server_ts").asLong(0L);
-
-                JsonNode prevContent = event.path("unsigned").path("prev_content");
-                if (!prevContent.isObject()) {
-                  prevContent = event.path("prev_content");
-                }
-                String prevMembership = normalize(prevContent.path("membership").asText(""));
-                String prevDisplayName = normalize(prevContent.path("displayname").asText(""));
-
-                events.add(
-                    new RoomMembershipEvent(
-                        roomId,
-                        userId,
-                        sender,
-                        eventId,
-                        membership,
-                        prevMembership,
-                        displayName,
-                        prevDisplayName,
-                        reason,
-                        originServerTs));
-              }
+              JsonNode roomNode = roomEntry.getValue();
+              collectRoomMembershipEvents(
+                  roomId, roomNode.path("timeline").path("events"), false, seenEventKeys, events);
+              collectRoomMembershipEvents(
+                  roomId, roomNode.path("state").path("events"), true, seenEventKeys, events);
             });
 
     return events.isEmpty() ? List.of() : List.copyOf(events);
+  }
+
+  private static void collectRoomMembershipEvents(
+      String roomId,
+      JsonNode membershipEvents,
+      boolean fromStateSnapshot,
+      Set<String> seenEventKeys,
+      List<RoomMembershipEvent> out) {
+    if (membershipEvents == null || !membershipEvents.isArray()) return;
+    if (out == null) return;
+
+    for (JsonNode event : membershipEvents) {
+      if (event == null || event.isNull()) continue;
+      String type = normalize(event.path("type").asText(""));
+      if (!"m.room.member".equals(type)) continue;
+
+      String userId = normalize(event.path("state_key").asText(""));
+      if (!looksLikeMatrixUserId(userId)) continue;
+
+      JsonNode content = event.path("content");
+      String sender = normalize(event.path("sender").asText(""));
+      String eventId = normalize(event.path("event_id").asText(""));
+      String membership = normalize(content.path("membership").asText(""));
+      if (membership.isEmpty()) continue;
+      String displayName = normalize(content.path("displayname").asText(""));
+      String reason = Objects.toString(content.path("reason").asText(""), "");
+      long originServerTs = event.path("origin_server_ts").asLong(0L);
+
+      JsonNode prevContent = event.path("unsigned").path("prev_content");
+      if (!prevContent.isObject()) {
+        prevContent = event.path("prev_content");
+      }
+      String prevMembership = normalize(prevContent.path("membership").asText(""));
+      String prevDisplayName = normalize(prevContent.path("displayname").asText(""));
+      if (fromStateSnapshot && prevMembership.isEmpty()) {
+        // Joined-room state snapshots represent current membership, not a join/part transition.
+        prevMembership = membership;
+      }
+
+      String key =
+          membershipEventDedupeKey(
+              roomId, userId, eventId, membership, displayName, originServerTs, fromStateSnapshot);
+      if (!seenEventKeys.add(key)) continue;
+
+      out.add(
+          new RoomMembershipEvent(
+              roomId,
+              userId,
+              sender,
+              eventId,
+              membership,
+              prevMembership,
+              displayName,
+              prevDisplayName,
+              reason,
+              originServerTs));
+    }
+  }
+
+  private static String membershipEventDedupeKey(
+      String roomId,
+      String userId,
+      String eventId,
+      String membership,
+      String displayName,
+      long originServerTs,
+      boolean fromStateSnapshot) {
+    String eid = normalize(eventId);
+    if (!eid.isEmpty()) return "id:" + eid;
+    return (fromStateSnapshot ? "state" : "timeline")
+        + ":"
+        + normalize(roomId)
+        + "|"
+        + normalize(userId)
+        + "|"
+        + normalize(membership)
+        + "|"
+        + normalize(displayName)
+        + "|"
+        + originServerTs;
   }
 
   private static List<RoomMessageEditEvent> parseRoomMessageEditEvents(JsonNode root) {
@@ -560,6 +608,81 @@ final class MatrixSyncClient {
     return receipts.isEmpty() ? List.of() : List.copyOf(receipts);
   }
 
+  private static Map<String, String> parseJoinedRoomAliases(JsonNode root) {
+    Map<String, String> aliasByRoom = new HashMap<>();
+    JsonNode joinedRooms = root.path("rooms").path("join");
+    if (!joinedRooms.isObject()) {
+      return Map.of();
+    }
+
+    joinedRooms
+        .fields()
+        .forEachRemaining(
+            roomEntry -> {
+              if (roomEntry == null) return;
+              String roomId = normalize(roomEntry.getKey());
+              if (!looksLikeMatrixRoomId(roomId)) return;
+              JsonNode roomNode = roomEntry.getValue();
+              String alias = joinedRoomAlias(roomNode);
+              if (looksLikeMatrixRoomAlias(alias)) {
+                aliasByRoom.put(roomId, alias);
+              }
+            });
+
+    return aliasByRoom.isEmpty() ? Map.of() : Map.copyOf(aliasByRoom);
+  }
+
+  private static String joinedRoomAlias(JsonNode roomNode) {
+    if (roomNode == null || roomNode.isNull()) {
+      return "";
+    }
+    String fromState = aliasFromStateEvents(roomNode.path("state").path("events"));
+    if (!fromState.isEmpty()) return fromState;
+    return aliasFromStateEvents(roomNode.path("timeline").path("events"));
+  }
+
+  private static String aliasFromStateEvents(JsonNode events) {
+    if (events == null || !events.isArray()) {
+      return "";
+    }
+    for (JsonNode event : events) {
+      if (event == null || event.isNull()) continue;
+      String type = normalize(event.path("type").asText(""));
+      JsonNode content = event.path("content");
+      if ("m.room.canonical_alias".equals(type)) {
+        String alias = normalize(content.path("alias").asText(""));
+        if (looksLikeMatrixRoomAlias(alias)) {
+          return alias;
+        }
+        String altAlias = firstRoomAlias(content.path("alt_aliases"));
+        if (!altAlias.isEmpty()) {
+          return altAlias;
+        }
+        continue;
+      }
+      if ("m.room.aliases".equals(type)) {
+        String alias = firstRoomAlias(content.path("aliases"));
+        if (!alias.isEmpty()) {
+          return alias;
+        }
+      }
+    }
+    return "";
+  }
+
+  private static String firstRoomAlias(JsonNode aliases) {
+    if (aliases == null || !aliases.isArray()) {
+      return "";
+    }
+    for (JsonNode aliasNode : aliases) {
+      String alias = normalize(aliasNode == null ? "" : aliasNode.asText(""));
+      if (looksLikeMatrixRoomAlias(alias)) {
+        return alias;
+      }
+    }
+    return "";
+  }
+
   private static boolean isReadReceiptType(String type) {
     String token = normalize(type);
     return "m.read".equals(token) || "m.read.private".equals(token);
@@ -583,6 +706,13 @@ final class MatrixSyncClient {
     return colon > 1 && colon < value.length() - 1;
   }
 
+  private static boolean looksLikeMatrixRoomAlias(String token) {
+    String value = normalize(token);
+    if (!value.startsWith("#")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
+  }
+
   record SyncResult(
       boolean success,
       URI endpoint,
@@ -593,6 +723,7 @@ final class MatrixSyncClient {
       List<RoomReactionEvent> reactionEvents,
       List<RoomRedactionEvent> redactionEvents,
       Map<String, String> directPeerByRoom,
+      Map<String, String> roomAliasByRoom,
       List<TypingEvent> typingEvents,
       List<ReadReceiptEvent> readReceipts,
       String detail) {
@@ -672,6 +803,32 @@ final class MatrixSyncClient {
         Map<String, String> directPeerByRoom,
         List<TypingEvent> typingEvents,
         List<ReadReceiptEvent> readReceipts) {
+      return success(
+          endpoint,
+          nextBatch,
+          events,
+          membershipEvents,
+          messageEditEvents,
+          reactionEvents,
+          redactionEvents,
+          directPeerByRoom,
+          Map.of(),
+          typingEvents,
+          readReceipts);
+    }
+
+    static SyncResult success(
+        URI endpoint,
+        String nextBatch,
+        List<RoomTimelineEvent> events,
+        List<RoomMembershipEvent> membershipEvents,
+        List<RoomMessageEditEvent> messageEditEvents,
+        List<RoomReactionEvent> reactionEvents,
+        List<RoomRedactionEvent> redactionEvents,
+        Map<String, String> directPeerByRoom,
+        Map<String, String> roomAliasByRoom,
+        List<TypingEvent> typingEvents,
+        List<ReadReceiptEvent> readReceipts) {
       List<RoomTimelineEvent> safeEvents = events == null ? List.of() : List.copyOf(events);
       List<RoomMembershipEvent> safeMembershipEvents =
           membershipEvents == null ? List.of() : List.copyOf(membershipEvents);
@@ -683,6 +840,8 @@ final class MatrixSyncClient {
           redactionEvents == null ? List.of() : List.copyOf(redactionEvents);
       Map<String, String> safeDirectPeerByRoom =
           directPeerByRoom == null ? Map.of() : Map.copyOf(directPeerByRoom);
+      Map<String, String> safeRoomAliasByRoom =
+          roomAliasByRoom == null ? Map.of() : Map.copyOf(roomAliasByRoom);
       List<TypingEvent> safeTypingEvents =
           typingEvents == null ? List.of() : List.copyOf(typingEvents);
       List<ReadReceiptEvent> safeReadReceipts =
@@ -697,6 +856,7 @@ final class MatrixSyncClient {
           safeReactionEvents,
           safeRedactionEvents,
           safeDirectPeerByRoom,
+          safeRoomAliasByRoom,
           safeTypingEvents,
           safeReadReceipts,
           "");
@@ -716,6 +876,7 @@ final class MatrixSyncClient {
           List.of(),
           List.of(),
           List.of(),
+          Map.of(),
           Map.of(),
           List.of(),
           List.of(),

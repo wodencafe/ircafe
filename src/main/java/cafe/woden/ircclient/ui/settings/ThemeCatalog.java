@@ -7,10 +7,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 @Lazy
 class ThemeCatalog {
 

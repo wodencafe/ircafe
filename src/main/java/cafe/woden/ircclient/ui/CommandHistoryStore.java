@@ -10,10 +10,12 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 public class CommandHistoryStore {
 
   private final UiSettingsBus settingsBus;

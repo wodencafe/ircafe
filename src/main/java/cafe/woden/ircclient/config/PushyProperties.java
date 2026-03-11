@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.config;
 
 import java.util.Objects;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -9,6 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * <p>When enabled and configured, IRC event notifications can be forwarded to Pushy.
  */
 @ConfigurationProperties(prefix = "ircafe.pushy")
+@InfrastructureLayer
 public record PushyProperties(
     Boolean enabled,
     String endpoint,

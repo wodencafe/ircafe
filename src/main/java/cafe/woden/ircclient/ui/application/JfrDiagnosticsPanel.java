@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.application;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.diagnostics.RuntimeDiagnosticEvent;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.util.VirtualThreads;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -27,6 +28,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -62,6 +64,8 @@ public final class JfrDiagnosticsPanel extends JPanel {
   private static final int ACTION_ICON_SIZE = 16;
   private static final Dimension ACTION_BUTTON_SIZE = new Dimension(28, 28);
   private static final String GC_EVENT_TYPE = "jdk.GarbageCollection";
+  private static final ExecutorService MEMORY_EXPORT_EXECUTOR =
+      VirtualThreads.newThreadPerTaskExecutor("ircafe-jfr-memory-export");
 
   private static final int COL_TIME = 0;
   private static final int COL_LEVEL = 1;
@@ -584,7 +588,8 @@ public final class JfrDiagnosticsPanel extends JPanel {
     boolean includeHeapDump = choice == 1;
 
     setExportInProgress(true);
-    CompletableFuture.supplyAsync(() -> service.captureMemoryDiagnosticsBundle(includeHeapDump))
+    CompletableFuture.supplyAsync(
+            () -> service.captureMemoryDiagnosticsBundle(includeHeapDump), MEMORY_EXPORT_EXECUTOR)
         .whenComplete(
             (report, error) ->
                 SwingUtilities.invokeLater(

@@ -82,6 +82,22 @@ class OutboundNamesWhoListCommandServiceTest {
   }
 
   @Test
+  void listUsesQualifiedChannelListTargetWhenActiveTargetIsNetworkQualified() {
+    TargetRef qualifiedChannel = new TargetRef("quassel", "#ircafe{net:libera}");
+    TargetRef qualifiedChannelList = TargetRef.channelList("quassel", "libera");
+    when(targetCoordinator.getActiveTarget()).thenReturn(qualifiedChannel);
+    when(connectionCoordinator.isConnected("quassel")).thenReturn(true);
+    when(irc.sendRaw("quassel", "LIST")).thenReturn(Completable.complete());
+
+    service.handleList(disposables, "");
+
+    verify(ui).ensureTargetExists(qualifiedChannelList);
+    verify(ui).beginChannelList("quassel", "Loading channel list...");
+    verify(ui).selectTarget(qualifiedChannelList);
+    verify(irc).sendRaw("quassel", "LIST");
+  }
+
+  @Test
   void namesOnMatrixBackendRequestsNames() {
     TargetRef room = new TargetRef("matrix", "!room:example.org");
     when(targetCoordinator.getActiveTarget()).thenReturn(room);

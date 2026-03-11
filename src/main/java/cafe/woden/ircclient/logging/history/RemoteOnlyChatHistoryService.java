@@ -33,6 +33,7 @@ import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import javax.swing.text.Position;
 import javax.swing.text.StyledDocument;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -46,6 +47,7 @@ import org.springframework.stereotype.Component;
     name = "enabled",
     havingValue = "false",
     matchIfMissing = true)
+@InfrastructureLayer
 public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
   private static final Logger log = LoggerFactory.getLogger(RemoteOnlyChatHistoryService.class);

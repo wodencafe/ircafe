@@ -6,6 +6,7 @@ import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
@@ -332,14 +333,25 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     String nick = Objects.toString(ev.nick(), "").trim();
     if (nick.isEmpty()) return false;
+    String realName = Objects.toString(ev.realName(), "").trim();
+    boolean matrixDisplayNameObserved = looksLikeMatrixUserId(nick) && !realName.isEmpty();
 
     java.util.Set<String> changedChannels =
         userListStore.updateRealNameAcrossChannels(sid, nick, ev.realName());
-    if (activeTarget != null
-        && Objects.equals(activeTarget.serverId(), sid)
-        && activeTarget.isChannel()
-        && changedChannels.contains(activeTarget.key())) {
-      scheduleActiveUsersRefresh(sid, activeTarget.target());
+    if (matrixDisplayNameObserved) {
+      ui.refreshMatrixTranscriptDisplayName(sid, nick);
+    }
+    TargetRef at = activeTarget;
+    boolean activeMatrixIdentityRefresh =
+        at != null
+            && Objects.equals(at.serverId(), sid)
+            && at.isChannel()
+            && matrixDisplayNameObserved;
+    if (at != null
+        && Objects.equals(at.serverId(), sid)
+        && at.isChannel()
+        && (changedChannels.contains(at.key()) || activeMatrixIdentityRefresh)) {
+      scheduleActiveUsersRefresh(sid, at.target());
     }
 
     return !changedChannels.isEmpty() || userListStore.isNickPresentOnServer(sid, nick);
@@ -378,6 +390,33 @@ public class TargetCoordinator implements ActiveTargetPort {
       return;
     }
     ui.setInputEnabled(connectionCoordinator.isConnected(activeTarget.serverId()));
+  }
+
+  /**
+   * Marks a channel as attached when we observe live channel activity.
+   *
+   * <p>This is primarily used for backends that can surface channel traffic without an explicit
+   * join event during initial sync. User-detached channels remain detached.
+   */
+  public void onChannelActivityObserved(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) return;
+
+    TargetRef target = new TargetRef(sid, ch);
+    if (!target.isChannel()) return;
+
+    ensureTargetExists(target);
+    if (detachedChannelsByUserOrKick.contains(target) || bouncerDetachedChannels.contains(target)) {
+      return;
+    }
+    if (!ui.isChannelDisconnected(target)) return;
+
+    ui.setChannelDisconnected(target, false);
+    if (Objects.equals(activeTarget, target)) {
+      applyTargetContext(target);
+      ui.setChatActiveTarget(target);
+    }
   }
 
   @Override
@@ -544,7 +583,9 @@ public class TargetCoordinator implements ActiveTargetPort {
     ensureTargetExists(target);
 
     channelsClosedByUser.remove(target);
-    runtimeConfig.rememberJoinedChannel(sid, target.target());
+    if (!isQuasselCoreServer(sid)) {
+      runtimeConfig.rememberJoinedChannel(sid, target.target());
+    }
     detachedChannelsByUserOrKick.remove(target);
     bouncerDetachedChannels.remove(target);
     // Keep detached until JOIN is confirmed by the server.
@@ -676,6 +717,18 @@ public class TargetCoordinator implements ActiveTargetPort {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
     return bouncerPlayback.isSojuBouncerAvailable(sid) || bouncerPlayback.isZncBouncerDetected(sid);
+  }
+
+  private boolean isQuasselCoreServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return false;
+    try {
+      var configured = serverRegistry.find(sid);
+      if (configured == null || configured.isEmpty()) return false;
+      return configured.orElseThrow().backend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 
   private Completable bouncerDetach(String serverId, String channel) {
@@ -939,6 +992,13 @@ public class TargetCoordinator implements ActiveTargetPort {
     boolean identUnknown = ident.isEmpty() || "*".equals(ident);
     boolean hostUnknown = host.isEmpty() || "*".equals(host);
     return !(identUnknown && hostUnknown);
+  }
+
+  private static boolean looksLikeMatrixUserId(String token) {
+    String value = Objects.toString(token, "").trim();
+    if (!value.startsWith("@")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
   }
 
   private void scheduleActiveUsersRefresh(String serverId, String channel) {

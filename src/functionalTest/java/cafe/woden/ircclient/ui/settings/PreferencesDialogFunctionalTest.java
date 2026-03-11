@@ -284,6 +284,9 @@ class PreferencesDialogFunctionalTest {
     @SuppressWarnings("unchecked")
     JComboBox<Object> style =
         (JComboBox<Object>) invoke(dialog, "buildTypingTreeIndicatorStyleCombo", current);
+    @SuppressWarnings("unchecked")
+    JComboBox<Object> matrixUserListNameDisplayMode =
+        (JComboBox<Object>) invoke(dialog, "buildMatrixUserListNameDisplayModeCombo", current);
     JCheckBox badgesEnabled =
         (JCheckBox) invoke(dialog, "buildServerTreeNotificationBadgesCheckbox", current);
     JSpinner badgeScale = new JSpinner(new javax.swing.SpinnerNumberModel(100, 50, 150, 5));
@@ -301,6 +304,7 @@ class PreferencesDialogFunctionalTest {
                 transcriptDisplay,
                 sendSignalDisplay,
                 style,
+                matrixUserListNameDisplayMode,
                 badgesEnabled,
                 badgeScale,
                 capabilities);

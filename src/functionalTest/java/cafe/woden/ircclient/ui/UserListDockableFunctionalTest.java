@@ -146,6 +146,7 @@ class UserListDockableFunctionalTest {
         null,
         null,
         null,
+        null,
         new TargetActivationBus(),
         new OutboundLineBus(),
         new NickContextMenuFactory(),

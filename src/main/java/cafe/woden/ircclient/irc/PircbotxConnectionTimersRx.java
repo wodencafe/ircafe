@@ -12,16 +12,14 @@ import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PreDestroy;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.pircbotx.PircBotX;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +33,7 @@ import org.springframework.stereotype.Component;
  * PircbotxBridgeListener} don't need their own executor plumbing.
  */
 @Component
+@InfrastructureLayer
 final class PircbotxConnectionTimersRx {
   private static final Logger log = LoggerFactory.getLogger(PircbotxConnectionTimersRx.class);
 
@@ -46,6 +45,7 @@ final class PircbotxConnectionTimersRx {
   private final ScheduledExecutorService heartbeatExec;
   private final ScheduledExecutorService reconnectExec;
   private final Scheduler heartbeatScheduler;
+  private final Scheduler reconnectScheduler;
 
   // Prevent scheduling (and noisy UndeliverableException logs) during JVM/app shutdown.
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
@@ -65,6 +65,7 @@ final class PircbotxConnectionTimersRx {
     this.heartbeatExec = Objects.requireNonNull(heartbeatExec, "heartbeatExec");
     this.reconnectExec = Objects.requireNonNull(reconnectExec, "reconnectExec");
     this.heartbeatScheduler = Schedulers.from(heartbeatExec);
+    this.reconnectScheduler = Schedulers.from(reconnectExec);
   }
 
   void startHeartbeat(PircbotxConnectionState c) {
@@ -171,43 +172,11 @@ final class PircbotxConnectionTimersRx {
     // Replace any existing scheduled reconnect.
     final Disposable next;
     try {
-      final ScheduledFuture<?> future =
-          reconnectExec.schedule(
-              () -> {
-                if (shuttingDown.get() || c.manualDisconnect.get()) return;
-
-                // If the server was removed while waiting, abort.
-                if (!serverCatalog.containsId(c.serverId)) {
-                  emit.accept(
-                      new ServerIrcEvent(
-                          c.serverId,
-                          new IrcEvent.Error(
-                              Instant.now(), "Reconnect cancelled (server removed)", null)));
-                  return;
-                }
-
-                // Connect is idempotent per-server; it will no-op if already connected.
-                var unused =
-                    connectFn
-                        .apply(c.serverId)
-                        .subscribe(
-                            () -> {},
-                            err -> {
-                              emit.accept(
-                                  new ServerIrcEvent(
-                                      c.serverId,
-                                      new IrcEvent.Error(
-                                          Instant.now(), "Reconnect attempt failed", err)));
-                              // Backoff again.
-                              scheduleReconnect(c, "Reconnect attempt failed", connectFn, emit);
-                            });
-              },
-              delayMs,
-              TimeUnit.MILLISECONDS);
-
-      // RxJava's Disposables helper isn't present in some older RxJava 3 minor lines.
-      // Wrap the ScheduledFuture into a lightweight Disposable.
-      next = futureDisposable(future);
+      next =
+          Completable.timer(delayMs, TimeUnit.MILLISECONDS, reconnectScheduler)
+              .subscribe(
+                  () -> runReconnectAttempt(c, connectFn, emit),
+                  err -> log.debug("[ircafe] Reconnect scheduling failed for {}", c.serverId, err));
     } catch (RejectedExecutionException rejected) {
       // Common during shutdown: executor already terminated.
       log.debug("[ircafe] Reconnect scheduling rejected for {} (likely shutdown)", c.serverId);
@@ -216,6 +185,37 @@ final class PircbotxConnectionTimersRx {
 
     Disposable prev = c.reconnectDisposable.getAndSet(next);
     if (prev != null && !prev.isDisposed()) prev.dispose();
+  }
+
+  private void runReconnectAttempt(
+      PircbotxConnectionState c,
+      Function<String, Completable> connectFn,
+      Consumer<ServerIrcEvent> emit) {
+    if (shuttingDown.get() || c.manualDisconnect.get()) return;
+
+    // If the server was removed while waiting, abort.
+    if (!serverCatalog.containsId(c.serverId)) {
+      emit.accept(
+          new ServerIrcEvent(
+              c.serverId,
+              new IrcEvent.Error(Instant.now(), "Reconnect cancelled (server removed)", null)));
+      return;
+    }
+
+    // Connect is idempotent per-server; it will no-op if already connected.
+    var unused =
+        connectFn
+            .apply(c.serverId)
+            .subscribe(
+                () -> {},
+                err -> {
+                  emit.accept(
+                      new ServerIrcEvent(
+                          c.serverId,
+                          new IrcEvent.Error(Instant.now(), "Reconnect attempt failed", err)));
+                  // Backoff again.
+                  scheduleReconnect(c, "Reconnect attempt failed", connectFn, emit);
+                });
   }
 
   private static long computeBackoffDelayMs(IrcProperties.Reconnect p, long attempt) {
@@ -230,28 +230,6 @@ final class PircbotxConnectionTimersRx {
     double factor = 1.0 + ThreadLocalRandom.current().nextDouble(-jitter, jitter);
     long withJitter = (long) Math.max(0, capped * factor);
     return Math.max(250, withJitter);
-  }
-
-  private static Disposable futureDisposable(Future<?> f) {
-    AtomicReference<Future<?>> ref = new AtomicReference<>(f);
-    return new Disposable() {
-      private final AtomicBoolean disposed = new AtomicBoolean(false);
-
-      @Override
-      public void dispose() {
-        if (disposed.compareAndSet(false, true)) {
-          Future<?> fx = ref.getAndSet(null);
-          if (fx != null) fx.cancel(true);
-        }
-      }
-
-      @Override
-      public boolean isDisposed() {
-        if (disposed.get()) return true;
-        Future<?> fx = ref.get();
-        return fx == null || fx.isCancelled() || fx.isDone();
-      }
-    };
   }
 
   @PreDestroy

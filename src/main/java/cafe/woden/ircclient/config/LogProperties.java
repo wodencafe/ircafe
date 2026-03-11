@@ -1,8 +1,10 @@
 package cafe.woden.ircclient.config;
 
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "ircafe.logging")
+@InfrastructureLayer
 public record LogProperties(
     Boolean enabled,
     Boolean logSoftIgnoredLines,

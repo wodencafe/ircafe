@@ -7,10 +7,12 @@ import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.util.List;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 @Lazy
 public class UiSettingsBus {
 
@@ -287,7 +289,8 @@ public class UiSettingsBus {
             notificationRules,
             props.serverTreeUnreadChannelColor(),
             props.serverTreeHighlightChannelColor(),
-            props.layout() != null && Boolean.TRUE.equals(props.layout().preserveDockLayout()));
+            props.layout() != null && Boolean.TRUE.equals(props.layout().preserveDockLayout()),
+            props.matrixUserListNameDisplayMode());
   }
 
   public UiSettings get() {

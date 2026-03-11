@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
@@ -136,6 +137,29 @@ public class QuasselCoreDatastreamCodec {
     writeSignalProxyPayloadFrame(out, items);
   }
 
+  public void writeSignalProxyInitRequest(
+      OutputStream output, String className, String objectName, List<Object> params)
+      throws IOException {
+    OutputStream out = Objects.requireNonNull(output, "output");
+    String clazz = Objects.toString(className, "").trim();
+    String object = Objects.toString(objectName, "").trim();
+    if (clazz.isEmpty()) {
+      throw new IllegalArgumentException("className is blank");
+    }
+    if (object.isEmpty()) {
+      throw new IllegalArgumentException("objectName is blank");
+    }
+
+    ArrayList<Object> items = new ArrayList<>();
+    items.add(SIGNAL_PROXY_INIT_REQUEST);
+    items.add(clazz.getBytes(StandardCharsets.UTF_8));
+    items.add(object.getBytes(StandardCharsets.UTF_8));
+    if (params != null && !params.isEmpty()) {
+      items.addAll(params);
+    }
+    writeSignalProxyPayloadFrame(out, items);
+  }
+
   public void writeSignalProxyHeartBeatReply(OutputStream output, QtDateTimeValue serverTime)
       throws IOException {
     OutputStream out = Objects.requireNonNull(output, "output");
@@ -245,6 +269,12 @@ public class QuasselCoreDatastreamCodec {
         || "2bufferInfoRemoved(BufferInfo)".equals(slotName)) {
       return List.of(readVariant(payload, 0));
     }
+    // Some cores emit lifecycle updates over rpc slots (for example create/remove notifications).
+    // Preserve params for those slots so higher layers can observe ids and metadata.
+    String normalizedSlot = Objects.toString(slotName, "").trim().toLowerCase(Locale.ROOT);
+    if (normalizedSlot.contains("network") || normalizedSlot.contains("identity")) {
+      return readRemainingVariants(remainingParamCount, payload);
+    }
     // Unknown rpc calls are intentionally ignored for now; we keep frame handling resilient.
     return List.of();
   }
@@ -267,13 +297,15 @@ public class QuasselCoreDatastreamCodec {
     }
     if ("Network".equals(classToken)
         || "NetworkInfo".equals(classToken)
+        || "NetworkConfig".equals(classToken)
+        || "Identity".equals(classToken)
         || "IrcChannel".equals(classToken)
         || "IrcUser".equals(classToken)) {
       return readRemainingVariants(remainingParamCount, payload);
     }
 
-    // Unknown sync/init payload is intentionally skipped.
-    return List.of();
+    // Preserve unknown sync/init payloads so upper layers can inspect and adapt to core variants.
+    return readRemainingVariants(remainingParamCount, payload);
   }
 
   private static List<Object> readRemainingVariants(int count, ByteBuffer payload)
@@ -283,7 +315,7 @@ public class QuasselCoreDatastreamCodec {
     for (int i = 0; i < count; i++) {
       out.add(readVariant(payload, 0));
     }
-    return List.copyOf(out);
+    return Collections.unmodifiableList(out);
   }
 
   private static int asInt(Object value, String context) throws IOException {

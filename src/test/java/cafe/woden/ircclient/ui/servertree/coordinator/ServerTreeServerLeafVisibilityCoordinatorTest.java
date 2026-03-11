@@ -10,6 +10,7 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.mutation.ServerTreeNodeVisibilityMutator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -61,6 +62,7 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
               appliedOrder.set(next);
             },
             sid -> "Server",
+            sid -> false,
             () -> false,
             fixture.leaves::get);
 
@@ -109,6 +111,7 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
             (sn, next) -> {},
             (sn, next) -> {},
             sid -> "Server",
+            sid -> false,
             () -> false,
             fixture.leaves::get);
 
@@ -116,6 +119,99 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
 
     assertFalse(fixture.leaves.containsKey(dccRef));
     assertNull(dccLeaf.getParent());
+  }
+
+  @Test
+  void syncHidesQuasselRootChannelListMonitorAndInterceptors() {
+    String serverId = "quassel";
+    Fixture fixture = new Fixture(serverId);
+
+    DefaultMutableTreeNode channelListLeaf =
+        new DefaultMutableTreeNode(
+            new ServerTreeNodeData(TargetRef.channelList(serverId), "Channel List"));
+    fixture.nodes.serverNode.insert(channelListLeaf, 0);
+    fixture.leaves.put(TargetRef.channelList(serverId), channelListLeaf);
+
+    fixture.nodes.otherNode.add(fixture.nodes.monitorNode);
+    fixture.nodes.otherNode.add(fixture.nodes.interceptorsNode);
+
+    ServerTreeServerLeafVisibilityCoordinator coordinator =
+        new ServerTreeServerLeafVisibilityCoordinator(
+            "Channel List",
+            "Filters",
+            "Ignores",
+            "DCC Transfers",
+            "Notifications",
+            "Log Viewer",
+            fixture.nodeVisibilityMutator,
+            value -> value == null ? "" : value.trim(),
+            sid -> fixture.serverNodesById.get(sid),
+            sid -> new ServerBuiltInNodesVisibility(true, true, true, true, true),
+            sid -> RuntimeConfigStore.ServerTreeBuiltInLayout.defaults(),
+            sid -> RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults(),
+            (sn, next) -> {
+              // Simulate persisted layout reattaching groups under root "Other".
+              if (fixture.nodes.monitorNode.getParent() != fixture.nodes.otherNode) {
+                fixture.nodes.otherNode.add(fixture.nodes.monitorNode);
+              }
+              if (fixture.nodes.interceptorsNode.getParent() != fixture.nodes.otherNode) {
+                fixture.nodes.otherNode.add(fixture.nodes.interceptorsNode);
+              }
+            },
+            (sn, next) -> {},
+            sid -> "Server",
+            sid -> "quassel".equals(sid),
+            () -> true,
+            fixture.leaves::get);
+
+    coordinator.syncUiLeafVisibilityForServer(serverId);
+
+    assertFalse(fixture.leaves.containsKey(TargetRef.channelList(serverId)));
+    assertNull(channelListLeaf.getParent());
+    assertNull(fixture.nodes.monitorNode.getParent());
+    assertNull(fixture.nodes.interceptorsNode.getParent());
+    assertNull(fixture.nodes.pmNode.getParent());
+  }
+
+  @Test
+  void syncKeepsAliasedQuasselChannelListOnNetworkNode() {
+    String serverId = "quassel";
+    Fixture fixture = new Fixture(serverId);
+
+    DefaultMutableTreeNode networkNode = new DefaultMutableTreeNode("network");
+    fixture.nodes.serverNode.insert(networkNode, 0);
+    TargetRef networkChannelListRef = TargetRef.channelList(serverId, "libera");
+    DefaultMutableTreeNode networkChannelListLeaf =
+        new DefaultMutableTreeNode(new ServerTreeNodeData(networkChannelListRef, "Channel List"));
+    networkNode.add(networkChannelListLeaf);
+    fixture.leaves.put(networkChannelListRef, networkChannelListLeaf);
+    fixture.leaves.put(TargetRef.channelList(serverId), networkChannelListLeaf);
+
+    ServerTreeServerLeafVisibilityCoordinator coordinator =
+        new ServerTreeServerLeafVisibilityCoordinator(
+            "Channel List",
+            "Filters",
+            "Ignores",
+            "DCC Transfers",
+            "Notifications",
+            "Log Viewer",
+            fixture.nodeVisibilityMutator,
+            value -> value == null ? "" : value.trim(),
+            sid -> fixture.serverNodesById.get(sid),
+            sid -> new ServerBuiltInNodesVisibility(true, true, true, true, true),
+            sid -> RuntimeConfigStore.ServerTreeBuiltInLayout.defaults(),
+            sid -> RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults(),
+            (sn, next) -> {},
+            (sn, next) -> {},
+            sid -> "Server",
+            sid -> "quassel".equals(sid),
+            () -> true,
+            fixture.leaves::get);
+
+    coordinator.syncUiLeafVisibilityForServer(serverId);
+
+    assertEquals(networkChannelListLeaf, fixture.leaves.get(TargetRef.channelList(serverId)));
+    assertEquals(networkNode, networkChannelListLeaf.getParent());
   }
 
   private static final class Fixture {

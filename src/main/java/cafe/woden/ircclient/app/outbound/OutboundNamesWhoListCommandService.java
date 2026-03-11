@@ -7,11 +7,13 @@ import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /names, /who, and /list command flow. */
 @Component
+@ApplicationLayer
 final class OutboundNamesWhoListCommandService {
 
   private final IrcTargetMembershipPort targetMembership;
@@ -150,7 +152,10 @@ final class OutboundNamesWhoListCommandService {
       return;
     }
 
-    TargetRef channelList = TargetRef.channelList(at.serverId());
+    TargetRef channelList =
+        at.hasNetworkQualifier()
+            ? TargetRef.channelList(at.serverId(), at.networkQualifierToken())
+            : TargetRef.channelList(at.serverId());
     ui.ensureTargetExists(channelList);
     ui.beginChannelList(
         at.serverId(),

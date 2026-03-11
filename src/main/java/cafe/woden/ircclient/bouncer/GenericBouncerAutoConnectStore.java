@@ -3,10 +3,12 @@ package cafe.woden.ircclient.bouncer;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Persisted auto-connect preferences for generic bouncer-discovered networks. */
 @Component
+@ApplicationLayer
 public class GenericBouncerAutoConnectStore extends AbstractBouncerAutoConnectStore {
 
   public GenericBouncerAutoConnectStore(RuntimeConfigStore runtimeConfig) {

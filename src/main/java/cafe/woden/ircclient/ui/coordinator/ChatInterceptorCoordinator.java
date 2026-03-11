@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.coordinator;
 
+import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
@@ -54,14 +55,18 @@ public final class ChatInterceptorCoordinator {
 
                   TargetRef activeTarget = activeTargetSupplier.get();
                   if (activeTarget == null || !activeTarget.isInterceptor()) return;
-                  if (!Objects.equals(activeTarget.serverId(), change.serverId())) return;
+                  String activeScopeServerId =
+                      InterceptorScope.scopedServerIdForTarget(activeTarget);
+                  if (!Objects.equals(activeScopeServerId, change.serverId())) return;
                   if (!Objects.equals(activeTarget.interceptorId(), change.interceptorId())) return;
 
                   SwingUtilities.invokeLater(
                       () -> {
                         dockTitleRefresher.run();
                         interceptorPanel.setInterceptorTarget(
-                            activeTarget.serverId(), activeTarget.interceptorId());
+                            activeTarget.serverId(),
+                            activeTarget.networkQualifierToken(),
+                            activeTarget.interceptorId());
                       });
                 },
                 err -> {
@@ -75,7 +80,7 @@ public final class ChatInterceptorCoordinator {
     if (!leavingInterceptor || enteringInterceptor) return;
 
     try {
-      interceptorPanel.setInterceptorTarget("", "");
+      interceptorPanel.setInterceptorTarget("", "", "");
     } catch (Exception ignored) {
     }
   }

@@ -4,11 +4,13 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /** Tracks per-server nick mention patterns. */
 @Component
+@InterfaceLayer
 @Lazy
 public class MentionPatternRegistry {
 

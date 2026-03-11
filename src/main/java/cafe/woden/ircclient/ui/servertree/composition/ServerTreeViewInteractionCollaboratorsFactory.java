@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.servertree.composition;
 import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.TargetRef;
@@ -22,6 +23,7 @@ import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeNodeBadgeUpdater;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeRuntimeState;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeContextMenuBuilder;
+import cafe.woden.ircclient.ui.servertree.view.ServerTreeQuasselNetworkNodeMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerNodeMenuBuilder;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTargetNodeMenuBuilder;
@@ -35,6 +37,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import javax.swing.Action;
@@ -79,6 +82,8 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             in.nodeClassifier()::isMonitorGroupNode,
             in.nodeClassifier()::isOtherGroupNode,
             in.uiHooks()::isServerNode,
+            in.isQuasselNetworkNode(),
+            in.isQuasselEmptyStateNode(),
             in.uiHooks()::connectionStateForServer,
             Objects.requireNonNull(in.runtimeState(), "runtimeState")::desiredOnlineForServer,
             in.runtimeState()::connectionDiagnosticsTipForServer,
@@ -90,16 +95,21 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             (backendId, originId, networkKey) ->
                 isAutoConnectEnabled(in, backendId, originId, networkKey),
             Objects.requireNonNull(in.isApplicationJfrActive(), "isApplicationJfrActive"),
-            nodeData -> isBouncerControlStatusNode(nodeData, in)));
+            nodeData -> isBouncerControlStatusNode(nodeData, in),
+            in.quasselNetworkTooltip()));
   }
 
   private static ServerTreeContextMenuBuilder createContextMenuBuilder(
       Inputs in, ServerTreeRequestStreams requestStreams) {
     return new ServerTreeContextMenuBuilder(
         ServerTreeContextMenuBuilder.routingContext(
-            in.uiHooks()::isServerNode, in.nodeClassifier()::isInterceptorsGroupNode),
+            in.uiHooks()::isServerNode,
+            in.nodeClassifier()::isInterceptorsGroupNode,
+            in.isQuasselNetworkNode(),
+            in.isQuasselEmptyStateNode()),
         createServerNodeMenuContext(in),
-        createTargetNodeMenuContext(in, requestStreams));
+        createTargetNodeMenuContext(in, requestStreams),
+        createQuasselNetworkNodeMenuContext(in));
   }
 
   private static ServerTreeServerNodeMenuBuilder.Context createServerNodeMenuContext(Inputs in) {
@@ -116,6 +126,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         Objects.requireNonNull(in.openServerInfoDialog(), "openServerInfoDialog"),
         Objects.requireNonNull(in.requestEmitter(), "requestEmitter")::emitOpenQuasselSetup,
         in.requestEmitter()::emitOpenQuasselNetworkManager,
+        serverId -> isQuasselSetupPending(in.runtimeState(), serverId),
         () -> in.interceptorStore() != null,
         in.interceptorActions()::promptAndAddInterceptor,
         () -> in.serverDialogs() != null,
@@ -167,6 +178,64 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         in.interceptorActions()::setInterceptorEnabled,
         in.interceptorActions()::promptRenameInterceptor,
         in.interceptorActions()::confirmDeleteInterceptor);
+  }
+
+  private static ServerTreeQuasselNetworkNodeMenuBuilder.Context
+      createQuasselNetworkNodeMenuContext(Inputs in) {
+    return ServerTreeQuasselNetworkNodeMenuBuilder.context(
+        in.uiHooks()::openPinnedChat,
+        (serverId, networkToken) ->
+            in.requestEmitter()
+                .emitOpenQuasselNetworkManager(
+                    encodeQuasselNetworkManagerAction(serverId, "connect", networkToken)),
+        (serverId, networkToken) ->
+            in.requestEmitter()
+                .emitOpenQuasselNetworkManager(
+                    encodeQuasselNetworkManagerAction(serverId, "disconnect", networkToken)),
+        (serverId, networkToken) ->
+            in.requestEmitter()
+                .emitOpenQuasselNetworkManager(
+                    encodeQuasselNetworkManagerAction(serverId, "remove", networkToken)),
+        serverId ->
+            in.requestEmitter()
+                .emitOpenQuasselNetworkManager(
+                    encodeQuasselNetworkManagerAction(serverId, "add", "")),
+        (serverId, networkToken, networkLabel) ->
+            confirmRemoveQuasselNetwork(in, networkToken, networkLabel),
+        Objects.requireNonNull(in.requestEmitter(), "requestEmitter")::emitOpenQuasselSetup,
+        in.requestEmitter()::emitOpenQuasselNetworkManager,
+        serverId -> isQuasselSetupPending(in.runtimeState(), serverId));
+  }
+
+  private static String encodeQuasselNetworkManagerAction(
+      String serverId, String verb, String networkToken) {
+    String sid = Objects.toString(serverId, "").trim();
+    String op = Objects.toString(verb, "").trim().toLowerCase(java.util.Locale.ROOT);
+    String token = Objects.toString(networkToken, "").trim();
+    if (sid.isEmpty()) return "";
+    if (op.isEmpty()) return sid;
+    if (token.isEmpty()) return sid + " " + op;
+    return sid + " " + op + " " + token;
+  }
+
+  private static boolean confirmRemoveQuasselNetwork(
+      Inputs in, String networkToken, String networkLabel) {
+    String token = Objects.toString(networkToken, "").trim();
+    String label = Objects.toString(networkLabel, "").trim();
+    String display = label.isEmpty() ? token : label;
+    if (display.isEmpty()) display = "this network";
+    Component owner = in.ownerComponent();
+    int choice =
+        JOptionPane.showConfirmDialog(
+            owner,
+            "Remove Quassel network \""
+                + display
+                + "\"?\n\n"
+                + "This removes it from Quassel Core configuration.",
+            "Remove Quassel Network",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE);
+    return choice == JOptionPane.YES_OPTION;
   }
 
   private static java.util.Optional<cafe.woden.ircclient.config.ServerEntry> serverEntry(
@@ -320,6 +389,17 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
     requestStreams.emitChannelModeSetRequest(target, modeSpec);
   }
 
+  private static boolean isQuasselSetupPending(
+      ServerTreeRuntimeState runtimeState, String serverId) {
+    if (runtimeState == null) return false;
+    String diagnostics =
+        Objects.toString(runtimeState.connectionDiagnosticsTipForServer(serverId), "")
+            .toLowerCase(java.util.Locale.ROOT);
+    return diagnostics.contains("setup required")
+        || diagnostics.contains("setup is required")
+        || diagnostics.contains("not configured for client logins");
+  }
+
   private static boolean isBouncerControlStatusNode(ServerTreeNodeData nodeData, Inputs inputs) {
     if (nodeData == null || nodeData.ref == null || !nodeData.ref.isStatus()) {
       return false;
@@ -355,7 +435,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
   private static InterceptorDefinition interceptorDefinition(
       InterceptorStore interceptorStore, TargetRef target) {
     if (interceptorStore == null || target == null || !target.isInterceptor()) return null;
-    String serverId = Objects.toString(target.serverId(), "").trim();
+    String serverId = InterceptorScope.scopedServerIdForTarget(target);
     String interceptorId = Objects.toString(target.interceptorId(), "").trim();
     if (serverId.isEmpty() || interceptorId.isEmpty()) return null;
     return interceptorStore.interceptor(serverId, interceptorId);
@@ -396,5 +476,8 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       Predicate<TargetRef> isChannelMuted,
       BiConsumer<TargetRef, Boolean> setChannelMuted,
       ServerTreeRequestStreams requestStreams,
-      Predicate<TargetRef> canEditChannelModes) {}
+      Predicate<TargetRef> canEditChannelModes,
+      Predicate<javax.swing.tree.DefaultMutableTreeNode> isQuasselNetworkNode,
+      Predicate<javax.swing.tree.DefaultMutableTreeNode> isQuasselEmptyStateNode,
+      BiFunction<String, String, String> quasselNetworkTooltip) {}
 }

@@ -77,6 +77,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -91,6 +92,7 @@ import org.springframework.stereotype.Component;
  * docks) can share them.
  */
 @Component
+@InterfaceLayer
 @Lazy
 public class ChatDockable extends ChatViewPanel implements Dockable {
 
@@ -879,14 +881,22 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private IgnoresPanel createIgnoresPanel(IgnoreListDialog ignoreListDialog) {
     IgnoresPanel panel = new IgnoresPanel();
     panel.setOnOpenIgnoreDialog(
-        serverId -> {
+        targetRef -> {
           if (ignoreListDialog == null) return;
-          String sid = Objects.toString(serverId, "").trim();
+          String sid = ignoreScopeServerId(targetRef);
           if (sid.isEmpty()) return;
           Window owner = SwingUtilities.getWindowAncestor(this);
           ignoreListDialog.open(owner, sid);
         });
     return panel;
+  }
+
+  private static String ignoreScopeServerId(TargetRef targetRef) {
+    if (targetRef == null) return "";
+    String sid = Objects.toString(targetRef.serverId(), "").trim();
+    if (sid.isEmpty()) return "";
+    String token = Objects.toString(targetRef.networkQualifierToken(), "").trim();
+    return token.isEmpty() ? sid : TargetRef.withNetworkQualifier(sid, token);
   }
 
   private void registerCenterCards() {

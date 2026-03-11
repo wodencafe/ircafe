@@ -5,9 +5,11 @@ import cafe.woden.ircclient.irc.IrcEvent.AccountState;
 import cafe.woden.ircclient.irc.IrcEvent.AwayState;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 public class UserListNickTooltipBuilder {
 
   public String build(NickInfo nickInfo, boolean ignored, boolean softIgnored) {

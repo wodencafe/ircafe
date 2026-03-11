@@ -12,11 +12,13 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles reply/reaction/edit/redaction outbound command flows. */
 @Component
+@ApplicationLayer
 final class OutboundMessageMutationCommandService implements OutboundHelpContributor {
 
   private final IrcTargetMembershipPort targetMembership;

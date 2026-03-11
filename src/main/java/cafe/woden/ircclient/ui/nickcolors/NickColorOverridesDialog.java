@@ -32,6 +32,7 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -41,6 +42,7 @@ import org.springframework.stereotype.Component;
  * <p>Overrides are stored under {@code ircafe.ui.nickColorOverrides} in the runtime YAML.
  */
 @Component
+@InterfaceLayer
 @Lazy
 public class NickColorOverridesDialog {
 

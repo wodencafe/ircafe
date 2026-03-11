@@ -9,10 +9,12 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /nick and /away command flow. */
 @Component
+@ApplicationLayer
 final class OutboundNickAwayCommandService {
 
   private final IrcClientService irc;

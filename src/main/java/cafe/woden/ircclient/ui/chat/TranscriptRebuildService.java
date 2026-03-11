@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  * filtering/placeholder folding can be applied to already-existing messages.
  */
 @Component
+@InterfaceLayer
 @Lazy
 public class TranscriptRebuildService {
 

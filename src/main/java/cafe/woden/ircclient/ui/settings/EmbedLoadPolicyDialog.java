@@ -30,11 +30,13 @@ import javax.swing.UIManager;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import net.miginfocom.swing.MigLayout;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /** Modal editor for advanced embed/link loading policy settings. */
 @Component
+@InterfaceLayer
 @Lazy
 public class EmbedLoadPolicyDialog {
 

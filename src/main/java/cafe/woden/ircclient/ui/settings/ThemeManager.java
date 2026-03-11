@@ -8,11 +8,13 @@ import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 import java.awt.Window;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 @Lazy
 public class ThemeManager {
 

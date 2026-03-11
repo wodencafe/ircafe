@@ -3,6 +3,7 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Locale;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 /** Decorator that adds lightweight logging around outbound command dispatch. */
 @Component
 @Primary
+@ApplicationLayer
 public class ObservedOutboundCommandDispatcher extends OutboundCommandDispatcherDecorator {
 
   private static final Logger log =

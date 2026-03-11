@@ -9,6 +9,7 @@ import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;
 import cafe.woden.ircclient.model.InterceptorRuleMode;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class InterceptorStoreTest {
@@ -143,6 +144,122 @@ class InterceptorStoreTest {
   }
 
   @Test
+  void networkScopedInterceptorMatchesOnlyItsQualifiedNetwork() throws Exception {
+    InterceptorStore store = new InterceptorStore(200);
+    String scopeServerId = "quassel{net:libera}";
+    try {
+      InterceptorDefinition def = store.createInterceptor(scopeServerId, "Libera watcher");
+      InterceptorDefinition updated =
+          new InterceptorDefinition(
+              def.id(),
+              def.name(),
+              true,
+              scopeServerId,
+              InterceptorRuleMode.GLOB,
+              "#*",
+              InterceptorRuleMode.GLOB,
+              "",
+              false,
+              false,
+              false,
+              "NOTIF_1",
+              false,
+              "",
+              false,
+              "",
+              "",
+              "",
+              List.of(
+                  new InterceptorRule(
+                      true,
+                      "Match",
+                      "message",
+                      InterceptorRuleMode.LIKE,
+                      "ping",
+                      InterceptorRuleMode.GLOB,
+                      "",
+                      InterceptorRuleMode.GLOB,
+                      "")));
+      store.saveInterceptor(scopeServerId, updated);
+
+      store.ingestEvent(
+          "quassel",
+          "#ircafe{net:libera}",
+          "alice",
+          "alice!ident@host.example",
+          "ping",
+          InterceptorEventType.MESSAGE);
+      store.ingestEvent(
+          "quassel",
+          "#ircafe{net:oftc}",
+          "alice",
+          "alice!ident@host.example",
+          "ping",
+          InterceptorEventType.MESSAGE);
+
+      List<InterceptorHit> hits = waitForHits(store, scopeServerId, def.id(), 1);
+      assertEquals(1, hits.size());
+      assertEquals("#ircafe{net:libera}", hits.getFirst().channel());
+    } finally {
+      store.shutdown();
+    }
+  }
+
+  @Test
+  void serverScopedInterceptorStillMatchesQualifiedNetworkChannels() throws Exception {
+    InterceptorStore store = new InterceptorStore(200);
+    try {
+      InterceptorDefinition def = store.createInterceptor("quassel", "Server watcher");
+      InterceptorDefinition updated =
+          new InterceptorDefinition(
+              def.id(),
+              def.name(),
+              true,
+              "quassel",
+              InterceptorRuleMode.GLOB,
+              "#*",
+              InterceptorRuleMode.GLOB,
+              "",
+              false,
+              false,
+              false,
+              "NOTIF_1",
+              false,
+              "",
+              false,
+              "",
+              "",
+              "",
+              List.of(
+                  new InterceptorRule(
+                      true,
+                      "Match",
+                      "message",
+                      InterceptorRuleMode.LIKE,
+                      "ping",
+                      InterceptorRuleMode.GLOB,
+                      "",
+                      InterceptorRuleMode.GLOB,
+                      "")));
+      store.saveInterceptor("quassel", updated);
+
+      store.ingestEvent(
+          "quassel",
+          "#ircafe{net:libera}",
+          "alice",
+          "alice!ident@host.example",
+          "ping",
+          InterceptorEventType.MESSAGE);
+
+      List<InterceptorHit> hits = waitForHits(store, "quassel", def.id(), 1);
+      assertEquals(1, hits.size());
+      assertEquals("#ircafe{net:libera}", hits.getFirst().channel());
+    } finally {
+      store.shutdown();
+    }
+  }
+
+  @Test
   void createsUniqueNamesPerServer() {
     InterceptorStore store = new InterceptorStore(200);
     try {
@@ -150,6 +267,31 @@ class InterceptorStoreTest {
       InterceptorDefinition b = store.createInterceptor("srv", "Watcher");
       assertTrue(b.name().startsWith("Watcher"));
       assertTrue(!a.id().equals(b.id()));
+    } finally {
+      store.shutdown();
+    }
+  }
+
+  @Test
+  void listInterceptorRefsForBaseServerIncludesScopedAndUnscopedKeys() {
+    InterceptorStore store = new InterceptorStore(200);
+    try {
+      InterceptorDefinition root = store.createInterceptor("quassel", "Root watcher");
+      InterceptorDefinition libera =
+          store.createInterceptor("quassel{net:libera}", "Libera watcher");
+      store.createInterceptor("quassel{net:oftc}", "OFTC watcher");
+      store.createInterceptor("libera", "Other backend");
+
+      List<InterceptorStore.ScopedInterceptorRef> refs =
+          store.listInterceptorRefsForBaseServer("quassel");
+      Set<String> keys =
+          refs.stream()
+              .map(ref -> ref.serverId() + "/" + ref.interceptorId())
+              .collect(java.util.stream.Collectors.toSet());
+
+      assertTrue(keys.contains("quassel/" + root.id()));
+      assertTrue(keys.contains("quassel{net:libera}/" + libera.id()));
+      assertTrue(keys.stream().noneMatch(key -> key.startsWith("libera/")));
     } finally {
       store.shutdown();
     }

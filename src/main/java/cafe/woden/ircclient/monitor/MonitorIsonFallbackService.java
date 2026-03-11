@@ -9,7 +9,10 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.PircbotxIsonParsers;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.model.TargetRef;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -21,7 +24,6 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
@@ -47,13 +49,14 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
   private final UiPort ui;
   private final UiSettingsPort uiSettingsPort;
   private final ScheduledExecutorService pollScheduler;
+  private final Scheduler pollTimingScheduler;
   private final Object scheduleLock = new Object();
 
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final ConcurrentHashMap<String, Boolean> connectedByServer = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Boolean> readyByServer = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, Long> nextPollAtMsByServer = new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<String, ScheduledFuture<?>> scheduledPollByServer =
+  private final ConcurrentHashMap<String, Disposable> scheduledPollByServer =
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, PollTimeoutHandle> timeoutByServer =
       new ConcurrentHashMap<>();
@@ -75,6 +78,7 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
     this.ui = Objects.requireNonNull(ui, "ui");
     this.uiSettingsPort = Objects.requireNonNull(uiSettingsPort, "uiSettingsPort");
     this.pollScheduler = Objects.requireNonNull(pollScheduler, "pollScheduler");
+    this.pollTimingScheduler = io.reactivex.rxjava3.schedulers.Schedulers.from(this.pollScheduler);
 
     disposables.add(irc.events().subscribe(this::onEvent, this::onEventError));
     disposables.add(
@@ -365,19 +369,28 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
     synchronized (scheduleLock) {
       if (pollScheduler.isShutdown()) return;
 
-      ScheduledFuture<?> existing = scheduledPollByServer.get(sid);
+      Disposable existing = scheduledPollByServer.get(sid);
       long existingDueAt = nextPollAtMsByServer.getOrDefault(sid, Long.MAX_VALUE);
-      if (existing != null && !existing.isDone() && dueAt >= existingDueAt) {
+      if (existing != null && !existing.isDisposed() && dueAt >= existingDueAt) {
         return;
       }
       if (existing != null) {
-        existing.cancel(false);
+        existing.dispose();
       }
 
       nextPollAtMsByServer.put(sid, dueAt);
       try {
-        ScheduledFuture<?> scheduled =
-            pollScheduler.schedule(() -> runScheduledPoll(sid), delayMs, TimeUnit.MILLISECONDS);
+        Disposable scheduled =
+            Completable.timer(delayMs, TimeUnit.MILLISECONDS, pollTimingScheduler)
+                .subscribe(
+                    () -> {
+                      scheduledPollByServer.remove(sid);
+                      runScheduledPoll(sid);
+                    },
+                    err -> {
+                      scheduledPollByServer.remove(sid);
+                      log.debug("[{}] monitor fallback poll schedule failed", sid, err);
+                    });
         scheduledPollByServer.put(sid, scheduled);
       } catch (RejectedExecutionException ex) {
         log.debug("[{}] monitor fallback poll schedule rejected", sid, ex);
@@ -398,13 +411,15 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
 
       PollTimeoutHandle existing = timeoutByServer.remove(sid);
       if (existing != null) {
-        existing.future.cancel(false);
+        existing.future.dispose();
       }
 
       try {
-        ScheduledFuture<?> timeout =
-            pollScheduler.schedule(
-                () -> onPollTimeout(sid, cycle), POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        Disposable timeout =
+            Completable.timer(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS, pollTimingScheduler)
+                .subscribe(
+                    () -> onPollTimeout(sid, cycle),
+                    err -> log.debug("[{}] monitor fallback timeout schedule failed", sid, err));
         timeoutByServer.put(sid, new PollTimeoutHandle(cycle, timeout));
       } catch (RejectedExecutionException ex) {
         log.debug("[{}] monitor fallback timeout schedule rejected", sid, ex);
@@ -431,7 +446,7 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
       if (handle == null) return;
       if (cycle != null && handle.cycle != cycle) return;
       if (timeoutByServer.remove(sid, handle)) {
-        handle.future.cancel(false);
+        handle.future.dispose();
       }
     }
   }
@@ -484,9 +499,9 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
     if (sid.isEmpty()) return;
 
     synchronized (scheduleLock) {
-      ScheduledFuture<?> scheduled = scheduledPollByServer.remove(sid);
+      Disposable scheduled = scheduledPollByServer.remove(sid);
       if (scheduled != null) {
-        scheduled.cancel(false);
+        scheduled.dispose();
       }
       if (clearDueAt) {
         nextPollAtMsByServer.remove(sid);
@@ -496,15 +511,15 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
 
   private void cancelAllSchedules() {
     synchronized (scheduleLock) {
-      for (ScheduledFuture<?> scheduled : scheduledPollByServer.values()) {
+      for (Disposable scheduled : scheduledPollByServer.values()) {
         if (scheduled != null) {
-          scheduled.cancel(false);
+          scheduled.dispose();
         }
       }
       scheduledPollByServer.clear();
       for (PollTimeoutHandle handle : timeoutByServer.values()) {
         if (handle != null) {
-          handle.future.cancel(false);
+          handle.future.dispose();
         }
       }
       timeoutByServer.clear();
@@ -569,9 +584,9 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
 
   private static final class PollTimeoutHandle {
     final PollCycle cycle;
-    final ScheduledFuture<?> future;
+    final Disposable future;
 
-    PollTimeoutHandle(PollCycle cycle, ScheduledFuture<?> future) {
+    PollTimeoutHandle(PollCycle cycle, Disposable future) {
       this.cycle = cycle;
       this.future = future;
     }

@@ -31,6 +31,8 @@ class ServerTreeTooltipProviderContextTest {
             value -> true,
             value -> false,
             value -> true,
+            value -> value == node,
+            value -> false,
             serverId -> ConnectionState.CONNECTED,
             serverId -> true,
             serverId -> " diagnostic",
@@ -47,7 +49,8 @@ class ServerTreeTooltipProviderContextTest {
             serverId -> "Libera",
             (backendId, originId, networkKey) -> ServerTreeBouncerBackends.SOJU.equals(backendId),
             () -> true,
-            value -> value == nodeData);
+            value -> value == nodeData,
+            (serverId, networkToken) -> "tip " + serverId + "/" + networkToken);
 
     assertEquals("libera", context.serverIdAt(1, 2));
     assertSame(path, context.serverPathForId("libera"));
@@ -58,6 +61,8 @@ class ServerTreeTooltipProviderContextTest {
     assertTrue(context.isMonitorGroupNode(node));
     assertFalse(context.isOtherGroupNode(node));
     assertTrue(context.isServerNode(node));
+    assertTrue(context.isQuasselNetworkNode(node));
+    assertFalse(context.isQuasselEmptyStateNode(node));
     assertEquals(ConnectionState.CONNECTED, context.connectionStateForServer("libera"));
     assertTrue(context.desiredOnlineForServer("libera"));
     assertEquals(" diagnostic", context.connectionDiagnosticsTipForServer("libera"));
@@ -74,5 +79,6 @@ class ServerTreeTooltipProviderContextTest {
         context.isAutoConnectEnabled(ServerTreeBouncerBackends.GENERIC, "origin-c", "Libera"));
     assertTrue(context.isApplicationJfrActive());
     assertTrue(context.isBouncerControlStatusNode(nodeData));
+    assertEquals("tip libera/libera", context.quasselNetworkTooltip("libera", "libera"));
   }
 }

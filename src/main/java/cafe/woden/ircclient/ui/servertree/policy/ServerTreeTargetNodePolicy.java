@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.policy;
 
+import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
@@ -44,9 +45,10 @@ public final class ServerTreeTargetNodePolicy {
     if (ref == null) return "";
     if (ref.isNotifications()) return notificationsLabel;
     if (ref.isInterceptor()) {
+      String scopeServerId = InterceptorScope.scopedServerIdForTarget(ref);
       String name =
           interceptorStore != null
-              ? interceptorStore.interceptorName(ref.serverId(), ref.interceptorId())
+              ? interceptorStore.interceptorName(scopeServerId, ref.interceptorId())
               : "";
       String normalized = Objects.toString(name, "").trim();
       return normalized.isEmpty() ? interceptorLabel : normalized;
@@ -56,6 +58,57 @@ public final class ServerTreeTargetNodePolicy {
     if (ref.isWeechatFilters()) return weechatFiltersLabel;
     if (ref.isIgnores()) return ignoresLabel;
     if (ref.isDccTransfers()) return dccTransfersLabel;
-    return ref.target();
+    return simplifyMatrixAddress(ref.baseTarget());
+  }
+
+  private static String simplifyMatrixAddress(String rawTarget) {
+    String target = Objects.toString(rawTarget, "").trim();
+    if (target.isEmpty()) return "";
+    if (target.startsWith("#")) {
+      String local = matrixLocalpart(target);
+      if (local.isEmpty()) return target;
+      String bridged = extractBridgedIrcChannel(local);
+      return bridged.isEmpty() ? local : bridged;
+    }
+    if (target.startsWith("@") || target.startsWith("!")) {
+      String local = matrixLocalpart(target);
+      return local.isEmpty() ? target : local;
+    }
+    return target;
+  }
+
+  private static String matrixLocalpart(String value) {
+    String token = Objects.toString(value, "").trim();
+    if (token.isEmpty()) return "";
+    int colon = token.indexOf(':');
+    if (colon <= 1 || colon >= token.length() - 1) return token;
+    return token.substring(0, colon);
+  }
+
+  private static String extractBridgedIrcChannel(String localAlias) {
+    String alias = Objects.toString(localAlias, "").trim();
+    if (alias.length() < 6 || !alias.startsWith("#")) return "";
+    int marker = alias.indexOf("_#");
+    if (marker < 2 || marker >= alias.length() - 1) return "";
+    if (!looksLikeBridgePrefix(alias.substring(1, marker))) return "";
+    String channel = alias.substring(marker + 1);
+    return channel.startsWith("#") ? channel : "";
+  }
+
+  private static boolean looksLikeBridgePrefix(String prefix) {
+    String value = Objects.toString(prefix, "").trim();
+    if (value.isEmpty()) return false;
+    for (int i = 0; i < value.length(); i++) {
+      char ch = value.charAt(i);
+      boolean allowed =
+          (ch >= 'a' && ch <= 'z')
+              || (ch >= 'A' && ch <= 'Z')
+              || (ch >= '0' && ch <= '9')
+              || ch == '_'
+              || ch == '-'
+              || ch == '.';
+      if (!allowed) return false;
+    }
+    return true;
   }
 }

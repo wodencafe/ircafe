@@ -11,10 +11,12 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles {@code /monitor} command family. */
 @Component
+@ApplicationLayer
 public class OutboundMonitorCommandService {
   private static final int DEFAULT_MONITOR_CHUNK = 100;
 

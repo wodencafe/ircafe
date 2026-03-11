@@ -22,6 +22,8 @@ public final class ServerTreeSelectionPersistencePolicy {
     boolean isMonitorGroupNode(DefaultMutableTreeNode node);
 
     boolean isInterceptorsGroupNode(DefaultMutableTreeNode node);
+
+    TargetRef syntheticTargetForNode(DefaultMutableTreeNode node);
   }
 
   public static Context context(
@@ -30,13 +32,15 @@ public final class ServerTreeSelectionPersistencePolicy {
       Supplier<DefaultMutableTreeNode> selectedTreeNode,
       Function<DefaultMutableTreeNode, String> owningServerIdForNode,
       Predicate<DefaultMutableTreeNode> isMonitorGroupNode,
-      Predicate<DefaultMutableTreeNode> isInterceptorsGroupNode) {
+      Predicate<DefaultMutableTreeNode> isInterceptorsGroupNode,
+      Function<DefaultMutableTreeNode, TargetRef> syntheticTargetForNode) {
     Objects.requireNonNull(lastBroadcastSelection, "lastBroadcastSelection");
     Objects.requireNonNull(selectedTargetRef, "selectedTargetRef");
     Objects.requireNonNull(selectedTreeNode, "selectedTreeNode");
     Objects.requireNonNull(owningServerIdForNode, "owningServerIdForNode");
     Objects.requireNonNull(isMonitorGroupNode, "isMonitorGroupNode");
     Objects.requireNonNull(isInterceptorsGroupNode, "isInterceptorsGroupNode");
+    Objects.requireNonNull(syntheticTargetForNode, "syntheticTargetForNode");
     return new Context() {
       @Override
       public TargetRef lastBroadcastSelection() {
@@ -67,6 +71,11 @@ public final class ServerTreeSelectionPersistencePolicy {
       public boolean isInterceptorsGroupNode(DefaultMutableTreeNode node) {
         return isInterceptorsGroupNode.test(node);
       }
+
+      @Override
+      public TargetRef syntheticTargetForNode(DefaultMutableTreeNode node) {
+        return syntheticTargetForNode.apply(node);
+      }
     };
   }
 
@@ -95,6 +104,6 @@ public final class ServerTreeSelectionPersistencePolicy {
     if (context.isInterceptorsGroupNode(node)) {
       return TargetRef.interceptorsGroup(serverId);
     }
-    return null;
+    return context.syntheticTargetForNode(node);
   }
 }

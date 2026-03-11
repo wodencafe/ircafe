@@ -52,10 +52,25 @@ class ServerEditorDialogFunctionalTest {
     JTextField hostField = readField(dialog, "hostField", JTextField.class);
     JTextField nickField = readField(dialog, "nickField", JTextField.class);
     JTextField loginField = readField(dialog, "loginField", JTextField.class);
-    JTextField serverPassField = readField(dialog, "serverPassField", JTextField.class);
+    JPasswordField serverPassField = readField(dialog, "serverPassField", JPasswordField.class);
     JButton saveBtn = readField(dialog, "saveBtn", JButton.class);
 
     try {
+      JTabbedPane tabs = onEdtCall(() -> findDescendant(dialog, JTabbedPane.class));
+      assertNotNull(tabs, "server dialog should contain tabs");
+      int authTabIndex = onEdtCall(() -> tabs.indexOfTab("Auth"));
+      int connectionTabIndex = onEdtCall(() -> tabs.indexOfTab("Connection"));
+      assertTrue(authTabIndex >= 0, "auth tab should be present");
+      assertTrue(connectionTabIndex >= 0, "connection tab should be present");
+      Component authTabComponent = onEdtCall(() -> tabs.getComponentAt(authTabIndex));
+      Component connectionTabComponent = onEdtCall(() -> tabs.getComponentAt(connectionTabIndex));
+      assertTrue(
+          onEdtCall(() -> isDescendant(authTabComponent, serverPassField)),
+          "server/core password field should be on Auth tab");
+      assertFalse(
+          onEdtCall(() -> isDescendant(connectionTabComponent, serverPassField)),
+          "server/core password field should not live on Connection tab");
+
       onEdt(() -> assertEquals("6697", portField.getText(), "tls default should set secure port"));
       onEdt(
           () ->
@@ -63,6 +78,13 @@ class ServerEditorDialogFunctionalTest {
                   IrcProperties.Server.Backend.IRC,
                   backendCombo.getSelectedItem(),
                   "new servers should default to IRC backend"));
+      onEdt(
+          () -> {
+            assertTrue(serverPassField.isVisible(), "auth password field should be visible on IRC");
+            assertTrue(
+                serverPassField.getPreferredSize().width > 100,
+                "auth password field should have usable width");
+          });
 
       onEdt(tlsBox::doClick);
       onEdt(() -> assertEquals("6667", portField.getText(), "plain mode should use 6667"));
@@ -166,9 +188,10 @@ class ServerEditorDialogFunctionalTest {
     JTextField idField = readField(dialog, "idField", JTextField.class);
     JTextField hostField = readField(dialog, "hostField", JTextField.class);
     JTextField portField = readField(dialog, "portField", JTextField.class);
-    JTextField serverPassField = readField(dialog, "serverPassField", JTextField.class);
+    JPasswordField serverPassField = readField(dialog, "serverPassField", JPasswordField.class);
     JComboBox<?> backendCombo = readField(dialog, "backendCombo", JComboBox.class);
     JComboBox<?> authModeCombo = readField(dialog, "authModeCombo", JComboBox.class);
+    JComboBox<?> matrixAuthModeCombo = readField(dialog, "matrixAuthModeCombo", JComboBox.class);
     JCheckBox tlsBox = readField(dialog, "tlsBox", JCheckBox.class);
     JLabel hostLabel = readField(dialog, "hostLabel", JLabel.class);
     JLabel serverPasswordLabel = readField(dialog, "serverPasswordLabel", JLabel.class);
@@ -185,8 +208,11 @@ class ServerEditorDialogFunctionalTest {
           () -> {
             assertEquals("Homeserver", hostLabel.getText());
             assertEquals("Access token", serverPasswordLabel.getText());
+            assertEquals(0, matrixAuthModeCombo.getSelectedIndex());
             assertEquals("443", portField.getText(), "matrix backend should default to TLS 443");
             assertFalse(authModeCombo.isEnabled(), "Matrix backend should disable IRC auth mode");
+            assertFalse(
+                authModeCombo.isVisible(), "Matrix backend should hide IRC auth method row");
             assertFalse(saveBtn.isEnabled(), "matrix backend should require access token");
           });
 
@@ -216,6 +242,66 @@ class ServerEditorDialogFunctionalTest {
       Object nickserv = nickservMethod.invoke(server);
       Method nickservEnabled = nickserv.getClass().getMethod("enabled");
       assertEquals(Boolean.FALSE, nickservEnabled.invoke(nickserv));
+    } finally {
+      onEdt(dialog::dispose);
+      flushEdt();
+    }
+  }
+
+  @Test
+  void matrixBackendSupportsUsernamePasswordAuthMode() throws Exception {
+    Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "dialog UI requires a display");
+
+    ServerEditorDialog dialog = onEdtCall(() -> new ServerEditorDialog(null, "Add Server", null));
+    JTextField idField = readField(dialog, "idField", JTextField.class);
+    JTextField hostField = readField(dialog, "hostField", JTextField.class);
+    JPasswordField serverPassField = readField(dialog, "serverPassField", JPasswordField.class);
+    JTextField matrixAuthUserField = readField(dialog, "matrixAuthUserField", JTextField.class);
+    JComboBox<?> backendCombo = readField(dialog, "backendCombo", JComboBox.class);
+    JComboBox<?> matrixAuthModeCombo = readField(dialog, "matrixAuthModeCombo", JComboBox.class);
+    JLabel serverPasswordLabel = readField(dialog, "serverPasswordLabel", JLabel.class);
+    JButton saveBtn = readField(dialog, "saveBtn", JButton.class);
+
+    try {
+      onEdt(
+          () -> {
+            idField.setText("matrix");
+            hostField.setText("https://matrix.example.org");
+            backendCombo.setSelectedItem(IrcProperties.Server.Backend.MATRIX);
+            matrixAuthModeCombo.setSelectedIndex(1);
+          });
+
+      onEdt(() -> assertEquals("Password", serverPasswordLabel.getText()));
+      onEdt(() -> assertFalse(saveBtn.isEnabled(), "matrix password mode requires both fields"));
+
+      onEdt(() -> matrixAuthUserField.setText("alice"));
+      onEdt(() -> assertFalse(saveBtn.isEnabled(), "matrix password mode requires password"));
+      onEdt(() -> serverPassField.setText("matrix-password"));
+      waitFor(() -> onEdtBoolean(saveBtn::isEnabled), Duration.ofSeconds(2));
+
+      onEdt(saveBtn::doClick);
+
+      Optional<?> result = readField(dialog, "result", Optional.class);
+      assertTrue(result.isPresent(), "save should produce a server result");
+      Object server = result.get();
+
+      Method backend = server.getClass().getMethod("backend");
+      assertEquals(IrcProperties.Server.Backend.MATRIX, backend.invoke(server));
+      Method serverPassword = server.getClass().getMethod("serverPassword");
+      assertEquals("", serverPassword.invoke(server));
+      Method login = server.getClass().getMethod("login");
+      assertEquals("alice", login.invoke(server));
+
+      Method saslMethod = server.getClass().getMethod("sasl");
+      Object sasl = saslMethod.invoke(server);
+      Method saslEnabled = sasl.getClass().getMethod("enabled");
+      Method saslUser = sasl.getClass().getMethod("username");
+      Method saslPassword = sasl.getClass().getMethod("password");
+      Method saslMechanism = sasl.getClass().getMethod("mechanism");
+      assertEquals(Boolean.TRUE, saslEnabled.invoke(sasl));
+      assertEquals("alice", saslUser.invoke(sasl));
+      assertEquals("matrix-password", saslPassword.invoke(sasl));
+      assertEquals("MATRIX_PASSWORD", saslMechanism.invoke(sasl));
     } finally {
       onEdt(dialog::dispose);
       flushEdt();
@@ -266,6 +352,16 @@ class ServerEditorDialogFunctionalTest {
       }
     }
     return null;
+  }
+
+  private static boolean isDescendant(Component root, Component target) {
+    if (root == null || target == null) return false;
+    if (root == target) return true;
+    if (!(root instanceof Container container)) return false;
+    for (Component child : container.getComponents()) {
+      if (isDescendant(child, target)) return true;
+    }
+    return false;
   }
 
   private static void waitFor(BooleanSupplier condition, Duration timeout) throws Exception {

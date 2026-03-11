@@ -12,6 +12,7 @@ import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
 import cafe.woden.ircclient.ui.coordinator.DccActionCoordinator;
 import cafe.woden.ircclient.ui.ignore.IgnoreListDialog;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.userlist.UserListIgnorePromptHandler;
 import cafe.woden.ircclient.ui.userlist.UserListNickCellRenderer;
 import cafe.woden.ircclient.ui.userlist.UserListNickListView;
@@ -38,10 +39,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import javax.swing.*;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
+@InterfaceLayer
 @Lazy
 public class UserListDockable extends JPanel implements Dockable, Scrollable {
   public static final String ID = "users";
@@ -68,8 +71,11 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
       PublishProcessor.<UserActionRequest>create().toSerialized();
 
   private final NickColorSettingsBus nickColorSettingsBus;
+  private final UiSettingsBus settingsBus;
+  private final UserListNickCellRenderer cellRenderer;
 
   private final PropertyChangeListener nickColorSettingsListener = this::onNickColorSettingsChanged;
+  private final PropertyChangeListener uiSettingsListener = this::onUiSettingsChanged;
 
   private final TargetActivationBus activationBus;
   private final OutboundLineBus outboundBus;
@@ -93,6 +99,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   public UserListDockable(
       NickColorService nickColors,
       NickColorSettingsBus nickColorSettingsBus,
+      UiSettingsBus settingsBus,
       IgnoreListService ignoreListService,
       IgnoreListDialog ignoreDialog,
       IgnoreStatusService ignoreStatusService,
@@ -105,6 +112,7 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
     setMinimumSize(new Dimension(0, 0));
 
     this.nickColorSettingsBus = nickColorSettingsBus;
+    this.settingsBus = settingsBus;
 
     this.ignoreListService = ignoreListService;
     this.tooltipBuilder = Objects.requireNonNull(tooltipBuilder, "tooltipBuilder");
@@ -176,9 +184,18 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
 
     list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
     list.setToolTipText("");
-    list.setCellRenderer(
+    String matrixUserListNameDisplayMode =
+        settingsBus != null && settingsBus.get() != null
+            ? settingsBus.get().matrixUserListNameDisplayMode()
+            : "compact";
+    this.cellRenderer =
         new UserListNickCellRenderer(
-            nickColors, this::ignoreMark, this::typingAlphaForNick, this::isPausedTypingForNick));
+            nickColors,
+            this::ignoreMark,
+            this::typingAlphaForNick,
+            this::isPausedTypingForNick,
+            matrixUserListNameDisplayMode);
+    list.setCellRenderer(cellRenderer);
     typingIndicatorTimer.setRepeats(true);
     list.addHierarchyListener(
         e -> {
@@ -207,6 +224,10 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
     enforceNoHorizontalScrollBar(scroll);
 
     add(scroll, BorderLayout.CENTER);
+    if (this.settingsBus != null) {
+      this.settingsBus.addListener(uiSettingsListener);
+      closeables.addCleanup(() -> this.settingsBus.removeListener(uiSettingsListener));
+    }
     if (ignoreListService != null) {
       var d =
           ignoreListService
@@ -288,6 +309,10 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
       clearTypingIndicators();
     }
     list.repaint();
+  }
+
+  public TargetRef activeTarget() {
+    return active;
   }
 
   public void setNicks(List<NickInfo> nicks) {
@@ -540,6 +565,24 @@ public class UserListDockable extends JPanel implements Dockable, Scrollable {
   private void onNickColorSettingsChanged(PropertyChangeEvent evt) {
     if (!NickColorSettingsBus.PROP_NICK_COLOR_SETTINGS.equals(evt.getPropertyName())) return;
     SwingUtilities.invokeLater(list::repaint);
+  }
+
+  private void onUiSettingsChanged(PropertyChangeEvent evt) {
+    if (!UiSettingsBus.PROP_UI_SETTINGS.equals(evt.getPropertyName())) return;
+    Runnable applyUpdate =
+        () -> {
+          String matrixUserListNameDisplayMode =
+              settingsBus != null && settingsBus.get() != null
+                  ? settingsBus.get().matrixUserListNameDisplayMode()
+                  : "compact";
+          cellRenderer.setMatrixUserListNameDisplayMode(matrixUserListNameDisplayMode);
+          list.repaint();
+        };
+    if (SwingUtilities.isEventDispatchThread()) {
+      applyUpdate.run();
+    } else {
+      SwingUtilities.invokeLater(applyUpdate);
+    }
   }
 
   @Override

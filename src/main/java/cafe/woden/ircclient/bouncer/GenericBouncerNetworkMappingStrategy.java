@@ -7,10 +7,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Generic fallback mapping strategy for bouncer protocols exposing standard discovery events. */
 @Component
+@ApplicationLayer
 public class GenericBouncerNetworkMappingStrategy implements BouncerNetworkMappingStrategy {
 
   public static final String BACKEND_ID = "generic";

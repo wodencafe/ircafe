@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.model.TargetRef;
 import java.awt.Component;
 import java.awt.Container;
 import java.lang.reflect.InvocationTargetException;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -34,7 +36,8 @@ class IgnoresPanelTest {
 
     onEdt(
         () -> {
-          panel.setOnOpenIgnoreDialog(openedFor::set);
+          panel.setOnOpenIgnoreDialog(
+              ref -> openedFor.set(ref == null ? "" : Objects.toString(ref.serverId(), "")));
           panel.setServerId("  libera  ");
         });
 
@@ -52,7 +55,8 @@ class IgnoresPanelTest {
 
     onEdt(
         () -> {
-          panel.setOnOpenIgnoreDialog(openedFor::set);
+          panel.setOnOpenIgnoreDialog(
+              ref -> openedFor.set(ref == null ? "" : Objects.toString(ref.serverId(), "")));
           panel.setServerId(" ");
         });
 
@@ -86,7 +90,8 @@ class IgnoresPanelTest {
 
     onEdt(
         () -> {
-          panel.setOnOpenIgnoreDialog(openedFor::set);
+          panel.setOnOpenIgnoreDialog(
+              ref -> openedFor.set(ref == null ? "" : Objects.toString(ref.serverId(), "")));
           panel.setServerId("bad id");
         });
 
@@ -95,6 +100,17 @@ class IgnoresPanelTest {
     onEdt(openButton::doClick);
 
     assertEquals("unset", openedFor.get());
+  }
+
+  @Test
+  void setTargetShowsNetworkScopedServerLabel() throws Exception {
+    IgnoresPanel panel = onEdtCall(IgnoresPanel::new);
+
+    onEdt(() -> panel.setTarget(TargetRef.ignores("quassel", "libera")));
+
+    JLabel label = findLabelStartingWith(panel, "Server:");
+    assertNotNull(label);
+    assertEquals("Server: quassel (network: libera)", onEdtCall(label::getText));
   }
 
   private static JButton findButtonByText(Component root, String text)

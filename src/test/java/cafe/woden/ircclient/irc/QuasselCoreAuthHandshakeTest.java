@@ -24,6 +24,8 @@ class QuasselCoreAuthHandshakeTest {
     QuasselCoreAuthHandshake handshake = new QuasselCoreAuthHandshake(codec);
     QuasselCoreDatastreamCodec.BufferInfoValue initialStatusBuffer =
         new QuasselCoreDatastreamCodec.BufferInfoValue(5, 7, 0x01, -1, "status");
+    Map<String, Object> initialIdentity =
+        Map.of("identityId", 1, "identityName", "quassel-user", "nicks", List.of("quassel-user"));
 
     byte[] inbound =
         encodeFrames(
@@ -42,7 +44,7 @@ class QuasselCoreAuthHandshakeTest {
                         java.util.Map.of(
                             "BufferInfos", List.of(initialStatusBuffer),
                             "NetworkIds", List.of(7),
-                            "Identities", List.of())))));
+                            "Identities", List.of(initialIdentity))))));
 
     ScriptedSocket socket = new ScriptedSocket(inbound);
     IrcProperties.Server server = server("alice", "secret");
@@ -53,6 +55,7 @@ class QuasselCoreAuthHandshakeTest {
     assertEquals(7, result.primaryNetworkId());
     assertEquals(List.of(7), result.networkIds());
     assertEquals(java.util.Map.of(5, initialStatusBuffer), result.initialBuffers());
+    assertEquals("quassel-user", result.initialIdentities().get(1).get("identityName"));
 
     ByteArrayInputStream outbound = new ByteArrayInputStream(socket.writtenBytes());
     QuasselCoreDatastreamCodec.HandshakeMessage first = codec.readHandshakeMessage(outbound);

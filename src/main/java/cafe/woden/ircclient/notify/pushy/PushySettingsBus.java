@@ -1,11 +1,13 @@
 package cafe.woden.ircclient.notify.pushy;
 
 import cafe.woden.ircclient.config.PushyProperties;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
 @Lazy
+@ApplicationLayer
 public class PushySettingsBus {
 
   private volatile PushyProperties current;

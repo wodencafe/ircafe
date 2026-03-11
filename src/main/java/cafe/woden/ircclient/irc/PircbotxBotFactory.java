@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.CoreHooks;
@@ -40,6 +41,7 @@ import org.springframework.stereotype.Component;
 
 /** Factory for building a configured {@link PircBotX} instance for a given server. */
 @Component
+@InfrastructureLayer
 public class PircbotxBotFactory {
 
   private static final long DEFAULT_MESSAGE_DELAY_MS = 200L;

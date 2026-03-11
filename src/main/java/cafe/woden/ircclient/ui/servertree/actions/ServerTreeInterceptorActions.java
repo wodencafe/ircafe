@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.actions;
 
+import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import java.awt.Component;
 import java.awt.Window;
@@ -99,8 +99,9 @@ public final class ServerTreeInterceptorActions {
 
   public void promptAndAddInterceptor(String serverId) {
     if (interceptorStore == null) return;
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty()) return;
+    String scopeServerId = normalizeScopeServerId(serverId);
+    String baseServerId = baseServerId(scopeServerId);
+    if (scopeServerId.isEmpty() || baseServerId.isEmpty()) return;
 
     Window owner = SwingUtilities.getWindowAncestor(ownerComponent);
     Object input =
@@ -118,21 +119,23 @@ public final class ServerTreeInterceptorActions {
     if (requested.isEmpty()) return;
 
     try {
-      InterceptorDefinition definition = interceptorStore.createInterceptor(sid, requested);
-      TargetRef ref = TargetRef.interceptor(sid, definition.id());
+      InterceptorDefinition definition =
+          interceptorStore.createInterceptor(scopeServerId, requested);
+      TargetRef ref = InterceptorScope.interceptorRef(scopeServerId, definition.id());
+      if (ref == null) return;
       context.ensureNode(ref);
-      refreshInterceptorNodeLabel(sid, definition.id());
-      refreshInterceptorGroupCount(sid);
+      refreshInterceptorNodeLabel(scopeServerId, definition.id());
+      refreshInterceptorGroupCount(scopeServerId);
       context.selectTarget(ref);
     } catch (Exception ex) {
-      log.warn("[ircafe] could not add interceptor for server {}", sid, ex);
+      log.warn("[ircafe] could not add interceptor for server {}", baseServerId, ex);
     }
   }
 
   public void promptRenameInterceptor(TargetRef ref, String currentLabel) {
     if (interceptorStore == null || ref == null || !ref.isInterceptor()) return;
 
-    String sid = normalizeServerId(ref.serverId());
+    String sid = normalizeScopeServerId(InterceptorScope.scopedServerIdForTarget(ref));
     String iid = normalizeInterceptorId(ref.interceptorId());
     if (sid.isEmpty() || iid.isEmpty()) return;
 
@@ -160,14 +163,14 @@ public final class ServerTreeInterceptorActions {
         refreshInterceptorNodeLabel(sid, iid);
       }
     } catch (Exception ex) {
-      log.warn("[ircafe] could not rename interceptor {} on {}", iid, sid, ex);
+      log.warn("[ircafe] could not rename interceptor {} on {}", iid, baseServerId(sid), ex);
     }
   }
 
   public void setInterceptorEnabled(TargetRef ref, boolean enabled) {
     if (interceptorStore == null || ref == null || !ref.isInterceptor()) return;
 
-    String sid = normalizeServerId(ref.serverId());
+    String sid = normalizeScopeServerId(InterceptorScope.scopedServerIdForTarget(ref));
     String iid = normalizeInterceptorId(ref.interceptorId());
     if (sid.isEmpty() || iid.isEmpty()) return;
 
@@ -176,14 +179,19 @@ public final class ServerTreeInterceptorActions {
         refreshInterceptorNodeLabel(sid, iid);
       }
     } catch (Exception ex) {
-      log.warn("[ircafe] could not set interceptor enabled={} for {} on {}", enabled, iid, sid, ex);
+      log.warn(
+          "[ircafe] could not set interceptor enabled={} for {} on {}",
+          enabled,
+          iid,
+          baseServerId(sid),
+          ex);
     }
   }
 
   public void confirmDeleteInterceptor(TargetRef ref, String label) {
     if (interceptorStore == null || ref == null || !ref.isInterceptor()) return;
 
-    String sid = normalizeServerId(ref.serverId());
+    String sid = normalizeScopeServerId(InterceptorScope.scopedServerIdForTarget(ref));
     String iid = normalizeInterceptorId(ref.interceptorId());
     if (sid.isEmpty() || iid.isEmpty()) return;
 
@@ -203,23 +211,24 @@ public final class ServerTreeInterceptorActions {
 
     try {
       if (interceptorStore.removeInterceptor(sid, iid)) {
-        context.selectTarget(new TargetRef(sid, "status"));
+        context.selectTarget(new TargetRef(baseServerId(sid), "status"));
         context.removeTarget(ref);
         refreshInterceptorGroupCount(sid);
       }
     } catch (Exception ex) {
-      log.warn("[ircafe] could not delete interceptor {} on {}", iid, sid, ex);
+      log.warn("[ircafe] could not delete interceptor {} on {}", iid, baseServerId(sid), ex);
     }
   }
 
   public void refreshInterceptorNodeLabel(String serverId, String interceptorId) {
     if (interceptorStore == null) return;
 
-    String sid = normalizeServerId(serverId);
+    String sid = normalizeScopeServerId(serverId);
     String iid = normalizeInterceptorId(interceptorId);
     if (sid.isEmpty() || iid.isEmpty()) return;
 
-    TargetRef ref = TargetRef.interceptor(sid, iid);
+    TargetRef ref = InterceptorScope.interceptorRef(sid, iid);
+    if (ref == null) return;
     DefaultMutableTreeNode node = context.leafNode(ref);
     if (node == null) return;
 
@@ -247,10 +256,14 @@ public final class ServerTreeInterceptorActions {
   public void refreshInterceptorGroupCount(String serverId) {
     if (interceptorStore == null) return;
 
-    String sid = normalizeServerId(serverId);
+    String sid = normalizeScopeServerId(serverId);
     if (sid.isEmpty()) return;
 
-    DefaultMutableTreeNode node = context.interceptorsGroupNode(sid);
+    TargetRef groupRef = InterceptorScope.interceptorsGroupRef(sid);
+    DefaultMutableTreeNode node = groupRef == null ? null : context.leafNode(groupRef);
+    if (node == null) {
+      node = context.interceptorsGroupNode(baseServerId(sid));
+    }
     if (node == null) return;
 
     Object userObject = node.getUserObject();
@@ -258,7 +271,7 @@ public final class ServerTreeInterceptorActions {
     if (userObject instanceof ServerTreeNodeData existing) {
       data = existing;
     } else {
-      data = new ServerTreeNodeData(null, interceptorsGroupLabel);
+      data = new ServerTreeNodeData(groupRef, interceptorsGroupLabel);
       node.setUserObject(data);
     }
 
@@ -270,8 +283,12 @@ public final class ServerTreeInterceptorActions {
     context.nodeChanged(node);
   }
 
-  private static String normalizeServerId(String serverId) {
-    return ServerTreeConventions.normalizeServerId(serverId);
+  private static String normalizeScopeServerId(String serverId) {
+    return InterceptorScope.normalizeScopeServerId(serverId);
+  }
+
+  private static String baseServerId(String scopeServerId) {
+    return InterceptorScope.baseServerId(scopeServerId);
   }
 
   private static String normalizeInterceptorId(String interceptorId) {

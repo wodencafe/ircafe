@@ -207,6 +207,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void refreshMatrixTranscriptDisplayName(String serverId, String matrixUserId) {
+    delegate.refreshMatrixTranscriptDisplayName(serverId, matrixUserId);
+  }
+
+  @Override
   public void beginChannelList(String serverId, String banner) {
     delegate.beginChannelList(serverId, banner);
   }
@@ -268,6 +273,12 @@ public abstract class UiPortDecorator implements UiPort {
   public Optional<QuasselNetworkManagerAction> promptQuasselNetworkManagerAction(
       String serverId, List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {
     return delegate.promptQuasselNetworkManagerAction(serverId, networks);
+  }
+
+  @Override
+  public void syncQuasselNetworks(
+      String serverId, List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {
+    delegate.syncQuasselNetworks(serverId, networks);
   }
 
   @Override

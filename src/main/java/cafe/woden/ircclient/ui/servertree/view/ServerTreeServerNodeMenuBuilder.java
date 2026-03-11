@@ -3,7 +3,10 @@ package cafe.woden.ircclient.ui.servertree.view;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.interceptors.InterceptorScope;
+import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
 import java.util.Locale;
 import java.util.Objects;
@@ -19,9 +22,13 @@ import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.tree.DefaultMutableTreeNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Builds server-node and interceptor-group context menus for server tree. */
 public final class ServerTreeServerNodeMenuBuilder {
+
+  private static final Logger log = LoggerFactory.getLogger(ServerTreeServerNodeMenuBuilder.class);
 
   public interface Context {
     boolean isRootServerNode(DefaultMutableTreeNode node);
@@ -47,6 +54,8 @@ public final class ServerTreeServerNodeMenuBuilder {
     void openQuasselSetup(String serverId);
 
     void openQuasselNetworkManager(String serverId);
+
+    boolean isQuasselSetupPending(String serverId);
 
     boolean interceptorStoreAvailable();
 
@@ -103,6 +112,7 @@ public final class ServerTreeServerNodeMenuBuilder {
       Consumer<String> openServerInfoDialog,
       Consumer<String> openQuasselSetup,
       Consumer<String> openQuasselNetworkManager,
+      Function<String, Boolean> isQuasselSetupPending,
       Supplier<Boolean> interceptorStoreAvailable,
       Consumer<String> promptAndAddInterceptor,
       Supplier<Boolean> serverDialogsAvailable,
@@ -130,6 +140,7 @@ public final class ServerTreeServerNodeMenuBuilder {
     Objects.requireNonNull(openServerInfoDialog, "openServerInfoDialog");
     Objects.requireNonNull(openQuasselSetup, "openQuasselSetup");
     Objects.requireNonNull(openQuasselNetworkManager, "openQuasselNetworkManager");
+    Objects.requireNonNull(isQuasselSetupPending, "isQuasselSetupPending");
     Objects.requireNonNull(interceptorStoreAvailable, "interceptorStoreAvailable");
     Objects.requireNonNull(promptAndAddInterceptor, "promptAndAddInterceptor");
     Objects.requireNonNull(serverDialogsAvailable, "serverDialogsAvailable");
@@ -204,6 +215,11 @@ public final class ServerTreeServerNodeMenuBuilder {
       @Override
       public void openQuasselNetworkManager(String serverId) {
         openQuasselNetworkManager.accept(serverId);
+      }
+
+      @Override
+      public boolean isQuasselSetupPending(String serverId) {
+        return Boolean.TRUE.equals(isQuasselSetupPending.apply(serverId));
       }
 
       @Override
@@ -336,22 +352,22 @@ public final class ServerTreeServerNodeMenuBuilder {
             .map(backend -> backend == IrcProperties.Server.Backend.QUASSEL_CORE)
             .orElse(false);
     if (quasselCoreServer) {
-      String diagnostics =
-          Objects.toString(context.connectionDiagnosticsTipForServer(serverId), "")
-              .toLowerCase(Locale.ROOT);
-      boolean setupPending =
-          diagnostics.contains("setup required") || diagnostics.contains("setup is required");
-      JMenuItem runQuasselSetup =
-          new JMenuItem(setupPending ? "Complete Quassel Setup..." : "Run Quassel Setup...");
-      runQuasselSetup.setIcon(SvgIcons.action("edit", 16));
-      runQuasselSetup.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
-      runQuasselSetup.addActionListener(ev -> context.openQuasselSetup(serverId));
-      menu.add(runQuasselSetup);
+      if (context.isQuasselSetupPending(serverId)) {
+        JMenuItem completeQuasselSetup = new JMenuItem("Complete Quassel Setup...");
+        completeQuasselSetup.setIcon(SvgIcons.action("edit", 16));
+        completeQuasselSetup.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
+        completeQuasselSetup.addActionListener(ev -> context.openQuasselSetup(serverId));
+        menu.add(completeQuasselSetup);
+      }
 
       JMenuItem manageQuasselNetworks = new JMenuItem("Manage Quassel Networks...");
       manageQuasselNetworks.setIcon(SvgIcons.action("edit", 16));
       manageQuasselNetworks.setDisabledIcon(SvgIcons.actionDisabled("edit", 16));
-      manageQuasselNetworks.addActionListener(ev -> context.openQuasselNetworkManager(serverId));
+      manageQuasselNetworks.addActionListener(
+          ev -> {
+            log.info("server-tree menu: Manage Quassel Networks clicked for serverId={}", serverId);
+            context.openQuasselNetworkManager(serverId);
+          });
       menu.add(manageQuasselNetworks);
     }
 
@@ -394,17 +410,30 @@ public final class ServerTreeServerNodeMenuBuilder {
   }
 
   JPopupMenu buildInterceptorsGroupMenu(DefaultMutableTreeNode node) {
-    String serverId = context.owningServerIdForNode(node);
-    if (serverId.isEmpty()) return null;
+    String scopeServerId = interceptorScopeServerIdForNode(node);
+    if (scopeServerId.isEmpty()) return null;
 
     JPopupMenu menu = new JPopupMenu();
     JMenuItem addInterceptor = new JMenuItem("Add Interceptor...");
     addInterceptor.setIcon(SvgIcons.action("plus", 16));
     addInterceptor.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
     addInterceptor.setEnabled(context.interceptorStoreAvailable());
-    addInterceptor.addActionListener(ev -> context.promptAndAddInterceptor(serverId));
+    addInterceptor.addActionListener(ev -> context.promptAndAddInterceptor(scopeServerId));
     menu.add(addInterceptor);
     return menu;
+  }
+
+  private String interceptorScopeServerIdForNode(DefaultMutableTreeNode node) {
+    if (node == null) return "";
+    Object userObject = node.getUserObject();
+    if (userObject instanceof ServerTreeNodeData nodeData) {
+      TargetRef ref = nodeData.ref;
+      if (ref != null && ref.isInterceptorsGroup()) {
+        return InterceptorScope.scopedServerIdForTarget(ref);
+      }
+    }
+    String serverId = context.owningServerIdForNode(node);
+    return InterceptorScope.normalizeScopeServerId(serverId);
   }
 
   private void addEphemeralAutoConnectToggleIfNeeded(JPopupMenu menu, String serverId) {
@@ -432,6 +461,6 @@ public final class ServerTreeServerNodeMenuBuilder {
   }
 
   private static String normalizeBackendId(String backendId) {
-    return Objects.toString(backendId, "").trim().toLowerCase(java.util.Locale.ROOT);
+    return Objects.toString(backendId, "").trim().toLowerCase(Locale.ROOT);
   }
 }

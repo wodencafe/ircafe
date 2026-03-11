@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
@@ -242,6 +243,42 @@ class SwingUiPortCommandRoutingTest {
     assertEquals(List.of("chat.setInputEnabled", "chatDockManager.setPinnedInputsEnabled"), steps);
     assertEquals(Boolean.TRUE, onEdtByStep.get("chat.setInputEnabled"));
     assertEquals(Boolean.TRUE, onEdtByStep.get("chatDockManager.setPinnedInputsEnabled"));
+  }
+
+  @Test
+  void backendNamedQuasselSetupRevealsStatusTarget() throws Exception {
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
+    PublishProcessor<String> setupRequests = PublishProcessor.create();
+    when(serverTree.quasselSetupRequests()).thenReturn(setupRequests);
+    when(serverTree.quasselNetworkManagerRequests()).thenReturn(PublishProcessor.create());
+
+    SwingUiPort ui =
+        new SwingUiPort(
+            serverTree,
+            mock(ChatDockable.class),
+            transcripts,
+            mock(MentionPatternRegistry.class),
+            mock(NotificationStore.class),
+            mock(UserListDockable.class),
+            mock(StatusBar.class),
+            mock(ConnectButton.class),
+            mock(DisconnectButton.class),
+            new TargetActivationBus(),
+            new OutboundLineBus(),
+            mock(ChatDockManager.class),
+            new ActiveInputRouter());
+
+    var subscriber = ui.backendNamedCommandRequests().test();
+    setupRequests.onNext(" testlocal ");
+    flushEdt();
+
+    TargetRef status = new TargetRef("testlocal", "status");
+    verify(transcripts).ensureTargetExists(status);
+    verify(serverTree).ensureNode(status);
+    verify(serverTree).selectTarget(status);
+    subscriber.assertValueCount(1);
+    subscriber.cancel();
   }
 
   private static void record(String step, List<String> steps, Map<String, Boolean> onEdtByStep) {

@@ -50,6 +50,7 @@ import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.logging.LoggingTargetLogMaintenancePortAdapter;
 import cafe.woden.ircclient.logging.history.LoggingAppHistoryPortsAdapter;
+import cafe.woden.ircclient.logging.viewer.DbChatLogViewerService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.monitor.MonitorIsonFallbackService;
 import cafe.woden.ircclient.monitor.MonitorListService;
@@ -58,6 +59,8 @@ import cafe.woden.ircclient.notifications.IrcEventNotificationRulesBus;
 import cafe.woden.ircclient.notifications.IrcEventNotificationService;
 import cafe.woden.ircclient.notifications.NotificationRuleMatcher;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
+import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.perform.PerformOnConnectService;
 import cafe.woden.ircclient.state.ModeRoutingState;
 import cafe.woden.ircclient.state.PendingInviteState;
@@ -73,6 +76,14 @@ import cafe.woden.ircclient.state.api.PendingInvitePort;
 import cafe.woden.ircclient.state.api.RecentStatusModePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
+import cafe.woden.ircclient.ui.chat.ChatDockManager;
+import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
+import cafe.woden.ircclient.ui.filter.FilterEngine;
+import cafe.woden.ircclient.ui.settings.ThemeManager;
+import cafe.woden.ircclient.ui.shell.MainFrame;
+import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.ui.tray.TrayService;
+import cafe.woden.ircclient.util.VirtualThreads;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModule;
 import org.springframework.modulith.core.ApplicationModules;
@@ -202,10 +213,30 @@ class SpringModulithIncrementalAdoptionTest {
     assertThat(loggingModule).isNotEqualTo(appModule);
     assertThat(moduleFor(modules, LoggingAppHistoryPortsAdapter.class)).isEqualTo(loggingModule);
     assertThat(loggingModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.logging");
+    assertNamedInterfaceContains(loggingModule, "history", LoggingAppHistoryPortsAdapter.class);
+    assertNamedInterfaceContains(loggingModule, "viewer", DbChatLogViewerService.class);
+
+    ApplicationModule notifyModule = moduleFor(modules, NotificationSoundService.class);
+    assertThat(notifyModule).isNotEqualTo(appModule);
+    assertThat(moduleFor(modules, PushyNotificationService.class)).isEqualTo(notifyModule);
+    assertThat(notifyModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.notify");
+    assertNamedInterfaceContains(notifyModule, "sound", NotificationSoundService.class);
+    assertNamedInterfaceContains(notifyModule, "pushy", PushyNotificationService.class);
 
     ApplicationModule uiModule = moduleFor(modules, RuntimeEventsPanel.class);
     assertThat(uiModule).isNotEqualTo(appModule);
     assertThat(uiModule.getBasePackage().getName()).startsWith("cafe.woden.ircclient.ui");
+    assertNamedInterfaceContains(uiModule, "chat", ChatDockManager.class);
+    assertNamedInterfaceContains(uiModule, "chat-fold", LoadOlderMessagesComponent.class);
+    assertNamedInterfaceContains(uiModule, "filter", FilterEngine.class);
+    assertNamedInterfaceContains(uiModule, "settings", ThemeManager.class);
+    assertNamedInterfaceContains(uiModule, "shell", MainFrame.class);
+    assertNamedInterfaceContains(uiModule, "terminal", TerminalDockable.class);
+    assertNamedInterfaceContains(uiModule, "tray", TrayService.class);
+
+    ApplicationModule utilModule = moduleFor(modules, VirtualThreads.class);
+    assertThat(utilModule).isNotEqualTo(appModule);
+    assertThat(utilModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.util");
   }
 
   @Test

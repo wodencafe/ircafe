@@ -17,11 +17,13 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /** Publishes the current filter settings snapshot. */
 @Component
+@InterfaceLayer
 @Lazy
 public class FilterSettingsBus {
 

@@ -112,6 +112,30 @@ class ServerTreeDockableServerAutoConnectMenuTest {
   }
 
   @Test
+  void serverPopupAllowsConnectWhileDisconnecting() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ServerTreeDockable dockable = newDockable(null, null);
+            invokeAddServerRoot(dockable, "libera");
+            dockable.setServerConnectionState("libera", ConnectionState.DISCONNECTING);
+
+            JPopupMenu menu = buildPopupMenuForServerRoot(dockable, "libera");
+            assertNotNull(menu);
+
+            JMenuItem connect = findMenuItem(menu, "Connect \"libera\"");
+            JMenuItem disconnect = findMenuItem(menu, "Disconnect \"libera\"");
+            assertNotNull(connect);
+            assertNotNull(disconnect);
+            assertTrue(connect.isEnabled());
+            assertTrue(!disconnect.isEnabled());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
   void quasselServerPopupShowsManageNetworksAction() throws Exception {
     onEdt(
         () -> {
@@ -131,7 +155,8 @@ class ServerTreeDockableServerAutoConnectMenuTest {
 
             JPopupMenu menu = buildPopupMenuForServerRoot(dockable, "quassel");
             assertNotNull(menu);
-            assertNotNull(findMenuItem(menu, "Run Quassel Setup..."));
+            assertNull(findMenuItem(menu, "Run Quassel Setup..."));
+            assertNull(findMenuItem(menu, "Complete Quassel Setup..."));
             assertNotNull(findMenuItem(menu, "Manage Quassel Networks..."));
           } catch (Exception e) {
             throw new RuntimeException(e);
@@ -232,7 +257,7 @@ class ServerTreeDockableServerAutoConnectMenuTest {
   }
 
   @Test
-  void quasselSetupMenuItemEmitsRequest() throws Exception {
+  void quasselSetupPendingMenuItemEmitsRequest() throws Exception {
     onEdt(
         () -> {
           Disposable requestSub = null;
@@ -249,13 +274,15 @@ class ServerTreeDockableServerAutoConnectMenuTest {
 
             ServerTreeDockable dockable = newDockable(serverCatalog, runtimeConfig);
             invokeAddServerRoot(dockable, "quassel");
+            dockable.setServerConnectionDiagnostics(
+                "quassel", "Quassel Core setup is required before login", null);
 
             AtomicReference<String> requestedServer = new AtomicReference<>();
             requestSub = dockable.quasselSetupRequests().subscribe(requestedServer::set);
 
             JPopupMenu menu = buildPopupMenuForServerRoot(dockable, "quassel");
             assertNotNull(menu);
-            JMenuItem setup = findMenuItem(menu, "Run Quassel Setup...");
+            JMenuItem setup = findMenuItem(menu, "Complete Quassel Setup...");
             assertNotNull(setup);
             setup.doClick();
 

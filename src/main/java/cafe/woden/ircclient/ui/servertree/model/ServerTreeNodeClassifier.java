@@ -66,7 +66,11 @@ public final class ServerTreeNodeClassifier {
     Object userObject = node.getUserObject();
     if (userObject instanceof String label) return label.trim();
     if (userObject instanceof ServerTreeNodeData nodeData) {
-      if (nodeData.ref != null) return "";
+      if (nodeData.ref != null
+          && !nodeData.ref.isMonitorGroup()
+          && !nodeData.ref.isInterceptorsGroup()) {
+        return "";
+      }
       return Objects.toString(nodeData.label, "").trim();
     }
     return "";

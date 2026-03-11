@@ -34,6 +34,7 @@ import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
@@ -346,6 +347,64 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void matrixSelfEchoChannelMessageResolvesPendingUsingNormalizedSelfCheck() throws Exception {
+    TargetRef chan = new TargetRef("matrix", "#ircafe:matrix.example.org");
+    TargetRef active = new TargetRef("matrix", "#other:matrix.example.org");
+    Instant at = Instant.parse("2026-03-10T16:09:00Z");
+    PendingEchoMessagePort.PendingOutboundChat pending =
+        new PendingEchoMessagePort.PendingOutboundChat(
+            "pending-matrix-1", chan, "@alice:matrix.example.org", "hello matrix", at);
+
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    when(irc.currentNick("matrix")).thenReturn(Optional.of("@alice:matrix.example.org"));
+    when(pendingEchoMessageState.consumeByTargetAndText(
+            eq(chan), eq("@alice:matrix.example.org"), eq("hello matrix")))
+        .thenReturn(Optional.of(pending));
+    when(ui.resolvePendingOutgoingChat(
+            eq(chan),
+            eq("pending-matrix-1"),
+            eq(at),
+            eq("@alice:matrix.example.org"),
+            eq("hello matrix"),
+            eq("$m-event-1"),
+            eq(Map.of("msgid", "$m-event-1"))))
+        .thenReturn(true);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "matrix",
+            new IrcEvent.ChannelMessage(
+                at,
+                "#ircafe:matrix.example.org",
+                "@alice:matrix.example.org",
+                "hello matrix",
+                "$m-event-1",
+                Map.of("msgid", "$m-event-1"))));
+
+    verify(pendingEchoMessageState)
+        .consumeByTargetAndText(eq(chan), eq("@alice:matrix.example.org"), eq("hello matrix"));
+    verify(ui)
+        .resolvePendingOutgoingChat(
+            eq(chan),
+            eq("pending-matrix-1"),
+            eq(at),
+            eq("@alice:matrix.example.org"),
+            eq("hello matrix"),
+            eq("$m-event-1"),
+            eq(Map.of("msgid", "$m-event-1")));
+    verify(ui, never())
+        .appendChatAt(
+            eq(chan),
+            any(),
+            eq("@alice:matrix.example.org"),
+            eq("hello matrix"),
+            eq(false),
+            eq("$m-event-1"),
+            eq(Map.of("msgid", "$m-event-1")),
+            any());
+  }
+
+  @Test
   void privateMessageFromPeerClearsTypingIndicatorAsDone() throws Exception {
     TargetRef pm = new TargetRef("libera", "alice");
     when(targetCoordinator.allowPrivateAutoOpenFromInbound(eq(pm), eq(false))).thenReturn(false);
@@ -367,6 +426,21 @@ class IrcMediatorMockVerifyTest {
     invokeOnServerIrcEvent(new ServerIrcEvent("libera", ready));
 
     verify(connectionCoordinator).handleConnectivityEvent("libera", ready, active);
+    verify(targetCoordinator).refreshInputEnabledForActiveTarget();
+  }
+
+  @Test
+  void connectionFeaturesEventIsForwardedToConnectivityCoordinator() throws Exception {
+    TargetRef active = new TargetRef("quassel", "status");
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    IrcEvent.ConnectionFeaturesUpdated updated =
+        new IrcEvent.ConnectionFeaturesUpdated(
+            Instant.now(),
+            "quassel-phase=setup-required;detail=core is not configured for client logins");
+
+    invokeOnServerIrcEvent(new ServerIrcEvent("quassel", updated));
+
+    verify(connectionCoordinator).handleConnectivityEvent("quassel", updated, active);
     verify(targetCoordinator).refreshInputEnabledForActiveTarget();
   }
 
@@ -720,6 +794,27 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void channelRedirectOnQuasselSkipsPersistingJoinedChannel() throws Exception {
+    TargetRef origin = new TargetRef("quassel", "status");
+    when(joinRoutingState.recentOriginIfFresh("quassel", "#old", Duration.ofSeconds(15)))
+        .thenReturn(origin);
+    when(serverRegistry.find("quassel"))
+        .thenReturn(
+            Optional.of(serverWithBackend("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "quassel",
+            new IrcEvent.ChannelRedirected(
+                Instant.now(), "#old", "#new", 470, "Forwarding to another channel")));
+
+    verify(joinRoutingState).rememberOrigin("quassel", "#new", origin);
+    verify(joinRoutingState).clear("quassel", "#old");
+    verify(runtimeConfig, never()).rememberJoinedChannel("quassel", "#new");
+    verify(targetCoordinator).joinChannel(new TargetRef("quassel", "#new"));
+  }
+
+  @Test
   void noSuchNickServerResponseFailsMatchingPendingPmAndAppendsPmError() throws Exception {
     TargetRef pm = new TargetRef("libera", "ghost");
     Instant at = Instant.parse("2026-03-02T18:53:57Z");
@@ -782,5 +877,24 @@ class IrcMediatorMockVerifyTest {
     Method method = IrcMediator.class.getDeclaredMethod("onServerIrcEvent", ServerIrcEvent.class);
     method.setAccessible(true);
     method.invoke(mediator, event);
+  }
+
+  private static IrcProperties.Server serverWithBackend(
+      String id, IrcProperties.Server.Backend backend) {
+    return new IrcProperties.Server(
+        id,
+        "core.example.net",
+        4242,
+        false,
+        "",
+        "ircafe",
+        "ircafe",
+        "IRCafe User",
+        null,
+        null,
+        List.of(),
+        List.of(),
+        null,
+        backend);
   }
 }

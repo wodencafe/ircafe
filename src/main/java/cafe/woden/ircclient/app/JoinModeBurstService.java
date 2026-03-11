@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Component;
  * sets and print a single summary line shortly after the burst settles.
  */
 @Component
+@ApplicationLayer
 public final class JoinModeBurstService {
   private static final Logger log = LoggerFactory.getLogger(JoinModeBurstService.class);
 

@@ -162,6 +162,9 @@ public interface UiPort {
 
   void setUsersNicks(List<NickInfo> nicks);
 
+  /** Re-render already-visible Matrix sender labels for one Matrix user id on a server. */
+  default void refreshMatrixTranscriptDisplayName(String serverId, String matrixUserId) {}
+
   /** Reset/prepare the per-server channel list view for a new /LIST response stream. */
   default void beginChannelList(String serverId, String banner) {}
 
@@ -223,6 +226,10 @@ public interface UiPort {
       String serverId, List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {
     return Optional.empty();
   }
+
+  /** Sync best-effort Quassel network snapshots into UI surfaces (for example server tree). */
+  default void syncQuasselNetworks(
+      String serverId, List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {}
 
   void setConnectionControlsEnabled(boolean connectEnabled, boolean disconnectEnabled);
 

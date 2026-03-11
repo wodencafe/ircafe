@@ -24,6 +24,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Component;
  * persists changes to runtime config.
  */
 @Component
+@InterfaceLayer
 public class LocalFilterCommandService implements LocalFilterCommandHandler {
 
   private final UiPort ui;

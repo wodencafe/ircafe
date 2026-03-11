@@ -614,6 +614,27 @@ class ArchitectureGuardrailsTest {
               "direct new Thread(...) creation should be avoided in favor of VirtualThreads helpers");
 
   @ArchTest
+  static final ArchRule app_should_not_use_rxjava_default_io_scheduler =
+      noClasses()
+          .should()
+          .callMethod(io.reactivex.rxjava3.schedulers.Schedulers.class, "io")
+          .because(
+              "RxJava Schedulers.io() uses the default platform-thread pool; use RxVirtualSchedulers.io()");
+
+  @ArchTest
+  static final ArchRule app_should_not_use_completable_future_common_pool_overloads =
+      noClasses()
+          .should()
+          .callMethod(
+              java.util.concurrent.CompletableFuture.class,
+              "supplyAsync",
+              java.util.function.Supplier.class)
+          .orShould()
+          .callMethod(java.util.concurrent.CompletableFuture.class, "runAsync", Runnable.class)
+          .because(
+              "CompletableFuture common-pool overloads bypass virtual-thread executors; pass an explicit VirtualThreads-backed executor");
+
+  @ArchTest
   static final ArchRule
       non_ui_packages_should_not_depend_on_ui_input_servertree_or_coordinator_subpackages =
           noClasses()

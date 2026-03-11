@@ -3,6 +3,7 @@ package cafe.woden.ircclient.config;
 import cafe.woden.ircclient.util.VirtualThreads;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,6 +14,7 @@ import org.springframework.context.annotation.Configuration;
  * giving Spring ownership of creation/shutdown.
  */
 @Configuration
+@InfrastructureLayer
 public class ExecutorConfig {
   public static final String TARGET_COORDINATOR_MAINTENANCE_EXECUTOR =
       "targetCoordinatorMaintenanceExecutor";

@@ -2,10 +2,12 @@ package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Registers history/replay and message-mutation command handlers. */
 @Component
+@ApplicationLayer
 final class HistoryMutationOutboundCommandRegistrar implements OutboundCommandRegistrar {
 
   private final OutboundChatHistoryCommandService outboundChatHistoryCommandService;

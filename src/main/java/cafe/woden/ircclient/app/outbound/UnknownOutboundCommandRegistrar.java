@@ -6,10 +6,12 @@ import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Registers fallback handling for unknown slash commands. */
 @Component
+@ApplicationLayer
 final class UnknownOutboundCommandRegistrar implements OutboundCommandRegistrar {
 
   private final UserCommandAliasesBus userCommandAliasesBus;

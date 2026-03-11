@@ -7,10 +7,12 @@ import java.util.Objects;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.stereotype.Component;
 
 /** Builds the standard context menu used when right-clicking a nickname. */
 @Component
+@InterfaceLayer
 public final class NickContextMenuFactory {
 
   public enum DccAction {

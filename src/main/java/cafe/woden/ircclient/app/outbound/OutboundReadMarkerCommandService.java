@@ -10,10 +10,12 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /markread command flow and read-marker help messaging. */
 @Component
+@ApplicationLayer
 final class OutboundReadMarkerCommandService implements OutboundHelpContributor {
 
   private final IrcReadMarkerPort readMarkerPort;

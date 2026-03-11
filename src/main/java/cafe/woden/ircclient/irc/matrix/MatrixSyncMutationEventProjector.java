@@ -20,6 +20,8 @@ final class MatrixSyncMutationEventProjector {
 
     String peerForRoom(String roomId);
 
+    String targetForRoom(String roomId);
+
     void rememberRoomEvent(String roomId, String eventId, long timestampMs);
 
     void rememberReactionEvent(
@@ -92,11 +94,13 @@ final class MatrixSyncMutationEventProjector {
                     TAG_DRAFT_EDIT,
                     targetMessageId)));
       } else {
+        String target = signalTargetForRoom(session, roomId);
+        if (target.isEmpty()) continue;
         emit(
             sid,
             new IrcEvent.ChannelMessage(
                 at,
-                roomId,
+                target,
                 sender,
                 body,
                 messageId,
@@ -180,11 +184,9 @@ final class MatrixSyncMutationEventProjector {
   private static String signalTargetForRoom(SessionView session, String roomId) {
     String rid = normalize(roomId);
     if (rid.isEmpty()) return "";
-    String peer = session == null ? "" : session.peerForRoom(rid);
-    if (!peer.isEmpty()) {
-      return peer;
-    }
-    return rid;
+    if (session == null) return rid;
+    String target = normalize(session.targetForRoom(rid));
+    return target.isEmpty() ? rid : target;
   }
 
   private static Map<String, String> privateMessageTags(

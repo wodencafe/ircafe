@@ -6,10 +6,12 @@ import cafe.woden.ircclient.bouncer.ResolvedBouncerNetwork;
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.List;
 import java.util.Set;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Soju-specific naming and login shaping strategy for bouncer discovery. */
 @Component
+@ApplicationLayer
 public class SojuBouncerNetworkMappingStrategy implements BouncerNetworkMappingStrategy {
 
   public static final String BACKEND_ID = "soju";

@@ -4,10 +4,12 @@ import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
+import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
@@ -77,6 +79,7 @@ import cafe.woden.ircclient.ui.servertree.query.ServerTreeTargetSnapshotProvider
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestEmitter;
 import cafe.woden.ircclient.ui.servertree.request.ServerTreeRequestStreams;
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeEnsureNodeParentResolver;
+import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeQuasselNetworkParentResolver;
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeServerParentResolver;
 import cafe.woden.ircclient.ui.servertree.state.ServerRuntimeMetadata;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeApplicationNodes;
@@ -120,6 +123,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import javax.swing.Action;
@@ -135,15 +139,18 @@ import javax.swing.Timer;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 
 @org.springframework.stereotype.Component
+@InterfaceLayer
 @Lazy
 public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   // UI label for the per-server "status" transcript target.
   // The target id remains "status" internally; this is just what the user sees in the tree.
   private static final String STATUS_LABEL = "Server";
   private static final String CHANNEL_LIST_LABEL = "Channel List";
+  private static final String PRIVATE_MESSAGES_LABEL = "Private Messages";
   private static final String WEECHAT_FILTERS_LABEL = "Filters";
   private static final String IGNORES_LABEL = "Ignores";
   private static final String DCC_TRANSFERS_LABEL = "DCC Transfers";
@@ -312,6 +319,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeChannelTargetOperations channelTargetOperations;
   private final ServerTreeChannelInteractionApi channelInteractionApi;
   private final ServerTreeEnsureNodeParentResolver ensureNodeParentResolver;
+  private final ServerTreeQuasselNetworkParentResolver quasselNetworkParentResolver;
   private final ServerTreeChannelListNodeEnsurer channelListNodeEnsurer;
   private final ServerTreeEnsureNodeLeafInserter ensureNodeLeafInserter;
 
@@ -331,6 +339,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private final ServerTreeExternalStreamBinder externalStreamBinder;
 
   private final ServerTreeSettingsSynchronizer settingsSynchronizer;
+  private final ServerCatalog serverCatalog;
   private volatile ServerTreeTypingIndicatorStyle typingIndicatorStyle =
       ServerTreeTypingIndicatorStyle.DOTS;
   private volatile boolean typingIndicatorsTreeEnabled = true;
@@ -338,6 +347,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private volatile boolean serverTreeNotificationBadgesEnabled = true;
   private volatile Color unreadChannelTextColor = null;
   private volatile Color highlightChannelTextColor = null;
+  private volatile BiFunction<String, String, String> quasselNetworkTooltipProvider =
+      (serverId, networkToken) -> "";
   private boolean startupSelectionCompleted = false;
 
   public ServerTreeDockable(
@@ -416,6 +427,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
     this.runtimeConfig = runtimeConfig;
     this.logProps = logProps;
+    this.serverCatalog = serverCatalog;
 
     this.interceptorStore = interceptorStore;
     this.jfrRuntimeEventsService = jfrRuntimeEventsService;
@@ -438,7 +450,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         new ServerTreeServerNodeResolver(servers, leaves, ServerTreeDockable::normalizeServerId);
     this.nodeClassifier =
         new ServerTreeNodeClassifier(
-            "Private Messages",
+            PRIVATE_MESSAGES_LABEL,
             INTERCEPTORS_GROUP_LABEL,
             MONITOR_GROUP_LABEL,
             OTHER_GROUP_LABEL,
@@ -691,6 +703,17 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             interceptorActions::refreshInterceptorNodeLabel,
             interceptorActions::refreshInterceptorGroupCount,
             nodeBadgeUpdater::refreshAutoConnectBadges);
+    this.quasselNetworkParentResolver =
+        new ServerTreeQuasselNetworkParentResolver(
+            leaves,
+            model,
+            this::isQuasselServer,
+            CHANNEL_LIST_LABEL,
+            PRIVATE_MESSAGES_LABEL,
+            OTHER_GROUP_LABEL,
+            MONITOR_GROUP_LABEL,
+            INTERCEPTORS_GROUP_LABEL,
+            IGNORES_LABEL);
     this.selectionFallbackPolicy =
         new ServerTreeSelectionFallbackPolicy(
             ServerTreeSelectionFallbackPolicy.context(
@@ -708,7 +731,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 () -> (DefaultMutableTreeNode) tree.getLastSelectedPathComponent(),
                 nodeClassifier::owningServerIdForNode,
                 nodeClassifier::isMonitorGroupNode,
-                nodeClassifier::isInterceptorsGroupNode));
+                nodeClassifier::isInterceptorsGroupNode,
+                quasselNetworkParentResolver::channelListRefForNetworkNode));
     this.startupSelectionRestorer =
         new ServerTreeStartupSelectionRestorer(
             ServerTreeStartupSelectionRestorer.readRememberedSelection(runtimeConfig),
@@ -737,6 +761,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             this::applyBuiltInLayoutToTree,
             this::applyRootSiblingOrderToTree,
             statusLabelManager::statusLeafLabelForServer,
+            this::isQuasselServer,
             nodeVisibilityApi::isDccTransfersNodesVisible,
             leaves::get);
     this.uiLeafVisibilitySynchronizer =
@@ -852,7 +877,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::isChannelMuted,
                 this::setChannelMuted,
                 requestStreams,
-                channelTargetOperations::canEditChannelModesForTarget));
+                channelTargetOperations::canEditChannelModesForTarget,
+                quasselNetworkParentResolver::isQuasselNetworkNode,
+                quasselNetworkParentResolver::isQuasselEmptyStateNode,
+                this::quasselNetworkTooltip));
 
     this.tooltipResolver = viewInteractionCollaborators.tooltipResolver();
     this.contextMenuBuilder = viewInteractionCollaborators.contextMenuBuilder();
@@ -930,6 +958,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::builtInLayoutNodeKindForRef,
                 this::builtInLayout,
                 this::rootSiblingOrder,
+                this::backendSpecificParent,
                 this::ensureChannelListNodeForEnsureNode,
                 this::applyBuiltInLayoutToTree,
                 this::applyRootSiblingOrderToTree,
@@ -975,7 +1004,9 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 nodeAccess::isIrcRootNode,
                 nodeAccess::isApplicationRootNode,
                 nodeClassifier::isPrivateMessagesGroupNode,
-                networkGroupManager::backendIdForNetworksGroupNode));
+                networkGroupManager::backendIdForNetworksGroupNode,
+                quasselNetworkParentResolver::isQuasselNetworkNode,
+                quasselNetworkParentResolver::isQuasselEmptyStateNode));
     this.uiRefreshCoordinator =
         new ServerTreeUiRefreshCoordinator(
             tree,
@@ -1314,6 +1345,38 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return requestApi.quasselNetworkManagerRequests();
   }
 
+  public void setQuasselNetworkTooltipProvider(
+      BiFunction<String, String, String> quasselNetworkTooltipProvider) {
+    this.quasselNetworkTooltipProvider =
+        quasselNetworkTooltipProvider == null
+            ? (serverId, networkToken) -> ""
+            : quasselNetworkTooltipProvider;
+  }
+
+  public void syncQuasselNetworks(
+      String serverId, List<ServerTreeQuasselNetworkParentResolver.NetworkPresentation> networks) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+    List<ServerTreeQuasselNetworkParentResolver.NetworkPresentation> safeNetworks =
+        networks == null ? List.of() : List.copyOf(networks);
+
+    Runnable sync =
+        () -> {
+          ServerNodes serverNodes = serverNodeResolver.serverNodesForServer(sid);
+          if (serverNodes == null) return;
+          boolean connected =
+              runtimeState.connectionStateForServer(sid) == ConnectionState.CONNECTED;
+          quasselNetworkParentResolver.syncServerNetworks(
+              sid, serverNodes, safeNetworks, connected);
+          tree.repaint();
+        };
+    if (SwingUtilities.isEventDispatchThread()) {
+      sync.run();
+    } else {
+      SwingUtilities.invokeLater(sync);
+    }
+  }
+
   public void setPinnedDockableProvider(Function<TargetRef, Dockable> provider) {
     requestApi.setPinnedDockableProvider(provider);
   }
@@ -1574,7 +1637,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   private boolean isInterceptorEnabled(TargetRef ref) {
     if (ref == null || !ref.isInterceptor()) return true;
     if (interceptorStore == null) return true;
-    String sid = Objects.toString(ref.serverId(), "").trim();
+    String sid = InterceptorScope.scopedServerIdForTarget(ref);
     String iid = Objects.toString(ref.interceptorId(), "").trim();
     if (sid.isEmpty() || iid.isEmpty()) return true;
     InterceptorDefinition def = interceptorStore.interceptor(sid, iid);
@@ -1607,6 +1670,16 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private TreePath defaultSelectionPath() {
     return expansionStateManager.defaultSelectionPath();
+  }
+
+  private String quasselNetworkTooltip(String serverId, String networkToken) {
+    BiFunction<String, String, String> provider = quasselNetworkTooltipProvider;
+    if (provider == null) return "";
+    String sid = Objects.toString(serverId, "").trim();
+    String token = Objects.toString(networkToken, "").trim();
+    if (sid.isEmpty() || token.isEmpty()) return "";
+    String tip = provider.apply(sid, token);
+    return Objects.toString(tip, "").trim();
   }
 
   private boolean isApplicationJfrActive() {
@@ -1667,6 +1740,11 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private DefaultMutableTreeNode ensureChannelListNodeForEnsureNode(ServerNodes sn) {
     return channelListNodeEnsurer.ensureChannelListNode(sn);
+  }
+
+  private DefaultMutableTreeNode backendSpecificParent(TargetRef ref, ServerNodes serverNodes) {
+    if (quasselNetworkParentResolver == null) return null;
+    return quasselNetworkParentResolver.resolveParent(ref, serverNodes);
   }
 
   public void selectTarget(TargetRef ref) {
@@ -1841,11 +1919,47 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   }
 
   private void removeServerRoot(String serverId) {
+    quasselNetworkParentResolver.forgetServer(serverId);
     serverLifecycleFacade.removeServerRoot(serverId);
   }
 
   private ServerNodes addServerRoot(String serverId) {
-    return serverLifecycleFacade.addServerRoot(serverId);
+    ServerNodes serverNodes = serverLifecycleFacade.addServerRoot(serverId);
+    String sid = normalizeServerId(serverId);
+    boolean connected = runtimeState.connectionStateForServer(sid) == ConnectionState.CONNECTED;
+    quasselNetworkParentResolver.initializeServer(serverId, serverNodes, connected);
+    serverLeafVisibilityCoordinator.syncUiLeafVisibilityForServer(sid);
+    ensureInterceptorNodesForServer(serverId);
+    return serverNodes;
+  }
+
+  private void ensureInterceptorNodesForServer(String serverId) {
+    if (interceptorStore == null || targetLifecycleCoordinator == null) return;
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return;
+
+    Set<String> scopeServerIds = new HashSet<>();
+    for (InterceptorStore.ScopedInterceptorRef scoped :
+        interceptorStore.listInterceptorRefsForBaseServer(sid)) {
+      if (scoped == null) continue;
+      String scopeServerId = InterceptorScope.normalizeScopeServerId(scoped.serverId());
+      String interceptorId = Objects.toString(scoped.interceptorId(), "").trim();
+      if (scopeServerId.isEmpty() || interceptorId.isEmpty()) continue;
+
+      TargetRef ref = InterceptorScope.interceptorRef(scopeServerId, interceptorId);
+      if (ref == null) continue;
+      targetLifecycleCoordinator.ensureNode(ref);
+      interceptorActions.refreshInterceptorNodeLabel(scopeServerId, interceptorId);
+      scopeServerIds.add(scopeServerId);
+    }
+
+    if (scopeServerIds.isEmpty()) {
+      interceptorActions.refreshInterceptorGroupCount(sid);
+      return;
+    }
+    for (String scopeServerId : scopeServerIds) {
+      interceptorActions.refreshInterceptorGroupCount(scopeServerId);
+    }
   }
 
   private void updateBouncerControlLabels(Map<String, Set<String>> nextBouncerControlByBackendId) {
@@ -1854,6 +1968,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private void refreshTreeLayoutAfterUiChange() {
     uiRefreshCoordinator.refreshTreeLayoutAfterUiChange();
+  }
+
+  private boolean isQuasselServer(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty() || serverCatalog == null) return false;
+    return serverCatalog
+        .find(sid)
+        .map(server -> server.backend() == IrcProperties.Server.Backend.QUASSEL_CORE)
+        .orElse(false);
   }
 
   @PreDestroy

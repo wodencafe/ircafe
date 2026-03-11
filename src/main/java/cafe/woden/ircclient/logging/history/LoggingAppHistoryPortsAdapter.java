@@ -9,6 +9,7 @@ import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
  * services/buses.
  */
 @Component
+@InfrastructureLayer
 public class LoggingAppHistoryPortsAdapter
     implements ChatHistoryIngestionPort,
         ChatHistoryIngestEventsPort,

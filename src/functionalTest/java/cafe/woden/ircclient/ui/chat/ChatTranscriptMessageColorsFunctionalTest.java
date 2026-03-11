@@ -26,7 +26,7 @@ class ChatTranscriptMessageColorsFunctionalTest {
     ChatStyles styles = new ChatStyles(bus);
     ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, styles, null);
     ChatTranscriptStore store =
-        new ChatTranscriptStore(styles, renderer, null, null, null, null, null, null, null);
+        new ChatTranscriptStore(styles, renderer, null, null, null, null, null, null, null, null);
 
     try {
       TargetRef ref = new TargetRef("srv", "#colors");

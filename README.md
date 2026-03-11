@@ -18,6 +18,14 @@ IRCafe is a Java 25 desktop chat client with a Swing UI and a Spring Boot backen
   </figcaption>
 </figure>
 
+## Quick start
+
+```bash
+./gradlew bootRun
+```
+
+This launches the Swing app and loads runtime config from `${XDG_CONFIG_HOME}/ircafe/ircafe.yml` (or `~/.config/ircafe/ircafe.yml`).
+
 ## Features
 
 ### Core IRC
@@ -127,11 +135,75 @@ IRCafe is a Java 25 desktop chat client with a Swing UI and a Spring Boot backen
 - Channel List node for `/list` results with filtering and double-click join.
 - User command alias editor with HexChat `commands.conf` import.
 - Monitor and Notifications nodes per server for quick operational actions.
-- Runtime diagnostics surfaces under `Application` (including terminal mirror and diagnostics streams).
+- Runtime diagnostics surfaces under `Application` (Unhandled Errors, AssertJ Swing, jHiccup, Inbound Dedup, JFR, Spring, Terminal), including bounded event feeds plus clear/export actions.
 
 ## Requirements
 
-- Java 25 (Only if running as a jar)
+- Java 25 for local run/build tasks (`./gradlew bootRun`, `./gradlew test`, `./gradlew jpackage`, `java -jar ...`).
+- GNU Make + Docker only if using the optional Makefile Docker shortcuts.
+- Flatpak + `flatpak-builder` only if building Flatpak bundles on Linux.
+
+## Project layout
+
+- Entry point: `src/main/java/cafe/woden/ircclient/IrcSwingApp.java`
+- `src/main/java/cafe/woden/ircclient/ui`: Swing UI, docking, dialogs, rendering, tray integration.
+- `src/main/java/cafe/woden/ircclient/app`: orchestration, mediator flow, command dispatch, notifications.
+- `src/main/java/cafe/woden/ircclient/irc`: IRC/Matrix/Quassel protocol integrations and capability handling.
+- `src/main/java/cafe/woden/ircclient/config`: runtime config models, property binding, registries.
+- `src/main/java/cafe/woden/ircclient/logging`: log persistence, history ingestion, log viewer services.
+- `src/main/java/cafe/woden/ircclient/net`: TLS/proxy bootstrapping and lightweight HTTP utilities.
+- `src/test/java/cafe/woden/ircclient`: unit + integration + architecture tests.
+- `src/functionalTest/java/cafe/woden/ircclient`: Swing functional tests (`*FunctionalTest`).
+
+## Makefile shortcuts (optional)
+
+The repository includes a root `Makefile` with convenience commands that call Gradle directly.
+
+```bash
+make help
+make build
+make test
+make check
+```
+
+If you prefer a Make-first workflow, these cover most tasks:
+
+| Workflow | Make | Gradle equivalent |
+|---|---|---|
+| Run app from source | `make bootrun` | `./gradlew bootRun` |
+| Build runnable jar | `make jar` | `./gradlew bootJar` |
+| Run lint checks | `make lint` | `./gradlew lint` |
+| Run unit/non-functional tests | `make test` | `./gradlew test` |
+| Run integration tests | `make integration-test` | `./gradlew integrationTest` |
+| Run architecture guardrails | `make architecture-test` | `./gradlew architectureTest` |
+| Run Swing functional tests | `make functional-test` | `./gradlew functionalTest` |
+| Build app image | `make jpackage` | `./gradlew jpackage` |
+| Run full verification | `make check` | `./gradlew check` |
+
+Run any Gradle task(s) via:
+
+```bash
+make gradle TASKS="bootRun"
+make gradle TASKS="integrationTest --tests 'cafe.woden.ircclient.irc.QuasselCoreContainerIntegrationTest'"
+```
+
+Build/test in Docker (no local JDK install required):
+
+```bash
+make docker-image
+make docker-build
+make docker-check
+make docker-gradle TASKS="test"
+# Also available: make docker-lint, make docker-integration-test, make docker-architecture-test, make docker-functional-test
+```
+
+Notes:
+
+- Local Make targets default `GRADLE_USER_HOME` to `./.gradle-local` (override with `LOCAL_GRADLE_USER_HOME=/path`).
+- Docker shortcuts run `./gradlew` inside a local image built from versioned `Dockerfile.build`.
+- `Dockerfile.build` pins `eclipse-temurin:25-jdk` by digest for reproducible toolchain resolution.
+- Docker targets auto-build the image if missing (override with `DOCKER_IMAGE=...` if needed).
+- A persistent repo-local cache directory (`./.gradle-docker`) is used for Docker Gradle cache reuse between runs.
 
 ## Run from source
 
@@ -139,6 +211,8 @@ From the project root:
 
 ```bash
 ./gradlew bootRun
+# or:
+make bootrun
 ```
 
 This launches the Swing UI.
@@ -147,6 +221,8 @@ This launches the Swing UI.
 
 ```bash
 ./gradlew bootJar
+# or:
+make jar
 java -jar build/libs/*.jar
 ```
 
@@ -154,6 +230,8 @@ java -jar build/libs/*.jar
 
 ```bash
 ./gradlew jpackage
+# or:
+make jpackage
 ```
 
 Output is written under `build/dist/` using the platform's app-image layout.
@@ -205,6 +283,14 @@ Common local checks:
 ./gradlew test
 ./gradlew check
 ```
+
+One-time contributor setup:
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+This enables the repo's `commit-msg` hook for Conventional Commit validation.
 
 Targeted suites:
 
@@ -317,6 +403,7 @@ Auto-fix workflow (Error Prone auto-corrects first, then Spotless formatting):
 Additional verification/reporting tasks:
 
 ```bash
+./gradlew mutationTest
 ./gradlew themeValidate
 ./gradlew dependencyCheckAnalyze
 ./gradlew cyclonedxBom
@@ -324,9 +411,11 @@ Additional verification/reporting tasks:
 
 ## Command discovery
 
-- `/help` shows the main command groups.
+- `/help` shows the main command groups (including backend-specific helpers).
 - `/help dcc` shows DCC chat/file commands.
-- `/help edit` and `/help redact` show IRCv3 compose/edit command help.
+- `/help chathistory`, `/help markread`, and `/help upload` show focused usage for those flows.
+- `/help edit`, `/help redact`, and `/help delete` show IRCv3 compose mutation command help.
+- Quassel-specific workflows: `/quasselsetup` and `/quasselnet ...`.
 - `/filter help` shows local filter command usage.
 - `/monitor help` shows monitor command usage.
 
@@ -334,7 +423,7 @@ Additional verification/reporting tasks:
 
 ### Runtime configuration (preferred)
 
-When running IRCafe as a packaged jar, edit the runtime config file (loaded on startup and overrides the defaults in `application.yml`):
+When running IRCafe (from source or as a packaged jar), edit the runtime config file (loaded on startup and overrides the defaults in `application.yml`):
 
 - Default path: `${XDG_CONFIG_HOME}/ircafe/ircafe.yml` when `XDG_CONFIG_HOME` is set.
 - Otherwise falls back to: `~/.config/ircafe/ircafe.yml` (i.e. `${user.home}/.config/ircafe/ircafe.yml`)
@@ -463,6 +552,12 @@ To enable SASL, set `irc.servers[].sasl.enabled: true` in your config and set `I
 - System tray and desktop notification behavior depends on OS/session support.
 - Linux supports D-Bus notification actions when enabled (`ircafe.ui.tray.linuxDbusActionsEnabled: true`).
 - Linux app-image builds include desktop/install helper files; other platforms keep standard app-image packaging.
+
+## Contributing
+
+- Commit messages follow Conventional Commits: `<type>(<scope>): <subject>`.
+- Local hooks are configured by `./scripts/setup-git-hooks.sh`; CI validates the same rules.
+- Allowed types: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`, `style`, `revert`.
 
 ## Project support
 

@@ -68,6 +68,27 @@ class ChatDockTitleCoordinatorTest {
   }
 
   @Test
+  void tabTextUsesQualifiedInterceptorScopeKey() {
+    AtomicReference<TargetRef> activeTarget =
+        new AtomicReference<>(TargetRef.interceptor("quassel", "audit", "libera"));
+    AtomicReference<String> dockName = new AtomicReference<>("old");
+    InterceptorStore interceptorStore = mock(InterceptorStore.class);
+    when(interceptorStore.interceptorName("quassel{net:libera}", "audit"))
+        .thenReturn("Libera Audit");
+
+    ChatDockTitleCoordinator coordinator =
+        new ChatDockTitleCoordinator(
+            new JPanel(),
+            activeTarget::get,
+            interceptorStore,
+            dockName::get,
+            dockName::set,
+            Runnable::run);
+
+    assertEquals("Libera Audit", coordinator.tabText());
+  }
+
+  @Test
   void updateDockTitleUpdatesNameAndDirectTabbedTitle() {
     AtomicReference<TargetRef> activeTarget =
         new AtomicReference<>(new TargetRef("libera", "#ircafe"));

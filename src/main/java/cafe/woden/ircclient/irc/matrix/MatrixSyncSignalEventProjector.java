@@ -18,6 +18,8 @@ final class MatrixSyncSignalEventProjector {
 
     String peerForRoom(String roomId);
 
+    String targetForRoom(String roomId);
+
     Set<String> replaceTypingUsers(String roomId, Set<String> users);
 
     boolean shouldEmitReadMarker(String roomId, long markerTsMs);
@@ -43,6 +45,10 @@ final class MatrixSyncSignalEventProjector {
       String roomId = normalize(membershipEvent.roomId());
       String userId = normalize(membershipEvent.userId());
       if (roomId.isEmpty() || !looksLikeMatrixUserId(userId)) continue;
+      String roomTarget = signalTargetForRoom(session, roomId);
+      if (roomTarget.isEmpty()) {
+        roomTarget = roomId;
+      }
 
       String membership = normalize(membershipEvent.membership()).toLowerCase(Locale.ROOT);
       String prevMembership = normalize(membershipEvent.prevMembership()).toLowerCase(Locale.ROOT);
@@ -56,13 +62,13 @@ final class MatrixSyncSignalEventProjector {
       boolean joinedBefore = "join".equals(prevMembership);
 
       if (!userId.equals(selfUserId) && joinedNow && !joinedBefore) {
-        emit(sid, new IrcEvent.UserJoinedChannel(at, roomId, userId));
+        emit(sid, new IrcEvent.UserJoinedChannel(at, roomTarget, userId));
       } else if (joinedBefore && !joinedNow) {
         if (userId.equals(selfUserId)) {
           session.forgetJoinedRoom(roomId);
-          emit(sid, new IrcEvent.LeftChannel(at, roomId, reason));
+          emit(sid, new IrcEvent.LeftChannel(at, roomTarget, reason));
         } else {
-          emit(sid, new IrcEvent.UserPartedChannel(at, roomId, userId, reason));
+          emit(sid, new IrcEvent.UserPartedChannel(at, roomTarget, userId, reason));
         }
       }
 
@@ -70,7 +76,7 @@ final class MatrixSyncSignalEventProjector {
         emit(
             sid,
             new IrcEvent.UserSetNameObserved(
-                at, userId, displayName, IrcEvent.UserSetNameObserved.Source.SETNAME));
+                at, userId, displayName, IrcEvent.UserSetNameObserved.Source.EXTENDED_JOIN));
       }
     }
   }
@@ -162,11 +168,9 @@ final class MatrixSyncSignalEventProjector {
   private static String signalTargetForRoom(SessionView session, String roomId) {
     String rid = normalize(roomId);
     if (rid.isEmpty()) return "";
-    String peer = session == null ? "" : session.peerForRoom(rid);
-    if (!peer.isEmpty()) {
-      return peer;
-    }
-    return rid;
+    if (session == null) return rid;
+    String target = normalize(session.targetForRoom(rid));
+    return target.isEmpty() ? rid : target;
   }
 
   private static boolean looksLikeMatrixUserId(String token) {

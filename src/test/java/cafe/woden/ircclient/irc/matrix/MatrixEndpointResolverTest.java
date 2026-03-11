@@ -29,6 +29,15 @@ class MatrixEndpointResolverTest {
   }
 
   @Test
+  void loginUriUsesSameClientApiPrefix() {
+    IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
+
+    URI uri = MatrixEndpointResolver.loginUri(server);
+
+    assertEquals("https://example.org:443/matrix/_matrix/client/v3/login", uri.toString());
+  }
+
+  @Test
   void userProfileUriBuildsProfilePath() {
     IrcProperties.Server server = server("matrix", "https://example.org/matrix", 0, true);
 

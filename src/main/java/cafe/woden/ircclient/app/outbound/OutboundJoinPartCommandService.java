@@ -3,17 +3,20 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /join and /part command flow. */
 @Component
+@ApplicationLayer
 final class OutboundJoinPartCommandService {
 
   private final IrcTargetMembershipPort targetMembership;
@@ -56,7 +59,9 @@ final class OutboundJoinPartCommandService {
       return;
     }
 
-    runtimeConfig.rememberJoinedChannel(at.serverId(), chan);
+    if (shouldPersistJoinedChannel(at.serverId())) {
+      runtimeConfig.rememberJoinedChannel(at.serverId(), chan);
+    }
 
     // Route join results back to the origin buffer; ui-only surfaces route to status.
     TargetRef joinOrigin = at.isUiOnly() ? new TargetRef(at.serverId(), "status") : at;
@@ -175,6 +180,11 @@ final class OutboundJoinPartCommandService {
 
   private static boolean containsCrlf(String s) {
     return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);
+  }
+
+  private boolean shouldPersistJoinedChannel(String serverId) {
+    return commandTargetPolicy.backendForServer(serverId)
+        != IrcProperties.Server.Backend.QUASSEL_CORE;
   }
 
   private record ParsedPartTarget(TargetRef target, String reason) {}

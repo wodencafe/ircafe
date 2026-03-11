@@ -21,6 +21,7 @@ import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
+import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
@@ -57,6 +58,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -490,7 +492,28 @@ public class IrcMediator implements MediatorControlPort {
     String ch = Objects.toString(inboundChannel, "").trim();
     String text = Objects.toString(inboundText, "");
     List<String> levelList = (levels == null || levels.length == 0) ? List.of() : List.of(levels);
-    return inboundIgnorePolicy.decide(sid, f, null, isCtcp, levelList, ch, text);
+    String scopeServerId = inboundIgnoreScopeServerId(sid, ch);
+    return inboundIgnorePolicy.decide(scopeServerId, f, null, isCtcp, levelList, ch, text);
+  }
+
+  private static String inboundIgnoreScopeServerId(String serverId, String inboundChannel) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return "";
+    String token = TargetRef.parseQualifiedTarget(inboundChannel).networkToken();
+    return token.isEmpty() ? sid : TargetRef.withNetworkQualifier(sid, token);
+  }
+
+  private void observeChannelActivity(String serverId, String channel) {
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = Objects.toString(channel, "").trim();
+    if (sid.isEmpty() || ch.isEmpty()) return;
+    try {
+      TargetRef target = new TargetRef(sid, ch);
+      if (!target.isChannel()) return;
+    } catch (IllegalArgumentException ignored) {
+      return;
+    }
+    targetCoordinator.onChannelActivityObserved(sid, ch);
   }
 
   private void handleNoticeOrSpoiler(
@@ -641,7 +664,8 @@ public class IrcMediator implements MediatorControlPort {
         || e instanceof IrcEvent.Connecting
         || e instanceof IrcEvent.Reconnecting
         || e instanceof IrcEvent.Disconnected
-        || e instanceof IrcEvent.ConnectionReady) {
+        || e instanceof IrcEvent.ConnectionReady
+        || e instanceof IrcEvent.ConnectionFeaturesUpdated) {
       if (e instanceof IrcEvent.Connected ev) {
         ui.setServerConnectedIdentity(sid, ev.serverHost(), ev.serverPort(), ev.nick(), ev.at());
       }
@@ -681,6 +705,7 @@ public class IrcMediator implements MediatorControlPort {
                 });
       }
       case IrcEvent.ChannelMessage ev -> {
+        observeChannelActivity(sid, ev.channel());
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
         NotificationRuleMatch ruleMatch = firstRuleMatchForChannel(sid, chan, ev.from(), ev.text());
@@ -760,6 +785,7 @@ public class IrcMediator implements MediatorControlPort {
         }
       }
       case IrcEvent.ChannelAction ev -> {
+        observeChannelActivity(sid, ev.channel());
         TargetRef chan = new TargetRef(sid, ev.channel());
         TargetRef active = targetCoordinator.getActiveTarget();
         NotificationRuleMatch ruleMatch =
@@ -832,6 +858,7 @@ public class IrcMediator implements MediatorControlPort {
         }
       }
       case IrcEvent.ChannelModeObserved ev -> {
+        observeChannelActivity(sid, ev.channel());
         inboundModeEventHandler.handleChannelModeObserved(sid, ev);
         if (ev.kind() == IrcEvent.ChannelModeKind.DELTA) {
           maybeNotifyModeEvents(sid, ev);
@@ -846,6 +873,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.ChannelTopicUpdated ev -> {
+        observeChannelActivity(sid, ev.channel());
         inboundModeEventHandler.onChannelTopicUpdated(sid, ev.channel());
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
@@ -1267,6 +1295,7 @@ public class IrcMediator implements MediatorControlPort {
         recordInterceptorEvent(sid, "status", "server", "", rawLine, InterceptorEventType.SERVER);
       }
       case IrcEvent.ChatHistoryBatchReceived ev -> {
+        observeChannelActivity(sid, ev.target());
         mediatorHistoryIngestOrchestrator.onChatHistoryBatchReceived(sid, ev);
       }
 
@@ -1501,6 +1530,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.UserJoinedChannel ev -> {
+        observeChannelActivity(sid, ev.channel());
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.appendPresence(chan, PresenceEvent.join(ev.nick()));
@@ -1523,6 +1553,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.UserPartedChannel ev -> {
+        observeChannelActivity(sid, ev.channel());
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.appendPresence(chan, PresenceEvent.part(ev.nick(), ev.reason()));
@@ -1609,6 +1640,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.UserQuitChannel ev -> {
+        observeChannelActivity(sid, ev.channel());
         markPrivateMessagePeerOffline(sid, ev.nick());
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
@@ -1633,6 +1665,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.UserNickChangedChannel ev -> {
+        observeChannelActivity(sid, ev.channel());
         TargetRef chan = new TargetRef(sid, ev.channel());
         ensureTargetExists(chan);
         ui.appendPresence(chan, PresenceEvent.nick(ev.oldNick(), ev.newNick()));
@@ -1672,7 +1705,9 @@ public class IrcMediator implements MediatorControlPort {
         }
         joinRoutingState.clear(sid, fromChannel);
 
-        runtimeConfig.rememberJoinedChannel(sid, toChannel);
+        if (!isQuasselCoreServer(sid)) {
+          runtimeConfig.rememberJoinedChannel(sid, toChannel);
+        }
         targetCoordinator.joinChannel(new TargetRef(sid, toChannel));
       }
 
@@ -1697,7 +1732,9 @@ public class IrcMediator implements MediatorControlPort {
           break;
         }
 
-        runtimeConfig.rememberJoinedChannel(sid, ev.channel());
+        if (!isQuasselCoreServer(sid)) {
+          runtimeConfig.rememberJoinedChannel(sid, ev.channel());
+        }
         inboundModeEventHandler.onJoinedChannel(sid, ev.channel());
         userInfoEnrichmentService.enqueueWhoChannelPrioritized(sid, ev.channel());
 
@@ -1741,6 +1778,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.NickListUpdated ev -> {
+        observeChannelActivity(sid, ev.channel());
         inboundModeEventHandler.onNickListUpdated(sid, ev.channel());
         targetCoordinator.onNickListUpdated(sid, ev);
       }
@@ -1954,10 +1992,6 @@ public class IrcMediator implements MediatorControlPort {
         if (targetMsgId.isEmpty()) return;
         ui.applyMessageRedaction(
             dest, ev.at(), from, targetMsgId, "", Map.of("draft/delete", targetMsgId));
-      }
-
-      case IrcEvent.ConnectionFeaturesUpdated ignored -> {
-        // Backend-neutral feature refresh marker used by monitor fallback/sync services.
       }
 
       case IrcEvent.Ircv3CapabilityChanged ev -> {
@@ -2911,8 +2945,9 @@ public class IrcMediator implements MediatorControlPort {
     if (serverId == null || from == null) return false;
     String me = irc.currentNick(serverId).orElse(null);
     if (me == null || me.isBlank()) return false;
+    String meNorm = normalizeNickForCompare(me);
     String fromNorm = normalizeNickForCompare(from);
-    return fromNorm != null && fromNorm.equalsIgnoreCase(me);
+    return fromNorm != null && meNorm != null && fromNorm.equalsIgnoreCase(meNorm);
   }
 
   private void markPrivateMessagePeerOnline(String serverId, String rawNick) {
@@ -3338,5 +3373,18 @@ public class IrcMediator implements MediatorControlPort {
 
   private TargetRef safeStatusTarget() {
     return targetCoordinator.safeStatusTarget();
+  }
+
+  private boolean isQuasselCoreServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return false;
+    if (serverRegistry == null) return false;
+    try {
+      Optional<IrcProperties.Server> configured = serverRegistry.find(sid);
+      if (configured == null || configured.isEmpty()) return false;
+      return configured.orElseThrow().backend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 }

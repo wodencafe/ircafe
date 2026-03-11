@@ -5,6 +5,7 @@ import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 /** In-memory bus that carries ZNC Playback module ranges. */
 @Component
+@InfrastructureLayer
 public final class ZncPlaybackBus extends AbstractTargetWaiterBus<ZncPlaybackBus.PlaybackEvent> {
 
   private static final Logger log = LoggerFactory.getLogger(ZncPlaybackBus.class);

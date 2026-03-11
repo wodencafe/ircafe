@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -10,6 +11,7 @@ import org.springframework.core.annotation.Order;
  * <p>Order is significant: earlier resolvers get first shot before fallbacks like OpenGraph.
  */
 @Configuration
+@InterfaceLayer
 public class LinkPreviewResolverConfig {
 
   // Keep in sync with any resolver HTML caps.

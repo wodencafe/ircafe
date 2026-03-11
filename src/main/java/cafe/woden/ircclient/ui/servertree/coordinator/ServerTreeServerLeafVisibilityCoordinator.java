@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 /** Applies per-server built-in leaf/group visibility and reapplies persisted layout/order. */
@@ -33,6 +34,7 @@ public final class ServerTreeServerLeafVisibilityCoordinator {
   private final BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder>
       applyRootSiblingOrderToTree;
   private final Function<String, String> statusLeafLabelForServer;
+  private final Predicate<String> isQuasselServer;
   private final BooleanSupplier showDccTransfersNodes;
   private final Function<TargetRef, DefaultMutableTreeNode> leafForTarget;
 
@@ -53,6 +55,7 @@ public final class ServerTreeServerLeafVisibilityCoordinator {
       BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder>
           applyRootSiblingOrderToTree,
       Function<String, String> statusLeafLabelForServer,
+      Predicate<String> isQuasselServer,
       BooleanSupplier showDccTransfersNodes,
       Function<TargetRef, DefaultMutableTreeNode> leafForTarget) {
     this.channelListLabel = Objects.requireNonNull(channelListLabel, "channelListLabel");
@@ -76,6 +79,7 @@ public final class ServerTreeServerLeafVisibilityCoordinator {
         Objects.requireNonNull(applyRootSiblingOrderToTree, "applyRootSiblingOrderToTree");
     this.statusLeafLabelForServer =
         Objects.requireNonNull(statusLeafLabelForServer, "statusLeafLabelForServer");
+    this.isQuasselServer = Objects.requireNonNull(isQuasselServer, "isQuasselServer");
     this.showDccTransfersNodes =
         Objects.requireNonNull(showDccTransfersNodes, "showDccTransfersNodes");
     this.leafForTarget = Objects.requireNonNull(leafForTarget, "leafForTarget");
@@ -89,6 +93,7 @@ public final class ServerTreeServerLeafVisibilityCoordinator {
     if (serverNodes == null || serverNodes.serverNode == null) return;
 
     ServerBuiltInNodesVisibility visibility = builtInNodesVisibility.apply(sid);
+    boolean quasselServer = isQuasselServer.test(sid);
     ensureMovableBuiltInLeafVisible(
         serverNodes,
         serverNodes.statusRef,
@@ -98,7 +103,12 @@ public final class ServerTreeServerLeafVisibilityCoordinator {
         serverNodes, serverNodes.notificationsRef, notificationsLabel, visibility.notifications());
     ensureMovableBuiltInLeafVisible(
         serverNodes, serverNodes.logViewerRef, logViewerLabel, visibility.logViewer());
-    ensureUiLeafVisible(serverNodes, serverNodes.channelListRef, channelListLabel, true);
+    if (quasselServer) {
+      suppressRootChannelListForQuassel(serverNodes);
+      ensurePrivateMessagesGroupVisible(serverNodes, false);
+    } else {
+      ensureUiLeafVisible(serverNodes, serverNodes.channelListRef, channelListLabel, true);
+    }
     ensureMovableBuiltInLeafVisible(
         serverNodes, serverNodes.weechatFiltersRef, weechatFiltersLabel, true);
     ensureMovableBuiltInLeafVisible(serverNodes, serverNodes.ignoresRef, ignoresLabel, true);
@@ -107,10 +117,26 @@ public final class ServerTreeServerLeafVisibilityCoordinator {
         serverNodes.dccTransfersRef,
         dccTransfersLabel,
         showDccTransfersNodes.getAsBoolean());
-    ensureMonitorGroupVisible(serverNodes, visibility.monitor());
-    ensureInterceptorsGroupVisible(serverNodes, visibility.interceptors());
+    ensureMonitorGroupVisible(serverNodes, !quasselServer && visibility.monitor());
+    ensureInterceptorsGroupVisible(serverNodes, !quasselServer && visibility.interceptors());
     applyBuiltInLayoutToTree.accept(serverNodes, builtInLayout.apply(sid));
+    if (quasselServer) {
+      ensureMonitorGroupVisible(serverNodes, false);
+      ensureInterceptorsGroupVisible(serverNodes, false);
+      ensurePrivateMessagesGroupVisible(serverNodes, false);
+    }
     applyRootSiblingOrderToTree.accept(serverNodes, rootSiblingOrder.apply(sid));
+  }
+
+  private void suppressRootChannelListForQuassel(ServerNodes serverNodes) {
+    if (serverNodes == null
+        || serverNodes.serverNode == null
+        || serverNodes.channelListRef == null) {
+      return;
+    }
+    DefaultMutableTreeNode channelListNode = leafForTarget.apply(serverNodes.channelListRef);
+    if (channelListNode == null || channelListNode.getParent() != serverNodes.serverNode) return;
+    ensureUiLeafVisible(serverNodes, serverNodes.channelListRef, channelListLabel, false);
   }
 
   private boolean ensureUiLeafVisible(
@@ -143,6 +169,12 @@ public final class ServerTreeServerLeafVisibilityCoordinator {
     if (serverNodes == null) return false;
     return nodeVisibilityMutator.ensureGroupVisible(
         serverNodes.serverNode, serverNodes.otherNode, serverNodes.monitorNode, visible);
+  }
+
+  private boolean ensurePrivateMessagesGroupVisible(ServerNodes serverNodes, boolean visible) {
+    if (serverNodes == null) return false;
+    return nodeVisibilityMutator.ensureGroupVisible(
+        serverNodes.serverNode, serverNodes.otherNode, serverNodes.pmNode, visible);
   }
 
   private String normalize(String serverId) {

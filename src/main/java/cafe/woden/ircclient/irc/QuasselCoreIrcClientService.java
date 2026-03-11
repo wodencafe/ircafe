@@ -33,12 +33,16 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -51,6 +55,8 @@ import org.springframework.stereotype.Service;
 @Service
 @InfrastructureLayer
 public class QuasselCoreIrcClientService implements IrcBackendClientService {
+  private static final Logger log = LoggerFactory.getLogger(QuasselCoreIrcClientService.class);
+
   private static final int BUFFER_STATUS = 0x01;
   private static final int BUFFER_CHANNEL = 0x02;
   private static final int BUFFER_QUERY = 0x04;
@@ -73,13 +79,15 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private static final int HISTORY_LIMIT_DEFAULT = 50;
   private static final int HISTORY_LIMIT_MAX = 200;
   private static final String NETWORK_CLASS = "Network";
-  private static final String NETWORK_CONNECT_SLOT = "requestConnect()";
-  private static final String NETWORK_DISCONNECT_SLOT = "requestDisconnect()";
-  private static final String NETWORK_SET_INFO_SLOT = "requestSetNetworkInfo(NetworkInfo)";
+  private static final String NETWORK_SET_INFO_SLOT = "requestSetNetworkInfo";
   private static final String BACKLOG_MANAGER_CLASS = "BacklogManager";
   private static final String BACKLOG_MANAGER_OBJECT = "global";
   private static final String BACKLOG_REQUEST_SLOT = "requestBacklog(BufferId,MsgId,MsgId,int,int)";
+  private static final String RPC_CREATE_IDENTITY_SLOT = "2createIdentity(Identity,QVariantMap)";
   private static final String RPC_CREATE_NETWORK_SLOT = "2createNetwork(NetworkInfo,QStringList)";
+  private static final String RPC_CREATE_NETWORK_SLOT_LEGACY = "2createNetwork(NetworkInfo)";
+  private static final String SYNC_CONNECT_NETWORK_SLOT = "requestConnect";
+  private static final String SYNC_DISCONNECT_NETWORK_SLOT = "requestDisconnect";
   private static final String RPC_REMOVE_NETWORK_SLOT = "2removeNetwork(NetworkId)";
   private static final String BUFFER_SYNCER_CLASS = "BufferSyncer";
   private static final String BUFFER_SYNCER_OBJECT = "global";
@@ -94,6 +102,10 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private static final int MAX_NETWORK_NICKS_PER_SESSION = 256;
   private static final int MAX_NETWORK_IDENTITIES_PER_SESSION = 512;
   private static final int MAX_HISTORY_MSGID_SAMPLES_PER_TARGET = 512;
+  private static final int MAX_PENDING_NETWORK_CREATE_NAMES = 32;
+  private static final long PENDING_NETWORK_CREATE_NAME_TTL_MS = TimeUnit.MINUTES.toMillis(2);
+  private static final String NETWORK_ADD_IRC_CHANNEL_SLOT = "addircchannel";
+  private static final String NETWORK_REMOVE_IRC_CHANNEL_SLOT = "removeircchannel";
   private static final String NETWORK_QUALIFIER_PREFIX = "{net:";
   private static final String NETWORK_QUALIFIER_SUFFIX = "}";
   private static final Set<String> TARGET_ROUTED_RAW_COMMANDS =
@@ -116,11 +128,14 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private static final String PHASE_SETUP_REQUIRED = "setup-required";
   private static final List<String> DEFAULT_SETUP_STORAGE_BACKENDS = List.of("SQLite");
   private static final List<String> DEFAULT_SETUP_AUTHENTICATORS = List.of("Database");
-  private static final byte[] DEFAULT_NETWORK_CODEC_BYTES =
-      "UTF-8".getBytes(StandardCharsets.UTF_8);
+  private static final String DEFAULT_NETWORK_CODEC = "UTF-8";
 
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
+  private final FlowableProcessor<QuasselCoreNetworkSnapshotEvent> quasselNetworkEvents =
+      PublishProcessor.<QuasselCoreNetworkSnapshotEvent>create().toSerialized();
+  private final FlowableProcessor<QuasselIdentityObservedEvent> quasselIdentityEvents =
+      PublishProcessor.<QuasselIdentityObservedEvent>create().toSerialized();
   private final Map<String, QuasselSession> sessions = new ConcurrentHashMap<>();
   private final Map<String, String> availabilityReasonByServer = new ConcurrentHashMap<>();
   private final Map<String, QuasselCoreSetupPrompt> pendingSetupByServer =
@@ -128,6 +143,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private final Map<String, Disposable> reconnectTasksByServer = new ConcurrentHashMap<>();
   private final Map<String, AtomicLong> reconnectAttemptsByServer = new ConcurrentHashMap<>();
   private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+
+  private record QuasselIdentityObservedEvent(String serverId, int identityId) {}
 
   private final ServerCatalog serverCatalog;
   private final QuasselCoreSocketConnector socketConnector;
@@ -227,6 +244,15 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   @Override
+  public boolean hasEstablishedQuasselCoreSession(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+    QuasselSession session = sessions.get(sid);
+    if (session == null || session.socketRef.get() == null) return false;
+    return session.phase.get() == QuasselSessionPhase.SESSION_ESTABLISHED;
+  }
+
+  @Override
   public Optional<QuasselCoreSetupPrompt> quasselCoreSetupPrompt(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return Optional.empty();
@@ -292,6 +318,11 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   @Override
+  public Flowable<QuasselCoreNetworkSnapshotEvent> quasselCoreNetworkEvents() {
+    return quasselNetworkEvents.onBackpressureBuffer();
+  }
+
+  @Override
   public Completable quasselCoreConnectNetwork(String serverId, String networkIdOrName) {
     return Completable.fromAction(
             () -> {
@@ -302,7 +333,45 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               QuasselSession session = requireEstablishedSession(sid, "quassel connect network");
               int networkId =
                   resolveQuasselNetworkId(session, sid, networkIdOrName, "quassel connect network");
-              sendNetworkRequest(session, networkId, NETWORK_CONNECT_SLOT);
+              log.debug(
+                  "Quassel connect network request: serverId={}, networkToken='{}', resolvedNetworkId={}, slot={}",
+                  sid,
+                  Objects.toString(networkIdOrName, ""),
+                  networkId,
+                  SYNC_CONNECT_NETWORK_SLOT);
+              QuasselCoreNetworkSummary targetSummary =
+                  findNetworkSummaryById(snapshotQuasselCoreNetworks(session), networkId);
+              if (targetSummary == null) {
+                log.debug(
+                    "Quassel connect target summary missing from current snapshot: serverId={}, networkId={}, knownNetworkIds={}, displayNames={}, stateKeys={}",
+                    sid,
+                    networkId,
+                    collectKnownNetworkIds(session),
+                    session.networkDisplayByNetworkId,
+                    session.networkStateByNetworkId.keySet());
+              } else {
+                log.debug(
+                    "Quassel connect target summary: serverId={}, networkId={}, networkName={}, connected={}, enabled={}, identityId={}, host={}, port={}, tls={}, rawState={}",
+                    sid,
+                    networkId,
+                    targetSummary.networkName(),
+                    targetSummary.connected(),
+                    targetSummary.enabled(),
+                    targetSummary.identityId(),
+                    targetSummary.serverHost(),
+                    targetSummary.serverPort(),
+                    targetSummary.useTls(),
+                    summarizeNetworkInfoForLog(targetSummary.rawState()));
+              }
+              boolean repairConfirmed = maybeRepairNetworkIdentityBeforeConnect(session, networkId);
+              if (!repairConfirmed) {
+                log.debug(
+                    "Skipping Quassel connect because identity repair is not confirmed yet: serverId={}, networkId={}",
+                    sid,
+                    networkId);
+                return;
+              }
+              sendNetworkRequest(session, networkId, SYNC_CONNECT_NETWORK_SLOT);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -319,7 +388,13 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               int networkId =
                   resolveQuasselNetworkId(
                       session, sid, networkIdOrName, "quassel disconnect network");
-              sendNetworkRequest(session, networkId, NETWORK_DISCONNECT_SLOT);
+              log.debug(
+                  "Quassel disconnect network request: serverId={}, networkToken='{}', resolvedNetworkId={}, slot={}",
+                  sid,
+                  Objects.toString(networkIdOrName, ""),
+                  networkId,
+                  SYNC_DISCONNECT_NETWORK_SLOT);
+              sendNetworkRequest(session, networkId, SYNC_DISCONNECT_NETWORK_SLOT);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -336,8 +411,34 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               QuasselSession session = requireEstablishedSession(sid, "quassel create network");
               QuasselCoreNetworkCreateRequest req =
                   normalizeQuasselCoreCreateRequest(Objects.requireNonNull(request, "request"));
+              log.debug(
+                  "Quassel create network preflight: serverId={}, requestedIdentityId={}, knownIdentityIds={}, identityStateKeys={}, identityNames={}, authNetworkIds={}",
+                  sid,
+                  req.identityId(),
+                  session.knownIdentityIds,
+                  session.identityStateByIdentityId.keySet(),
+                  session.identityNameByIdentityId,
+                  Optional.ofNullable(session.authResult.get())
+                      .map(QuasselCoreAuthHandshake.AuthResult::networkIds)
+                      .orElse(List.of()));
+              if (req.identityId() == null && !hasKnownIdentity(session)) {
+                maybeCreateDefaultIdentityForNetwork(session, sid, req);
+              }
               int identityId = resolveQuasselIdentityId(session, req.identityId());
+              log.debug(
+                  "Quassel create network request: serverId={}, networkName={}, host={}, port={}, tls={}, verifyTls={}, autoJoinCount={}, requestedIdentityId={}, resolvedIdentityId={}",
+                  sid,
+                  req.networkName(),
+                  req.serverHost(),
+                  req.serverPort(),
+                  req.useTls(),
+                  req.verifyTls(),
+                  req.autoJoinChannels() == null ? 0 : req.autoJoinChannels().size(),
+                  req.identityId(),
+                  identityId);
+              Set<Integer> baselineNetworkIds = Set.copyOf(collectKnownNetworkIds(session));
               sendCreateNetworkRequest(session, identityId, req);
+              maybeRetryLegacyCreateNetworkSlot(session, identityId, req, baselineNetworkIds);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -373,16 +474,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               int networkId =
                   resolveQuasselNetworkId(session, sid, networkIdOrName, "quassel remove network");
               sendRemoveNetworkRequest(session, networkId);
-              session.networkStateByNetworkId.remove(networkId);
-              session.networkDisplayByNetworkId.remove(networkId);
-              session.networkTokenByNetworkId.remove(networkId);
-              for (Map.Entry<String, Integer> entry :
-                  new ArrayList<>(session.networkIdByTokenLower.entrySet())) {
-                if (entry == null) continue;
-                Integer mapped = entry.getValue();
-                if (mapped == null || mapped.intValue() != networkId) continue;
-                session.networkIdByTokenLower.remove(entry.getKey(), mapped);
-              }
+              forgetKnownNetwork(session, networkId);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -1280,6 +1372,36 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     return normalized.toLowerCase(Locale.ROOT);
   }
 
+  private static String normalizeMembershipKey(String target, int networkId) {
+    QualifiedTarget parsed = parseQualifiedTarget(target);
+    String base = Objects.toString(parsed.baseTarget(), "").trim().toLowerCase(Locale.ROOT);
+    if (base.isEmpty()) return "";
+    if (networkId >= 0) {
+      return networkId + "|" + base;
+    }
+    String token = Objects.toString(parsed.networkToken(), "").trim().toLowerCase(Locale.ROOT);
+    if (!token.isEmpty()) {
+      return "net:" + token + "|" + base;
+    }
+    return "global|" + base;
+  }
+
+  private static boolean markChannelMembershipJoined(
+      QuasselSession session, String target, int networkId) {
+    if (session == null) return false;
+    String key = normalizeMembershipKey(target, networkId);
+    if (key.isEmpty()) return false;
+    return session.joinedChannelMembershipKeys.add(key);
+  }
+
+  private static boolean markChannelMembershipLeft(
+      QuasselSession session, String target, int networkId) {
+    if (session == null) return false;
+    String key = normalizeMembershipKey(target, networkId);
+    if (key.isEmpty()) return false;
+    return session.joinedChannelMembershipKeys.remove(key);
+  }
+
   private static QualifiedTarget parseQualifiedTarget(String target) {
     String raw = Objects.toString(target, "").trim();
     if (raw.isEmpty()) return new QualifiedTarget("", "", "");
@@ -1469,12 +1591,18 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       session.networkTokenByNetworkId.clear();
       session.networkIdByTokenLower.clear();
       session.networkStateByNetworkId.clear();
+      session.removedNetworkIds.clear();
+      session.identityStateByIdentityId.clear();
+      session.identityNameByIdentityId.clear();
+      session.knownIdentityIds.clear();
       session.networkCurrentNickByNetworkId.clear();
       session.enabledCapabilitiesByNetworkId.clear();
       session.monitorSupportByNetworkId.clear();
       session.multilineLimitsByNetworkId.clear();
+      session.pendingCreatedNetworkNames.clear();
       session.capabilitySnapshotObserved.set(false);
       observeKnownNetworks(session, auth);
+      observeKnownIdentities(session, auth);
       int primaryNetworkId = primaryNetworkId(session);
       if (primaryNetworkId >= 0) {
         session.networkCurrentNickByNetworkId.put(primaryNetworkId, session.initialNick);
@@ -1549,6 +1677,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         } catch (SocketTimeoutException timeout) {
           continue;
         } catch (EOFException eof) {
+          log.debug("Quassel read loop EOF: serverId={}", sid);
           availabilityReasonByServer.put(sid, "Quassel Core connection closed");
           emitDisconnectedOnce(session, "Quassel Core connection closed");
           scheduleReconnectIfEligible(session, "Quassel Core connection closed");
@@ -1558,6 +1687,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       }
     } catch (Exception e) {
       if (!session.closeRequested.get() && !shuttingDown.get()) {
+        log.warn("Quassel read loop error: serverId={}", sid, e);
         String detail = renderThrowableMessage(e);
         String reason = detail.isEmpty() ? "Connection error" : ("Connection error: " + detail);
         availabilityReasonByServer.put(sid, reason);
@@ -1588,6 +1718,14 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       throws Exception {
     if (message == null) return;
     int requestType = message.requestType();
+    log.debug(
+        "Quassel inbound signal: serverId={}, requestType={}, className={}, objectName={}, slotName={}, paramCount={}",
+        session == null ? "" : session.serverId,
+        requestType,
+        message.className(),
+        message.objectName(),
+        message.slotName(),
+        message.params() == null ? 0 : message.params().size());
     if (requestType == QuasselCoreDatastreamCodec.SIGNAL_PROXY_HEARTBEAT) {
       handleHeartbeat(session, message.params());
       return;
@@ -1648,6 +1786,18 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private void handleRpcCall(QuasselSession session, String slotName, List<Object> params) {
     String slot = Objects.toString(slotName, "").trim();
     if (slot.isEmpty()) return;
+    log.debug(
+        "Received Quassel RPC slot: serverId={}, slot={}, paramCount={}",
+        session == null ? "" : session.serverId,
+        slot,
+        params == null ? 0 : params.size());
+    if (slot.toLowerCase(Locale.ROOT).contains("network")) {
+      log.debug(
+          "Received Quassel network-related RPC slot: serverId={}, slot={}, params={}",
+          session == null ? "" : session.serverId,
+          slot,
+          params);
+    }
 
     if ("2displayMsg(Message)".equals(slot)) {
       Object first = (params == null || params.isEmpty()) ? null : params.get(0);
@@ -1676,6 +1826,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         trimMapToMaxSize(session.bufferInfosById, MAX_BUFFER_INFOS_PER_SESSION);
         observeKnownNetwork(session, merged.networkId(), "");
         noteTargetNetworkHint(session, merged.bufferName(), merged.networkId(), false);
+        emitJoinedChannelFromBufferInfoIfNetworkConnected(session, merged);
       }
       return;
     }
@@ -1687,11 +1838,196 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         session.bufferInfosById.remove(info.bufferId());
       }
     }
+
+    observeNetworkLifecycleFromRpcSlot(session, slot, params);
+    observeIdentityLifecycleFromRpcSlot(session, slot, params);
+  }
+
+  private void observeNetworkLifecycleFromRpcSlot(
+      QuasselSession session, String slotName, List<Object> params) {
+    if (session == null) return;
+    String slot = Objects.toString(slotName, "").trim().toLowerCase(Locale.ROOT);
+    if (slot.isEmpty() || !slot.contains("network")) return;
+    if (params == null || params.isEmpty()) return;
+
+    boolean remove = slot.contains("remove") || slot.contains("deleted");
+    boolean createLike = !remove && (slot.contains("create") || slot.contains("added"));
+    log.debug(
+        "Observing Quassel network lifecycle RPC: serverId={}, slot={}, remove={}, params={}",
+        session.serverId,
+        slotName,
+        remove,
+        params);
+    for (Object param : params) {
+      observeNetworkLifecycleFromRpcParam(session, param, remove, createLike);
+    }
+  }
+
+  private void observeIdentityLifecycleFromRpcSlot(
+      QuasselSession session, String slotName, List<Object> params) {
+    if (session == null) return;
+    String slot = Objects.toString(slotName, "").trim().toLowerCase(Locale.ROOT);
+    if (slot.isEmpty() || !slot.contains("identity")) return;
+    boolean remove = slot.contains("remove") || slot.contains("deleted");
+    if (params == null || params.isEmpty()) {
+      log.debug(
+          "Observed identity lifecycle RPC with no params: serverId={}, slot={}, remove={}",
+          session.serverId,
+          slotName,
+          remove);
+      return;
+    }
+
+    for (Object param : params) {
+      observeIdentityLifecycleFromRpcParam(session, slotName, slot, param, remove);
+    }
+  }
+
+  private void observeIdentityLifecycleFromRpcParam(
+      QuasselSession session, String slotName, String slotLower, Object raw, boolean remove) {
+    if (session == null || raw == null) return;
+    if (raw instanceof List<?> list) {
+      for (Object value : list) {
+        observeIdentityLifecycleFromRpcParam(session, slotName, slotLower, value, remove);
+      }
+      return;
+    }
+    if (raw instanceof QuasselCoreDatastreamCodec.UserTypeValue userType) {
+      String type = Objects.toString(userType.typeName(), "").trim();
+      Object value = userType.value();
+      if ("IdentityId".equals(type)) {
+        int identityId = tryParseInt(value);
+        if (identityId >= 0) {
+          if (remove) {
+            session.knownIdentityIds.remove(identityId);
+            session.identityStateByIdentityId.remove(identityId);
+            session.identityNameByIdentityId.remove(identityId);
+          } else {
+            observeKnownIdentity(session, identityId, "");
+          }
+          log.debug(
+              "Observed identity lifecycle RPC id user-type: serverId={}, slot={}, remove={}, identityId={}",
+              session.serverId,
+              slotName,
+              remove,
+              identityId);
+        }
+      }
+      observeIdentityLifecycleFromRpcParam(session, slotName, slotLower, value, remove);
+      return;
+    }
+    if (raw instanceof Map<?, ?> map) {
+      int identityId = identityIdFromStateMap(map, -1);
+      String identityName = parseIdentityName(map);
+      if (identityId >= 0) {
+        if (remove) {
+          session.knownIdentityIds.remove(identityId);
+          session.identityStateByIdentityId.remove(identityId);
+          session.identityNameByIdentityId.remove(identityId);
+        } else {
+          observeKnownIdentity(session, identityId, identityName);
+          session.identityStateByIdentityId.put(identityId, normalizeObjectMap(map));
+          trimMapToMaxSize(session.identityStateByIdentityId, MAX_NETWORK_IDENTITIES_PER_SESSION);
+        }
+      }
+      log.debug(
+          "Observed identity lifecycle RPC map: serverId={}, slot={}, remove={}, identityId={}, identityName={}, map={}",
+          session.serverId,
+          slotName,
+          remove,
+          identityId,
+          identityName,
+          map);
+      return;
+    }
+  }
+
+  private void observeNetworkLifecycleFromRpcParam(
+      QuasselSession session, Object raw, boolean remove, boolean createLike) {
+    if (session == null || raw == null) return;
+
+    if (raw instanceof List<?> list) {
+      for (Object value : list) {
+        observeNetworkLifecycleFromRpcParam(session, value, remove, createLike);
+      }
+      return;
+    }
+
+    if (raw instanceof QuasselCoreDatastreamCodec.UserTypeValue userType) {
+      String type = Objects.toString(userType.typeName(), "").trim();
+      Object value = userType.value();
+      if ("NetworkInfo".equals(type) && value instanceof Map<?, ?> map) {
+        observeNetworkLifecycleFromRpcParam(session, map, remove, createLike);
+        return;
+      }
+      if ("NetworkId".equals(type)) {
+        int networkId = tryParseInt(value);
+        if (networkId < 0) return;
+        if (remove) {
+          log.debug(
+              "Quassel network lifecycle RPC removed network by id: serverId={}, networkId={}",
+              session.serverId,
+              networkId);
+          forgetKnownNetwork(session, networkId);
+        } else {
+          String observedName = createLike ? claimPendingCreatedNetworkName(session) : "";
+          log.debug(
+              "Quassel network lifecycle RPC observed network by id: serverId={}, networkId={}, nameHint={}",
+              session.serverId,
+              networkId,
+              observedName);
+          observeKnownNetwork(session, networkId, observedName);
+        }
+        return;
+      }
+      observeNetworkLifecycleFromRpcParam(session, value, remove, createLike);
+      return;
+    }
+
+    if (raw instanceof Map<?, ?> map) {
+      int networkId = networkIdFromStateMap(map, -1);
+      if (remove && networkId >= 0) {
+        log.debug(
+            "Quassel network lifecycle RPC removed network by map: serverId={}, networkId={}, map={}",
+            session.serverId,
+            networkId,
+            map);
+        forgetKnownNetwork(session, networkId);
+        return;
+      }
+      String networkName =
+          firstNonBlank(
+              mapValueIgnoreCase(map, "networkName"),
+              mapValueIgnoreCase(map, "networkname"),
+              mapValueIgnoreCase(map, "name"));
+      log.debug(
+          "Quassel network lifecycle RPC observed network map: serverId={}, networkId={}, networkName={}, map={}",
+          session.serverId,
+          networkId,
+          networkName,
+          map);
+      observeKnownNetwork(session, networkId, networkName);
+      observeNetworkStateSnapshot(session, networkId, map);
+      observeNetworkCapabilities(session, networkId, map);
+      observeNetworkMonitorSupport(session, networkId, map);
+      return;
+    }
+
+    int networkId = tryParseInt(raw);
+    if (networkId < 0) return;
+    if (remove) {
+      forgetKnownNetwork(session, networkId);
+    } else {
+      String observedName = createLike ? claimPendingCreatedNetworkName(session) : "";
+      observeKnownNetwork(session, networkId, observedName);
+    }
   }
 
   private void handleDisplayStatusMessage(String serverId, String network, String text) {
     String net = Objects.toString(network, "").trim();
     String rawLine = Objects.toString(text, "").trim();
+    log.debug(
+        "Quassel display status message: serverId={}, network={}, text={}", serverId, net, rawLine);
     String messageLine = rawLine;
     if (messageLine.isEmpty()) {
       messageLine = net;
@@ -1712,6 +2048,24 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     String classToken = Objects.toString(className, "").trim();
     String slotToken = Objects.toString(slotName, "").trim();
     List<Object> values = params == null ? List.of() : params;
+    log.debug(
+        "Received Quassel sync/init envelope: serverId={}, requestType={}, className={}, objectName={}, slotName={}, paramCount={}",
+        session == null ? "" : session.serverId,
+        requestType,
+        classToken,
+        objectName,
+        slotToken,
+        values.size());
+    if (classToken.toLowerCase(Locale.ROOT).contains("network")) {
+      log.debug(
+          "Received network-related sync/init envelope: serverId={}, requestType={}, className={}, objectName={}, slotName={}, params={}",
+          session == null ? "" : session.serverId,
+          requestType,
+          classToken,
+          objectName,
+          slotToken,
+          values);
+    }
 
     if ("BufferSyncer".equals(classToken)) {
       applyBufferInfoSnapshot(session, values);
@@ -1731,8 +2085,20 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       return;
     }
 
+    if ("CoreInfo".equals(classToken)) {
+      handleCoreInfoStateSync(session, objectName, slotToken, values);
+      return;
+    }
+
+    if ("Identity".equals(classToken)) {
+      handleIdentityStateSync(session, objectName, values);
+      return;
+    }
+
     if ("Network".equals(classToken)) {
+      observeChannelMembershipFromNetworkSync(session, objectName, slotToken, values);
       maybeUpdateCurrentNickFromNetworkState(session, objectName, values);
+      observeMaybeNetworkStateFromUnknownSync(session, classToken, objectName, slotToken, values);
       return;
     }
 
@@ -1748,6 +2114,289 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
 
     if ("NetworkInfo".equals(classToken)) {
       handleNetworkInfoStateSync(session, objectName, values);
+      return;
+    }
+
+    if (classToken.toLowerCase(Locale.ROOT).contains("identity")) {
+      observeIdentitiesFromUnknownState(
+          session, values, parseNetworkId(objectName), classToken, objectName, slotToken);
+    }
+    observeMaybeNetworkStateFromUnknownSync(session, classToken, objectName, slotToken, values);
+  }
+
+  private void observeMaybeNetworkStateFromUnknownSync(
+      QuasselSession session,
+      String classToken,
+      String objectName,
+      String slotToken,
+      List<Object> values) {
+    if (session == null) return;
+    String className = Objects.toString(classToken, "").trim();
+    if (!className.toLowerCase(Locale.ROOT).contains("network")) {
+      return;
+    }
+    if (values == null || values.isEmpty()) return;
+
+    int fallbackNetworkId = parseNetworkId(objectName);
+    ArrayList<Map<?, ?>> candidates = new ArrayList<>();
+    Map<String, Object> flattened = flattenNetworkStateFromKeyValueParams(values);
+    if (!flattened.isEmpty()) {
+      candidates.add(flattened);
+    }
+    for (Object value : values) {
+      collectPotentialNetworkStateMaps(value, candidates);
+    }
+    if (candidates.isEmpty()) {
+      log.debug(
+          "Network-related sync envelope had no map payloads to inspect: serverId={}, className={}, objectName={}, slotName={}, params={}",
+          session.serverId,
+          className,
+          objectName,
+          slotToken,
+          values);
+      return;
+    }
+
+    int applied = 0;
+    for (Map<?, ?> candidate : candidates) {
+      if (candidate == null || candidate.isEmpty()) continue;
+      int networkId = networkIdFromStateMap(candidate, fallbackNetworkId);
+      String networkName =
+          firstNonBlank(
+              mapValueIgnoreCase(candidate, "networkName"),
+              mapValueIgnoreCase(candidate, "networkname"),
+              mapValueIgnoreCase(candidate, "name"));
+      boolean looksLikeNetworkState =
+          networkId >= 0
+              || !networkName.isEmpty()
+              || mapValueIgnoreCase(candidate, "ServerList") != null
+              || mapValueIgnoreCase(candidate, "serverList") != null;
+      if (!looksLikeNetworkState) continue;
+
+      observeKnownNetwork(session, networkId, networkName);
+      observeNetworkStateSnapshot(session, networkId, candidate);
+      observeNetworkCapabilities(session, networkId, candidate);
+      observeNetworkMonitorSupport(session, networkId, candidate);
+      applied++;
+      log.debug(
+          "Applied network state from unknown sync class: serverId={}, className={}, objectName={}, slotName={}, networkId={}, networkName={}, state={}",
+          session.serverId,
+          className,
+          objectName,
+          slotToken,
+          networkId,
+          networkName,
+          candidate);
+    }
+
+    if (applied == 0) {
+      log.debug(
+          "Network-related sync envelope maps were inspected but no network states were derived: serverId={}, className={}, objectName={}, slotName={}, mapCount={}",
+          session.serverId,
+          className,
+          objectName,
+          slotToken,
+          candidates.size());
+    }
+  }
+
+  private void observeChannelMembershipFromNetworkSync(
+      QuasselSession session, String objectName, String slotName, List<Object> values) {
+    if (session == null) return;
+    String normalizedSlot = Objects.toString(slotName, "").trim().toLowerCase(Locale.ROOT);
+    if (normalizedSlot.isEmpty()) return;
+
+    boolean isAdd = normalizedSlot.contains(NETWORK_ADD_IRC_CHANNEL_SLOT);
+    boolean isRemove = normalizedSlot.contains(NETWORK_REMOVE_IRC_CHANNEL_SLOT);
+    if (!isAdd && !isRemove) return;
+
+    int networkId = parseNetworkId(objectName);
+    ArrayList<String> candidates = new ArrayList<>();
+    collectChannelNamesFromLifecyclePayload(values, candidates);
+    if (candidates.isEmpty()) {
+      String fallback = parseObjectLeafToken(objectName);
+      if (looksLikeChannel(fallback)) {
+        candidates.add(fallback);
+      }
+    }
+    if (candidates.isEmpty()) return;
+
+    LinkedHashSet<String> uniqueChannels = new LinkedHashSet<>();
+    for (String raw : candidates) {
+      String channel = Objects.toString(raw, "").trim();
+      if (looksLikeChannel(channel)) {
+        uniqueChannels.add(channel);
+      }
+    }
+    if (uniqueChannels.isEmpty()) return;
+
+    Instant now = Instant.now();
+    for (String channel : uniqueChannels) {
+      String qualified = qualifyTargetForNetwork(session, channel, networkId);
+      if (isAdd) {
+        if (markChannelMembershipJoined(session, qualified, networkId)) {
+          bus.onNext(
+              new ServerIrcEvent(session.serverId, new IrcEvent.JoinedChannel(now, qualified)));
+        }
+      } else {
+        markChannelMembershipLeft(session, qualified, networkId);
+      }
+    }
+  }
+
+  private static void collectChannelNamesFromLifecyclePayload(Object raw, List<String> out) {
+    if (raw == null || out == null) return;
+    if (raw instanceof List<?> list) {
+      for (Object value : list) {
+        collectChannelNamesFromLifecyclePayload(value, out);
+      }
+      return;
+    }
+    if (raw instanceof QuasselCoreDatastreamCodec.UserTypeValue userType) {
+      collectChannelNamesFromLifecyclePayload(userType.value(), out);
+      return;
+    }
+    if (raw instanceof QuasselCoreDatastreamCodec.BufferInfoValue info) {
+      String channel = Objects.toString(info.bufferName(), "").trim();
+      if (!channel.isEmpty()) out.add(channel);
+      return;
+    }
+    if (raw instanceof Map<?, ?> map) {
+      String channel =
+          firstNonBlank(
+              mapValueIgnoreCase(map, "name"),
+              mapValueIgnoreCase(map, "channel"),
+              mapValueIgnoreCase(map, "bufferName"));
+      if (!channel.isEmpty()) out.add(channel);
+      return;
+    }
+    if (raw instanceof byte[] bytes) {
+      String channel = new String(bytes, StandardCharsets.UTF_8).trim();
+      if (!channel.isEmpty()) out.add(channel);
+      return;
+    }
+    String channel = Objects.toString(raw, "").trim();
+    if (!channel.isEmpty()) out.add(channel);
+  }
+
+  private static void collectPotentialNetworkStateMaps(Object raw, List<Map<?, ?>> out) {
+    if (raw == null || out == null) return;
+    if (raw instanceof Map<?, ?> map) {
+      out.add(map);
+      for (Object value : map.values()) {
+        collectPotentialNetworkStateMaps(value, out);
+      }
+      return;
+    }
+    if (raw instanceof List<?> list) {
+      for (Object value : list) {
+        collectPotentialNetworkStateMaps(value, out);
+      }
+      return;
+    }
+    if (raw instanceof QuasselCoreDatastreamCodec.UserTypeValue userType) {
+      collectPotentialNetworkStateMaps(userType.value(), out);
+    }
+  }
+
+  private static Map<String, Object> flattenNetworkStateFromKeyValueParams(List<Object> values) {
+    if (values == null || values.size() < 4 || (values.size() % 2) != 0) return Map.of();
+    LinkedHashMap<String, Object> flattened = new LinkedHashMap<>();
+    int decodedPairs = 0;
+    for (int i = 0; i + 1 < values.size(); i += 2) {
+      String key = decodeNetworkStateKey(values.get(i));
+      if (key.isEmpty()) continue;
+      flattened.put(key, values.get(i + 1));
+      decodedPairs++;
+    }
+    // Guard against accidental flattening of non-key/value payloads.
+    if (decodedPairs < 6) return Map.of();
+    return Collections.unmodifiableMap(flattened);
+  }
+
+  private static String decodeNetworkStateKey(Object raw) {
+    if (raw == null) return "";
+    if (raw instanceof byte[] bytes) {
+      return new String(bytes, StandardCharsets.UTF_8).trim();
+    }
+    return Objects.toString(raw, "").trim();
+  }
+
+  private void observeIdentitiesFromUnknownState(
+      QuasselSession session,
+      Object raw,
+      int fallbackIdentityId,
+      String sourceClass,
+      String objectName,
+      String slotName) {
+    if (session == null || raw == null) return;
+    if (raw instanceof Map<?, ?> map) {
+      int identityId = identityIdFromStateMap(map, fallbackIdentityId);
+      String identityName = parseIdentityName(map);
+      boolean hasIdentityKeys =
+          containsAnyMapKeysIgnoreCase(
+              map,
+              "identityId",
+              "identityid",
+              "identityName",
+              "identityname",
+              "nicks",
+              "awayNick",
+              "realName",
+              "ident",
+              "kickReason",
+              "partReason",
+              "quitReason");
+      boolean looksLikeIdentity = hasIdentityKeys || (identityId >= 0 && !identityName.isEmpty());
+      if (looksLikeIdentity) {
+        observeKnownIdentity(session, identityId, identityName);
+        if (identityId >= 0) {
+          session.identityStateByIdentityId.put(identityId, normalizeObjectMap(map));
+          trimMapToMaxSize(session.identityStateByIdentityId, MAX_NETWORK_IDENTITIES_PER_SESSION);
+        }
+        log.debug(
+            "Observed identity state from {} sync: serverId={}, objectName={}, slotName={}, identityId={}, identityName={}, map={}",
+            sourceClass,
+            session.serverId,
+            objectName,
+            slotName,
+            identityId,
+            identityName,
+            map);
+      }
+      for (Object value : map.values()) {
+        observeIdentitiesFromUnknownState(
+            session, value, fallbackIdentityId, sourceClass, objectName, slotName);
+      }
+      return;
+    }
+    if (raw instanceof List<?> list) {
+      for (Object value : list) {
+        observeIdentitiesFromUnknownState(
+            session, value, fallbackIdentityId, sourceClass, objectName, slotName);
+      }
+      return;
+    }
+    if (raw instanceof QuasselCoreDatastreamCodec.UserTypeValue userType) {
+      String type = Objects.toString(userType.typeName(), "").trim();
+      Object value = userType.value();
+      if ("IdentityId".equals(type)) {
+        int identityId = tryParseInt(value);
+        if (identityId >= 0) {
+          observeKnownIdentity(session, identityId, "");
+          log.debug(
+              "Observed identity id from {} sync user-type: serverId={}, objectName={}, slotName={}, identityId={}",
+              sourceClass,
+              session.serverId,
+              objectName,
+              slotName,
+              identityId);
+        }
+      }
+      int nestedFallback = "IdentityId".equals(type) ? tryParseInt(value) : fallbackIdentityId;
+      observeIdentitiesFromUnknownState(
+          session, value, nestedFallback, sourceClass, objectName, slotName);
+      return;
     }
   }
 
@@ -1766,6 +2415,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       trimMapToMaxSize(session.bufferInfosById, MAX_BUFFER_INFOS_PER_SESSION);
       observeKnownNetwork(session, merged.networkId(), "");
       noteTargetNetworkHint(session, merged.bufferName(), merged.networkId(), false);
+      emitJoinedChannelFromBufferInfoIfNetworkConnected(session, merged);
     }
   }
 
@@ -1810,6 +2460,49 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
   }
 
+  private void handleCoreInfoStateSync(
+      QuasselSession session, String objectName, String slotName, List<Object> values) {
+    if (session == null || values == null || values.isEmpty()) return;
+    for (Object value : values) {
+      if (!(value instanceof Map<?, ?> map) || map.isEmpty()) continue;
+      log.debug(
+          "Quassel CoreInfo sync observed: serverId={}, objectName={}, slotName={}, keys={}, map={}",
+          session.serverId,
+          objectName,
+          slotName,
+          map.keySet(),
+          map);
+      Object identities = firstMapValueByKeyIgnoreCase(map, "Identities", "identities");
+      if (identities != null) {
+        observeIdentitiesFromUnknownState(
+            session, identities, -1, "CoreInfo.Identities", objectName, slotName);
+      }
+    }
+  }
+
+  private void handleIdentityStateSync(
+      QuasselSession session, String objectName, List<Object> values) {
+    if (session == null || values == null || values.isEmpty()) return;
+    int objectIdentityId = parseNetworkId(objectName);
+    for (Object value : values) {
+      if (!(value instanceof Map<?, ?> map) || map.isEmpty()) continue;
+      int identityId = identityIdFromStateMap(map, objectIdentityId);
+      String identityName = parseIdentityName(map);
+      observeKnownIdentity(session, identityId, identityName);
+      if (identityId >= 0) {
+        session.identityStateByIdentityId.put(identityId, normalizeObjectMap(map));
+        trimMapToMaxSize(session.identityStateByIdentityId, MAX_NETWORK_IDENTITIES_PER_SESSION);
+      }
+      log.debug(
+          "Quassel Identity sync observed: serverId={}, objectName={}, identityId={}, identityName={}, map={}",
+          session.serverId,
+          objectName,
+          identityId,
+          identityName,
+          map);
+    }
+  }
+
   private void handleNetworkInfoStateSync(
       QuasselSession session, String objectName, List<Object> values) {
     if (values == null || values.isEmpty()) return;
@@ -1819,6 +2512,13 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       int networkId = networkIdFromStateMap(map, objectNetworkId);
       String networkName =
           firstNonBlank(map.get("networkName"), map.get("networkname"), map.get("name"));
+      log.debug(
+          "Quassel NetworkInfo sync observed: serverId={}, objectName={}, networkId={}, networkName={}, map={}",
+          session == null ? "" : session.serverId,
+          objectName,
+          networkId,
+          networkName,
+          map);
       observeKnownNetwork(session, networkId, networkName);
       observeNetworkStateSnapshot(session, networkId, map);
       observeNetworkCapabilities(session, networkId, map);
@@ -2662,6 +3362,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         String kickedNick = Objects.toString(kick.nick(), "").trim();
         if (!kickedNick.isEmpty()) {
           if (isSelfNick(session, kickedNick, networkId)) {
+            markChannelMembershipLeft(session, target, networkId);
             bus.onNext(
                 new ServerIrcEvent(
                     session.serverId,
@@ -3325,7 +4026,9 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       QuasselSession session, Instant at, String channel, String fromDisplay, int networkId) {
     if (channel.isEmpty()) return;
     if (isSelfNick(session, fromDisplay, networkId)) {
-      bus.onNext(new ServerIrcEvent(session.serverId, new IrcEvent.JoinedChannel(at, channel)));
+      if (markChannelMembershipJoined(session, channel, networkId)) {
+        bus.onNext(new ServerIrcEvent(session.serverId, new IrcEvent.JoinedChannel(at, channel)));
+      }
       return;
     }
     bus.onNext(
@@ -3343,6 +4046,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     if (channel.isEmpty()) return;
     String reason = normalizeReason(content);
     if (isSelfNick(session, fromDisplay, networkId)) {
+      markChannelMembershipLeft(session, channel, networkId);
       bus.onNext(
           new ServerIrcEvent(session.serverId, new IrcEvent.LeftChannel(at, channel, reason)));
       return;
@@ -3404,8 +4108,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private QuasselCoreDatastreamCodec.BufferInfoValue resolveBufferInfo(
       QuasselSession session, QuasselCoreDatastreamCodec.BufferInfoValue incoming) {
     if (incoming == null) {
-      QuasselCoreAuthHandshake.AuthResult auth = session.authResult.get();
-      int networkId = auth == null ? -1 : auth.primaryNetworkId();
+      int networkId = primaryNetworkId(session);
       return new QuasselCoreDatastreamCodec.BufferInfoValue(-1, networkId, BUFFER_STATUS, -1, "");
     }
 
@@ -3609,14 +4312,22 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
 
   private static int primaryNetworkId(QuasselSession session) {
     if (session == null) return -1;
+    LinkedHashSet<Integer> knownIds = collectKnownNetworkIds(session);
+    if (knownIds.isEmpty()) return -1;
     QuasselCoreAuthHandshake.AuthResult auth = session.authResult.get();
-    if (auth == null) return -1;
-    if (auth.primaryNetworkId() >= 0) return auth.primaryNetworkId();
-    if (auth.networkIds() == null) return -1;
-    for (Integer id : auth.networkIds()) {
-      if (id != null && id.intValue() >= 0) return id.intValue();
+    if (auth == null) {
+      return knownIds.iterator().next();
     }
-    return -1;
+    int primary = auth.primaryNetworkId();
+    if (primary >= 0 && knownIds.contains(primary)) return primary;
+    if (auth.networkIds() != null) {
+      for (Integer id : auth.networkIds()) {
+        if (id != null && id.intValue() >= 0 && knownIds.contains(id.intValue())) {
+          return id.intValue();
+        }
+      }
+    }
+    return knownIds.iterator().next();
   }
 
   private static int parseNetworkId(String raw) {
@@ -3659,6 +4370,40 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     };
   }
 
+  private static void rememberPendingCreatedNetworkName(
+      QuasselSession session, String networkName) {
+    if (session == null) return;
+    String name = Objects.toString(networkName, "").trim();
+    if (name.isEmpty()) return;
+    long nowMs = System.currentTimeMillis();
+    prunePendingCreatedNetworkNames(session, nowMs);
+    session.pendingCreatedNetworkNames.addLast(new PendingCreatedNetworkName(name, nowMs));
+    while (session.pendingCreatedNetworkNames.size() > MAX_PENDING_NETWORK_CREATE_NAMES) {
+      session.pendingCreatedNetworkNames.pollFirst();
+    }
+  }
+
+  private static String claimPendingCreatedNetworkName(QuasselSession session) {
+    if (session == null) return "";
+    long nowMs = System.currentTimeMillis();
+    prunePendingCreatedNetworkNames(session, nowMs);
+    PendingCreatedNetworkName pending = session.pendingCreatedNetworkNames.pollFirst();
+    if (pending == null) return "";
+    String name = Objects.toString(pending.networkName(), "").trim();
+    return name;
+  }
+
+  private static void prunePendingCreatedNetworkNames(QuasselSession session, long nowMs) {
+    if (session == null) return;
+    long cutoffMs = nowMs - PENDING_NETWORK_CREATE_NAME_TTL_MS;
+    for (; ; ) {
+      PendingCreatedNetworkName first = session.pendingCreatedNetworkNames.peekFirst();
+      if (first == null) break;
+      if (first.observedAtMs() >= cutoffMs) break;
+      session.pendingCreatedNetworkNames.pollFirst();
+    }
+  }
+
   private void observeKnownNetworks(
       QuasselSession session, QuasselCoreAuthHandshake.AuthResult authResult) {
     if (session == null || authResult == null || authResult.networkIds() == null) return;
@@ -3668,8 +4413,34 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
   }
 
+  private void observeKnownIdentities(
+      QuasselSession session, QuasselCoreAuthHandshake.AuthResult authResult) {
+    if (session == null || authResult == null || authResult.initialIdentities() == null) return;
+    for (Map.Entry<Integer, Map<String, Object>> entry :
+        authResult.initialIdentities().entrySet()) {
+      if (entry == null || entry.getKey() == null || entry.getKey().intValue() < 0) continue;
+      int identityId = entry.getKey().intValue();
+      Map<String, Object> normalized = normalizeObjectMap(entry.getValue());
+      String identityName =
+          firstNonBlank(
+              mapValueIgnoreCase(normalized, "identityName"),
+              mapValueIgnoreCase(normalized, "identityname"));
+      observeKnownIdentity(session, identityId, identityName);
+      if (!normalized.isEmpty()) {
+        session.identityStateByIdentityId.put(identityId, normalized);
+      }
+    }
+    trimMapToMaxSize(session.identityStateByIdentityId, MAX_NETWORK_IDENTITIES_PER_SESSION);
+  }
+
   private void observeKnownNetwork(QuasselSession session, int networkId, String networkName) {
+    observeKnownNetwork(session, networkId, networkName, true);
+  }
+
+  private void observeKnownNetwork(
+      QuasselSession session, int networkId, String networkName, boolean emitSnapshotEvent) {
     if (session == null || networkId < 0) return;
+    session.removedNetworkIds.remove(networkId);
     String display = Objects.toString(networkName, "").trim();
     if (display.isEmpty()) {
       display = Objects.toString(session.networkDisplayByNetworkId.get(networkId), "").trim();
@@ -3698,6 +4469,48 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     trimMapToMaxSize(session.networkDisplayByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
     trimMapToMaxSize(session.networkTokenByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
     trimMapToMaxSize(session.networkIdByTokenLower, MAX_NETWORK_IDENTITIES_PER_SESSION);
+    if (emitSnapshotEvent) {
+      emitQuasselNetworkSnapshotEvent(session, "observe-known-network");
+    }
+  }
+
+  private void forgetKnownNetwork(QuasselSession session, int networkId) {
+    if (session == null || networkId < 0) return;
+    session.removedNetworkIds.add(networkId);
+    session.networkCurrentNickByNetworkId.remove(networkId);
+    session.networkStateByNetworkId.remove(networkId);
+    session.networkDisplayByNetworkId.remove(networkId);
+    session.networkTokenByNetworkId.remove(networkId);
+    session.enabledCapabilitiesByNetworkId.remove(networkId);
+    session.monitorSupportByNetworkId.remove(networkId);
+    session.multilineLimitsByNetworkId.remove(networkId);
+    for (Map.Entry<String, Integer> entry :
+        new ArrayList<>(session.networkIdByTokenLower.entrySet())) {
+      if (entry == null) continue;
+      Integer mapped = entry.getValue();
+      if (mapped == null || mapped.intValue() != networkId) continue;
+      session.networkIdByTokenLower.remove(entry.getKey(), mapped);
+    }
+    for (Map.Entry<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> entry :
+        new ArrayList<>(session.bufferInfosById.entrySet())) {
+      if (entry == null || entry.getKey() == null) continue;
+      QuasselCoreDatastreamCodec.BufferInfoValue info = entry.getValue();
+      if (info == null || info.networkId() != networkId) continue;
+      session.bufferInfosById.remove(entry.getKey(), info);
+    }
+    for (Map.Entry<String, Integer> entry :
+        new ArrayList<>(session.targetNetworkHintsByTargetLower.entrySet())) {
+      if (entry == null) continue;
+      Integer mapped = entry.getValue();
+      if (mapped == null || mapped.intValue() != networkId) continue;
+      session.targetNetworkHintsByTargetLower.remove(entry.getKey(), mapped);
+    }
+    String membershipPrefix = networkId + "|";
+    for (String membershipKey : new ArrayList<>(session.joinedChannelMembershipKeys)) {
+      if (membershipKey == null || !membershipKey.startsWith(membershipPrefix)) continue;
+      session.joinedChannelMembershipKeys.remove(membershipKey);
+    }
+    emitQuasselNetworkSnapshotEvent(session, "forget-known-network");
   }
 
   private void observeNetworkStateSnapshot(
@@ -3705,8 +4518,122 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     if (session == null || networkId < 0 || stateMap == null || stateMap.isEmpty()) return;
     Map<String, Object> normalized = normalizeObjectMap(stateMap);
     if (normalized.isEmpty()) return;
-    session.networkStateByNetworkId.put(networkId, normalized);
+    Map<String, Object> merged =
+        session.networkStateByNetworkId.merge(
+            networkId,
+            normalized,
+            (existing, incoming) -> {
+              LinkedHashMap<String, Object> joined = new LinkedHashMap<>();
+              if (existing != null && !existing.isEmpty()) {
+                joined.putAll(existing);
+              }
+              if (incoming != null && !incoming.isEmpty()) {
+                joined.putAll(incoming);
+              }
+              return Collections.unmodifiableMap(joined);
+            });
+    int identityId = parseNetworkIdentityId(merged);
+    if (identityId >= 0) {
+      observeKnownIdentity(session, identityId, "");
+    }
     trimMapToMaxSize(session.networkStateByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
+    reconcileJoinedChannelsForNetworkState(session, networkId, merged);
+    emitQuasselNetworkSnapshotEvent(session, "observe-network-state");
+  }
+
+  private void reconcileJoinedChannelsForNetworkState(
+      QuasselSession session, int networkId, Map<?, ?> networkState) {
+    if (session == null || networkId < 0) return;
+    if (!parseNetworkConnected(networkState)) {
+      clearChannelMembershipForNetwork(session, networkId);
+      return;
+    }
+    emitJoinedChannelsFromKnownBuffers(session, networkId);
+  }
+
+  private void emitJoinedChannelsFromKnownBuffers(QuasselSession session, int networkId) {
+    if (session == null || networkId < 0) return;
+    Instant now = Instant.now();
+    for (QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo : session.bufferInfosById.values()) {
+      if (bufferInfo == null || bufferInfo.networkId() != networkId) continue;
+      emitJoinedChannelFromBufferInfoIfNeeded(session, bufferInfo, now);
+    }
+  }
+
+  private void emitJoinedChannelFromBufferInfoIfNetworkConnected(
+      QuasselSession session, QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo) {
+    if (session == null || bufferInfo == null) return;
+    int networkId = bufferInfo.networkId();
+    if (networkId < 0) return;
+    Map<String, Object> state = session.networkStateByNetworkId.get(networkId);
+    if (!parseNetworkConnected(state)) return;
+    emitJoinedChannelFromBufferInfoIfNeeded(session, bufferInfo, Instant.now());
+  }
+
+  private void emitJoinedChannelFromBufferInfoIfNeeded(
+      QuasselSession session,
+      QuasselCoreDatastreamCodec.BufferInfoValue bufferInfo,
+      Instant observedAt) {
+    if (session == null || bufferInfo == null) return;
+    String channel = normalizedBufferName(bufferInfo);
+    if (channel.isEmpty()) return;
+    if (!isChannelBuffer(bufferInfo) && !looksLikeChannel(channel)) return;
+
+    int networkId = bufferInfo.networkId();
+    String qualified = qualifyTargetForNetwork(session, channel, networkId);
+    if (qualified.isEmpty()) return;
+    noteTargetNetworkHint(session, qualified, networkId, true);
+    Instant at = observedAt == null ? Instant.now() : observedAt;
+    if (markChannelMembershipJoined(session, qualified, networkId)) {
+      bus.onNext(new ServerIrcEvent(session.serverId, new IrcEvent.JoinedChannel(at, qualified)));
+    }
+  }
+
+  private static void clearChannelMembershipForNetwork(QuasselSession session, int networkId) {
+    if (session == null || networkId < 0) return;
+    String membershipPrefix = networkId + "|";
+    for (String membershipKey : new ArrayList<>(session.joinedChannelMembershipKeys)) {
+      if (membershipKey == null || !membershipKey.startsWith(membershipPrefix)) continue;
+      session.joinedChannelMembershipKeys.remove(membershipKey);
+    }
+  }
+
+  private void observeKnownIdentity(QuasselSession session, int identityId, String identityName) {
+    if (session == null || identityId <= 0) return;
+    String name = Objects.toString(identityName, "").trim();
+    boolean added = session.knownIdentityIds.add(identityId);
+    String previousName = session.identityNameByIdentityId.get(identityId);
+    if (!name.isEmpty()) {
+      session.identityNameByIdentityId.put(identityId, name);
+      trimMapToMaxSize(session.identityNameByIdentityId, MAX_NETWORK_IDENTITIES_PER_SESSION);
+    } else {
+      session.identityNameByIdentityId.putIfAbsent(identityId, "");
+    }
+    if (added || (!name.isEmpty() && !name.equals(previousName))) {
+      log.debug(
+          "Observed Quassel identity: serverId={}, identityId={}, identityName='{}', knownIdentityIds={}",
+          session.serverId,
+          identityId,
+          session.identityNameByIdentityId.get(identityId),
+          session.knownIdentityIds);
+    }
+    quasselIdentityEvents.onNext(new QuasselIdentityObservedEvent(session.serverId, identityId));
+  }
+
+  private static int firstKnownIdentityId(QuasselSession session) {
+    if (session == null || session.knownIdentityIds.isEmpty()) return -1;
+    int best = Integer.MAX_VALUE;
+    for (Integer candidate : session.knownIdentityIds) {
+      if (candidate == null || candidate.intValue() < 0) continue;
+      if (candidate.intValue() < best) {
+        best = candidate.intValue();
+      }
+    }
+    return best == Integer.MAX_VALUE ? -1 : best;
+  }
+
+  private static boolean hasKnownIdentity(QuasselSession session) {
+    return firstKnownIdentityId(session) >= 0;
   }
 
   private List<QuasselCoreNetworkSummary> snapshotQuasselCoreNetworks(QuasselSession session) {
@@ -3729,7 +4656,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               mapValueIgnoreCase(state, "name"),
               session.networkDisplayByNetworkId.get(networkId));
       if (networkName.isBlank()) networkName = "network-" + networkId;
-      observeKnownNetwork(session, networkId, networkName);
+      observeKnownNetwork(session, networkId, networkName, false);
 
       NetworkServerEndpoint endpoint = parsePrimaryNetworkServer(state);
       Map<String, Object> rawState =
@@ -3747,6 +4674,14 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
               rawState));
     }
     return out.isEmpty() ? List.of() : List.copyOf(out);
+  }
+
+  private void emitQuasselNetworkSnapshotEvent(QuasselSession session, String source) {
+    if (session == null) return;
+    String sid = normalizeServerId(session.serverId);
+    if (sid.isEmpty()) return;
+    List<QuasselCoreNetworkSummary> snapshot = snapshotQuasselCoreNetworks(session);
+    quasselNetworkEvents.onNext(new QuasselCoreNetworkSnapshotEvent(sid, snapshot, source));
   }
 
   private static boolean parseNetworkConnected(Map<?, ?> state) {
@@ -3778,10 +4713,30 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     Object identity = firstMapValueByKeyIgnoreCase(state, "identity", "identityId", "identityid");
     if (identity instanceof QuasselCoreDatastreamCodec.UserTypeValue userType) {
       int parsed = tryParseInt(userType.value());
-      if (parsed >= 0) return parsed;
+      if (parsed > 0) return parsed;
     }
     int id = firstIntFromMapKeys(state, "identity", "identityId", "identityid");
-    return id >= 0 ? id : -1;
+    return id > 0 ? id : -1;
+  }
+
+  private static int identityIdFromStateMap(Map<?, ?> state, int fallbackIdentityId) {
+    if (state == null || state.isEmpty()) return fallbackIdentityId;
+    int id = firstIntFromMapKeys(state, "identityId", "identityid");
+    if (id > 0) return id;
+    Object wrapped = firstMapValueByKeyIgnoreCase(state, "identityId", "identityid");
+    if (wrapped instanceof QuasselCoreDatastreamCodec.UserTypeValue userType) {
+      int parsed = tryParseInt(userType.value());
+      if (parsed > 0) return parsed;
+    }
+    return fallbackIdentityId;
+  }
+
+  private static String parseIdentityName(Map<?, ?> state) {
+    if (state == null || state.isEmpty()) return "";
+    return firstNonBlank(
+        mapValueIgnoreCase(state, "identityName"),
+        mapValueIgnoreCase(state, "identityname"),
+        mapValueIgnoreCase(state, "name"));
   }
 
   private static NetworkServerEndpoint parsePrimaryNetworkServer(Map<?, ?> state) {
@@ -3848,7 +4803,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     ids.addAll(session.networkDisplayByNetworkId.keySet());
     ids.addAll(session.networkTokenByNetworkId.keySet());
     ids.addAll(session.networkStateByNetworkId.keySet());
-    ids.removeIf(id -> id == null || id.intValue() < 0);
+    ids.removeIf(
+        id -> id == null || id.intValue() < 0 || session.removedNetworkIds.contains(id.intValue()));
     return ids;
   }
 
@@ -3900,10 +4856,12 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   private static int resolveQuasselIdentityId(QuasselSession session, Integer requestedIdentityId) {
-    if (requestedIdentityId != null && requestedIdentityId.intValue() >= 0) {
+    if (requestedIdentityId != null && requestedIdentityId.intValue() > 0) {
       return requestedIdentityId.intValue();
     }
     if (session != null) {
+      int observedIdentity = firstKnownIdentityId(session);
+      if (observedIdentity >= 0) return observedIdentity;
       int primary = primaryNetworkId(session);
       if (primary >= 0) {
         Map<String, Object> state = session.networkStateByNetworkId.get(primary);
@@ -3914,6 +4872,13 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         int parsed = parseNetworkIdentityId(state);
         if (parsed >= 0) return parsed;
       }
+      log.debug(
+          "Falling back to default Quassel identity id=1: serverId={}, requestedIdentityId={}, knownIdentityIds={}, identityStateKeys={}, networkStateKeys={}",
+          session.serverId,
+          requestedIdentityId,
+          session.knownIdentityIds,
+          session.identityStateByIdentityId.keySet(),
+          session.networkStateByNetworkId.keySet());
     }
     return 1;
   }
@@ -3929,23 +4894,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   private static int knownNetworkCount(QuasselSession session) {
-    if (session == null) return 0;
-    Set<Integer> ids = new HashSet<>();
-    QuasselCoreAuthHandshake.AuthResult auth = session.authResult.get();
-    if (auth != null && auth.networkIds() != null) {
-      for (Integer id : auth.networkIds()) {
-        if (id != null && id.intValue() >= 0) ids.add(id.intValue());
-      }
-    }
-    for (QuasselCoreDatastreamCodec.BufferInfoValue info : session.bufferInfosById.values()) {
-      if (info != null && info.networkId() >= 0) {
-        ids.add(info.networkId());
-      }
-    }
-    ids.addAll(session.networkDisplayByNetworkId.keySet());
-    ids.addAll(session.networkTokenByNetworkId.keySet());
-    ids.addAll(session.networkStateByNetworkId.keySet());
-    return ids.size();
+    return collectKnownNetworkIds(session).size();
   }
 
   private String networkTokenForNetworkId(QuasselSession session, int networkId) {
@@ -4503,14 +5452,19 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     session.bufferInfosById.clear();
     session.historyByTarget.clear();
     session.targetNetworkHintsByTargetLower.clear();
+    session.joinedChannelMembershipKeys.clear();
     session.networkDisplayByNetworkId.clear();
     session.networkTokenByNetworkId.clear();
     session.networkIdByTokenLower.clear();
     session.networkStateByNetworkId.clear();
+    session.identityStateByIdentityId.clear();
+    session.identityNameByIdentityId.clear();
+    session.knownIdentityIds.clear();
     session.networkCurrentNickByNetworkId.clear();
     session.enabledCapabilitiesByNetworkId.clear();
     session.monitorSupportByNetworkId.clear();
     session.multilineLimitsByNetworkId.clear();
+    session.pendingCreatedNetworkNames.clear();
     session.capabilitySnapshotObserved.set(false);
     availabilityReasonByServer.put(session.serverId, session.closeReason.get());
     if (emitDisconnected) {
@@ -4627,14 +5581,515 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
 
     OutputStream out = socket.getOutputStream();
+    log.debug(
+        "Sending Quassel network sync call: serverId={}, className={}, objectName={}, slotName={}, paramCount=0",
+        session.serverId,
+        NETWORK_CLASS,
+        Integer.toString(networkId),
+        slot);
     synchronized (session.writeLock) {
       datastreamCodec.writeSignalProxySync(
           out, NETWORK_CLASS, Integer.toString(networkId), slot, List.of());
     }
   }
 
+  private boolean maybeRepairNetworkIdentityBeforeConnect(QuasselSession session, int networkId)
+      throws Exception {
+    if (session == null || networkId < 0) return true;
+    Map<String, Object> existing = refreshNetworkStateForConnectPreflight(session, networkId);
+    int configuredIdentityId = parseNetworkIdentityId(existing);
+    Map<String, Object> identityState =
+        configuredIdentityId > 0
+            ? session.identityStateByIdentityId.getOrDefault(configuredIdentityId, Map.of())
+            : Map.of();
+    boolean identityStateUsable = identityStateLooksUsable(identityState);
+    boolean identityKnown =
+        configuredIdentityId > 0 && session.knownIdentityIds.contains(configuredIdentityId);
+    NetworkServerEndpoint endpoint = parsePrimaryNetworkServer(existing);
+    String networkName =
+        firstNonBlank(
+            mapValueIgnoreCase(existing, "networkName"),
+            mapValueIgnoreCase(existing, "networkname"),
+            mapValueIgnoreCase(existing, "name"),
+            session.networkDisplayByNetworkId.get(networkId),
+            "network-" + networkId);
+    boolean enabled = parseNetworkEnabled(existing);
+    log.debug(
+        "Quassel connect preflight state: serverId={}, networkId={}, configuredIdentityId={}, identityKnown={}, identityStateUsable={}, knownIdentityIds={}, identityNames={}, identityStateKeys={}, networkName={}, endpointHost={}, endpointPort={}, endpointTls={}, enabled={}, knownNetworkIds={}, networkStateKeys={}, rawState={}",
+        session.serverId,
+        networkId,
+        configuredIdentityId,
+        identityKnown,
+        identityStateUsable,
+        session.knownIdentityIds,
+        session.identityNameByIdentityId,
+        session.identityStateByIdentityId.keySet(),
+        networkName,
+        endpoint.host(),
+        endpoint.port(),
+        endpoint.useTls(),
+        enabled,
+        collectKnownNetworkIds(session),
+        session.networkStateByNetworkId.keySet(),
+        summarizeNetworkInfoForLog(existing));
+    if (identityKnown && identityStateUsable) {
+      log.debug(
+          "Skipping network identity repair before connect because identity is already known and state looks usable: serverId={}, networkId={}, identityId={}",
+          session.serverId,
+          networkId,
+          configuredIdentityId);
+      return true;
+    }
+
+    int replacementIdentityId = resolveQuasselIdentityId(session, null);
+    if (replacementIdentityId < 0) {
+      log.debug(
+          "Skipping network identity repair before connect because no replacement identity id is available: serverId={}, networkId={}",
+          session.serverId,
+          networkId);
+      return true;
+    }
+
+    log.debug(
+        "Quassel connect preflight found invalid/unknown identity or unusable identity state: serverId={}, networkId={}, configuredIdentityId={}, identityKnown={}, identityStateUsable={}, knownIdentityIds={}, replacementIdentityId={}, networkName={}, endpointHost={}, endpointPort={}, endpointTls={}, rawState={}",
+        session.serverId,
+        networkId,
+        configuredIdentityId,
+        identityKnown,
+        identityStateUsable,
+        session.knownIdentityIds,
+        replacementIdentityId,
+        networkName,
+        endpoint.host(),
+        endpoint.port(),
+        endpoint.useTls(),
+        summarizeNetworkInfoForLog(existing));
+    if (endpoint.host().isBlank()) {
+      log.debug(
+          "Skipping network identity repair before connect due to missing host in network state: serverId={}, networkId={}",
+          session.serverId,
+          networkId);
+      return true;
+    }
+
+    QuasselCoreNetworkUpdateRequest repairRequest =
+        new QuasselCoreNetworkUpdateRequest(
+            networkName,
+            endpoint.host(),
+            endpoint.port(),
+            endpoint.useTls(),
+            "",
+            true,
+            replacementIdentityId,
+            enabled);
+    sendUpdateNetworkRequest(session, networkId, normalizeQuasselCoreUpdateRequest(repairRequest));
+    log.debug(
+        "Submitted pre-connect network identity repair: serverId={}, networkId={}, identityId={}, host={}, port={}, tls={}, enabled={}",
+        session.serverId,
+        networkId,
+        replacementIdentityId,
+        endpoint.host(),
+        endpoint.port(),
+        endpoint.useTls(),
+        enabled);
+    // Network updates are async on core side; request a fresh snapshot before connect.
+    requestNetworkInitState(session, networkId);
+    Map<String, Object> repaired =
+        awaitNetworkStateSnapshotForIdentity(session, networkId, replacementIdentityId, 2_500L);
+    int confirmedIdentityId = parseNetworkIdentityId(repaired);
+    if (confirmedIdentityId != replacementIdentityId) {
+      log.debug(
+          "Quassel connect preflight identity repair not yet confirmed by core: serverId={}, networkId={}, expectedIdentityId={}, confirmedIdentityId={}, state={}",
+          session.serverId,
+          networkId,
+          replacementIdentityId,
+          confirmedIdentityId,
+          summarizeNetworkInfoForLog(repaired));
+      QuasselCoreNetworkCreateRequest fallbackRequest =
+          new QuasselCoreNetworkCreateRequest(
+              networkName,
+              endpoint.host(),
+              endpoint.port(),
+              endpoint.useTls(),
+              "",
+              true,
+              replacementIdentityId,
+              List.of());
+      log.debug(
+          "Attempting createNetwork fallback to force identity repair: serverId={}, networkId={}, networkName={}, identityId={}",
+          session.serverId,
+          networkId,
+          networkName,
+          replacementIdentityId);
+      sendCreateNetworkRequest(
+          session, replacementIdentityId, fallbackRequest, RPC_CREATE_NETWORK_SLOT, true);
+      requestNetworkInitState(session, networkId);
+      Map<String, Object> fallbackSnapshot =
+          awaitNetworkStateSnapshotForIdentity(session, networkId, replacementIdentityId, 2_000L);
+      int fallbackConfirmedIdentityId = parseNetworkIdentityId(fallbackSnapshot);
+      if (fallbackConfirmedIdentityId != replacementIdentityId) {
+        log.debug(
+            "Quassel createNetwork fallback did not confirm identity repair: serverId={}, networkId={}, expectedIdentityId={}, confirmedIdentityId={}, state={}",
+            session.serverId,
+            networkId,
+            replacementIdentityId,
+            fallbackConfirmedIdentityId,
+            summarizeNetworkInfoForLog(fallbackSnapshot));
+        return false;
+      }
+      log.debug(
+          "Quassel createNetwork fallback confirmed identity repair: serverId={}, networkId={}, confirmedIdentityId={}",
+          session.serverId,
+          networkId,
+          fallbackConfirmedIdentityId);
+      return true;
+    }
+    log.debug(
+        "Post-repair network state snapshot: serverId={}, networkId={}, configuredIdentityId={}, state={}",
+        session.serverId,
+        networkId,
+        confirmedIdentityId,
+        summarizeNetworkInfoForLog(repaired));
+    return true;
+  }
+
+  private Map<String, Object> refreshNetworkStateForConnectPreflight(
+      QuasselSession session, int networkId) throws Exception {
+    if (session == null || networkId < 0) return Map.of();
+    Map<String, Object> existing = session.networkStateByNetworkId.get(networkId);
+    if (networkStateLooksUsableForConnect(existing)) {
+      return existing;
+    }
+
+    log.debug(
+        "Quassel connect preflight requesting init-data refresh for network state: serverId={}, networkId={}, knownNetworkIds={}, networkStateKeys={}",
+        session.serverId,
+        networkId,
+        collectKnownNetworkIds(session),
+        session.networkStateByNetworkId.keySet());
+    requestNetworkInitState(session, networkId);
+    Map<String, Object> refreshed = awaitNetworkStateSnapshot(session, networkId, 800L);
+    log.debug(
+        "Quassel connect preflight init-data refresh result: serverId={}, networkId={}, refreshedStateLooksUsable={}, refreshedState={}",
+        session.serverId,
+        networkId,
+        networkStateLooksUsableForConnect(refreshed),
+        summarizeNetworkInfoForLog(refreshed));
+    return refreshed;
+  }
+
+  private void requestNetworkInitState(QuasselSession session, int networkId) throws Exception {
+    if (session == null || networkId < 0) return;
+    sendSignalProxyInitRequest(session, NETWORK_CLASS, Integer.toString(networkId));
+  }
+
+  private void sendSignalProxyInitRequest(
+      QuasselSession session, String className, String objectName) throws Exception {
+    if (session == null) return;
+    String clazz = Objects.toString(className, "").trim();
+    String object = Objects.toString(objectName, "").trim();
+    if (clazz.isEmpty() || object.isEmpty()) return;
+    Socket socket = session.socketRef.get();
+    if (socket == null) return;
+    OutputStream out = socket.getOutputStream();
+    log.debug(
+        "Sending Quassel init request: serverId={}, className={}, objectName={}",
+        session.serverId,
+        clazz,
+        object);
+    synchronized (session.writeLock) {
+      datastreamCodec.writeSignalProxyInitRequest(out, clazz, object, List.of());
+    }
+  }
+
+  private Map<String, Object> awaitNetworkStateSnapshot(
+      QuasselSession session, int networkId, long timeoutMs) {
+    if (session == null || networkId < 0) return Map.of();
+    Map<String, Object> current = session.networkStateByNetworkId.get(networkId);
+    if (networkStateLooksUsableForConnect(current)) {
+      return current;
+    }
+    if (timeoutMs <= 0L) {
+      return current == null ? Map.of() : current;
+    }
+    awaitQuasselNetworkCondition(
+        session,
+        timeoutMs,
+        () -> {
+          Map<String, Object> state = session.networkStateByNetworkId.get(networkId);
+          return networkStateLooksUsableForConnect(state);
+        });
+    current = session.networkStateByNetworkId.get(networkId);
+    return current == null ? Map.of() : current;
+  }
+
+  private Map<String, Object> awaitNetworkStateSnapshotForIdentity(
+      QuasselSession session, int networkId, int expectedIdentityId, long timeoutMs) {
+    if (session == null || networkId < 0) return Map.of();
+    if (expectedIdentityId <= 0) {
+      return awaitNetworkStateSnapshot(session, networkId, timeoutMs);
+    }
+    Map<String, Object> current = session.networkStateByNetworkId.get(networkId);
+    if (parseNetworkIdentityId(current) == expectedIdentityId) {
+      return current;
+    }
+    if (timeoutMs <= 0L) {
+      return current == null ? Map.of() : current;
+    }
+    awaitQuasselNetworkCondition(
+        session,
+        timeoutMs,
+        () -> {
+          Map<String, Object> state = session.networkStateByNetworkId.get(networkId);
+          return parseNetworkIdentityId(state) == expectedIdentityId;
+        });
+    current = session.networkStateByNetworkId.get(networkId);
+    return current == null ? Map.of() : current;
+  }
+
+  private void awaitQuasselNetworkCondition(
+      QuasselSession session, long timeoutMs, BooleanSupplier condition) {
+    if (session == null || condition == null || timeoutMs <= 0L) return;
+    if (condition.getAsBoolean()) return;
+    String sid = normalizeServerId(session.serverId);
+    if (sid.isEmpty()) return;
+    try {
+      quasselNetworkEvents
+          .filter(event -> sid.equals(normalizeServerId(event.serverId())))
+          .filter(event -> condition.getAsBoolean())
+          .firstElement()
+          .timeout(timeoutMs, TimeUnit.MILLISECONDS)
+          .ignoreElement()
+          .onErrorComplete()
+          .blockingAwait();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void awaitQuasselIdentityCondition(
+      QuasselSession session, long timeoutMs, BooleanSupplier condition) {
+    if (session == null || condition == null || timeoutMs <= 0L) return;
+    if (condition.getAsBoolean()) return;
+    String sid = normalizeServerId(session.serverId);
+    if (sid.isEmpty()) return;
+    try {
+      quasselIdentityEvents
+          .filter(event -> sid.equals(normalizeServerId(event.serverId())))
+          .filter(event -> condition.getAsBoolean())
+          .firstElement()
+          .timeout(timeoutMs, TimeUnit.MILLISECONDS)
+          .ignoreElement()
+          .onErrorComplete()
+          .blockingAwait();
+    } catch (Exception ignored) {
+    }
+  }
+
+  private static boolean networkStateLooksUsableForConnect(Map<?, ?> state) {
+    if (state == null || state.isEmpty()) return false;
+    NetworkServerEndpoint endpoint = parsePrimaryNetworkServer(state);
+    if (!endpoint.host().isBlank()) return true;
+    if (parseNetworkIdentityId(state) > 0) return true;
+    String networkName =
+        firstNonBlank(
+            mapValueIgnoreCase(state, "networkName"),
+            mapValueIgnoreCase(state, "networkname"),
+            mapValueIgnoreCase(state, "name"));
+    return !networkName.isBlank();
+  }
+
+  private static QuasselCoreNetworkSummary findNetworkSummaryById(
+      List<QuasselCoreNetworkSummary> networks, int networkId) {
+    if (networks == null || networks.isEmpty() || networkId < 0) return null;
+    for (QuasselCoreNetworkSummary summary : networks) {
+      if (summary == null || summary.networkId() < 0) continue;
+      if (summary.networkId() == networkId) return summary;
+    }
+    return null;
+  }
+
+  private static boolean identityStateLooksUsable(Map<?, ?> identityState) {
+    if (identityState == null || identityState.isEmpty()) return false;
+    int identityId = identityIdFromStateMap(identityState, -1);
+    if (identityId <= 0) return false;
+    String identityName =
+        firstNonBlank(
+            mapValueIgnoreCase(identityState, "identityName"),
+            mapValueIgnoreCase(identityState, "identityname"),
+            mapValueIgnoreCase(identityState, "name"));
+    if (identityName.isBlank()) return false;
+    Object rawNicks = firstMapValueByKeyIgnoreCase(identityState, "nicks", "Nicks", "nick", "Nick");
+    if (rawNicks instanceof List<?> nicks) {
+      for (Object nick : nicks) {
+        if (!Objects.toString(nick, "").trim().isBlank()) return true;
+      }
+      return false;
+    }
+    String singleNick =
+        firstNonBlank(
+            mapValueIgnoreCase(identityState, "nick"), mapValueIgnoreCase(identityState, "Nick"));
+    return !singleNick.isBlank();
+  }
+
+  private void sendNetworkRpcRequest(QuasselSession session, int networkId, String slotName)
+      throws Exception {
+    if (session == null) {
+      throw new IllegalStateException("Quassel session is missing");
+    }
+    if (networkId < 0) {
+      throw new IllegalArgumentException("network id is invalid");
+    }
+    Socket socket = session.socketRef.get();
+    if (socket == null) {
+      throw new IllegalStateException("Quassel socket is closed");
+    }
+    String slot = Objects.toString(slotName, "").trim();
+    if (slot.isEmpty()) {
+      throw new IllegalArgumentException("rpc slot name is blank");
+    }
+
+    OutputStream out = socket.getOutputStream();
+    synchronized (session.writeLock) {
+      // Quassel's NetworkId is a type alias over Int on the wire.
+      datastreamCodec.writeSignalProxyRpcCall(out, slot, List.of(networkId));
+    }
+  }
+
   private void sendCreateNetworkRequest(
       QuasselSession session, int identityId, QuasselCoreNetworkCreateRequest request)
+      throws Exception {
+    sendCreateNetworkRequest(session, identityId, request, RPC_CREATE_NETWORK_SLOT, true);
+  }
+
+  private void maybeCreateDefaultIdentityForNetwork(
+      QuasselSession session, String serverId, QuasselCoreNetworkCreateRequest request)
+      throws Exception {
+    if (session == null) return;
+    if (hasKnownIdentity(session)) {
+      log.debug(
+          "Skipping create identity bootstrap because identities are already known: serverId={}, knownIdentityIds={}, identityNames={}",
+          serverId,
+          session.knownIdentityIds,
+          session.identityNameByIdentityId);
+      return;
+    }
+    int objectIdentityId = firstKnownIdentityId(session);
+    if (objectIdentityId >= 0) {
+      log.debug(
+          "Skipping create identity bootstrap because firstKnownIdentityId returned {}: serverId={}",
+          objectIdentityId,
+          serverId);
+      return;
+    }
+
+    Map<String, Object> identityPayload = buildDefaultIdentityPayload(session, request);
+    log.debug(
+        "No known Quassel identity observed before network create. Sending create identity RPC: serverId={}, payload={}",
+        serverId,
+        summarizeNetworkInfoForLog(identityPayload));
+    sendCreateIdentityRequest(session, identityPayload);
+    int observedIdentity = awaitObservedIdentityId(session, 1_500L);
+    if (observedIdentity >= 0) {
+      log.debug(
+          "Observed identity id {} after create identity RPC on serverId={}.",
+          observedIdentity,
+          serverId);
+      return;
+    }
+    log.debug(
+        "No identity observed after create identity RPC on serverId={}. Continuing with fallback identity resolution.",
+        serverId);
+  }
+
+  private void sendCreateIdentityRequest(
+      QuasselSession session, Map<String, Object> identityPayload) throws Exception {
+    if (session == null) {
+      throw new IllegalStateException("Quassel session is missing");
+    }
+    Socket socket = session.socketRef.get();
+    if (socket == null) {
+      throw new IllegalStateException("Quassel socket is closed");
+    }
+    Map<String, Object> payload =
+        identityPayload == null || identityPayload.isEmpty()
+            ? buildDefaultIdentityPayload(session, null)
+            : identityPayload;
+    List<Object> params =
+        List.of(
+            new QuasselCoreDatastreamCodec.UserTypeValue("Identity", payload),
+            Collections.emptyMap());
+    OutputStream out = socket.getOutputStream();
+    synchronized (session.writeLock) {
+      datastreamCodec.writeSignalProxyRpcCall(out, RPC_CREATE_IDENTITY_SLOT, params);
+    }
+  }
+
+  private int awaitObservedIdentityId(QuasselSession session, long timeoutMs) {
+    if (session == null || timeoutMs <= 0L) return -1;
+    int current = firstKnownIdentityId(session);
+    if (current >= 0) return current;
+    awaitQuasselIdentityCondition(session, timeoutMs, () -> firstKnownIdentityId(session) >= 0);
+    return firstKnownIdentityId(session);
+  }
+
+  private static Map<String, Object> buildDefaultIdentityPayload(
+      QuasselSession session, QuasselCoreNetworkCreateRequest request) {
+    String baseNick =
+        sanitizeIdentityNick(
+            firstNonBlank(
+                session == null ? "" : session.initialNick,
+                request == null ? "" : request.networkName(),
+                "ircafe"));
+    String identityName = firstNonBlank(baseNick, "IRCafe");
+    String realName = firstNonBlank(session == null ? "" : session.initialNick, baseNick);
+    String ident = sanitizeIdentityNick(baseNick.toLowerCase(Locale.ROOT));
+
+    LinkedHashMap<String, Object> identity = new LinkedHashMap<>();
+    identity.put("identityId", -1);
+    identity.put("identityName", identityName);
+    identity.put("nicks", List.of(baseNick));
+    identity.put("realName", realName);
+    identity.put("awayNick", baseNick + "_away");
+    identity.put("awayNickEnabled", false);
+    identity.put("awayReason", "");
+    identity.put("awayReasonEnabled", false);
+    identity.put("autoAwayEnabled", false);
+    identity.put("autoAwayTime", 10);
+    identity.put("autoAwayReason", "");
+    identity.put("autoAwayReasonEnabled", false);
+    identity.put("detachAwayEnabled", false);
+    identity.put("detachAwayReason", "");
+    identity.put("detachAwayReasonEnabled", false);
+    identity.put("ident", ident);
+    identity.put("kickReason", "");
+    identity.put("partReason", "");
+    identity.put("quitReason", "");
+    return Collections.unmodifiableMap(identity);
+  }
+
+  private static String sanitizeIdentityNick(String raw) {
+    String value = Objects.toString(raw, "").trim();
+    if (value.isEmpty()) return "ircafe";
+    StringBuilder out = new StringBuilder(value.length());
+    for (int i = 0; i < value.length(); i++) {
+      char ch = value.charAt(i);
+      if (Character.isWhitespace(ch) || ch == '\r' || ch == '\n') {
+        out.append('_');
+      } else {
+        out.append(ch);
+      }
+    }
+    String sanitized = out.toString().trim();
+    if (sanitized.isEmpty()) return "ircafe";
+    return sanitized;
+  }
+
+  private void sendCreateNetworkRequest(
+      QuasselSession session,
+      int identityId,
+      QuasselCoreNetworkCreateRequest request,
+      String rpcSlot,
+      boolean includeAutoJoinChannels)
       throws Exception {
     if (session == null) {
       throw new IllegalStateException("Quassel session is missing");
@@ -4643,16 +6098,148 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     if (socket == null) {
       throw new IllegalStateException("Quassel socket is closed");
     }
-    Map<String, Object> networkInfo = buildQuasselNetworkInfoPayload(-1, identityId, request, true);
-    List<Object> params =
-        List.of(
-            new QuasselCoreDatastreamCodec.UserTypeValue("NetworkInfo", networkInfo),
-            request.autoJoinChannels());
+    String slot = Objects.toString(rpcSlot, "").trim();
+    if (slot.isEmpty()) {
+      throw new IllegalArgumentException("create-network rpc slot is blank");
+    }
+    Map<String, Object> networkInfo =
+        buildQuasselNetworkInfoPayload(
+            -1, identityId, request, true, /* includeLegacyAliases= */ true);
+    ArrayList<Object> params = new ArrayList<>(2);
+    params.add(new QuasselCoreDatastreamCodec.UserTypeValue("NetworkInfo", networkInfo));
+    if (includeAutoJoinChannels) {
+      params.add(request.autoJoinChannels());
+    }
+
+    log.debug(
+        "Sending Quassel create network RPC: slot={}, networkName={}, host={}, port={}, tls={}, verifyTls={}, autoJoinChannels={}",
+        slot,
+        request.networkName(),
+        request.serverHost(),
+        request.serverPort(),
+        request.useTls(),
+        request.verifyTls(),
+        request.autoJoinChannels());
+    QuasselCoreAuthHandshake.AuthResult auth = session.authResult.get();
+    log.debug(
+        "Create-network session context: serverId={}, slot={}, knownNetworkIds={}, knownIdentityIds={}, authPrimaryNetworkId={}, authNetworkIds={}, authInitialBufferCount={}, networkStateKeys={}, networkDisplayKeys={}, networkTokenKeys={}, identityStateKeys={}, identityNames={}, payload={}",
+        session.serverId,
+        slot,
+        collectKnownNetworkIds(session),
+        session.knownIdentityIds,
+        auth == null ? -1 : auth.primaryNetworkId(),
+        auth == null ? List.of() : auth.networkIds(),
+        auth == null || auth.initialBuffers() == null ? 0 : auth.initialBuffers().size(),
+        session.networkStateByNetworkId.keySet(),
+        session.networkDisplayByNetworkId.keySet(),
+        session.networkTokenByNetworkId.keySet(),
+        session.identityStateByIdentityId.keySet(),
+        session.identityNameByIdentityId,
+        summarizeNetworkInfoForLog(networkInfo));
 
     OutputStream out = socket.getOutputStream();
     synchronized (session.writeLock) {
-      datastreamCodec.writeSignalProxyRpcCall(out, RPC_CREATE_NETWORK_SLOT, params);
+      datastreamCodec.writeSignalProxyRpcCall(out, slot, params);
     }
+    if (includeAutoJoinChannels) {
+      rememberPendingCreatedNetworkName(session, request.networkName());
+    }
+  }
+
+  private void maybeRetryLegacyCreateNetworkSlot(
+      QuasselSession session,
+      int identityId,
+      QuasselCoreNetworkCreateRequest request,
+      Set<Integer> baselineNetworkIds)
+      throws Exception {
+    if (session == null || request == null) return;
+    List<String> autoJoin = request.autoJoinChannels();
+    if (autoJoin != null && !autoJoin.isEmpty()) {
+      return;
+    }
+
+    if (awaitObservedNetworkAfterCreate(
+        session, request.networkName(), baselineNetworkIds, 1_000L)) {
+      return;
+    }
+
+    log.debug(
+        "No network observed after create RPC {} for serverId={}, networkName={}. Retrying once with legacy slot {}.",
+        RPC_CREATE_NETWORK_SLOT,
+        session.serverId,
+        request.networkName(),
+        RPC_CREATE_NETWORK_SLOT_LEGACY);
+    sendCreateNetworkRequest(session, identityId, request, RPC_CREATE_NETWORK_SLOT_LEGACY, false);
+    if (awaitObservedNetworkAfterCreate(
+        session, request.networkName(), baselineNetworkIds, 1_000L)) {
+      log.debug(
+          "Network '{}' observed after legacy create retry on serverId={}.",
+          request.networkName(),
+          session.serverId);
+      return;
+    }
+    log.debug(
+        "Network '{}' still not observed after legacy create retry on serverId={}.",
+        request.networkName(),
+        session.serverId);
+  }
+
+  private boolean awaitObservedNetworkAfterCreate(
+      QuasselSession session,
+      String expectedNetworkName,
+      Set<Integer> baselineNetworkIds,
+      long timeoutMs) {
+    if (session == null) return false;
+    String wanted = Objects.toString(expectedNetworkName, "").trim();
+    Set<Integer> baseline = baselineNetworkIds == null ? Set.of() : Set.copyOf(baselineNetworkIds);
+    if (timeoutMs <= 0L) return false;
+
+    if ((!wanted.isEmpty() && isObservedNetworkName(session, wanted))
+        || hasObservedNewNetworkId(session, baseline)) {
+      return true;
+    }
+    awaitQuasselNetworkCondition(
+        session,
+        timeoutMs,
+        () ->
+            (!wanted.isEmpty() && isObservedNetworkName(session, wanted))
+                || hasObservedNewNetworkId(session, baseline));
+    return (!wanted.isEmpty() && isObservedNetworkName(session, wanted))
+        || hasObservedNewNetworkId(session, baseline);
+  }
+
+  private static boolean hasObservedNewNetworkId(QuasselSession session, Set<Integer> baselineIds) {
+    if (session == null) return false;
+    Set<Integer> baseline = baselineIds == null ? Set.of() : baselineIds;
+    for (Integer id : collectKnownNetworkIds(session)) {
+      if (id == null || id.intValue() < 0) continue;
+      if (!baseline.contains(id)) return true;
+    }
+    return false;
+  }
+
+  private static boolean isObservedNetworkName(QuasselSession session, String expectedNetworkName) {
+    if (session == null) return false;
+    String wanted = Objects.toString(expectedNetworkName, "").trim();
+    if (wanted.isEmpty()) return false;
+
+    for (String display : session.networkDisplayByNetworkId.values()) {
+      if (Objects.toString(display, "").trim().equalsIgnoreCase(wanted)) {
+        return true;
+      }
+    }
+
+    for (Map<String, Object> state : session.networkStateByNetworkId.values()) {
+      String name =
+          firstNonBlank(
+              mapValueIgnoreCase(state, "networkName"),
+              mapValueIgnoreCase(state, "networkname"),
+              mapValueIgnoreCase(state, "name"));
+      if (name.equalsIgnoreCase(wanted)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private void sendUpdateNetworkRequest(
@@ -4694,30 +6281,26 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
             ? request.enabled().booleanValue()
             : parseNetworkEnabled(existing);
 
-    QuasselCoreNetworkCreateRequest createShape =
-        new QuasselCoreNetworkCreateRequest(
-            networkName,
-            request.serverHost(),
-            request.serverPort(),
-            request.useTls(),
-            request.serverPassword(),
-            request.verifyTls(),
-            identityId,
-            List.of());
     Map<String, Object> networkInfo =
-        buildQuasselNetworkInfoPayload(networkId, identityId, createShape, enabled);
+        buildQuasselNetworkInfoUpdatePayload(networkId, identityId, networkName, request, enabled);
     List<Object> params =
         List.of(new QuasselCoreDatastreamCodec.UserTypeValue("NetworkInfo", networkInfo));
 
     OutputStream out = socket.getOutputStream();
     synchronized (session.writeLock) {
+      log.debug(
+          "Sending Quassel network sync call: serverId={}, className={}, objectName={}, slotName={}, paramCount=1, payload=NetworkInfo(identityId={}, summary={})",
+          session.serverId,
+          NETWORK_CLASS,
+          Integer.toString(networkId),
+          NETWORK_SET_INFO_SLOT,
+          identityId,
+          summarizeNetworkInfoForLog(networkInfo));
       datastreamCodec.writeSignalProxySync(
           out, NETWORK_CLASS, Integer.toString(networkId), NETWORK_SET_INFO_SLOT, params);
     }
 
     observeKnownNetwork(session, networkId, networkName);
-    session.networkStateByNetworkId.put(networkId, normalizeObjectMap(networkInfo));
-    trimMapToMaxSize(session.networkStateByNetworkId, MAX_NETWORK_IDENTITIES_PER_SESSION);
   }
 
   private void sendRemoveNetworkRequest(QuasselSession session, int networkId) throws Exception {
@@ -4770,8 +6353,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
 
     Integer identityId = request.identityId();
-    if (identityId != null && identityId.intValue() < 0) {
-      throw new IllegalArgumentException("identity id must be >= 0");
+    if (identityId != null && identityId.intValue() <= 0) {
+      throw new IllegalArgumentException("identity id must be > 0");
     }
 
     List<String> autoJoin = new ArrayList<>();
@@ -4827,8 +6410,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
 
     Integer identityId = request.identityId();
-    if (identityId != null && identityId.intValue() < 0) {
-      throw new IllegalArgumentException("identity id must be >= 0");
+    if (identityId != null && identityId.intValue() <= 0) {
+      throw new IllegalArgumentException("identity id must be > 0");
     }
 
     return new QuasselCoreNetworkUpdateRequest(
@@ -4843,58 +6426,205 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   private static Map<String, Object> buildQuasselNetworkInfoPayload(
-      int networkId, int identityId, QuasselCoreNetworkCreateRequest request, boolean enabled) {
+      int networkId,
+      int identityId,
+      QuasselCoreNetworkCreateRequest request,
+      boolean enabled,
+      boolean includeLegacyAliases) {
+    byte[] codecForServer = DEFAULT_NETWORK_CODEC.getBytes(StandardCharsets.UTF_8);
+    byte[] codecForEncoding = DEFAULT_NETWORK_CODEC.getBytes(StandardCharsets.UTF_8);
+    byte[] codecForDecoding = DEFAULT_NETWORK_CODEC.getBytes(StandardCharsets.UTF_8);
     LinkedHashMap<String, Object> info = new LinkedHashMap<>();
-    info.put("networkId", networkId);
-    info.put("networkName", request.networkName());
-    info.put("identity", new QuasselCoreDatastreamCodec.UserTypeValue("IdentityId", identityId));
-    info.put("codec", DEFAULT_NETWORK_CODEC_BYTES);
-    info.put("codecForEncoding", DEFAULT_NETWORK_CODEC_BYTES);
-    info.put("codecForDecoding", DEFAULT_NETWORK_CODEC_BYTES);
-    info.put("isEnabled", enabled);
-    info.put("isInitialized", true);
-    info.put("useRandomServer", false);
-    info.put("perform", List.of());
-    info.put("useAutoIdentify", false);
-    info.put("autoIdentifyService", "NickServ");
-    info.put("autoIdentifyPassword", "");
-    info.put("useSasl", false);
-    info.put("saslAccount", "");
-    info.put("saslPassword", "");
-    info.put("saslMechanism", "");
-    info.put("saslExternal", false);
-    info.put("useCustomMessageRate", false);
-    info.put("msgRateBurstSize", 5);
-    info.put("msgRateMessageDelay", 2200);
-    info.put("unlimitedReconnectRetries", true);
-    info.put("rejoinChannels", true);
+    info.put("NetworkId", new QuasselCoreDatastreamCodec.UserTypeValue("NetworkId", networkId));
+    info.put("NetworkName", request.networkName());
+    // Upstream NetworkInfo deserialization reads "Identity" as IdentityId user-type.
+    info.put("Identity", new QuasselCoreDatastreamCodec.UserTypeValue("IdentityId", identityId));
+    info.put("IdentityId", identityId);
+    info.put("identity", identityId);
+    info.put("CodecForServer", codecForServer);
+    info.put("CodecForEncoding", codecForEncoding);
+    info.put("CodecForDecoding", codecForDecoding);
     info.put(
         "ServerList",
         List.of(
             new QuasselCoreDatastreamCodec.UserTypeValue(
                 "Network::Server", buildQuasselServerPayload(request))));
+    info.put("Perform", List.of());
+    info.put("SkipCaps", List.of());
+    info.put("AutoIdentifyService", "NickServ");
+    info.put("AutoIdentifyPassword", "");
+    info.put("SaslAccount", "");
+    info.put("SaslPassword", "");
+    info.put("SaslMechanism", "");
+    info.put("MessageRateBurstSize", 5);
+    info.put("MessageRateDelay", 2200);
+    info.put("AutoReconnectInterval", 60);
+    info.put("AutoReconnectRetries", 20);
+    info.put("UseRandomServer", false);
+    info.put("UseAutoIdentify", false);
+    info.put("UseSasl", false);
+    info.put("UseAutoReconnect", true);
+    info.put("UnlimitedReconnectRetries", true);
+    info.put("UseCustomMessageRate", false);
+    info.put("UnlimitedMessageRate", false);
+    info.put("RejoinChannels", true);
+    info.put("AutoAwayActive", false);
+    if (includeLegacyAliases) {
+      // Preserve aliases for create flows where older cores expect lower-cased keys.
+      info.put("networkId", networkId);
+      info.put("networkName", request.networkName());
+      info.put("identityId", identityId);
+      info.put("codecForServer", DEFAULT_NETWORK_CODEC);
+      info.put("codecForEncoding", DEFAULT_NETWORK_CODEC);
+      info.put("codecForDecoding", DEFAULT_NETWORK_CODEC);
+      info.put("perform", List.of());
+      info.put("skipCaps", List.of());
+      info.put("autoIdentifyService", "NickServ");
+      info.put("autoIdentifyPassword", "");
+      info.put("saslAccount", "");
+      info.put("saslPassword", "");
+      info.put("saslMechanism", "");
+      info.put("msgRateBurstSize", 5);
+      info.put("msgRateMessageDelay", 2200);
+      info.put("autoReconnectInterval", 60);
+      info.put("autoReconnectRetries", 20);
+      info.put("useRandomServer", false);
+      info.put("useAutoIdentify", false);
+      info.put("useSasl", false);
+      info.put("useAutoReconnect", true);
+      info.put("unlimitedReconnectRetries", true);
+      info.put("useCustomMessageRate", false);
+      info.put("unlimitedMessageRate", false);
+      info.put("rejoinChannels", true);
+      info.put("autoAwayActive", false);
+      info.put("isEnabled", enabled);
+      info.put("isInitialized", true);
+    }
     return Collections.unmodifiableMap(info);
+  }
+
+  private static Map<String, Object> buildQuasselNetworkInfoUpdatePayload(
+      int networkId,
+      int identityId,
+      String networkName,
+      QuasselCoreNetworkUpdateRequest request,
+      boolean enabled) {
+    QuasselCoreNetworkCreateRequest shape =
+        new QuasselCoreNetworkCreateRequest(
+            networkName,
+            request.serverHost(),
+            request.serverPort(),
+            request.useTls(),
+            request.serverPassword(),
+            request.verifyTls(),
+            identityId,
+            List.of());
+    Map<String, Object> base =
+        buildQuasselNetworkInfoPayload(
+            networkId, identityId, shape, enabled, /* includeLegacyAliases= */ false);
+    return Collections.unmodifiableMap(new LinkedHashMap<>(base));
   }
 
   private static Map<String, Object> buildQuasselServerPayload(
       QuasselCoreNetworkCreateRequest request) {
     LinkedHashMap<String, Object> server = new LinkedHashMap<>();
+    server.put("Host", request.serverHost());
+    server.put("Port", request.serverPort());
+    server.put("Password", Objects.toString(request.serverPassword(), ""));
+    server.put("UseSSL", request.useTls());
+    server.put("SslVerify", request.verifyTls());
+    server.put("SslVersion", 0);
+    server.put("UseProxy", false);
+    server.put("ProxyType", 0);
+    server.put("ProxyHost", "localhost");
+    server.put("ProxyPort", 0);
+    server.put("ProxyUser", "");
+    server.put("ProxyPass", "");
+    server.put("sslVerify", request.verifyTls());
+    server.put("sslVersion", 0);
+    // Legacy aliases retained for compatibility with existing parser fallback paths.
+    server.put("hostname", request.serverHost());
     server.put("server", request.serverHost());
+    server.put("host", request.serverHost());
     server.put("port", request.serverPort());
     server.put("password", Objects.toString(request.serverPassword(), ""));
     server.put("useSSL", request.useTls());
-    server.put("sslVerify", request.verifyTls());
-    server.put("sslVersion", 0);
     server.put("useProxy", false);
     server.put("proxyType", 0);
-    server.put("proxyHost", "");
+    server.put("proxyHost", "localhost");
     server.put("proxyPort", 0);
     server.put("proxyUser", "");
     server.put("proxyPass", "");
-    server.put("useAutoIdentify", false);
-    server.put("autoIdentifyService", "NickServ");
-    server.put("autoIdentifyPassword", "");
     return Collections.unmodifiableMap(server);
+  }
+
+  private static String summarizeNetworkInfoForLog(Map<String, Object> payload) {
+    if (payload == null || payload.isEmpty()) return "{}";
+    return summarizeValueForLog(payload, 0);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static String summarizeValueForLog(Object value, int depth) {
+    if (value == null) return "null";
+    if (depth > 3) return "<depth-limit>";
+    if (value instanceof String s) return '"' + s + '"';
+    if (value instanceof Number || value instanceof Boolean) return String.valueOf(value);
+    if (value instanceof byte[] bytes) return "byte[" + bytes.length + "]";
+    if (value instanceof QuasselCoreDatastreamCodec.UserTypeValue userType) {
+      return "UserType("
+          + userType.typeName()
+          + "="
+          + summarizeValueForLog(userType.value(), depth + 1)
+          + ")";
+    }
+    if (value instanceof List<?> list) {
+      StringBuilder out = new StringBuilder();
+      out.append("List[");
+      int index = 0;
+      for (Object item : list) {
+        if (index > 0) out.append(", ");
+        if (index >= 8) {
+          out.append("...");
+          break;
+        }
+        out.append(summarizeValueForLog(item, depth + 1));
+        index++;
+      }
+      out.append(']');
+      return out.toString();
+    }
+    if (value instanceof Map<?, ?> map) {
+      StringBuilder out = new StringBuilder();
+      out.append('{');
+      int index = 0;
+      for (Map.Entry<?, ?> entry : map.entrySet()) {
+        if (index > 0) out.append(", ");
+        if (index >= 32) {
+          out.append("...");
+          break;
+        }
+        String key = Objects.toString(entry.getKey(), "");
+        out.append(key).append('=');
+        if (looksSensitiveLogKey(key)) {
+          out.append("<redacted>");
+        } else {
+          out.append(summarizeValueForLog(entry.getValue(), depth + 1));
+        }
+        index++;
+      }
+      out.append('}');
+      return out.toString();
+    }
+    return value.getClass().getSimpleName() + "(" + value + ")";
+  }
+
+  private static boolean looksSensitiveLogKey(String key) {
+    String token = Objects.toString(key, "").trim().toLowerCase(Locale.ROOT);
+    if (token.isEmpty()) return false;
+    return token.contains("pass")
+        || token.contains("secret")
+        || token.contains("token")
+        || token.contains("auth");
   }
 
   private void sendInput(
@@ -5082,14 +6812,16 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   private static int firstKnownNetworkId(QuasselSession session) {
+    LinkedHashSet<Integer> knownIds = collectKnownNetworkIds(session);
+    if (knownIds.isEmpty()) return -1;
     QuasselCoreAuthHandshake.AuthResult auth = session == null ? null : session.authResult.get();
-    if (auth != null && auth.primaryNetworkId() >= 0) {
+    if (auth != null
+        && auth.primaryNetworkId() >= 0
+        && knownIds.contains(auth.primaryNetworkId())) {
       return auth.primaryNetworkId();
     }
-    if (auth != null && auth.networkIds() != null) {
-      for (Integer id : auth.networkIds()) {
-        if (id != null && id.intValue() >= 0) return id.intValue();
-      }
+    for (Integer id : knownIds) {
+      if (id != null && id.intValue() >= 0) return id.intValue();
     }
     return -1;
   }
@@ -5298,6 +7030,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     };
   }
 
+  private record PendingCreatedNetworkName(String networkName, long observedAtMs) {}
+
   private static final class QuasselSession {
     private final String serverId;
     private final String initialNick;
@@ -5318,16 +7052,24 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     private final Map<String, Integer> networkIdByTokenLower = new ConcurrentHashMap<>();
     private final Map<Integer, Map<String, Object>> networkStateByNetworkId =
         new ConcurrentHashMap<>();
+    private final Set<Integer> removedNetworkIds = ConcurrentHashMap.newKeySet();
+    private final Map<Integer, Map<String, Object>> identityStateByIdentityId =
+        new ConcurrentHashMap<>();
+    private final Map<Integer, String> identityNameByIdentityId = new ConcurrentHashMap<>();
+    private final Set<Integer> knownIdentityIds = ConcurrentHashMap.newKeySet();
     private final Map<Integer, Set<String>> enabledCapabilitiesByNetworkId =
         new ConcurrentHashMap<>();
     private final Map<Integer, MonitorSupportState> monitorSupportByNetworkId =
         new ConcurrentHashMap<>();
     private final Map<Integer, MultilineLimitState> multilineLimitsByNetworkId =
         new ConcurrentHashMap<>();
+    private final ConcurrentLinkedDeque<PendingCreatedNetworkName> pendingCreatedNetworkNames =
+        new ConcurrentLinkedDeque<>();
     private final Map<Integer, QuasselCoreDatastreamCodec.BufferInfoValue> bufferInfosById =
         new ConcurrentHashMap<>();
     private final Map<String, TargetHistoryState> historyByTarget = new ConcurrentHashMap<>();
     private final Map<String, Integer> targetNetworkHintsByTargetLower = new ConcurrentHashMap<>();
+    private final Set<String> joinedChannelMembershipKeys = ConcurrentHashMap.newKeySet();
     private final AtomicReference<QuasselCoreDatastreamCodec.QtDateTimeValue> lagProbeToken =
         new AtomicReference<>();
     private final AtomicLong lagProbeSentAtMs = new AtomicLong(0L);

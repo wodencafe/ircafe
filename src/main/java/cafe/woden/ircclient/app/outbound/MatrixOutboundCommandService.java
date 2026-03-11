@@ -4,10 +4,12 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles Matrix-specific outbound command logic and semantic /upload translation. */
 @Component
+@ApplicationLayer
 final class MatrixOutboundCommandService implements SemanticUploadCommandHandler {
 
   private final UiPort ui;

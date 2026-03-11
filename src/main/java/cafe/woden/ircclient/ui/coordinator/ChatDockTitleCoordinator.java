@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.coordinator;
 
+import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
@@ -78,7 +79,8 @@ public final class ChatDockTitleCoordinator {
     if (target.isApplicationTerminal()) return "Terminal";
     if (target.isLogViewer()) return "Log Viewer";
     if (target.isInterceptor()) {
-      String name = interceptorStore.interceptorName(target.serverId(), target.interceptorId());
+      String scopeServerId = InterceptorScope.scopedServerIdForTarget(target);
+      String name = interceptorStore.interceptorName(scopeServerId, target.interceptorId());
       return (name == null || name.isBlank()) ? "Interceptor" : name;
     }
     if (target.isStatus()) return "Server";

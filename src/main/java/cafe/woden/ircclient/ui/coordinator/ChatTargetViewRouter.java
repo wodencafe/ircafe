@@ -155,7 +155,7 @@ public final class ChatTargetViewRouter {
       return TargetViewType.UI_ONLY;
     }
     if (target.isIgnores()) {
-      showIgnoresCard(target.serverId());
+      showIgnoresCard(target);
       return TargetViewType.UI_ONLY;
     }
     if (target.isDccTransfers()) {
@@ -199,11 +199,12 @@ public final class ChatTargetViewRouter {
       return TargetViewType.UI_ONLY;
     }
     if (target.isInterceptorsGroup()) {
-      showInterceptorCard(target.serverId(), "");
+      showInterceptorCard(target.serverId(), target.networkQualifierToken(), "");
       return TargetViewType.UI_ONLY;
     }
     if (target.isInterceptor()) {
-      showInterceptorCard(target.serverId(), target.interceptorId());
+      showInterceptorCard(
+          target.serverId(), target.networkQualifierToken(), target.interceptorId());
       return TargetViewType.UI_ONLY;
     }
 
@@ -243,9 +244,9 @@ public final class ChatTargetViewRouter {
     }
   }
 
-  private void showIgnoresCard(String serverId) {
+  private void showIgnoresCard(TargetRef target) {
     try {
-      ignoresPanel.setServerId(serverId);
+      ignoresPanel.setTarget(target);
       showCard(CARD_IGNORES);
     } catch (Exception ignored) {
     }
@@ -324,9 +325,9 @@ public final class ChatTargetViewRouter {
     }
   }
 
-  private void showInterceptorCard(String serverId, String interceptorId) {
+  private void showInterceptorCard(String serverId, String networkToken, String interceptorId) {
     try {
-      interceptorPanel.setInterceptorTarget(serverId, interceptorId);
+      interceptorPanel.setInterceptorTarget(serverId, networkToken, interceptorId);
       showCard(CARD_INTERCEPTOR);
     } catch (Exception ignored) {
     }

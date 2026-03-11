@@ -57,6 +57,8 @@ public class InterceptorStore implements InterceptorIngestPort {
 
   public record Change(String serverId, String interceptorId) {}
 
+  public record ScopedInterceptorRef(String serverId, String interceptorId) {}
+
   private final RuntimeConfigStore runtimeConfig;
   private final NotificationSoundService notificationSoundService;
   private final TrayNotificationsPort trayNotificationService;
@@ -383,6 +385,33 @@ public class InterceptorStore implements InterceptorIngestPort {
     }
   }
 
+  public List<ScopedInterceptorRef> listInterceptorRefsForBaseServer(String serverId) {
+    String baseServerId = InterceptorScope.baseServerId(serverId);
+    if (baseServerId.isEmpty()) return List.of();
+
+    ArrayList<ScopedInterceptorRef> refs = new ArrayList<>();
+    for (Map.Entry<String, LinkedHashMap<String, InterceptorDefinition>> entry :
+        defsByServer.entrySet()) {
+      String ownerScopeServerId = InterceptorScope.normalizeScopeServerId(entry.getKey());
+      if (ownerScopeServerId.isEmpty()) continue;
+      if (!baseServerId.equalsIgnoreCase(InterceptorScope.baseServerId(ownerScopeServerId))) {
+        continue;
+      }
+
+      LinkedHashMap<String, InterceptorDefinition> defs = entry.getValue();
+      if (defs == null || defs.isEmpty()) continue;
+
+      synchronized (defs) {
+        for (String interceptorId : defs.keySet()) {
+          String iid = norm(interceptorId);
+          if (iid.isEmpty()) continue;
+          refs.add(new ScopedInterceptorRef(ownerScopeServerId, iid));
+        }
+      }
+    }
+    return refs.isEmpty() ? List.of() : List.copyOf(refs);
+  }
+
   public InterceptorDefinition interceptor(String serverId, String interceptorId) {
     String sid = norm(serverId);
     String iid = norm(interceptorId);
@@ -539,6 +568,7 @@ public class InterceptorStore implements InterceptorIngestPort {
       String text,
       InterceptorEventType eventType) {
     if (defsByServer.isEmpty()) return;
+    String eventScopeServerId = InterceptorScope.scopedServerIdForChannel(eventServerId, channel);
 
     for (Map.Entry<String, LinkedHashMap<String, InterceptorDefinition>> entry :
         defsByServer.entrySet()) {
@@ -553,7 +583,7 @@ public class InterceptorStore implements InterceptorIngestPort {
 
       for (InterceptorDefinition def : snapshot) {
         if (def == null || !def.enabled()) continue;
-        if (!def.scopeMatchesServer(eventServerId)) continue;
+        if (!scopeMatches(def, eventServerId, eventScopeServerId)) continue;
         if (!matchesChannelScope(def, channel)) continue;
 
         String reason = null;
@@ -582,6 +612,14 @@ public class InterceptorStore implements InterceptorIngestPort {
         changes.onNext(new Change(ownerServerId, def.id()));
       }
     }
+  }
+
+  private static boolean scopeMatches(
+      InterceptorDefinition definition, String eventServerId, String eventScopeServerId) {
+    if (definition == null) return false;
+    if (definition.scopeMatchesServer(eventScopeServerId)) return true;
+    if (Objects.equals(eventServerId, eventScopeServerId)) return false;
+    return definition.scopeMatchesServer(eventServerId);
   }
 
   private void dispatchActions(

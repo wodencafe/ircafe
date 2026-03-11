@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -51,6 +52,8 @@ public final class ServerTreeTargetLifecycleCoordinator {
     RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout(String serverId);
 
     RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder(String serverId);
+
+    DefaultMutableTreeNode backendSpecificParent(TargetRef ref, ServerNodes serverNodes);
 
     DefaultMutableTreeNode ensureChannelListNode(ServerNodes serverNodes);
 
@@ -95,6 +98,7 @@ public final class ServerTreeTargetLifecycleCoordinator {
           builtInLayoutNodeKindForRef,
       Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayout,
       Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> rootSiblingOrder,
+      BiFunction<TargetRef, ServerNodes, DefaultMutableTreeNode> backendSpecificParent,
       Function<ServerNodes, DefaultMutableTreeNode> ensureChannelListNode,
       BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeBuiltInLayout> applyBuiltInLayoutToTree,
       BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder>
@@ -122,6 +126,7 @@ public final class ServerTreeTargetLifecycleCoordinator {
     Objects.requireNonNull(builtInLayoutNodeKindForRef, "builtInLayoutNodeKindForRef");
     Objects.requireNonNull(builtInLayout, "builtInLayout");
     Objects.requireNonNull(rootSiblingOrder, "rootSiblingOrder");
+    Objects.requireNonNull(backendSpecificParent, "backendSpecificParent");
     Objects.requireNonNull(ensureChannelListNode, "ensureChannelListNode");
     Objects.requireNonNull(applyBuiltInLayoutToTree, "applyBuiltInLayoutToTree");
     Objects.requireNonNull(applyRootSiblingOrderToTree, "applyRootSiblingOrderToTree");
@@ -195,6 +200,11 @@ public final class ServerTreeTargetLifecycleCoordinator {
       @Override
       public RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
         return rootSiblingOrder.apply(serverId);
+      }
+
+      @Override
+      public DefaultMutableTreeNode backendSpecificParent(TargetRef ref, ServerNodes serverNodes) {
+        return backendSpecificParent.apply(ref, serverNodes);
       }
 
       @Override
@@ -341,18 +351,27 @@ public final class ServerTreeTargetLifecycleCoordinator {
         context.builtInLayoutNodeKindForRef(ref);
     RuntimeConfigStore.ServerTreeBuiltInLayout layout = context.builtInLayout(serverId);
     ServerNodes resolvedServerNodes = sn;
-    DefaultMutableTreeNode parent =
-        ensureNodeParentResolver.resolveParent(
-            ref,
-            new ServerTreeEnsureNodeParentResolver.ParentNodes(
-                resolvedServerNodes.serverNode,
-                resolvedServerNodes.pmNode,
-                resolvedServerNodes.otherNode,
-                resolvedServerNodes.monitorNode,
-                resolvedServerNodes.interceptorsNode),
-            builtInKind,
-            layout,
-            () -> context.ensureChannelListNode(resolvedServerNodes));
+    DefaultMutableTreeNode parent = context.backendSpecificParent(ref, resolvedServerNodes);
+    if (leaves.containsKey(ref)) {
+      if (parent != null) {
+        context.expandPath(parent);
+      }
+      return;
+    }
+    if (parent == null) {
+      parent =
+          ensureNodeParentResolver.resolveParent(
+              ref,
+              new ServerTreeEnsureNodeParentResolver.ParentNodes(
+                  resolvedServerNodes.serverNode,
+                  resolvedServerNodes.pmNode,
+                  resolvedServerNodes.otherNode,
+                  resolvedServerNodes.monitorNode,
+                  resolvedServerNodes.interceptorsNode),
+              builtInKind,
+              layout,
+              () -> context.ensureChannelListNode(resolvedServerNodes));
+    }
 
     String leafLabel = targetNodePolicy.leafLabel(ref);
     ensureNodeLeafInserter.insertLeaf(parent, ref, leafLabel);

@@ -1,6 +1,10 @@
 package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.util.VirtualThreads;
+import io.reactivex.rxjava3.core.Completable;
+import io.reactivex.rxjava3.core.Scheduler;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -9,8 +13,8 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -38,6 +42,7 @@ public final class ZncPlaybackCaptureCoordinator {
 
   private static final Object SCHEDULER_LOCK = new Object();
   private static ScheduledExecutorService scheduler;
+  private static Scheduler rxScheduler;
 
   private final AtomicReference<CaptureSession> active = new AtomicReference<>(null);
 
@@ -64,12 +69,7 @@ public final class ZncPlaybackCaptureCoordinator {
 
     session.emit = emit;
 
-    session.maxTimeout =
-        scheduler()
-            .schedule(
-                () -> timeoutIfStillActive(session, "max-time"),
-                MAX_CAPTURE_TIME.toMillis(),
-                TimeUnit.MILLISECONDS);
+    session.maxTimeout = scheduleTimeout(session, "max-time", MAX_CAPTURE_TIME.toMillis());
 
     scheduleQuietTimeout(session);
 
@@ -196,15 +196,26 @@ public final class ZncPlaybackCaptureCoordinator {
   }
 
   private void scheduleQuietTimeout(CaptureSession s) {
-    ScheduledFuture<?> prev = s.quietTimeout;
-    if (prev != null) prev.cancel(false);
+    disposeTimeout(s.quietTimeout);
+    s.quietTimeout = scheduleTimeout(s, "quiet-time", QUIET_TIME.toMillis());
+  }
 
-    s.quietTimeout =
-        scheduler()
-            .schedule(
-                () -> timeoutIfStillActive(s, "quiet-time"),
-                QUIET_TIME.toMillis(),
-                TimeUnit.MILLISECONDS);
+  private void disposeTimeout(Disposable timeout) {
+    if (timeout != null && !timeout.isDisposed()) timeout.dispose();
+  }
+
+  private Disposable scheduleTimeout(CaptureSession session, String reason, long delayMs) {
+    try {
+      return Completable.timer(delayMs, TimeUnit.MILLISECONDS, timerScheduler())
+          .subscribe(
+              () -> timeoutIfStillActive(session, reason),
+              err ->
+                  log.debug("[{}] ZNC playback timeout scheduling failed", session.serverId, err));
+    } catch (RejectedExecutionException ex) {
+      log.debug(
+          "[{}] ZNC playback timeout scheduling rejected (likely shutdown)", session.serverId, ex);
+      return null;
+    }
   }
 
   static void shutdownSharedScheduler() {
@@ -216,23 +227,25 @@ public final class ZncPlaybackCaptureCoordinator {
         }
       }
       scheduler = null;
+      rxScheduler = null;
     }
   }
 
-  private static ScheduledExecutorService scheduler() {
+  private static Scheduler timerScheduler() {
     synchronized (SCHEDULER_LOCK) {
       if (scheduler == null || scheduler.isShutdown() || scheduler.isTerminated()) {
         scheduler = VirtualThreads.newSingleThreadScheduledExecutor("znc-playback-capture");
+        rxScheduler = Schedulers.from(scheduler);
       }
-      return scheduler;
+      return rxScheduler;
     }
   }
 
   private void cancelInternal(CaptureSession s, String reason) {
     if (!active.compareAndSet(s, null)) return;
 
-    if (s.quietTimeout != null) s.quietTimeout.cancel(false);
-    if (s.maxTimeout != null) s.maxTimeout.cancel(false);
+    disposeTimeout(s.quietTimeout);
+    disposeTimeout(s.maxTimeout);
 
     log.debug(
         "[{}] ZNC playback capture cancelled target={} reason={}", s.serverId, s.target, reason);
@@ -242,8 +255,8 @@ public final class ZncPlaybackCaptureCoordinator {
     // Ensure we're still active and clear first to avoid re-entrancy issues.
     if (!active.compareAndSet(s, null)) return;
 
-    if (s.quietTimeout != null) s.quietTimeout.cancel(false);
-    if (s.maxTimeout != null) s.maxTimeout.cancel(false);
+    disposeTimeout(s.quietTimeout);
+    disposeTimeout(s.maxTimeout);
 
     List<ChatHistoryEntry> entries = new ArrayList<>(s.entries);
 
@@ -283,8 +296,8 @@ public final class ZncPlaybackCaptureCoordinator {
 
     volatile Instant startedAt;
 
-    volatile ScheduledFuture<?> quietTimeout;
-    volatile ScheduledFuture<?> maxTimeout;
+    volatile Disposable quietTimeout;
+    volatile Disposable maxTimeout;
     volatile Consumer<ServerIrcEvent> emit;
 
     CaptureSession(String serverId, String target, Instant fromInclusive, Instant toInclusive) {

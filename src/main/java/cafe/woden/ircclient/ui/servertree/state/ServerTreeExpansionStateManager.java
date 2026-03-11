@@ -1,7 +1,11 @@
 package cafe.woden.ircclient.ui.servertree.state;
 
+import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
+import cafe.woden.ircclient.ui.servertree.model.ServerTreeQuasselNetworkNodeData;
 import java.util.Enumeration;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import javax.swing.JTree;
@@ -42,32 +46,33 @@ public final class ServerTreeExpansionStateManager {
   public void restoreExpandedTreePaths(Set<TreePath> expanded) {
     if (expanded == null || expanded.isEmpty()) return;
     for (TreePath path : expanded) {
-      if (isPathInCurrentTreeModel(path)) {
-        tree.expandPath(path);
+      TreePath resolved = resolvePathInCurrentTreeModel(path);
+      if (resolved != null) {
+        tree.expandPath(resolved);
       }
     }
   }
 
   public boolean isPathInCurrentTreeModel(TreePath path) {
-    if (path == null) return false;
+    return resolvePathInCurrentTreeModel(path) != null;
+  }
+
+  private TreePath resolvePathInCurrentTreeModel(TreePath path) {
+    if (path == null) return null;
     Object[] nodes = path.getPath();
-    if (nodes.length == 0 || nodes[0] != root) return false;
+    if (nodes.length == 0 || nodes[0] != root) return null;
 
     DefaultMutableTreeNode cursor = root;
+    Object[] resolved = new Object[nodes.length];
+    resolved[0] = root;
     for (int i = 1; i < nodes.length; i++) {
-      Object next = nodes[i];
-      DefaultMutableTreeNode matched = null;
-      for (int childIndex = 0; childIndex < cursor.getChildCount(); childIndex++) {
-        Object child = cursor.getChildAt(childIndex);
-        if (child == next && child instanceof DefaultMutableTreeNode mutableTreeNode) {
-          matched = mutableTreeNode;
-          break;
-        }
-      }
-      if (matched == null) return false;
+      if (!(nodes[i] instanceof DefaultMutableTreeNode expectedNode)) return null;
+      DefaultMutableTreeNode matched = findMatchingChild(cursor, expectedNode);
+      if (matched == null) return null;
       cursor = matched;
+      resolved[i] = matched;
     }
-    return true;
+    return new TreePath(resolved);
   }
 
   public TreePath defaultSelectionPath() {
@@ -78,5 +83,53 @@ public final class ServerTreeExpansionStateManager {
       return new TreePath(applicationRoot.getPath());
     }
     return new TreePath(root.getPath());
+  }
+
+  private static DefaultMutableTreeNode findMatchingChild(
+      DefaultMutableTreeNode parent, DefaultMutableTreeNode expectedNode) {
+    if (parent == null || expectedNode == null) return null;
+    for (int childIndex = 0; childIndex < parent.getChildCount(); childIndex++) {
+      Object child = parent.getChildAt(childIndex);
+      if (child == expectedNode && child instanceof DefaultMutableTreeNode matched) {
+        return matched;
+      }
+    }
+    String expectedKey = nodeIdentityKey(expectedNode);
+    if (expectedKey.isEmpty()) return null;
+    for (int childIndex = 0; childIndex < parent.getChildCount(); childIndex++) {
+      Object child = parent.getChildAt(childIndex);
+      if (!(child instanceof DefaultMutableTreeNode candidate)) continue;
+      if (expectedKey.equals(nodeIdentityKey(candidate))) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  private static String nodeIdentityKey(DefaultMutableTreeNode node) {
+    if (node == null) return "";
+    Object userObject = node.getUserObject();
+    if (userObject instanceof String label) {
+      return "str:" + normalize(label);
+    }
+    if (userObject instanceof ServerTreeQuasselNetworkNodeData quasselNodeData) {
+      String server = normalize(quasselNodeData.serverId());
+      if (quasselNodeData.emptyState()) {
+        return "qempty:" + server;
+      }
+      return "qnet:" + server + "|" + normalize(quasselNodeData.networkToken());
+    }
+    if (userObject instanceof ServerTreeNodeData nodeData) {
+      TargetRef ref = nodeData.ref;
+      if (ref != null) {
+        return "ref:" + normalize(ref.serverId()) + "|" + normalize(ref.key());
+      }
+      return "label:" + normalize(nodeData.label);
+    }
+    return "obj:" + normalize(Objects.toString(userObject, ""));
+  }
+
+  private static String normalize(String value) {
+    return Objects.toString(value, "").trim().toLowerCase(Locale.ROOT);
   }
 }

@@ -5,10 +5,12 @@ import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Correlates outbound raw lines with labeled-response routing metadata when available. */
 @Component
+@ApplicationLayer
 final class OutboundRawLineCorrelationService {
 
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;

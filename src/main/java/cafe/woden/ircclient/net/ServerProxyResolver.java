@@ -3,6 +3,7 @@ package cafe.woden.ircclient.net;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
  * </ol>
  */
 @Component
+@ApplicationLayer
 public class ServerProxyResolver {
 
   private final ServerCatalog serverCatalog;

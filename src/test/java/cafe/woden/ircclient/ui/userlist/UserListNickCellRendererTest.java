@@ -29,7 +29,8 @@ class UserListNickCellRendererTest {
             nickColors,
             __ -> new UserListNickCellRenderer.IgnoreMark(true, true),
             __ -> 1f,
-            __ -> false);
+            __ -> false,
+            "compact");
 
     NickInfo nickInfo =
         new NickInfo(
@@ -56,12 +57,69 @@ class UserListNickCellRendererTest {
             nickColors,
             __ -> new UserListNickCellRenderer.IgnoreMark(false, false),
             __ -> 0f,
-            __ -> false);
+            __ -> false,
+            "compact");
 
     NickInfo nickInfo = new NickInfo("alice", "", "alice!u@h");
     JLabel label =
         (JLabel) renderer.getListCellRendererComponent(new JList<>(), nickInfo, 0, false, false);
 
     assertEquals(Color.ORANGE, label.getForeground());
+  }
+
+  @Test
+  void rendererShowsMatrixDisplayNameOnlyInCompactMode() {
+    NickColorService nickColors = mock(NickColorService.class);
+    when(nickColors.enabled()).thenReturn(false);
+    UserListNickCellRenderer renderer =
+        new UserListNickCellRenderer(
+            nickColors,
+            __ -> new UserListNickCellRenderer.IgnoreMark(false, false),
+            __ -> 0f,
+            __ -> false,
+            "compact");
+
+    NickInfo nickInfo =
+        new NickInfo(
+            "@alice:matrix.example.org",
+            "",
+            "@alice:matrix.example.org",
+            AwayState.HERE,
+            null,
+            AccountState.UNKNOWN,
+            null,
+            "Alice");
+    JLabel label =
+        (JLabel) renderer.getListCellRendererComponent(new JList<>(), nickInfo, 0, false, false);
+
+    assertEquals("Alice", label.getText());
+  }
+
+  @Test
+  void rendererShowsMatrixDisplayNameAndMxidInVerboseMode() {
+    NickColorService nickColors = mock(NickColorService.class);
+    when(nickColors.enabled()).thenReturn(false);
+    UserListNickCellRenderer renderer =
+        new UserListNickCellRenderer(
+            nickColors,
+            __ -> new UserListNickCellRenderer.IgnoreMark(false, false),
+            __ -> 0f,
+            __ -> false,
+            "verbose");
+
+    NickInfo nickInfo =
+        new NickInfo(
+            "@alice:matrix.example.org",
+            "",
+            "@alice:matrix.example.org",
+            AwayState.HERE,
+            null,
+            AccountState.UNKNOWN,
+            null,
+            "Alice");
+    JLabel label =
+        (JLabel) renderer.getListCellRendererComponent(new JList<>(), nickInfo, 0, false, false);
+
+    assertEquals("Alice (@alice:matrix.example.org)", label.getText());
   }
 }

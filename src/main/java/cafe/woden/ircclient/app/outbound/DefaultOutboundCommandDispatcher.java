@@ -6,10 +6,12 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Default outbound dispatcher backed by the concrete outbound command services. */
 @Component("defaultOutboundCommandDispatcher")
+@ApplicationLayer
 public class DefaultOutboundCommandDispatcher implements OutboundCommandDispatcher {
 
   private final List<OutboundCommandRegistrar> outboundCommandRegistrars;

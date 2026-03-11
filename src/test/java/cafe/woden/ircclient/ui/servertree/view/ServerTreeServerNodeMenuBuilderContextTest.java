@@ -60,6 +60,7 @@ class ServerTreeServerNodeMenuBuilderContextTest {
             openedServerInfo::set,
             openedQuasselSetup::set,
             openedQuasselNetworkManager::set,
+            serverId -> "quassel".equals(serverId),
             () -> true,
             promptedInterceptorServer::set,
             () -> true,
@@ -108,6 +109,8 @@ class ServerTreeServerNodeMenuBuilderContextTest {
     assertEquals("libera", openedQuasselSetup.get());
     assertEquals("libera", openedQuasselNetworkManager.get());
     assertEquals("libera", promptedInterceptorServer.get());
+    assertTrue(context.isQuasselSetupPending("quassel"));
+    assertFalse(context.isQuasselSetupPending("libera"));
 
     assertTrue(context.interceptorStoreAvailable());
     assertTrue(context.serverDialogsAvailable());

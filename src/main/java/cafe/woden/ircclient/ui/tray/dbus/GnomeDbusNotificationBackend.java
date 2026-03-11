@@ -20,6 +20,7 @@ import org.freedesktop.dbus.connections.impl.DBusConnectionBuilder;
 import org.freedesktop.dbus.interfaces.DBusSigHandler;
 import org.freedesktop.dbus.types.UInt32;
 import org.freedesktop.dbus.types.Variant;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -35,6 +36,7 @@ import org.springframework.stereotype.Component;
  * <p>G3: Listen for ActionInvoked/NotificationClosed and dispatch our click handler.
  */
 @Component
+@InterfaceLayer
 public class GnomeDbusNotificationBackend {
   private static final Logger log = LoggerFactory.getLogger(GnomeDbusNotificationBackend.class);
 

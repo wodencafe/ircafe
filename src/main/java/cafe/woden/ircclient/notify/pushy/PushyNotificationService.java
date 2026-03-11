@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -26,6 +27,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Lazy
+@ApplicationLayer
 public class PushyNotificationService {
 
   private static final Logger log = LoggerFactory.getLogger(PushyNotificationService.class);

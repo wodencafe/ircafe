@@ -11,10 +11,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Parses {@code /filter ...} commands using the mini-spec token grammar. */
 @Component
+@ApplicationLayer
 public class FilterCommandParser {
 
   public FilterCommand parse(String raw) {

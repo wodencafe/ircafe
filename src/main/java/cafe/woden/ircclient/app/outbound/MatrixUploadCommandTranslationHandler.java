@@ -2,9 +2,11 @@ package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@ApplicationLayer
 final class MatrixUploadCommandTranslationHandler implements UploadCommandTranslationHandler {
   private final MatrixOutboundCommandSupport matrixCommandSupport;
 

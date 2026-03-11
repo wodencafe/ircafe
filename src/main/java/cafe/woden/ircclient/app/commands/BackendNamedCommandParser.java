@@ -6,6 +6,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  * <p>This keeps backend command naming out of the main semantic parser flow.
  */
 @Component
+@ApplicationLayer
 public class BackendNamedCommandParser {
 
   private final Map<String, BackendNamedCommandHandler> handlersByCommandName;

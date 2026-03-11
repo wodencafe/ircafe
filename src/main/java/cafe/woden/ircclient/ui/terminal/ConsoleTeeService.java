@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  * records the output for the in-app terminal dock.
  */
 @Component
+@InterfaceLayer
 @Lazy(false)
 public class ConsoleTeeService {
 

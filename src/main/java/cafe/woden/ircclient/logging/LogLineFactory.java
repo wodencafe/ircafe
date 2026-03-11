@@ -10,10 +10,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
 /** Convert UI-facing transcript events into persisted {@link LogLine}s. */
 @Component
+@InfrastructureLayer
 public final class LogLineFactory {
 
   private final Clock clock;

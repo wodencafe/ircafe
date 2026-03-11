@@ -40,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -51,6 +52,7 @@ import org.springframework.stereotype.Component;
  * close &lt;nick&gt; /dcc list
  */
 @Component
+@ApplicationLayer
 public class OutboundDccCommandService {
   private static final int OFFER_ACCEPT_TIMEOUT_MS = 120_000;
   private static final int CONNECT_TIMEOUT_MS = 20_000;

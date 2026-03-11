@@ -8,9 +8,11 @@ import cafe.woden.ircclient.model.TargetRef;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 @Component
+@ApplicationLayer
 final class QuasselOutboundCommandSupport {
   private final ServerCatalog serverCatalog;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
@@ -23,9 +25,14 @@ final class QuasselOutboundCommandSupport {
   }
 
   boolean ensureQuasselServerBackend(String serverId, TargetRef out, String statusTag, UiPort ui) {
+    return ensureQuasselServerBackend(serverId, out, null, statusTag, ui);
+  }
+
+  boolean ensureQuasselServerBackend(
+      String serverId, TargetRef out, TargetRef fallbackOut, String statusTag, UiPort ui) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) {
-      ui.appendStatus(out, statusTag, "Select a Quassel server first.");
+      appendStatusMirrored(ui, out, fallbackOut, statusTag, "Select a Quassel server first.");
       return false;
     }
     if (serverCatalog == null) {
@@ -33,20 +40,32 @@ final class QuasselOutboundCommandSupport {
     }
     Optional<IrcProperties.Server> server = serverCatalog.find(sid);
     if (server.isEmpty()) {
-      ui.appendStatus(out, statusTag, "Unknown server '" + sid + "'.");
+      appendStatusMirrored(ui, out, fallbackOut, statusTag, "Unknown server '" + sid + "'.");
       return false;
     }
     IrcProperties.Server.Backend backend = server.orElseThrow().backend();
     if (backendCapabilityPolicy.supportsQuasselCoreCommands(backend)) {
       return true;
     }
-    ui.appendStatus(
+    appendStatusMirrored(
+        ui,
         out,
+        fallbackOut,
         statusTag,
         "Server '"
             + sid
             + "' does not use the Quassel Core backend. Quassel actions are only available on Quassel Core servers.");
     return false;
+  }
+
+  private static void appendStatusMirrored(
+      UiPort ui, TargetRef out, TargetRef fallbackOut, String statusTag, String message) {
+    if (ui == null || message == null || message.isBlank()) return;
+    ui.appendStatus(out, statusTag, message);
+    if (fallbackOut == null || Objects.equals(fallbackOut, out)) {
+      return;
+    }
+    ui.appendStatus(fallbackOut, statusTag, message);
   }
 
   String networkUsage() {

@@ -76,7 +76,8 @@ class ModeSnapshotSuppressionFunctionalTest {
     ChatStyles chatStyles = new ChatStyles(chatThemeBus);
     ChatRichTextRenderer renderer = new ChatRichTextRenderer(null, null, chatStyles, null);
     ChatTranscriptStore transcripts =
-        new ChatTranscriptStore(chatStyles, renderer, null, null, null, null, null, null, null);
+        new ChatTranscriptStore(
+            chatStyles, renderer, null, null, null, null, null, null, null, null);
 
     SwingUiPort ui =
         new SwingUiPort(

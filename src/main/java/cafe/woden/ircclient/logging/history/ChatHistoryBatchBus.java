@@ -4,6 +4,7 @@ import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 /** In-memory bus that carries the raw CHATHISTORY batch entries. */
 @Component
+@InfrastructureLayer
 public final class ChatHistoryBatchBus
     extends AbstractTargetWaiterBus<ChatHistoryBatchBus.BatchEvent> {
 

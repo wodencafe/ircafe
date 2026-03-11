@@ -79,6 +79,26 @@ class UiPropertiesBindingTest {
             });
   }
 
+  @Test
+  void matrixUserListNameDisplayModeDefaultsToCompact() {
+    runner.run(
+        ctx -> {
+          UiProperties props = ctx.getBean(UiProperties.class);
+          assertEquals("compact", props.matrixUserListNameDisplayMode());
+        });
+  }
+
+  @Test
+  void matrixUserListNameDisplayModeNormalizesAliases() {
+    runner
+        .withPropertyValues("ircafe.ui.matrixUserListNameDisplayMode=display-name-and-user-id")
+        .run(
+            ctx -> {
+              UiProperties props = ctx.getBean(UiProperties.class);
+              assertEquals("verbose", props.matrixUserListNameDisplayMode());
+            });
+  }
+
   @Configuration(proxyBeanMethods = false)
   @EnableConfigurationProperties(UiProperties.class)
   static class UiPropertiesTestConfig {}

@@ -2,6 +2,7 @@ package cafe.woden.ircclient.config;
 
 import java.util.List;
 import java.util.Map;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -11,6 +12,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * {@link cafe.woden.ircclient.config.RuntimeConfigStore}.
  */
 @ConfigurationProperties(prefix = "ircafe.ignore")
+@InfrastructureLayer
 public record IgnoreProperties(
     Boolean hardIgnoreIncludesCtcp,
     Boolean softIgnoreIncludesCtcp,

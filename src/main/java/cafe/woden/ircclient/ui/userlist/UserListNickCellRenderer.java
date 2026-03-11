@@ -30,6 +30,7 @@ public final class UserListNickCellRenderer extends DefaultListCellRenderer {
   private final Function<String, Float> typingAlphaLookup;
   private final Predicate<String> pausedTypingLookup;
   private final Icon keyboardIcon = SvgIcons.icon("keyboard", TYPING_ICON_SIZE, Palette.QUIET);
+  private volatile String matrixUserListNameDisplayMode = "compact";
 
   private float typingIconAlpha = 0f;
 
@@ -39,12 +40,20 @@ public final class UserListNickCellRenderer extends DefaultListCellRenderer {
       NickColorService nickColors,
       Function<NickInfo, IgnoreMark> ignoreMarkLookup,
       Function<String, Float> typingAlphaLookup,
-      Predicate<String> pausedTypingLookup) {
+      Predicate<String> pausedTypingLookup,
+      String matrixUserListNameDisplayMode) {
     this.nickColors = nickColors;
     this.ignoreMarkLookup =
         ignoreMarkLookup != null ? ignoreMarkLookup : __ -> new IgnoreMark(false, false);
     this.typingAlphaLookup = typingAlphaLookup != null ? typingAlphaLookup : __ -> 0f;
     this.pausedTypingLookup = pausedTypingLookup != null ? pausedTypingLookup : __ -> false;
+    this.matrixUserListNameDisplayMode =
+        normalizeMatrixUserListNameDisplayMode(matrixUserListNameDisplayMode);
+  }
+
+  public void setMatrixUserListNameDisplayMode(String matrixUserListNameDisplayMode) {
+    this.matrixUserListNameDisplayMode =
+        normalizeMatrixUserListNameDisplayMode(matrixUserListNameDisplayMode);
   }
 
   @Override
@@ -55,8 +64,14 @@ public final class UserListNickCellRenderer extends DefaultListCellRenderer {
     NickInfo nickInfo = (value instanceof NickInfo n) ? n : null;
 
     String nick = nickInfo == null ? "" : Objects.toString(nickInfo.nick(), "");
+    String realName = nickInfo == null ? "" : Objects.toString(nickInfo.realName(), "").trim();
     String prefix = nickInfo == null ? "" : Objects.toString(nickInfo.prefix(), "");
-    String display = prefix + nick;
+    String renderedNick = nick;
+    if (looksLikeMatrixUserId(nick) && !realName.isEmpty() && !realName.equalsIgnoreCase(nick)) {
+      renderedNick =
+          "verbose".equals(matrixUserListNameDisplayMode) ? realName + " (" + nick + ")" : realName;
+    }
+    String display = prefix + renderedNick;
 
     IgnoreMark mark = ignoreMarkLookup.apply(nickInfo);
     if (mark == null) {
@@ -123,6 +138,23 @@ public final class UserListNickCellRenderer extends DefaultListCellRenderer {
       case LOGGED_IN -> SvgIcons.icon("account-in", ACCOUNT_ICON_SIZE, Palette.QUIET);
       case LOGGED_OUT -> SvgIcons.icon("account-out", ACCOUNT_ICON_SIZE, Palette.QUIET);
       default -> SvgIcons.icon("account-unknown", ACCOUNT_ICON_SIZE, Palette.QUIET);
+    };
+  }
+
+  private static boolean looksLikeMatrixUserId(String token) {
+    String value = Objects.toString(token, "").trim();
+    if (!value.startsWith("@")) return false;
+    int colon = value.indexOf(':');
+    return colon > 1 && colon < value.length() - 1;
+  }
+
+  private static String normalizeMatrixUserListNameDisplayMode(String raw) {
+    String value = Objects.toString(raw, "").trim().toLowerCase(java.util.Locale.ROOT);
+    if (value.isEmpty()) return "compact";
+    return switch (value) {
+      case "compact", "display-name-only", "displayname", "name-only" -> "compact";
+      case "verbose", "display-name-and-user-id", "displayname-and-userid", "full" -> "verbose";
+      default -> "compact";
     };
   }
 }

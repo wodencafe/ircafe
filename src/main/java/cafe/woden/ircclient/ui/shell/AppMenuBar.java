@@ -88,9 +88,11 @@ import javax.swing.WindowConstants;
 import javax.swing.border.Border;
 import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 
 @org.springframework.stereotype.Component
+@InterfaceLayer
 @Lazy
 public class AppMenuBar extends JMenuBar {
   // Default proportions used when docking.

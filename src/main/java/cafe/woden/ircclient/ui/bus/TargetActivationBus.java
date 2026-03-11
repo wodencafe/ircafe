@@ -4,6 +4,7 @@ import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
  * transcript the main Chat dockable is currently…
  */
 @Component
+@InterfaceLayer
 @Lazy
 public class TargetActivationBus {
 

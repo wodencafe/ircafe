@@ -14,10 +14,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /query, /msg, /notice, /me and shared message send flow. */
 @Component
+@ApplicationLayer
 final class OutboundMessagingCommandService {
 
   private enum MultilineSendDecision {

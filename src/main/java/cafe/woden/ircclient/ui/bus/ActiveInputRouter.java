@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.bus;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
  * "input-only" updates) to the input the user is actually focused on.
  */
 @Component
+@InterfaceLayer
 @Lazy
 public class ActiveInputRouter {
 

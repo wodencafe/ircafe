@@ -30,11 +30,13 @@ import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
+import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /** A simple in-app "terminal" dock that mirrors whatever is printed to the real console. */
 @Component
+@InterfaceLayer
 @Lazy
 public class TerminalDockable extends JPanel implements Dockable {
 

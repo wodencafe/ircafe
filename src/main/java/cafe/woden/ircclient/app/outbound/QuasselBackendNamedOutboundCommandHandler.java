@@ -5,10 +5,12 @@ import cafe.woden.ircclient.app.commands.ParsedInput;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
 import java.util.Set;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles Quassel named commands routed from backend command parsing. */
 @Component
+@ApplicationLayer
 final class QuasselBackendNamedOutboundCommandHandler
     implements BackendNamedOutboundCommandHandler {
 

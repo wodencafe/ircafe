@@ -24,7 +24,8 @@ class ServerTreeSelectionPersistencePolicyContextTest {
             () -> selectedNode,
             node -> "libera",
             node -> node == selectedNode,
-            node -> false);
+            node -> false,
+            node -> TargetRef.channelList("libera", "libera"));
 
     assertSame(lastBroadcast, context.lastBroadcastSelection());
     assertSame(selectedTarget, context.selectedTargetRef());
@@ -32,5 +33,7 @@ class ServerTreeSelectionPersistencePolicyContextTest {
     assertEquals("libera", context.owningServerIdForNode(selectedNode));
     assertTrue(context.isMonitorGroupNode(selectedNode));
     assertFalse(context.isInterceptorsGroupNode(selectedNode));
+    assertEquals(
+        TargetRef.channelList("libera", "libera"), context.syntheticTargetForNode(selectedNode));
   }
 }

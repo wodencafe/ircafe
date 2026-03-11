@@ -571,6 +571,8 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
       AttributeSet attrs = el.getAttributes();
       Object marker = attrs.getAttribute(NickColorService.ATTR_NICK);
       if (marker == null) return null;
+      String metaFrom = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_FROM), "").trim();
+      if (!metaFrom.isEmpty()) return metaFrom;
 
       int start = el.getStartOffset();
       int end = el.getEndOffset();

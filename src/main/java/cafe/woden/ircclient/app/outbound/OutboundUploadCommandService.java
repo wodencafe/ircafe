@@ -9,11 +9,13 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Handles semantic /upload command flow and backend translation dispatch. */
 @Component
+@ApplicationLayer
 final class OutboundUploadCommandService implements OutboundHelpContributor {
 
   private final IrcTargetMembershipPort targetMembership;

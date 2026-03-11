@@ -9,6 +9,7 @@ import cafe.woden.ircclient.state.api.CtcpRoutingPort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Locale;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
  * Behavior is intended to match the previous in-mediator implementation.
  */
 @Component
+@ApplicationLayer
 public class OutboundCtcpWhoisCommandService {
 
   private final UiPort ui;

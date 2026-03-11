@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * spring.config.import}.
  */
 @ConfigurationProperties(prefix = "ircafe.ui")
+@InfrastructureLayer
 public record UiProperties(
     String theme,
     String accentColor,
@@ -126,6 +128,13 @@ public record UiProperties(
 
     /** Show typing markers next to nicks in the user list. */
     Boolean typingIndicatorsUsersListEnabled,
+
+    /**
+     * Matrix user list display mode.
+     *
+     * <p>Allowed values: {@code compact}, {@code verbose}.
+     */
+    String matrixUserListNameDisplayMode,
 
     /** Show typing status text ("X is typing") in the chat transcript input area. */
     Boolean typingIndicatorsTranscriptEnabled,
@@ -852,6 +861,8 @@ public record UiProperties(
     if (typingIndicatorsUsersListEnabled == null) {
       typingIndicatorsUsersListEnabled = typingIndicatorsReceiveEnabled;
     }
+    matrixUserListNameDisplayMode =
+        normalizeMatrixUserListNameDisplayMode(matrixUserListNameDisplayMode);
     if (typingIndicatorsTranscriptEnabled == null) {
       typingIndicatorsTranscriptEnabled = typingIndicatorsReceiveEnabled;
     }
@@ -984,6 +995,16 @@ public record UiProperties(
       case "keyboard", "kbd" -> "keyboard";
       case "glow-dot", "glowdot", "dot", "green-dot", "glowing-green-dot" -> "glow-dot";
       default -> "dots";
+    };
+  }
+
+  static String normalizeMatrixUserListNameDisplayMode(String raw) {
+    String s = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+    if (s.isEmpty()) return "compact";
+    return switch (s) {
+      case "compact", "display-name-only", "displayname", "name-only" -> "compact";
+      case "verbose", "display-name-and-user-id", "displayname-and-userid", "full" -> "verbose";
+      default -> "compact";
     };
   }
 

@@ -11,10 +11,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Routes parsed backend-specific command names to backend command handlers. */
 @Component
+@ApplicationLayer
 final class BackendNamedOutboundCommandRouter {
 
   private final Map<String, BackendNamedOutboundCommandHandler> handlersByCommandName;

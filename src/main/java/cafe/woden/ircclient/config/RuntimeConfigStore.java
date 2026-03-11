@@ -27,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +36,7 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 @Component
+@ApplicationLayer
 public class RuntimeConfigStore
     implements ChatCommandRuntimeConfigPort, InviteAutoJoinConfigPort, ConnectionRuntimeConfigPort {
 
@@ -4697,6 +4699,23 @@ public class RuntimeConfigStore
 
   public synchronized void rememberTypingIndicatorsUsersListEnabled(boolean enabled) {
     rememberTypingIndicatorDisplayBoolean("typingIndicatorsUsersListEnabled", enabled);
+  }
+
+  public synchronized void rememberMatrixUserListNameDisplayMode(String mode) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String normalized = UiProperties.normalizeMatrixUserListNameDisplayMode(mode);
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      ui.put("matrixUserListNameDisplayMode", normalized);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist Matrix user list name display mode to '{}'", file, e);
+    }
   }
 
   public synchronized void rememberTypingIndicatorsTranscriptEnabled(boolean enabled) {
