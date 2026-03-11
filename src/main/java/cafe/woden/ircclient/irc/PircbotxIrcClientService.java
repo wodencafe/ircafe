@@ -1231,6 +1231,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
   @Override
   public void shutdownNow() {
     shuttingDown.set(true);
+    String shutdownQuitReason = runtimeConfig.readDefaultQuitMessage();
     for (PircbotxConnectionState c : connections.values()) {
       if (c == null) continue;
       try {
@@ -1244,7 +1245,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
           try {
             if (bot.isConnected()) {
               try {
-                bot.sendIRC().quitServer("Client shutdown");
+                bot.sendIRC().quitServer(shutdownQuitReason);
               } catch (Exception ignored) {
               }
             }

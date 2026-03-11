@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.model.TargetRef;
 import org.junit.jupiter.api.Test;
 
@@ -17,8 +18,11 @@ class OutboundConnectionLifecycleCommandServiceTest {
   private final UiPort ui = mock(UiPort.class);
   private final ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
   private final TargetCoordinator targetCoordinator = mock(TargetCoordinator.class);
+  private final ChatCommandRuntimeConfigPort runtimeConfig =
+      mock(ChatCommandRuntimeConfigPort.class);
   private final OutboundConnectionLifecycleCommandService service =
-      new OutboundConnectionLifecycleCommandService(ui, connectionCoordinator, targetCoordinator);
+      new OutboundConnectionLifecycleCommandService(
+          ui, connectionCoordinator, targetCoordinator, runtimeConfig);
 
   @Test
   void connectWithoutArgUsesActiveServerContext() {
@@ -62,6 +66,33 @@ class OutboundConnectionLifecycleCommandServiceTest {
     service.handleQuit("gone for lunch");
 
     verify(connectionCoordinator).disconnectOne("libera", "gone for lunch");
+  }
+
+  @Test
+  void quitWithoutReasonUsesConfiguredDefaultQuitMessage() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(targetCoordinator.safeStatusTarget()).thenReturn(new TargetRef("libera", "status"));
+    when(runtimeConfig.readDefaultQuitMessage())
+        .thenReturn(ChatCommandRuntimeConfigPort.DEFAULT_QUIT_MESSAGE);
+
+    service.handleQuit("");
+
+    verify(connectionCoordinator)
+        .disconnectOne("libera", ChatCommandRuntimeConfigPort.DEFAULT_QUIT_MESSAGE);
+  }
+
+  @Test
+  void quitWithoutReasonFallsBackWhenConfiguredMessageIsBlank() {
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(targetCoordinator.getActiveTarget()).thenReturn(chan);
+    when(targetCoordinator.safeStatusTarget()).thenReturn(new TargetRef("libera", "status"));
+    when(runtimeConfig.readDefaultQuitMessage()).thenReturn("   ");
+
+    service.handleQuit("");
+
+    verify(connectionCoordinator)
+        .disconnectOne("libera", ChatCommandRuntimeConfigPort.DEFAULT_QUIT_MESSAGE);
   }
 
   @Test

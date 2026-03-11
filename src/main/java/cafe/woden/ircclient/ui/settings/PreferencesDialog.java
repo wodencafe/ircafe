@@ -919,6 +919,7 @@ public class PreferencesDialog {
 
     JCheckBox presenceFolds = buildPresenceFoldsCheckbox(current);
     JCheckBox ctcpRequestsInActiveTarget = buildCtcpRequestsInActiveTargetCheckbox(current);
+    JTextField defaultQuitMessage = buildDefaultQuitMessageField();
     SpellcheckSettings initialSpellcheck =
         spellcheckSettingsBus != null ? spellcheckSettingsBus.get() : SpellcheckSettings.defaults();
     SpellcheckControls spellcheck = buildSpellcheckControls(initialSpellcheck);
@@ -994,6 +995,7 @@ public class PreferencesDialog {
         buildChatPanel(
             presenceFolds,
             ctcpRequestsInActiveTarget,
+            defaultQuitMessage,
             spellcheck,
             nickColors,
             timestamps,
@@ -1271,6 +1273,15 @@ public class PreferencesDialog {
 
           boolean presenceFoldsV = presenceFolds.isSelected();
           boolean ctcpRequestsInActiveTargetV = ctcpRequestsInActiveTarget.isSelected();
+          String defaultQuitMessageV =
+              Objects.toString(defaultQuitMessage.getText(), "")
+                  .replace('\r', ' ')
+                  .replace('\n', ' ')
+                  .trim();
+          if (defaultQuitMessageV.isEmpty()) {
+            defaultQuitMessageV = RuntimeConfigStore.DEFAULT_QUIT_MESSAGE;
+          }
+          defaultQuitMessage.setText(defaultQuitMessageV);
           boolean spellcheckEnabledV = spellcheck.enabled.isSelected();
           boolean spellcheckUnderlineEnabledV = spellcheck.underlineEnabled.isSelected();
           boolean spellcheckSuggestOnTabEnabledV = spellcheck.suggestOnTabEnabled.isSelected();
@@ -1860,6 +1871,7 @@ public class PreferencesDialog {
             runtimeConfig.rememberPresenceFoldsEnabled(next.presenceFoldsEnabled());
             runtimeConfig.rememberCtcpRequestsInActiveTargetEnabled(
                 next.ctcpRequestsInActiveTargetEnabled());
+            runtimeConfig.rememberDefaultQuitMessage(defaultQuitMessageV);
             runtimeConfig.rememberCtcpAutoRepliesEnabled(ctcpAutoRepliesEnabledV);
             runtimeConfig.rememberCtcpAutoReplyVersionEnabled(ctcpAutoReplyVersionEnabledV);
             runtimeConfig.rememberCtcpAutoReplyPingEnabled(ctcpAutoReplyPingEnabledV);
@@ -4068,6 +4080,13 @@ public class PreferencesDialog {
         "When enabled, inbound CTCP requests (e.g. VERSION, PING) are announced in the currently active chat tab.\n"
             + "When disabled, CTCP requests are routed to the target they came from (channel or PM).");
     return ctcp;
+  }
+
+  private JTextField buildDefaultQuitMessageField() {
+    JTextField field = new JTextField(runtimeConfig.readDefaultQuitMessage());
+    field.setToolTipText(
+        "Used when /quit has no explicit reason, and when IRCafe closes IRC connections during shutdown.");
+    return field;
   }
 
   private JCheckBox buildOutgoingDeliveryIndicatorsCheckbox(UiSettings current) {
@@ -6495,6 +6514,7 @@ public class PreferencesDialog {
   private JPanel buildChatPanel(
       JCheckBox presenceFolds,
       JCheckBox ctcpRequestsInActiveTarget,
+      JTextField defaultQuitMessage,
       SpellcheckControls spellcheck,
       NickColorControls nickColors,
       TimestampControls timestamps,
@@ -6511,6 +6531,7 @@ public class PreferencesDialog {
             buildChatGeneralSubTab(
                 presenceFolds,
                 ctcpRequestsInActiveTarget,
+                defaultQuitMessage,
                 nickColors,
                 timestamps,
                 outgoing,
@@ -6523,6 +6544,7 @@ public class PreferencesDialog {
   private JPanel buildChatGeneralSubTab(
       JCheckBox presenceFolds,
       JCheckBox ctcpRequestsInActiveTarget,
+      JTextField defaultQuitMessage,
       NickColorControls nickColors,
       TimestampControls timestamps,
       OutgoingColorControls outgoing,
@@ -6551,6 +6573,8 @@ public class PreferencesDialog {
     panel.add(outgoing.panel, "growx, wmin 0");
     panel.add(new JLabel("Delivery indicators"), "aligny top");
     panel.add(outgoingDeliveryIndicators, "alignx left");
+    panel.add(new JLabel("Default /quit message"), "aligny top");
+    panel.add(defaultQuitMessage, "growx, wmin 0");
 
     return panel;
   }
