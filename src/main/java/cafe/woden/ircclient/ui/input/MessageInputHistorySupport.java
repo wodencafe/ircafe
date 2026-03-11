@@ -6,6 +6,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.util.List;
 import javax.swing.*;
+import javax.swing.text.JTextComponent;
 import org.fife.ui.autocomplete.AutoCompletion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +38,7 @@ final class MessageInputHistorySupport {
     }
   }
 
-  private final JTextField input;
+  private final JTextComponent input;
   private final CommandHistoryStore historyStore;
   private final AutoCompletion autoCompletion;
   private final MessageInputUndoSupport undoSupport;
@@ -50,7 +51,7 @@ final class MessageInputHistorySupport {
   private String historySearchPrefix = null;
 
   MessageInputHistorySupport(
-      JTextField input,
+      JTextComponent input,
       CommandHistoryStore historyStore,
       AutoCompletion autoCompletion,
       MessageInputUndoSupport undoSupport,

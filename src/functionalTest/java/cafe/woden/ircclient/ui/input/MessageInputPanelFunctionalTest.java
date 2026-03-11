@@ -10,6 +10,9 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import cafe.woden.ircclient.ui.backend.BackendUiProfile;
+import cafe.woden.ircclient.ui.settings.MemoryUsageDisplayMode;
+import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
+import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.awt.Component;
@@ -29,12 +32,35 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import javax.swing.JButton;
 import javax.swing.JComponent;
-import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.TransferHandler;
+import javax.swing.text.JTextComponent;
+import javax.swing.text.StyledDocument;
 import org.junit.jupiter.api.Test;
 
 class MessageInputPanelFunctionalTest {
+
+  @Test
+  void composeFieldMarksEmojiRunsForInlineRendering() throws Exception {
+    UiSettingsBus settingsBus = mock(UiSettingsBus.class);
+    when(settingsBus.get()).thenReturn(settingsWithChatFont("Monospaced", 12));
+    CommandHistoryStore historyStore = mock(CommandHistoryStore.class);
+
+    MessageInputPanel panel = new MessageInputPanel(settingsBus, historyStore);
+    JTextComponent input = findFirst(panel, JTextComponent.class);
+    assertNotNull(input, "message input field should be present");
+
+    onEdt(
+        () -> {
+          panel.setSize(320, 72);
+          panel.doLayout();
+          input.setText("😀");
+        });
+    flushEdt();
+    flushEdt();
+    waitFor(() -> hasEmojiRun(input), Duration.ofSeconds(1));
+    assertTrue(hasEmojiRun(input), "emoji runs should be tagged for inline rendering");
+  }
 
   @Test
   void clickingSendPublishesOutboundMessage() throws Exception {
@@ -47,7 +73,7 @@ class MessageInputPanelFunctionalTest {
     Disposable subscription = panel.outboundMessages().subscribe(outbound::add);
 
     try {
-      JTextField input = findFirst(panel, JTextField.class);
+      JTextComponent input = findFirst(panel, JTextComponent.class);
       JButton send = findNamedButton(panel, "messageSendButton");
       assertNotNull(input, "message input field should be present");
       assertNotNull(send, "send button should be present");
@@ -104,7 +130,7 @@ class MessageInputPanelFunctionalTest {
     Path image = Files.createTempFile("irc-drop-", ".png");
 
     try {
-      JTextField input = findFirst(panel, JTextField.class);
+      JTextComponent input = findFirst(panel, JTextComponent.class);
       assertNotNull(input, "message input field should be present");
 
       onEdt(
@@ -141,7 +167,7 @@ class MessageInputPanelFunctionalTest {
     Path image = Files.createTempFile("matrix-upload-image-", ".png");
 
     try {
-      JTextField input = findFirst(panel, JTextField.class);
+      JTextComponent input = findFirst(panel, JTextComponent.class);
       assertNotNull(input, "message input field should be present");
       onEdt(() -> enableMatrixUploads(panel));
 
@@ -176,7 +202,7 @@ class MessageInputPanelFunctionalTest {
     Path audio = Files.createTempFile("matrix-upload-audio-", ".mp3");
 
     try {
-      JTextField input = findFirst(panel, JTextField.class);
+      JTextComponent input = findFirst(panel, JTextComponent.class);
       assertNotNull(input, "message input field should be present");
       onEdt(() -> enableMatrixUploads(panel));
 
@@ -229,6 +255,92 @@ class MessageInputPanelFunctionalTest {
   private static final java.util.function.Predicate<String> MATRIX =
       sid -> "matrix".equalsIgnoreCase(sid);
 
+  private static UiSettings settingsWithChatFont(String family, int size) {
+    return new UiSettings(
+        "darcula",
+        family,
+        size,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        true,
+        false,
+        false,
+        true,
+        NotificationBackendMode.AUTO,
+        true,
+        false,
+        0,
+        0,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        "dots",
+        true,
+        true,
+        true,
+        true,
+        true,
+        "HH:mm:ss",
+        true,
+        true,
+        100,
+        200,
+        2000,
+        20,
+        10,
+        6,
+        false,
+        6,
+        18,
+        360,
+        500,
+        4000,
+        true,
+        "#6AA2FF",
+        true,
+        true,
+        true,
+        7,
+        6,
+        30,
+        5,
+        false,
+        15,
+        3,
+        60,
+        5,
+        false,
+        45,
+        120,
+        false,
+        300,
+        2,
+        30,
+        15,
+        MemoryUsageDisplayMode.LONG,
+        1000,
+        5,
+        true,
+        false,
+        false,
+        false,
+        List.of(),
+        null,
+        null,
+        false,
+        "compact");
+  }
+
   private static JButton findNamedButton(Component root, String name) {
     if (root == null || name == null) return null;
     if (root instanceof JButton button && name.equals(button.getName())) {
@@ -251,6 +363,14 @@ class MessageInputPanelFunctionalTest {
       if (found != null) return found;
     }
     return null;
+  }
+
+  private static boolean hasEmojiRun(JTextComponent input) {
+    if (!(input.getDocument() instanceof StyledDocument doc) || doc.getLength() <= 0) {
+      return false;
+    }
+    return cafe.woden.ircclient.ui.util.EmojiFontSupport.isEmojiRun(
+        doc.getCharacterElement(0).getAttributes());
   }
 
   private static void waitFor(BooleanSupplier condition, Duration timeout) throws Exception {

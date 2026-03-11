@@ -2,11 +2,14 @@ package cafe.woden.ircclient.ui.input;
 
 import cafe.woden.ircclient.irc.Ircv3DraftNormalizer;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.ui.SingleLineEmojiTextPane;
 import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettings;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.util.EmojiFontSupport;
+import cafe.woden.ircclient.ui.util.EmojiTextSupport;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -29,13 +32,16 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyledDocument;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class MessageInputPanel extends JPanel {
   private static final Logger log = LoggerFactory.getLogger(MessageInputPanel.class);
   public static final String ID = "input";
-  private final JTextField input = new JTextField();
+  private final SingleLineEmojiTextPane input = new SingleLineEmojiTextPane();
+  private final JScrollPane inputScroll = new JScrollPane(input);
   private final JButton attach = new JButton();
   private final JButton send = new JButton();
 
@@ -67,6 +73,7 @@ public class MessageInputPanel extends JPanel {
   private final PropertyChangeListener settingsListener = this::onSettingsChanged;
   private final PropertyChangeListener spellcheckSettingsListener = this::onSpellcheckChanged;
   private boolean shutdown;
+  private boolean inputEmojiRestyleQueued;
 
   public MessageInputPanel(UiSettingsBus settingsBus, CommandHistoryStore historyStore) {
     this(settingsBus, historyStore, null);
@@ -181,7 +188,7 @@ public class MessageInputPanel extends JPanel {
 
     JPanel inputRow = new JPanel(new BorderLayout(0, 0));
     inputRow.setOpaque(false);
-    inputRow.add(input, BorderLayout.CENTER);
+    inputRow.add(inputScroll, BorderLayout.CENTER);
     inputRow.add(actionRow, BorderLayout.EAST);
 
     JPanel center = new JPanel(new BorderLayout(0, 2));
@@ -226,6 +233,11 @@ public class MessageInputPanel extends JPanel {
   private void configureInputShell() {
     input.setOpaque(false);
     input.setBorder(BorderFactory.createEmptyBorder(5, 6, 5, 6));
+    inputScroll.setBorder(null);
+    inputScroll.setOpaque(false);
+    inputScroll.getViewport().setOpaque(false);
+    inputScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+    inputScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER);
 
     attach.setName("messageAttachButton");
     attach.setText("+");
@@ -307,16 +319,24 @@ public class MessageInputPanel extends JPanel {
               }
 
               @Override
-              public void changedUpdate(javax.swing.event.DocumentEvent e) {
-                onDraftDocumentChanged();
-              }
+              public void changedUpdate(javax.swing.event.DocumentEvent e) {}
             });
 
     input.getDocument().addUndoableEditListener(e -> undoSupport.handleUndoableEdit(e.getEdit()));
   }
 
   private void installSendActions() {
-    input.addActionListener(e -> emit());
+    ActionMap am = input.getActionMap();
+    InputMap im = input.getInputMap(JComponent.WHEN_FOCUSED);
+    am.put(
+        "ircafe.emit",
+        new AbstractAction() {
+          @Override
+          public void actionPerformed(ActionEvent e) {
+            emit();
+          }
+        });
+    im.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "ircafe.emit");
     send.addActionListener(e -> emit());
   }
 
@@ -531,15 +551,16 @@ public class MessageInputPanel extends JPanel {
   private void applySettings(UiSettings s) {
     if (s == null) return;
     try {
-      Font f = new Font(s.chatFontFamily(), Font.PLAIN, s.chatFontSize());
-      input.setFont(f);
-      attach.setFont(f);
-      send.setFont(f);
-      typingBannerLabel.setFont(f.deriveFont(Math.max(10f, f.getSize2D() - 2f)));
+      Font preferred = new Font(s.chatFontFamily(), Font.PLAIN, s.chatFontSize());
+      Font inputFont = EmojiFontSupport.resolveMessageInputFont(preferred);
+      input.setFont(inputFont);
+      attach.setFont(preferred);
+      send.setFont(preferred);
+      typingBannerLabel.setFont(inputFont.deriveFont(Math.max(10f, inputFont.getSize2D() - 2f)));
       typingDotsIndicator.setFont(typingBannerLabel.getFont());
       typingSignalIndicator.setFont(typingBannerLabel.getFont());
-      hintPopupSupport.onAppearanceChanged(f);
-      spellcheckHoverPopupSupport.onAppearanceChanged(f);
+      hintPopupSupport.onAppearanceChanged(inputFont);
+      spellcheckHoverPopupSupport.onAppearanceChanged(inputFont);
 
       // Mark completion popup UI dirty when appearance changes (e.g., accent sliders).
       // Refresh existing popup windows if present.
@@ -548,6 +569,7 @@ public class MessageInputPanel extends JPanel {
       log.warn("[MessageInputPanel] applySettings failed", ex);
     }
 
+    queueInputEmojiRestyle();
     typingSupport.onSettingsApplied(s);
   }
 
@@ -558,6 +580,7 @@ public class MessageInputPanel extends JPanel {
   }
 
   private void onDraftDocumentChanged() {
+    queueInputEmojiRestyle();
     hintPopupSupport.updateHint();
     nickCompletionSupport.markUiDirty();
     spellcheckHoverPopupSupport.onDraftChanged();
@@ -566,6 +589,45 @@ public class MessageInputPanel extends JPanel {
     historySupport.onUserEdit(programmaticEdit);
     if (!programmaticEdit) {
       typingSupport.onUserEdit(programmaticEdit);
+    }
+  }
+
+  private void queueInputEmojiRestyle() {
+    if (inputEmojiRestyleQueued) {
+      return;
+    }
+    if (!(input.getDocument() instanceof StyledDocument doc)) {
+      return;
+    }
+    inputEmojiRestyleQueued = true;
+    SwingUtilities.invokeLater(
+        () -> {
+          inputEmojiRestyleQueued = false;
+          applyInputEmojiStyles(doc);
+        });
+  }
+
+  private void applyInputEmojiStyles(StyledDocument doc) {
+    try {
+      int len = doc.getLength();
+      if (len <= 0) {
+        return;
+      }
+
+      String text = doc.getText(0, len);
+      doc.setCharacterAttributes(0, len, new SimpleAttributeSet(), true);
+
+      int offset = 0;
+      for (EmojiTextSupport.Segment segment : EmojiTextSupport.split(text)) {
+        if (segment.emoji()) {
+          SimpleAttributeSet attrs = new SimpleAttributeSet();
+          EmojiFontSupport.applyEmojiRunFont(attrs);
+          doc.setCharacterAttributes(offset, segment.text().length(), attrs, false);
+        }
+        offset += segment.text().length();
+      }
+    } catch (Exception ex) {
+      log.debug("[MessageInputPanel] emoji restyle failed", ex);
     }
   }
 

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import javax.swing.*;
+import javax.swing.text.JTextComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +44,7 @@ final class MessageInputSpellcheckHoverPopupSupport {
   }
 
   private final JComponent owner;
-  private final JTextField input;
+  private final JTextComponent input;
   private final MessageInputSpellcheckSupport spellcheckSupport;
   private final PopupDisplay popupDisplay;
 
@@ -107,7 +108,7 @@ final class MessageInputSpellcheckHoverPopupSupport {
 
   MessageInputSpellcheckHoverPopupSupport(
       JComponent owner,
-      JTextField input,
+      JTextComponent input,
       MessageInputSpellcheckSupport spellcheckSupport,
       SpellcheckSettings initialSettings) {
     this(
@@ -121,7 +122,7 @@ final class MessageInputSpellcheckHoverPopupSupport {
 
   MessageInputSpellcheckHoverPopupSupport(
       JComponent owner,
-      JTextField input,
+      JTextComponent input,
       MessageInputSpellcheckSupport spellcheckSupport,
       SpellcheckSettings initialSettings,
       PopupDisplay popupDisplay) {

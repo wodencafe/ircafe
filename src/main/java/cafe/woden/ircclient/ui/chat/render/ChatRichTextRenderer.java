@@ -5,6 +5,8 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.MentionPatternRegistry;
 import cafe.woden.ircclient.ui.chat.NickColorService;
+import cafe.woden.ircclient.ui.util.EmojiFontSupport;
+import cafe.woden.ircclient.ui.util.EmojiTextSupport;
 import java.awt.Color;
 import java.util.Locale;
 import java.util.Set;
@@ -54,6 +56,19 @@ public class ChatRichTextRenderer {
   public void insertRichText(StyledDocument doc, TargetRef ref, String text, AttributeSet baseStyle)
       throws BadLocationException {
     insertRichTextAt(doc, ref, text, baseStyle, doc != null ? doc.getLength() : 0);
+  }
+
+  public static int insertStyledTextAt(
+      StyledDocument doc, String text, AttributeSet baseStyle, int insertPos)
+      throws BadLocationException {
+    if (doc == null || text == null || text.isEmpty()) {
+      return Math.max(0, insertPos);
+    }
+
+    int pos = Math.max(0, Math.min(insertPos, doc.getLength()));
+    InsertCursor cur = new InsertCursor(doc, pos);
+    cur.insert(text, baseStyle);
+    return cur.pos;
   }
 
   /**
@@ -280,8 +295,31 @@ public class ChatRichTextRenderer {
 
     void insert(String s, AttributeSet attrs) throws BadLocationException {
       if (s == null || s.isEmpty()) return;
-      doc.insertString(pos, s, attrs);
-      pos += s.length();
+      if (!EmojiTextSupport.containsEmoji(s)) {
+        doc.insertString(pos, s, attrs);
+        pos += s.length();
+        return;
+      }
+
+      for (EmojiTextSupport.Segment segment : EmojiTextSupport.split(s)) {
+        String text = segment.text();
+        if (text.isEmpty()) {
+          continue;
+        }
+
+        AttributeSet effectiveAttrs = attrs;
+        if (segment.emoji()) {
+          SimpleAttributeSet emojiAttrs = new SimpleAttributeSet();
+          if (attrs != null) {
+            emojiAttrs.addAttributes(attrs);
+          }
+          EmojiFontSupport.applyEmojiRunFont(emojiAttrs);
+          effectiveAttrs = emojiAttrs;
+        }
+
+        doc.insertString(pos, text, effectiveAttrs);
+        pos += text.length();
+      }
     }
   }
 

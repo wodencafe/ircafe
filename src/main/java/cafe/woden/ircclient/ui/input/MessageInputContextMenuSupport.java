@@ -16,6 +16,7 @@ import javax.swing.*;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.JTextComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +28,7 @@ import org.slf4j.LoggerFactory;
 public final class MessageInputContextMenuSupport {
   private static final Logger log = LoggerFactory.getLogger(MessageInputContextMenuSupport.class);
 
-  private final JTextField input;
+  private final JTextComponent input;
   private final MessageInputUndoSupport undoSupport;
   private final MessageInputHistorySupport historySupport;
   private final MessageInputSpellcheckSupport spellcheckSupport;
@@ -35,7 +36,7 @@ public final class MessageInputContextMenuSupport {
   private boolean installed;
 
   public MessageInputContextMenuSupport(
-      JTextField input,
+      JTextComponent input,
       MessageInputUndoSupport undoSupport,
       MessageInputHistorySupport historySupport,
       MessageInputSpellcheckSupport spellcheckSupport) {

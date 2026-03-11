@@ -5,17 +5,12 @@ import javax.swing.*;
 import javax.swing.SwingUtilities;
 import javax.swing.text.Caret;
 import javax.swing.text.DefaultCaret;
-import javax.swing.text.Element;
-import javax.swing.text.ParagraphView;
-import javax.swing.text.StyledEditorKit;
-import javax.swing.text.View;
-import javax.swing.text.ViewFactory;
 
 /** JTextPane that word/line wraps when placed inside a JScrollPane. */
 public class WrapTextPane extends JTextPane {
 
   public WrapTextPane() {
-    setEditorKit(new WrapEditorKit());
+    setEditorKit(EmojiEditorKits.wrapping());
 
     setAutoscrolls(false);
     ensureNonAutoScrollingCaret();
@@ -64,39 +59,5 @@ public class WrapTextPane extends JTextPane {
       }
     }
     super.setSize(d);
-  }
-
-  private static final class WrapEditorKit extends StyledEditorKit {
-    private final ViewFactory factory = new WrapViewFactory(super.getViewFactory());
-
-    @Override
-    public ViewFactory getViewFactory() {
-      return factory;
-    }
-  }
-
-  private static final class WrapViewFactory implements ViewFactory {
-    private final ViewFactory delegate;
-
-    private WrapViewFactory(ViewFactory delegate) {
-      this.delegate = delegate;
-    }
-
-    @Override
-    public View create(Element elem) {
-      View v = delegate.create(elem);
-
-      if (v instanceof ParagraphView) {
-        return new ParagraphView(elem) {
-          @Override
-          public float getMinimumSpan(int axis) {
-            if (axis == View.X_AXIS) return 0;
-            return super.getMinimumSpan(axis);
-          }
-        };
-      }
-
-      return v;
-    }
   }
 }

@@ -120,7 +120,7 @@ final class MessageInputNickCompletionSupport {
           new SlashCommand("/raw", "Alias: /quote"));
 
   private final JComponent owner;
-  private final JTextField input;
+  private final JTextComponent input;
   private final MessageInputUndoSupport undoSupport;
   private final MessageInputWordSuggestionProvider wordSuggestionProvider;
 
@@ -162,13 +162,13 @@ final class MessageInputNickCompletionSupport {
       this::onOwnerHierarchyChangedForLafCleanup;
 
   MessageInputNickCompletionSupport(
-      JComponent owner, JTextField input, MessageInputUndoSupport undoSupport) {
+      JComponent owner, JTextComponent input, MessageInputUndoSupport undoSupport) {
     this(owner, input, undoSupport, null);
   }
 
   MessageInputNickCompletionSupport(
       JComponent owner,
-      JTextField input,
+      JTextComponent input,
       MessageInputUndoSupport undoSupport,
       MessageInputWordSuggestionProvider wordSuggestionProvider) {
     this.owner = owner;

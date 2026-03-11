@@ -20,6 +20,7 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.ServerIrcEvent;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
@@ -5755,7 +5756,23 @@ class MatrixIrcClientServiceTest {
                         "m.text",
                         "end",
                         Instant.parse("2024-03-09T16:00:00Z").toEpochMilli()))));
+    var events = service.events().test();
     service.connect("matrix").blockingAwait();
+    events.awaitCount(5);
+    assertTrue(
+        events.values().stream()
+            .map(ServerIrcEvent::event)
+            .filter(IrcEvent.ChannelMessage.class::isInstance)
+            .map(IrcEvent.ChannelMessage.class::cast)
+            .map(IrcEvent.ChannelMessage::messageId)
+            .anyMatch("$h-start"::equals));
+    assertTrue(
+        events.values().stream()
+            .map(ServerIrcEvent::event)
+            .filter(IrcEvent.ChannelMessage.class::isInstance)
+            .map(IrcEvent.ChannelMessage.class::cast)
+            .map(IrcEvent.ChannelMessage::messageId)
+            .anyMatch("$h-end"::equals));
 
     assertDoesNotThrow(
         () ->
