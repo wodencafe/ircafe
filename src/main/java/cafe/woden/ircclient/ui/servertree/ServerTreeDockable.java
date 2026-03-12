@@ -1454,6 +1454,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     runtimeHeaderApi.setServerConnectionState(serverId, state);
   }
 
+  public boolean isServerConnected(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return false;
+    return runtimeState.connectionStateForServer(sid) == ConnectionState.CONNECTED;
+  }
+
   public void setServerDesiredOnline(String serverId, boolean desiredOnline) {
     runtimeHeaderApi.setServerDesiredOnline(serverId, desiredOnline);
   }

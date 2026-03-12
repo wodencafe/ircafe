@@ -395,12 +395,26 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void setChannelDisconnected(TargetRef target, boolean detached) {
-    onEdt(() -> serverTree.setChannelDisconnected(target, detached));
+    onEdt(
+        () -> {
+          serverTree.setChannelDisconnected(target, detached);
+          chat.refreshDisplayedTargetInputEnabled();
+          if (chatDockManager != null) {
+            chatDockManager.refreshPinnedInputEnabled(target);
+          }
+        });
   }
 
   @Override
   public void setChannelDisconnected(TargetRef target, boolean detached, String warningReason) {
-    onEdt(() -> serverTree.setChannelDisconnected(target, detached, warningReason));
+    onEdt(
+        () -> {
+          serverTree.setChannelDisconnected(target, detached, warningReason);
+          chat.refreshDisplayedTargetInputEnabled();
+          if (chatDockManager != null) {
+            chatDockManager.refreshPinnedInputEnabled(target);
+          }
+        });
   }
 
   @Override
@@ -1182,7 +1196,14 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void setServerConnectionState(String serverId, ConnectionState state) {
-    onEdt(() -> serverTree.setServerConnectionState(serverId, state));
+    onEdt(
+        () -> {
+          serverTree.setServerConnectionState(serverId, state);
+          chat.refreshDisplayedTargetInputEnabled();
+          if (chatDockManager != null) {
+            chatDockManager.refreshPinnedInputEnabledForServer(serverId);
+          }
+        });
   }
 
   @Override
@@ -1249,13 +1270,7 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void setInputEnabled(boolean enabled) {
-    onEdt(
-        () -> {
-          chat.setInputEnabled(enabled);
-          if (chatDockManager != null) {
-            chatDockManager.setPinnedInputsEnabled(enabled);
-          }
-        });
+    onEdt(chat::refreshDisplayedTargetInputEnabled);
   }
 
   @Override

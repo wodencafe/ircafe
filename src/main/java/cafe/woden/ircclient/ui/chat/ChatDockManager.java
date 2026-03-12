@@ -75,8 +75,6 @@ public class ChatDockManager {
 
   private final CompositeDisposable disposables = new CompositeDisposable();
 
-  private volatile boolean pinnedInputsEnabled = true;
-
   public ChatDockManager(
       ServerTreeDockable serverTree,
       ChatDockable mainChat,
@@ -141,17 +139,22 @@ public class ChatDockManager {
     openPinned.clear();
   }
 
-  /**
-   * Enable/disable input bars for all currently-open pinned chat docks. Newly opened pinned docks
-   * will inherit the latest value.
-   */
-  public void setPinnedInputsEnabled(boolean enabled) {
-    this.pinnedInputsEnabled = enabled;
-    for (PinnedChatDockable d : openPinned.values()) {
-      try {
-        d.setInputEnabled(enabled);
-      } catch (Exception ignored) {
-      }
+  public void refreshPinnedInputEnabled(TargetRef target) {
+    if (target == null) return;
+    PinnedChatDockable dock = openPinned.get(target);
+    if (dock == null) return;
+    applyPinnedInputEnabled(target, dock);
+  }
+
+  public void refreshPinnedInputEnabledForServer(String serverId) {
+    String sid = java.util.Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return;
+    for (Map.Entry<TargetRef, PinnedChatDockable> e : openPinned.entrySet()) {
+      TargetRef target = e.getKey();
+      PinnedChatDockable dock = e.getValue();
+      if (target == null || dock == null) continue;
+      if (!java.util.Objects.equals(target.serverId(), sid)) continue;
+      applyPinnedInputEnabled(target, dock);
     }
   }
 
@@ -299,7 +302,7 @@ public class ChatDockManager {
     if (target == null || dock == null) return;
     // Keep in sync with current settings/draft even for already-registered dockables.
     String mainTopic = mainChat.topicFor(target);
-    dock.setInputEnabled(pinnedInputsEnabled);
+    applyPinnedInputEnabled(target, dock);
     dock.setTopicPanelHeightPx(mainChat.topicPanelHeightPxFor(target));
     dock.setTopic(mainTopic);
     requestPinnedHistoryPrefill(target);
@@ -390,7 +393,7 @@ public class ChatDockManager {
               pinnedDrafts.put(t, draft == null ? "" : draft);
             });
     created.setDraftText(initialDraft);
-    created.setInputEnabled(pinnedInputsEnabled);
+    applyPinnedInputEnabled(target, created);
     created.setTopicPanelHeightPx(mainChat.topicPanelHeightPxFor(target));
     created.setOnTopicPanelHeightChanged(
         heightPx -> {
@@ -403,6 +406,20 @@ public class ChatDockManager {
 
     Docking.registerDockable(created);
     return created;
+  }
+
+  private void applyPinnedInputEnabled(TargetRef target, PinnedChatDockable dock) {
+    if (target == null || dock == null) return;
+    try {
+      dock.setInputEnabled(isPinnedInputEnabled(target));
+    } catch (Exception ignored) {
+    }
+  }
+
+  private boolean isPinnedInputEnabled(TargetRef target) {
+    if (target == null || target.isUiOnly()) return false;
+    if (!serverTree.isServerConnected(target.serverId())) return false;
+    return !target.isChannel() || !serverTree.isChannelDisconnected(target);
   }
 
   private static TargetRef targetFromPinnedPersistentId(String persistentId) {

@@ -70,6 +70,8 @@ class ChatDockManagerTest {
     TargetRef target = new TargetRef("libera", "#ircafe");
     PinnedChatDockable pinnedDock = mock(PinnedChatDockable.class);
     openPinned(manager).put(target, pinnedDock);
+    when(serverTree.isServerConnected("libera")).thenReturn(true);
+    when(serverTree.isChannelDisconnected(target)).thenReturn(false);
     AtomicBoolean topicLookupOnEdt = new AtomicBoolean(false);
     when(mainChat.topicPanelHeightPxFor(target)).thenReturn(144);
     when(mainChat.topicFor(target))
@@ -90,6 +92,67 @@ class ChatDockManagerTest {
     verify(chatHistoryService).onTargetSelected(target);
     verify(pinnedDock).onShown();
     assertTrue(topicLookupOnEdt.get());
+  }
+
+  @Test
+  void refreshPinnedInputEnabledDisablesDetachedChannelInputs() throws Exception {
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    TargetRef target = new TargetRef("libera", "#ircafe");
+    PinnedChatDockable pinnedDock = mock(PinnedChatDockable.class);
+    when(serverTree.isServerConnected("libera")).thenReturn(true);
+    when(serverTree.isChannelDisconnected(target)).thenReturn(true);
+
+    ChatDockManager manager =
+        new ChatDockManager(
+            serverTree,
+            mock(ChatDockable.class),
+            mock(ChatTranscriptStore.class),
+            mock(TargetActivationBus.class),
+            mock(UiSettingsBus.class),
+            mock(SpellcheckSettingsBus.class),
+            mock(OutboundLineBus.class),
+            mock(IrcTypingPort.class),
+            mock(IrcReadMarkerPort.class),
+            mock(BackendUiProfileProvider.class),
+            mock(MessageActionCapabilityPolicy.class),
+            mock(ActiveInputRouter.class),
+            mock(ChatHistoryService.class),
+            mock(CommandHistoryStore.class));
+    openPinned(manager).put(target, pinnedDock);
+
+    manager.refreshPinnedInputEnabled(target);
+
+    verify(pinnedDock).setInputEnabled(false);
+  }
+
+  @Test
+  void refreshPinnedInputEnabledForServerDisablesDisconnectedServerInputs() throws Exception {
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    TargetRef target = new TargetRef("libera", "#ircafe");
+    PinnedChatDockable pinnedDock = mock(PinnedChatDockable.class);
+    when(serverTree.isServerConnected("libera")).thenReturn(false);
+
+    ChatDockManager manager =
+        new ChatDockManager(
+            serverTree,
+            mock(ChatDockable.class),
+            mock(ChatTranscriptStore.class),
+            mock(TargetActivationBus.class),
+            mock(UiSettingsBus.class),
+            mock(SpellcheckSettingsBus.class),
+            mock(OutboundLineBus.class),
+            mock(IrcTypingPort.class),
+            mock(IrcReadMarkerPort.class),
+            mock(BackendUiProfileProvider.class),
+            mock(MessageActionCapabilityPolicy.class),
+            mock(ActiveInputRouter.class),
+            mock(ChatHistoryService.class),
+            mock(CommandHistoryStore.class));
+    openPinned(manager).put(target, pinnedDock);
+
+    manager.refreshPinnedInputEnabledForServer("libera");
+
+    verify(pinnedDock).setInputEnabled(false);
   }
 
   @Test
