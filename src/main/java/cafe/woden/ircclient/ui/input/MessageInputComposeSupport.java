@@ -4,6 +4,7 @@ import cafe.woden.ircclient.ui.util.PopupMenuThemeSupport;
 import java.awt.*;
 import java.util.Objects;
 import javax.swing.*;
+import javax.swing.text.JTextComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,7 +19,7 @@ public final class MessageInputComposeSupport {
 
   private final JComponent layoutTarget;
   private final Component dialogOwner;
-  private final JTextField input;
+  private final JTextComponent input;
   private final JButton sendButton;
   private final MessageInputUiHooks hooks;
 
@@ -36,7 +37,7 @@ public final class MessageInputComposeSupport {
   public MessageInputComposeSupport(
       JComponent layoutTarget,
       Component dialogOwner,
-      JTextField input,
+      JTextComponent input,
       JButton sendButton,
       MessageInputUiHooks hooks) {
     this.layoutTarget = Objects.requireNonNull(layoutTarget, "layoutTarget");

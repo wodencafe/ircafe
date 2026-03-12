@@ -66,6 +66,8 @@ public class RuntimeConfigStore
           "NOHILIGHT",
           "CRAP");
   private static final String DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE = "{base}/{network}";
+  public static final String DEFAULT_QUIT_MESSAGE =
+      ChatCommandRuntimeConfigPort.DEFAULT_QUIT_MESSAGE;
 
   public record ServerTreeBuiltInNodesVisibility(
       boolean server,
@@ -3077,6 +3079,27 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
+  public synchronized String readDefaultQuitMessage() {
+    try {
+      if (file.toString().isBlank()) return DEFAULT_QUIT_MESSAGE;
+      if (!Files.exists(file)) return DEFAULT_QUIT_MESSAGE;
+
+      Map<String, Object> doc = loadFile();
+      Object ircafeObj = doc.get("ircafe");
+      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return DEFAULT_QUIT_MESSAGE;
+
+      Object uiObj = ircafe.get("ui");
+      if (!(uiObj instanceof Map<?, ?> ui)) return DEFAULT_QUIT_MESSAGE;
+
+      if (!ui.containsKey("defaultQuitMessage")) return DEFAULT_QUIT_MESSAGE;
+      return normalizeQuitMessage(ui.get("defaultQuitMessage"));
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not read ui.defaultQuitMessage from '{}'", file, e);
+      return DEFAULT_QUIT_MESSAGE;
+    }
+  }
+
   public synchronized boolean readAppDiagnosticsAssertjSwingEnabled(boolean defaultValue) {
     return readAppDiagnosticsAssertjSwingBoolean("enabled", defaultValue);
   }
@@ -4592,6 +4615,34 @@ public class RuntimeConfigStore
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist presence folds setting to '{}'", file, e);
     }
+  }
+
+  public synchronized void rememberDefaultQuitMessage(String message) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      String normalized = normalizeQuitMessage(message);
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
+
+      if (DEFAULT_QUIT_MESSAGE.equals(normalized)) {
+        ui.remove("defaultQuitMessage");
+      } else {
+        ui.put("defaultQuitMessage", normalized);
+      }
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist ui.defaultQuitMessage to '{}'", file, e);
+    }
+  }
+
+  private static String normalizeQuitMessage(Object message) {
+    String normalized = Objects.toString(message, "").replace('\r', ' ').replace('\n', ' ').trim();
+    if (normalized.isEmpty()) return DEFAULT_QUIT_MESSAGE;
+    return normalized;
   }
 
   public synchronized void rememberCtcpRequestsInActiveTargetEnabled(boolean enabled) {

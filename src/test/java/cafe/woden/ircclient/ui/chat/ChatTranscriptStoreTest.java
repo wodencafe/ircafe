@@ -24,6 +24,7 @@ import cafe.woden.ircclient.ui.settings.MemoryUsageDisplayMode;
 import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.util.EmojiFontSupport;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.util.List;
@@ -228,6 +229,23 @@ class ChatTranscriptStoreTest {
     assertEquals("m-42", clickedMsgId.get());
     assertEquals(":+1:", clickedReaction.get());
     assertFalse(unreact.get());
+  }
+
+  @Test
+  void appendChatAtMarksEmojiGlyphRunsInTranscript() throws Exception {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "hello 😀 world", false, 6_500L);
+
+    StyledDocument doc = store.document(ref);
+    String text = transcriptText(doc);
+    int emojiIndex = text.indexOf("😀");
+    assertTrue(emojiIndex >= 0);
+    assertTrue(EmojiFontSupport.isEmojiRun(doc.getCharacterElement(emojiIndex).getAttributes()));
+    assertFalse(
+        EmojiFontSupport.isEmojiRun(
+            doc.getCharacterElement(text.indexOf("hello")).getAttributes()));
   }
 
   @Test

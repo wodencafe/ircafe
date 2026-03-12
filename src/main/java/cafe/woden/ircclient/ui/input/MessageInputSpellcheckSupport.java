@@ -32,10 +32,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.text.DefaultHighlighter;
 import javax.swing.text.Highlighter;
+import javax.swing.text.JTextComponent;
 import org.languagetool.JLanguageTool;
 import org.languagetool.Language;
 import org.languagetool.Languages;
@@ -82,7 +82,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   private static final SpellcheckSettings.CompletionProfile DEFAULT_COMPLETION_PROFILE =
       SpellcheckSettings.defaults().completionProfile();
 
-  private final JTextField input;
+  private final JTextComponent input;
   private final Subject<SpellcheckRequest> spellcheckRequests;
   private final Disposable spellcheckSubscription;
   private final AtomicLong spellcheckRequestSeq = new AtomicLong();
@@ -97,7 +97,7 @@ final class MessageInputSpellcheckSupport implements MessageInputWordSuggestionP
   private volatile Set<String> customDictionaryByLower = Set.of();
   private final ConcurrentHashMap<String, Integer> localWordFrequency = new ConcurrentHashMap<>();
 
-  MessageInputSpellcheckSupport(JTextField input, SpellcheckSettings initialSettings) {
+  MessageInputSpellcheckSupport(JTextComponent input, SpellcheckSettings initialSettings) {
     this.input = Objects.requireNonNull(input, "input");
     this.settings = initialSettings != null ? initialSettings : SpellcheckSettings.defaults();
     applyCustomDictionarySnapshot(this.settings.customDictionary());

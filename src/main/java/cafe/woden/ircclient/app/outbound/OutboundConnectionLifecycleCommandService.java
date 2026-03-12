@@ -3,6 +3,7 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.ApplicationLayer;
@@ -16,13 +17,18 @@ final class OutboundConnectionLifecycleCommandService {
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
+  private final ChatCommandRuntimeConfigPort runtimeConfig;
 
   OutboundConnectionLifecycleCommandService(
-      UiPort ui, ConnectionCoordinator connectionCoordinator, TargetCoordinator targetCoordinator) {
+      UiPort ui,
+      ConnectionCoordinator connectionCoordinator,
+      TargetCoordinator targetCoordinator,
+      ChatCommandRuntimeConfigPort runtimeConfig) {
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
+    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
   }
 
   void handleConnect(String target) {
@@ -82,6 +88,10 @@ final class OutboundConnectionLifecycleCommandService {
     }
 
     String msg = reason == null ? "" : reason.trim();
+    if (msg.isEmpty()) {
+      String configured = Objects.toString(runtimeConfig.readDefaultQuitMessage(), "").trim();
+      msg = configured.isEmpty() ? ChatCommandRuntimeConfigPort.DEFAULT_QUIT_MESSAGE : configured;
+    }
     if (containsCrlf(msg)) {
       ui.appendStatus(
           new TargetRef(sid, "status"), "(quit)", "Refusing to send multi-line /quit reason.");

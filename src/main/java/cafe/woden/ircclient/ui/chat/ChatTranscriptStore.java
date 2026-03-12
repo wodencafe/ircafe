@@ -24,6 +24,7 @@ import cafe.woden.ircclient.ui.filter.FilterContext;
 import cafe.woden.ircclient.ui.filter.FilterEngine;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.util.EmojiFontSupport;
 import jakarta.annotation.PreDestroy;
 import java.awt.Color;
 import java.awt.Font;
@@ -1411,7 +1412,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     try {
       if (uiSettings != null && uiSettings.get() != null) {
         UiSettings us = uiSettings.get();
-        return new Font(us.chatFontFamily(), Font.PLAIN, us.chatFontSize());
+        Font preferred = new Font(us.chatFontFamily(), Font.PLAIN, us.chatFontSize());
+        return EmojiFontSupport.resolveTranscriptComponentFont(preferred);
       }
     } catch (Exception ignored) {
     }
@@ -1970,7 +1972,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     breakPresenceRun(ref);
     StyledDocument doc = docs.get(ref);
     try {
-      doc.insertString(doc.getLength(), text, styles.message());
+      ChatRichTextRenderer.insertStyledTextAt(doc, text, styles.message(), doc.getLength());
       enforceTranscriptLineCap(ref, doc);
     } catch (Exception ignored) {
     }
@@ -2216,7 +2218,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       if (renderer != null && !shouldDeferRichTextDuringHistoryBatch(ref)) {
         renderer.insertRichText(doc, ref, text, base);
       } else {
-        doc.insertString(doc.getLength(), text == null ? "" : text, base);
+        ChatRichTextRenderer.insertStyledTextAt(
+            doc, text == null ? "" : text, base, doc.getLength());
       }
 
       if (tailComponent != null) {
@@ -2747,8 +2750,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       if (renderer != null && !shouldDeferRichTextDuringHistoryBatch(ref)) {
         pos = renderer.insertRichTextAt(doc, ref, a, ms, pos);
       } else {
-        doc.insertString(pos, a, ms);
-        pos += a.length();
+        pos = ChatRichTextRenderer.insertStyledTextAt(doc, a, ms, pos);
       }
 
       doc.insertString(pos, "\n", tsStyle);
@@ -3120,8 +3122,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         pos = renderer.insertRichTextAt(doc, ref, text, msgStyle2, pos);
       } else {
         String t = text == null ? "" : text;
-        doc.insertString(pos, t, msgStyle2);
-        pos += t.length();
+        pos = ChatRichTextRenderer.insertStyledTextAt(doc, t, msgStyle2, pos);
       }
 
       doc.insertString(pos, "\n", tsStyle);
@@ -3517,8 +3518,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       if (renderer != null) {
         pos = renderer.insertRichTextAt(doc, ref, a, ms, pos);
       } else {
-        doc.insertString(pos, a, ms);
-        pos += a.length();
+        pos = ChatRichTextRenderer.insertStyledTextAt(doc, a, ms, pos);
       }
 
       doc.insertString(pos, "\n", tsStyle);
@@ -4407,12 +4407,12 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
           if (renderer != null) {
             renderer.insertRichText(inner, ref, msg, new SimpleAttributeSet(msgStyle));
           } else {
-            inner.insertString(0, msg, msgStyle);
+            ChatRichTextRenderer.insertStyledTextAt(inner, msg, msgStyle, 0);
           }
         } catch (Exception ignored2) {
           try {
             inner.remove(0, inner.getLength());
-            inner.insertString(0, msg, msgStyle);
+            ChatRichTextRenderer.insertStyledTextAt(inner, msg, msgStyle, 0);
           } catch (Exception ignored3) {
           }
         }
@@ -4632,7 +4632,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       if (renderer != null) {
         renderer.insertRichText(doc, ref, a, ms);
       } else {
-        doc.insertString(doc.getLength(), a, ms);
+        ChatRichTextRenderer.insertStyledTextAt(doc, a, ms, doc.getLength());
       }
 
       int lineEndOffset = doc.getLength();
@@ -5590,6 +5590,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       if (styleId != null) {
         fresh.addAttribute(ChatStyles.ATTR_STYLE, styleId);
       }
+      EmojiFontSupport.reapplyEmojiRunFontIfPresent(old, fresh);
 
       doc.setCharacterAttributes(start, end - start, fresh, true);
       offset = end;

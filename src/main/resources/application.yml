@@ -17,6 +17,9 @@ ircafe:
     # If false, IRCafe starts disconnected and you can connect manually using the Connect button.
     autoConnectOnStart: true
 
+    # Default QUIT message used when `/quit` has no explicit reason and during app shutdown.
+    defaultQuitMessage: "Client shutdown: IRCafe https://github.com/wodencafe/ircafe"
+
     # Timestamp prefix shown for status/error lines in the chat transcript.
     # Format uses Java time patterns (ex: "HH:mm:ss", "HH:mm", "h:mm a").
     timestamps:

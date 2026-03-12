@@ -1,0 +1,13 @@
+This product bundles Twemoji graphics from jdecked/twemoji v17.0.2.
+
+Graphics copyright:
+- Copyright (c) 2022-present Jason Sofonia & Justine De Caires
+- Copyright (c) 2014-2021 Twitter
+
+Graphics license:
+- CC-BY 4.0
+
+Software license:
+- MIT
+
+See TWEMOJI-GRAPHICS-LICENSE.txt and TWEMOJI-LICENSE.txt for the full license texts.

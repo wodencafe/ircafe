@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.*;
+import javax.swing.text.JTextComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +43,7 @@ final class MessageInputTypingSupport {
   // so short network delays do not cause the banner to blink out before "done" arrives.
   private static final int REMOTE_TYPING_HINT_MS = 8000;
 
-  private final JTextField input;
+  private final JTextComponent input;
   private final JPanel typingBanner;
   private final JLabel typingBannerLabel;
   private final TypingDotsIndicator typingDotsIndicator;
@@ -68,7 +69,7 @@ final class MessageInputTypingSupport {
   private boolean typingSignalAvailable;
 
   MessageInputTypingSupport(
-      JTextField input,
+      JTextComponent input,
       JPanel typingBanner,
       JLabel typingBannerLabel,
       TypingDotsIndicator typingDotsIndicator,

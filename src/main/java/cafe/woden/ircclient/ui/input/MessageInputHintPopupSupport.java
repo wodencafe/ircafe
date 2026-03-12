@@ -8,6 +8,7 @@ import java.awt.event.HierarchyListener;
 import java.util.Objects;
 import java.util.function.Function;
 import javax.swing.*;
+import javax.swing.text.JTextComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,7 +27,7 @@ final class MessageInputHintPopupSupport {
   private static final int HINT_POPUP_GAP_PX = 6;
 
   private final JComponent owner;
-  private final JTextField input;
+  private final JTextComponent input;
   private final Function<String, String> completionMatcher;
 
   private final JLabel hintPopupLabel = new JLabel();
@@ -65,7 +66,7 @@ final class MessageInputHintPopupSupport {
   private final HierarchyListener hierarchyListener;
 
   MessageInputHintPopupSupport(
-      JComponent owner, JTextField input, Function<String, String> completionMatcher) {
+      JComponent owner, JTextComponent input, Function<String, String> completionMatcher) {
     this.owner = owner;
     this.input = input;
     this.completionMatcher = completionMatcher;
