@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -262,6 +263,15 @@ class DetachedChannelLifecycleFunctionalTest {
                     null));
 
     ChatDockable chat = mock(ChatDockable.class);
+    CopyOnWriteArrayList<Boolean> inputEnabledStates = new CopyOnWriteArrayList<>();
+    doAnswer(
+            invocation -> {
+              inputEnabledStates.add(invocation.getArgument(0, Boolean.class));
+              return null;
+            })
+        .when(chat)
+        .setInputEnabled(anyBoolean());
+    doNothing().when(chat).refreshDisplayedTargetInputEnabled();
     ChatTranscriptStore transcripts = mock(ChatTranscriptStore.class);
     MentionPatternRegistry mentions = mock(MentionPatternRegistry.class);
     NotificationStore notificationStore = mock(NotificationStore.class);
@@ -325,15 +335,6 @@ class DetachedChannelLifecycleFunctionalTest {
             runtimeConfig,
             logProps,
             tray);
-
-    CopyOnWriteArrayList<Boolean> inputEnabledStates = new CopyOnWriteArrayList<>();
-    doAnswer(
-            invocation -> {
-              inputEnabledStates.add(invocation.getArgument(0, Boolean.class));
-              return null;
-            })
-        .when(chat)
-        .setInputEnabled(anyBoolean());
 
     TargetCoordinator targetCoordinator =
         new TargetCoordinator(

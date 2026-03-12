@@ -754,6 +754,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         this::updateScrollStateFromBar,
         this::updateDockTitle,
         typingCoordinator::refreshTypingSignalAvailabilityForActiveTarget,
+        this::refreshDisplayedTargetInputEnabled,
         interceptorCoordinator::onActiveTargetChanged,
         targetViewRouter::route,
         transcripts,
@@ -984,6 +985,18 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   public void setActiveTarget(TargetRef target) {
     activeTargetCoordinator.setActiveTarget(target);
+  }
+
+  public void refreshDisplayedTargetInputEnabled() {
+    TargetRef target = activeTarget;
+    boolean enabled = target != null && !target.isUiOnly();
+    if (enabled && !serverTree.isServerConnected(target.serverId())) {
+      enabled = false;
+    }
+    if (enabled && target.isChannel() && serverTree.isChannelDisconnected(target)) {
+      enabled = false;
+    }
+    setInputEnabled(enabled);
   }
 
   /**

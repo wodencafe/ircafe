@@ -1,11 +1,14 @@
 package cafe.woden.ircclient.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.model.TargetRef;
@@ -196,7 +199,7 @@ class SwingUiPortCommandRoutingTest {
   }
 
   @Test
-  void setInputEnabledDelegatesToChatAndPinnedInputsOnEdt() throws Exception {
+  void setInputEnabledDelegatesThenRefreshesMainChatEligibilityOnlyOnEdt() throws Exception {
     ChatDockable chat = mock(ChatDockable.class);
     ChatDockManager chatDockManager = mock(ChatDockManager.class);
 
@@ -229,20 +232,153 @@ class SwingUiPortCommandRoutingTest {
 
     doAnswer(
             inv -> {
-              record("chatDockManager.setPinnedInputsEnabled", steps, onEdtByStep);
+              record("chat.refreshDisplayedTargetInputEnabled", steps, onEdtByStep);
               return null;
             })
-        .when(chatDockManager)
-        .setPinnedInputsEnabled(false);
+        .when(chat)
+        .refreshDisplayedTargetInputEnabled();
 
     Thread caller = new Thread(() -> ui.setInputEnabled(false), "ui-port-caller-input");
     caller.start();
     caller.join();
     flushEdt();
 
-    assertEquals(List.of("chat.setInputEnabled", "chatDockManager.setPinnedInputsEnabled"), steps);
+    assertEquals(List.of("chat.setInputEnabled", "chat.refreshDisplayedTargetInputEnabled"), steps);
     assertEquals(Boolean.TRUE, onEdtByStep.get("chat.setInputEnabled"));
-    assertEquals(Boolean.TRUE, onEdtByStep.get("chatDockManager.setPinnedInputsEnabled"));
+    assertEquals(Boolean.TRUE, onEdtByStep.get("chat.refreshDisplayedTargetInputEnabled"));
+    verify(chatDockManager, never()).refreshPinnedInputEnabled(any());
+  }
+
+  @Test
+  void setChannelDisconnectedRefreshesMainAndPinnedInputStateOnEdt() throws Exception {
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    ChatDockable chat = mock(ChatDockable.class);
+    ChatDockManager chatDockManager = mock(ChatDockManager.class);
+    TargetRef target = new TargetRef("libera", "#ircafe");
+
+    SwingUiPort ui =
+        new SwingUiPort(
+            serverTree,
+            chat,
+            mock(ChatTranscriptStore.class),
+            mock(MentionPatternRegistry.class),
+            mock(NotificationStore.class),
+            mock(UserListDockable.class),
+            mock(StatusBar.class),
+            mock(ConnectButton.class),
+            mock(DisconnectButton.class),
+            new TargetActivationBus(),
+            new OutboundLineBus(),
+            chatDockManager,
+            new ActiveInputRouter());
+
+    List<String> steps = new CopyOnWriteArrayList<>();
+    Map<String, Boolean> onEdtByStep = new ConcurrentHashMap<>();
+
+    doAnswer(
+            inv -> {
+              record("serverTree.setChannelDisconnected", steps, onEdtByStep);
+              return null;
+            })
+        .when(serverTree)
+        .setChannelDisconnected(target, true);
+    doAnswer(
+            inv -> {
+              record("chat.refreshDisplayedTargetInputEnabled", steps, onEdtByStep);
+              return null;
+            })
+        .when(chat)
+        .refreshDisplayedTargetInputEnabled();
+    doAnswer(
+            inv -> {
+              record("chatDockManager.refreshPinnedInputEnabled", steps, onEdtByStep);
+              return null;
+            })
+        .when(chatDockManager)
+        .refreshPinnedInputEnabled(target);
+
+    Thread caller =
+        new Thread(() -> ui.setChannelDisconnected(target, true), "ui-port-caller-detached");
+    caller.start();
+    caller.join();
+    flushEdt();
+
+    assertEquals(
+        List.of(
+            "serverTree.setChannelDisconnected",
+            "chat.refreshDisplayedTargetInputEnabled",
+            "chatDockManager.refreshPinnedInputEnabled"),
+        steps);
+    assertEquals(Boolean.TRUE, onEdtByStep.get("serverTree.setChannelDisconnected"));
+    assertEquals(Boolean.TRUE, onEdtByStep.get("chat.refreshDisplayedTargetInputEnabled"));
+    assertEquals(Boolean.TRUE, onEdtByStep.get("chatDockManager.refreshPinnedInputEnabled"));
+  }
+
+  @Test
+  void setServerConnectionStateRefreshesMainAndPinnedInputStateOnEdt() throws Exception {
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    ChatDockable chat = mock(ChatDockable.class);
+    ChatDockManager chatDockManager = mock(ChatDockManager.class);
+
+    SwingUiPort ui =
+        new SwingUiPort(
+            serverTree,
+            chat,
+            mock(ChatTranscriptStore.class),
+            mock(MentionPatternRegistry.class),
+            mock(NotificationStore.class),
+            mock(UserListDockable.class),
+            mock(StatusBar.class),
+            mock(ConnectButton.class),
+            mock(DisconnectButton.class),
+            new TargetActivationBus(),
+            new OutboundLineBus(),
+            chatDockManager,
+            new ActiveInputRouter());
+
+    List<String> steps = new CopyOnWriteArrayList<>();
+    Map<String, Boolean> onEdtByStep = new ConcurrentHashMap<>();
+
+    doAnswer(
+            inv -> {
+              record("serverTree.setServerConnectionState", steps, onEdtByStep);
+              return null;
+            })
+        .when(serverTree)
+        .setServerConnectionState("libera", ConnectionState.DISCONNECTED);
+    doAnswer(
+            inv -> {
+              record("chat.refreshDisplayedTargetInputEnabled", steps, onEdtByStep);
+              return null;
+            })
+        .when(chat)
+        .refreshDisplayedTargetInputEnabled();
+    doAnswer(
+            inv -> {
+              record("chatDockManager.refreshPinnedInputEnabledForServer", steps, onEdtByStep);
+              return null;
+            })
+        .when(chatDockManager)
+        .refreshPinnedInputEnabledForServer("libera");
+
+    Thread caller =
+        new Thread(
+            () -> ui.setServerConnectionState("libera", ConnectionState.DISCONNECTED),
+            "ui-port-caller-server-state");
+    caller.start();
+    caller.join();
+    flushEdt();
+
+    assertEquals(
+        List.of(
+            "serverTree.setServerConnectionState",
+            "chat.refreshDisplayedTargetInputEnabled",
+            "chatDockManager.refreshPinnedInputEnabledForServer"),
+        steps);
+    assertEquals(Boolean.TRUE, onEdtByStep.get("serverTree.setServerConnectionState"));
+    assertEquals(Boolean.TRUE, onEdtByStep.get("chat.refreshDisplayedTargetInputEnabled"));
+    assertEquals(
+        Boolean.TRUE, onEdtByStep.get("chatDockManager.refreshPinnedInputEnabledForServer"));
   }
 
   @Test

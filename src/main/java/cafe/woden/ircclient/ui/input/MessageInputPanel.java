@@ -377,7 +377,7 @@ public class MessageInputPanel extends JPanel {
     attach.addFocusListener(focusAdapter);
     send.addFocusListener(focusAdapter);
 
-    MouseAdapter mouseAdapter =
+    MouseAdapter activationMouseAdapter =
         new MouseAdapter() {
           @Override
           public void mousePressed(MouseEvent e) {
@@ -385,10 +385,25 @@ public class MessageInputPanel extends JPanel {
             fireActivated();
           }
         };
-    input.addMouseListener(mouseAdapter);
-    attach.addMouseListener(mouseAdapter);
-    send.addMouseListener(mouseAdapter);
-    addMouseListener(mouseAdapter);
+    input.addMouseListener(activationMouseAdapter);
+    attach.addMouseListener(activationMouseAdapter);
+    send.addMouseListener(activationMouseAdapter);
+    addMouseListener(activationMouseAdapter);
+
+    MouseAdapter inputSurfaceMouseAdapter =
+        new MouseAdapter() {
+          @Override
+          public void mousePressed(MouseEvent e) {
+            if (e.isPopupTrigger()) {
+              return;
+            }
+            undoSupport.endCompoundEdit();
+            fireActivated();
+            focusInput();
+          }
+        };
+    inputScroll.addMouseListener(inputSurfaceMouseAdapter);
+    inputScroll.getViewport().addMouseListener(inputSurfaceMouseAdapter);
   }
 
   private void installEscapeHandler() {

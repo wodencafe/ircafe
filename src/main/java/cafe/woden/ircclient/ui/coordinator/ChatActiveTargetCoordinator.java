@@ -24,6 +24,7 @@ public final class ChatActiveTargetCoordinator {
   private final Runnable updateScrollStateFromBar;
   private final Runnable dockTitleUpdater;
   private final Runnable typingAvailabilityRefresher;
+  private final Runnable inputEligibilityRefresher;
   private final BiConsumer<TargetRef, TargetRef> interceptorTargetChangeHandler;
   private final Function<TargetRef, ChatTargetViewRouter.TargetViewType> targetViewRouter;
   private final ChatTranscriptStore transcripts;
@@ -43,6 +44,7 @@ public final class ChatActiveTargetCoordinator {
       Runnable updateScrollStateFromBar,
       Runnable dockTitleUpdater,
       Runnable typingAvailabilityRefresher,
+      Runnable inputEligibilityRefresher,
       BiConsumer<TargetRef, TargetRef> interceptorTargetChangeHandler,
       Function<TargetRef, ChatTargetViewRouter.TargetViewType> targetViewRouter,
       ChatTranscriptStore transcripts,
@@ -64,6 +66,8 @@ public final class ChatActiveTargetCoordinator {
     this.dockTitleUpdater = Objects.requireNonNull(dockTitleUpdater, "dockTitleUpdater");
     this.typingAvailabilityRefresher =
         Objects.requireNonNull(typingAvailabilityRefresher, "typingAvailabilityRefresher");
+    this.inputEligibilityRefresher =
+        Objects.requireNonNull(inputEligibilityRefresher, "inputEligibilityRefresher");
     this.interceptorTargetChangeHandler =
         Objects.requireNonNull(interceptorTargetChangeHandler, "interceptorTargetChangeHandler");
     this.targetViewRouter = Objects.requireNonNull(targetViewRouter, "targetViewRouter");
@@ -99,6 +103,7 @@ public final class ChatActiveTargetCoordinator {
     dockTitleUpdater.run();
     typingAvailabilityRefresher.run();
     setInputPanelVisibleForTarget(target);
+    inputEligibilityRefresher.run();
     interceptorTargetChangeHandler.accept(previousTarget, target);
 
     ChatTargetViewRouter.TargetViewType targetView = targetViewRouter.apply(target);

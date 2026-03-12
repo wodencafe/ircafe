@@ -98,6 +98,7 @@ class ChatActiveTargetCoordinatorTest {
             scrollUpdates::incrementAndGet,
             titleUpdates::incrementAndGet,
             typingRefreshes::incrementAndGet,
+            () -> {},
             (prev, next) -> {
               interceptorPrevious.set(prev);
               interceptorNext.set(next);
@@ -168,6 +169,7 @@ class ChatActiveTargetCoordinatorTest {
             () -> {},
             () -> {},
             () -> {},
+            () -> {},
             (prev, current) -> {},
             target -> ChatTargetViewRouter.TargetViewType.TRANSCRIPT,
             transcripts,
@@ -228,6 +230,7 @@ class ChatActiveTargetCoordinatorTest {
                 new BackendUiProfile(
                     serverId, BackendUiContext.fromMatrixServerPredicate("matrix"::equals)),
             new HashMap<>(),
+            () -> {},
             () -> {},
             () -> {},
             () -> {},
@@ -326,6 +329,7 @@ class ChatActiveTargetCoordinatorTest {
         inputPanel,
         BackendUiProfile::ircOnly,
         drafts,
+        () -> {},
         () -> {},
         () -> {},
         () -> {},

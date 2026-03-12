@@ -376,7 +376,7 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind'
 
     implementation 'io.reactivex.rxjava3:rxjava:3.1.12'
-    implementation 'com.github.pircbotx:pircbotx:2.3.1'
+    implementation 'com.github.pircbotx:pircbotx:b1b48bf'
     implementation 'com.github.ben-manes.caffeine:caffeine'
     implementation 'it.unimi.dsi:fastutil:8.5.18'
 
