@@ -199,7 +199,7 @@ class SwingUiPortCommandRoutingTest {
   }
 
   @Test
-  void setInputEnabledRefreshesMainChatEligibilityOnlyOnEdt() throws Exception {
+  void setInputEnabledDelegatesThenRefreshesMainChatEligibilityOnlyOnEdt() throws Exception {
     ChatDockable chat = mock(ChatDockable.class);
     ChatDockManager chatDockManager = mock(ChatDockManager.class);
 
@@ -224,6 +224,14 @@ class SwingUiPortCommandRoutingTest {
 
     doAnswer(
             inv -> {
+              record("chat.setInputEnabled", steps, onEdtByStep);
+              return null;
+            })
+        .when(chat)
+        .setInputEnabled(false);
+
+    doAnswer(
+            inv -> {
               record("chat.refreshDisplayedTargetInputEnabled", steps, onEdtByStep);
               return null;
             })
@@ -235,7 +243,8 @@ class SwingUiPortCommandRoutingTest {
     caller.join();
     flushEdt();
 
-    assertEquals(List.of("chat.refreshDisplayedTargetInputEnabled"), steps);
+    assertEquals(List.of("chat.setInputEnabled", "chat.refreshDisplayedTargetInputEnabled"), steps);
+    assertEquals(Boolean.TRUE, onEdtByStep.get("chat.setInputEnabled"));
     assertEquals(Boolean.TRUE, onEdtByStep.get("chat.refreshDisplayedTargetInputEnabled"));
     verify(chatDockManager, never()).refreshPinnedInputEnabled(any());
   }

@@ -1270,7 +1270,11 @@ public class SwingUiPort implements UiPort {
 
   @Override
   public void setInputEnabled(boolean enabled) {
-    onEdt(chat::refreshDisplayedTargetInputEnabled);
+    onEdt(
+        () -> {
+          chat.setInputEnabled(enabled);
+          chat.refreshDisplayedTargetInputEnabled();
+        });
   }
 
   @Override
