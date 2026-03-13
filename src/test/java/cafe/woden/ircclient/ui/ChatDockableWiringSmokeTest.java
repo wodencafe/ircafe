@@ -23,6 +23,8 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
@@ -209,6 +211,8 @@ class ChatDockableWiringSmokeTest {
     TargetActivationBus activationBus = new TargetActivationBus();
     OutboundLineBus outboundBus = new OutboundLineBus();
     IrcClientService irc = mock(IrcClientService.class);
+    ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
+    ServerIsupportStatePort serverIsupportState = mock(ServerIsupportStatePort.class);
     BackendUiProfileProvider backendUiProfileProvider = mock(BackendUiProfileProvider.class);
     MessageActionCapabilityPolicy messageActionCapabilityPolicy =
         mock(MessageActionCapabilityPolicy.class);
@@ -247,6 +251,8 @@ class ChatDockableWiringSmokeTest {
                     activationBus,
                     outboundBus,
                     irc,
+                    modeRoutingState,
+                    serverIsupportState,
                     backendUiProfileProvider,
                     messageActionCapabilityPolicy,
                     activeInputRouter,

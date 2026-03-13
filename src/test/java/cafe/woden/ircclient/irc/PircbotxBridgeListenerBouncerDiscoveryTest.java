@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.state.ServerIsupportState;
 import com.google.common.collect.ImmutableMap;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -96,7 +97,8 @@ class PircbotxBridgeListenerBouncerDiscoveryTest {
         zncDiscoveryEnabled,
         new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
         bouncerEvents,
-        new NoOpPlaybackCursorProvider());
+        new NoOpPlaybackCursorProvider(),
+        new ServerIsupportState());
   }
 
   private static UnknownEvent unknownEvent(String rawLine) {

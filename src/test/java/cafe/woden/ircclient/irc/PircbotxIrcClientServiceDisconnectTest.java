@@ -17,6 +17,7 @@ import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.irc.soju.SojuBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.znc.ZncBouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.state.ServerIsupportState;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.util.List;
@@ -67,6 +68,7 @@ class PircbotxIrcClientServiceDisconnectTest {
             bouncerBackends,
             bouncerDiscoveryEvents,
             timers,
+            new ServerIsupportState(),
             playbackCursorProviderProvider);
 
     TestSubscriber<ServerIrcEvent> events = service.events().test();

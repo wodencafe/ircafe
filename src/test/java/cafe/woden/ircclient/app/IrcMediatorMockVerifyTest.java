@@ -56,6 +56,7 @@ import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -113,6 +114,7 @@ class IrcMediatorMockVerifyTest {
       mock(LabeledResponseRoutingPort.class);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final PendingInvitePort pendingInviteState = mock(PendingInvitePort.class);
+  private final ServerIsupportStatePort serverIsupportState = mock(ServerIsupportStatePort.class);
   private final InboundModeEventHandler inboundModeEventHandler =
       mock(InboundModeEventHandler.class);
   private final IrcEventNotifierPort ircEventNotifierPort = mock(IrcEventNotifierPort.class);
@@ -155,6 +157,7 @@ class IrcMediatorMockVerifyTest {
           labeledResponseRoutingState,
           pendingEchoMessageState,
           pendingInviteState,
+          serverIsupportState,
           inboundModeEventHandler,
           ircEventNotifierPort,
           interceptorIngestPort,

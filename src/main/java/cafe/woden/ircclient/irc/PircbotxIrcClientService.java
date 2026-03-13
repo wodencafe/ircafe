@@ -8,6 +8,7 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.irc.znc.ZncLoginParts;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -58,6 +59,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
   private final SojuProperties sojuProps;
   private final ZncProperties zncProps;
   private final RuntimeConfigStore runtimeConfig;
+  private final ServerIsupportStatePort serverIsupportState;
   private final Ircv3StsPolicyService stsPolicies;
   private final PlaybackCursorProvider playbackCursorProvider;
   private String version;
@@ -74,6 +76,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
       BouncerBackendRegistry bouncerBackends,
       BouncerDiscoveryEventPort bouncerDiscoveryEvents,
       PircbotxConnectionTimersRx timers,
+      ServerIsupportStatePort serverIsupportState,
       ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider) {
     this.serverCatalog = serverCatalog;
     version = props.client().version();
@@ -82,6 +85,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
     this.sojuProps = sojuProps;
     this.zncProps = zncProps;
     this.runtimeConfig = runtimeConfig;
+    this.serverIsupportState = Objects.requireNonNull(serverIsupportState, "serverIsupportState");
     this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
     this.bouncerBackends = Objects.requireNonNull(bouncerBackends, "bouncerBackends");
     this.bouncerDiscoveryEvents =
@@ -133,6 +137,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
               if (shuttingDown.get()) return;
               PircbotxConnectionState c = conn(serverId);
               if (c.botRef.get() != null) return;
+              serverIsupportState.clearServer(serverId);
               c.resetNegotiatedCaps();
               // soju discovery state is per-session; reset before starting a new connection.
               try {
@@ -202,7 +207,8 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
                       zncProps.discovery().enabled(),
                       bouncerBackends,
                       bouncerDiscoveryEvents,
-                      playbackCursorProvider);
+                      playbackCursorProvider,
+                      serverIsupportState);
 
               PircBotX bot = botFactory.build(s, version, listener);
               c.botRef.set(bot);
@@ -243,6 +249,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
     return Completable.fromAction(
             () -> {
               PircbotxConnectionState c = conn(serverId);
+              serverIsupportState.clearServer(serverId);
               c.manualDisconnect.set(true);
               cancelReconnect(c);
               timers.stopHeartbeat(c);

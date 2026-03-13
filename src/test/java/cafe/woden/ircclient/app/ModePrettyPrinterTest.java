@@ -3,6 +3,8 @@ package cafe.woden.ircclient.app;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.state.ServerIsupportState;
+import cafe.woden.ircclient.state.api.ModeVocabulary;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -47,5 +49,17 @@ class ModePrettyPrinterTest {
     List<String> lines = ModePrettyPrinter.pretty("ChanServ", "#ircafe", "+q alice");
 
     assertEquals(List.of("ChanServ gives owner privileges to alice."), lines);
+  }
+
+  @Test
+  void respectsNegotiatedQModeListSemanticsEvenForNickLikeTargets() {
+    ServerIsupportState isupport = new ServerIsupportState();
+    isupport.applyIsupportToken("srv", "PREFIX", "(ov)@+");
+    isupport.applyIsupportToken("srv", "CHANMODES", "qbeI,k,l,imnst");
+    ModeVocabulary vocabulary = isupport.vocabularyForServer("srv");
+
+    List<String> lines = ModePrettyPrinter.pretty(vocabulary, "ChanServ", "#ircafe", "+q alice");
+
+    assertEquals(List.of("ChanServ adds a quiet rule for alice."), lines);
   }
 }

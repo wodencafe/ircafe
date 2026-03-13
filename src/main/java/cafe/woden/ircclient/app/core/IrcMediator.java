@@ -42,8 +42,11 @@ import cafe.woden.ircclient.state.api.CtcpRoutingPort.PendingCtcp;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.ModeVocabulary;
+import cafe.woden.ircclient.state.api.NegotiatedModeSemantics;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -121,6 +124,7 @@ public class IrcMediator implements MediatorControlPort {
   private final LabeledResponseRoutingPort labeledResponseRoutingState;
   private final PendingEchoMessagePort pendingEchoMessageState;
   private final PendingInvitePort pendingInviteState;
+  private final ServerIsupportStatePort serverIsupportState;
   private final InboundModeEventHandler inboundModeEventHandler;
   private final IrcEventNotifierPort ircEventNotifierPort;
   private final InterceptorIngestPort interceptorIngestPort;
@@ -211,6 +215,7 @@ public class IrcMediator implements MediatorControlPort {
       LabeledResponseRoutingPort labeledResponseRoutingState,
       PendingEchoMessagePort pendingEchoMessageState,
       PendingInvitePort pendingInviteState,
+      ServerIsupportStatePort serverIsupportState,
       InboundModeEventHandler inboundModeEventHandler,
       IrcEventNotifierPort ircEventNotifierPort,
       InterceptorIngestPort interceptorIngestPort,
@@ -249,6 +254,7 @@ public class IrcMediator implements MediatorControlPort {
     this.labeledResponseRoutingState = labeledResponseRoutingState;
     this.pendingEchoMessageState = pendingEchoMessageState;
     this.pendingInviteState = pendingInviteState;
+    this.serverIsupportState = serverIsupportState;
     this.inboundModeEventHandler = inboundModeEventHandler;
     this.ircEventNotifierPort = ircEventNotifierPort;
     this.interceptorIngestPort = interceptorIngestPort;
@@ -666,6 +672,11 @@ public class IrcMediator implements MediatorControlPort {
         || e instanceof IrcEvent.Disconnected
         || e instanceof IrcEvent.ConnectionReady
         || e instanceof IrcEvent.ConnectionFeaturesUpdated) {
+      if (e instanceof IrcEvent.Connecting
+          || e instanceof IrcEvent.Connected
+          || e instanceof IrcEvent.Reconnecting) {
+        serverIsupportState.clearServer(sid);
+      }
       if (e instanceof IrcEvent.Connected ev) {
         ui.setServerConnectedIdentity(sid, ev.serverHost(), ev.serverPort(), ev.nick(), ev.at());
       }
@@ -682,6 +693,7 @@ public class IrcMediator implements MediatorControlPort {
         joinRoutingState.clearServer(sid);
         labeledResponseRoutingState.clearServer(sid);
         pendingInviteState.clearServer(sid);
+        serverIsupportState.clearServer(sid);
         inboundModeEventHandler.clearServer(sid);
         clearNetsplitDebounceForServer(sid);
       }
@@ -2221,7 +2233,7 @@ public class IrcMediator implements MediatorControlPort {
     String actor = Objects.toString(ev.by(), "").trim();
     String by = actor.isEmpty() ? "Someone" : actor;
 
-    for (ModeChangeToken ch : parseModeChanges(ev.details())) {
+    for (ModeChangeToken ch : parseModeChanges(serverId, ev.details())) {
       if (ch == null) continue;
 
       IrcEventNotificationRule.EventType type = null;
@@ -2361,7 +2373,7 @@ public class IrcMediator implements MediatorControlPort {
     };
   }
 
-  private List<ModeChangeToken> parseModeChanges(String details) {
+  private List<ModeChangeToken> parseModeChanges(String serverId, String details) {
     String d = Objects.toString(details, "").trim();
     if (d.isEmpty()) return List.of();
 
@@ -2387,6 +2399,7 @@ public class IrcMediator implements MediatorControlPort {
     boolean add = true;
     int argIdx = 0;
     List<ModeChangeToken> out = new java.util.ArrayList<>();
+    ModeVocabulary vocabulary = serverIsupportState.vocabularyForServer(serverId);
     for (int i = 0; i < modeSeq.length(); i++) {
       char c = modeSeq.charAt(i);
       if (c == '+') {
@@ -2399,20 +2412,12 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       String arg = null;
-      if (modeTakesArg(c, add) && argIdx < args.size()) {
+      if (NegotiatedModeSemantics.takesArgument(vocabulary, c, add) && argIdx < args.size()) {
         arg = args.get(argIdx++);
       }
       out.add(new ModeChangeToken(add, c, arg));
     }
     return out;
-  }
-
-  private static boolean modeTakesArg(char mode, boolean adding) {
-    return switch (mode) {
-      case 'o', 'v', 'h', 'a', 'q', 'y', 'b', 'e', 'I', 'k', 'f', 'j' -> true;
-      case 'l' -> adding;
-      default -> false;
-    };
   }
 
   private record ModeChangeToken(boolean add, char mode, String arg) {}
@@ -2664,6 +2669,7 @@ public class IrcMediator implements MediatorControlPort {
 
         if (tok.startsWith("-") && tok.length() > 1) {
           ui.setServerIsupportToken(sid, tok.substring(1), null);
+          serverIsupportState.applyIsupportToken(sid, tok.substring(1), null);
           continue;
         }
 
@@ -2673,12 +2679,14 @@ public class IrcMediator implements MediatorControlPort {
           String value = tok.substring(eq + 1).trim();
           if (!key.isEmpty()) {
             ui.setServerIsupportToken(sid, key, value);
+            serverIsupportState.applyIsupportToken(sid, key, value);
           }
           continue;
         }
 
         // Tokens without "=" still represent support (for example WHOX).
         ui.setServerIsupportToken(sid, tok, "");
+        serverIsupportState.applyIsupportToken(sid, tok, "");
       }
     }
   }

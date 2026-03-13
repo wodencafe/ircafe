@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.ServerIsupportState;
 import cafe.woden.ircclient.state.api.ChannelFlagModeStatePort;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import cafe.woden.ircclient.state.api.RecentStatusModePort;
@@ -38,6 +39,7 @@ class InboundModeEventHandlerTest {
   private final ChannelFlagModeStatePort channelFlagModeState =
       new InMemoryChannelFlagModeStatePort();
   private final RecentStatusModePort recentStatusModeState = new InMemoryRecentStatusModePort();
+  private final ServerIsupportState serverIsupportState = new ServerIsupportState();
 
   private final InboundModeEventHandler handler =
       new InboundModeEventHandler(
@@ -46,12 +48,14 @@ class InboundModeEventHandlerTest {
           joinModeBurstService,
           modeFormattingService,
           channelFlagModeState,
-          recentStatusModeState);
+          recentStatusModeState,
+          serverIsupportState);
 
   @BeforeEach
   void setUp() {
-    when(modeFormattingService.describeCurrentChannelModes(anyString())).thenReturn(SUMMARY);
-    when(modeFormattingService.prettyModeChange(anyString(), anyString(), anyString()))
+    when(modeFormattingService.describeCurrentChannelModes(anyString(), anyString()))
+        .thenReturn(SUMMARY);
+    when(modeFormattingService.prettyModeChange(anyString(), anyString(), anyString(), anyString()))
         .thenReturn(List.of("mode line"));
     when(joinModeBurstService.shouldSuppressModesListedSummary(
             anyString(), anyString(), anyBoolean()))
@@ -118,9 +122,9 @@ class InboundModeEventHandlerTest {
     String opLine = "FurBot gives channel operator privileges to Arca.";
     String snapshotDetails = "+nrf [10j#R10]:5";
     String snapshotSummary = "Channel modes: no outside messages, registered only, +f";
-    when(modeFormattingService.prettyModeChange("FurBot", CHANNEL, "+o Arca"))
+    when(modeFormattingService.prettyModeChange(SERVER_ID, "FurBot", CHANNEL, "+o Arca"))
         .thenReturn(List.of(opLine));
-    when(modeFormattingService.describeCurrentChannelModes(snapshotDetails))
+    when(modeFormattingService.describeCurrentChannelModes(SERVER_ID, snapshotDetails))
         .thenReturn(snapshotSummary);
 
     handler.handleChannelModeObserved(
@@ -151,7 +155,7 @@ class InboundModeEventHandlerTest {
   void keepsLiveSnapshotDuringActiveJoinBootstrap() {
     String snapshotDetails = "+nrf [10j#R10]:5";
     String snapshotSummary = "Channel modes: no outside messages, registered only, +f";
-    when(modeFormattingService.describeCurrentChannelModes(snapshotDetails))
+    when(modeFormattingService.describeCurrentChannelModes(SERVER_ID, snapshotDetails))
         .thenReturn(snapshotSummary);
     when(joinModeBurstService.hasActiveJoinModeBuffer(SERVER_ID, CHANNEL)).thenReturn(true);
 
@@ -174,7 +178,7 @@ class InboundModeEventHandlerTest {
     String snapshotDetails = "+nrf [10j#R10]:5";
     String snapshotSummary = "Channel modes: no outside messages, registered only, +f";
     TargetRef explicitTarget = new TargetRef(SERVER_ID, CHANNEL);
-    when(modeFormattingService.describeCurrentChannelModes(snapshotDetails))
+    when(modeFormattingService.describeCurrentChannelModes(SERVER_ID, snapshotDetails))
         .thenReturn(snapshotSummary);
     modeRoutingState.putPendingModeTarget(SERVER_ID, CHANNEL, explicitTarget);
 
@@ -195,7 +199,7 @@ class InboundModeEventHandlerTest {
   void suppressesUnsolicitedLiveSnapshotEvenWithoutRecentStatusMode() {
     String snapshotDetails = "+nrf [10j#R10]:5";
     String snapshotSummary = "Channel modes: no outside messages, registered only, +f";
-    when(modeFormattingService.describeCurrentChannelModes(snapshotDetails))
+    when(modeFormattingService.describeCurrentChannelModes(SERVER_ID, snapshotDetails))
         .thenReturn(snapshotSummary);
 
     handler.handleChannelModeObserved(

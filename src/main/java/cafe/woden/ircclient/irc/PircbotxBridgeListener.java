@@ -9,6 +9,8 @@ import cafe.woden.ircclient.irc.soju.SojuBouncerDiscoveryAdapter;
 import cafe.woden.ircclient.irc.soju.SojuBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.znc.ZncBouncerDiscoveryAdapter;
 import cafe.woden.ircclient.irc.znc.ZncBouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.state.api.ModeVocabulary;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -21,7 +23,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import org.pircbotx.Channel;
@@ -40,9 +41,6 @@ import org.slf4j.LoggerFactory;
 final class PircbotxBridgeListener extends ListenerAdapter {
   private static final Logger log = LoggerFactory.getLogger(PircbotxBridgeListener.class);
 
-  // Helpful for correlating MODE bursts in logs.
-  private static final AtomicLong MODE_SEQ = new AtomicLong();
-
   @FunctionalInterface
   interface CtcpRequestHandler {
     boolean handle(PircBotX bot, String fromNick, String message);
@@ -59,6 +57,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final PircbotxConnectionState conn;
   private final FlowableProcessor<ServerIrcEvent> bus;
   private final PlaybackCursorProvider playbackCursorProvider;
+  private final ServerIsupportStatePort serverIsupportState;
   private final Consumer<PircbotxConnectionState> heartbeatStopper;
   private final BiConsumer<PircbotxConnectionState, String> reconnectScheduler;
   private final CtcpRequestHandler ctcpHandler;
@@ -706,7 +705,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       boolean zncDiscoveryEnabled,
       BouncerBackendRegistry bouncerBackends,
       BouncerDiscoveryEventPort bouncerDiscoveryEvents,
-      PlaybackCursorProvider playbackCursorProvider) {
+      PlaybackCursorProvider playbackCursorProvider,
+      ServerIsupportStatePort serverIsupportState) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.conn = Objects.requireNonNull(conn, "conn");
     this.bus = Objects.requireNonNull(bus, "bus");
@@ -724,6 +724,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             : bouncerDiscoveryEvents;
     this.playbackCursorProvider =
         java.util.Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
+    this.serverIsupportState =
+        java.util.Objects.requireNonNull(serverIsupportState, "serverIsupportState");
   }
 
   private List<UnknownLineDiscoveryAdapter> buildUnknownLineDiscoveryAdapters(boolean sojuEnabled) {
@@ -2023,6 +2025,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       }
     }
 
+    applyIsupportTokens(rawLine);
     if (PircbotxWhoUserhostParsers.parseRpl005IsupportHasWhox(rawLine)) {
       bus.onNext(
           new ServerIrcEvent(serverId, new IrcEvent.WhoxSupportObserved(Instant.now(), true)));
@@ -2721,6 +2724,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       if (line == null || line.isBlank()) line = String.valueOf(event);
 
       String rawLine = PircbotxLineParseUtil.normalizeIrcLineForParsing(line);
+      applyIsupportTokens(rawLine);
 
       String netId = PircbotxSojuParsers.parseRpl005BouncerNetId(rawLine);
       if (netId != null && !netId.isBlank()) {
@@ -3532,34 +3536,11 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     if (event == null) return;
     if (event.getChannel() == null) return;
 
-    long seq = MODE_SEQ.incrementAndGet();
-
     emitRoster(event.getChannel());
 
     String chan = event.getChannel().getName();
     String by = nickFromEvent(event);
     String details = modeDetailsFromEvent(event, chan);
-
-    if (log.isDebugEnabled()) {
-      Object rawLine = reflectCall(event, "getRawLine");
-      if (rawLine == null) rawLine = reflectCall(event, "getRaw");
-      if (rawLine == null) rawLine = reflectCall(event, "getLine");
-      Object modeLine = reflectCall(event, "getModeLine");
-      if (modeLine == null) modeLine = reflectCall(event, "getModeString");
-      Object mode = reflectCall(event, "getMode");
-
-      log.debug(
-          "[{}] MODEDBG#{} chan={} by={} eventClass={} rawLine={} modeLine={} mode={} details={}",
-          serverId,
-          seq,
-          chan,
-          by,
-          event.getClass().getName(),
-          clip(rawLine),
-          clip(modeLine),
-          clip(mode),
-          clip(details));
-    }
 
     if (details != null && !details.isBlank()) {
       bus.onNext(
@@ -3620,6 +3601,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   }
 
   private static String prefixForUser(
+      ModeVocabulary vocabulary,
       Object user,
       java.util.Set<?> owners,
       java.util.Set<?> admins,
@@ -3627,31 +3609,76 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       java.util.Set<?> halfOps,
       java.util.Set<?> voices) {
     if (user == null) return "";
-    if (owners != null && owners.contains(user)) return "~";
-    if (admins != null && admins.contains(user)) return "&";
-    if (ops != null && ops.contains(user)) return "@";
-    if (halfOps != null && halfOps.contains(user)) return "%";
-    if (voices != null && voices.contains(user)) return "+";
+    if (owners != null && owners.contains(user))
+      return String.valueOf(prefixForMode(vocabulary, 'q', '~'));
+    if (admins != null && admins.contains(user))
+      return String.valueOf(prefixForMode(vocabulary, 'a', '&'));
+    if (ops != null && ops.contains(user))
+      return String.valueOf(prefixForMode(vocabulary, 'o', '@'));
+    if (halfOps != null && halfOps.contains(user))
+      return String.valueOf(prefixForMode(vocabulary, 'h', '%'));
+    if (voices != null && voices.contains(user))
+      return String.valueOf(prefixForMode(vocabulary, 'v', '+'));
     return "";
   }
 
-  private static int prefixRank(String prefix) {
-    if (prefix == null || prefix.isBlank()) return 99;
-    return switch (prefix.charAt(0)) {
-      case '~' -> 0;
-      case '&' -> 1;
-      case '@' -> 2;
-      case '%' -> 3;
-      case '+' -> 4;
-      default -> 10;
-    };
+  private static char prefixForMode(ModeVocabulary vocabulary, char mode, char fallback) {
+    if (vocabulary == null) return fallback;
+    return vocabulary.prefixForMode(mode).orElse(fallback);
   }
 
-  private static boolean isOperatorLike(IrcEvent.NickInfo n) {
+  private static int prefixRank(ModeVocabulary vocabulary, String prefix) {
+    if (vocabulary == null) return 99;
+    return vocabulary.prefixRank(prefix);
+  }
+
+  private static boolean isOperatorLike(ModeVocabulary vocabulary, IrcEvent.NickInfo n) {
     if (n == null) return false;
-    String p = n.prefix();
-    if (p == null || p.isBlank()) return false;
-    return p.indexOf('~') >= 0 || p.indexOf('&') >= 0 || p.indexOf('@') >= 0;
+    String prefixes = Objects.toString(n.prefix(), "").trim();
+    if (prefixes.isEmpty() || vocabulary == null) return false;
+    for (int i = 0; i < prefixes.length(); i++) {
+      Optional<Character> mode = vocabulary.modeForPrefix(prefixes.charAt(i));
+      if (mode.isPresent()
+          && (mode.get().charValue() == 'q'
+              || mode.get().charValue() == 'a'
+              || mode.get().charValue() == 'o')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private void applyIsupportTokens(String rawLine) {
+    ParsedIrcLine parsed = parseIrcLine(rawLine);
+    if (parsed == null || !"005".equals(parsed.command())) return;
+
+    List<String> params = parsed.params();
+    int start = params.size() >= 1 ? 1 : 0;
+    for (int i = start; i < params.size(); i++) {
+      String token = Objects.toString(params.get(i), "").trim();
+      if (token.isEmpty()) continue;
+      if (token.startsWith("-") && token.length() > 1) {
+        serverIsupportState.applyIsupportToken(serverId, token.substring(1), null);
+        continue;
+      }
+
+      int eq = token.indexOf('=');
+      if (eq >= 0) {
+        String key = token.substring(0, eq).trim();
+        String value = token.substring(eq + 1).trim();
+        if (!key.isEmpty()) {
+          serverIsupportState.applyIsupportToken(serverId, key, value);
+        }
+        continue;
+      }
+
+      serverIsupportState.applyIsupportToken(serverId, token, "");
+    }
+  }
+
+  private ModeVocabulary vocabulary() {
+    ModeVocabulary vocabulary = serverIsupportState.vocabularyForServer(serverId);
+    return vocabulary == null ? ModeVocabulary.fallback() : vocabulary;
   }
 
   private static String nickFromEvent(Object event) {
@@ -3809,19 +3836,11 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     }
   }
 
-  private static String clip(Object v) {
-    if (v == null) return "<null>";
-    String s = String.valueOf(v);
-    if (s == null) return "<null>";
-    s = s.replace('\n', ' ').replace('\r', ' ');
-    if (s.length() > 280) return s.substring(0, 277) + "...";
-    return s;
-  }
-
   private void emitRoster(Channel channel) {
     if (channel == null) return;
 
     String channelName = channel.getName();
+    ModeVocabulary vocabulary = vocabulary();
     java.util.Set<?> owners = setOrEmpty(channel, "getOwners");
     java.util.Set<?> admins = setOrEmpty(channel, "getSuperOps");
     java.util.Set<?> ops = setOrEmpty(channel, "getOps");
@@ -3834,15 +3853,15 @@ final class PircbotxBridgeListener extends ListenerAdapter {
                 u ->
                     new IrcEvent.NickInfo(
                         u.getNick(),
-                        prefixForUser(u, owners, admins, ops, halfOps, voices),
+                        prefixForUser(vocabulary, u, owners, admins, ops, halfOps, voices),
                         PircbotxUtil.hostmaskFromUser(u)))
             .sorted(
-                Comparator.comparingInt((IrcEvent.NickInfo n) -> prefixRank(n.prefix()))
+                Comparator.comparingInt((IrcEvent.NickInfo n) -> prefixRank(vocabulary, n.prefix()))
                     .thenComparing(IrcEvent.NickInfo::nick, String.CASE_INSENSITIVE_ORDER))
             .toList();
 
     int totalUsers = nicks.size();
-    int operatorCount = (int) nicks.stream().filter(PircbotxBridgeListener::isOperatorLike).count();
+    int operatorCount = (int) nicks.stream().filter(n -> isOperatorLike(vocabulary, n)).count();
 
     bus.onNext(
         new ServerIrcEvent(

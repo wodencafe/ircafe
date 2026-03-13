@@ -1,13 +1,16 @@
 package cafe.woden.ircclient.ui.coordinator;
 
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.UserListDockable;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
+import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -25,16 +28,37 @@ import org.slf4j.LoggerFactory;
 public final class ChatChannelListCoordinator {
 
   private static final Logger log = LoggerFactory.getLogger(ChatChannelListCoordinator.class);
+  private static final ModeRoutingPort NO_OP_MODE_ROUTING =
+      new ModeRoutingPort() {
+        @Override
+        public void putPendingModeTarget(String serverId, String channel, TargetRef target) {}
+
+        @Override
+        public TargetRef removePendingModeTarget(String serverId, String channel) {
+          return null;
+        }
+
+        @Override
+        public TargetRef getPendingModeTarget(String serverId, String channel) {
+          return null;
+        }
+
+        @Override
+        public void clearServer(String serverId) {}
+      };
 
   private final ChannelListPanel channelListPanel;
   private final ServerTreeDockable serverTree;
   private final OutboundLineBus outboundBus;
+  private final IrcClientService irc;
+  private final ModeRoutingPort modeRoutingState;
   private final UserListStore userListStore;
   private final UserListDockable usersDock;
   private final Supplier<TargetRef> activeTargetSupplier;
   private final Function<String, String> currentNickLookup;
   private final BiFunction<String, String, String> topicLookup;
   private final BiFunction<String, String, List<String>> banListSnapshotLookup;
+  private CompositeDisposable bindDisposables;
 
   private final FlowableProcessor<String> channelListCommandRequests =
       PublishProcessor.<String>create().toSerialized();
@@ -49,9 +73,37 @@ public final class ChatChannelListCoordinator {
       Function<String, String> currentNickLookup,
       BiFunction<String, String, String> topicLookup,
       BiFunction<String, String, List<String>> banListSnapshotLookup) {
+    this(
+        channelListPanel,
+        serverTree,
+        outboundBus,
+        userListStore,
+        usersDock,
+        activeTargetSupplier,
+        currentNickLookup,
+        topicLookup,
+        banListSnapshotLookup,
+        null,
+        NO_OP_MODE_ROUTING);
+  }
+
+  public ChatChannelListCoordinator(
+      ChannelListPanel channelListPanel,
+      ServerTreeDockable serverTree,
+      OutboundLineBus outboundBus,
+      UserListStore userListStore,
+      UserListDockable usersDock,
+      Supplier<TargetRef> activeTargetSupplier,
+      Function<String, String> currentNickLookup,
+      BiFunction<String, String, String> topicLookup,
+      BiFunction<String, String, List<String>> banListSnapshotLookup,
+      IrcClientService irc,
+      ModeRoutingPort modeRoutingState) {
     this.channelListPanel = Objects.requireNonNull(channelListPanel, "channelListPanel");
     this.serverTree = serverTree;
     this.outboundBus = Objects.requireNonNull(outboundBus, "outboundBus");
+    this.irc = irc;
+    this.modeRoutingState = (modeRoutingState == null) ? NO_OP_MODE_ROUTING : modeRoutingState;
     this.userListStore = Objects.requireNonNull(userListStore, "userListStore");
     this.usersDock = Objects.requireNonNull(usersDock, "usersDock");
     this.activeTargetSupplier =
@@ -64,6 +116,7 @@ public final class ChatChannelListCoordinator {
 
   public void bind(CompositeDisposable disposables) {
     Objects.requireNonNull(disposables, "disposables");
+    this.bindDisposables = disposables;
 
     channelListPanel.setOnJoinChannel(
         channel -> {
@@ -169,6 +222,9 @@ public final class ChatChannelListCoordinator {
           if (sid.isBlank()) sid = channelListServerIdForActions();
           String ch = normalizeChannelName(channel);
           if (sid.isBlank() || ch.isEmpty()) return;
+          if (sendRawModeCommand(disposables, sid, "MODE " + ch + " +b", "ban-list refresh")) {
+            return;
+          }
           serverTree.selectTarget(TargetRef.channelList(sid));
           outboundBus.emit("/mode " + ch + " +b");
         });
@@ -178,6 +234,10 @@ public final class ChatChannelListCoordinator {
           if (sid.isBlank()) sid = channelListServerIdForActions();
           String ch = normalizeChannelName(channel);
           if (sid.isBlank() || ch.isEmpty()) return;
+          modeRoutingState.putPendingModeTarget(sid, ch, new TargetRef(sid, ch));
+          if (sendRawModeCommand(disposables, sid, "MODE " + ch, "channel-mode refresh")) {
+            return;
+          }
           outboundBus.emit("/mode " + ch);
         });
     channelListPanel.setOnChannelModeSetRequest(
@@ -187,6 +247,9 @@ public final class ChatChannelListCoordinator {
           String ch = normalizeChannelName(channel);
           String spec = Objects.toString(modeSpec, "").trim();
           if (sid.isBlank() || ch.isEmpty() || spec.isEmpty()) return;
+          if (sendRawModeCommand(disposables, sid, "MODE " + ch + " " + spec, "channel-mode set")) {
+            return;
+          }
           outboundBus.emit("/mode " + ch + " " + spec);
         });
     channelListPanel.setCanEditChannelModes(this::canEditChannelModes);
@@ -349,6 +412,10 @@ public final class ChatChannelListCoordinator {
     String channel = normalizeChannelName(target.target());
     if (sid.isBlank() || channel.isEmpty()) return;
     serverTree.selectTarget(TargetRef.channelList(sid));
+    modeRoutingState.putPendingModeTarget(sid, channel, new TargetRef(sid, channel));
+    if (sendRawModeCommand(bindDisposables, sid, "MODE " + channel, "tree channel-mode refresh")) {
+      return;
+    }
     outboundBus.emit("/mode " + channel);
   }
 
@@ -362,7 +429,41 @@ public final class ChatChannelListCoordinator {
     if (sid.isBlank() || channel.isEmpty() || modeSpec.isEmpty()) return;
     if (!canEditChannelModes(sid, channel)) return;
     serverTree.selectTarget(TargetRef.channelList(sid));
+    if (sendRawModeCommand(
+        bindDisposables, sid, "MODE " + channel + " " + modeSpec, "tree channel-mode set")) {
+      return;
+    }
     outboundBus.emit("/mode " + channel + " " + modeSpec);
+  }
+
+  private boolean sendRawModeCommand(
+      CompositeDisposable disposables, String serverId, String rawLine, String action) {
+    if (irc == null) return false;
+    Completable send = irc.sendRaw(serverId, rawLine);
+    if (send == null) return false;
+    if (disposables == null) {
+      send.subscribe(
+          () -> {},
+          err ->
+              log.debug(
+                  "[ircafe] raw MODE send failed action={} serverId={} line={}",
+                  action,
+                  serverId,
+                  rawLine,
+                  err));
+      return true;
+    }
+    disposables.add(
+        send.subscribe(
+            () -> {},
+            err ->
+                log.debug(
+                    "[ircafe] raw MODE send failed action={} serverId={} line={}",
+                    action,
+                    serverId,
+                    rawLine,
+                    err)));
+    return true;
   }
 
   private static String normalizeChannelName(String channel) {

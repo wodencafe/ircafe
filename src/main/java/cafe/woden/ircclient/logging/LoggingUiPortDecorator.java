@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.logging;
 
 import cafe.woden.ircclient.app.api.PresenceEvent;
-import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.api.UiPortDecorator;
+import cafe.woden.ircclient.app.api.UiTranscriptPort;
+import cafe.woden.ircclient.app.api.UiTranscriptPortDecorator;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
@@ -18,8 +18,8 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** {@link UiPort} decorator that persists everything that reaches the transcript boundary. */
-public final class LoggingUiPortDecorator extends UiPortDecorator {
+/** {@link UiTranscriptPort} decorator that persists transcript-bound UI events. */
+public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
 
   private static final Logger log = LoggerFactory.getLogger(LoggingUiPortDecorator.class);
   private static final int DEDUP_MAX_ENTRIES = 20_000;
@@ -37,7 +37,10 @@ public final class LoggingUiPortDecorator extends UiPortDecorator {
           .build();
 
   public LoggingUiPortDecorator(
-      UiPort delegate, ChatLogWriter writer, LogLineFactory factory, LogProperties props) {
+      UiTranscriptPort delegate,
+      ChatLogWriter writer,
+      LogLineFactory factory,
+      LogProperties props) {
     super(delegate);
     this.writer = Objects.requireNonNull(writer, "writer");
     this.factory = Objects.requireNonNull(factory, "factory");

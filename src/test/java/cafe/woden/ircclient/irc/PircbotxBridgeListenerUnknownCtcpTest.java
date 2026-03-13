@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.state.ServerIsupportState;
 import com.google.common.collect.ImmutableMap;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -98,6 +99,7 @@ class PircbotxBridgeListenerUnknownCtcpTest {
         false,
         new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
         null,
-        new NoOpPlaybackCursorProvider());
+        new NoOpPlaybackCursorProvider(),
+        new ServerIsupportState());
   }
 }

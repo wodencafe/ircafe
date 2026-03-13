@@ -167,6 +167,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void recordHighlight(TargetRef target, String fromNick, String snippet) {
+    delegate.recordHighlight(target, fromNick, snippet);
+  }
+
+  @Override
   public void recordRuleMatch(TargetRef target, String fromNick, String ruleLabel, String snippet) {
     delegate.recordRuleMatch(target, fromNick, ruleLabel, snippet);
   }
@@ -241,6 +246,12 @@ public abstract class UiPortDecorator implements UiPort {
   @Override
   public void endChannelBanList(String serverId, String channel, String summary) {
     delegate.endChannelBanList(serverId, channel, summary);
+  }
+
+  @Override
+  public void setChannelModeSnapshot(
+      String serverId, String channel, String rawModes, String friendlySummary) {
+    delegate.setChannelModeSnapshot(serverId, channel, rawModes, friendlySummary);
   }
 
   @Override
@@ -350,6 +361,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public void appendChat(TargetRef target, String from, String text) {
+    delegate.appendChat(target, from, text);
+  }
+
+  @Override
   public void appendChat(TargetRef target, String from, String text, boolean outgoingLocalEcho) {
     delegate.appendChat(target, from, text, outgoingLocalEcho);
   }
@@ -437,6 +453,11 @@ public abstract class UiPortDecorator implements UiPort {
       String messageId,
       Map<String, String> ircv3Tags) {
     delegate.appendSpoilerChatAt(target, at, from, text, messageId, ircv3Tags);
+  }
+
+  @Override
+  public void appendAction(TargetRef target, String from, String action) {
+    delegate.appendAction(target, from, action);
   }
 
   @Override

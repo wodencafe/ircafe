@@ -1,0 +1,108 @@
+package cafe.woden.ircclient.irc;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
+import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.state.ServerIsupportState;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedSet;
+import io.reactivex.rxjava3.processors.FlowableProcessor;
+import io.reactivex.rxjava3.processors.PublishProcessor;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.pircbotx.Channel;
+import org.pircbotx.User;
+import org.pircbotx.hooks.events.UnknownEvent;
+
+class PircbotxBridgeListenerRosterTest {
+
+  @Test
+  void emitRosterUsesNegotiatedPrefixCharactersAndRanks() throws Exception {
+    FlowableProcessor<ServerIrcEvent> bus =
+        PublishProcessor.<ServerIrcEvent>create().toSerialized();
+    List<ServerIrcEvent> seen = new ArrayList<>();
+    bus.subscribe(seen::add);
+
+    ServerIsupportState isupportState = new ServerIsupportState();
+    PircbotxBridgeListener listener =
+        new PircbotxBridgeListener(
+            "libera",
+            new PircbotxConnectionState("libera"),
+            bus,
+            c -> {},
+            (c, reason) -> {},
+            (bot, fromNick, message) -> false,
+            false,
+            false,
+            false,
+            new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
+            null,
+            new NoOpPlaybackCursorProvider(),
+            isupportState);
+
+    listener.onUnknown(
+        new UnknownEvent(
+            null,
+            "me",
+            "irc.example",
+            "005",
+            ":irc.example 005 me PREFIX=(qaohv)!&@%+ :are supported by this server",
+            List.of("me", "PREFIX=(qaohv)!&@%+"),
+            ImmutableMap.of()));
+
+    User owner = mock(User.class);
+    when(owner.getNick()).thenReturn("alice");
+    User voice = mock(User.class);
+    when(voice.getNick()).thenReturn("bob");
+
+    Channel channel = mock(Channel.class);
+    when(channel.getName()).thenReturn("#ircafe");
+    ImmutableSortedSet<User> users =
+        ImmutableSortedSet.orderedBy(
+                Comparator.comparing(User::getNick, String.CASE_INSENSITIVE_ORDER))
+            .add(voice, owner)
+            .build();
+    ImmutableSortedSet<User> owners =
+        ImmutableSortedSet.orderedBy(
+                Comparator.comparing(User::getNick, String.CASE_INSENSITIVE_ORDER))
+            .add(owner)
+            .build();
+    ImmutableSortedSet<User> voices =
+        ImmutableSortedSet.orderedBy(
+                Comparator.comparing(User::getNick, String.CASE_INSENSITIVE_ORDER))
+            .add(voice)
+            .build();
+    ImmutableSortedSet<User> none =
+        ImmutableSortedSet.orderedBy(
+                Comparator.comparing(User::getNick, String.CASE_INSENSITIVE_ORDER))
+            .build();
+    when(channel.getUsers()).thenReturn(users);
+    when(channel.getOwners()).thenReturn(owners);
+    when(channel.getSuperOps()).thenReturn(none);
+    when(channel.getOps()).thenReturn(none);
+    when(channel.getHalfOps()).thenReturn(none);
+    when(channel.getVoices()).thenReturn(voices);
+
+    Method emitRoster = PircbotxBridgeListener.class.getDeclaredMethod("emitRoster", Channel.class);
+    emitRoster.setAccessible(true);
+    emitRoster.invoke(listener, channel);
+
+    ServerIrcEvent emitted = seen.getLast();
+    IrcEvent.NickListUpdated nickListUpdated =
+        assertInstanceOf(IrcEvent.NickListUpdated.class, emitted.event());
+
+    assertEquals(
+        List.of("alice", "bob"),
+        nickListUpdated.nicks().stream().map(IrcEvent.NickInfo::nick).toList());
+    assertEquals("!", nickListUpdated.nicks().get(0).prefix());
+    assertEquals("+", nickListUpdated.nicks().get(1).prefix());
+    assertEquals(1, nickListUpdated.operatorCount());
+  }
+}

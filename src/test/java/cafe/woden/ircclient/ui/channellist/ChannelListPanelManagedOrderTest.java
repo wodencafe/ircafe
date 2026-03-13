@@ -7,11 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.state.ServerIsupportState;
 import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import java.awt.Cursor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -20,9 +22,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JDialog;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 class ChannelListPanelManagedOrderTest {
 
@@ -269,6 +275,41 @@ class ChannelListPanelManagedOrderTest {
   }
 
   @Test
+  void refreshOpenDetailsDialogDoesNotClearPendingDialogStateBeforeDialogBecomesDisplayable()
+      throws Exception {
+    ChannelListPanel panel = new ChannelListPanel();
+
+    onEdt(
+        () -> {
+          try {
+            JDialog dialog = Mockito.mock(JDialog.class);
+            Mockito.when(dialog.isDisplayable()).thenReturn(false);
+            Object state =
+                newChannelDetailsDialogState(
+                    dialog, "libera", "#ircafe", ChannelListPanel.ChannelDetailsSource.MANAGED);
+            setPrivateField(panel, "channelDetailsDialog", state);
+
+            invokeNoArg(panel, "refreshOpenDetailsDialog");
+
+            assertSame(state, privateFieldValue(panel, "channelDetailsDialog"));
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void friendlyModeSummaryUsesNegotiatedVocabularyForQuietLists() throws Exception {
+    ChannelListPanel panel = new ChannelListPanel();
+    ServerIsupportState isupportState = new ServerIsupportState();
+    isupportState.applyIsupportToken("libera", "PREFIX", "(ov)@+");
+    isupportState.applyIsupportToken("libera", "CHANMODES", "bq,,,");
+    onEdt(() -> panel.setModeVocabularyProvider(isupportState::vocabularyForServer));
+
+    assertEquals("+q quiet rule alice", invokeFriendlyModeSummary(panel, "libera", "+q alice"));
+  }
+
+  @Test
   void listLoadingDisablesActionsAndUsesAlisButtonActivityIconUntilCompletion() throws Exception {
     ChannelListPanel panel = new ChannelListPanel();
     onEdt(() -> panel.setServerId("libera"));
@@ -305,6 +346,18 @@ class ChannelListPanelManagedOrderTest {
     Field f = target.getClass().getDeclaredField(name);
     f.setAccessible(true);
     return type.cast(f.get(target));
+  }
+
+  private static Object privateFieldValue(Object target, String name) throws Exception {
+    Field f = target.getClass().getDeclaredField(name);
+    f.setAccessible(true);
+    return f.get(target);
+  }
+
+  private static void setPrivateField(Object target, String name, Object value) throws Exception {
+    Field f = target.getClass().getDeclaredField(name);
+    f.setAccessible(true);
+    f.set(target, value);
   }
 
   private static void onEdt(Runnable r) throws InvocationTargetException, InterruptedException {
@@ -345,6 +398,59 @@ class ChannelListPanelManagedOrderTest {
       Thread.sleep(25);
     }
     assertTrue(condition.getAsBoolean(), "Timed out waiting for condition");
+  }
+
+  private static String invokeFriendlyModeSummary(
+      ChannelListPanel panel, String serverId, String rawModes) throws Exception {
+    Method method =
+        ChannelListPanel.class.getDeclaredMethod(
+            "friendlyModeSummaryFromRaw", String.class, String.class);
+    method.setAccessible(true);
+    return (String) method.invoke(panel, serverId, rawModes);
+  }
+
+  private static void invokeNoArg(Object target, String methodName) throws Exception {
+    Method method = target.getClass().getDeclaredMethod(methodName);
+    method.setAccessible(true);
+    method.invoke(target);
+  }
+
+  private static Object newChannelDetailsDialogState(
+      JDialog dialog, String serverId, String channel, ChannelListPanel.ChannelDetailsSource source)
+      throws Exception {
+    Class<?> type =
+        Class.forName(
+            "cafe.woden.ircclient.ui.channellist.ChannelListPanel$ChannelDetailsDialogState");
+    var constructor =
+        type.getDeclaredConstructor(
+            JDialog.class,
+            String.class,
+            String.class,
+            ChannelListPanel.ChannelDetailsSource.class,
+            JTextField.class,
+            JTextField.class,
+            JTextField.class,
+            JTextField.class,
+            JTextArea.class,
+            JButton.class,
+            JTextField.class,
+            JTextArea.class,
+            JTextArea.class);
+    constructor.setAccessible(true);
+    return constructor.newInstance(
+        dialog,
+        serverId,
+        channel,
+        source,
+        new JTextField(),
+        new JTextField(),
+        new JTextField(),
+        new JTextField(),
+        new JTextArea(),
+        new JButton(),
+        new JTextField(),
+        new JTextArea(),
+        new JTextArea());
   }
 
   @FunctionalInterface

@@ -1,10 +1,10 @@
 package cafe.woden.ircclient.app;
 
+import cafe.woden.ircclient.state.api.ModeVocabulary;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import java.util.List;
 import java.util.Set;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,51 +16,24 @@ import org.springframework.stereotype.Component;
 @Component
 @ApplicationLayer
 public final class ModeFormattingService {
+  private final ServerIsupportStatePort serverIsupportState;
 
-  private static final Logger log = LoggerFactory.getLogger(ModeFormattingService.class);
-
-  public List<String> prettyModeChange(String actor, String channel, String details) {
-    List<String> out = ModePrettyPrinter.pretty(actor, channel, details);
-    if (log.isDebugEnabled()) {
-      log.debug(
-          "MODEDBG formatting prettyModeChange actor={} channel={} details={} -> lines={}",
-          clip(actor),
-          clip(channel),
-          clip(details),
-          out.size());
-    }
-    return out;
+  public ModeFormattingService(ServerIsupportStatePort serverIsupportState) {
+    this.serverIsupportState = serverIsupportState;
   }
 
-  public String describeCurrentChannelModes(String details) {
-    String s = ModeSummary.describeCurrentChannelModes(details);
-    if (log.isDebugEnabled()) {
-      log.debug(
-          "MODEDBG formatting describeCurrentChannelModes details={} -> {}",
-          clip(details),
-          clip(s));
-    }
-    return s;
+  public List<String> prettyModeChange(
+      String serverId, String actor, String channel, String details) {
+    ModeVocabulary vocabulary = serverIsupportState.vocabularyForServer(serverId);
+    return ModePrettyPrinter.pretty(vocabulary, actor, channel, details);
+  }
+
+  public String describeCurrentChannelModes(String serverId, String details) {
+    ModeVocabulary vocabulary = serverIsupportState.vocabularyForServer(serverId);
+    return ModeSummary.describeCurrentChannelModes(vocabulary, details);
   }
 
   public String describeBufferedJoinModes(Set<Character> plus, Set<Character> minus) {
-    String s = ModeSummary.describeBufferedJoinModes(plus, minus);
-    if (log.isDebugEnabled()) {
-      log.debug(
-          "MODEDBG formatting describeBufferedJoinModes plus={} minus={} -> {}",
-          plus,
-          minus,
-          clip(s));
-    }
-    return s;
-  }
-
-  private static String clip(Object v) {
-    if (v == null) return "<null>";
-    String s = String.valueOf(v);
-    if (s == null) return "<null>";
-    s = s.replace('\n', ' ').replace('\r', ' ');
-    if (s.length() > 200) return s.substring(0, 197) + "...";
-    return s;
+    return ModeSummary.describeBufferedJoinModes(plus, minus);
   }
 }

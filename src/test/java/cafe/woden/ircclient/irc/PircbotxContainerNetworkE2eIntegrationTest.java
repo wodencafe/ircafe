@@ -13,6 +13,7 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.net.ServerProxyResolver;
+import cafe.woden.ircclient.state.ServerIsupportState;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.io.BufferedReader;
@@ -1003,6 +1004,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
             bouncerBackends,
             bouncerDiscoveryEvents,
             timers,
+            new ServerIsupportState(),
             playbackCursorProviderProvider);
 
     return new ServiceFixture(service, timers, heartbeatExec, reconnectExec);

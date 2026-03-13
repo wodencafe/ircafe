@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.app;
 
+import cafe.woden.ircclient.state.api.ModeVocabulary;
+import cafe.woden.ircclient.state.api.NegotiatedModeSemantics;
 import java.util.ArrayList;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Pretty-prints IRC MODE changes into human-friendly sentences.
@@ -13,36 +13,29 @@ import org.slf4j.LoggerFactory;
  */
 final class ModePrettyPrinter {
 
-  private static final Logger log = LoggerFactory.getLogger(ModePrettyPrinter.class);
-
   private ModePrettyPrinter() {}
 
   public static List<String> pretty(String actor, String channel, String details) {
+    return pretty(ModeVocabulary.fallback(), actor, channel, details);
+  }
+
+  public static List<String> pretty(
+      ModeVocabulary vocabulary, String actor, String channel, String details) {
     String a = normalizeActor(actor, details);
     String d = normalizeDetails(channel, details);
-
-    if (log.isDebugEnabled()) {
-      log.debug(
-          "MODEDBG pretty actor={} channel={} details={} -> normalizedActor={} normalizedDetails={} ",
-          clip(actor),
-          clip(channel),
-          clip(details),
-          clip(a),
-          clip(d));
-    }
 
     if (d == null || d.isBlank()) {
       return List.of(a + " sets mode.");
     }
 
-    ParsedModes pm = parse(d);
+    ParsedModes pm = parse(vocabulary, d);
     if (pm == null || pm.changes.isEmpty()) {
       return List.of(a + " sets mode: " + d);
     }
 
     List<String> out = new ArrayList<>();
     for (ModeChange c : pm.changes) {
-      String s = prettyOne(a, c);
+      String s = prettyOne(vocabulary, a, c);
       if (s != null && !s.isBlank()) out.add(s);
     }
     if (out.isEmpty()) {
@@ -119,7 +112,7 @@ final class ModePrettyPrinter {
     return d;
   }
 
-  private static ParsedModes parse(String details) {
+  private static ParsedModes parse(ModeVocabulary vocabulary, String details) {
     if (details == null) return null;
     String d = details.trim();
     if (d.isEmpty()) return null;
@@ -130,10 +123,6 @@ final class ModePrettyPrinter {
     String modeSeq = parts[0];
     List<String> args = new ArrayList<>();
     for (int i = 1; i < parts.length; i++) args.add(parts[i]);
-
-    if (log.isDebugEnabled()) {
-      log.debug("MODEDBG parse details={} modeSeq={} args={}", clip(details), clip(modeSeq), args);
-    }
 
     List<ModeChange> changes = new ArrayList<>();
     boolean adding = true;
@@ -150,7 +139,7 @@ final class ModePrettyPrinter {
         continue;
       }
 
-      boolean wantsArg = wantsArgument(c, adding);
+      boolean wantsArg = NegotiatedModeSemantics.takesArgument(vocabulary, c, adding);
       String arg = null;
       if (wantsArg && argIdx < args.size()) {
         arg = args.get(argIdx++);
@@ -160,74 +149,39 @@ final class ModePrettyPrinter {
 
     if (argIdx < args.size() && changes.size() == 1) {
       ModeChange only = changes.get(0);
-      if (only.arg == null && wantsArgument(only.mode, only.add)) {
+      if (only.arg == null
+          && NegotiatedModeSemantics.takesArgument(vocabulary, only.mode, only.add)) {
         only.arg = String.join(" ", args.subList(argIdx, args.size()));
       }
     }
 
-    if (log.isDebugEnabled()) {
-      log.debug("MODEDBG parse changes(beforeSuppress)={}", changesToString(changes));
-    }
-
-    List<ModeChange> suppressed = suppressEchoedChannelModes(modeSeq, args, changes);
-
-    if (log.isDebugEnabled()) {
-      if (suppressed != changes) {
-        log.debug("MODEDBG parse changes(afterSuppress)={}", changesToString(suppressed));
-      } else {
-        log.debug("MODEDBG parse suppress not applied");
-      }
-    }
+    List<ModeChange> suppressed = suppressEchoedChannelModes(vocabulary, changes);
 
     return new ParsedModes(suppressed);
   }
 
-  private static String changesToString(List<ModeChange> changes) {
-    if (changes == null) return "<null>";
-    StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < changes.size(); i++) {
-      ModeChange c = changes.get(i);
-      if (i > 0) sb.append(", ");
-      sb.append(c.add ? "+" : "-").append(c.mode);
-      if (c.arg != null) sb.append("(").append(c.arg).append(")");
-    }
-    return sb.toString();
-  }
-
-  private static String clip(Object v) {
-    if (v == null) return "<null>";
-    String s = String.valueOf(v);
-    if (s == null) return "<null>";
-    s = s.replace('\n', ' ').replace('\r', ' ');
-    if (s.length() > 240) return s.substring(0, 237) + "...";
-    return s;
-  }
-
   private static List<ModeChange> suppressEchoedChannelModes(
-      String modeSeq, List<String> args, List<ModeChange> changes) {
-    if (modeSeq == null || changes == null || changes.isEmpty()) return changes;
+      ModeVocabulary vocabulary, List<ModeChange> changes) {
+    if (changes == null || changes.isEmpty()) return changes;
 
-    int privilegeCount = 0;
+    int statusCount = 0;
+    int argCount = 0;
     int otherArgCount = 0;
-    boolean adding = true;
-    for (int i = 0; i < modeSeq.length(); i++) {
-      char c = modeSeq.charAt(i);
-      if (c == '+') {
-        adding = true;
-        continue;
+    for (ModeChange change : changes) {
+      if (change == null) continue;
+      if (change.arg != null && !change.arg.isBlank()) {
+        argCount++;
       }
-      if (c == '-') {
-        adding = false;
-        continue;
+      if (NegotiatedModeSemantics.isStatusMode(vocabulary, change.mode, change.arg)) {
+        statusCount++;
+      } else if (NegotiatedModeSemantics.takesArgument(vocabulary, change.mode, change.add)) {
+        otherArgCount++;
       }
-
-      if (isPrivilegeMode(c)) privilegeCount++;
-      else if (wantsArgument(c, adding)) otherArgCount++;
     }
 
-    if (privilegeCount == 0) return changes;
+    if (statusCount == 0) return changes;
     if (otherArgCount != 0) return changes;
-    if (args == null || args.size() != privilegeCount) return changes;
+    if (argCount != statusCount) return changes;
 
     boolean hasEcho = false;
     for (ModeChange c : changes) {
@@ -246,13 +200,6 @@ final class ModePrettyPrinter {
     return out;
   }
 
-  private static boolean isPrivilegeMode(char mode) {
-    return switch (mode) {
-      case 'o', 'v', 'h', 'a', 'q', 'y' -> true;
-      default -> false;
-    };
-  }
-
   private static boolean isEchoCandidateMode(char mode) {
     return switch (mode) {
       case 'n', 't', 'C', 'g' -> true;
@@ -260,28 +207,16 @@ final class ModePrettyPrinter {
     };
   }
 
-  private static boolean wantsArgument(char mode, boolean adding) {
-    return switch (mode) {
-      // user prefix modes
-      case 'o', 'v', 'h', 'a', 'q', 'y' -> true;
-
-      // list modes
-      case 'b', 'e', 'I' -> true;
-
-      // key/limit and other common arg modes
-      case 'k' -> true; // sometimes -k includes key, sometimes not; best-effort
-      case 'l' -> adding; // +l needs arg; -l often doesn't
-      case 'f', 'j' -> true;
-
-      default -> false;
-    };
-  }
-
-  private static String prettyOne(String actor, ModeChange c) {
+  private static String prettyOne(ModeVocabulary vocabulary, String actor, ModeChange c) {
     String who = actor;
     String arg = c.arg;
     char m = c.mode;
     boolean add = c.add;
+
+    if (m == 'q' && NegotiatedModeSemantics.isListMode(vocabulary, m, arg)) {
+      if (add) return who + " adds a quiet rule for " + safe(arg) + ".";
+      return who + " removes a quiet rule for " + safe(arg) + ".";
+    }
 
     // Privilege modes
     if (m == 'o') {
@@ -300,12 +235,7 @@ final class ModePrettyPrinter {
       if (add) return who + " gives admin privileges to " + safe(arg) + ".";
       return who + " removes admin privileges from " + safe(arg) + ".";
     }
-    if (m == 'q') {
-      // Network-dependent: +q may be owner status or quiet-mask list mode.
-      if (looksLikeQuietMaskTarget(arg)) {
-        if (add) return who + " adds a quiet rule for " + safe(arg) + ".";
-        return who + " removes a quiet rule for " + safe(arg) + ".";
-      }
+    if (m == 'q' && NegotiatedModeSemantics.isStatusMode(vocabulary, m, arg)) {
       if (add) return who + " gives owner privileges to " + safe(arg) + ".";
       return who + " removes owner privileges from " + safe(arg) + ".";
     }
@@ -315,11 +245,11 @@ final class ModePrettyPrinter {
       if (add) return who + " adds a ban on " + safe(arg) + ".";
       return who + " removes a ban on " + safe(arg) + ".";
     }
-    if (m == 'e') {
+    if (vocabulary != null && vocabulary.isExceptsMode(m)) {
       if (add) return who + " adds a ban exception for " + safe(arg) + ".";
       return who + " removes a ban exception for " + safe(arg) + ".";
     }
-    if (m == 'I') {
+    if (vocabulary != null && vocabulary.isInvexMode(m)) {
       if (add) return who + " adds an invite exception for " + safe(arg) + ".";
       return who + " removes an invite exception for " + safe(arg) + ".";
     }
@@ -375,15 +305,6 @@ final class ModePrettyPrinter {
   private static String safe(String s) {
     if (s == null || s.isBlank()) return "(unknown)";
     return s;
-  }
-
-  private static boolean looksLikeQuietMaskTarget(String arg) {
-    String a = safe(arg);
-    return a.indexOf('!') >= 0
-        || a.indexOf('@') >= 0
-        || a.indexOf('*') >= 0
-        || a.indexOf('$') >= 0
-        || a.indexOf(':') >= 0;
   }
 
   private record ParsedModes(List<ModeChange> changes) {}

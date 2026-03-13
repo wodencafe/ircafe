@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.app;
 
+import cafe.woden.ircclient.state.api.ModeVocabulary;
+import cafe.woden.ircclient.state.api.NegotiatedModeSemantics;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -27,6 +29,10 @@ final class ModeSummary {
   }
 
   static String describeCurrentChannelModes(String details) {
+    return describeCurrentChannelModes(ModeVocabulary.fallback(), details);
+  }
+
+  static String describeCurrentChannelModes(ModeVocabulary vocabulary, String details) {
     if (details == null) return "";
     String d = details.trim();
     if (d.isEmpty()) return "";
@@ -77,6 +83,10 @@ final class ModeSummary {
           extras.add("channel key removed");
         }
         continue;
+      }
+
+      if (NegotiatedModeSemantics.takesArgument(vocabulary, c, sign == '+')) {
+        if (argIdx < args.size()) argIdx++;
       }
 
       if (sign == '+') plus.add(c);

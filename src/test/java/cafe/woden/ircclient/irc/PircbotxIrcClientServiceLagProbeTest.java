@@ -13,6 +13,7 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
+import cafe.woden.ircclient.state.ServerIsupportState;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -90,6 +91,7 @@ class PircbotxIrcClientServiceLagProbeTest {
         bouncerBackends,
         bouncerDiscoveryEvents,
         timers,
+        new ServerIsupportState(),
         playbackCursorProviderProvider);
   }
 
