@@ -12,7 +12,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -20,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.pircbotx.Channel;
 import org.pircbotx.User;
 import org.pircbotx.hooks.events.UnknownEvent;
+import org.pircbotx.hooks.events.UserListEvent;
 
 class PircbotxBridgeListenerRosterTest {
 
@@ -90,9 +90,9 @@ class PircbotxBridgeListenerRosterTest {
     when(channel.getHalfOps()).thenReturn(none);
     when(channel.getVoices()).thenReturn(voices);
 
-    Method emitRoster = PircbotxBridgeListener.class.getDeclaredMethod("emitRoster", Channel.class);
-    emitRoster.setAccessible(true);
-    emitRoster.invoke(listener, channel);
+    UserListEvent event = mock(UserListEvent.class);
+    when(event.getChannel()).thenReturn(channel);
+    listener.onUserList(event);
 
     ServerIrcEvent emitted = seen.getLast();
     IrcEvent.NickListUpdated nickListUpdated =

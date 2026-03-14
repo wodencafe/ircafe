@@ -4,84 +4,66 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 
 class PircbotxBridgeListenerPrivateTargetTest {
 
   @Test
-  void resolvesPrivateTargetFromChannelSourceWhenActionEventLacksRawLine() throws Exception {
-    Method m =
-        PircbotxBridgeListener.class.getDeclaredMethod("privmsgTargetFromEvent", Object.class);
-    m.setAccessible(true);
-
-    String target = (String) m.invoke(null, new FakeActionEvent("alice"));
+  void resolvesPrivateTargetFromChannelSourceWhenActionEventLacksRawLine() {
+    String target = PircbotxEventAccessors.privmsgTargetFromEvent(new FakeActionEvent("alice"));
     assertEquals("alice", target);
   }
 
   @Test
-  void senderNickFallsBackToNoticeRawPrefix() throws Exception {
-    Method m = PircbotxBridgeListener.class.getDeclaredMethod("senderNickFromEvent", Object.class);
-    m.setAccessible(true);
-
+  void senderNickFallsBackToNoticeRawPrefix() {
     String nick =
-        (String)
-            m.invoke(
-                null,
-                new FakeRawNoticeEvent(
-                    ":alis!alis@services.libera.chat NOTICE wodencafe2 :End of output."));
+        PircbotxEventAccessors.senderNickFromEvent(
+            new FakeRawNoticeEvent(
+                ":alis!alis@services.libera.chat NOTICE wodencafe2 :End of output."));
     assertEquals("alis", nick);
   }
 
   @Test
-  void senderNickDefaultsToServerWhenUnavailable() throws Exception {
-    Method m = PircbotxBridgeListener.class.getDeclaredMethod("senderNickFromEvent", Object.class);
-    m.setAccessible(true);
-
-    String nick = (String) m.invoke(null, new Object());
+  void senderNickDefaultsToServerWhenUnavailable() {
+    String nick = PircbotxEventAccessors.senderNickFromEvent(new Object());
     assertEquals("server", nick);
   }
 
   @Test
-  void senderNickPrefersRawPrefixOverGetSourceFallback() throws Exception {
-    Method m = PircbotxBridgeListener.class.getDeclaredMethod("senderNickFromEvent", Object.class);
-    m.setAccessible(true);
-
+  void senderNickPrefersRawPrefixOverGetSourceFallback() {
     String nick =
-        (String)
-            m.invoke(
-                null,
-                new FakeRawNoticeWithSourceEvent(
-                    ":alis!alis@services.libera.chat NOTICE wodencafe2 :#test 12 :topic",
-                    "wodencafe2"));
+        PircbotxEventAccessors.senderNickFromEvent(
+            new FakeRawNoticeWithSourceEvent(
+                ":alis!alis@services.libera.chat NOTICE wodencafe2 :#test 12 :topic",
+                "wodencafe2"));
     assertEquals("alis", nick);
   }
 
   @Test
-  void parseChannelRedirectExtractsBothChannelsFromErrLinkchannel() throws Exception {
-    Method m = PircbotxBridgeListener.class.getDeclaredMethod("parseChannelRedirect", String.class);
-    m.setAccessible(true);
+  void modeDetailsPreferRawModeLinePayload() {
+    String details =
+        PircbotxEventAccessors.modeDetailsFromEvent(
+            new FakeModeEvent(":nick!ident@host MODE #ircafe +ov alice bob"), "#ircafe");
 
-    Object parsed =
-        m.invoke(null, ":irc.example.net 470 chris #old #new :Forwarding to another channel");
-    assertNotNull(parsed);
-
-    Method from = parsed.getClass().getDeclaredMethod("fromChannel");
-    Method to = parsed.getClass().getDeclaredMethod("toChannel");
-    from.setAccessible(true);
-    to.setAccessible(true);
-
-    assertEquals("#old", from.invoke(parsed));
-    assertEquals("#new", to.invoke(parsed));
+    assertEquals("+ov alice bob", details);
   }
 
   @Test
-  void parseChannelRedirectReturnsNullWhenRedirectTargetMissing() throws Exception {
-    Method m = PircbotxBridgeListener.class.getDeclaredMethod("parseChannelRedirect", String.class);
-    m.setAccessible(true);
+  void parseChannelRedirectExtractsBothChannelsFromErrLinkchannel() {
+    ParsedChannelRedirect parsed =
+        PircbotxInboundLineParsers.parseChannelRedirect(
+            ":irc.example.net 470 chris #old #new :Forwarding to another channel");
+    assertNotNull(parsed);
 
-    Object parsed =
-        m.invoke(null, ":irc.example.net 470 chris #old :Forwarding to another channel");
+    assertEquals("#old", parsed.fromChannel());
+    assertEquals("#new", parsed.toChannel());
+  }
+
+  @Test
+  void parseChannelRedirectReturnsNullWhenRedirectTargetMissing() {
+    ParsedChannelRedirect parsed =
+        PircbotxInboundLineParsers.parseChannelRedirect(
+            ":irc.example.net 470 chris #old :Forwarding to another channel");
     assertNull(parsed);
   }
 
@@ -128,6 +110,19 @@ class PircbotxBridgeListenerPrivateTargetTest {
     @SuppressWarnings("unused")
     public Object getSource() {
       return source;
+    }
+  }
+
+  private static final class FakeModeEvent {
+    private final String rawLine;
+
+    private FakeModeEvent(String rawLine) {
+      this.rawLine = rawLine;
+    }
+
+    @SuppressWarnings("unused")
+    public String getRawLine() {
+      return rawLine;
     }
   }
 
