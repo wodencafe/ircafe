@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.capability;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -24,12 +24,12 @@ import org.pircbotx.exception.CAPException;
  * This handler batches all desired capabilities into a single request while preserving optional
  * semantics (missing caps are ignored).
  */
-final class BatchedEnableCapHandler implements CapHandler {
+public final class BatchedEnableCapHandler implements CapHandler {
 
   private final List<String> desiredCaps;
   private final Set<String> pendingCapsLower = new LinkedHashSet<>();
 
-  BatchedEnableCapHandler(List<String> desiredCaps) {
+  public BatchedEnableCapHandler(List<String> desiredCaps) {
     LinkedHashMap<String, String> dedup = new LinkedHashMap<>();
     for (String cap : desiredCaps) {
       String normalized = normalizeCap(cap);
