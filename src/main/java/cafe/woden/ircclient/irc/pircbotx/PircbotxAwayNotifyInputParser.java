@@ -4,6 +4,7 @@ import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.mode.*;
+import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.playback.*;
 import com.google.common.collect.ImmutableMap;
 import java.io.IOException;

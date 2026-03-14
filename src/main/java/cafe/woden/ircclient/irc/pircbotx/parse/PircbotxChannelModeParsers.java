@@ -1,8 +1,9 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxIrcClientService;
 import cafe.woden.ircclient.irc.playback.*;
 
 /**
@@ -11,10 +12,10 @@ import cafe.woden.ircclient.irc.playback.*;
  * <p>This class intentionally contains only pure parsing helpers extracted from {@link
  * PircbotxIrcClientService} during refactor step B2.5.
  */
-final class PircbotxChannelModeParsers {
+public final class PircbotxChannelModeParsers {
   private PircbotxChannelModeParsers() {}
 
-  record ParsedRpl324(String channel, String details) {}
+  public record ParsedRpl324(String channel, String details) {}
 
   /**
    * Parse RPL_CHANNELMODEIS (324).
@@ -22,7 +23,7 @@ final class PircbotxChannelModeParsers {
    * <p>Expected tokenized format (after optional prefix): {@code 324 <me> <#chan> <modes>
    * [args...]}.
    */
-  static ParsedRpl324 parseRpl324(String line) {
+  public static ParsedRpl324 parseRpl324(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;

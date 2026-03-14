@@ -1,8 +1,9 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxIrcClientService;
 import cafe.woden.ircclient.irc.playback.*;
 
 /**
@@ -11,12 +12,13 @@ import cafe.woden.ircclient.irc.playback.*;
  * <p>This class intentionally contains only pure parsing helpers extracted from {@link
  * PircbotxIrcClientService} during refactor step B2.2.
  */
-final class PircbotxAwayParsers {
+public final class PircbotxAwayParsers {
   private PircbotxAwayParsers() {}
 
-  static record ParsedAwayNotify(String nick, IrcEvent.AwayState awayState, String message) {}
+  public static record ParsedAwayNotify(
+      String nick, IrcEvent.AwayState awayState, String message) {}
 
-  static record ParsedAwayConfirmation(boolean away, String server, String message) {}
+  public static record ParsedAwayConfirmation(boolean away, String server, String message) {}
 
   /**
    * Parse an IRCv3 away-notify line, which is delivered as a raw {@code AWAY} command from another
@@ -29,7 +31,7 @@ final class PircbotxAwayParsers {
    *   <li>{@code :nick!user@host AWAY} (clears away)
    * </ul>
    */
-  static ParsedAwayNotify parseAwayNotify(String line) {
+  public static ParsedAwayNotify parseAwayNotify(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (!s.startsWith(":")) return null;
@@ -67,7 +69,7 @@ final class PircbotxAwayParsers {
   }
 
   /** Parse RPL_UNAWAY (305) / RPL_NOWAWAY (306) lines and extract the trailing message. */
-  static ParsedAwayConfirmation parseRpl305or306Away(String line) {
+  public static ParsedAwayConfirmation parseRpl305or306Away(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;

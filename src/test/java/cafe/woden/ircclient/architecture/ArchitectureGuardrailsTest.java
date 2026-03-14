@@ -73,8 +73,8 @@ class ArchitectureGuardrailsTest {
         @Override
         public boolean test(JavaClass input) {
           String name = input.getName();
-          return name.equals("cafe.woden.ircclient.irc.pircbotx.PircbotxZncParsers")
-              || name.startsWith("cafe.woden.ircclient.irc.pircbotx.PircbotxZncParsers$")
+          return name.equals("cafe.woden.ircclient.irc.pircbotx.parse.PircbotxZncParsers")
+              || name.startsWith("cafe.woden.ircclient.irc.pircbotx.parse.PircbotxZncParsers$")
               || name.equals("cafe.woden.ircclient.irc.soju.PircbotxSojuParsers")
               || name.startsWith("cafe.woden.ircclient.irc.soju.PircbotxSojuParsers$");
         }

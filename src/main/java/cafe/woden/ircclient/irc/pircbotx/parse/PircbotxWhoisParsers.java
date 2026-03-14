@@ -1,8 +1,9 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxIrcClientService;
 import cafe.woden.ircclient.irc.playback.*;
 
 /**
@@ -11,16 +12,16 @@ import cafe.woden.ircclient.irc.playback.*;
  * <p>This class intentionally contains only pure parsing helpers extracted from {@link
  * PircbotxIrcClientService} during refactor step B2.3.
  */
-final class PircbotxWhoisParsers {
+public final class PircbotxWhoisParsers {
   private PircbotxWhoisParsers() {}
 
-  static record ParsedWhoisUser(String nick, String user, String host) {}
+  public static record ParsedWhoisUser(String nick, String user, String host) {}
 
-  static record ParsedWhoisAway(String nick, String message) {}
+  public static record ParsedWhoisAway(String nick, String message) {}
 
-  static record ParsedWhoisAccount(String nick, String account) {}
+  public static record ParsedWhoisAccount(String nick, String account) {}
 
-  static ParsedWhoisUser parseRpl311WhoisUser(String line) {
+  public static ParsedWhoisUser parseRpl311WhoisUser(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
@@ -48,7 +49,7 @@ final class PircbotxWhoisParsers {
     return new ParsedWhoisUser(nick, user, host);
   }
 
-  static ParsedWhoisUser parseRpl314WhowasUser(String line) {
+  public static ParsedWhoisUser parseRpl314WhowasUser(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
@@ -76,7 +77,7 @@ final class PircbotxWhoisParsers {
     return new ParsedWhoisUser(nick, user, host);
   }
 
-  static ParsedWhoisAway parseRpl301WhoisAway(String line) {
+  public static ParsedWhoisAway parseRpl301WhoisAway(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
@@ -106,7 +107,7 @@ final class PircbotxWhoisParsers {
     return new ParsedWhoisAway(nick, msg);
   }
 
-  static String parseRpl318EndOfWhoisNick(String line) {
+  public static String parseRpl318EndOfWhoisNick(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
@@ -131,7 +132,7 @@ final class PircbotxWhoisParsers {
    *
    * <p>Common format: ":server 330 <me> <nick> <account> :is logged in as"
    */
-  static ParsedWhoisAccount parseRpl330WhoisAccount(String line) {
+  public static ParsedWhoisAccount parseRpl330WhoisAccount(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;

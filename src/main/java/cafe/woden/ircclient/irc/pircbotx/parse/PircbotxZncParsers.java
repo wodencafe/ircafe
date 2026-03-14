@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;

@@ -1,11 +1,12 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxUtil;
 import cafe.woden.ircclient.irc.playback.*;
 
-final class PircbotxWhoUserhostParsers {
+public final class PircbotxWhoUserhostParsers {
   private PircbotxWhoUserhostParsers() {}
 
   /**
@@ -14,7 +15,7 @@ final class PircbotxWhoUserhostParsers {
    * <p>Servers may split ISUPPORT across multiple 005 lines. Call this on each line and treat a
    * single true result as sufficient evidence of WHOX support.
    */
-  static boolean parseRpl005IsupportHasWhox(String line) {
+  public static boolean parseRpl005IsupportHasWhox(String line) {
     if (line == null) return false;
     String s = line.trim();
     if (s.isEmpty()) return false;
@@ -38,13 +39,13 @@ final class PircbotxWhoUserhostParsers {
     return false;
   }
 
-  static record ParsedWhoReply(
+  public static record ParsedWhoReply(
       String channel, String nick, String user, String host, String flags) {}
 
-  static record ParsedWhoxReply(String channel, String nick, String user, String host) {}
+  public static record ParsedWhoxReply(String channel, String nick, String user, String host) {}
 
   /** Strict parse for IRCafe-issued WHOX scans: WHO <chan> %tcuhnaf,<token> */
-  static record ParsedWhoxTcuhnaf(
+  public static record ParsedWhoxTcuhnaf(
       String token,
       String channel,
       String user,
@@ -53,9 +54,9 @@ final class PircbotxWhoUserhostParsers {
       String flags,
       String account) {}
 
-  static record UserhostEntry(String nick, String hostmask, IrcEvent.AwayState awayState) {}
+  public static record UserhostEntry(String nick, String hostmask, IrcEvent.AwayState awayState) {}
 
-  static ParsedWhoReply parseRpl352WhoReply(String line) {
+  public static ParsedWhoReply parseRpl352WhoReply(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
@@ -94,7 +95,7 @@ final class PircbotxWhoUserhostParsers {
    *
    * We validate the token and channel-ish shape to avoid mis-parsing arbitrary WHOX formats.
    */
-  static ParsedWhoxTcuhnaf parseRpl354WhoxTcuhnaf(String line, String expectedToken) {
+  public static ParsedWhoxTcuhnaf parseRpl354WhoxTcuhnaf(String line, String expectedToken) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
@@ -165,7 +166,7 @@ final class PircbotxWhoUserhostParsers {
    * <p>This is used to detect schema mismatches when strict parsing fails, so enrichment can fall
    * back to plain WHO/USERHOST instead of silently "working" without producing account updates.
    */
-  static boolean seemsRpl354WhoxWithToken(String line, String expectedToken) {
+  public static boolean seemsRpl354WhoxWithToken(String line, String expectedToken) {
     if (line == null || expectedToken == null || expectedToken.isBlank()) return false;
     String s = line.trim();
     if (s.isEmpty()) return false;
@@ -204,7 +205,7 @@ final class PircbotxWhoUserhostParsers {
   }
 
   /** Parse RPL_WHOSPCRPL (354) / WHOX lines. */
-  static ParsedWhoxReply parseRpl354WhoxReply(String line) {
+  public static ParsedWhoxReply parseRpl354WhoxReply(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
@@ -297,7 +298,7 @@ final class PircbotxWhoUserhostParsers {
    *
    * <p>Format: ":server 302 <me> :nick[\*]=[+|-]user@host ..."
    */
-  static java.util.List<UserhostEntry> parseRpl302Userhost(String line) {
+  public static java.util.List<UserhostEntry> parseRpl302Userhost(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;

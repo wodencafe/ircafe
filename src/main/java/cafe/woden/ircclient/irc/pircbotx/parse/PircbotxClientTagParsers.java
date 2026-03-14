@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -14,7 +14,7 @@ import java.util.Set;
  * <p>Per IRCv3 message-tags, servers may optionally advertise {@code CLIENTTAGDENY} in numeric 005
  * to indicate which client-only tags are blocked / ignored.
  */
-final class PircbotxClientTagParsers {
+public final class PircbotxClientTagParsers {
   private PircbotxClientTagParsers() {}
 
   /**
@@ -24,7 +24,7 @@ final class PircbotxClientTagParsers {
    * <p>Returns {@code null} if the token is not present on this line. Returns empty string if
    * {@code CLIENTTAGDENY=} is present (meaning "allow all client-only tags").
    */
-  static String parseRpl005ClientTagDenyValue(String line) {
+  public static String parseRpl005ClientTagDenyValue(String line) {
     if (line == null) return null;
     String s = line.trim();
     if (s.isEmpty()) return null;
@@ -62,7 +62,7 @@ final class PircbotxClientTagParsers {
    *
    * <p>If {@code clientTagDenyValue} is null/blank, the default is to allow all client-only tags.
    */
-  static boolean isClientOnlyTagAllowed(String clientTagDenyValue, String tagNameNoPlus) {
+  public static boolean isClientOnlyTagAllowed(String clientTagDenyValue, String tagNameNoPlus) {
     String deny = (clientTagDenyValue == null) ? "" : clientTagDenyValue.trim();
     if (deny.isEmpty()) return true;
 

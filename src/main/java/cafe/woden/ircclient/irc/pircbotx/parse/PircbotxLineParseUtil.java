@@ -1,8 +1,9 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxIrcClientService;
 import cafe.woden.ircclient.irc.playback.*;
 
 /**
@@ -11,7 +12,7 @@ import cafe.woden.ircclient.irc.playback.*;
  * <p>Keeping these in a dedicated file reduces the size/visual noise of the service and makes
  * future parser extraction less risky.
  */
-final class PircbotxLineParseUtil {
+public final class PircbotxLineParseUtil {
 
   private PircbotxLineParseUtil() {}
 
@@ -23,7 +24,7 @@ final class PircbotxLineParseUtil {
    *   <li>Unwraps some toString() formats like "UnknownEvent(line=...)"
    * </ul>
    */
-  static String normalizeIrcLineForParsing(String raw) {
+  public static String normalizeIrcLineForParsing(String raw) {
     if (raw == null) return null;
     String s = raw.trim();
 
@@ -62,7 +63,7 @@ final class PircbotxLineParseUtil {
     return s;
   }
 
-  static boolean looksNumeric(String s) {
+  public static boolean looksNumeric(String s) {
     if (s == null || s.isBlank()) return false;
     for (int i = 0; i < s.length(); i++) {
       char c = s.charAt(i);
@@ -71,13 +72,13 @@ final class PircbotxLineParseUtil {
     return true;
   }
 
-  static boolean looksLikeChannel(String s) {
+  public static boolean looksLikeChannel(String s) {
     if (s == null || s.isBlank()) return false;
     char c = s.charAt(0);
     return c == '#' || c == '&';
   }
 
-  static boolean looksLikeUser(String s) {
+  public static boolean looksLikeUser(String s) {
     if (s == null || s.isBlank()) return false;
     if (looksLikeChannel(s)) return false;
     if (looksNumeric(s)) return false;
@@ -88,7 +89,7 @@ final class PircbotxLineParseUtil {
     return true;
   }
 
-  static boolean looksLikeHost(String s) {
+  public static boolean looksLikeHost(String s) {
     if (s == null || s.isBlank()) return false;
     if (looksLikeChannel(s)) return false;
     if (s.indexOf('!') >= 0 || s.indexOf('@') >= 0) return false;
@@ -96,7 +97,7 @@ final class PircbotxLineParseUtil {
     return (s.indexOf('.') >= 0) || (s.indexOf(':') >= 0) || (s.indexOf('/') >= 0);
   }
 
-  static boolean looksLikeIp(String s) {
+  public static boolean looksLikeIp(String s) {
     if (s == null || s.isBlank()) return false;
     // IPv4
     if (s.matches("\\d{1,3}(?:\\.\\d{1,3}){3}")) return true;
@@ -104,7 +105,7 @@ final class PircbotxLineParseUtil {
     return s.indexOf(':') >= 0 && s.matches("[0-9A-Fa-f:]+");
   }
 
-  static boolean looksLikeNick(String s) {
+  public static boolean looksLikeNick(String s) {
     if (s == null || s.isBlank()) return false;
     if (looksLikeChannel(s)) return false;
     if (looksNumeric(s)) return false;

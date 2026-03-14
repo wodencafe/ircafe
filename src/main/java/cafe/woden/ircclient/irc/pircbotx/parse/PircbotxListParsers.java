@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -9,29 +9,30 @@ import java.util.Locale;
 import java.util.Objects;
 
 /** Parsers/formatters for IRC channel-list numerics (321/322/323). */
-final class PircbotxListParsers {
+public final class PircbotxListParsers {
   private PircbotxListParsers() {}
 
-  static record ListEntry(
+  public static record ListEntry(
       String channel, int visibleUsers, boolean hasVisibleUsers, String topic) {}
 
-  static record BanListEntry(String channel, String mask, String setBy, Long setAtEpochSeconds) {}
+  public static record BanListEntry(
+      String channel, String mask, String setBy, Long setAtEpochSeconds) {}
 
-  static String parseListStartBanner(String command, String trailing) {
+  public static String parseListStartBanner(String command, String trailing) {
     String cmd = Objects.toString(command, "").trim();
     if (!"321".equals(cmd)) return null;
     String t = Objects.toString(trailing, "").trim();
     return t.isEmpty() ? "Channel list follows" : t;
   }
 
-  static String parseListEndSummary(String command, String trailing) {
+  public static String parseListEndSummary(String command, String trailing) {
     String cmd = Objects.toString(command, "").trim();
     if (!"323".equals(cmd)) return null;
     String t = Objects.toString(trailing, "").trim();
     return t.isEmpty() ? "End of /LIST" : t;
   }
 
-  static ListEntry parseListEntry(
+  public static ListEntry parseListEntry(
       String command, List<String> params, String trailing, String myNick) {
     String cmd = Objects.toString(command, "").trim();
     if (!"322".equals(cmd)) return null;
@@ -54,7 +55,7 @@ final class PircbotxListParsers {
     return new ListEntry(channel, Math.max(-1, visibleUsers), hasVisibleUsers, topic);
   }
 
-  static ListEntry parseAlisNoticeEntry(String fromNick, String text) {
+  public static ListEntry parseAlisNoticeEntry(String fromNick, String text) {
     String from = Objects.toString(fromNick, "").trim();
     if (!isLikelyAlisSource(from)) return null;
 
@@ -102,7 +103,7 @@ final class PircbotxListParsers {
     return new ListEntry(channel, users.intValue(), true, topic);
   }
 
-  static String parseAlisNoticeEndSummary(String fromNick, String text) {
+  public static String parseAlisNoticeEndSummary(String fromNick, String text) {
     String from = Objects.toString(fromNick, "").trim();
     if (!isLikelyAlisSource(from)) return null;
 
@@ -114,7 +115,7 @@ final class PircbotxListParsers {
     return raw;
   }
 
-  static BanListEntry parseBanListEntry(String command, List<String> params) {
+  public static BanListEntry parseBanListEntry(String command, List<String> params) {
     String cmd = Objects.toString(command, "").trim();
     if (!"367".equals(cmd)) return null;
     if (params == null || params.isEmpty()) return null;
@@ -141,7 +142,7 @@ final class PircbotxListParsers {
     return new BanListEntry(channel, mask, setBy, setAtEpochSeconds);
   }
 
-  static String parseBanListEndChannel(String command, List<String> params) {
+  public static String parseBanListEndChannel(String command, List<String> params) {
     String cmd = Objects.toString(command, "").trim();
     if (!"368".equals(cmd)) return null;
     if (params == null || params.isEmpty()) return null;
@@ -151,7 +152,7 @@ final class PircbotxListParsers {
     return PircbotxLineParseUtil.looksLikeChannel(channel) ? channel : null;
   }
 
-  static String parseBanListEndSummary(String command, String trailing) {
+  public static String parseBanListEndSummary(String command, String trailing) {
     String cmd = Objects.toString(command, "").trim();
     if (!"368".equals(cmd)) return null;
     String t = Objects.toString(trailing, "").trim();
@@ -162,7 +163,7 @@ final class PircbotxListParsers {
    * Returns a friendly rendering for LIST numerics, or {@code null} if the command is not part of
    * LIST handling (or if an entry line is malformed).
    */
-  static String tryFormatListNumeric(
+  public static String tryFormatListNumeric(
       String command, List<String> params, String trailing, String myNick) {
     String start = parseListStartBanner(command, trailing);
     if (start != null) return start;

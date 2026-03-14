@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -13,11 +13,11 @@ import java.util.Objects;
  * <p>Keeping these parsers out of the bridge listener makes future translator/coordinator
  * extractions less risky because the line-shape logic no longer lives inside the event adapter.
  */
-final class PircbotxInboundLineParsers {
+public final class PircbotxInboundLineParsers {
 
   private PircbotxInboundLineParsers() {}
 
-  static ParsedIrcLine parseIrcLine(String normalizedLine) {
+  public static ParsedIrcLine parseIrcLine(String normalizedLine) {
     if (normalizedLine == null) return null;
     String s = normalizedLine.trim();
     if (s.isEmpty()) return null;
@@ -51,7 +51,7 @@ final class PircbotxInboundLineParsers {
     return new ParsedIrcLine(prefix, cmd, params, trailing);
   }
 
-  static String rawTrailingFromIrcLine(String rawLine) {
+  public static String rawTrailingFromIrcLine(String rawLine) {
     String s = Objects.toString(rawLine, "");
     if (s.isEmpty()) return "";
 
@@ -83,7 +83,7 @@ final class PircbotxInboundLineParsers {
     return s.substring(trailingIdx + 2);
   }
 
-  static ParsedInviteLine parseInviteLine(ParsedIrcLine parsed) {
+  public static ParsedInviteLine parseInviteLine(ParsedIrcLine parsed) {
     if (parsed == null) return null;
     String cmd = Objects.toString(parsed.command(), "").trim();
     if (!"INVITE".equalsIgnoreCase(cmd)) return null;
@@ -130,7 +130,7 @@ final class PircbotxInboundLineParsers {
     return new ParsedInviteLine(from, invitee, channel, reason);
   }
 
-  static ParsedWallopsLine parseWallopsLine(ParsedIrcLine parsed) {
+  public static ParsedWallopsLine parseWallopsLine(ParsedIrcLine parsed) {
     if (parsed == null) return null;
     String cmd = Objects.toString(parsed.command(), "").trim();
     if (!"WALLOPS".equalsIgnoreCase(cmd)) return null;
@@ -156,7 +156,7 @@ final class PircbotxInboundLineParsers {
     return new ParsedWallopsLine(from, message);
   }
 
-  static String nickFromPrefix(String prefix) {
+  public static String nickFromPrefix(String prefix) {
     if (prefix == null || prefix.isBlank()) return "";
     String p = prefix;
     int bang = p.indexOf('!');
@@ -166,7 +166,7 @@ final class PircbotxInboundLineParsers {
     return p;
   }
 
-  static ParsedJoinFailure parseJoinFailure(String rawLine) {
+  public static ParsedJoinFailure parseJoinFailure(String rawLine) {
     if (rawLine == null || rawLine.isBlank()) return null;
     String s = PircbotxLineParseUtil.normalizeIrcLineForParsing(rawLine);
     if (s == null || s.isBlank()) return null;
@@ -200,7 +200,7 @@ final class PircbotxInboundLineParsers {
     return new ParsedJoinFailure(channel, trailing);
   }
 
-  static ParsedChannelRedirect parseChannelRedirect(String rawLine) {
+  public static ParsedChannelRedirect parseChannelRedirect(String rawLine) {
     if (rawLine == null || rawLine.isBlank()) return null;
     String normalized = PircbotxLineParseUtil.normalizeIrcLineForParsing(rawLine);
     ParsedIrcLine pl = parseIrcLine(normalized);
@@ -224,13 +224,3 @@ final class PircbotxInboundLineParsers {
     return new ParsedChannelRedirect(from, to, Objects.toString(pl.trailing(), "").trim());
   }
 }
-
-record ParsedJoinFailure(String channel, String message) {}
-
-record ParsedChannelRedirect(String fromChannel, String toChannel, String message) {}
-
-record ParsedInviteLine(String fromNick, String inviteeNick, String channel, String reason) {}
-
-record ParsedWallopsLine(String from, String message) {}
-
-record ParsedIrcLine(String prefix, String command, List<String> params, String trailing) {}
