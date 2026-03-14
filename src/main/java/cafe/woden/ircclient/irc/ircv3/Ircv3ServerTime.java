@@ -3,10 +3,11 @@ package cafe.woden.ircclient.irc.ircv3;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class Ircv3ServerTime {
-
-  private Ircv3ServerTime() {}
 
   public static Optional<Instant> fromEvent(Object pircbotxEvent) {
     if (pircbotxEvent == null) return Optional.empty();

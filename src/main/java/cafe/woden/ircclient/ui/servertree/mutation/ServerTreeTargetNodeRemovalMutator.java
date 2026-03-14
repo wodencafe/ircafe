@@ -1,21 +1,17 @@
 package cafe.woden.ircclient.ui.servertree.mutation;
 
-import java.util.Objects;
 import java.util.Set;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 /** Removes target tree nodes and publishes precise model removal events. */
+@RequiredArgsConstructor
 public final class ServerTreeTargetNodeRemovalMutator {
 
-  private final Set<DefaultMutableTreeNode> typingActivityNodes;
-  private final DefaultTreeModel model;
-
-  public ServerTreeTargetNodeRemovalMutator(
-      Set<DefaultMutableTreeNode> typingActivityNodes, DefaultTreeModel model) {
-    this.typingActivityNodes = Objects.requireNonNull(typingActivityNodes, "typingActivityNodes");
-    this.model = Objects.requireNonNull(model, "model");
-  }
+  @NonNull private final Set<DefaultMutableTreeNode> typingActivityNodes;
+  @NonNull private final DefaultTreeModel model;
 
   public boolean removeNodes(Set<DefaultMutableTreeNode> nodesToRemove) {
     if (nodesToRemove == null || nodesToRemove.isEmpty()) return false;

@@ -9,26 +9,29 @@ import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.ActionEvent;
 
 /** Emits structured action events for a single IRC connection. */
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 final class PircbotxActionEventEmitter {
   private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
 
-  private final String serverId;
+  @NonNull private final String serverId;
 
-  private final PircbotxRosterEmitter rosterEmitter;
-  private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
-  private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
-  private final PircbotxPrivateConversationSupport privateConversationSupport;
-  private final Consumer<ServerIrcEvent> emit;
-  private final Function<PircBotX, String> selfNickResolver;
-  private final Function<Object, String> privateTargetFromEvent;
+  @NonNull private final PircbotxRosterEmitter rosterEmitter;
+  @NonNull private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
+  @NonNull private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
+  @NonNull private final PircbotxPrivateConversationSupport privateConversationSupport;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
+  @NonNull private final Function<PircBotX, String> selfNickResolver;
+  @NonNull private final Function<Object, String> privateTargetFromEvent;
 
   PircbotxActionEventEmitter(
       String serverId,
@@ -38,16 +41,15 @@ final class PircbotxActionEventEmitter {
       Consumer<ServerIrcEvent> emit,
       Function<PircBotX, String> selfNickResolver,
       Function<Object, String> privateTargetFromEvent) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-
-    this.rosterEmitter = Objects.requireNonNull(rosterEmitter, "rosterEmitter");
-    this.chatHistoryBatches = Objects.requireNonNull(chatHistoryBatches, "chatHistoryBatches");
-    this.playbackCaptureRecorder = new PircbotxPlaybackCaptureRecorder(conn);
-    this.privateConversationSupport = new PircbotxPrivateConversationSupport(conn);
-    this.emit = Objects.requireNonNull(emit, "emit");
-    this.selfNickResolver = Objects.requireNonNull(selfNickResolver, "selfNickResolver");
-    this.privateTargetFromEvent =
-        Objects.requireNonNull(privateTargetFromEvent, "privateTargetFromEvent");
+    this(
+        serverId,
+        rosterEmitter,
+        chatHistoryBatches,
+        new PircbotxPlaybackCaptureRecorder(conn),
+        new PircbotxPrivateConversationSupport(conn),
+        emit,
+        selfNickResolver,
+        privateTargetFromEvent);
   }
 
   void onAction(ActionEvent event) {

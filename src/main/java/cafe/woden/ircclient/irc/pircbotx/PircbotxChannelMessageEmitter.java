@@ -10,20 +10,23 @@ import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.hooks.events.MessageEvent;
 
 /** Emits structured channel message events for a single IRC connection. */
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 final class PircbotxChannelMessageEmitter {
-  private final String serverId;
+  @NonNull private final String serverId;
 
-  private final PircbotxRosterEmitter rosterEmitter;
-  private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
-  private final Ircv3MultilineAccumulator multilineAccumulator;
-  private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
-  private final Consumer<ServerIrcEvent> emit;
+  @NonNull private final PircbotxRosterEmitter rosterEmitter;
+  @NonNull private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
+  @NonNull private final Ircv3MultilineAccumulator multilineAccumulator;
+  @NonNull private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
 
   PircbotxChannelMessageEmitter(
       String serverId,
@@ -32,14 +35,13 @@ final class PircbotxChannelMessageEmitter {
       PircbotxChatHistoryBatchCollector chatHistoryBatches,
       Ircv3MultilineAccumulator multilineAccumulator,
       Consumer<ServerIrcEvent> emit) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-
-    this.rosterEmitter = Objects.requireNonNull(rosterEmitter, "rosterEmitter");
-    this.chatHistoryBatches = Objects.requireNonNull(chatHistoryBatches, "chatHistoryBatches");
-    this.multilineAccumulator =
-        Objects.requireNonNull(multilineAccumulator, "multilineAccumulator");
-    this.playbackCaptureRecorder = new PircbotxPlaybackCaptureRecorder(conn);
-    this.emit = Objects.requireNonNull(emit, "emit");
+    this(
+        serverId,
+        rosterEmitter,
+        chatHistoryBatches,
+        multilineAccumulator,
+        new PircbotxPlaybackCaptureRecorder(conn),
+        emit);
   }
 
   void onMessage(MessageEvent event) {

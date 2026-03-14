@@ -13,6 +13,9 @@ import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 import org.pircbotx.User;
 import org.pircbotx.hooks.events.FingerEvent;
@@ -22,47 +25,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Handles inbound library-level CTCP requests and optional auto-replies. */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxInboundCtcpHandler {
   private static final Logger log = LoggerFactory.getLogger(PircbotxInboundCtcpHandler.class);
 
-  private final String serverId;
-  private final Supplier<String> selfNickHintSupplier;
-  private final BiPredicate<PircBotX, String> nickMatchesSelf;
-  private final BiPredicate<PircBotX, String> selfEchoDetector;
-  private final Function<PircBotX, String> selfNickResolver;
-  private final Function<PircBotX, String> botNickResolver;
-  private final Function<Object, String> rawLineResolver;
-  private final Function<Object, String> privateTargetResolver;
-  private final BiConsumer<String, User> hostmaskObserver;
-  private final Consumer<ServerIrcEvent> emit;
-  private final PircbotxBridgeListener.CtcpRequestHandler autoReplySender;
-
-  PircbotxInboundCtcpHandler(
-      String serverId,
-      Supplier<String> selfNickHintSupplier,
-      BiPredicate<PircBotX, String> nickMatchesSelf,
-      BiPredicate<PircBotX, String> selfEchoDetector,
-      Function<PircBotX, String> selfNickResolver,
-      Function<PircBotX, String> botNickResolver,
-      Function<Object, String> rawLineResolver,
-      Function<Object, String> privateTargetResolver,
-      BiConsumer<String, User> hostmaskObserver,
-      Consumer<ServerIrcEvent> emit,
-      PircbotxBridgeListener.CtcpRequestHandler autoReplySender) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.selfNickHintSupplier =
-        Objects.requireNonNull(selfNickHintSupplier, "selfNickHintSupplier");
-    this.nickMatchesSelf = Objects.requireNonNull(nickMatchesSelf, "nickMatchesSelf");
-    this.selfEchoDetector = Objects.requireNonNull(selfEchoDetector, "selfEchoDetector");
-    this.selfNickResolver = Objects.requireNonNull(selfNickResolver, "selfNickResolver");
-    this.botNickResolver = Objects.requireNonNull(botNickResolver, "botNickResolver");
-    this.rawLineResolver = Objects.requireNonNull(rawLineResolver, "rawLineResolver");
-    this.privateTargetResolver =
-        Objects.requireNonNull(privateTargetResolver, "privateTargetResolver");
-    this.hostmaskObserver = Objects.requireNonNull(hostmaskObserver, "hostmaskObserver");
-    this.emit = Objects.requireNonNull(emit, "emit");
-    this.autoReplySender = Objects.requireNonNull(autoReplySender, "autoReplySender");
-  }
+  @NonNull private final String serverId;
+  @NonNull private final Supplier<String> selfNickHintSupplier;
+  @NonNull private final BiPredicate<PircBotX, String> nickMatchesSelf;
+  @NonNull private final BiPredicate<PircBotX, String> selfEchoDetector;
+  @NonNull private final Function<PircBotX, String> selfNickResolver;
+  @NonNull private final Function<PircBotX, String> botNickResolver;
+  @NonNull private final Function<Object, String> rawLineResolver;
+  @NonNull private final Function<Object, String> privateTargetResolver;
+  @NonNull private final BiConsumer<String, User> hostmaskObserver;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
+  @NonNull private final PircbotxBridgeListener.CtcpRequestHandler autoReplySender;
 
   void onGenericCtcp(GenericCTCPEvent event) {
     String command = deriveCommand(event);

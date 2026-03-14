@@ -5,14 +5,15 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /** Small helper for building IRCv3 CHATHISTORY commands. */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class Ircv3ChatHistoryCommandBuilder {
 
   private static final DateTimeFormatter TS_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
-
-  private Ircv3ChatHistoryCommandBuilder() {}
 
   public static String buildBeforeByTimestamp(String target, Instant beforeExclusive, int limit) {
     Instant ts = Objects.requireNonNull(beforeExclusive, "beforeExclusive");

@@ -6,6 +6,8 @@ import java.net.ProxySelector;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.List;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * A lightweight {@link ProxySelector} that routes HTTP(S) traffic through the currently configured
@@ -14,12 +16,11 @@ import java.util.List;
  * <p>This is intentionally global + dynamic: {@link NetProxyContext#configure} may be called on
  * startup (and potentially later), and callers can keep using the same selector instance.
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class NetProxySelector extends ProxySelector {
 
   /** Reusable singleton selector. */
   public static final NetProxySelector INSTANCE = new NetProxySelector();
-
-  private NetProxySelector() {}
 
   @Override
   public List<Proxy> select(URI uri) {

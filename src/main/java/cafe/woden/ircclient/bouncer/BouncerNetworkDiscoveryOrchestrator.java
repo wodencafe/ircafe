@@ -10,6 +10,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 
@@ -19,35 +21,19 @@ import org.slf4j.Logger;
  * <p>Backend-specific parsing and naming policy are delegated to a mapping strategy.
  */
 @ApplicationLayer
+@RequiredArgsConstructor
 public final class BouncerNetworkDiscoveryOrchestrator {
 
-  private final Logger log;
-  private final BouncerNetworkMappingStrategy mappingStrategy;
-  private final ServerRegistry serverRegistry;
-  private final EphemeralServerRegistry ephemeralServers;
-  private final BouncerAutoConnectStore autoConnect;
-  private final RuntimeConfigStore runtimeConfig;
-  private final BouncerConnectionPort connectionPort;
+  @NonNull private final Logger log;
+  @NonNull private final BouncerNetworkMappingStrategy mappingStrategy;
+  @NonNull private final ServerRegistry serverRegistry;
+  @NonNull private final EphemeralServerRegistry ephemeralServers;
+  @NonNull private final BouncerAutoConnectStore autoConnect;
+  @NonNull private final RuntimeConfigStore runtimeConfig;
+  @NonNull private final BouncerConnectionPort connectionPort;
 
   /** Guard against repeated connect() calls when a bouncer repeats network discovery lines. */
   private final Set<String> autoConnectQueued = ConcurrentHashMap.newKeySet();
-
-  public BouncerNetworkDiscoveryOrchestrator(
-      Logger log,
-      BouncerNetworkMappingStrategy mappingStrategy,
-      ServerRegistry serverRegistry,
-      EphemeralServerRegistry ephemeralServers,
-      BouncerAutoConnectStore autoConnect,
-      RuntimeConfigStore runtimeConfig,
-      BouncerConnectionPort connectionPort) {
-    this.log = Objects.requireNonNull(log, "log");
-    this.mappingStrategy = Objects.requireNonNull(mappingStrategy, "mappingStrategy");
-    this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
-    this.ephemeralServers = Objects.requireNonNull(ephemeralServers, "ephemeralServers");
-    this.autoConnect = Objects.requireNonNull(autoConnect, "autoConnect");
-    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
-    this.connectionPort = Objects.requireNonNull(connectionPort, "connectionPort");
-  }
 
   public String backendId() {
     return mappingStrategy.backendId();

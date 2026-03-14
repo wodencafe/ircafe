@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Properties;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * Lightweight build/version helper.
@@ -17,14 +19,13 @@ import java.util.Properties;
  *   <li>System property: ircafe.version
  * </ol>
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class AppVersion {
 
   public static final String APP_NAME = "IRCafe";
 
   private static volatile String cachedVersion;
   private static volatile Instant cachedBuildTime;
-
-  private AppVersion() {}
 
   /** Returns the build/version string, or null if unknown. */
   public static String version() {

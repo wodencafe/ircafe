@@ -1,10 +1,11 @@
 package cafe.woden.ircclient.irc.ircv3;
 
 import java.util.Optional;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class Ircv3BatchTag {
-
-  private Ircv3BatchTag() {}
 
   public static Optional<String> fromEvent(Object pircbotxEvent) {
     if (pircbotxEvent == null) return Optional.empty();

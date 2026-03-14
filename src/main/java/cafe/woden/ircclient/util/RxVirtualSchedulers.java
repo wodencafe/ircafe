@@ -5,8 +5,11 @@ import io.reactivex.rxjava3.schedulers.Schedulers;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /** Shared RxJava schedulers backed by virtual-thread executors. */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class RxVirtualSchedulers {
   private static final int COMPUTATION_THREADS =
       Math.max(2, Runtime.getRuntime().availableProcessors());
@@ -18,8 +21,6 @@ public final class RxVirtualSchedulers {
   private static ScheduledExecutorService computationExec;
   private static Scheduler ioScheduler;
   private static Scheduler computationScheduler;
-
-  private RxVirtualSchedulers() {}
 
   public static Scheduler io() {
     synchronized (LOCK) {

@@ -7,14 +7,15 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /** Shared helpers for creating app-owned executors/threads on virtual threads. */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class VirtualThreads {
   private static final java.util.Set<ExecutorService> TRACKED_EXECUTORS =
       ConcurrentHashMap.newKeySet();
   private static final long TRACKED_SHUTDOWN_GRACE_MS = 1500L;
-
-  private VirtualThreads() {}
 
   public static ThreadFactory namedFactory(String baseName) {
     String base = normalize(baseName);

@@ -4,6 +4,8 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * Shared IRCv3 message-tag parsing helpers.
@@ -11,9 +13,8 @@ import java.util.Map;
  * <p>Parses tag maps from either PircBotX events ({@code getTags()}) or raw IRC lines
  * ({@code @k=v;... :prefix COMMAND ...}), normalizing keys and preserving insertion order.
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class Ircv3Tags {
-
-  private Ircv3Tags() {}
 
   public static Map<String, String> fromEvent(Object pircbotxEvent) {
     if (pircbotxEvent == null) return Map.of();

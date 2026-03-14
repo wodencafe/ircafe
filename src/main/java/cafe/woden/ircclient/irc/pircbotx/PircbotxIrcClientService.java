@@ -33,6 +33,9 @@ import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.pircbotx.PircBotX;
 import org.slf4j.Logger;
@@ -41,6 +44,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @InfrastructureLayer
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class PircbotxIrcClientService implements IrcBackendClientService {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxIrcClientService.class);
@@ -55,14 +59,14 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
   private final ServerCatalog serverCatalog;
   private final PircbotxInputParserHookInstaller inputParserHookInstaller;
   private final PircbotxBotFactory botFactory;
-  private final PircbotxBridgeListenerFactory bridgeListenerFactory;
+  @NonNull private final PircbotxBridgeListenerFactory bridgeListenerFactory;
   private final PircbotxConnectionTimersRx timers;
-  private final BouncerDiscoveryEventPort bouncerDiscoveryEvents;
-  private final BouncerBackendRegistry bouncerBackends;
+  @NonNull private final BouncerDiscoveryEventPort bouncerDiscoveryEvents;
+  @NonNull private final BouncerBackendRegistry bouncerBackends;
   private final RuntimeConfigStore runtimeConfig;
-  private final ServerIsupportStatePort serverIsupportState;
-  private final Ircv3StsPolicyService stsPolicies;
-  private String version;
+  @NonNull private final ServerIsupportStatePort serverIsupportState;
+  @NonNull private final Ircv3StsPolicyService stsPolicies;
+  private final String version;
 
   public PircbotxIrcClientService(
       IrcProperties props,
@@ -76,19 +80,18 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
       BouncerDiscoveryEventPort bouncerDiscoveryEvents,
       PircbotxConnectionTimersRx timers,
       ServerIsupportStatePort serverIsupportState) {
-    this.serverCatalog = serverCatalog;
-    version = props.client().version();
-    this.inputParserHookInstaller = inputParserHookInstaller;
-    this.botFactory = botFactory;
-    this.bridgeListenerFactory =
-        Objects.requireNonNull(bridgeListenerFactory, "bridgeListenerFactory");
-    this.runtimeConfig = runtimeConfig;
-    this.serverIsupportState = Objects.requireNonNull(serverIsupportState, "serverIsupportState");
-    this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
-    this.bouncerBackends = Objects.requireNonNull(bouncerBackends, "bouncerBackends");
-    this.bouncerDiscoveryEvents =
-        Objects.requireNonNull(bouncerDiscoveryEvents, "bouncerDiscoveryEvents");
-    this.timers = timers;
+    this(
+        serverCatalog,
+        inputParserHookInstaller,
+        botFactory,
+        bridgeListenerFactory,
+        timers,
+        bouncerDiscoveryEvents,
+        bouncerBackends,
+        runtimeConfig,
+        serverIsupportState,
+        stsPolicies,
+        Objects.requireNonNull(props, "props").client().version());
   }
 
   @Override

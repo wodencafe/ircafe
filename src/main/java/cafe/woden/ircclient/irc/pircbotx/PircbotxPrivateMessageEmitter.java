@@ -10,28 +10,31 @@ import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.PrivateMessageEvent;
 
 /** Emits structured private-message events for a single IRC connection. */
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 final class PircbotxPrivateMessageEmitter {
   private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
 
-  private final String serverId;
-  private final PircbotxConnectionState conn;
-  private final PircbotxRosterEmitter rosterEmitter;
-  private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
-  private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
-  private final Ircv3MultilineAccumulator multilineAccumulator;
-  private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
-  private final PircbotxPrivateConversationSupport privateConversationSupport;
-  private final Consumer<ServerIrcEvent> emit;
-  private final Function<PircBotX, String> selfNickResolver;
-  private final Function<Object, String> privateTargetFromEvent;
+  @NonNull private final String serverId;
+  @NonNull private final PircbotxConnectionState conn;
+  @NonNull private final PircbotxRosterEmitter rosterEmitter;
+  @NonNull private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
+  @NonNull private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
+  @NonNull private final Ircv3MultilineAccumulator multilineAccumulator;
+  @NonNull private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
+  @NonNull private final PircbotxPrivateConversationSupport privateConversationSupport;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
+  @NonNull private final Function<PircBotX, String> selfNickResolver;
+  @NonNull private final Function<Object, String> privateTargetFromEvent;
 
   PircbotxPrivateMessageEmitter(
       String serverId,
@@ -43,19 +46,18 @@ final class PircbotxPrivateMessageEmitter {
       Consumer<ServerIrcEvent> emit,
       Function<PircBotX, String> selfNickResolver,
       Function<Object, String> privateTargetFromEvent) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.conn = Objects.requireNonNull(conn, "conn");
-    this.rosterEmitter = Objects.requireNonNull(rosterEmitter, "rosterEmitter");
-    this.bouncerDiscovery = Objects.requireNonNull(bouncerDiscovery, "bouncerDiscovery");
-    this.chatHistoryBatches = Objects.requireNonNull(chatHistoryBatches, "chatHistoryBatches");
-    this.multilineAccumulator =
-        Objects.requireNonNull(multilineAccumulator, "multilineAccumulator");
-    this.playbackCaptureRecorder = new PircbotxPlaybackCaptureRecorder(conn);
-    this.privateConversationSupport = new PircbotxPrivateConversationSupport(conn);
-    this.emit = Objects.requireNonNull(emit, "emit");
-    this.selfNickResolver = Objects.requireNonNull(selfNickResolver, "selfNickResolver");
-    this.privateTargetFromEvent =
-        Objects.requireNonNull(privateTargetFromEvent, "privateTargetFromEvent");
+    this(
+        serverId,
+        conn,
+        rosterEmitter,
+        bouncerDiscovery,
+        chatHistoryBatches,
+        multilineAccumulator,
+        new PircbotxPlaybackCaptureRecorder(conn),
+        new PircbotxPrivateConversationSupport(conn),
+        emit,
+        selfNickResolver,
+        privateTargetFromEvent);
   }
 
   void onPrivateMessage(PrivateMessageEvent event) {

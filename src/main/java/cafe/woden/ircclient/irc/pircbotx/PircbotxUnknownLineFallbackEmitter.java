@@ -15,28 +15,32 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.UnknownEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Handles raw unknown-line fallbacks after the dedicated unknown-line translators decline them. */
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 final class PircbotxUnknownLineFallbackEmitter {
   private static final Logger log =
       LoggerFactory.getLogger(PircbotxUnknownLineFallbackEmitter.class);
 
-  private final String serverId;
+  @NonNull private final String serverId;
 
-  private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
-  private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
-  private final PircbotxServerResponseEmitter serverResponses;
-  private final PircbotxSaslFailureHandler saslFailures;
-  private final PircbotxIsupportObserver isupportObserver;
-  private final PircbotxWhoEventEmitter whoEvents;
-  private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
-  private final PircbotxPrivateConversationSupport privateConversationSupport;
-  private final Consumer<ServerIrcEvent> emit;
-  private final Function<PircBotX, String> selfNickResolver;
+  @NonNull private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
+  @NonNull private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
+  @NonNull private final PircbotxServerResponseEmitter serverResponses;
+  @NonNull private final PircbotxSaslFailureHandler saslFailures;
+  @NonNull private final PircbotxIsupportObserver isupportObserver;
+  @NonNull private final PircbotxWhoEventEmitter whoEvents;
+  @NonNull private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
+  @NonNull private final PircbotxPrivateConversationSupport privateConversationSupport;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
+  @NonNull private final Function<PircBotX, String> selfNickResolver;
 
   PircbotxUnknownLineFallbackEmitter(
       String serverId,
@@ -49,18 +53,18 @@ final class PircbotxUnknownLineFallbackEmitter {
       PircbotxWhoEventEmitter whoEvents,
       Consumer<ServerIrcEvent> emit,
       Function<PircBotX, String> selfNickResolver) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-
-    this.bouncerDiscovery = Objects.requireNonNull(bouncerDiscovery, "bouncerDiscovery");
-    this.chatHistoryBatches = Objects.requireNonNull(chatHistoryBatches, "chatHistoryBatches");
-    this.serverResponses = Objects.requireNonNull(serverResponses, "serverResponses");
-    this.saslFailures = Objects.requireNonNull(saslFailures, "saslFailures");
-    this.isupportObserver = Objects.requireNonNull(isupportObserver, "isupportObserver");
-    this.whoEvents = Objects.requireNonNull(whoEvents, "whoEvents");
-    this.playbackCaptureRecorder = new PircbotxPlaybackCaptureRecorder(conn);
-    this.privateConversationSupport = new PircbotxPrivateConversationSupport(conn);
-    this.emit = Objects.requireNonNull(emit, "emit");
-    this.selfNickResolver = Objects.requireNonNull(selfNickResolver, "selfNickResolver");
+    this(
+        serverId,
+        bouncerDiscovery,
+        chatHistoryBatches,
+        serverResponses,
+        saslFailures,
+        isupportObserver,
+        whoEvents,
+        new PircbotxPlaybackCaptureRecorder(conn),
+        new PircbotxPrivateConversationSupport(conn),
+        emit,
+        selfNickResolver);
   }
 
   void handle(UnknownEvent event, String lineWithTags, String normalizedRawLine) {
