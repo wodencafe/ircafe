@@ -1,32 +1,24 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
-import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Registers lifecycle and backend-management slash commands. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class LifecycleBackendOutboundCommandRegistrar implements OutboundCommandRegistrar {
 
-  private final OutboundJoinPartCommandService outboundJoinPartCommandService;
-  private final OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService;
-  private final BackendNamedOutboundCommandRouter backendNamedOutboundCommandRouter;
+  @NonNull private final OutboundJoinPartCommandService outboundJoinPartCommandService;
 
-  LifecycleBackendOutboundCommandRegistrar(
-      OutboundJoinPartCommandService outboundJoinPartCommandService,
-      OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService,
-      BackendNamedOutboundCommandRouter backendNamedOutboundCommandRouter) {
-    this.outboundJoinPartCommandService =
-        Objects.requireNonNull(outboundJoinPartCommandService, "outboundJoinPartCommandService");
-    this.outboundConnectionLifecycleCommandService =
-        Objects.requireNonNull(
-            outboundConnectionLifecycleCommandService, "outboundConnectionLifecycleCommandService");
-    this.backendNamedOutboundCommandRouter =
-        Objects.requireNonNull(
-            backendNamedOutboundCommandRouter, "backendNamedOutboundCommandRouter");
-  }
+  @NonNull
+  private final OutboundConnectionLifecycleCommandService outboundConnectionLifecycleCommandService;
+
+  @NonNull private final BackendNamedOutboundCommandRouter backendNamedOutboundCommandRouter;
 
   @Override
   public void registerCommands(OutboundCommandRegistry registry) {

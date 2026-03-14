@@ -14,12 +14,16 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
 /** Uploads local media files to Matrix via {@code /_matrix/media/v3/upload}. */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixMediaUploadClient {
 
   private static final Map<String, String> REQUEST_HEADERS =
@@ -30,11 +34,7 @@ final class MatrixMediaUploadClient {
 
   private static final ObjectMapper JSON = new ObjectMapper();
 
-  private final ServerProxyResolver proxyResolver;
-
-  MatrixMediaUploadClient(ServerProxyResolver proxyResolver) {
-    this.proxyResolver = Objects.requireNonNull(proxyResolver, "proxyResolver");
-  }
+  @NonNull private final ServerProxyResolver proxyResolver;
 
   UploadResult uploadFile(
       String serverId, IrcProperties.Server server, String accessToken, String uploadPath) {

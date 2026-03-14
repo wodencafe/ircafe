@@ -2,19 +2,17 @@ package cafe.woden.ircclient.net;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Initializes {@link NetHeartbeatContext} from configuration properties. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class NetHeartbeatBootstrap {
 
   private final IrcProperties props;
-
-  public NetHeartbeatBootstrap(IrcProperties props) {
-    this.props = props;
-  }
 
   @PostConstruct
   public void init() {

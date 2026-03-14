@@ -2,6 +2,7 @@ package cafe.woden.ircclient.logging;
 
 import cafe.woden.ircclient.irc.PlaybackCursorProvider;
 import java.util.OptionalLong;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
@@ -12,13 +13,10 @@ import org.springframework.stereotype.Component;
 @Primary
 @ConditionalOnProperty(prefix = "ircafe.logging", name = "enabled", havingValue = "true")
 @InfrastructureLayer
+@RequiredArgsConstructor
 public class ChatLogPlaybackCursorProvider implements PlaybackCursorProvider {
 
   private final ChatLogRepository repo;
-
-  public ChatLogPlaybackCursorProvider(ChatLogRepository repo) {
-    this.repo = repo;
-  }
 
   @Override
   public OptionalLong lastSeenEpochSeconds(String serverId) {

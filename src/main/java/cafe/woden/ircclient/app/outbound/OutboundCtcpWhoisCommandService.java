@@ -9,6 +9,7 @@ import cafe.woden.ircclient.state.api.CtcpRoutingPort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Locale;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -21,29 +22,18 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class OutboundCtcpWhoisCommandService {
 
   private final UiPort ui;
+
+  @Qualifier("ircMediatorInteractionPort")
   private final IrcMediatorInteractionPort mediatorIrc;
+
   private final TargetCoordinator targetCoordinator;
   private final ConnectionCoordinator connectionCoordinator;
   private final CtcpRoutingPort ctcpRoutingState;
   private final WhoisRoutingPort whoisRoutingState;
-
-  public OutboundCtcpWhoisCommandService(
-      UiPort ui,
-      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
-      TargetCoordinator targetCoordinator,
-      ConnectionCoordinator connectionCoordinator,
-      CtcpRoutingPort ctcpRoutingState,
-      WhoisRoutingPort whoisRoutingState) {
-    this.ui = ui;
-    this.mediatorIrc = mediatorIrc;
-    this.targetCoordinator = targetCoordinator;
-    this.connectionCoordinator = connectionCoordinator;
-    this.ctcpRoutingState = ctcpRoutingState;
-    this.whoisRoutingState = whoisRoutingState;
-  }
 
   public void requestWhois(CompositeDisposable disposables, TargetRef ctx, String nick) {
     if (ctx == null) return;

@@ -1,30 +1,21 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
-import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Registers identity, user lookups, and chat messaging slash commands. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class IdentityMessagingOutboundCommandRegistrar implements OutboundCommandRegistrar {
 
-  private final OutboundNickAwayCommandService outboundNickAwayCommandService;
-  private final OutboundMessagingCommandService outboundMessagingCommandService;
-  private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
-
-  IdentityMessagingOutboundCommandRegistrar(
-      OutboundNickAwayCommandService outboundNickAwayCommandService,
-      OutboundMessagingCommandService outboundMessagingCommandService,
-      OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService) {
-    this.outboundNickAwayCommandService =
-        Objects.requireNonNull(outboundNickAwayCommandService, "outboundNickAwayCommandService");
-    this.outboundMessagingCommandService =
-        Objects.requireNonNull(outboundMessagingCommandService, "outboundMessagingCommandService");
-    this.outboundCtcpWhoisCommandService =
-        Objects.requireNonNull(outboundCtcpWhoisCommandService, "outboundCtcpWhoisCommandService");
-  }
+  @NonNull private final OutboundNickAwayCommandService outboundNickAwayCommandService;
+  @NonNull private final OutboundMessagingCommandService outboundMessagingCommandService;
+  @NonNull private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
 
   @Override
   public void registerCommands(OutboundCommandRegistry registry) {

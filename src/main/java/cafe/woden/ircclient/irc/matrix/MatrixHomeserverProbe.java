@@ -11,12 +11,16 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
 /** Probes Matrix homeserver reachability via {@code /_matrix/client/versions}. */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixHomeserverProbe {
 
   private static final Map<String, String> REQUEST_HEADERS =
@@ -27,11 +31,7 @@ final class MatrixHomeserverProbe {
 
   private static final ObjectMapper JSON = new ObjectMapper();
 
-  private final ServerProxyResolver proxyResolver;
-
-  MatrixHomeserverProbe(ServerProxyResolver proxyResolver) {
-    this.proxyResolver = Objects.requireNonNull(proxyResolver, "proxyResolver");
-  }
+  @NonNull private final ServerProxyResolver proxyResolver;
 
   ProbeResult probe(String serverId, IrcProperties.Server server) {
     URI versionsUri = MatrixEndpointResolver.versionsUri(server);

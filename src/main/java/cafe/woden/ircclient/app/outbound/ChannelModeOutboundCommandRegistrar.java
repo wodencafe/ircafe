@@ -1,39 +1,23 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
-import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Registers channel moderation, invite, and mode/list commands. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class ChannelModeOutboundCommandRegistrar implements OutboundCommandRegistrar {
 
-  private final OutboundTopicKickCommandService outboundTopicKickCommandService;
-  private final OutboundInviteCommandService outboundInviteCommandService;
-  private final OutboundNamesWhoListCommandService outboundNamesWhoListCommandService;
-  private final OutboundMonitorCommandService outboundMonitorCommandService;
-  private final OutboundModeCommandService outboundModeCommandService;
-
-  ChannelModeOutboundCommandRegistrar(
-      OutboundTopicKickCommandService outboundTopicKickCommandService,
-      OutboundInviteCommandService outboundInviteCommandService,
-      OutboundNamesWhoListCommandService outboundNamesWhoListCommandService,
-      OutboundMonitorCommandService outboundMonitorCommandService,
-      OutboundModeCommandService outboundModeCommandService) {
-    this.outboundTopicKickCommandService =
-        Objects.requireNonNull(outboundTopicKickCommandService, "outboundTopicKickCommandService");
-    this.outboundInviteCommandService =
-        Objects.requireNonNull(outboundInviteCommandService, "outboundInviteCommandService");
-    this.outboundNamesWhoListCommandService =
-        Objects.requireNonNull(
-            outboundNamesWhoListCommandService, "outboundNamesWhoListCommandService");
-    this.outboundMonitorCommandService =
-        Objects.requireNonNull(outboundMonitorCommandService, "outboundMonitorCommandService");
-    this.outboundModeCommandService =
-        Objects.requireNonNull(outboundModeCommandService, "outboundModeCommandService");
-  }
+  @NonNull private final OutboundTopicKickCommandService outboundTopicKickCommandService;
+  @NonNull private final OutboundInviteCommandService outboundInviteCommandService;
+  @NonNull private final OutboundNamesWhoListCommandService outboundNamesWhoListCommandService;
+  @NonNull private final OutboundMonitorCommandService outboundMonitorCommandService;
+  @NonNull private final OutboundModeCommandService outboundModeCommandService;
 
   @Override
   public void registerCommands(OutboundCommandRegistry registry) {

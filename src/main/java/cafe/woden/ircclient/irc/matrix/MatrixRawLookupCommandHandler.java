@@ -4,25 +4,20 @@ import io.reactivex.rxjava3.core.Completable;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BiFunction;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixRawLookupCommandHandler {
   @FunctionalInterface
   interface WhowasInvoker {
     Completable invoke(String serverId, String target, int count);
   }
 
-  private final BiFunction<String, String, Completable> whoisInvoker;
-  private final BiFunction<String, String, Completable> requestNamesInvoker;
-  private final WhowasInvoker whowasInvoker;
-
-  MatrixRawLookupCommandHandler(
-      BiFunction<String, String, Completable> whoisInvoker,
-      BiFunction<String, String, Completable> requestNamesInvoker,
-      WhowasInvoker whowasInvoker) {
-    this.whoisInvoker = Objects.requireNonNull(whoisInvoker, "whoisInvoker");
-    this.requestNamesInvoker = Objects.requireNonNull(requestNamesInvoker, "requestNamesInvoker");
-    this.whowasInvoker = Objects.requireNonNull(whowasInvoker, "whowasInvoker");
-  }
+  @NonNull private final BiFunction<String, String, Completable> whoisInvoker;
+  @NonNull private final BiFunction<String, String, Completable> requestNamesInvoker;
+  @NonNull private final WhowasInvoker whowasInvoker;
 
   Completable handleWho(String serverId, List<String> arguments) {
     String token = argOrBlank(arguments, 0, "WHO requires a target");

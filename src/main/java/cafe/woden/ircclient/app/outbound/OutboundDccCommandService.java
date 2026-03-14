@@ -40,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -53,6 +54,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class OutboundDccCommandService {
   private static final int OFFER_ACCEPT_TIMEOUT_MS = 120_000;
   private static final int CONNECT_TIMEOUT_MS = 20_000;
@@ -62,11 +64,15 @@ public class OutboundDccCommandService {
   private static final String DCC_ERR_TAG = "(dcc-error)";
 
   private final UiPort ui;
+
+  @Qualifier("ircMediatorInteractionPort")
   private final IrcMediatorInteractionPort mediatorIrc;
+
   private final TargetCoordinator targetCoordinator;
   private final ConnectionCoordinator connectionCoordinator;
   private final DccTransferStore dccTransferStore;
 
+  @Qualifier(ExecutorConfig.OUTBOUND_DCC_EXECUTOR)
   private final ExecutorService io;
 
   private final ConcurrentMap<String, PendingChatOffer> pendingChatOffers =
@@ -78,21 +84,6 @@ public class OutboundDccCommandService {
       new ConcurrentHashMap<>();
   private final ConcurrentMap<String, ServerSocket> outgoingSendListeners =
       new ConcurrentHashMap<>();
-
-  public OutboundDccCommandService(
-      UiPort ui,
-      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
-      TargetCoordinator targetCoordinator,
-      ConnectionCoordinator connectionCoordinator,
-      DccTransferStore dccTransferStore,
-      @Qualifier(ExecutorConfig.OUTBOUND_DCC_EXECUTOR) ExecutorService io) {
-    this.ui = ui;
-    this.mediatorIrc = mediatorIrc;
-    this.targetCoordinator = targetCoordinator;
-    this.connectionCoordinator = connectionCoordinator;
-    this.dccTransferStore = dccTransferStore;
-    this.io = io;
-  }
 
   public void handleDcc(
       CompositeDisposable disposables, String subcommand, String nick, String argument) {

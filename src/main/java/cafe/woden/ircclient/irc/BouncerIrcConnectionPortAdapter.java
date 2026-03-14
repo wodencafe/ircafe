@@ -2,7 +2,8 @@ package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import io.reactivex.rxjava3.core.Completable;
-import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -10,13 +11,10 @@ import org.springframework.stereotype.Component;
 /** IRC-backed adapter for bouncer-triggered auto-connect requests. */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor
 public class BouncerIrcConnectionPortAdapter implements BouncerConnectionPort {
 
-  private final IrcClientService irc;
-
-  public BouncerIrcConnectionPortAdapter(@Lazy IrcClientService irc) {
-    this.irc = Objects.requireNonNull(irc, "irc");
-  }
+  @NonNull @Lazy private final IrcClientService irc;
 
   @Override
   public Completable connect(String serverId) {

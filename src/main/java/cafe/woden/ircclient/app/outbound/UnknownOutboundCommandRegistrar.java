@@ -6,31 +6,22 @@ import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Registers fallback handling for unknown slash commands. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class UnknownOutboundCommandRegistrar implements OutboundCommandRegistrar {
 
-  private final UserCommandAliasesBus userCommandAliasesBus;
-  private final OutboundSayQuoteCommandService outboundSayQuoteCommandService;
-  private final TargetCoordinator targetCoordinator;
-  private final UiPort ui;
-
-  UnknownOutboundCommandRegistrar(
-      UserCommandAliasesBus userCommandAliasesBus,
-      OutboundSayQuoteCommandService outboundSayQuoteCommandService,
-      TargetCoordinator targetCoordinator,
-      UiPort ui) {
-    this.userCommandAliasesBus =
-        Objects.requireNonNull(userCommandAliasesBus, "userCommandAliasesBus");
-    this.outboundSayQuoteCommandService =
-        Objects.requireNonNull(outboundSayQuoteCommandService, "outboundSayQuoteCommandService");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.ui = Objects.requireNonNull(ui, "ui");
-  }
+  @NonNull private final UserCommandAliasesBus userCommandAliasesBus;
+  @NonNull private final OutboundSayQuoteCommandService outboundSayQuoteCommandService;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final UiPort ui;
 
   @Override
   public void registerCommands(OutboundCommandRegistry registry) {

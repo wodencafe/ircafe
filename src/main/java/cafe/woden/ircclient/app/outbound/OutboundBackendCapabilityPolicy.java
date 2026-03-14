@@ -4,6 +4,8 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
 import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -11,24 +13,19 @@ import org.springframework.stereotype.Component;
 /** Backend capability facade used by outbound command services. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 final class OutboundBackendCapabilityPolicy {
 
-  private final CommandTargetPolicy commandTargetPolicy;
-  private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry;
-  private final IrcNegotiatedFeaturePort irc;
-  private final IrcBackendAvailabilityPort backendAvailability;
+  @NonNull private final CommandTargetPolicy commandTargetPolicy;
+  @NonNull private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry;
 
-  OutboundBackendCapabilityPolicy(
-      CommandTargetPolicy commandTargetPolicy,
-      OutboundBackendFeatureRegistry outboundBackendFeatureRegistry,
-      @Qualifier("ircNegotiatedFeaturePort") IrcNegotiatedFeaturePort irc,
-      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability) {
-    this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
-    this.outboundBackendFeatureRegistry =
-        Objects.requireNonNull(outboundBackendFeatureRegistry, "outboundBackendFeatureRegistry");
-    this.irc = Objects.requireNonNull(irc, "irc");
-    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
-  }
+  @NonNull
+  @Qualifier("ircNegotiatedFeaturePort")
+  private final IrcNegotiatedFeaturePort irc;
+
+  @NonNull
+  @Qualifier("ircClientService")
+  private final IrcBackendAvailabilityPort backendAvailability;
 
   IrcProperties.Server.Backend backendForServer(String serverId) {
     return commandTargetPolicy.backendForServer(serverId);

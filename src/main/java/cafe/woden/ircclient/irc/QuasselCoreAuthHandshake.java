@@ -12,6 +12,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,15 +22,12 @@ import org.springframework.stereotype.Component;
 /** Performs Quassel datastream handshake/authentication (ClientInit + ClientLogin). */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor
 public class QuasselCoreAuthHandshake {
   private static final Logger log = LoggerFactory.getLogger(QuasselCoreAuthHandshake.class);
   private static final int MAX_HANDSHAKE_MESSAGES = 16;
 
-  private final QuasselCoreDatastreamCodec datastreamCodec;
-
-  public QuasselCoreAuthHandshake(QuasselCoreDatastreamCodec datastreamCodec) {
-    this.datastreamCodec = Objects.requireNonNull(datastreamCodec, "datastreamCodec");
-  }
+  @NonNull private final QuasselCoreDatastreamCodec datastreamCodec;
 
   public AuthResult authenticate(Socket socket, IrcProperties.Server server) throws IOException {
     Socket s = Objects.requireNonNull(socket, "socket");

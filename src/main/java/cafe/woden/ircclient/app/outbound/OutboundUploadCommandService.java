@@ -7,8 +7,9 @@ import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -16,32 +17,18 @@ import org.springframework.stereotype.Component;
 /** Handles semantic /upload command flow and backend translation dispatch. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 final class OutboundUploadCommandService implements OutboundHelpContributor {
 
+  @NonNull
+  @Qualifier("ircTargetMembershipPort")
   private final IrcTargetMembershipPort targetMembership;
-  private final UiPort ui;
-  private final ConnectionCoordinator connectionCoordinator;
-  private final TargetCoordinator targetCoordinator;
-  private final SemanticUploadCommandHandler semanticUploadCommandHandler;
-  private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
-  OutboundUploadCommandService(
-      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      SemanticUploadCommandHandler semanticUploadCommandHandler,
-      OutboundRawLineCorrelationService rawLineCorrelationService) {
-    this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.connectionCoordinator =
-        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.semanticUploadCommandHandler =
-        Objects.requireNonNull(semanticUploadCommandHandler, "semanticUploadCommandHandler");
-    this.rawLineCorrelationService =
-        Objects.requireNonNull(rawLineCorrelationService, "rawLineCorrelationService");
-  }
+  @NonNull private final UiPort ui;
+  @NonNull private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final SemanticUploadCommandHandler semanticUploadCommandHandler;
+  @NonNull private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
   void appendUploadHelp(TargetRef out) {
     semanticUploadCommandHandler.appendUploadHelp(out);

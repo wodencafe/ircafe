@@ -13,7 +13,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixHistoryCursorCoordinator {
   private static final String HISTORY_SELECTOR_TIMESTAMP_PREFIX = "timestamp=";
   private static final String HISTORY_SELECTOR_MSGID_PREFIX = "msgid=";
@@ -46,14 +50,8 @@ final class MatrixHistoryCursorCoordinator {
     long roomEventTimestampMs(String roomId, String eventId);
   }
 
-  private final MatrixRoomHistoryClient roomHistoryClient;
-  private final MatrixSyncClient syncClient;
-
-  MatrixHistoryCursorCoordinator(
-      MatrixRoomHistoryClient roomHistoryClient, MatrixSyncClient syncClient) {
-    this.roomHistoryClient = Objects.requireNonNull(roomHistoryClient, "roomHistoryClient");
-    this.syncClient = Objects.requireNonNull(syncClient, "syncClient");
-  }
+  @NonNull private final MatrixRoomHistoryClient roomHistoryClient;
+  @NonNull private final MatrixSyncClient syncClient;
 
   int normalizeHistoryLimit(int limit) {
     int normalized = limit <= 0 ? 50 : limit;

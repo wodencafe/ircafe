@@ -14,7 +14,11 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixRawRoomAdminCommandHandler {
   interface SessionView {
     String userId();
@@ -31,32 +35,13 @@ final class MatrixRawRoomAdminCommandHandler {
   private static final int MATRIX_LIST_DEFAULT_LIMIT = 100;
   private static final int MATRIX_LIST_MAX_LIMIT = 200;
 
-  private final ServerCatalog serverCatalog;
-  private final MatrixRoomMembershipClient roomMembershipClient;
-  private final MatrixRoomStateClient roomStateClient;
-  private final MatrixRoomDirectoryClient roomDirectoryClient;
-  private final Function<String, SessionView> sessionLookup;
-  private final Function<String, String> backendAvailabilityReasonLookup;
-  private final Consumer<ServerIrcEvent> eventEmitter;
-
-  MatrixRawRoomAdminCommandHandler(
-      ServerCatalog serverCatalog,
-      MatrixRoomMembershipClient roomMembershipClient,
-      MatrixRoomStateClient roomStateClient,
-      MatrixRoomDirectoryClient roomDirectoryClient,
-      Function<String, SessionView> sessionLookup,
-      Function<String, String> backendAvailabilityReasonLookup,
-      Consumer<ServerIrcEvent> eventEmitter) {
-    this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
-    this.roomMembershipClient =
-        Objects.requireNonNull(roomMembershipClient, "roomMembershipClient");
-    this.roomStateClient = Objects.requireNonNull(roomStateClient, "roomStateClient");
-    this.roomDirectoryClient = Objects.requireNonNull(roomDirectoryClient, "roomDirectoryClient");
-    this.sessionLookup = Objects.requireNonNull(sessionLookup, "sessionLookup");
-    this.backendAvailabilityReasonLookup =
-        Objects.requireNonNull(backendAvailabilityReasonLookup, "backendAvailabilityReasonLookup");
-    this.eventEmitter = Objects.requireNonNull(eventEmitter, "eventEmitter");
-  }
+  @NonNull private final ServerCatalog serverCatalog;
+  @NonNull private final MatrixRoomMembershipClient roomMembershipClient;
+  @NonNull private final MatrixRoomStateClient roomStateClient;
+  @NonNull private final MatrixRoomDirectoryClient roomDirectoryClient;
+  @NonNull private final Function<String, SessionView> sessionLookup;
+  @NonNull private final Function<String, String> backendAvailabilityReasonLookup;
+  @NonNull private final Consumer<ServerIrcEvent> eventEmitter;
 
   Completable handleTopic(String serverId, List<String> arguments) {
     String target = argOrBlank(arguments, 0, "TOPIC requires a room target");

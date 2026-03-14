@@ -8,7 +8,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixSyncTimelineEventProjector {
   private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
   private static final String TAG_MATRIX_MSGTYPE = "matrix.msgtype";
@@ -26,11 +30,7 @@ final class MatrixSyncTimelineEventProjector {
     void rememberRoomEvent(String roomId, String eventId, long timestampMs);
   }
 
-  private final Consumer<ServerIrcEvent> eventEmitter;
-
-  MatrixSyncTimelineEventProjector(Consumer<ServerIrcEvent> eventEmitter) {
-    this.eventEmitter = Objects.requireNonNull(eventEmitter, "eventEmitter");
-  }
+  @NonNull private final Consumer<ServerIrcEvent> eventEmitter;
 
   void emitTimelineEvents(
       String serverId, SessionView session, List<MatrixSyncClient.RoomTimelineEvent> events) {

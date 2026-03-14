@@ -10,18 +10,17 @@ import java.net.Socket;
 import java.util.Objects;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
 /** Opens raw transport sockets for Quassel Core sessions (direct/proxied, optional TLS). */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor
 public class QuasselCoreSocketConnector {
-  private final ServerProxyResolver proxyResolver;
-
-  public QuasselCoreSocketConnector(ServerProxyResolver proxyResolver) {
-    this.proxyResolver = Objects.requireNonNull(proxyResolver, "proxyResolver");
-  }
+  @NonNull private final ServerProxyResolver proxyResolver;
 
   public Socket connect(IrcProperties.Server server) throws IOException {
     IrcProperties.Server s = Objects.requireNonNull(server, "server");

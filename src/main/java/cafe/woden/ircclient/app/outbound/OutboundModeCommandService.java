@@ -9,6 +9,7 @@ import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Objects;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -21,32 +22,18 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class OutboundModeCommandService {
 
+  @Qualifier("ircTargetMembershipPort")
   private final IrcTargetMembershipPort targetMembership;
+
   private final UiPort ui;
   private final ConnectionCoordinator connectionCoordinator;
   private final TargetCoordinator targetCoordinator;
   private final CommandTargetPolicy commandTargetPolicy;
   private final ModeRoutingPort modeRoutingState;
   private final OutboundRawLineCorrelationService rawLineCorrelationService;
-
-  public OutboundModeCommandService(
-      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      CommandTargetPolicy commandTargetPolicy,
-      ModeRoutingPort modeRoutingState,
-      OutboundRawLineCorrelationService rawLineCorrelationService) {
-    this.targetMembership = targetMembership;
-    this.ui = ui;
-    this.connectionCoordinator = connectionCoordinator;
-    this.targetCoordinator = targetCoordinator;
-    this.commandTargetPolicy = commandTargetPolicy;
-    this.modeRoutingState = modeRoutingState;
-    this.rawLineCorrelationService = rawLineCorrelationService;
-  }
 
   public void handleMode(CompositeDisposable disposables, String first, String rest) {
     TargetRef at = targetCoordinator.getActiveTarget();

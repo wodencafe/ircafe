@@ -1,45 +1,27 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
-import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Registers history/replay and message-mutation command handlers. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class HistoryMutationOutboundCommandRegistrar implements OutboundCommandRegistrar {
 
-  private final OutboundChatHistoryCommandService outboundChatHistoryCommandService;
-  private final OutboundReadMarkerCommandService outboundReadMarkerCommandService;
-  private final OutboundHelpCommandService outboundHelpCommandService;
-  private final OutboundUploadCommandService outboundUploadCommandService;
-  private final OutboundMessageMutationCommandService outboundMessageMutationCommandService;
-  private final OutboundSayQuoteCommandService outboundSayQuoteCommandService;
+  @NonNull private final OutboundChatHistoryCommandService outboundChatHistoryCommandService;
+  @NonNull private final OutboundReadMarkerCommandService outboundReadMarkerCommandService;
+  @NonNull private final OutboundHelpCommandService outboundHelpCommandService;
+  @NonNull private final OutboundUploadCommandService outboundUploadCommandService;
 
-  HistoryMutationOutboundCommandRegistrar(
-      OutboundChatHistoryCommandService outboundChatHistoryCommandService,
-      OutboundReadMarkerCommandService outboundReadMarkerCommandService,
-      OutboundHelpCommandService outboundHelpCommandService,
-      OutboundUploadCommandService outboundUploadCommandService,
-      OutboundMessageMutationCommandService outboundMessageMutationCommandService,
-      OutboundSayQuoteCommandService outboundSayQuoteCommandService) {
-    this.outboundChatHistoryCommandService =
-        Objects.requireNonNull(
-            outboundChatHistoryCommandService, "outboundChatHistoryCommandService");
-    this.outboundReadMarkerCommandService =
-        Objects.requireNonNull(
-            outboundReadMarkerCommandService, "outboundReadMarkerCommandService");
-    this.outboundHelpCommandService =
-        Objects.requireNonNull(outboundHelpCommandService, "outboundHelpCommandService");
-    this.outboundUploadCommandService =
-        Objects.requireNonNull(outboundUploadCommandService, "outboundUploadCommandService");
-    this.outboundMessageMutationCommandService =
-        Objects.requireNonNull(
-            outboundMessageMutationCommandService, "outboundMessageMutationCommandService");
-    this.outboundSayQuoteCommandService =
-        Objects.requireNonNull(outboundSayQuoteCommandService, "outboundSayQuoteCommandService");
-  }
+  @NonNull
+  private final OutboundMessageMutationCommandService outboundMessageMutationCommandService;
+
+  @NonNull private final OutboundSayQuoteCommandService outboundSayQuoteCommandService;
 
   @Override
   public void registerCommands(OutboundCommandRegistry registry) {

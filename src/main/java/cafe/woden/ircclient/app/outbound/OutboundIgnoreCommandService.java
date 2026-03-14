@@ -18,6 +18,7 @@ import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +31,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class OutboundIgnoreCommandService {
 
   private static final Pattern DURATION_PART = Pattern.compile("(\\d+)([a-z]*)");
@@ -38,17 +40,6 @@ public class OutboundIgnoreCommandService {
   private final TargetCoordinator targetCoordinator;
   private final IgnoreListQueryPort ignoreListQueryPort;
   private final IgnoreListCommandPort ignoreListCommandPort;
-
-  public OutboundIgnoreCommandService(
-      UiPort ui,
-      TargetCoordinator targetCoordinator,
-      IgnoreListQueryPort ignoreListQueryPort,
-      IgnoreListCommandPort ignoreListCommandPort) {
-    this.ui = ui;
-    this.targetCoordinator = targetCoordinator;
-    this.ignoreListQueryPort = ignoreListQueryPort;
-    this.ignoreListCommandPort = ignoreListCommandPort;
-  }
 
   public void handleIgnore(String maskOrNick) {
     TargetRef active = targetCoordinator.getActiveTarget();

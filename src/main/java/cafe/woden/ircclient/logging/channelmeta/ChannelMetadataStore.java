@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor
 public class ChannelMetadataStore implements ChannelMetadataPort {
 
   private static final Logger log = LoggerFactory.getLogger(ChannelMetadataStore.class);
@@ -24,17 +27,14 @@ public class ChannelMetadataStore implements ChannelMetadataPort {
   private static final int MIN_TOPIC_PANEL_HEIGHT_PX = 40;
   private static final int MAX_TOPIC_PANEL_HEIGHT_PX = 200;
 
-  private final ChannelMetadataRepository repository;
+  @NonNull private final ChannelMetadataRepository repository;
+
+  @NonNull
+  @Qualifier(ExecutorConfig.CHANNEL_METADATA_PERSIST_EXECUTOR)
   private final Executor persistExecutor;
+
   private final Map<TargetRef, String> topicByTarget = new ConcurrentHashMap<>();
   private final Map<TargetRef, Integer> topicHeightByTarget = new ConcurrentHashMap<>();
-
-  public ChannelMetadataStore(
-      ChannelMetadataRepository repository,
-      @Qualifier(ExecutorConfig.CHANNEL_METADATA_PERSIST_EXECUTOR) Executor persistExecutor) {
-    this.repository = Objects.requireNonNull(repository, "repository");
-    this.persistExecutor = Objects.requireNonNull(persistExecutor, "persistExecutor");
-  }
 
   @PostConstruct
   void initializeCache() {

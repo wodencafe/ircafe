@@ -12,9 +12,10 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,25 +28,22 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Component
 @ConditionalOnProperty(prefix = "ircafe.logging", name = "enabled", havingValue = "true")
 @InfrastructureLayer
+@RequiredArgsConstructor
 public class DbChatHistoryIngestor implements ChatHistoryIngestor {
 
   private static final Logger log = LoggerFactory.getLogger(DbChatHistoryIngestor.class);
 
-  private final ChatLogRepository repo;
-  private final TransactionTemplate tx;
-  private final LogProperties props;
-  private final ExecutorService exec;
+  @NonNull private final ChatLogRepository repo;
 
-  public DbChatHistoryIngestor(
-      ChatLogRepository repo,
-      @Qualifier("chatLogTx") TransactionTemplate tx,
-      LogProperties props,
-      @Qualifier(ExecutorConfig.DB_CHAT_HISTORY_INGEST_EXECUTOR) ExecutorService exec) {
-    this.repo = Objects.requireNonNull(repo, "repo");
-    this.tx = Objects.requireNonNull(tx, "tx");
-    this.props = Objects.requireNonNull(props, "props");
-    this.exec = Objects.requireNonNull(exec, "exec");
-  }
+  @NonNull
+  @Qualifier("chatLogTx")
+  private final TransactionTemplate tx;
+
+  @NonNull private final LogProperties props;
+
+  @NonNull
+  @Qualifier(ExecutorConfig.DB_CHAT_HISTORY_INGEST_EXECUTOR)
+  private final ExecutorService exec;
 
   @Override
   public void ingestAsync(

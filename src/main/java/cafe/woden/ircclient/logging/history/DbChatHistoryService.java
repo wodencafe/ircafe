@@ -32,6 +32,8 @@ import javax.swing.SwingUtilities;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import javax.swing.text.Position;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +41,7 @@ import org.slf4j.LoggerFactory;
  * Loads recent log lines from the database and replays them into the transcript when a target is
  * selected.
  */
+@RequiredArgsConstructor
 public final class DbChatHistoryService implements ChatHistoryService {
 
   private static final Logger log = LoggerFactory.getLogger(DbChatHistoryService.class);
@@ -63,9 +66,9 @@ public final class DbChatHistoryService implements ChatHistoryService {
   // Optional remote fill when DB runs out:
   //  - Prefer IRCv3 CHATHISTORY (soju / servers that support it)
   //  - Fall back to ZNC playback (znc.in/playback) when available
-  private final IrcClientService irc;
-  private final IrcBouncerPlaybackPort bouncerPlayback;
-  private final ChatHistoryIngestBus ingestBus;
+  @NonNull private final IrcClientService irc;
+  @NonNull private final IrcBouncerPlaybackPort bouncerPlayback;
+  @NonNull private final ChatHistoryIngestBus ingestBus;
 
   private final ConcurrentHashMap<TargetRef, LogCursor> oldestCursor = new ConcurrentHashMap<>();
 
@@ -73,24 +76,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
 
   private final Set<TargetRef> loading = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-  private final ExecutorService exec;
-
-  public DbChatHistoryService(
-      ChatLogRepository repo,
-      LogProperties props,
-      ChatHistoryTranscriptPort transcripts,
-      IrcClientService irc,
-      IrcBouncerPlaybackPort bouncerPlayback,
-      ChatHistoryIngestBus ingestBus,
-      ExecutorService exec) {
-    this.repo = repo;
-    this.props = props;
-    this.transcripts = transcripts;
-    this.irc = Objects.requireNonNull(irc, "irc");
-    this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
-    this.ingestBus = Objects.requireNonNull(ingestBus, "ingestBus");
-    this.exec = Objects.requireNonNull(exec, "exec");
-  }
+  @NonNull private final ExecutorService exec;
 
   /**
    * Filter which persisted lines are allowed to appear when replaying chat history.

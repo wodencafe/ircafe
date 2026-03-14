@@ -9,7 +9,11 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixSyncSignalEventProjector {
   interface SessionView {
     String userId();
@@ -25,11 +29,7 @@ final class MatrixSyncSignalEventProjector {
     boolean shouldEmitReadMarker(String roomId, long markerTsMs);
   }
 
-  private final Consumer<ServerIrcEvent> eventEmitter;
-
-  MatrixSyncSignalEventProjector(Consumer<ServerIrcEvent> eventEmitter) {
-    this.eventEmitter = Objects.requireNonNull(eventEmitter, "eventEmitter");
-  }
+  @NonNull private final Consumer<ServerIrcEvent> eventEmitter;
 
   void emitMembershipEvents(
       String serverId,

@@ -442,15 +442,16 @@ public final class ChatChannelListCoordinator {
     Completable send = irc.sendRaw(serverId, rawLine);
     if (send == null) return false;
     if (disposables == null) {
-      send.subscribe(
-          () -> {},
-          err ->
-              log.debug(
-                  "[ircafe] raw MODE send failed action={} serverId={} line={}",
-                  action,
-                  serverId,
-                  rawLine,
-                  err));
+      var unused =
+          send.subscribe(
+              () -> {},
+              err ->
+                  log.debug(
+                      "[ircafe] raw MODE send failed action={} serverId={} line={}",
+                      action,
+                      serverId,
+                      rawLine,
+                      err));
       return true;
     }
     disposables.add(

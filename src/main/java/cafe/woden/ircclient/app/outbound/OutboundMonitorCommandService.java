@@ -11,12 +11,14 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles {@code /monitor} command family. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class OutboundMonitorCommandService {
   private static final int DEFAULT_MONITOR_CHUNK = 100;
 
@@ -27,23 +29,6 @@ public class OutboundMonitorCommandService {
   private final MonitorRosterPort monitorRosterPort;
   private final MonitorFallbackPort monitorFallbackPort;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
-
-  public OutboundMonitorCommandService(
-      IrcClientService irc,
-      UiPort ui,
-      TargetCoordinator targetCoordinator,
-      ConnectionCoordinator connectionCoordinator,
-      MonitorRosterPort monitorRosterPort,
-      MonitorFallbackPort monitorFallbackPort,
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy) {
-    this.irc = irc;
-    this.ui = ui;
-    this.targetCoordinator = targetCoordinator;
-    this.connectionCoordinator = connectionCoordinator;
-    this.monitorRosterPort = monitorRosterPort;
-    this.monitorFallbackPort = monitorFallbackPort;
-    this.backendCapabilityPolicy = backendCapabilityPolicy;
-  }
 
   public void handleMonitor(CompositeDisposable disposables, String args) {
     TargetRef active = targetCoordinator.getActiveTarget();

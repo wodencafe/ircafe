@@ -3,6 +3,8 @@ package cafe.woden.ircclient.irc;
 import java.lang.reflect.Field;
 import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.pircbotx.InputParser;
 import org.pircbotx.PircBotX;
@@ -20,15 +22,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor
 public class PircbotxInputParserHookInstaller {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxInputParserHookInstaller.class);
 
-  private final Ircv3StsPolicyService stsPolicies;
-
-  public PircbotxInputParserHookInstaller(Ircv3StsPolicyService stsPolicies) {
-    this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
-  }
+  @NonNull private final Ircv3StsPolicyService stsPolicies;
 
   public void installAwayNotifyHook(
       PircBotX bot, String serverId, PircbotxConnectionState conn, Consumer<ServerIrcEvent> sink) {

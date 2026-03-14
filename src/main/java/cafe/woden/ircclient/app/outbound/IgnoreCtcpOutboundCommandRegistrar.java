@@ -1,34 +1,22 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
-import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Registers ignore/filter and CTCP/DCC command handlers. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class IgnoreCtcpOutboundCommandRegistrar implements OutboundCommandRegistrar {
 
-  private final OutboundIgnoreCommandService outboundIgnoreCommandService;
-  private final LocalFilterCommandHandler localFilterCommandService;
-  private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
-  private final OutboundDccCommandService outboundDccCommandService;
-
-  IgnoreCtcpOutboundCommandRegistrar(
-      OutboundIgnoreCommandService outboundIgnoreCommandService,
-      LocalFilterCommandHandler localFilterCommandService,
-      OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService,
-      OutboundDccCommandService outboundDccCommandService) {
-    this.outboundIgnoreCommandService =
-        Objects.requireNonNull(outboundIgnoreCommandService, "outboundIgnoreCommandService");
-    this.localFilterCommandService =
-        Objects.requireNonNull(localFilterCommandService, "localFilterCommandService");
-    this.outboundCtcpWhoisCommandService =
-        Objects.requireNonNull(outboundCtcpWhoisCommandService, "outboundCtcpWhoisCommandService");
-    this.outboundDccCommandService =
-        Objects.requireNonNull(outboundDccCommandService, "outboundDccCommandService");
-  }
+  @NonNull private final OutboundIgnoreCommandService outboundIgnoreCommandService;
+  @NonNull private final LocalFilterCommandHandler localFilterCommandService;
+  @NonNull private final OutboundCtcpWhoisCommandService outboundCtcpWhoisCommandService;
+  @NonNull private final OutboundDccCommandService outboundDccCommandService;
 
   @Override
   public void registerCommands(OutboundCommandRegistry registry) {

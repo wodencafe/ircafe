@@ -9,6 +9,7 @@ import cafe.woden.ircclient.state.api.ModeVocabulary;
 import cafe.woden.ircclient.state.api.NegotiatedModeSemantics;
 import cafe.woden.ircclient.state.api.RecentStatusModePort;
 import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class InboundModeEventHandler {
   private final UiPort ui;
   private final ModeRoutingPort modeRoutingState;
@@ -26,23 +28,6 @@ public class InboundModeEventHandler {
   private final ChannelFlagModeStatePort channelFlagModeState;
   private final RecentStatusModePort recentStatusModeState;
   private final ServerIsupportStatePort serverIsupportState;
-
-  public InboundModeEventHandler(
-      UiPort ui,
-      ModeRoutingPort modeRoutingState,
-      JoinModeBurstService joinModeBurstService,
-      ModeFormattingService modeFormattingService,
-      ChannelFlagModeStatePort channelFlagModeState,
-      RecentStatusModePort recentStatusModeState,
-      ServerIsupportStatePort serverIsupportState) {
-    this.ui = ui;
-    this.modeRoutingState = modeRoutingState;
-    this.joinModeBurstService = joinModeBurstService;
-    this.modeFormattingService = modeFormattingService;
-    this.channelFlagModeState = channelFlagModeState;
-    this.recentStatusModeState = recentStatusModeState;
-    this.serverIsupportState = serverIsupportState;
-  }
 
   public void onJoinedChannel(String serverId, String channel) {
     if (serverId == null || channel == null) return;

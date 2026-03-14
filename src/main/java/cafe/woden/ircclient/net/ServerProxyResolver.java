@@ -3,6 +3,7 @@ package cafe.woden.ircclient.net;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import java.util.Objects;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
@@ -18,13 +19,10 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class ServerProxyResolver {
 
   private final ServerCatalog serverCatalog;
-
-  public ServerProxyResolver(ServerCatalog serverCatalog) {
-    this.serverCatalog = serverCatalog;
-  }
 
   /** Returns the current default proxy settings (never null). */
   public IrcProperties.Proxy defaultProxy() {

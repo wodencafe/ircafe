@@ -10,34 +10,22 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /markread command flow and read-marker help messaging. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 final class OutboundReadMarkerCommandService implements OutboundHelpContributor {
 
-  private final IrcReadMarkerPort readMarkerPort;
-  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
-  private final UiPort ui;
-  private final ConnectionCoordinator connectionCoordinator;
-  private final TargetCoordinator targetCoordinator;
-
-  OutboundReadMarkerCommandService(
-      IrcReadMarkerPort readMarkerPort,
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator) {
-    this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
-    this.backendCapabilityPolicy =
-        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.connectionCoordinator =
-        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-  }
+  @NonNull private final IrcReadMarkerPort readMarkerPort;
+  @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  @NonNull private final UiPort ui;
+  @NonNull private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final TargetCoordinator targetCoordinator;
 
   @Override
   public void appendGeneralHelp(TargetRef out) {

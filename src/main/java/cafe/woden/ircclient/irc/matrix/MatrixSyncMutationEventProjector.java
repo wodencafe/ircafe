@@ -8,7 +8,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixSyncMutationEventProjector {
   private static final String TAG_IRCAFE_PM_TARGET = "ircafe/pm-target";
   private static final String TAG_MATRIX_MSGTYPE = "matrix.msgtype";
@@ -36,11 +40,7 @@ final class MatrixSyncMutationEventProjector {
 
   record ReactionIndexEntry(String targetEventId, String reaction, String sender) {}
 
-  private final Consumer<ServerIrcEvent> eventEmitter;
-
-  MatrixSyncMutationEventProjector(Consumer<ServerIrcEvent> eventEmitter) {
-    this.eventEmitter = Objects.requireNonNull(eventEmitter, "eventEmitter");
-  }
+  @NonNull private final Consumer<ServerIrcEvent> eventEmitter;
 
   void emitMutationEvents(
       String serverId,

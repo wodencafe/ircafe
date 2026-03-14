@@ -5,6 +5,7 @@ import cafe.woden.ircclient.util.VirtualThreads;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class ApplicationShutdownCoordinator {
   private static final Logger log = LoggerFactory.getLogger(ApplicationShutdownCoordinator.class);
 
@@ -25,15 +27,11 @@ public class ApplicationShutdownCoordinator {
   private static final long SHUTDOWN_SPRING_PHASE_TIMEOUT_MS = 3000L;
 
   private final ConfigurableApplicationContext applicationContext;
-  private final IrcShutdownPort ircShutdownPort;
-  private final AtomicBoolean shutdownStarted = new AtomicBoolean(false);
 
-  public ApplicationShutdownCoordinator(
-      ConfigurableApplicationContext applicationContext,
-      @Qualifier("ircShutdownPort") IrcShutdownPort ircShutdownPort) {
-    this.applicationContext = applicationContext;
-    this.ircShutdownPort = ircShutdownPort;
-  }
+  @Qualifier("ircShutdownPort")
+  private final IrcShutdownPort ircShutdownPort;
+
+  private final AtomicBoolean shutdownStarted = new AtomicBoolean(false);
 
   public void shutdown() {
     if (!shutdownStarted.compareAndSet(false, true)) {
