@@ -12,8 +12,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.IrcRuntimeSettings;
-import cafe.woden.ircclient.irc.IrcRuntimeSettingsProvider;
+import cafe.woden.ircclient.irc.runtime.IrcRuntimeSettings;
+import cafe.woden.ircclient.irc.runtime.IrcRuntimeSettingsProvider;
 import io.reactivex.rxjava3.core.Completable;
 import java.lang.reflect.Method;
 import java.util.List;

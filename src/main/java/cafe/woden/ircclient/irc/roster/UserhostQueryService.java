@@ -2,8 +2,8 @@ package cafe.woden.ircclient.irc.roster;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.IrcRuntimeSettings;
-import cafe.woden.ircclient.irc.IrcRuntimeSettingsProvider;
+import cafe.woden.ircclient.irc.runtime.IrcRuntimeSettings;
+import cafe.woden.ircclient.irc.runtime.IrcRuntimeSettingsProvider;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.Disposable;

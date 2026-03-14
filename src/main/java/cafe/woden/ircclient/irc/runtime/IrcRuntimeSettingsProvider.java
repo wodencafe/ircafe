@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.runtime;
 
 /** Provides runtime settings to IRC services without depending on UI modules. */
 public interface IrcRuntimeSettingsProvider {

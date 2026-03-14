@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.runtime;
 
 /** Snapshot of runtime settings needed by IRC-side services. */
 public record IrcRuntimeSettings(
