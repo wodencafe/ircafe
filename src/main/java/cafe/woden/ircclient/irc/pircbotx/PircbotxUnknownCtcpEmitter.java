@@ -13,29 +13,20 @@ import java.util.Objects;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.UnknownEvent;
 
 /** Emits structured CTCP request events from raw unknown PRIVMSG/NOTICE lines. */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxUnknownCtcpEmitter {
-  private final String serverId;
-  private final Consumer<ServerIrcEvent> emit;
-  private final BiPredicate<PircBotX, String> nickMatchesSelf;
-  private final BiPredicate<PircBotX, String> selfEchoDetector;
-  private final Function<PircBotX, String> selfNickResolver;
-
-  PircbotxUnknownCtcpEmitter(
-      String serverId,
-      Consumer<ServerIrcEvent> emit,
-      BiPredicate<PircBotX, String> nickMatchesSelf,
-      BiPredicate<PircBotX, String> selfEchoDetector,
-      Function<PircBotX, String> selfNickResolver) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.emit = Objects.requireNonNull(emit, "emit");
-    this.nickMatchesSelf = Objects.requireNonNull(nickMatchesSelf, "nickMatchesSelf");
-    this.selfEchoDetector = Objects.requireNonNull(selfEchoDetector, "selfEchoDetector");
-    this.selfNickResolver = Objects.requireNonNull(selfNickResolver, "selfNickResolver");
-  }
+  @NonNull private final String serverId;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
+  @NonNull private final BiPredicate<PircBotX, String> nickMatchesSelf;
+  @NonNull private final BiPredicate<PircBotX, String> selfEchoDetector;
+  @NonNull private final Function<PircBotX, String> selfNickResolver;
 
   boolean maybeEmit(
       UnknownEvent event,

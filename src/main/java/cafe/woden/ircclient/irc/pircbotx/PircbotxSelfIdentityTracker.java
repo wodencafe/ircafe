@@ -7,16 +7,15 @@ import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxEventAccessors;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.irc.playback.*;
-import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 
 /** Tracks our best-known nick for a single IRC connection and resolves self-message heuristics. */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxSelfIdentityTracker {
-  private final PircbotxConnectionState conn;
-
-  PircbotxSelfIdentityTracker(PircbotxConnectionState conn) {
-    this.conn = Objects.requireNonNull(conn, "conn");
-  }
+  @NonNull private final PircbotxConnectionState conn;
 
   /** Best-effort resolve of our current nick (prefers UserBot nick when available). */
   static String resolveBotNick(PircBotX bot) {

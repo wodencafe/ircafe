@@ -9,11 +9,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /** Parsers for IRC MONITOR numerics and RPL_ISUPPORT MONITOR token. */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxMonitorParsers {
-  private PircbotxMonitorParsers() {}
-
   public static record ParsedMonitorSupport(boolean supported, int limit) {}
 
   public static record ParsedMonitorStatusEntry(String nick, String hostmask) {

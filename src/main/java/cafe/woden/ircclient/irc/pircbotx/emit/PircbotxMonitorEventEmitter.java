@@ -11,16 +11,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 /** Emits structured {@link IrcEvent}s from IRC MONITOR numerics. */
+@RequiredArgsConstructor(access = AccessLevel.PUBLIC)
 public final class PircbotxMonitorEventEmitter {
-  private final String serverId;
-  private final Consumer<ServerIrcEvent> emit;
-
-  public PircbotxMonitorEventEmitter(String serverId, Consumer<ServerIrcEvent> emit) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.emit = Objects.requireNonNull(emit, "emit");
-  }
+  @NonNull private final String serverId;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
 
   public boolean maybeEmitNumeric(String rawLine, String originalLine) {
     String raw = Objects.toString(rawLine, "").trim();

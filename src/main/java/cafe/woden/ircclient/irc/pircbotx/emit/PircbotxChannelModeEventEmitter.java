@@ -7,10 +7,12 @@ import cafe.woden.ircclient.irc.mode.*;
 import cafe.woden.ircclient.irc.pircbotx.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
-import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.hooks.events.HalfOpEvent;
 import org.pircbotx.hooks.events.ModeEvent;
 import org.pircbotx.hooks.events.OpEvent;
@@ -19,26 +21,13 @@ import org.pircbotx.hooks.events.SuperOpEvent;
 import org.pircbotx.hooks.events.VoiceEvent;
 
 /** Emits live channel-mode observations and refreshes roster snapshots on privilege changes. */
+@RequiredArgsConstructor(access = AccessLevel.PUBLIC)
 public final class PircbotxChannelModeEventEmitter {
-  private final String serverId;
-  private final PircbotxRosterEmitter rosterEmitter;
-  private final Consumer<ServerIrcEvent> emit;
-  private final Function<Object, String> nickFromEvent;
-  private final BiFunction<Object, String, String> modeDetailsFromEvent;
-
-  public PircbotxChannelModeEventEmitter(
-      String serverId,
-      PircbotxRosterEmitter rosterEmitter,
-      Consumer<ServerIrcEvent> emit,
-      Function<Object, String> nickFromEvent,
-      BiFunction<Object, String, String> modeDetailsFromEvent) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.rosterEmitter = Objects.requireNonNull(rosterEmitter, "rosterEmitter");
-    this.emit = Objects.requireNonNull(emit, "emit");
-    this.nickFromEvent = Objects.requireNonNull(nickFromEvent, "nickFromEvent");
-    this.modeDetailsFromEvent =
-        Objects.requireNonNull(modeDetailsFromEvent, "modeDetailsFromEvent");
-  }
+  @NonNull private final String serverId;
+  @NonNull private final PircbotxRosterEmitter rosterEmitter;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
+  @NonNull private final Function<Object, String> nickFromEvent;
+  @NonNull private final BiFunction<Object, String, String> modeDetailsFromEvent;
 
   public void onMode(ModeEvent event) {
     if (event == null || event.getChannel() == null) return;

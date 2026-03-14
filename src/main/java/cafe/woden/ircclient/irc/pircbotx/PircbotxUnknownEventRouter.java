@@ -11,42 +11,24 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.UnknownEvent;
 
 /** Pre-routes unknown IRC lines before falling through to the lower-level fallback handlers. */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxUnknownEventRouter {
-  private final String serverId;
-  private final Consumer<String> rememberSelfNickHint;
-  private final Function<PircBotX, String> selfNickResolver;
-  private final PircbotxServerResponseEmitter serverResponses;
-  private final PircbotxMonitorEventEmitter monitorEvents;
-  private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
-  private final PircbotxUnknownCtcpEmitter unknownCtcp;
-  private final PircbotxUnknownLineFallbackEmitter unknownLineFallback;
-  private final Consumer<ServerIrcEvent> emit;
-
-  PircbotxUnknownEventRouter(
-      String serverId,
-      Consumer<String> rememberSelfNickHint,
-      Function<PircBotX, String> selfNickResolver,
-      PircbotxServerResponseEmitter serverResponses,
-      PircbotxMonitorEventEmitter monitorEvents,
-      PircbotxChatHistoryBatchCollector chatHistoryBatches,
-      PircbotxUnknownCtcpEmitter unknownCtcp,
-      PircbotxUnknownLineFallbackEmitter unknownLineFallback,
-      Consumer<ServerIrcEvent> emit) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.rememberSelfNickHint =
-        Objects.requireNonNull(rememberSelfNickHint, "rememberSelfNickHint");
-    this.selfNickResolver = Objects.requireNonNull(selfNickResolver, "selfNickResolver");
-    this.serverResponses = Objects.requireNonNull(serverResponses, "serverResponses");
-    this.monitorEvents = Objects.requireNonNull(monitorEvents, "monitorEvents");
-    this.chatHistoryBatches = Objects.requireNonNull(chatHistoryBatches, "chatHistoryBatches");
-    this.unknownCtcp = Objects.requireNonNull(unknownCtcp, "unknownCtcp");
-    this.unknownLineFallback = Objects.requireNonNull(unknownLineFallback, "unknownLineFallback");
-    this.emit = Objects.requireNonNull(emit, "emit");
-  }
+  @NonNull private final String serverId;
+  @NonNull private final Consumer<String> rememberSelfNickHint;
+  @NonNull private final Function<PircBotX, String> selfNickResolver;
+  @NonNull private final PircbotxServerResponseEmitter serverResponses;
+  @NonNull private final PircbotxMonitorEventEmitter monitorEvents;
+  @NonNull private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
+  @NonNull private final PircbotxUnknownCtcpEmitter unknownCtcp;
+  @NonNull private final PircbotxUnknownLineFallbackEmitter unknownLineFallback;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
 
   void handle(UnknownEvent event) {
     String line = eventLine(event);

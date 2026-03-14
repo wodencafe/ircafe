@@ -9,24 +9,22 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 
 /**
  * Emits structured events from generic server numerics, channel list numerics, and ban-list
  * numerics.
  */
+@RequiredArgsConstructor(access = AccessLevel.PUBLIC)
 public final class PircbotxServerResponseEmitter {
-  private final String serverId;
-  private final Consumer<ServerIrcEvent> emit;
+  @NonNull private final String serverId;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
   private final Set<String> activeBanListChannels = new HashSet<>();
-
-  public PircbotxServerResponseEmitter(String serverId, Consumer<ServerIrcEvent> emit) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.emit = Objects.requireNonNull(emit, "emit");
-  }
 
   public void clear() {
     activeBanListChannels.clear();

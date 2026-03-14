@@ -7,11 +7,12 @@ import cafe.woden.ircclient.irc.playback.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /** Utility parsers for ZNC-related heuristics. */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxZncParsers {
-
-  private PircbotxZncParsers() {}
 
   public static boolean seemsZncCap(String cap) {
     if (cap == null) return false;

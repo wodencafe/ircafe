@@ -5,6 +5,8 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.PircbotxIrcClientService;
 import cafe.woden.ircclient.irc.playback.*;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * Small, dependency-free parsing helpers used by {@link PircbotxIrcClientService}.
@@ -12,9 +14,8 @@ import cafe.woden.ircclient.irc.playback.*;
  * <p>Keeping these in a dedicated file reduces the size/visual noise of the service and makes
  * future parser extraction less risky.
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxLineParseUtil {
-
-  private PircbotxLineParseUtil() {}
 
   /**
    * Best-effort normalization for server lines we parse ourselves.

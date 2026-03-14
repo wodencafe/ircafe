@@ -8,26 +8,22 @@ import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Emits structured WHO/WHOX/WHOIS events from numeric IRC lines. */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxWhoEventEmitter {
   private static final Logger log = LoggerFactory.getLogger(PircbotxWhoEventEmitter.class);
   private static final String IRCAFE_WHOX_TOKEN = "1";
 
-  private final String serverId;
-  private final PircbotxConnectionState conn;
-  private final Consumer<ServerIrcEvent> emit;
-
-  PircbotxWhoEventEmitter(
-      String serverId, PircbotxConnectionState conn, Consumer<ServerIrcEvent> emit) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.conn = Objects.requireNonNull(conn, "conn");
-    this.emit = Objects.requireNonNull(emit, "emit");
-  }
+  @NonNull private final String serverId;
+  @NonNull private final PircbotxConnectionState conn;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
 
   void maybeEmitLine(String rawLine) {
     if (rawLine == null || rawLine.isBlank()) return;

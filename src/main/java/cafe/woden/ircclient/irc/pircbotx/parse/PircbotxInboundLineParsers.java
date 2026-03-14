@@ -6,6 +6,8 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.playback.*;
 import java.util.List;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * Shared raw-line parsing helpers for classic IRC inbound flows.
@@ -13,9 +15,8 @@ import java.util.Objects;
  * <p>Keeping these parsers out of the bridge listener makes future translator/coordinator
  * extractions less risky because the line-shape logic no longer lives inside the event adapter.
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxInboundLineParsers {
-
-  private PircbotxInboundLineParsers() {}
 
   public static ParsedIrcLine parseIrcLine(String normalizedLine) {
     if (normalizedLine == null) return null;

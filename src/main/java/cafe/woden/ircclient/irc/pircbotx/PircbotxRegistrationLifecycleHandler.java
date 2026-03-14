@@ -8,40 +8,27 @@ import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
-import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Handles post-registration numerics and related connection bootstrap side effects. */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxRegistrationLifecycleHandler {
   private static final Logger log =
       LoggerFactory.getLogger(PircbotxRegistrationLifecycleHandler.class);
 
-  private final String serverId;
-  private final PircbotxConnectionState conn;
-  private final PlaybackCursorProvider playbackCursorProvider;
-  private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
-  private final PircbotxServerResponseEmitter serverResponses;
-  private final Consumer<ServerIrcEvent> emit;
-
-  PircbotxRegistrationLifecycleHandler(
-      String serverId,
-      PircbotxConnectionState conn,
-      PlaybackCursorProvider playbackCursorProvider,
-      PircbotxBouncerDiscoveryCoordinator bouncerDiscovery,
-      PircbotxServerResponseEmitter serverResponses,
-      Consumer<ServerIrcEvent> emit) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.conn = Objects.requireNonNull(conn, "conn");
-    this.playbackCursorProvider =
-        Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
-    this.bouncerDiscovery = Objects.requireNonNull(bouncerDiscovery, "bouncerDiscovery");
-    this.serverResponses = Objects.requireNonNull(serverResponses, "serverResponses");
-    this.emit = Objects.requireNonNull(emit, "emit");
-  }
+  @NonNull private final String serverId;
+  @NonNull private final PircbotxConnectionState conn;
+  @NonNull private final PlaybackCursorProvider playbackCursorProvider;
+  @NonNull private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
+  @NonNull private final PircbotxServerResponseEmitter serverResponses;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
 
   boolean maybeHandle(int code, PircBotX bot, String line) {
     switch (code) {

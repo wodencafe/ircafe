@@ -15,27 +15,20 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.Channel;
 import org.pircbotx.PircBotX;
 import org.pircbotx.User;
 
 /** Emits roster snapshots and opportunistic hostmask observations for a single connection. */
+@RequiredArgsConstructor(access = AccessLevel.PUBLIC)
 public final class PircbotxRosterEmitter {
-  private final String serverId;
-  private final PircbotxConnectionState conn;
-  private final ServerIsupportStatePort serverIsupportState;
-  private final Consumer<ServerIrcEvent> emit;
-
-  public PircbotxRosterEmitter(
-      String serverId,
-      PircbotxConnectionState conn,
-      ServerIsupportStatePort serverIsupportState,
-      Consumer<ServerIrcEvent> emit) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.conn = Objects.requireNonNull(conn, "conn");
-    this.serverIsupportState = Objects.requireNonNull(serverIsupportState, "serverIsupportState");
-    this.emit = Objects.requireNonNull(emit, "emit");
-  }
+  @NonNull private final String serverId;
+  @NonNull private final PircbotxConnectionState conn;
+  @NonNull private final ServerIsupportStatePort serverIsupportState;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
 
   public void maybeEmitHostmaskObserved(String channel, User user) {
     if (user == null) return;

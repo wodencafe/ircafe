@@ -15,6 +15,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,18 +28,14 @@ import org.slf4j.LoggerFactory;
  * but this collector owns the batch lifecycle and buffering so the listener no longer manages that
  * state directly.
  */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxChatHistoryBatchCollector {
   private static final Logger log =
       LoggerFactory.getLogger(PircbotxChatHistoryBatchCollector.class);
 
-  private final String serverId;
-  private final Consumer<ServerIrcEvent> emit;
+  @NonNull private final String serverId;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
   private final Map<String, ChatHistoryBatchBuffer> activeBatches = new HashMap<>();
-
-  PircbotxChatHistoryBatchCollector(String serverId, Consumer<ServerIrcEvent> emit) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.emit = Objects.requireNonNull(emit, "emit");
-  }
 
   boolean handleBatchControlLine(String normalizedLine) {
     ParsedIrcLine pl = PircbotxInboundLineParsers.parseIrcLine(normalizedLine);

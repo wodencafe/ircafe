@@ -6,14 +6,14 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.playback.*;
 import java.util.Locale;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 /** Shared routing and suppression helpers for private conversations. */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxPrivateConversationSupport {
-  private final PircbotxConnectionState conn;
-
-  PircbotxPrivateConversationSupport(PircbotxConnectionState conn) {
-    this.conn = Objects.requireNonNull(conn, "conn");
-  }
+  @NonNull private final PircbotxConnectionState conn;
 
   String deriveConversationTarget(String botNick, String fromNick, String dest) {
     String from = fromNick == null ? "" : fromNick.trim();

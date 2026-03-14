@@ -8,19 +8,17 @@ import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.hooks.events.WhoisEvent;
 
 /** Emits structured WHOIS results and related observed user metadata. */
+@RequiredArgsConstructor(access = AccessLevel.PUBLIC)
 public final class PircbotxWhoisResultEmitter {
-  private final String serverId;
-  private final Consumer<ServerIrcEvent> emit;
-
-  public PircbotxWhoisResultEmitter(String serverId, Consumer<ServerIrcEvent> emit) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.emit = Objects.requireNonNull(emit, "emit");
-  }
+  @NonNull private final String serverId;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
 
   public void onWhois(WhoisEvent event) {
     if (event == null) return;

@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
@@ -47,6 +48,7 @@ import org.springframework.stereotype.Component;
 /** Factory for building a configured {@link PircBotX} instance for a given server. */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor
 public class PircbotxBotFactory {
 
   private static final long DEFAULT_MESSAGE_DELAY_MS = 200L;
@@ -56,15 +58,6 @@ public class PircbotxBotFactory {
   private final ServerProxyResolver proxyResolver;
   private final SojuProperties sojuProps;
   private final RuntimeConfigStore runtimeConfig;
-
-  public PircbotxBotFactory(
-      ServerProxyResolver proxyResolver,
-      SojuProperties sojuProps,
-      RuntimeConfigStore runtimeConfig) {
-    this.proxyResolver = proxyResolver;
-    this.sojuProps = sojuProps;
-    this.runtimeConfig = runtimeConfig;
-  }
 
   public PircBotX build(IrcProperties.Server s, String version, ListenerAdapter listener) {
     ProxyPlan plan = proxyResolver.planForServer(s.id());

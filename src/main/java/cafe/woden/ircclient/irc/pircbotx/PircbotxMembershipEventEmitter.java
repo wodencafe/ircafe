@@ -10,6 +10,9 @@ import java.util.Objects;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.Channel;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.JoinEvent;
@@ -24,34 +27,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Emits membership and nick-change events for a single IRC connection. */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxMembershipEventEmitter {
   private static final Logger log = LoggerFactory.getLogger(PircbotxMembershipEventEmitter.class);
 
-  private final String serverId;
-  private final PircbotxConnectionState conn;
-  private final PircbotxRosterEmitter rosterEmitter;
-  private final Consumer<ServerIrcEvent> emit;
-  private final BiPredicate<PircBotX, String> isSelfNick;
-  private final Consumer<String> rememberSelfNickHint;
-  private final Function<PircBotX, String> resolveBotNick;
-
-  PircbotxMembershipEventEmitter(
-      String serverId,
-      PircbotxConnectionState conn,
-      PircbotxRosterEmitter rosterEmitter,
-      Consumer<ServerIrcEvent> emit,
-      BiPredicate<PircBotX, String> isSelfNick,
-      Consumer<String> rememberSelfNickHint,
-      Function<PircBotX, String> resolveBotNick) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.conn = Objects.requireNonNull(conn, "conn");
-    this.rosterEmitter = Objects.requireNonNull(rosterEmitter, "rosterEmitter");
-    this.emit = Objects.requireNonNull(emit, "emit");
-    this.isSelfNick = Objects.requireNonNull(isSelfNick, "isSelfNick");
-    this.rememberSelfNickHint =
-        Objects.requireNonNull(rememberSelfNickHint, "rememberSelfNickHint");
-    this.resolveBotNick = Objects.requireNonNull(resolveBotNick, "resolveBotNick");
-  }
+  @NonNull private final String serverId;
+  @NonNull private final PircbotxConnectionState conn;
+  @NonNull private final PircbotxRosterEmitter rosterEmitter;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
+  @NonNull private final BiPredicate<PircBotX, String> isSelfNick;
+  @NonNull private final Consumer<String> rememberSelfNickHint;
+  @NonNull private final Function<PircBotX, String> resolveBotNick;
 
   void onJoin(JoinEvent event) {
     Channel channel = event.getChannel();

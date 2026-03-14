@@ -7,6 +7,8 @@ import cafe.woden.ircclient.irc.playback.*;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * Parsers/helpers for IRCv3 client-only message tags as advertised via RPL_ISUPPORT.
@@ -14,9 +16,8 @@ import java.util.Set;
  * <p>Per IRCv3 message-tags, servers may optionally advertise {@code CLIENTTAGDENY} in numeric 005
  * to indicate which client-only tags are blocked / ignored.
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxClientTagParsers {
-  private PircbotxClientTagParsers() {}
-
   /**
    * Parse a single RPL_ISUPPORT (005) line and return the raw CLIENTTAGDENY value (without the
    * key).

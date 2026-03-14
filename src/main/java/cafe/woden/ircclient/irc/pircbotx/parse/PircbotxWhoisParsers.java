@@ -5,6 +5,8 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.PircbotxIrcClientService;
 import cafe.woden.ircclient.irc.playback.*;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * Parsers for WHOIS/WHOWAS related numerics.
@@ -12,9 +14,8 @@ import cafe.woden.ircclient.irc.playback.*;
  * <p>This class intentionally contains only pure parsing helpers extracted from {@link
  * PircbotxIrcClientService} during refactor step B2.3.
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxWhoisParsers {
-  private PircbotxWhoisParsers() {}
-
   public static record ParsedWhoisUser(String nick, String user, String host) {}
 
   public static record ParsedWhoisAway(String nick, String message) {}

@@ -7,13 +7,14 @@ import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import org.pircbotx.User;
 
 /** Shared IRCv3 metadata helpers for inbound PircBotX events. */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxEventMetadata {
   private static final String TAG_IRCAFE_HOSTMASK = "ircafe/hostmask";
-
-  private PircbotxEventMetadata() {}
 
   public static Instant inboundAt(Object pircbotxEvent) {
     Instant now = Instant.now();

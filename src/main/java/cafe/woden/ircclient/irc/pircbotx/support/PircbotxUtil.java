@@ -6,11 +6,12 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.playback.*;
 import java.util.List;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import org.pircbotx.User;
 
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxUtil {
-
-  private PircbotxUtil() {}
 
   public static String sanitizeNick(String nick) {
     String n = Objects.requireNonNull(nick, "nick").trim();

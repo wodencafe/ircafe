@@ -11,31 +11,22 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Applies RPL_ISUPPORT tokens and emits derived connection-feature observations. */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxIsupportObserver {
   private static final Logger log = LoggerFactory.getLogger(PircbotxIsupportObserver.class);
 
-  private final String serverId;
-  private final PircbotxConnectionState conn;
-  private final ServerIsupportStatePort serverIsupportState;
-  private final Consumer<ServerIrcEvent> emit;
-  private final Consumer<String> sojuNetIdObserver;
-
-  PircbotxIsupportObserver(
-      String serverId,
-      PircbotxConnectionState conn,
-      ServerIsupportStatePort serverIsupportState,
-      Consumer<ServerIrcEvent> emit,
-      Consumer<String> sojuNetIdObserver) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.conn = Objects.requireNonNull(conn, "conn");
-    this.serverIsupportState = Objects.requireNonNull(serverIsupportState, "serverIsupportState");
-    this.emit = Objects.requireNonNull(emit, "emit");
-    this.sojuNetIdObserver = Objects.requireNonNull(sojuNetIdObserver, "sojuNetIdObserver");
-  }
+  @NonNull private final String serverId;
+  @NonNull private final PircbotxConnectionState conn;
+  @NonNull private final ServerIsupportStatePort serverIsupportState;
+  @NonNull private final Consumer<ServerIrcEvent> emit;
+  @NonNull private final Consumer<String> sojuNetIdObserver;
 
   void observe(String rawLine) {
     if (rawLine == null || rawLine.isBlank()) return;

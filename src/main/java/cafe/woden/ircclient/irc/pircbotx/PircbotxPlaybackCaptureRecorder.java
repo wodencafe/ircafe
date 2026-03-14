@@ -6,15 +6,14 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.Map;
-import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 /** Records replayed ZNC playback lines into the active capture window, if one exists. */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxPlaybackCaptureRecorder {
-  private final PircbotxConnectionState conn;
-
-  PircbotxPlaybackCaptureRecorder(PircbotxConnectionState conn) {
-    this.conn = Objects.requireNonNull(conn, "conn");
-  }
+  @NonNull private final PircbotxConnectionState conn;
 
   boolean maybeCapture(
       String target,

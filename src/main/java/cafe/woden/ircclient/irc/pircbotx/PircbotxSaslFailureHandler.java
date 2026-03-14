@@ -7,9 +7,12 @@ import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 
 /** Handles SASL failure numerics and the resulting disconnect/reconnect policy. */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class PircbotxSaslFailureHandler {
   private static final int ERR_SASL_FAIL = 904;
   private static final int ERR_SASL_TOO_LONG = 905;
@@ -20,17 +23,6 @@ final class PircbotxSaslFailureHandler {
   private final PircbotxConnectionState conn;
   private final Consumer<ServerIrcEvent> emit;
   private final boolean disconnectOnSaslFailure;
-
-  PircbotxSaslFailureHandler(
-      String serverId,
-      PircbotxConnectionState conn,
-      Consumer<ServerIrcEvent> emit,
-      boolean disconnectOnSaslFailure) {
-    this.serverId = serverId;
-    this.conn = conn;
-    this.emit = emit;
-    this.disconnectOnSaslFailure = disconnectOnSaslFailure;
-  }
 
   boolean isFailureCode(int code) {
     return code == ERR_SASL_FAIL

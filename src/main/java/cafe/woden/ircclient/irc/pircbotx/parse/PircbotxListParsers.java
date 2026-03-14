@@ -7,11 +7,12 @@ import cafe.woden.ircclient.irc.playback.*;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /** Parsers/formatters for IRC channel-list numerics (321/322/323). */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxListParsers {
-  private PircbotxListParsers() {}
-
   public static record ListEntry(
       String channel, int visibleUsers, boolean hasVisibleUsers, String topic) {}
 

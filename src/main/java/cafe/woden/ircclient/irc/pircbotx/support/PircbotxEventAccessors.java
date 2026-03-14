@@ -6,13 +6,14 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.playback.*;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import org.pircbotx.Channel;
 import org.pircbotx.User;
 
 /** Shared low-level accessors for extracting data from PircBotX event objects. */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxEventAccessors {
-  private PircbotxEventAccessors() {}
-
   public static String rawLineFromEvent(Object event) {
     if (event == null) return null;
 

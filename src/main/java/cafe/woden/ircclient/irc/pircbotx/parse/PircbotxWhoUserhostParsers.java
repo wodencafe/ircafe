@@ -5,10 +5,11 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.irc.playback.*;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxWhoUserhostParsers {
-  private PircbotxWhoUserhostParsers() {}
-
   /**
    * Parse RPL_ISUPPORT (005) and return true if WHOX token is present.
    *
