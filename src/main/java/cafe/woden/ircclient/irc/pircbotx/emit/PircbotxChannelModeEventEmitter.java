@@ -1,9 +1,10 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.mode.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.Objects;
@@ -18,14 +19,14 @@ import org.pircbotx.hooks.events.SuperOpEvent;
 import org.pircbotx.hooks.events.VoiceEvent;
 
 /** Emits live channel-mode observations and refreshes roster snapshots on privilege changes. */
-final class PircbotxChannelModeEventEmitter {
+public final class PircbotxChannelModeEventEmitter {
   private final String serverId;
   private final PircbotxRosterEmitter rosterEmitter;
   private final Consumer<ServerIrcEvent> emit;
   private final Function<Object, String> nickFromEvent;
   private final BiFunction<Object, String, String> modeDetailsFromEvent;
 
-  PircbotxChannelModeEventEmitter(
+  public PircbotxChannelModeEventEmitter(
       String serverId,
       PircbotxRosterEmitter rosterEmitter,
       Consumer<ServerIrcEvent> emit,
@@ -39,7 +40,7 @@ final class PircbotxChannelModeEventEmitter {
         Objects.requireNonNull(modeDetailsFromEvent, "modeDetailsFromEvent");
   }
 
-  void onMode(ModeEvent event) {
+  public void onMode(ModeEvent event) {
     if (event == null || event.getChannel() == null) return;
 
     rosterEmitter.emitRoster(event.getChannel());
@@ -56,23 +57,23 @@ final class PircbotxChannelModeEventEmitter {
     }
   }
 
-  void onOp(OpEvent event) {
+  public void onOp(OpEvent event) {
     rosterEmitter.emitRoster(event.getChannel());
   }
 
-  void onVoice(VoiceEvent event) {
+  public void onVoice(VoiceEvent event) {
     rosterEmitter.emitRoster(event.getChannel());
   }
 
-  void onHalfOp(HalfOpEvent event) {
+  public void onHalfOp(HalfOpEvent event) {
     rosterEmitter.emitRoster(event.getChannel());
   }
 
-  void onOwner(OwnerEvent event) {
+  public void onOwner(OwnerEvent event) {
     rosterEmitter.emitRoster(event.getChannel());
   }
 
-  void onSuperOp(SuperOpEvent event) {
+  public void onSuperOp(SuperOpEvent event) {
     rosterEmitter.emitRoster(event.getChannel());
   }
 }

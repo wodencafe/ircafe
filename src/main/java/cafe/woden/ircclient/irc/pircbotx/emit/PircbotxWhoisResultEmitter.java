@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -13,16 +13,16 @@ import java.util.function.Consumer;
 import org.pircbotx.hooks.events.WhoisEvent;
 
 /** Emits structured WHOIS results and related observed user metadata. */
-final class PircbotxWhoisResultEmitter {
+public final class PircbotxWhoisResultEmitter {
   private final String serverId;
   private final Consumer<ServerIrcEvent> emit;
 
-  PircbotxWhoisResultEmitter(String serverId, Consumer<ServerIrcEvent> emit) {
+  public PircbotxWhoisResultEmitter(String serverId, Consumer<ServerIrcEvent> emit) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.emit = Objects.requireNonNull(emit, "emit");
   }
 
-  void onWhois(WhoisEvent event) {
+  public void onWhois(WhoisEvent event) {
     if (event == null) return;
 
     try {

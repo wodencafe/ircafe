@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -18,21 +18,21 @@ import org.pircbotx.PircBotX;
  * Emits structured events from generic server numerics, channel list numerics, and ban-list
  * numerics.
  */
-final class PircbotxServerResponseEmitter {
+public final class PircbotxServerResponseEmitter {
   private final String serverId;
   private final Consumer<ServerIrcEvent> emit;
   private final Set<String> activeBanListChannels = new HashSet<>();
 
-  PircbotxServerResponseEmitter(String serverId, Consumer<ServerIrcEvent> emit) {
+  public PircbotxServerResponseEmitter(String serverId, Consumer<ServerIrcEvent> emit) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.emit = Objects.requireNonNull(emit, "emit");
   }
 
-  void clear() {
+  public void clear() {
     activeBanListChannels.clear();
   }
 
-  void emitServerResponseLine(PircBotX bot, int code, String line) {
+  public void emitServerResponseLine(PircBotX bot, int code, String line) {
     try {
       if (line == null || line.isBlank()) return;
       String originalLine = line.trim();
@@ -66,7 +66,7 @@ final class PircbotxServerResponseEmitter {
     }
   }
 
-  void emitChannelListEvent(Instant at, ParsedIrcLine pl, String myNick) {
+  public void emitChannelListEvent(Instant at, ParsedIrcLine pl, String myNick) {
     if (pl == null) return;
 
     String banner = PircbotxListParsers.parseListStartBanner(pl.command(), pl.trailing());
@@ -92,7 +92,7 @@ final class PircbotxServerResponseEmitter {
     }
   }
 
-  boolean maybeEmitAlisChannelListEntry(Instant at, String fromNick, String noticeText) {
+  public boolean maybeEmitAlisChannelListEntry(Instant at, String fromNick, String noticeText) {
     PircbotxListParsers.ListEntry entry =
         PircbotxListParsers.parseAlisNoticeEntry(fromNick, noticeText);
     if (entry != null) {
@@ -110,7 +110,7 @@ final class PircbotxServerResponseEmitter {
     return true;
   }
 
-  void emitChannelBanListEvent(Instant at, ParsedIrcLine pl) {
+  public void emitChannelBanListEvent(Instant at, ParsedIrcLine pl) {
     if (pl == null) return;
 
     PircbotxListParsers.BanListEntry entry =

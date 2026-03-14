@@ -1,8 +1,9 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxEventAccessors;
 import cafe.woden.ircclient.irc.playback.*;
@@ -15,13 +16,13 @@ import lombok.RequiredArgsConstructor;
 import org.pircbotx.hooks.events.InviteEvent;
 
 /** Emits structured invite events for a single IRC connection. */
-@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
-final class PircbotxInviteEventEmitter {
+@RequiredArgsConstructor(access = AccessLevel.PUBLIC)
+public final class PircbotxInviteEventEmitter {
   @NonNull private final String serverId;
   @NonNull private final PircbotxRosterEmitter rosterEmitter;
   @NonNull private final Consumer<ServerIrcEvent> emit;
 
-  void onInvite(InviteEvent event) {
+  public void onInvite(InviteEvent event) {
     if (event == null) return;
 
     String channel = resolveChannel(event);

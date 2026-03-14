@@ -20,13 +20,13 @@ import org.pircbotx.PircBotX;
 import org.pircbotx.User;
 
 /** Emits roster snapshots and opportunistic hostmask observations for a single connection. */
-final class PircbotxRosterEmitter {
+public final class PircbotxRosterEmitter {
   private final String serverId;
   private final PircbotxConnectionState conn;
   private final ServerIsupportStatePort serverIsupportState;
   private final Consumer<ServerIrcEvent> emit;
 
-  PircbotxRosterEmitter(
+  public PircbotxRosterEmitter(
       String serverId,
       PircbotxConnectionState conn,
       ServerIsupportStatePort serverIsupportState,
@@ -37,7 +37,7 @@ final class PircbotxRosterEmitter {
     this.emit = Objects.requireNonNull(emit, "emit");
   }
 
-  void maybeEmitHostmaskObserved(String channel, User user) {
+  public void maybeEmitHostmaskObserved(String channel, User user) {
     if (user == null) return;
     String nick = PircbotxUtil.safeStr(user::getNick, "");
     if (nick == null || nick.isBlank()) return;
@@ -57,7 +57,7 @@ final class PircbotxRosterEmitter {
                 Instant.now(), observedChannel, nick.trim(), hostmask)));
   }
 
-  void refreshRosterByName(PircBotX bot, String channelName) {
+  public void refreshRosterByName(PircBotX bot, String channelName) {
     if (bot == null || channelName == null || channelName.isBlank()) return;
     try {
       if (!bot.getUserChannelDao().containsChannel(channelName)) return;
@@ -67,7 +67,7 @@ final class PircbotxRosterEmitter {
     }
   }
 
-  void emitRoster(Channel channel) {
+  public void emitRoster(Channel channel) {
     if (channel == null) return;
 
     String channelName = channel.getName();

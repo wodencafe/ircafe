@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -13,16 +13,16 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /** Emits structured {@link IrcEvent}s from IRC MONITOR numerics. */
-final class PircbotxMonitorEventEmitter {
+public final class PircbotxMonitorEventEmitter {
   private final String serverId;
   private final Consumer<ServerIrcEvent> emit;
 
-  PircbotxMonitorEventEmitter(String serverId, Consumer<ServerIrcEvent> emit) {
+  public PircbotxMonitorEventEmitter(String serverId, Consumer<ServerIrcEvent> emit) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.emit = Objects.requireNonNull(emit, "emit");
   }
 
-  boolean maybeEmitNumeric(String rawLine, String originalLine) {
+  public boolean maybeEmitNumeric(String rawLine, String originalLine) {
     String raw = Objects.toString(rawLine, "").trim();
     if (raw.isEmpty()) return false;
     Instant at = Ircv3ServerTime.parseServerTimeFromRawLine(originalLine);

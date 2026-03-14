@@ -1,15 +1,16 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.playback.*;
-import cafe.woden.ircclient.state.ServerIsupportState;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,8 @@ class PircbotxInviteEventEmitterTest {
   @Test
   void onInviteEmitsInviteUsingEventFieldsWhenNoRawLineIsAvailable() {
     List<ServerIrcEvent> events = new ArrayList<>();
-    PircbotxInviteEventEmitter emitter = newEmitter(events);
+    PircbotxRosterEmitter rosterEmitter = mock(PircbotxRosterEmitter.class);
+    PircbotxInviteEventEmitter emitter = newEmitter(events, rosterEmitter);
     InviteEvent event = mock(InviteEvent.class);
     User user = mock(User.class);
     when(user.getNick()).thenReturn("alice");
@@ -32,6 +34,7 @@ class PircbotxInviteEventEmitterTest {
 
     emitter.onInvite(event);
 
+    verify(rosterEmitter).maybeEmitHostmaskObserved("#ircafe", user);
     assertEquals(1, events.size());
     IrcEvent.InvitedToChannel invite =
         assertInstanceOf(IrcEvent.InvitedToChannel.class, events.getFirst().event());
@@ -44,7 +47,8 @@ class PircbotxInviteEventEmitterTest {
   @Test
   void onInvitePrefersParsedRawLineDetailsWhenAvailable() {
     List<ServerIrcEvent> events = new ArrayList<>();
-    PircbotxInviteEventEmitter emitter = newEmitter(events);
+    PircbotxRosterEmitter rosterEmitter = mock(PircbotxRosterEmitter.class);
+    PircbotxInviteEventEmitter emitter = newEmitter(events, rosterEmitter);
     User user = mock(User.class);
     when(user.getNick()).thenReturn("alice");
     InviteEvent event =
@@ -57,6 +61,7 @@ class PircbotxInviteEventEmitterTest {
 
     emitter.onInvite(event);
 
+    verify(rosterEmitter).maybeEmitHostmaskObserved("#fallback", user);
     assertEquals(1, events.size());
     IrcEvent.InvitedToChannel invite =
         assertInstanceOf(IrcEvent.InvitedToChannel.class, events.getFirst().event());
@@ -66,10 +71,8 @@ class PircbotxInviteEventEmitterTest {
     assertEquals("join us", invite.reason());
   }
 
-  private static PircbotxInviteEventEmitter newEmitter(List<ServerIrcEvent> events) {
-    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    PircbotxRosterEmitter rosterEmitter =
-        new PircbotxRosterEmitter("libera", conn, new ServerIsupportState(), events::add);
+  private static PircbotxInviteEventEmitter newEmitter(
+      List<ServerIrcEvent> events, PircbotxRosterEmitter rosterEmitter) {
     return new PircbotxInviteEventEmitter("libera", rosterEmitter, events::add);
   }
 

@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -12,12 +12,12 @@ import lombok.RequiredArgsConstructor;
 import org.pircbotx.hooks.events.TopicEvent;
 
 /** Emits structured topic-change events for a single IRC connection. */
-@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
-final class PircbotxTopicEventEmitter {
+@RequiredArgsConstructor(access = AccessLevel.PUBLIC)
+public final class PircbotxTopicEventEmitter {
   @NonNull private final String serverId;
   @NonNull private final Consumer<ServerIrcEvent> emit;
 
-  void onTopic(TopicEvent event) {
+  public void onTopic(TopicEvent event) {
     if (event == null || event.getChannel() == null) return;
     String channel = event.getChannel().getName();
     String topic = event.getTopic();

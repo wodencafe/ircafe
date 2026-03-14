@@ -1,15 +1,16 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.playback.*;
-import cafe.woden.ircclient.state.ServerIsupportState;
 import com.google.common.collect.ImmutableSortedSet;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,7 +26,8 @@ class PircbotxChannelModeEventEmitterTest {
   @Test
   void onModeEmitsRosterAndLiveModeObservation() {
     List<ServerIrcEvent> events = new ArrayList<>();
-    PircbotxChannelModeEventEmitter emitter = newEmitter(events);
+    PircbotxRosterEmitter rosterEmitter = mock(PircbotxRosterEmitter.class);
+    PircbotxChannelModeEventEmitter emitter = newEmitter(events, rosterEmitter);
 
     Channel channel = channel("#ircafe");
     User user = mock(User.class);
@@ -37,10 +39,10 @@ class PircbotxChannelModeEventEmitterTest {
 
     emitter.onMode(event);
 
-    assertEquals(2, events.size());
-    assertInstanceOf(IrcEvent.NickListUpdated.class, events.get(0).event());
+    verify(rosterEmitter).emitRoster(channel);
+    assertEquals(1, events.size());
     IrcEvent.ChannelModeObserved observed =
-        assertInstanceOf(IrcEvent.ChannelModeObserved.class, events.get(1).event());
+        assertInstanceOf(IrcEvent.ChannelModeObserved.class, events.getFirst().event());
     assertEquals("#ircafe", observed.channel());
     assertEquals("oper", observed.by());
     assertEquals("+o alice", observed.details());
@@ -50,7 +52,8 @@ class PircbotxChannelModeEventEmitterTest {
   @Test
   void onOpRefreshesRoster() {
     List<ServerIrcEvent> events = new ArrayList<>();
-    PircbotxChannelModeEventEmitter emitter = newEmitter(events);
+    PircbotxRosterEmitter rosterEmitter = mock(PircbotxRosterEmitter.class);
+    PircbotxChannelModeEventEmitter emitter = newEmitter(events, rosterEmitter);
 
     OpEvent event = mock(OpEvent.class);
     Channel channel = channel("#ircafe");
@@ -58,17 +61,12 @@ class PircbotxChannelModeEventEmitterTest {
 
     emitter.onOp(event);
 
-    assertEquals(1, events.size());
-    assertInstanceOf(IrcEvent.NickListUpdated.class, events.getFirst().event());
+    verify(rosterEmitter).emitRoster(channel);
+    assertEquals(0, events.size());
   }
 
-  private static PircbotxChannelModeEventEmitter newEmitter(List<ServerIrcEvent> events) {
-    PircbotxRosterEmitter rosterEmitter =
-        new PircbotxRosterEmitter(
-            "libera",
-            new PircbotxConnectionState("libera"),
-            new ServerIsupportState(),
-            events::add);
+  private static PircbotxChannelModeEventEmitter newEmitter(
+      List<ServerIrcEvent> events, PircbotxRosterEmitter rosterEmitter) {
     return new PircbotxChannelModeEventEmitter(
         "libera",
         rosterEmitter,
