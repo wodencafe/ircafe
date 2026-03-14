@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.support;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -10,10 +10,10 @@ import org.pircbotx.Channel;
 import org.pircbotx.User;
 
 /** Shared low-level accessors for extracting data from PircBotX event objects. */
-final class PircbotxEventAccessors {
+public final class PircbotxEventAccessors {
   private PircbotxEventAccessors() {}
 
-  static String rawLineFromEvent(Object event) {
+  public static String rawLineFromEvent(Object event) {
     if (event == null) return null;
 
     try {
@@ -40,7 +40,7 @@ final class PircbotxEventAccessors {
     return null;
   }
 
-  static String privmsgTargetFromEvent(Object event) {
+  public static String privmsgTargetFromEvent(Object event) {
     try {
       String raw = rawLineFromEvent(event);
       String normalized = PircbotxLineParseUtil.normalizeIrcLineForParsing(raw);
@@ -79,7 +79,7 @@ final class PircbotxEventAccessors {
     return null;
   }
 
-  static String nickFromEvent(Object event) {
+  public static String nickFromEvent(Object event) {
     if (event == null) return null;
 
     Object user = reflectCall(event, "getUser");
@@ -96,7 +96,7 @@ final class PircbotxEventAccessors {
     return null;
   }
 
-  static String senderNickFromEvent(Object event) {
+  public static String senderNickFromEvent(Object event) {
     String directUserNick = "";
     Object user = reflectCall(event, "getUser");
     if (user != null) {
@@ -110,7 +110,7 @@ final class PircbotxEventAccessors {
     return "server";
   }
 
-  static String modeDetailsFromEvent(Object event, String channelName) {
+  public static String modeDetailsFromEvent(Object event, String channelName) {
     if (event == null) return null;
 
     Object raw = reflectCall(event, "getRawLine");
@@ -138,12 +138,22 @@ final class PircbotxEventAccessors {
     return (reduced != null) ? reduced : s;
   }
 
-  static Object reflectCall(Object target, String method) {
+  public static Object reflectCall(Object target, String method) {
     if (target == null || method == null) return null;
     try {
       java.lang.reflect.Method m = target.getClass().getMethod(method);
       return m.invoke(target);
     } catch (Exception ignored) {
+      Class<?> type = target.getClass();
+      while (type != null) {
+        try {
+          java.lang.reflect.Method m = type.getDeclaredMethod(method);
+          m.setAccessible(true);
+          return m.invoke(target);
+        } catch (Exception ignoredDeclared) {
+          type = type.getSuperclass();
+        }
+      }
       return null;
     }
   }

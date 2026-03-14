@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.support;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -17,12 +17,12 @@ import java.util.Objects;
  * multiline-concat} (or {@code draft/multiline-concat}) are buffered; the first subsequent line
  * without concat finalizes and emits the joined message.
  */
-final class Ircv3MultilineAccumulator {
+public final class Ircv3MultilineAccumulator {
 
   private static final int MAX_BUFFERS = 512;
   private static final long BUFFER_TTL_MS = 60_000L;
 
-  record FoldResult(
+  public record FoldResult(
       boolean suppressed, Instant at, String text, String messageId, Map<String, String> tags) {
     static FoldResult passThrough(
         Instant at, String text, String messageId, Map<String, String> tags) {
@@ -71,7 +71,7 @@ final class Ircv3MultilineAccumulator {
 
   private final Map<Key, Buffer> buffers = new HashMap<>();
 
-  FoldResult fold(
+  public FoldResult fold(
       String kind,
       String from,
       String target,
@@ -120,7 +120,7 @@ final class Ircv3MultilineAccumulator {
     return FoldResult.passThrough(outAt, outText, outMessageId, outTags);
   }
 
-  void clear() {
+  public void clear() {
     buffers.clear();
   }
 

@@ -3,6 +3,8 @@ package cafe.woden.ircclient.irc.pircbotx;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.support.PircbotxEventMetadata;
+import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.HashMap;

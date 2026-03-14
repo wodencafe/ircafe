@@ -3,7 +3,7 @@ package cafe.woden.ircclient.irc.pircbotx.parse;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxUtil;
+import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.irc.playback.*;
 
 public final class PircbotxWhoUserhostParsers {

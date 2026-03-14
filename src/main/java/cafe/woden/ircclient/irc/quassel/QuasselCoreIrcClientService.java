@@ -8,6 +8,7 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.mode.*;
 import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
+import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;

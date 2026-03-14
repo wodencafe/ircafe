@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.support;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -12,7 +12,7 @@ public final class PircbotxUtil {
 
   private PircbotxUtil() {}
 
-  static String sanitizeNick(String nick) {
+  public static String sanitizeNick(String nick) {
     String n = Objects.requireNonNull(nick, "nick").trim();
     if (n.isEmpty()) throw new IllegalArgumentException("nick is blank");
     if (n.contains("\r") || n.contains("\n"))
@@ -21,7 +21,7 @@ public final class PircbotxUtil {
     return n;
   }
 
-  static String sanitizeChannel(String channel) {
+  public static String sanitizeChannel(String channel) {
     String c = Objects.requireNonNull(channel, "channel").trim();
     if (c.isEmpty()) throw new IllegalArgumentException("channel is blank");
     if (c.contains("\r") || c.contains("\n"))
@@ -33,16 +33,16 @@ public final class PircbotxUtil {
   }
 
   @FunctionalInterface
-  interface ThrowingSupplier<T> {
+  public interface ThrowingSupplier<T> {
     T get() throws Exception;
   }
 
   @FunctionalInterface
-  interface ThrowingLongSupplier {
+  public interface ThrowingLongSupplier {
     long getAsLong() throws Exception;
   }
 
-  static String safeStr(ThrowingSupplier<String> s, String def) {
+  public static String safeStr(ThrowingSupplier<String> s, String def) {
     try {
       String v = s.get();
       return v == null ? def : v;
@@ -51,7 +51,7 @@ public final class PircbotxUtil {
     }
   }
 
-  static long safeLong(ThrowingLongSupplier s, long def) {
+  public static long safeLong(ThrowingLongSupplier s, long def) {
     try {
       return s.getAsLong();
     } catch (Exception ignored) {
@@ -60,7 +60,7 @@ public final class PircbotxUtil {
   }
 
   @SuppressWarnings("unchecked")
-  static <T> List<T> safeList(ThrowingSupplier<List<T>> s) {
+  public static <T> List<T> safeList(ThrowingSupplier<List<T>> s) {
     try {
       List<T> v = s.get();
       return v == null ? java.util.List.of() : v;
@@ -69,7 +69,7 @@ public final class PircbotxUtil {
     }
   }
 
-  static String parseCtcpAction(String message) {
+  public static String parseCtcpAction(String message) {
     if (message == null || message.length() < 2) return null;
     if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return null;
     String inner = message.substring(1, message.length() - 1).trim();
@@ -83,7 +83,7 @@ public final class PircbotxUtil {
     return null;
   }
 
-  static boolean isCtcpWrapped(String message) {
+  public static boolean isCtcpWrapped(String message) {
     if (message == null || message.length() < 2) return false;
     return message.charAt(0) == 0x01 && message.charAt(message.length() - 1) == 0x01;
   }
@@ -92,7 +92,7 @@ public final class PircbotxUtil {
    * Best-effort hostmask derived from PircBotX's {@link User}. Returns empty string if no useful
    * information exists.
    */
-  static String hostmaskFromUser(User user) {
+  public static String hostmaskFromUser(User user) {
     if (user == null) return "";
 
     String hm = safeStr(user::getHostmask, "");

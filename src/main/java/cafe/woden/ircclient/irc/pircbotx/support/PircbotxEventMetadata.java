@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.support;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -10,21 +10,21 @@ import java.util.Map;
 import org.pircbotx.User;
 
 /** Shared IRCv3 metadata helpers for inbound PircBotX events. */
-final class PircbotxEventMetadata {
+public final class PircbotxEventMetadata {
   private static final String TAG_IRCAFE_HOSTMASK = "ircafe/hostmask";
 
   private PircbotxEventMetadata() {}
 
-  static Instant inboundAt(Object pircbotxEvent) {
+  public static Instant inboundAt(Object pircbotxEvent) {
     Instant now = Instant.now();
     return Ircv3ServerTime.orNow(Ircv3ServerTime.fromEvent(pircbotxEvent), now);
   }
 
-  static Map<String, String> ircv3TagsFromEvent(Object event) {
+  public static Map<String, String> ircv3TagsFromEvent(Object event) {
     return Ircv3Tags.fromEvent(event);
   }
 
-  static Map<String, String> withObservedHostmaskTag(Map<String, String> tags, User user) {
+  public static Map<String, String> withObservedHostmaskTag(Map<String, String> tags, User user) {
     Map<String, String> out = (tags == null) ? new HashMap<>() : tags;
     if (user == null) return out;
     String hostmask = PircbotxUtil.hostmaskFromUser(user);
@@ -33,7 +33,7 @@ final class PircbotxEventMetadata {
     return out;
   }
 
-  static String ircv3MessageId(Map<String, String> tags) {
+  public static String ircv3MessageId(Map<String, String> tags) {
     return Ircv3Tags.firstTagValue(tags, "msgid", "draft/msgid", "znc.in/msgid");
   }
 }

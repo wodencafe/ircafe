@@ -14,6 +14,7 @@ import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.support.Ircv3MultilineAccumulator;
 import cafe.woden.ircclient.irc.playback.*;
 import java.util.ArrayList;
 import java.util.List;

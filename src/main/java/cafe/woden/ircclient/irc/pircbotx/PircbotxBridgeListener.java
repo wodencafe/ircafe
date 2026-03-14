@@ -5,6 +5,8 @@ import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.support.Ircv3MultilineAccumulator;
+import cafe.woden.ircclient.irc.pircbotx.support.PircbotxEventAccessors;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
