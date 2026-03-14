@@ -4,7 +4,7 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ignore.IgnoreMaskMatcher;
 import cafe.woden.ircclient.irc.IrcEvent.AccountState;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
-import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
 import java.net.URI;
 import java.time.Instant;

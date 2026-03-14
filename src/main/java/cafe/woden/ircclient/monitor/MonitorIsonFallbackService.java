@@ -6,8 +6,8 @@ import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.irc.PircbotxIsonParsers;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.presence.IsonParsers;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Scheduler;
@@ -253,7 +253,7 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
     PollCycle cycle = pollByServer.get(sid);
     if (cycle == null) return;
 
-    List<String> online = PircbotxIsonParsers.parseRpl303IsonOnlineNicks(sr.rawLine());
+    List<String> online = IsonParsers.parseRpl303IsonOnlineNicks(sr.rawLine());
     if (online == null) return;
     synchronized (cycle.lock) {
       for (String nick : online) {

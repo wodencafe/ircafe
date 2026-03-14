@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
-import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.support.AopUtils;

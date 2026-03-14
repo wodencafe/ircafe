@@ -3,7 +3,7 @@ package cafe.woden.ircclient.ui.chat;
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
 import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.app.api.PresenceKind;
-import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.FilterAction;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;

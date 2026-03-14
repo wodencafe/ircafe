@@ -45,7 +45,15 @@ import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
+import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityCatalog;
+import cafe.woden.ircclient.irc.ircv3.Ircv3DraftNormalizer;
 import cafe.woden.ircclient.irc.matrix.MatrixIrcClientService;
+import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
+import cafe.woden.ircclient.irc.playback.PlaybackCursorProvider;
+import cafe.woden.ircclient.irc.playback.PlaybackCursorProviderConfig;
+import cafe.woden.ircclient.irc.presence.IsonParsers;
+import cafe.woden.ircclient.irc.roster.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserhostQueryService;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.logging.LoggingTargetLogMaintenancePortAdapter;
@@ -197,6 +205,17 @@ class SpringModulithIncrementalAdoptionTest {
     assertNamedInterfaceContains(ircModule, "soju", SojuAutoConnectStore.class);
     assertNamedInterfaceContains(ircModule, "znc", ZncAutoConnectStore.class);
     assertNamedInterfaceContains(ircModule, "enrichment", UserInfoEnrichmentService.class);
+    assertNamedInterfaceContains(
+        ircModule, "ircv3", Ircv3CapabilityCatalog.class, Ircv3DraftNormalizer.class);
+    assertNamedInterfaceContains(
+        ircModule, "roster", UserListStore.class, UserhostQueryService.class);
+    assertNamedInterfaceContains(
+        ircModule,
+        "playback",
+        IrcBouncerPlaybackPort.class,
+        PlaybackCursorProvider.class,
+        PlaybackCursorProviderConfig.class);
+    assertNamedInterfaceContains(ircModule, "presence", IsonParsers.class);
 
     ApplicationModule ignoreModule = moduleFor(modules, InboundIgnorePolicy.class);
     assertThat(ignoreModule).isNotEqualTo(appModule);

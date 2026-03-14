@@ -2,7 +2,7 @@ package cafe.woden.ircclient.ui.coordinator;
 
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
-import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import cafe.woden.ircclient.ui.ChatDockable;

@@ -23,7 +23,7 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.irc.IrcConnectionLifecyclePort;
-import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.modulith.AbstractApplicationModuleIntegrationTest;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;

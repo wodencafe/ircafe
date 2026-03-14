@@ -10,7 +10,7 @@ import cafe.woden.ircclient.config.PushyProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.irc.IrcHeartbeatMaintenanceService;
-import cafe.woden.ircclient.irc.PircbotxBotFactory;
+import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityCatalog;
 import cafe.woden.ircclient.model.BuiltInSound;
 import cafe.woden.ircclient.model.FilterRule;
 import cafe.woden.ircclient.model.FilterScopeOverride;
@@ -4566,7 +4566,7 @@ public class PreferencesDialog {
     panel.setOpaque(false);
 
     LinkedHashMap<String, List<String>> grouped = new LinkedHashMap<>();
-    for (String cap : PircbotxBotFactory.requestableCapabilities()) {
+    for (String cap : Ircv3CapabilityCatalog.requestableCapabilities()) {
       String key = normalizeIrcv3CapabilityKey(cap);
       if (key.isEmpty()) continue;
       grouped.computeIfAbsent(capabilityGroupKey(key), __ -> new ArrayList<>()).add(key);

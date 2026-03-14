@@ -18,9 +18,9 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
-import cafe.woden.ircclient.irc.UserListStore;
-import cafe.woden.ircclient.irc.UserhostQueryService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
+import cafe.woden.ircclient.irc.roster.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserhostQueryService;
 import cafe.woden.ircclient.model.TargetRef;
 import org.junit.jupiter.api.Test;
 

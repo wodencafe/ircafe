@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;

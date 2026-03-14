@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.logging;
 
-import cafe.woden.ircclient.irc.PlaybackCursorProvider;
+import cafe.woden.ircclient.irc.playback.PlaybackCursorProvider;
 import java.util.OptionalLong;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;

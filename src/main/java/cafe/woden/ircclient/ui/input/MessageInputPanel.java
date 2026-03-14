@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.input;
 
-import cafe.woden.ircclient.irc.Ircv3DraftNormalizer;
+import cafe.woden.ircclient.irc.ircv3.Ircv3DraftNormalizer;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
 import cafe.woden.ircclient.ui.SingleLineEmojiTextPane;
 import cafe.woden.ircclient.ui.backend.BackendUiProfile;

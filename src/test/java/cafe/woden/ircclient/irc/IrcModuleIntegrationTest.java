@@ -8,6 +8,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.irc.adapter.BouncerIrcConnectionPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcConnectionLifecyclePortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcCurrentNickPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcMediatorInteractionPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcReadMarkerPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcShutdownPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcTypingPortAdapter;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
