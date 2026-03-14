@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -29,6 +30,7 @@ import org.springframework.stereotype.Component;
 /** Orchestrates history batch persistence side effects extracted from {@link IrcMediator}. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class MediatorHistoryIngestOrchestrator {
   private static final Duration LIVE_REQUEST_MAX_AGE = Duration.ofMinutes(2);
   private static final String HISTORY_STATUS_TAG = "(history)";
@@ -44,31 +46,15 @@ public class MediatorHistoryIngestOrchestrator {
   private final ZncPlaybackEventsPort zncPlaybackEventsPort;
   private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState;
   private final ChatTranscriptHistoryPort transcripts;
+
+  @Qualifier("ircCurrentNickPort")
   private final IrcCurrentNickPort currentNickPort;
+
   private final Cache<HistoryRenderKey, Boolean> recentRenderedHistory =
       Caffeine.newBuilder()
           .maximumSize(HISTORY_RENDER_DEDUP_MAX)
           .expireAfterAccess(Duration.ofMillis(HISTORY_RENDER_DEDUP_TTL_MS))
           .build();
-
-  public MediatorHistoryIngestOrchestrator(
-      UiPort ui,
-      ChatHistoryIngestionPort chatHistoryIngestionPort,
-      ChatHistoryIngestEventsPort chatHistoryIngestEventsPort,
-      ChatHistoryBatchEventsPort chatHistoryBatchEventsPort,
-      ZncPlaybackEventsPort zncPlaybackEventsPort,
-      ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState,
-      ChatTranscriptHistoryPort transcripts,
-      @Qualifier("ircCurrentNickPort") IrcCurrentNickPort currentNickPort) {
-    this.ui = ui;
-    this.chatHistoryIngestionPort = chatHistoryIngestionPort;
-    this.chatHistoryIngestEventsPort = chatHistoryIngestEventsPort;
-    this.chatHistoryBatchEventsPort = chatHistoryBatchEventsPort;
-    this.zncPlaybackEventsPort = zncPlaybackEventsPort;
-    this.chatHistoryRequestRoutingState = chatHistoryRequestRoutingState;
-    this.transcripts = transcripts;
-    this.currentNickPort = currentNickPort;
-  }
 
   public void onChatHistoryBatchReceived(String sid, IrcEvent.ChatHistoryBatchReceived ev) {
     String target = normalizeTarget(ev.target());

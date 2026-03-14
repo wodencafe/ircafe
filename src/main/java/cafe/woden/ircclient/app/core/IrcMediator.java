@@ -66,6 +66,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,6 +80,7 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 @ApplicationLayer
+@RequiredArgsConstructor
 public class IrcMediator implements MediatorControlPort {
   private static final Logger log = LoggerFactory.getLogger(IrcMediator.class);
   private static final Duration LABELED_RESPONSE_CORRELATION_WINDOW = Duration.ofMinutes(2);
@@ -92,10 +95,12 @@ public class IrcMediator implements MediatorControlPort {
   private static final Duration INBOUND_MSGID_DEDUP_COUNTER_TTL = Duration.ofHours(6);
   private static final long INBOUND_MSGID_DEDUP_DIAG_MIN_EMIT_MS = 10_000L;
 
+  @Qualifier("ircMediatorInteractionPort")
   private final IrcMediatorInteractionPort irc;
-  private final IrcTypingPort typingPort;
-  private final IrcReadMarkerPort readMarkerPort;
-  private final IrcNegotiatedFeaturePort negotiatedFeaturePort;
+
+  @NonNull private final IrcTypingPort typingPort;
+  @NonNull private final IrcReadMarkerPort readMarkerPort;
+  @NonNull private final IrcNegotiatedFeaturePort negotiatedFeaturePort;
   private final UiPort ui;
   private final CommandParser commandParser;
   private final UserCommandAliasEngine userCommandAliasEngine;
@@ -110,11 +115,9 @@ public class IrcMediator implements MediatorControlPort {
   private final TargetCoordinator targetCoordinator;
   private final UiSettingsPort uiSettingsPort;
   private final TrayNotificationsPort trayNotificationService;
+  private final NotificationRuleMatcherPort notificationRuleMatcherPort;
   private final UserInfoEnrichmentService userInfoEnrichmentService;
   private final UserListStore userListStore;
-  private final InboundIgnorePolicyPort inboundIgnorePolicy;
-  private final ApplicationEventPublisher applicationEventPublisher;
-  private final CompositeDisposable disposables = new CompositeDisposable();
   private final WhoisRoutingPort whoisRoutingState;
   private final CtcpRoutingPort ctcpRoutingState;
   private final ModeRoutingPort modeRoutingState;
@@ -128,9 +131,11 @@ public class IrcMediator implements MediatorControlPort {
   private final InboundModeEventHandler inboundModeEventHandler;
   private final IrcEventNotifierPort ircEventNotifierPort;
   private final InterceptorIngestPort interceptorIngestPort;
+  private final InboundIgnorePolicyPort inboundIgnorePolicy;
   private final MonitorFallbackPort monitorFallbackPort;
+  private final ApplicationEventPublisher applicationEventPublisher;
 
-  private final NotificationRuleMatcherPort notificationRuleMatcherPort;
+  private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final java.util.concurrent.atomic.AtomicBoolean started =
       new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -182,85 +187,6 @@ public class IrcMediator implements MediatorControlPort {
   @PreDestroy
   void shutdown() {
     stop();
-  }
-
-  public IrcMediator(
-      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort irc,
-      IrcTypingPort typingPort,
-      IrcReadMarkerPort readMarkerPort,
-      IrcNegotiatedFeaturePort negotiatedFeaturePort,
-      UiPort ui,
-      CommandParser commandParser,
-      UserCommandAliasEngine userCommandAliasEngine,
-      ServerRegistry serverRegistry,
-      RuntimeConfigStore runtimeConfig,
-      ConnectionCoordinator connectionCoordinator,
-      MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder,
-      MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder,
-      MediatorHistoryIngestOrchestrator mediatorHistoryIngestOrchestrator,
-      OutboundCommandDispatcher outboundCommandDispatcher,
-      OutboundDccCommandService outboundDccCommandService,
-      TargetCoordinator targetCoordinator,
-      UiSettingsPort uiSettingsPort,
-      TrayNotificationsPort trayNotificationService,
-      NotificationRuleMatcherPort notificationRuleMatcherPort,
-      UserInfoEnrichmentService userInfoEnrichmentService,
-      UserListStore userListStore,
-      WhoisRoutingPort whoisRoutingState,
-      CtcpRoutingPort ctcpRoutingState,
-      ModeRoutingPort modeRoutingState,
-      AwayRoutingPort awayRoutingState,
-      ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState,
-      JoinRoutingPort joinRoutingState,
-      LabeledResponseRoutingPort labeledResponseRoutingState,
-      PendingEchoMessagePort pendingEchoMessageState,
-      PendingInvitePort pendingInviteState,
-      ServerIsupportStatePort serverIsupportState,
-      InboundModeEventHandler inboundModeEventHandler,
-      IrcEventNotifierPort ircEventNotifierPort,
-      InterceptorIngestPort interceptorIngestPort,
-      InboundIgnorePolicyPort inboundIgnorePolicy,
-      MonitorFallbackPort monitorFallbackPort,
-      ApplicationEventPublisher applicationEventPublisher) {
-
-    this.irc = irc;
-    this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
-    this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
-    this.negotiatedFeaturePort =
-        Objects.requireNonNull(negotiatedFeaturePort, "negotiatedFeaturePort");
-    this.ui = ui;
-    this.commandParser = commandParser;
-    this.userCommandAliasEngine = userCommandAliasEngine;
-    this.serverRegistry = serverRegistry;
-    this.runtimeConfig = runtimeConfig;
-    this.connectionCoordinator = connectionCoordinator;
-    this.mediatorConnectionSubscriptionBinder = mediatorConnectionSubscriptionBinder;
-    this.mediatorUiSubscriptionBinder = mediatorUiSubscriptionBinder;
-    this.mediatorHistoryIngestOrchestrator = mediatorHistoryIngestOrchestrator;
-    this.outboundCommandDispatcher = outboundCommandDispatcher;
-    this.outboundDccCommandService = outboundDccCommandService;
-    this.targetCoordinator = targetCoordinator;
-    this.uiSettingsPort = uiSettingsPort;
-    this.trayNotificationService = trayNotificationService;
-    this.notificationRuleMatcherPort = notificationRuleMatcherPort;
-    this.userInfoEnrichmentService = userInfoEnrichmentService;
-    this.userListStore = userListStore;
-    this.whoisRoutingState = whoisRoutingState;
-    this.ctcpRoutingState = ctcpRoutingState;
-    this.modeRoutingState = modeRoutingState;
-    this.awayRoutingState = awayRoutingState;
-    this.chatHistoryRequestRoutingState = chatHistoryRequestRoutingState;
-    this.joinRoutingState = joinRoutingState;
-    this.labeledResponseRoutingState = labeledResponseRoutingState;
-    this.pendingEchoMessageState = pendingEchoMessageState;
-    this.pendingInviteState = pendingInviteState;
-    this.serverIsupportState = serverIsupportState;
-    this.inboundModeEventHandler = inboundModeEventHandler;
-    this.ircEventNotifierPort = ircEventNotifierPort;
-    this.interceptorIngestPort = interceptorIngestPort;
-    this.inboundIgnorePolicy = inboundIgnorePolicy;
-    this.monitorFallbackPort = monitorFallbackPort;
-    this.applicationEventPublisher = applicationEventPublisher;
   }
 
   public void start() {

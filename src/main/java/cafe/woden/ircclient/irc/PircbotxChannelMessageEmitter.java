@@ -11,10 +11,11 @@ import org.pircbotx.hooks.events.MessageEvent;
 /** Emits structured channel message events for a single IRC connection. */
 final class PircbotxChannelMessageEmitter {
   private final String serverId;
-  private final PircbotxConnectionState conn;
+
   private final PircbotxRosterEmitter rosterEmitter;
   private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
   private final Ircv3MultilineAccumulator multilineAccumulator;
+  private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
   private final Consumer<ServerIrcEvent> emit;
 
   PircbotxChannelMessageEmitter(
@@ -25,11 +26,12 @@ final class PircbotxChannelMessageEmitter {
       Ircv3MultilineAccumulator multilineAccumulator,
       Consumer<ServerIrcEvent> emit) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.conn = Objects.requireNonNull(conn, "conn");
+
     this.rosterEmitter = Objects.requireNonNull(rosterEmitter, "rosterEmitter");
     this.chatHistoryBatches = Objects.requireNonNull(chatHistoryBatches, "chatHistoryBatches");
     this.multilineAccumulator =
         Objects.requireNonNull(multilineAccumulator, "multilineAccumulator");
+    this.playbackCaptureRecorder = new PircbotxPlaybackCaptureRecorder(conn);
     this.emit = Objects.requireNonNull(emit, "emit");
   }
 
@@ -78,7 +80,7 @@ final class PircbotxChannelMessageEmitter {
 
     String action = PircbotxUtil.parseCtcpAction(msg);
     if (action != null) {
-      if (maybeCaptureZncPlayback(
+      if (playbackCaptureRecorder.maybeCapture(
           channel, at, ChatHistoryEntry.Kind.ACTION, from, action, messageId, ircv3Tags)) {
         return;
       }
@@ -89,7 +91,7 @@ final class PircbotxChannelMessageEmitter {
       return;
     }
 
-    if (maybeCaptureZncPlayback(
+    if (playbackCaptureRecorder.maybeCapture(
         channel, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg, messageId, ircv3Tags)) {
       return;
     }
@@ -97,30 +99,5 @@ final class PircbotxChannelMessageEmitter {
     emit.accept(
         new ServerIrcEvent(
             serverId, new IrcEvent.ChannelMessage(at, channel, from, msg, messageId, ircv3Tags)));
-  }
-
-  private boolean maybeCaptureZncPlayback(
-      String target,
-      Instant at,
-      ChatHistoryEntry.Kind kind,
-      String from,
-      String text,
-      String messageId,
-      Map<String, String> ircv3Tags) {
-    try {
-      if (!conn.zncPlaybackCapture.shouldCapture(target, at)) return false;
-      conn.zncPlaybackCapture.addEntry(
-          new ChatHistoryEntry(
-              at == null ? Instant.now() : at,
-              kind == null ? ChatHistoryEntry.Kind.PRIVMSG : kind,
-              target == null ? "" : target,
-              from == null ? "" : from,
-              text == null ? "" : text,
-              messageId,
-              ircv3Tags));
-      return true;
-    } catch (Exception ignored) {
-      return false;
-    }
   }
 }

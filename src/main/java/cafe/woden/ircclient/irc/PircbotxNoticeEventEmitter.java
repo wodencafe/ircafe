@@ -18,6 +18,7 @@ final class PircbotxNoticeEventEmitter {
   private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
   private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
   private final Ircv3MultilineAccumulator multilineAccumulator;
+  private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
   private final PircbotxServerResponseEmitter serverResponses;
   private final Consumer<ServerIrcEvent> emit;
   private final Function<Object, String> senderNickResolver;
@@ -39,6 +40,7 @@ final class PircbotxNoticeEventEmitter {
     this.chatHistoryBatches = Objects.requireNonNull(chatHistoryBatches, "chatHistoryBatches");
     this.multilineAccumulator =
         Objects.requireNonNull(multilineAccumulator, "multilineAccumulator");
+    this.playbackCaptureRecorder = new PircbotxPlaybackCaptureRecorder(conn);
     this.serverResponses = Objects.requireNonNull(serverResponses, "serverResponses");
     this.emit = Objects.requireNonNull(emit, "emit");
     this.senderNickResolver = Objects.requireNonNull(senderNickResolver, "senderNickResolver");
@@ -112,7 +114,7 @@ final class PircbotxNoticeEventEmitter {
       }
       if (target == null || target.isBlank()) target = from;
       if (target != null
-          && maybeCaptureZncPlayback(
+          && playbackCaptureRecorder.maybeCapture(
               target, at, ChatHistoryEntry.Kind.NOTICE, from, notice, messageId, ircv3Tags)) {
         return;
       }
@@ -132,30 +134,5 @@ final class PircbotxNoticeEventEmitter {
     emit.accept(
         new ServerIrcEvent(
             serverId, new IrcEvent.Notice(at, from, target, notice, messageId, ircv3Tags)));
-  }
-
-  private boolean maybeCaptureZncPlayback(
-      String target,
-      Instant at,
-      ChatHistoryEntry.Kind kind,
-      String from,
-      String text,
-      String messageId,
-      Map<String, String> ircv3Tags) {
-    try {
-      if (!conn.zncPlaybackCapture.shouldCapture(target, at)) return false;
-      conn.zncPlaybackCapture.addEntry(
-          new ChatHistoryEntry(
-              at == null ? Instant.now() : at,
-              kind == null ? ChatHistoryEntry.Kind.PRIVMSG : kind,
-              target == null ? "" : target,
-              from == null ? "" : from,
-              text == null ? "" : text,
-              messageId,
-              ircv3Tags));
-      return true;
-    } catch (Exception ignored) {
-      return false;
-    }
   }
 }

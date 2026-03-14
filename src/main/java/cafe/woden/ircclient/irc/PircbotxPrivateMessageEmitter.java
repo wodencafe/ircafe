@@ -2,7 +2,6 @@ package cafe.woden.ircclient.irc;
 
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -21,6 +20,8 @@ final class PircbotxPrivateMessageEmitter {
   private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
   private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
   private final Ircv3MultilineAccumulator multilineAccumulator;
+  private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
+  private final PircbotxPrivateConversationSupport privateConversationSupport;
   private final Consumer<ServerIrcEvent> emit;
   private final Function<PircBotX, String> selfNickResolver;
   private final Function<Object, String> privateTargetFromEvent;
@@ -42,6 +43,8 @@ final class PircbotxPrivateMessageEmitter {
     this.chatHistoryBatches = Objects.requireNonNull(chatHistoryBatches, "chatHistoryBatches");
     this.multilineAccumulator =
         Objects.requireNonNull(multilineAccumulator, "multilineAccumulator");
+    this.playbackCaptureRecorder = new PircbotxPlaybackCaptureRecorder(conn);
+    this.privateConversationSupport = new PircbotxPrivateConversationSupport(conn);
     this.emit = Objects.requireNonNull(emit, "emit");
     this.selfNickResolver = Objects.requireNonNull(selfNickResolver, "selfNickResolver");
     this.privateTargetFromEvent =
@@ -66,30 +69,19 @@ final class PircbotxPrivateMessageEmitter {
       boolean fromSelf =
           botNick != null && !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
       if ((pmDest == null || pmDest.isBlank()) && fromSelf) {
-        String hinted = inferPrivateDestinationFromHints(from, kind, hintPayload, batchMsgId);
+        String hinted =
+            privateConversationSupport.inferPrivateDestinationFromHints(
+                from, kind, hintPayload, batchMsgId);
         if (!hinted.isBlank()) {
           pmDest = hinted;
         }
       }
-      if (fromSelf) {
-        if (isZncPlayStarCursorCommand(msg)) {
-          return;
-        }
-        if (pmDest != null) {
-          if ("*playback".equalsIgnoreCase(pmDest)
-              && msg != null
-              && msg.toLowerCase(Locale.ROOT).startsWith("play ")) {
-            return;
-          }
-          if ("*status".equalsIgnoreCase(pmDest)
-              && msg != null
-              && msg.equalsIgnoreCase("ListNetworks")) {
-            return;
-          }
-        }
+      if (privateConversationSupport.shouldSuppressSelfBootstrapMessage(fromSelf, pmDest, msg)) {
+        return;
       }
 
-      String convTarget = derivePrivateConversationTarget(botNick, from, pmDest);
+      String convTarget =
+          privateConversationSupport.deriveConversationTarget(botNick, from, pmDest);
       ChatHistoryEntry.Kind entryKind =
           action != null ? ChatHistoryEntry.Kind.ACTION : ChatHistoryEntry.Kind.PRIVMSG;
       String payload = action != null ? action : msg;
@@ -116,7 +108,9 @@ final class PircbotxPrivateMessageEmitter {
     Map<String, String> tags = new HashMap<>(PircbotxEventMetadata.ircv3TagsFromEvent(event));
     String messageId = PircbotxEventMetadata.ircv3MessageId(tags);
     if ((pmDest == null || pmDest.isBlank()) && fromSelf) {
-      String hinted = inferPrivateDestinationFromHints(from, hintKind, hintPayload, messageId);
+      String hinted =
+          privateConversationSupport.inferPrivateDestinationFromHints(
+              from, hintKind, hintPayload, messageId);
       if (!hinted.isBlank()) {
         pmDest = hinted;
       }
@@ -128,22 +122,8 @@ final class PircbotxPrivateMessageEmitter {
     Map<String, String> ircv3Tags = tags;
     messageId = PircbotxEventMetadata.ircv3MessageId(ircv3Tags);
 
-    if (fromSelf) {
-      if (isZncPlayStarCursorCommand(msg)) {
-        return;
-      }
-      if (pmDest != null) {
-        if ("*playback".equalsIgnoreCase(pmDest)
-            && msg != null
-            && msg.toLowerCase(Locale.ROOT).startsWith("play ")) {
-          return;
-        }
-        if ("*status".equalsIgnoreCase(pmDest)
-            && msg != null
-            && msg.equalsIgnoreCase("ListNetworks")) {
-          return;
-        }
-      }
+    if (privateConversationSupport.shouldSuppressSelfBootstrapMessage(fromSelf, pmDest, msg)) {
+      return;
     }
 
     if ("*status".equalsIgnoreCase(from)) {
@@ -158,7 +138,7 @@ final class PircbotxPrivateMessageEmitter {
       conn.zncPlaybackCapture.onPlaybackControlLine(msg);
     }
 
-    String convTarget = derivePrivateConversationTarget(botNick, from, pmDest);
+    String convTarget = privateConversationSupport.deriveConversationTarget(botNick, from, pmDest);
     Ircv3MultilineAccumulator.FoldResult folded =
         multilineAccumulator.fold("PRIVMSG", from, convTarget, at, msg, messageId, ircv3Tags);
     if (folded.suppressed()) {
@@ -176,12 +156,12 @@ final class PircbotxPrivateMessageEmitter {
     if (!"*playback".equalsIgnoreCase(from)) {
       String action = PircbotxUtil.parseCtcpAction(msg);
       if (action != null) {
-        if (maybeCaptureZncPlayback(
+        if (playbackCaptureRecorder.maybeCapture(
             convTarget, at, ChatHistoryEntry.Kind.ACTION, from, action, messageId, ircv3Tags)) {
           return;
         }
       } else {
-        if (maybeCaptureZncPlayback(
+        if (playbackCaptureRecorder.maybeCapture(
             convTarget, at, ChatHistoryEntry.Kind.PRIVMSG, from, msg, messageId, ircv3Tags)) {
           return;
         }
@@ -205,65 +185,5 @@ final class PircbotxPrivateMessageEmitter {
     emit.accept(
         new ServerIrcEvent(
             serverId, new IrcEvent.PrivateMessage(at, from, msg, messageId, ircv3Tags)));
-  }
-
-  static String derivePrivateConversationTarget(String botNick, String fromNick, String dest) {
-    String from = fromNick == null ? "" : fromNick.trim();
-    String d = dest == null ? "" : dest.trim();
-    String me = botNick == null ? "" : botNick.trim();
-
-    if (d.isBlank()) return from;
-    if (me.isBlank()) return from;
-    if (d.equalsIgnoreCase(me)) return from;
-    return d;
-  }
-
-  static boolean isZncPlayStarCursorCommand(String msg) {
-    String m = Objects.toString(msg, "").trim();
-    if (m.isEmpty()) return false;
-    String[] parts = m.split("\\s+");
-    if (parts.length < 3) return false;
-    if (!"play".equalsIgnoreCase(parts[0])) return false;
-    if (!"*".equals(parts[1])) return false;
-    String n = parts[2];
-    if (n.isEmpty()) return false;
-    for (int i = 0; i < n.length(); i++) {
-      if (!Character.isDigit(n.charAt(i))) return false;
-    }
-    return true;
-  }
-
-  private String inferPrivateDestinationFromHints(
-      String from, String kind, String payload, String messageId) {
-    String fromNick = Objects.toString(from, "").trim();
-    String k = Objects.toString(kind, "").trim().toUpperCase(Locale.ROOT);
-    String body = Objects.toString(payload, "").trim();
-    if (fromNick.isBlank() || k.isBlank() || body.isBlank()) return "";
-    return conn.findPrivateTargetHint(fromNick, k, body, messageId, System.currentTimeMillis());
-  }
-
-  private boolean maybeCaptureZncPlayback(
-      String target,
-      Instant at,
-      ChatHistoryEntry.Kind kind,
-      String from,
-      String text,
-      String messageId,
-      Map<String, String> ircv3Tags) {
-    try {
-      if (!conn.zncPlaybackCapture.shouldCapture(target, at)) return false;
-      conn.zncPlaybackCapture.addEntry(
-          new ChatHistoryEntry(
-              at == null ? Instant.now() : at,
-              kind == null ? ChatHistoryEntry.Kind.PRIVMSG : kind,
-              target == null ? "" : target,
-              from == null ? "" : from,
-              text == null ? "" : text,
-              messageId,
-              ircv3Tags));
-      return true;
-    } catch (Exception ignored) {
-      return false;
-    }
   }
 }

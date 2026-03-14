@@ -29,6 +29,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,22 +41,32 @@ import org.springframework.stereotype.Component;
 @Component
 @Lazy
 @ApplicationLayer
+@RequiredArgsConstructor
 public class TargetCoordinator implements ActiveTargetPort {
   private static final Logger log = LoggerFactory.getLogger(TargetCoordinator.class);
 
-  private final UiPort ui;
-  private final UserListStore userListStore;
-  private final IrcTargetMembershipPort targetMembership;
-  private final IrcBouncerPlaybackPort bouncerPlayback;
-  private final ServerRegistry serverRegistry;
-  private final RuntimeConfigStore runtimeConfig;
-  private final ConnectionCoordinator connectionCoordinator;
-  private final IgnoreListQueryPort ignoreList;
-  private final UserhostQueryService userhostQueryService;
-  private final UserInfoEnrichmentService userInfoEnrichmentService;
-  private final TargetChatHistoryPort targetChatHistoryPort;
-  private final TargetLogMaintenancePort targetLogMaintenancePort;
+  @NonNull private final UiPort ui;
+  @NonNull private final UserListStore userListStore;
 
+  @NonNull
+  @Qualifier("ircTargetMembershipPort")
+  private final IrcTargetMembershipPort targetMembership;
+
+  @NonNull
+  @Qualifier("ircClientService")
+  private final IrcBouncerPlaybackPort bouncerPlayback;
+
+  @NonNull private final ServerRegistry serverRegistry;
+  @NonNull private final RuntimeConfigStore runtimeConfig;
+  @NonNull private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final IgnoreListQueryPort ignoreList;
+  @NonNull private final UserhostQueryService userhostQueryService;
+  @NonNull private final UserInfoEnrichmentService userInfoEnrichmentService;
+  @NonNull private final TargetChatHistoryPort targetChatHistoryPort;
+  @NonNull private final TargetLogMaintenancePort targetLogMaintenancePort;
+
+  @NonNull
+  @Qualifier(ExecutorConfig.TARGET_COORDINATOR_MAINTENANCE_EXECUTOR)
   private final ExecutorService maintenanceExec;
 
   /**
@@ -62,6 +74,8 @@ public class TargetCoordinator implements ActiveTargetPort {
    * (e.g., WHOX scans on big channels). Coalesce these to avoid rebuilding nick completions on the
    * EDT thousands of times.
    */
+  @NonNull
+  @Qualifier(ExecutorConfig.TARGET_COORDINATOR_USERS_REFRESH_SCHEDULER)
   private final ScheduledExecutorService usersRefreshExec;
 
   private final AtomicBoolean usersRefreshScheduled = new AtomicBoolean(false);
@@ -73,44 +87,6 @@ public class TargetCoordinator implements ActiveTargetPort {
   private final Set<TargetRef> channelsClosedByUser = ConcurrentHashMap.newKeySet();
 
   private TargetRef activeTarget;
-
-  public TargetCoordinator(
-      UiPort ui,
-      UserListStore userListStore,
-      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
-      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
-      ServerRegistry serverRegistry,
-      RuntimeConfigStore runtimeConfig,
-      ConnectionCoordinator connectionCoordinator,
-      IgnoreListQueryPort ignoreList,
-      UserhostQueryService userhostQueryService,
-      UserInfoEnrichmentService userInfoEnrichmentService,
-      TargetChatHistoryPort targetChatHistoryPort,
-      TargetLogMaintenancePort targetLogMaintenancePort,
-      @Qualifier(ExecutorConfig.TARGET_COORDINATOR_MAINTENANCE_EXECUTOR)
-          ExecutorService maintenanceExec,
-      @Qualifier(ExecutorConfig.TARGET_COORDINATOR_USERS_REFRESH_SCHEDULER)
-          ScheduledExecutorService usersRefreshExec) {
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.userListStore = Objects.requireNonNull(userListStore, "userListStore");
-    this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
-    this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
-    this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
-    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
-    this.connectionCoordinator =
-        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
-    this.ignoreList = Objects.requireNonNull(ignoreList, "ignoreList");
-    this.userhostQueryService =
-        Objects.requireNonNull(userhostQueryService, "userhostQueryService");
-    this.userInfoEnrichmentService =
-        Objects.requireNonNull(userInfoEnrichmentService, "userInfoEnrichmentService");
-    this.targetChatHistoryPort =
-        Objects.requireNonNull(targetChatHistoryPort, "targetChatHistoryPort");
-    this.targetLogMaintenancePort =
-        Objects.requireNonNull(targetLogMaintenancePort, "targetLogMaintenancePort");
-    this.maintenanceExec = Objects.requireNonNull(maintenanceExec, "maintenanceExec");
-    this.usersRefreshExec = Objects.requireNonNull(usersRefreshExec, "usersRefreshExec");
-  }
 
   @PreDestroy
   void shutdown() {

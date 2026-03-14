@@ -17,13 +17,15 @@ final class PircbotxUnknownLineFallbackEmitter {
       LoggerFactory.getLogger(PircbotxUnknownLineFallbackEmitter.class);
 
   private final String serverId;
-  private final PircbotxConnectionState conn;
+
   private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
   private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
   private final PircbotxServerResponseEmitter serverResponses;
   private final PircbotxSaslFailureHandler saslFailures;
   private final PircbotxIsupportObserver isupportObserver;
   private final PircbotxWhoEventEmitter whoEvents;
+  private final PircbotxPlaybackCaptureRecorder playbackCaptureRecorder;
+  private final PircbotxPrivateConversationSupport privateConversationSupport;
   private final Consumer<ServerIrcEvent> emit;
   private final Function<PircBotX, String> selfNickResolver;
 
@@ -39,13 +41,15 @@ final class PircbotxUnknownLineFallbackEmitter {
       Consumer<ServerIrcEvent> emit,
       Function<PircBotX, String> selfNickResolver) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.conn = Objects.requireNonNull(conn, "conn");
+
     this.bouncerDiscovery = Objects.requireNonNull(bouncerDiscovery, "bouncerDiscovery");
     this.chatHistoryBatches = Objects.requireNonNull(chatHistoryBatches, "chatHistoryBatches");
     this.serverResponses = Objects.requireNonNull(serverResponses, "serverResponses");
     this.saslFailures = Objects.requireNonNull(saslFailures, "saslFailures");
     this.isupportObserver = Objects.requireNonNull(isupportObserver, "isupportObserver");
     this.whoEvents = Objects.requireNonNull(whoEvents, "whoEvents");
+    this.playbackCaptureRecorder = new PircbotxPlaybackCaptureRecorder(conn);
+    this.privateConversationSupport = new PircbotxPrivateConversationSupport(conn);
     this.emit = Objects.requireNonNull(emit, "emit");
     this.selfNickResolver = Objects.requireNonNull(selfNickResolver, "selfNickResolver");
   }
@@ -138,8 +142,7 @@ final class PircbotxUnknownLineFallbackEmitter {
       if (!"PRIVMSG".equals(command) && !"NOTICE".equals(command)) return false;
 
       Map<String, String> ircv3Tags = PircbotxIrcv3Tags.fromRawLine(lineWithTags);
-      String messageId =
-          PircbotxIrcv3Tags.firstTagValue(ircv3Tags, "msgid", "draft/msgid", "znc.in/msgid");
+      String messageId = PircbotxEventMetadata.ircv3MessageId(ircv3Tags);
       Instant at = PircbotxIrcv3ServerTime.parseServerTimeFromRawLine(lineWithTags);
       if (at == null) at = Instant.now();
       String from = PircbotxInboundLineParsers.nickFromPrefix(parsed.prefix());
@@ -167,23 +170,12 @@ final class PircbotxUnknownLineFallbackEmitter {
       }
 
       if (!target.startsWith("#") && !target.startsWith("&")) {
-        target = PircbotxPrivateMessageEmitter.derivePrivateConversationTarget(botNick, from, dest);
+        target = privateConversationSupport.deriveConversationTarget(botNick, from, dest);
       }
 
       boolean fromSelf = !botNick.isBlank() && from != null && from.equalsIgnoreCase(botNick);
-      if (fromSelf) {
-        if (PircbotxPrivateMessageEmitter.isZncPlayStarCursorCommand(payload)) {
-          return true;
-        }
-        if (dest != null) {
-          if ("*playback".equalsIgnoreCase(dest)
-              && payload.toLowerCase(Locale.ROOT).startsWith("play ")) {
-            return true;
-          }
-          if ("*status".equalsIgnoreCase(dest) && payload.equalsIgnoreCase("ListNetworks")) {
-            return true;
-          }
-        }
+      if (privateConversationSupport.shouldSuppressSelfBootstrapMessage(fromSelf, dest, payload)) {
+        return true;
       }
 
       if (bouncerDiscovery.maybeCaptureZncListNetworks(from, payload)) {
@@ -195,32 +187,8 @@ final class PircbotxUnknownLineFallbackEmitter {
         return true;
       }
 
-      return maybeCaptureZncPlayback(target, at, kind, from, payload, messageId, ircv3Tags);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private boolean maybeCaptureZncPlayback(
-      String target,
-      Instant at,
-      ChatHistoryEntry.Kind kind,
-      String from,
-      String text,
-      String messageId,
-      Map<String, String> ircv3Tags) {
-    try {
-      if (!conn.zncPlaybackCapture.shouldCapture(target, at)) return false;
-      conn.zncPlaybackCapture.addEntry(
-          new ChatHistoryEntry(
-              at == null ? Instant.now() : at,
-              kind == null ? ChatHistoryEntry.Kind.PRIVMSG : kind,
-              target == null ? "" : target,
-              from == null ? "" : from,
-              text == null ? "" : text,
-              messageId,
-              ircv3Tags));
-      return true;
+      return playbackCaptureRecorder.maybeCapture(
+          target, at, kind, from, payload, messageId, ircv3Tags);
     } catch (Exception ignored) {
       return false;
     }
