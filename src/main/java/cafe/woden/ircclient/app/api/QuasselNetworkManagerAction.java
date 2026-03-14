@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app.api;
 
-import cafe.woden.ircclient.irc.QuasselCoreControlPort;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import java.util.Objects;
 
 /** User-selected operation from the Quassel network manager dialog. */

@@ -12,7 +12,7 @@ import cafe.woden.ircclient.app.api.UiViewStatePort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
-import cafe.woden.ircclient.irc.QuasselCoreControlPort;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;

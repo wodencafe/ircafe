@@ -14,6 +14,7 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.backend.BackendRoutingIrcClientService;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.time.Instant;

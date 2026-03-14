@@ -2,7 +2,7 @@ package cafe.woden.ircclient.app.api;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
-import cafe.woden.ircclient.irc.QuasselCoreControlPort;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;

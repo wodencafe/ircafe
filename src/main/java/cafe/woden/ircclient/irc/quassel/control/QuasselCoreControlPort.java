@@ -1,5 +1,6 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.quassel.control;
 
+import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import java.util.List;

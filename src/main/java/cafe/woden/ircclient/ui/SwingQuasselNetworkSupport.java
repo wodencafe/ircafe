@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui;
 
-import cafe.woden.ircclient.irc.QuasselCoreControlPort;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.ui.servertree.resolver.ServerTreeQuasselNetworkParentResolver;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
