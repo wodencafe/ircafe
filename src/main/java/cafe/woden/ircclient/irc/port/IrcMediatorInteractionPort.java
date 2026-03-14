@@ -1,5 +1,7 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.port;
 
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.ServerIrcEvent;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import java.util.Objects;

@@ -1,12 +1,12 @@
 package cafe.woden.ircclient.irc.enrichment;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
-import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.IrcRuntimeSettings;
 import cafe.woden.ircclient.irc.IrcRuntimeSettingsProvider;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.Disposable;

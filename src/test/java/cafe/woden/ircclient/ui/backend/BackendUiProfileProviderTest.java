@@ -8,7 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.irc.IrcBackendModePort;
+import cafe.woden.ircclient.irc.backend.IrcBackendModePort;
 import org.junit.jupiter.api.Test;
 
 class BackendUiProfileProviderTest {

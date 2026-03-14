@@ -1,6 +1,8 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.backend;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 
 /** Backend-specific IRC transport adapter contract (IRC, Quassel Core, etc). */

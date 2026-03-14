@@ -3,6 +3,7 @@ package cafe.woden.ircclient.irc.pircbotx;
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.irc.*;
+import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.state.api.ServerIsupportStatePort;

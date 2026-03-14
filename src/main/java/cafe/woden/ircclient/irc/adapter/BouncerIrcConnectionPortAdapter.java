@@ -2,6 +2,8 @@ package cafe.woden.ircclient.irc.adapter;
 
 import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.irc.*;
+import cafe.woden.ircclient.irc.backend.*;
+import cafe.woden.ircclient.irc.port.*;
 import io.reactivex.rxjava3.core.Completable;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;

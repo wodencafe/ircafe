@@ -1,8 +1,9 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.port;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import cafe.woden.ircclient.irc.IrcClientService;
 import org.junit.jupiter.api.Test;
 
 class IrcShutdownPortTest {

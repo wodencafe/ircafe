@@ -1,4 +1,6 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.backend;
+
+import cafe.woden.ircclient.irc.IrcClientService;
 
 /** Backend-specific availability diagnostics. */
 public interface IrcBackendAvailabilityPort {

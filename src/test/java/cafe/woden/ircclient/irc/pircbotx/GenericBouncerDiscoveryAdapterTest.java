@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
 import cafe.woden.ircclient.irc.*;
+import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.playback.*;
 import org.junit.jupiter.api.Test;

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import cafe.woden.ircclient.irc.*;
+import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import java.lang.reflect.Field;
 import java.util.concurrent.ScheduledExecutorService;

@@ -1,7 +1,11 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.backend;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcEvent;
+import cafe.woden.ircclient.irc.QuasselCoreControlPort;
+import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;

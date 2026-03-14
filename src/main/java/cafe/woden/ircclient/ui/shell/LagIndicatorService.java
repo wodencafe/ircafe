@@ -4,7 +4,7 @@ import static com.google.common.base.Verify.verify;
 
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.irc.IrcLagProbePort;
+import cafe.woden.ircclient.irc.port.IrcLagProbePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PostConstruct;

@@ -1,4 +1,6 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.port;
+
+import cafe.woden.ircclient.irc.IrcClientService;
 
 /** Echo-message capability/readiness API used by outbound message services. */
 public interface IrcEchoCapabilityPort {

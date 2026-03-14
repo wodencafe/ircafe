@@ -1,10 +1,11 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.port;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
 import org.junit.jupiter.api.Test;
 

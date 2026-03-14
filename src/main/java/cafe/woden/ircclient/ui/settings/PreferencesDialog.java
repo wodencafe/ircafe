@@ -9,7 +9,7 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.PushyProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
-import cafe.woden.ircclient.irc.IrcHeartbeatMaintenanceService;
+import cafe.woden.ircclient.irc.backend.IrcHeartbeatMaintenanceService;
 import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityCatalog;
 import cafe.woden.ircclient.model.BuiltInSound;
 import cafe.woden.ircclient.model.FilterRule;

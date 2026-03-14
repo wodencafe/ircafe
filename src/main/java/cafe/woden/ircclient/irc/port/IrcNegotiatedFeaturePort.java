@@ -1,4 +1,6 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.port;
+
+import cafe.woden.ircclient.irc.IrcClientService;
 
 /** Read-only negotiated feature/capability view for a server connection. */
 public interface IrcNegotiatedFeaturePort {

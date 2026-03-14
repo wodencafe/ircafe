@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.backend;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.Objects;

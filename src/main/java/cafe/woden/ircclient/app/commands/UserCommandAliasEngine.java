@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app.commands;
 
-import cafe.woden.ircclient.irc.IrcCurrentNickPort;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.model.UserCommandAlias;
 import cafe.woden.ircclient.util.AppVersion;

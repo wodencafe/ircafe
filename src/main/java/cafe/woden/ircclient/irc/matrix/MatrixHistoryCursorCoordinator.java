@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.irc.matrix;
 
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.irc.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
+import cafe.woden.ircclient.irc.backend.BackendNotAvailableException;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;

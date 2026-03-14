@@ -1,4 +1,6 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.port;
+
+import cafe.woden.ircclient.irc.IrcClientService;
 
 /** Shutdown hook operations used during application teardown. */
 public interface IrcShutdownPort {

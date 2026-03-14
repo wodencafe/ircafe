@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app;
 
-import cafe.woden.ircclient.irc.IrcShutdownPort;
+import cafe.woden.ircclient.irc.port.IrcShutdownPort;
 import cafe.woden.ircclient.util.VirtualThreads;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;

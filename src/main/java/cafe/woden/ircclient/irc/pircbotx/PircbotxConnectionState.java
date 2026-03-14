@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc.pircbotx;
 
 import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
 import cafe.woden.ircclient.irc.*;
+import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.playback.*;
 import io.reactivex.rxjava3.disposables.Disposable;

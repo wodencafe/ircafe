@@ -429,7 +429,7 @@ class ArchitectureGuardrailsTest {
           .doNotHaveFullyQualifiedName("cafe.woden.ircclient.ui.backend.BackendUiProfileProvider")
           .should()
           .dependOnClassesThat()
-          .haveFullyQualifiedName("cafe.woden.ircclient.irc.IrcBackendModePort")
+          .haveFullyQualifiedName("cafe.woden.ircclient.irc.backend.IrcBackendModePort")
           .because(
               "backend mode checks in UI should stay centralized behind backend-ui profile/context services");
 

@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.irc.adapter;
 
 import cafe.woden.ircclient.irc.*;
+import cafe.woden.ircclient.irc.backend.*;
+import cafe.woden.ircclient.irc.port.*;
 import io.reactivex.rxjava3.core.Completable;
 import java.time.Instant;
 import org.jmolecules.architecture.layered.InfrastructureLayer;

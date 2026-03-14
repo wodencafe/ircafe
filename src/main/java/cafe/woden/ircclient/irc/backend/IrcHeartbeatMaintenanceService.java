@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.backend;
 
 import org.jmolecules.architecture.layered.ApplicationLayer;
 

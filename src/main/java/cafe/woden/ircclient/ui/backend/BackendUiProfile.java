@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.backend;
 
-import cafe.woden.ircclient.irc.IrcBackendModePort;
+import cafe.woden.ircclient.irc.backend.IrcBackendModePort;
 import java.util.Objects;
 
 /** Backend-aware UI profile for a specific server selection. */

@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.backend;
 
-import cafe.woden.ircclient.irc.IrcBackendModePort;
+import cafe.woden.ircclient.irc.backend.IrcBackendModePort;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.beans.factory.annotation.Qualifier;

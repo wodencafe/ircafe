@@ -1,5 +1,6 @@
-package cafe.woden.ircclient.irc;
+package cafe.woden.ircclient.irc.port;
 
+import cafe.woden.ircclient.irc.IrcClientService;
 import java.util.Objects;
 import java.util.Optional;
 
