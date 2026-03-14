@@ -7,12 +7,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.config.SojuProperties;
+import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.state.ServerIsupportState;
 import com.google.common.collect.ImmutableMap;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.hooks.events.UnknownEvent;
 
@@ -87,19 +90,20 @@ class PircbotxBridgeListenerUnknownCtcpTest {
 
   private static PircbotxBridgeListener newListener(
       PircbotxConnectionState conn, FlowableProcessor<ServerIrcEvent> bus) {
-    return new PircbotxBridgeListener(
-        "libera",
-        conn,
-        bus,
-        c -> {},
-        (c, reason) -> {},
-        (bot, fromNick, message) -> false,
-        false,
-        false,
-        false,
-        new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
-        null,
-        new NoOpPlaybackCursorProvider(),
-        new ServerIsupportState());
+    return new PircbotxBridgeListenerFactory(
+            new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
+            null,
+            new NoOpPlaybackCursorProvider(),
+            new ServerIsupportState(),
+            new SojuProperties(Map.of(), new SojuProperties.Discovery(false)),
+            new ZncProperties(Map.of(), new ZncProperties.Discovery(false)))
+        .create(
+            "libera",
+            conn,
+            bus,
+            c -> {},
+            (c, reason) -> {},
+            (bot, fromNick, message) -> false,
+            false);
   }
 }

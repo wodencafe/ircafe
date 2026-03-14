@@ -24,8 +24,6 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.support.StaticListableBeanFactory;
 
 class PircbotxIrcClientServiceDisconnectTest {
 
@@ -51,9 +49,15 @@ class PircbotxIrcClientServiceDisconnectTest {
                 SojuBouncerNetworkMappingStrategy.BACKEND_ID,
                 ZncBouncerNetworkMappingStrategy.BACKEND_ID,
                 GenericBouncerNetworkMappingStrategy.BACKEND_ID));
-
-    ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider =
-        new StaticListableBeanFactory().getBeanProvider(PlaybackCursorProvider.class);
+    ServerIsupportState serverIsupportState = new ServerIsupportState();
+    PircbotxBridgeListenerFactory bridgeListenerFactory =
+        new PircbotxBridgeListenerFactory(
+            bouncerBackends,
+            bouncerDiscoveryEvents,
+            new NoOpPlaybackCursorProvider(),
+            serverIsupportState,
+            new SojuProperties(null, null),
+            new ZncProperties(null, null));
 
     PircbotxIrcClientService service =
         new PircbotxIrcClientService(
@@ -61,15 +65,13 @@ class PircbotxIrcClientServiceDisconnectTest {
             serverCatalog,
             inputParserHookInstaller,
             botFactory,
-            new SojuProperties(null, null),
-            new ZncProperties(null, null),
+            bridgeListenerFactory,
             runtimeConfig,
             stsPolicies,
             bouncerBackends,
             bouncerDiscoveryEvents,
             timers,
-            new ServerIsupportState(),
-            playbackCursorProviderProvider);
+            serverIsupportState);
 
     TestSubscriber<ServerIrcEvent> events = service.events().test();
 

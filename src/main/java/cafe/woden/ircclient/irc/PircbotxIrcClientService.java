@@ -5,8 +5,6 @@ import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
-import cafe.woden.ircclient.config.SojuProperties;
-import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.irc.znc.ZncLoginParts;
 import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
@@ -34,7 +32,6 @@ import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.pircbotx.PircBotX;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -53,15 +50,13 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
   private final ServerCatalog serverCatalog;
   private final PircbotxInputParserHookInstaller inputParserHookInstaller;
   private final PircbotxBotFactory botFactory;
+  private final PircbotxBridgeListenerFactory bridgeListenerFactory;
   private final PircbotxConnectionTimersRx timers;
   private final BouncerDiscoveryEventPort bouncerDiscoveryEvents;
   private final BouncerBackendRegistry bouncerBackends;
-  private final SojuProperties sojuProps;
-  private final ZncProperties zncProps;
   private final RuntimeConfigStore runtimeConfig;
   private final ServerIsupportStatePort serverIsupportState;
   private final Ircv3StsPolicyService stsPolicies;
-  private final PlaybackCursorProvider playbackCursorProvider;
   private String version;
 
   public PircbotxIrcClientService(
@@ -69,21 +64,19 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
       ServerCatalog serverCatalog,
       PircbotxInputParserHookInstaller inputParserHookInstaller,
       PircbotxBotFactory botFactory,
-      SojuProperties sojuProps,
-      ZncProperties zncProps,
+      PircbotxBridgeListenerFactory bridgeListenerFactory,
       RuntimeConfigStore runtimeConfig,
       Ircv3StsPolicyService stsPolicies,
       BouncerBackendRegistry bouncerBackends,
       BouncerDiscoveryEventPort bouncerDiscoveryEvents,
       PircbotxConnectionTimersRx timers,
-      ServerIsupportStatePort serverIsupportState,
-      ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider) {
+      ServerIsupportStatePort serverIsupportState) {
     this.serverCatalog = serverCatalog;
     version = props.client().version();
     this.inputParserHookInstaller = inputParserHookInstaller;
     this.botFactory = botFactory;
-    this.sojuProps = sojuProps;
-    this.zncProps = zncProps;
+    this.bridgeListenerFactory =
+        Objects.requireNonNull(bridgeListenerFactory, "bridgeListenerFactory");
     this.runtimeConfig = runtimeConfig;
     this.serverIsupportState = Objects.requireNonNull(serverIsupportState, "serverIsupportState");
     this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
@@ -91,8 +84,6 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
     this.bouncerDiscoveryEvents =
         Objects.requireNonNull(bouncerDiscoveryEvents, "bouncerDiscoveryEvents");
     this.timers = timers;
-    this.playbackCursorProvider =
-        playbackCursorProviderProvider.getIfAvailable(() -> (String sid) -> OptionalLong.empty());
   }
 
   @Override
@@ -195,20 +186,14 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
                       new IrcEvent.Connecting(Instant.now(), s.host(), s.port(), s.nick())));
 
               PircbotxBridgeListener listener =
-                  new PircbotxBridgeListener(
+                  bridgeListenerFactory.create(
                       serverId,
                       c,
                       bus,
                       timers::stopHeartbeat,
                       this::scheduleReconnect,
                       this::handleCtcpIfPresent,
-                      disconnectOnSaslFailure,
-                      sojuProps.discovery().enabled(),
-                      zncProps.discovery().enabled(),
-                      bouncerBackends,
-                      bouncerDiscoveryEvents,
-                      playbackCursorProvider,
-                      serverIsupportState);
+                      disconnectOnSaslFailure);
 
               PircBotX bot = botFactory.build(s, version, listener);
               c.botRef.set(bot);

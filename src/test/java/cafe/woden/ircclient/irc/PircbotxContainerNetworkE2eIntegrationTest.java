@@ -45,8 +45,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -987,9 +985,15 @@ class PircbotxContainerNetworkE2eIntegrationTest {
         Executors.newSingleThreadScheduledExecutor(namedDaemonFactory("it-pircbotx-reconnect"));
     PircbotxConnectionTimersRx timers =
         new PircbotxConnectionTimersRx(props, serverCatalog, heartbeatExec, reconnectExec);
-
-    ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider =
-        new StaticListableBeanFactory().getBeanProvider(PlaybackCursorProvider.class);
+    ServerIsupportState serverIsupportState = new ServerIsupportState();
+    PircbotxBridgeListenerFactory bridgeListenerFactory =
+        new PircbotxBridgeListenerFactory(
+            bouncerBackends,
+            bouncerDiscoveryEvents,
+            new NoOpPlaybackCursorProvider(),
+            serverIsupportState,
+            sojuProps,
+            zncProps);
 
     PircbotxIrcClientService service =
         new PircbotxIrcClientService(
@@ -997,15 +1001,13 @@ class PircbotxContainerNetworkE2eIntegrationTest {
             serverCatalog,
             hookInstaller,
             botFactory,
-            sojuProps,
-            zncProps,
+            bridgeListenerFactory,
             null,
             stsPolicies,
             bouncerBackends,
             bouncerDiscoveryEvents,
             timers,
-            new ServerIsupportState(),
-            playbackCursorProviderProvider);
+            serverIsupportState);
 
     return new ServiceFixture(service, timers, heartbeatExec, reconnectExec);
   }

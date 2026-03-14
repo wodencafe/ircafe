@@ -22,8 +22,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
 import org.pircbotx.output.OutputRaw;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.support.StaticListableBeanFactory;
 
 class PircbotxIrcClientServiceLagProbeTest {
 
@@ -75,24 +73,28 @@ class PircbotxIrcClientServiceLagProbeTest {
     BouncerDiscoveryEventPort bouncerDiscoveryEvents = mock(BouncerDiscoveryEventPort.class);
     PircbotxConnectionTimersRx timers = mock(PircbotxConnectionTimersRx.class);
     when(bouncerBackends.backendIds()).thenReturn(Set.of());
-
-    ObjectProvider<PlaybackCursorProvider> playbackCursorProviderProvider =
-        new StaticListableBeanFactory().getBeanProvider(PlaybackCursorProvider.class);
+    ServerIsupportState serverIsupportState = new ServerIsupportState();
+    PircbotxBridgeListenerFactory bridgeListenerFactory =
+        new PircbotxBridgeListenerFactory(
+            bouncerBackends,
+            bouncerDiscoveryEvents,
+            new NoOpPlaybackCursorProvider(),
+            serverIsupportState,
+            new SojuProperties(null, null),
+            new ZncProperties(null, null));
 
     return new PircbotxIrcClientService(
         new IrcProperties(null, List.of()),
         serverCatalog,
         inputParserHookInstaller,
         botFactory,
-        new SojuProperties(null, null),
-        new ZncProperties(null, null),
+        bridgeListenerFactory,
         runtimeConfig,
         stsPolicies,
         bouncerBackends,
         bouncerDiscoveryEvents,
         timers,
-        new ServerIsupportState(),
-        playbackCursorProviderProvider);
+        serverIsupportState);
   }
 
   private static PircbotxConnectionState conn(PircbotxIrcClientService service, String serverId)

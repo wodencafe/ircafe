@@ -4,7 +4,6 @@ import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
-import java.time.Instant;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -20,14 +19,9 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     boolean handle(PircBotX bot, String fromNick, String message);
   }
 
-  private final String serverId;
-  private final PircbotxConnectionState conn;
-  private final FlowableProcessor<ServerIrcEvent> bus;
-  private final PlaybackCursorProvider playbackCursorProvider;
-  private final ServerIsupportStatePort serverIsupportState;
-  private final Consumer<PircbotxConnectionState> heartbeatStopper;
-  private final BiConsumer<PircbotxConnectionState, String> reconnectScheduler;
+  private final PircbotxSelfIdentityTracker selfIdentity;
 
+  private final PircbotxConnectionSessionHandler session;
   private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
   private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
   private final PircbotxMonitorEventEmitter monitorEvents;
@@ -39,6 +33,8 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final PircbotxRegistrationLifecycleHandler registrationLifecycle;
   private final PircbotxRosterEmitter rosterEmitter;
   private final PircbotxMembershipEventEmitter membershipEvents;
+  private final PircbotxInviteEventEmitter inviteEvents;
+  private final PircbotxTopicEventEmitter topicEvents;
   private final PircbotxChannelModeEventEmitter channelModeEvents;
   private final PircbotxChannelMessageEmitter channelMessageEvents;
   private final PircbotxPrivateMessageEmitter privateMessageEvents;
@@ -50,110 +46,6 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final PircbotxUnknownEventRouter unknownEventRouter;
   private final PircbotxServerNumericRouter serverNumericRouter;
   private final Ircv3MultilineAccumulator multilineAccumulator = new Ircv3MultilineAccumulator();
-
-  /** Best-effort resolve of our current nick (prefers UserBot nick when available). */
-  private static String resolveBotNick(PircBotX bot) {
-    if (bot == null) return "";
-
-    // Prefer UserBot nick, since it tends to reflect the *current* nick (including alt-nick
-    // fallback).
-    try {
-      if (bot.getUserBot() != null) {
-        String ub = bot.getUserBot().getNick();
-        if (ub != null && !ub.isBlank()) return ub.trim();
-      }
-    } catch (Exception ignored) {
-    }
-
-    try {
-      String n = PircbotxUtil.safeStr(bot::getNick, "");
-      if (n != null && !n.isBlank()) return n.trim();
-    } catch (Exception ignored) {
-    }
-
-    // Last resort: poke configuration via reflection (PircBotX versions differ).
-    try {
-      Object cfg = PircbotxEventAccessors.reflectCall(bot, "getConfiguration");
-      Object n = PircbotxEventAccessors.reflectCall(cfg, "getNick");
-      if (n != null) {
-        String s = String.valueOf(n);
-        if (!s.isBlank()) return s.trim();
-      }
-    } catch (Exception ignored) {
-    }
-    return "";
-  }
-
-  /** True when an inbound event is actually our own message echoed back (IRCv3 echo-message). */
-  private static boolean isSelfEchoed(PircBotX bot, String fromNick) {
-    try {
-      if (fromNick == null || fromNick.isBlank()) return false;
-
-      String botNick = resolveBotNick(bot);
-      if (!botNick.isBlank() && fromNick.equalsIgnoreCase(botNick)) return true;
-
-      // Sometimes UserBot nick is available even when botNick isn't.
-      try {
-        if (bot != null && bot.getUserBot() != null) {
-          String ub = bot.getUserBot().getNick();
-          if (ub != null && !ub.isBlank() && fromNick.equalsIgnoreCase(ub)) return true;
-        }
-      } catch (Exception ignored) {
-      }
-
-      return false;
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private static boolean looksLikeSelfNickHint(String nick) {
-    if (nick == null) return false;
-    String n = nick.trim();
-    if (n.isBlank()) return false;
-    if ("*".equals(n)) return false;
-    if (PircbotxLineParseUtil.looksNumeric(n)) return false;
-    if (PircbotxLineParseUtil.looksLikeChannel(n)) return false;
-    if (n.indexOf(' ') >= 0) return false;
-    return true;
-  }
-
-  private void rememberSelfNickHint(String nick) {
-    if (!looksLikeSelfNickHint(nick)) return;
-    String n = nick.trim();
-    conn.selfNickHint.set(n);
-  }
-
-  private boolean nickMatchesSelf(PircBotX bot, String nick) {
-    if (nick == null || nick.isBlank()) return false;
-    String n = nick.trim();
-
-    String hinted = conn.selfNickHint.get();
-    if (hinted != null && !hinted.isBlank() && n.equalsIgnoreCase(hinted.trim())) {
-      return true;
-    }
-
-    String fromBot = resolveBotNick(bot);
-    if (!fromBot.isBlank() && n.equalsIgnoreCase(fromBot.trim())) {
-      rememberSelfNickHint(fromBot);
-      return true;
-    }
-
-    return false;
-  }
-
-  private String resolveSelfNick(PircBotX bot) {
-    String hinted = conn.selfNickHint.get();
-    if (looksLikeSelfNickHint(hinted)) {
-      return hinted.trim();
-    }
-    String fromBot = resolveBotNick(bot);
-    if (!fromBot.isBlank()) {
-      rememberSelfNickHint(fromBot);
-      return fromBot;
-    }
-    return "";
-  }
 
   PircbotxBridgeListener(
       String serverId,
@@ -169,12 +61,18 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       BouncerDiscoveryEventPort bouncerDiscoveryEvents,
       PlaybackCursorProvider playbackCursorProvider,
       ServerIsupportStatePort serverIsupportState) {
-    this.serverId = Objects.requireNonNull(serverId, "serverId");
-    this.conn = Objects.requireNonNull(conn, "conn");
-    this.bus = Objects.requireNonNull(bus, "bus");
-    this.heartbeatStopper = Objects.requireNonNull(heartbeatStopper, "heartbeatStopper");
-    this.reconnectScheduler = Objects.requireNonNull(reconnectScheduler, "reconnectScheduler");
+    Objects.requireNonNull(serverId, "serverId");
+    Objects.requireNonNull(conn, "conn");
+    Objects.requireNonNull(bus, "bus");
+    Objects.requireNonNull(heartbeatStopper, "heartbeatStopper");
+    Objects.requireNonNull(reconnectScheduler, "reconnectScheduler");
     Objects.requireNonNull(ctcpHandler, "ctcpHandler");
+    this.selfIdentity = new PircbotxSelfIdentityTracker(conn);
+
+    PlaybackCursorProvider cursorProvider =
+        Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
+    ServerIsupportStatePort isupportState =
+        Objects.requireNonNull(serverIsupportState, "serverIsupportState");
 
     this.bouncerDiscovery =
         new PircbotxBouncerDiscoveryCoordinator(
@@ -187,46 +85,45 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     this.chatHistoryBatches = new PircbotxChatHistoryBatchCollector(serverId, bus::onNext);
     this.monitorEvents = new PircbotxMonitorEventEmitter(serverId, bus::onNext);
     this.serverResponses = new PircbotxServerResponseEmitter(serverId, bus::onNext);
+    this.session =
+        new PircbotxConnectionSessionHandler(
+            serverId,
+            conn,
+            heartbeatStopper,
+            reconnectScheduler,
+            bouncerDiscovery,
+            chatHistoryBatches,
+            serverResponses,
+            multilineAccumulator,
+            bus::onNext);
     this.unknownCtcp =
         new PircbotxUnknownCtcpEmitter(
             serverId,
             bus::onNext,
-            this::nickMatchesSelf,
-            PircbotxBridgeListener::isSelfEchoed,
-            this::resolveSelfNick);
+            selfIdentity::nickMatchesSelf,
+            PircbotxSelfIdentityTracker::isSelfEchoed,
+            selfIdentity::resolveSelfNick);
     this.whoEvents = new PircbotxWhoEventEmitter(serverId, conn, bus::onNext);
-    this.playbackCursorProvider =
-        java.util.Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
-    this.serverIsupportState =
-        java.util.Objects.requireNonNull(serverIsupportState, "serverIsupportState");
     this.isupportObserver =
         new PircbotxIsupportObserver(
-            serverId,
-            conn,
-            this.serverIsupportState,
-            bus::onNext,
-            bouncerDiscovery::observeSojuBouncerNetId);
+            serverId, conn, isupportState, bus::onNext, bouncerDiscovery::observeSojuBouncerNetId);
     this.saslFailures =
         new PircbotxSaslFailureHandler(serverId, conn, bus::onNext, disconnectOnSaslFailure);
     this.registrationLifecycle =
         new PircbotxRegistrationLifecycleHandler(
-            serverId,
-            conn,
-            this.playbackCursorProvider,
-            bouncerDiscovery,
-            serverResponses,
-            bus::onNext);
-    this.rosterEmitter =
-        new PircbotxRosterEmitter(serverId, conn, this.serverIsupportState, bus::onNext);
+            serverId, conn, cursorProvider, bouncerDiscovery, serverResponses, bus::onNext);
+    this.rosterEmitter = new PircbotxRosterEmitter(serverId, conn, isupportState, bus::onNext);
     this.membershipEvents =
         new PircbotxMembershipEventEmitter(
             serverId,
             conn,
             rosterEmitter,
             bus::onNext,
-            this::nickMatchesSelf,
-            this::rememberSelfNickHint,
-            PircbotxBridgeListener::resolveBotNick);
+            selfIdentity::nickMatchesSelf,
+            selfIdentity::rememberSelfNickHint,
+            PircbotxSelfIdentityTracker::resolveBotNick);
+    this.inviteEvents = new PircbotxInviteEventEmitter(serverId, rosterEmitter, bus::onNext);
+    this.topicEvents = new PircbotxTopicEventEmitter(serverId, bus::onNext);
     this.channelModeEvents =
         new PircbotxChannelModeEventEmitter(
             serverId,
@@ -246,7 +143,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             chatHistoryBatches,
             multilineAccumulator,
             bus::onNext,
-            this::resolveSelfNick,
+            selfIdentity::resolveSelfNick,
             PircbotxEventAccessors::privmsgTargetFromEvent);
     this.actionEvents =
         new PircbotxActionEventEmitter(
@@ -255,7 +152,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             rosterEmitter,
             chatHistoryBatches,
             bus::onNext,
-            this::resolveSelfNick,
+            selfIdentity::resolveSelfNick,
             PircbotxEventAccessors::privmsgTargetFromEvent);
     this.noticeEvents =
         new PircbotxNoticeEventEmitter(
@@ -272,10 +169,10 @@ final class PircbotxBridgeListener extends ListenerAdapter {
         new PircbotxInboundCtcpHandler(
             serverId,
             conn.selfNickHint::get,
-            this::nickMatchesSelf,
-            PircbotxBridgeListener::isSelfEchoed,
-            this::resolveSelfNick,
-            PircbotxBridgeListener::resolveBotNick,
+            selfIdentity::nickMatchesSelf,
+            PircbotxSelfIdentityTracker::isSelfEchoed,
+            selfIdentity::resolveSelfNick,
+            PircbotxSelfIdentityTracker::resolveBotNick,
             PircbotxEventAccessors::rawLineFromEvent,
             PircbotxEventAccessors::privmsgTargetFromEvent,
             rosterEmitter::maybeEmitHostmaskObserved,
@@ -293,12 +190,12 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             isupportObserver,
             whoEvents,
             bus::onNext,
-            this::resolveSelfNick);
+            selfIdentity::resolveSelfNick);
     this.unknownEventRouter =
         new PircbotxUnknownEventRouter(
             serverId,
-            this::rememberSelfNickHint,
-            PircbotxBridgeListener::resolveBotNick,
+            selfIdentity::rememberSelfNickHint,
+            PircbotxSelfIdentityTracker::resolveBotNick,
             serverResponses,
             monitorEvents,
             chatHistoryBatches,
@@ -308,7 +205,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     this.serverNumericRouter =
         new PircbotxServerNumericRouter(
             serverId,
-            this::rememberSelfNickHint,
+            selfIdentity::rememberSelfNickHint,
             bus::onNext,
             saslFailures,
             monitorEvents,
@@ -320,147 +217,65 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
   @Override
   public void onConnect(ConnectEvent event) {
-    touchInbound();
-    PircBotX bot = event.getBot();
-    conn.reconnectAttempts.set(0);
-    conn.manualDisconnect.set(false);
-    serverResponses.clear();
-
-    bus.onNext(
-        new ServerIrcEvent(
-            serverId,
-            new IrcEvent.Connected(
-                Instant.now(), bot.getServerHostname(), bot.getServerPort(), bot.getNick())));
+    session.onConnect(event);
   }
 
   @Override
   public void onDisconnect(DisconnectEvent event) {
-    serverResponses.clear();
-    String override = conn.disconnectReasonOverride.getAndSet(null);
-    Exception ex = event.getDisconnectException();
-    String reason =
-        (override != null && !override.isBlank())
-            ? override
-            : (ex != null && ex.getMessage() != null) ? ex.getMessage() : "Disconnected";
-    if (conn.botRef.compareAndSet(event.getBot(), null)) {
-      heartbeatStopper.accept(conn);
-    }
-    bouncerDiscovery.onDisconnect();
-    multilineAccumulator.clear();
-    chatHistoryBatches.clear();
-
-    bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Disconnected(Instant.now(), reason)));
-    boolean suppressReconnect = conn.suppressAutoReconnectOnce.getAndSet(false);
-    if (!conn.manualDisconnect.get() && !suppressReconnect) {
-      reconnectScheduler.accept(conn, reason);
-    }
+    session.onDisconnect(event);
   }
 
   @Override
   public void onMessage(MessageEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     channelMessageEvents.onMessage(event);
   }
 
   @Override
   public void onAction(ActionEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     actionEvents.onAction(event);
   }
 
   @Override
   public void onTopic(TopicEvent event) {
-    touchInbound();
-    if (event == null || event.getChannel() == null) return;
-    String channel = event.getChannel().getName();
-    String topic = event.getTopic();
-    if (channel == null || channel.isBlank()) return;
-    bus.onNext(
-        new ServerIrcEvent(
-            serverId, new IrcEvent.ChannelTopicUpdated(Instant.now(), channel, topic)));
+    session.recordInboundActivity();
+    topicEvents.onTopic(event);
   }
 
   @Override
   public void onInvite(InviteEvent event) {
-    touchInbound();
-    if (event == null) return;
-
-    String channel = "";
-    try {
-      Object c = PircbotxEventAccessors.reflectCall(event, "getChannel");
-      if (c != null) channel = String.valueOf(c);
-    } catch (Exception ignored) {
-    }
-    if (channel == null || channel.isBlank()) {
-      try {
-        Object c = PircbotxEventAccessors.reflectCall(event, "getChannelName");
-        if (c != null) channel = String.valueOf(c);
-      } catch (Exception ignored) {
-      }
-    }
-    channel = channel == null ? "" : channel.trim();
-    if (channel.isBlank()) return;
-
-    String from = "server";
-    String invitee = "";
-    String reason = "";
-    try {
-      if (event.getUser() != null) {
-        rosterEmitter.maybeEmitHostmaskObserved(channel, event.getUser());
-        String nick = event.getUser().getNick();
-        if (nick != null && !nick.isBlank()) from = nick.trim();
-      }
-    } catch (Exception ignored) {
-    }
-
-    try {
-      String raw = PircbotxEventAccessors.rawLineFromEvent(event);
-      ParsedIrcLine parsed =
-          PircbotxInboundLineParsers.parseIrcLine(
-              PircbotxLineParseUtil.normalizeIrcLineForParsing(raw));
-      ParsedInviteLine pi = PircbotxInboundLineParsers.parseInviteLine(parsed);
-      if (pi != null) {
-        if (from.isBlank()) from = Objects.toString(pi.fromNick(), "").trim();
-        if (!Objects.toString(pi.channel(), "").isBlank()) channel = pi.channel().trim();
-        invitee = Objects.toString(pi.inviteeNick(), "").trim();
-        reason = Objects.toString(pi.reason(), "").trim();
-      }
-    } catch (Exception ignored) {
-    }
-
-    bus.onNext(
-        new ServerIrcEvent(
-            serverId,
-            new IrcEvent.InvitedToChannel(Instant.now(), channel, from, invitee, reason, false)));
+    session.recordInboundActivity();
+    inviteEvents.onInvite(event);
   }
 
   @Override
   public void onPrivateMessage(PrivateMessageEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     privateMessageEvents.onPrivateMessage(event);
   }
 
   @Override
   public void onNotice(NoticeEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     noticeEvents.onNotice(event);
   }
 
   @Override
   public void onGenericCTCP(GenericCTCPEvent event) throws Exception {
-    touchInbound();
+    session.recordInboundActivity();
     inboundCtcpHandler.onGenericCtcp(event);
   }
 
   @Override
   public void onFinger(FingerEvent event) throws Exception {
-    touchInbound();
+    session.recordInboundActivity();
     inboundCtcpHandler.onFinger(event);
   }
 
   @Override
   public void onWhois(WhoisEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     whoisResults.onWhois(event);
   }
 
@@ -471,59 +286,54 @@ final class PircbotxBridgeListener extends ListenerAdapter {
 
   @Override
   public void onUnknown(UnknownEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     unknownEventRouter.handle(event);
   }
 
   @Override
   public void onServerResponse(ServerResponseEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     serverNumericRouter.onServerResponse(event);
   }
 
   @Override
   public void onJoin(JoinEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     membershipEvents.onJoin(event);
   }
 
   @Override
   public void onPart(PartEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     membershipEvents.onPart(event);
   }
 
   @Override
   public void onQuit(QuitEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     membershipEvents.onQuit(event);
-  }
-
-  private void touchInbound() {
-    conn.lastInboundMs.set(System.currentTimeMillis());
-    conn.localTimeoutEmitted.set(false);
   }
 
   @Override
   public void onServerPing(ServerPingEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
   }
 
   @Override
   public void onKick(KickEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     membershipEvents.onKick(event);
   }
 
   @Override
   public void onNickChange(NickChangeEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     membershipEvents.onNickChange(event);
   }
 
   @Override
   public void onMode(ModeEvent event) {
-    touchInbound();
+    session.recordInboundActivity();
     channelModeEvents.onMode(event);
   }
 

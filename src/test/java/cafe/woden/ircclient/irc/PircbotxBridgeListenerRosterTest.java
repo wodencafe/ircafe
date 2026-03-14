@@ -7,6 +7,8 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.config.SojuProperties;
+import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.state.ServerIsupportState;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
@@ -15,6 +17,7 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.Channel;
 import org.pircbotx.User;
@@ -32,20 +35,21 @@ class PircbotxBridgeListenerRosterTest {
 
     ServerIsupportState isupportState = new ServerIsupportState();
     PircbotxBridgeListener listener =
-        new PircbotxBridgeListener(
-            "libera",
-            new PircbotxConnectionState("libera"),
-            bus,
-            c -> {},
-            (c, reason) -> {},
-            (bot, fromNick, message) -> false,
-            false,
-            false,
-            false,
-            new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
-            null,
-            new NoOpPlaybackCursorProvider(),
-            isupportState);
+        new PircbotxBridgeListenerFactory(
+                new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
+                null,
+                new NoOpPlaybackCursorProvider(),
+                isupportState,
+                new SojuProperties(Map.of(), new SojuProperties.Discovery(false)),
+                new ZncProperties(Map.of(), new ZncProperties.Discovery(false)))
+            .create(
+                "libera",
+                new PircbotxConnectionState("libera"),
+                bus,
+                c -> {},
+                (c, reason) -> {},
+                (bot, fromNick, message) -> false,
+                false);
 
     listener.onUnknown(
         new UnknownEvent(
