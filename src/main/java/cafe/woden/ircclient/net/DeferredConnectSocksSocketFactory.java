@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.net;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.net.NetProxyContext;
@@ -19,7 +19,7 @@ import javax.net.ssl.SSLSocketFactory;
  * SOCKS-aware socket factory for client libraries that call {@link #createSocket()} first and
  * invoke {@link Socket#connect(SocketAddress, int)} later.
  */
-final class PircbotxSocksSocketFactory extends SocketFactory {
+public final class DeferredConnectSocksSocketFactory extends SocketFactory {
 
   private final IrcProperties.Proxy cfg;
   private final Proxy proxy;
@@ -27,11 +27,11 @@ final class PircbotxSocksSocketFactory extends SocketFactory {
   private final int defaultPort;
   private final SSLSocketFactory sslFactory;
 
-  PircbotxSocksSocketFactory(IrcProperties.Proxy cfg, String defaultHost, int defaultPort) {
+  public DeferredConnectSocksSocketFactory(IrcProperties.Proxy cfg, String defaultHost, int defaultPort) {
     this(cfg, defaultHost, defaultPort, null);
   }
 
-  PircbotxSocksSocketFactory(
+  public DeferredConnectSocksSocketFactory(
       IrcProperties.Proxy cfg, String defaultHost, int defaultPort, SSLSocketFactory sslFactory) {
     this.cfg = Objects.requireNonNull(cfg, "cfg");
     this.defaultHost = Objects.toString(defaultHost, "").trim();

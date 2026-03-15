@@ -18,15 +18,15 @@ import org.mockito.ArgumentCaptor;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
 
-class PircbotxAwayNotifyInputParserMockVerifyTest {
+class PircbotxIrcv3InputParserMockVerifyTest {
 
   @Test
   void replayedRpl324LineEmitsSnapshotModeObservation() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     @SuppressWarnings("unchecked")
     Consumer<ServerIrcEvent> sink = mock(Consumer.class);
-    PircbotxAwayNotifyInputParser parser =
-        new PircbotxAwayNotifyInputParser(
+    PircbotxIrcv3InputParser parser =
+        new PircbotxIrcv3InputParser(
             dummyBot(), "libera", conn, sink, new Ircv3StsPolicyService());
 
     String line = ":osmium.libera.chat 324 me ##politics +CLTcnrt";

@@ -6,6 +6,7 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.playback.*;
 import io.reactivex.rxjava3.disposables.Disposable;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,7 +23,7 @@ import org.pircbotx.PircBotX;
  * top-level (package-private) helper so we can continue splitting responsibilities without turning
  * PircbotxIrcClientService into a god-file.
  */
-final class PircbotxConnectionState {
+public final class PircbotxConnectionState {
   private static final long PRIVATE_TARGET_HINT_TTL_MS = 120_000L;
   private static final int PRIVATE_TARGET_HINT_MAX = 1_024;
   private static final long CHANNEL_MODE_324_DEDUPE_TTL_MS = 2_000L;
@@ -200,7 +201,7 @@ final class PircbotxConnectionState {
       new ConcurrentHashMap<>();
   private final Map<String, Long> recentChannelMode324ByKey = new ConcurrentHashMap<>();
 
-  PircbotxConnectionState(String serverId) {
+  public PircbotxConnectionState(String serverId) {
     this.serverId = serverId;
   }
 
@@ -255,7 +256,7 @@ final class PircbotxConnectionState {
     recentChannelMode324ByKey.clear();
   }
 
-  void rememberPrivateTargetHint(
+  public void rememberPrivateTargetHint(
       String fromNick,
       String target,
       String kind,
@@ -282,7 +283,7 @@ final class PircbotxConnectionState {
     }
   }
 
-  String findPrivateTargetHint(
+  public String findPrivateTargetHint(
       String fromNick, String kind, String payload, String messageId, long nowMs) {
     String from = normalizeLower(fromNick);
     String k = normalizeKind(kind);
@@ -308,6 +309,20 @@ final class PircbotxConnectionState {
       }
     }
     return "";
+  }
+
+  public void onPlaybackControlLine(String line) {
+    zncPlaybackCapture.onPlaybackControlLine(line);
+  }
+
+  public boolean shouldCapturePlayback(String target, Instant at) {
+    return zncPlaybackCapture.shouldCapture(target, at);
+  }
+
+  public void addPlaybackEntry(ChatHistoryEntry entry) {
+    if (entry != null) {
+      zncPlaybackCapture.addEntry(entry);
+    }
   }
 
   void beginLagProbe(String token, long sentAtMs) {

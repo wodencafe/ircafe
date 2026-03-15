@@ -206,7 +206,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
                 lagAwareBot.setLagProbeObserver(c::beginLagProbe);
               }
               c.botRef.set(bot);
-              inputParserHookInstaller.installAwayNotifyHook(bot, serverId, c, bus::onNext);
+              inputParserHookInstaller.installIrcv3Hook(bot, serverId, c, bus::onNext);
 
               timers.startHeartbeat(c);
               RxVirtualSchedulers.io()

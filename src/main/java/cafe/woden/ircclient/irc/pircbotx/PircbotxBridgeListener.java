@@ -23,6 +23,11 @@ import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.ListenerAdapter;
 import org.pircbotx.hooks.events.*;
 import org.pircbotx.hooks.types.GenericCTCPEvent;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxActionEventEmitter;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChannelMessageEmitter;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxNoticeEventEmitter;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxPrivateMessageEmitter;
 
 /** Translates PircBotX events into ServerIrcEvent. */
 final class PircbotxBridgeListener extends ListenerAdapter {
@@ -54,7 +59,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
   private final PircbotxNoticeEventEmitter noticeEvents;
   private final PircbotxInboundCtcpHandler inboundCtcpHandler;
   private final PircbotxWhoisResultEmitter whoisResults;
-  private final PircbotxUnknownLineFallbackEmitter unknownLineFallback;
+  private final PircbotxUnknownLineFallbackHandler unknownLineFallback;
   private final PircbotxUnknownEventRouter unknownEventRouter;
   private final PircbotxServerNumericRouter serverNumericRouter;
   private final Ircv3MultilineAccumulator multilineAccumulator = new Ircv3MultilineAccumulator();
@@ -192,7 +197,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
             ctcpHandler);
     this.whoisResults = new PircbotxWhoisResultEmitter(serverId, bus::onNext);
     this.unknownLineFallback =
-        new PircbotxUnknownLineFallbackEmitter(
+        new PircbotxUnknownLineFallbackHandler(
             serverId,
             conn,
             bouncerDiscovery,

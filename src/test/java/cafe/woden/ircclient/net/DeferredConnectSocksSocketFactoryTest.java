@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.net;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -21,7 +21,7 @@ import java.util.concurrent.TimeoutException;
 import javax.net.ssl.SSLSocketFactory;
 import org.junit.jupiter.api.Test;
 
-class PircbotxSocksSocketFactoryTest {
+class DeferredConnectSocksSocketFactoryTest {
 
   @Test
   void deferredTlsSocketUsesSocksProxyAndPreservesRemoteDns() throws Exception {
@@ -29,8 +29,8 @@ class PircbotxSocksSocketFactoryTest {
       RecordingSslSocketFactory sslFactory = new RecordingSslSocketFactory();
       IrcProperties.Proxy cfg =
           new IrcProperties.Proxy(true, proxy.host(), proxy.port(), "", "", true, 2_000, 3_000);
-      PircbotxSocksSocketFactory factory =
-          new PircbotxSocksSocketFactory(cfg, "irc.example.test", 6697, sslFactory);
+      DeferredConnectSocksSocketFactory factory =
+          new DeferredConnectSocksSocketFactory(cfg, "irc.example.test", 6697, sslFactory);
 
       try (Socket socket = factory.createSocket()) {
         socket.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));

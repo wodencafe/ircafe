@@ -33,7 +33,7 @@ public class PircbotxInputParserHookInstaller {
 
   @NonNull private final Ircv3StsPolicyService stsPolicies;
 
-  public void installAwayNotifyHook(
+  public void installIrcv3Hook(
       PircBotX bot, String serverId, PircbotxConnectionState conn, Consumer<ServerIrcEvent> sink) {
     if (bot == null) return;
     String sid = Objects.toString(serverId, "").trim();
@@ -41,7 +41,7 @@ public class PircbotxInputParserHookInstaller {
 
     try {
       InputParser replacement =
-          new PircbotxAwayNotifyInputParser(bot, sid, conn, sink, stsPolicies);
+          new PircbotxIrcv3InputParser(bot, sid, conn, sink, stsPolicies);
       boolean swapped = swapInputParser(bot, replacement);
       if (swapped) {
         log.info(

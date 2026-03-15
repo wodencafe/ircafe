@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
@@ -21,12 +22,12 @@ import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.UnknownEvent;
 
-class PircbotxUnknownLineFallbackEmitterTest {
+class PircbotxUnknownLineFallbackHandlerTest {
 
   @Test
   void handleEmitsAwayNotifyObservation() {
     List<ServerIrcEvent> events = new ArrayList<>();
-    PircbotxUnknownLineFallbackEmitter emitter = newEmitter(events);
+    PircbotxUnknownLineFallbackHandler emitter = newEmitter(events);
 
     emitter.handle(
         unknown(null),
@@ -43,7 +44,7 @@ class PircbotxUnknownLineFallbackEmitterTest {
   @Test
   void handleEmitsChannelModeObservationFor324Fallback() {
     List<ServerIrcEvent> events = new ArrayList<>();
-    PircbotxUnknownLineFallbackEmitter emitter = newEmitter(events);
+    PircbotxUnknownLineFallbackHandler emitter = newEmitter(events);
 
     emitter.handle(unknown(null), ":server 324 me #ircafe +nt", ":server 324 me #ircafe +nt");
 
@@ -57,7 +58,7 @@ class PircbotxUnknownLineFallbackEmitterTest {
   @Test
   void handleEmitsAwayStatusChangedFor306Fallback() {
     List<ServerIrcEvent> events = new ArrayList<>();
-    PircbotxUnknownLineFallbackEmitter emitter = newEmitter(events);
+    PircbotxUnknownLineFallbackHandler emitter = newEmitter(events);
 
     emitter.handle(
         unknown(null),
@@ -74,7 +75,7 @@ class PircbotxUnknownLineFallbackEmitterTest {
   void handleSuppressesUnknownReplayLinesCapturedForPlayback() {
     List<ServerIrcEvent> events = new ArrayList<>();
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    PircbotxUnknownLineFallbackEmitter emitter = newEmitter(conn, events);
+    PircbotxUnknownLineFallbackHandler emitter = newEmitter(conn, events);
     conn.zncPlaybackCapture.start(
         "libera", "#ircafe", Instant.now().minusSeconds(60), null, events::add);
 
@@ -87,11 +88,11 @@ class PircbotxUnknownLineFallbackEmitterTest {
     conn.zncPlaybackCapture.cancelActive("test");
   }
 
-  private static PircbotxUnknownLineFallbackEmitter newEmitter(List<ServerIrcEvent> events) {
+  private static PircbotxUnknownLineFallbackHandler newEmitter(List<ServerIrcEvent> events) {
     return newEmitter(new PircbotxConnectionState("libera"), events);
   }
 
-  private static PircbotxUnknownLineFallbackEmitter newEmitter(
+  private static PircbotxUnknownLineFallbackHandler newEmitter(
       PircbotxConnectionState conn, List<ServerIrcEvent> events) {
     PircbotxBouncerDiscoveryCoordinator bouncerDiscovery =
         new PircbotxBouncerDiscoveryCoordinator(
@@ -115,7 +116,7 @@ class PircbotxUnknownLineFallbackEmitterTest {
             events::add,
             bouncerDiscovery::observeSojuBouncerNetId);
     PircbotxWhoEventEmitter whoEvents = new PircbotxWhoEventEmitter("libera", conn, events::add);
-    return new PircbotxUnknownLineFallbackEmitter(
+    return new PircbotxUnknownLineFallbackHandler(
         "libera",
         conn,
         bouncerDiscovery,

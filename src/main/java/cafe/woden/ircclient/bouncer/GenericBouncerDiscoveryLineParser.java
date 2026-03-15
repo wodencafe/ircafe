@@ -1,7 +1,5 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.bouncer;
 
-import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
-import cafe.woden.ircclient.bouncer.GenericBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
@@ -22,7 +20,7 @@ import java.util.Set;
  *   :server BOUNCER NETWORK <networkId> name=<display>;auto=<name>;k=v
  * </pre>
  */
-public class GenericBouncerDiscoveryAdapter {
+public class GenericBouncerDiscoveryLineParser {
 
   public BouncerDiscoveredNetwork parseNetworkLine(String originServerId, String rawLine) {
     if (rawLine == null || rawLine.isBlank()) return null;

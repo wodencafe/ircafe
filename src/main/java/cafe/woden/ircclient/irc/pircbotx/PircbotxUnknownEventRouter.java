@@ -16,6 +16,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.UnknownEvent;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 
 /** Pre-routes unknown IRC lines before falling through to the lower-level fallback handlers. */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
@@ -27,7 +28,7 @@ final class PircbotxUnknownEventRouter {
   @NonNull private final PircbotxMonitorEventEmitter monitorEvents;
   @NonNull private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
   @NonNull private final PircbotxUnknownCtcpEmitter unknownCtcp;
-  @NonNull private final PircbotxUnknownLineFallbackEmitter unknownLineFallback;
+  @NonNull private final PircbotxUnknownLineFallbackHandler unknownLineFallback;
   @NonNull private final Consumer<ServerIrcEvent> emit;
 
   void handle(UnknownEvent event) {

@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc.pircbotx;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
+import cafe.woden.ircclient.bouncer.GenericBouncerDiscoveryLineParser;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.bouncer.GenericBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.*;
@@ -26,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * <p>This keeps the bridge listener focused on event translation instead of discovery state,
  * capture flow, and discovery event fan-out.
  */
-final class PircbotxBouncerDiscoveryCoordinator {
+public final class PircbotxBouncerDiscoveryCoordinator {
   private static final Logger log =
       LoggerFactory.getLogger(PircbotxBouncerDiscoveryCoordinator.class);
 
@@ -46,11 +47,11 @@ final class PircbotxBouncerDiscoveryCoordinator {
   private final SojuBouncerDiscoveryAdapter sojuDiscoveryAdapter =
       new SojuBouncerDiscoveryAdapter();
   private final ZncBouncerDiscoveryAdapter zncDiscoveryAdapter = new ZncBouncerDiscoveryAdapter();
-  private final GenericBouncerDiscoveryAdapter genericDiscoveryAdapter =
-      new GenericBouncerDiscoveryAdapter();
+  private final GenericBouncerDiscoveryLineParser genericDiscoveryAdapter =
+      new GenericBouncerDiscoveryLineParser();
   private final List<UnknownLineDiscoveryAdapter> unknownLineDiscoveryAdapters;
 
-  PircbotxBouncerDiscoveryCoordinator(
+  public PircbotxBouncerDiscoveryCoordinator(
       String serverId,
       PircbotxConnectionState conn,
       boolean sojuDiscoveryEnabled,
@@ -67,7 +68,7 @@ final class PircbotxBouncerDiscoveryCoordinator {
     this.unknownLineDiscoveryAdapters = buildUnknownLineDiscoveryAdapters(sojuDiscoveryEnabled);
   }
 
-  boolean maybeCaptureZncListNetworks(String fromNick, String text) {
+  public boolean maybeCaptureZncListNetworks(String fromNick, String text) {
     if (!zncDiscoveryEnabled) return false;
     if (!conn.zncListNetworksCaptureActive.get()) return false;
 
@@ -106,7 +107,7 @@ final class PircbotxBouncerDiscoveryCoordinator {
     }
   }
 
-  boolean maybeCaptureUnknownLine(String rawLine) {
+  public boolean maybeCaptureUnknownLine(String rawLine) {
     if (rawLine == null || rawLine.isBlank()) return false;
     for (UnknownLineDiscoveryAdapter adapter : unknownLineDiscoveryAdapters) {
       BouncerDiscoveredNetwork network;
@@ -124,7 +125,7 @@ final class PircbotxBouncerDiscoveryCoordinator {
     return false;
   }
 
-  void maybeRequestZncNetworks(PircBotX bot) {
+  public void maybeRequestZncNetworks(PircBotX bot) {
     if (bot == null) return;
     if (!zncDiscoveryEnabled) return;
     if (!conn.zncDetected.get()) return;
@@ -148,7 +149,7 @@ final class PircbotxBouncerDiscoveryCoordinator {
     }
   }
 
-  void maybeRequestSojuNetworks(PircBotX bot) {
+  public void maybeRequestSojuNetworks(PircBotX bot) {
     if (bot == null) return;
     if (!sojuDiscoveryEnabled) return;
     if (!conn.sojuBouncerNetworksCapAcked.get()) return;
@@ -167,7 +168,7 @@ final class PircbotxBouncerDiscoveryCoordinator {
     }
   }
 
-  void maybeMarkZncDetected(String via, String detail) {
+  public void maybeMarkZncDetected(String via, String detail) {
     if (!conn.zncDetected.compareAndSet(false, true)) return;
     String extra = detail == null ? "" : detail;
     log.info("[{}] znc: detected via {} {}", serverId, via, extra);
@@ -187,7 +188,7 @@ final class PircbotxBouncerDiscoveryCoordinator {
     }
   }
 
-  void observeSojuBouncerNetId(String maybeSojuNetId) {
+  public void observeSojuBouncerNetId(String maybeSojuNetId) {
     if (maybeSojuNetId == null || maybeSojuNetId.isBlank()) return;
     String prev = conn.sojuBouncerNetId.get();
     if (prev == null || prev.isBlank()) {
@@ -202,7 +203,7 @@ final class PircbotxBouncerDiscoveryCoordinator {
     }
   }
 
-  void onDisconnect() {
+  public void onDisconnect() {
     for (String backendId : bouncerBackends.backendIds()) {
       notifyOriginDisconnected(backendId);
     }

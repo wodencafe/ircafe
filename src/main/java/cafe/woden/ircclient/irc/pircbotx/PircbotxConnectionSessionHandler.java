@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.ConnectEvent;
 import org.pircbotx.hooks.events.DisconnectEvent;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 
 /** Owns connection-scoped lifecycle transitions and inbound activity bookkeeping. */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)

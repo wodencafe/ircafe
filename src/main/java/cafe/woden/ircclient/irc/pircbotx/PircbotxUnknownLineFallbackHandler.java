@@ -22,12 +22,15 @@ import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.UnknownEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxPlaybackCaptureRecorder;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxPrivateConversationSupport;
 
 /** Handles raw unknown-line fallbacks after the dedicated unknown-line translators decline them. */
 @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
-final class PircbotxUnknownLineFallbackEmitter {
+final class PircbotxUnknownLineFallbackHandler {
   private static final Logger log =
-      LoggerFactory.getLogger(PircbotxUnknownLineFallbackEmitter.class);
+      LoggerFactory.getLogger(PircbotxUnknownLineFallbackHandler.class);
 
   @NonNull private final String serverId;
   @NonNull private final PircbotxConnectionState conn;
@@ -43,7 +46,7 @@ final class PircbotxUnknownLineFallbackEmitter {
   @NonNull private final Consumer<ServerIrcEvent> emit;
   @NonNull private final Function<PircBotX, String> selfNickResolver;
 
-  PircbotxUnknownLineFallbackEmitter(
+  PircbotxUnknownLineFallbackHandler(
       String serverId,
       PircbotxConnectionState conn,
       PircbotxBouncerDiscoveryCoordinator bouncerDiscovery,

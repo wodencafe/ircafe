@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc.pircbotx;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
@@ -117,8 +118,8 @@ class PircbotxUnknownEventRouterTest {
             events::add,
             bouncerDiscovery::observeSojuBouncerNetId);
     PircbotxWhoEventEmitter whoEvents = new PircbotxWhoEventEmitter("libera", conn, events::add);
-    PircbotxUnknownLineFallbackEmitter fallback =
-        new PircbotxUnknownLineFallbackEmitter(
+    PircbotxUnknownLineFallbackHandler fallback =
+        new PircbotxUnknownLineFallbackHandler(
             "libera",
             conn,
             bouncerDiscovery,

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
@@ -28,7 +29,7 @@ class PircbotxChannelMode324DedupTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> events = new ArrayList<>();
     PircbotxRegistrationLifecycleHandler handler = newHandler(conn, events);
-    PircbotxUnknownLineFallbackEmitter emitter = newEmitter(conn, events);
+    PircbotxUnknownLineFallbackHandler emitter = newEmitter(conn, events);
 
     String line = ":server 324 me #ircafe +ntC";
 
@@ -43,7 +44,7 @@ class PircbotxChannelMode324DedupTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> events = new ArrayList<>();
     PircbotxRegistrationLifecycleHandler handler = newHandler(conn, events);
-    PircbotxUnknownLineFallbackEmitter emitter = newEmitter(conn, events);
+    PircbotxUnknownLineFallbackHandler emitter = newEmitter(conn, events);
 
     String line = ":server 324 me #ircafe +ntC";
 
@@ -84,7 +85,7 @@ class PircbotxChannelMode324DedupTest {
         events::add);
   }
 
-  private static PircbotxUnknownLineFallbackEmitter newEmitter(
+  private static PircbotxUnknownLineFallbackHandler newEmitter(
       PircbotxConnectionState conn, List<ServerIrcEvent> events) {
     PircbotxBouncerDiscoveryCoordinator bouncerDiscovery =
         new PircbotxBouncerDiscoveryCoordinator(
@@ -108,7 +109,7 @@ class PircbotxChannelMode324DedupTest {
             events::add,
             bouncerDiscovery::observeSojuBouncerNetId);
     PircbotxWhoEventEmitter whoEvents = new PircbotxWhoEventEmitter("libera", conn, events::add);
-    return new PircbotxUnknownLineFallbackEmitter(
+    return new PircbotxUnknownLineFallbackHandler(
         "libera",
         conn,
         bouncerDiscovery,

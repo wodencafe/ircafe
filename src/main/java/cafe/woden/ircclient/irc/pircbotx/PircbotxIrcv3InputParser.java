@@ -35,9 +35,9 @@ import org.slf4j.LoggerFactory;
  *   <li><code>:nick!user@host AWAY</code>
  * </ul>
  */
-final class PircbotxAwayNotifyInputParser extends InputParser {
+final class PircbotxIrcv3InputParser extends InputParser {
 
-  private static final Logger log = LoggerFactory.getLogger(PircbotxAwayNotifyInputParser.class);
+  private static final Logger log = LoggerFactory.getLogger(PircbotxIrcv3InputParser.class);
   private static final int MAX_ACCOUNT_TAG_KEYS = 8_192;
 
   private final String serverId;
@@ -56,7 +56,7 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
             }
           });
 
-  PircbotxAwayNotifyInputParser(
+  PircbotxIrcv3InputParser(
       PircBotX bot,
       String serverId,
       PircbotxConnectionState conn,

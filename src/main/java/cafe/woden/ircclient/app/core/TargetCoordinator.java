@@ -452,14 +452,21 @@ public class TargetCoordinator implements ActiveTargetPort {
     if (sid.isEmpty()) return;
     String msg = Objects.toString(reason, "").trim();
 
-    // Guard against stale tree selection/activation events racing behind the close action.
-    channelsClosedByUser.add(target);
-
     TargetRef status = new TargetRef(sid, "status");
     ensureTargetExists(status);
     ensureTargetExists(target);
     boolean detached = ui.isChannelDisconnected(target);
     boolean connected = connectionCoordinator.isConnected(sid);
+    boolean shouldPart = !detached && connected;
+
+    // Guard against stale tree selection/activation events racing behind the close action only
+    // when a live PART is still in flight. Detached/offline closes are local-only and may be
+    // deliberately reopened by a later explicit selection.
+    if (shouldPart) {
+      channelsClosedByUser.add(target);
+    } else {
+      channelsClosedByUser.remove(target);
+    }
 
     if (Objects.equals(activeTarget, target)) {
       applyTargetContext(status);
@@ -476,7 +483,6 @@ public class TargetCoordinator implements ActiveTargetPort {
     ui.appendStatus(status, "(ui)", "Closed " + target.target());
     ui.closeTarget(target);
 
-    boolean shouldPart = !detached && connected;
     if (!shouldPart) return;
     disposables.add(
         targetMembership

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.SojuProperties;
+import cafe.woden.ircclient.net.DeferredConnectSocksSocketFactory;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import java.util.List;
@@ -34,7 +35,7 @@ class PircbotxBotFactoryProxyTest {
 
     assertEquals(11_111, cfg.getSocketConnectTimeout());
     assertEquals(22_222, cfg.getSocketTimeout());
-    assertInstanceOf(PircbotxSocksSocketFactory.class, cfg.getSocketFactory());
+    assertInstanceOf(DeferredConnectSocksSocketFactory.class, cfg.getSocketFactory());
   }
 
   private static IrcProperties.Server server(String id, boolean tls) {

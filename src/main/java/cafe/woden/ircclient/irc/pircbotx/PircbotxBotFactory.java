@@ -10,6 +10,7 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.capability.*;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.net.NetTlsContext;
+import cafe.woden.ircclient.net.DeferredConnectSocksSocketFactory;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.util.VirtualThreads;
@@ -70,8 +71,8 @@ public class PircbotxBotFactory {
     if (plan.enabled()) {
       socketFactory =
           s.tls()
-              ? new PircbotxSocksSocketFactory(plan.cfg(), s.host(), s.port(), ssl)
-              : new PircbotxSocksSocketFactory(plan.cfg(), s.host(), s.port());
+              ? new DeferredConnectSocksSocketFactory(plan.cfg(), s.host(), s.port(), ssl)
+              : new DeferredConnectSocksSocketFactory(plan.cfg(), s.host(), s.port());
     } else {
       socketFactory =
           s.tls()

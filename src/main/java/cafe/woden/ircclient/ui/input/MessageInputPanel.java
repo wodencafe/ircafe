@@ -238,6 +238,7 @@ public class MessageInputPanel extends JPanel {
     inputScroll.getViewport().setOpaque(false);
     inputScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
     inputScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER);
+    applyInputSurfaceCursor();
 
     attach.setName("messageAttachButton");
     attach.setText("+");
@@ -301,6 +302,16 @@ public class MessageInputPanel extends JPanel {
     input.setFocusTraversalKeysEnabled(false);
 
     input.addCaretListener(e -> hintPopupSupport.updateHint());
+  }
+
+  private void applyInputSurfaceCursor() {
+    Cursor cursor =
+        isInputEditable()
+            ? Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR)
+            : Cursor.getDefaultCursor();
+    input.setCursor(cursor);
+    inputScroll.setCursor(cursor);
+    inputScroll.getViewport().setCursor(cursor);
   }
 
   private void installDraftListeners() {
@@ -966,6 +977,7 @@ public class MessageInputPanel extends JPanel {
     input.setEnabled(enabled);
     attach.setEnabled(enabled);
     send.setEnabled(enabled);
+    applyInputSurfaceCursor();
     if (!enabled) {
       flushTypingDone();
       clearRemoteTypingIndicator();
