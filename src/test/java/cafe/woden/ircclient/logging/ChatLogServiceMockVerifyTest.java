@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
-import cafe.woden.ircclient.model.LogLine;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;

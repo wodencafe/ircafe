@@ -9,7 +9,7 @@ import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;
 import cafe.woden.ircclient.model.InterceptorRuleMode;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
-import cafe.woden.ircclient.model.NotificationRule;
+import cafe.woden.ircclient.config.NotificationRule;
 import cafe.woden.ircclient.model.RegexSpec;
 import cafe.woden.ircclient.model.TagSpec;
 import cafe.woden.ircclient.model.UserCommandAlias;

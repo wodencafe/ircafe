@@ -1,5 +1,7 @@
-package cafe.woden.ircclient.model;
+package cafe.woden.ircclient.logging;
 
+import cafe.woden.ircclient.model.LogDirection;
+import cafe.woden.ircclient.model.LogKind;
 import java.util.Objects;
 import org.jmolecules.ddd.annotation.ValueObject;
 

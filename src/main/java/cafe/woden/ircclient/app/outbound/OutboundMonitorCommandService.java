@@ -12,11 +12,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
+import org.jmolecules.architecture.hexagonal.Application;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles {@code /monitor} command family. */
 @Component
+@Application
 @ApplicationLayer
 @RequiredArgsConstructor
 public class OutboundMonitorCommandService {

@@ -22,9 +22,11 @@ import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.IrcMediator;
+import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
 import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
+import cafe.woden.ircclient.config.NotificationRule;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
@@ -56,6 +58,8 @@ import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.irc.roster.UserhostQueryService;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
+import cafe.woden.ircclient.logging.LogLine;
+import cafe.woden.ircclient.logging.LogRow;
 import cafe.woden.ircclient.logging.LoggingTargetLogMaintenancePortAdapter;
 import cafe.woden.ircclient.logging.history.LoggingAppHistoryPortsAdapter;
 import cafe.woden.ircclient.logging.viewer.DbChatLogViewerService;
@@ -70,6 +74,7 @@ import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.notify.pushy.PushyNotificationService;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import cafe.woden.ircclient.perform.PerformOnConnectService;
+import cafe.woden.ircclient.state.AwayStatusStore;
 import cafe.woden.ircclient.state.ModeRoutingState;
 import cafe.woden.ircclient.state.PendingInviteState;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
@@ -83,6 +88,7 @@ import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
 import cafe.woden.ircclient.state.api.RecentStatusModePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
+import cafe.woden.ircclient.ui.SwingUiPort;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
@@ -90,8 +96,13 @@ import cafe.woden.ircclient.ui.filter.FilterEngine;
 import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.shell.MainFrame;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.TrayService;
 import cafe.woden.ircclient.util.VirtualThreads;
+import org.jmolecules.architecture.hexagonal.Application;
+import org.jmolecules.architecture.hexagonal.PrimaryPort;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModule;
 import org.springframework.modulith.core.ApplicationModules;
@@ -119,6 +130,7 @@ class SpringModulithIncrementalAdoptionTest {
     ApplicationModule stateModule = moduleFor(modules, ModeRoutingState.class);
     assertThat(stateModule).isNotEqualTo(appModule);
     assertThat(moduleFor(modules, PendingInviteState.class)).isEqualTo(stateModule);
+    assertThat(moduleFor(modules, AwayStatusStore.class)).isEqualTo(stateModule);
     assertThat(stateModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.state");
     assertNamedInterfaceContains(
         stateModule,
@@ -137,6 +149,7 @@ class SpringModulithIncrementalAdoptionTest {
 
     ApplicationModule configModule = moduleFor(modules, RuntimeConfigStore.class);
     assertThat(configModule).isNotEqualTo(appModule);
+    assertThat(moduleFor(modules, NotificationRule.class)).isEqualTo(configModule);
     assertThat(configModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.config");
     assertNamedInterfaceContains(
         configModule,
@@ -231,6 +244,8 @@ class SpringModulithIncrementalAdoptionTest {
         moduleFor(modules, LoggingTargetLogMaintenancePortAdapter.class);
     assertThat(loggingModule).isNotEqualTo(appModule);
     assertThat(moduleFor(modules, LoggingAppHistoryPortsAdapter.class)).isEqualTo(loggingModule);
+    assertThat(moduleFor(modules, LogLine.class)).isEqualTo(loggingModule);
+    assertThat(moduleFor(modules, LogRow.class)).isEqualTo(loggingModule);
     assertThat(loggingModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.logging");
     assertNamedInterfaceContains(loggingModule, "history", LoggingAppHistoryPortsAdapter.class);
     assertNamedInterfaceContains(loggingModule, "viewer", DbChatLogViewerService.class);
@@ -256,6 +271,103 @@ class SpringModulithIncrementalAdoptionTest {
     ApplicationModule utilModule = moduleFor(modules, VirtualThreads.class);
     assertThat(utilModule).isNotEqualTo(appModule);
     assertThat(utilModule.getBasePackage().getName()).isEqualTo("cafe.woden.ircclient.util");
+  }
+
+  @Test
+  void appAndUiModulesDeclareExplicitAllowedDependencies() {
+    org.springframework.modulith.ApplicationModule appModuleAnnotation =
+        cafe.woden.ircclient.app.ApplicationShutdownCoordinator.class
+            .getPackage()
+            .getAnnotation(org.springframework.modulith.ApplicationModule.class);
+    org.springframework.modulith.ApplicationModule uiModuleAnnotation =
+        SwingUiPort.class.getPackage().getAnnotation(org.springframework.modulith.ApplicationModule.class);
+
+    assertThat(appModuleAnnotation).isNotNull();
+    assertThat(appModuleAnnotation.allowedDependencies())
+        .containsExactlyInAnyOrder(
+            "config",
+            "config::api",
+            "dcc",
+            "ignore::api",
+            "irc",
+            "irc::backend",
+            "irc::enrichment",
+            "irc::playback",
+            "irc::port",
+            "irc::quassel-control",
+            "irc::roster",
+            "model",
+            "state::api",
+            "util");
+
+    assertThat(uiModuleAnnotation).isNotNull();
+    assertThat(uiModuleAnnotation.allowedDependencies())
+        .containsExactlyInAnyOrder(
+            "app",
+            "app::api",
+            "app::commands",
+            "app::outbound",
+            "bouncer",
+            "config",
+            "dcc",
+            "diagnostics",
+            "ignore",
+            "ignore::api",
+            "interceptors",
+            "irc",
+            "irc::backend",
+            "irc::ircv3",
+            "irc::playback",
+            "irc::port",
+            "irc::quassel-control",
+            "irc::roster",
+            "irc::runtime",
+            "irc::soju",
+            "irc::znc",
+            "logging::history",
+            "logging::viewer",
+            "model",
+            "monitor",
+            "net",
+            "notifications",
+            "notify::pushy",
+            "notify::sound",
+            "state::api",
+            "util");
+  }
+
+  @Test
+  void hexagonalRolesAreDeclaredOnAppPortsAndAdapters() {
+    assertThat(MediatorControlPort.class.isAnnotationPresent(PrimaryPort.class)).isTrue();
+    assertThat(ActiveTargetPort.class.isAnnotationPresent(PrimaryPort.class)).isTrue();
+
+    assertThat(UiPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(TargetChatHistoryPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(TargetLogMaintenancePort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(TrayNotificationsPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(NotificationRuleMatcherPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(MonitorFallbackPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(MonitorRosterPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(ChatHistoryIngestionPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(ChatHistoryIngestEventsPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(ChatHistoryBatchEventsPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(InterceptorIngestPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcEventNotifierPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(ZncPlaybackEventsPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+
+    assertThat(IrcMediator.class.isAnnotationPresent(Application.class)).isTrue();
+    assertThat(TargetCoordinator.class.isAnnotationPresent(Application.class)).isTrue();
+    assertThat(SwingUiPort.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
+    assertThat(TrayNotificationService.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
+    assertThat(LoggingAppHistoryPortsAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
+    assertThat(LoggingTargetLogMaintenancePortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
+    assertThat(NotificationRuleMatcher.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
+    assertThat(IrcEventNotificationService.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
+    assertThat(MonitorIsonFallbackService.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
+    assertThat(MonitorListService.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
   }
 
   @Test

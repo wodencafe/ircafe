@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app.api;
 
-import cafe.woden.ircclient.model.NotificationRule;
+import cafe.woden.ircclient.config.NotificationRule;
 import java.util.List;
 
 /** App-level projection of UI settings needed by application services. */

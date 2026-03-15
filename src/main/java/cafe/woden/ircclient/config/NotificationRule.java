@@ -1,9 +1,12 @@
-package cafe.woden.ircclient.model;
+package cafe.woden.ircclient.config;
+
+import org.jmolecules.ddd.annotation.ValueObject;
 
 import java.util.Locale;
 import java.util.Objects;
 
 /** User-configured notification rule. */
+@ValueObject
 public record NotificationRule(
     String label,
     Type type,

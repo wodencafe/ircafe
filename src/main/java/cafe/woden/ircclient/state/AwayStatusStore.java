@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.model;
+package cafe.woden.ircclient.state;
 
 import java.time.Instant;
 import java.util.Locale;

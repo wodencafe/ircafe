@@ -68,6 +68,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.jmolecules.architecture.hexagonal.Application;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,6 +80,7 @@ import org.springframework.stereotype.Component;
 /** App mediator. */
 @Component
 @Lazy
+@Application
 @ApplicationLayer
 @RequiredArgsConstructor
 public class IrcMediator implements MediatorControlPort {

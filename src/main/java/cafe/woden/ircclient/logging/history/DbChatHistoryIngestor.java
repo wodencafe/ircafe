@@ -6,7 +6,7 @@ import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.logging.ChatLogRepository;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
-import cafe.woden.ircclient.model.LogLine;
+import cafe.woden.ircclient.logging.LogLine;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;

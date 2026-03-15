@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.jmolecules.architecture.hexagonal.Application;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +41,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Lazy
+@Application
 @ApplicationLayer
 @RequiredArgsConstructor
 public class TargetCoordinator implements ActiveTargetPort {

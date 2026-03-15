@@ -14,11 +14,13 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Server-scoped monitor nick list persistence/cache. */
 @Component
+@SecondaryAdapter
 @ApplicationLayer
 @RequiredArgsConstructor
 public class MonitorListService implements MonitorRosterPort {

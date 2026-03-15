@@ -4,7 +4,7 @@ import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
-import cafe.woden.ircclient.model.NotificationRule;
+import cafe.woden.ircclient.config.NotificationRule;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.beans.PropertyChangeEvent;
@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +31,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Lazy
+@SecondaryAdapter
 @ApplicationLayer
 public class NotificationRuleMatcher implements NotificationRuleMatcherPort {
 

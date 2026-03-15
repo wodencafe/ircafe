@@ -12,8 +12,8 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.logging.ChatLogRepository;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
-import cafe.woden.ircclient.model.LogLine;
-import cafe.woden.ircclient.model.LogRow;
+import cafe.woden.ircclient.logging.LogLine;
+import cafe.woden.ircclient.logging.LogRow;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

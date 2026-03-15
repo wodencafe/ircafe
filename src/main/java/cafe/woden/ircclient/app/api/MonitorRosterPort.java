@@ -1,9 +1,11 @@
 package cafe.woden.ircclient.app.api;
 
 import java.util.List;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** App-facing port for persisting and mutating monitor nick rosters. */
+@SecondaryPort
 @ApplicationLayer
 public interface MonitorRosterPort {
 

@@ -30,12 +30,14 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /** Aggregate Swing adapter that composes specialized UI port delegates. */
 @Component
+@SecondaryAdapter
 @InterfaceLayer
 @Lazy
 public class SwingUiPort implements UiPort {

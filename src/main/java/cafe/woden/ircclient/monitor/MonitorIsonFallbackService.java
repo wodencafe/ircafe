@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Component;
 
 /** ISON-based monitor fallback when IRC MONITOR is unavailable on a connected server. */
 @Component
+@SecondaryAdapter
 @ApplicationLayer
 public class MonitorIsonFallbackService implements MonitorFallbackPort {
   private static final Logger log = LoggerFactory.getLogger(MonitorIsonFallbackService.class);

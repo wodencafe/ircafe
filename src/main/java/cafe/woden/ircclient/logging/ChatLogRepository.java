@@ -2,8 +2,6 @@ package cafe.woden.ircclient.logging;
 
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
-import cafe.woden.ircclient.model.LogLine;
-import cafe.woden.ircclient.model.LogRow;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;

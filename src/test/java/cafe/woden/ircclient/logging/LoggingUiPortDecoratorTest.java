@@ -14,7 +14,6 @@ import cafe.woden.ircclient.app.api.UiTranscriptPort;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
-import cafe.woden.ircclient.model.LogLine;
 import cafe.woden.ircclient.model.TargetRef;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

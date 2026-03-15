@@ -23,12 +23,14 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import org.jmolecules.architecture.hexagonal.Application;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Orchestrates history batch persistence side effects extracted from {@link IrcMediator}. */
 @Component
+@Application
 @ApplicationLayer
 @RequiredArgsConstructor
 public class MediatorHistoryIngestOrchestrator {

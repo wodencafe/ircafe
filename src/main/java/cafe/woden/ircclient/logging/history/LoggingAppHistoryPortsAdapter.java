@@ -10,6 +10,7 @@ import cafe.woden.ircclient.model.TargetRef;
 import java.util.function.Consumer;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
  * services/buses.
  */
 @Component
+@SecondaryAdapter
 @InfrastructureLayer
 @RequiredArgsConstructor
 public class LoggingAppHistoryPortsAdapter

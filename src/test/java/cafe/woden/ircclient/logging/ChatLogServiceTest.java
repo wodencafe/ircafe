@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
-import cafe.woden.ircclient.model.LogLine;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;

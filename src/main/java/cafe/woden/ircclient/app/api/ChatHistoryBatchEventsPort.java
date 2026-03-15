@@ -2,9 +2,11 @@ package cafe.woden.ircclient.app.api;
 
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import java.util.List;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** App-owned publishing contract for raw CHATHISTORY batches. */
+@SecondaryPort
 @ApplicationLayer
 public interface ChatHistoryBatchEventsPort {
 

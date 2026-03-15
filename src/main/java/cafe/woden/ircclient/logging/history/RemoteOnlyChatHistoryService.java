@@ -6,7 +6,7 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
-import cafe.woden.ircclient.model.LogLine;
+import cafe.woden.ircclient.logging.LogLine;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
 import java.awt.Point;

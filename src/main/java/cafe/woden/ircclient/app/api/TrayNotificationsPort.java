@@ -1,9 +1,11 @@
 package cafe.woden.ircclient.app.api;
 
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** App-owned contract for user-facing desktop/tray notifications. */
+@SecondaryPort
 @ApplicationLayer
 public interface TrayNotificationsPort {
 

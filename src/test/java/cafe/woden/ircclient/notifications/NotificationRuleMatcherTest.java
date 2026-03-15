@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
-import cafe.woden.ircclient.model.NotificationRule;
+import cafe.woden.ircclient.config.NotificationRule;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.List;

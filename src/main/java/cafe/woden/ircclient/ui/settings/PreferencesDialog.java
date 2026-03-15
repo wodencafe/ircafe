@@ -15,7 +15,7 @@ import cafe.woden.ircclient.model.BuiltInSound;
 import cafe.woden.ircclient.model.FilterRule;
 import cafe.woden.ircclient.model.FilterScopeOverride;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
-import cafe.woden.ircclient.model.NotificationRule;
+import cafe.woden.ircclient.config.NotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.model.UserCommandAlias;
 import cafe.woden.ircclient.net.NetHeartbeatContext;
