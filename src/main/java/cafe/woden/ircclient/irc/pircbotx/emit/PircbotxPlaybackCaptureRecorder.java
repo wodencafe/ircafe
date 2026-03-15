@@ -3,13 +3,13 @@ package cafe.woden.ircclient.irc.pircbotx.emit;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.Map;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 
 /** Records replayed ZNC playback lines into the active capture window, if one exists. */
 @RequiredArgsConstructor(access = AccessLevel.PUBLIC)

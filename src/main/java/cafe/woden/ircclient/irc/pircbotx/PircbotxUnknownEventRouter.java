@@ -3,6 +3,7 @@ package cafe.woden.ircclient.irc.pircbotx;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxMonitorEventEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
@@ -16,7 +17,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.UnknownEvent;
-import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 
 /** Pre-routes unknown IRC lines before falling through to the lower-level fallback handlers. */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)

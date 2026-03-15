@@ -40,8 +40,7 @@ public class PircbotxInputParserHookInstaller {
     if (sid.isEmpty()) return;
 
     try {
-      InputParser replacement =
-          new PircbotxIrcv3InputParser(bot, sid, conn, sink, stsPolicies);
+      InputParser replacement = new PircbotxIrcv3InputParser(bot, sid, conn, sink, stsPolicies);
       boolean swapped = swapInputParser(bot, replacement);
       if (swapped) {
         log.info(

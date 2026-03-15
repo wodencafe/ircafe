@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.net;
 
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.net.NetProxyContext;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -27,7 +26,8 @@ public final class DeferredConnectSocksSocketFactory extends SocketFactory {
   private final int defaultPort;
   private final SSLSocketFactory sslFactory;
 
-  public DeferredConnectSocksSocketFactory(IrcProperties.Proxy cfg, String defaultHost, int defaultPort) {
+  public DeferredConnectSocksSocketFactory(
+      IrcProperties.Proxy cfg, String defaultHost, int defaultPort) {
     this(cfg, defaultHost, defaultPort, null);
   }
 

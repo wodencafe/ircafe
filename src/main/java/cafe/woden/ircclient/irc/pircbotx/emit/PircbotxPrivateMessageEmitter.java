@@ -3,6 +3,9 @@ package cafe.woden.ircclient.irc.pircbotx.emit;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxBouncerDiscoveryCoordinator;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.pircbotx.support.Ircv3MultilineAccumulator;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxEventMetadata;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
@@ -18,9 +21,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.PrivateMessageEvent;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxRosterEmitter;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxBouncerDiscoveryCoordinator;
 
 /** Emits structured private-message events for a single IRC connection. */
 @RequiredArgsConstructor(access = AccessLevel.PUBLIC)

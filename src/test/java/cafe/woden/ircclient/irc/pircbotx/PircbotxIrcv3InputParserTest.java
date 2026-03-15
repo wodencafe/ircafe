@@ -91,8 +91,7 @@ class PircbotxIrcv3InputParserTest {
     OutputCAP outputCap = mock(OutputCAP.class);
     doReturn(outputCap).when(bot).sendCAP();
     PircbotxIrcv3InputParser parser =
-        new PircbotxIrcv3InputParser(
-            bot, "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxIrcv3InputParser(bot, "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -113,8 +112,7 @@ class PircbotxIrcv3InputParserTest {
     OutputCAP outputCap = mock(OutputCAP.class);
     doReturn(outputCap).when(bot).sendCAP();
     PircbotxIrcv3InputParser parser =
-        new PircbotxIrcv3InputParser(
-            bot, "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxIrcv3InputParser(bot, "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "*",
@@ -601,8 +599,7 @@ class PircbotxIrcv3InputParserTest {
     PircBotX bot = dummyBot();
     bot.getUserChannelDao().createChannel("#ircafe");
     PircbotxIrcv3InputParser parser =
-        new PircbotxIrcv3InputParser(
-            bot, "libera", conn, out::add, new Ircv3StsPolicyService());
+        new PircbotxIrcv3InputParser(bot, "libera", conn, out::add, new Ircv3StsPolicyService());
 
     parser.processCommand(
         "#ircafe",

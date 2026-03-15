@@ -2,8 +2,8 @@ package cafe.woden.ircclient.irc.pircbotx;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
-import cafe.woden.ircclient.bouncer.GenericBouncerDiscoveryLineParser;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
+import cafe.woden.ircclient.bouncer.GenericBouncerDiscoveryLineParser;
 import cafe.woden.ircclient.bouncer.GenericBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;

@@ -3,13 +3,13 @@ package cafe.woden.ircclient.irc.pircbotx.emit;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
 import java.util.Locale;
 import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 
 /** Shared routing and suppression helpers for private conversations. */
 @RequiredArgsConstructor(access = AccessLevel.PUBLIC)

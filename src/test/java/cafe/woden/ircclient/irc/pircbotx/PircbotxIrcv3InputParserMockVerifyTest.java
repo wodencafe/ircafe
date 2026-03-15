@@ -26,8 +26,7 @@ class PircbotxIrcv3InputParserMockVerifyTest {
     @SuppressWarnings("unchecked")
     Consumer<ServerIrcEvent> sink = mock(Consumer.class);
     PircbotxIrcv3InputParser parser =
-        new PircbotxIrcv3InputParser(
-            dummyBot(), "libera", conn, sink, new Ircv3StsPolicyService());
+        new PircbotxIrcv3InputParser(dummyBot(), "libera", conn, sink, new Ircv3StsPolicyService());
 
     String line = ":osmium.libera.chat 324 me ##politics +CLTcnrt";
     List<String> parsed = List.of("me", "##politics", "+CLTcnrt");
