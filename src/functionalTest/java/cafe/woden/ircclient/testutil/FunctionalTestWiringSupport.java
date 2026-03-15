@@ -75,9 +75,15 @@ public final class FunctionalTestWiringSupport {
   public static ServerIsupportStatePort fallbackIsupportState() {
     return new ServerIsupportStatePort() {
       @Override
+      public void applyIsupportToken(String serverId, String tokenName, String tokenValue) {}
+
+      @Override
       public ModeVocabulary vocabularyForServer(String serverId) {
         return ModeVocabulary.fallback();
       }
+
+      @Override
+      public void clearServer(String serverId) {}
     };
   }
 

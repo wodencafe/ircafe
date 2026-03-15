@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.modulith;
 
+import static org.mockito.Mockito.when;
+
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
 import cafe.woden.ircclient.app.api.InterceptorIngestPort;
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
@@ -10,11 +12,12 @@ import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
+import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
-import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
+import cafe.woden.ircclient.irc.backend.BackendRoutingIrcClientService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
@@ -28,6 +31,12 @@ import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.irc.roster.UserhostQueryService;
 import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
+import cafe.woden.ircclient.state.api.ModeVocabulary;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
+import io.reactivex.rxjava3.core.Flowable;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.mockito.Answers;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.test.context.TestPropertySource;
@@ -52,7 +61,42 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 public abstract class AbstractApplicationModuleIntegrationTest {
 
   @MockitoBean(name = "ircClientService", answers = Answers.RETURNS_DEEP_STUBS)
-  IrcBackendClientService ircClientService;
+  BackendRoutingIrcClientService ircClientService;
+
+  @TestBean ServerIsupportStatePort serverIsupportStatePort;
+
+  @SuppressWarnings("unused")
+  static ServerIsupportStatePort serverIsupportStatePort() {
+    return new ServerIsupportStatePort() {
+      @Override
+      public void applyIsupportToken(String serverId, String tokenName, String tokenValue) {}
+
+      @Override
+      public ModeVocabulary vocabularyForServer(String serverId) {
+        return ModeVocabulary.fallback();
+      }
+
+      @Override
+      public void clearServer(String serverId) {}
+    };
+  }
+
+  @TestBean BouncerBackendRegistry bouncerBackendRegistry;
+
+  @SuppressWarnings("unused")
+  static BouncerBackendRegistry bouncerBackendRegistry() {
+    return new BouncerBackendRegistry(List.of());
+  }
+
+  @BeforeEach
+  void resetIrcClientServiceDefaults() {
+    when(ircClientService.events()).thenReturn(Flowable.empty());
+    when(ircClientService.quasselCoreNetworkEvents()).thenReturn(Flowable.empty());
+    when(ircClientService.currentNick(org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn(Optional.empty());
+    when(ircClientService.backendAvailabilityReason(org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn("");
+  }
 
   @MockitoBean(name = "ircShutdownPort")
   IrcShutdownPort ircShutdownPort;

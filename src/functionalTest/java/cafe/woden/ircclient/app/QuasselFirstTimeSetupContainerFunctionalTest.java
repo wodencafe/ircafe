@@ -29,6 +29,7 @@ import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.testutil.FunctionalTestWiringSupport;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import cafe.woden.ircclient.ui.UserListDockable;
@@ -185,7 +186,7 @@ class QuasselFirstTimeSetupContainerFunctionalTest {
       TrayNotificationsPort trayNotifications = mock(TrayNotificationsPort.class);
 
       ConnectionCoordinator coordinator =
-          new ConnectionCoordinator(
+          FunctionalTestWiringSupport.newConnectionCoordinator(
               IrcConnectionLifecyclePort.from(service),
               IrcBackendAvailabilityPort.from(service),
               QuasselCoreControlPort.from(service),
@@ -351,7 +352,7 @@ class QuasselFirstTimeSetupContainerFunctionalTest {
       TrayNotificationsPort trayNotifications = mock(TrayNotificationsPort.class);
 
       ConnectionCoordinator coordinator =
-          new ConnectionCoordinator(
+          FunctionalTestWiringSupport.newConnectionCoordinator(
               IrcConnectionLifecyclePort.from(service),
               IrcBackendAvailabilityPort.from(service),
               QuasselCoreControlPort.from(service),

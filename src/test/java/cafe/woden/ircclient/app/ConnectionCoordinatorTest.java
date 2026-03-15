@@ -59,7 +59,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -97,7 +96,6 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
-            irc,
             irc,
             ui,
             serverRegistry,
@@ -138,7 +136,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -176,7 +173,6 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
-            irc,
             irc,
             ui,
             serverRegistry,
@@ -226,7 +222,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -261,7 +256,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -293,7 +287,6 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
-            irc,
             irc,
             ui,
             serverRegistry,
@@ -327,7 +320,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -360,7 +352,6 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
-            irc,
             irc,
             ui,
             serverRegistry,
@@ -406,7 +397,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -441,7 +431,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -471,7 +460,6 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
-            irc,
             irc,
             ui,
             serverRegistry,
@@ -508,7 +496,6 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
-            irc,
             irc,
             ui,
             serverRegistry,
@@ -548,7 +535,6 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
-            irc,
             irc,
             ui,
             serverRegistry,
@@ -624,7 +610,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -679,7 +664,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -722,7 +706,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -764,7 +747,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -805,7 +787,6 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
-            irc,
             irc,
             ui,
             serverRegistry,
@@ -859,7 +840,6 @@ class ConnectionCoordinatorTest {
     ConnectionCoordinator coordinator =
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
-            irc,
             irc,
             ui,
             serverRegistry,
@@ -940,7 +920,6 @@ class ConnectionCoordinatorTest {
         new ConnectionCoordinator(
             IrcConnectionLifecyclePort.from(irc),
             irc,
-            irc,
             ui,
             serverRegistry,
             serverCatalog,
@@ -983,7 +962,6 @@ class ConnectionCoordinatorTest {
     new ConnectionCoordinator(
         IrcConnectionLifecyclePort.from(irc),
         irc,
-        irc,
         ui,
         serverRegistry,
         serverCatalog,
@@ -1020,7 +998,6 @@ class ConnectionCoordinatorTest {
 
     new ConnectionCoordinator(
         IrcConnectionLifecyclePort.from(irc),
-        irc,
         irc,
         ui,
         serverRegistry,

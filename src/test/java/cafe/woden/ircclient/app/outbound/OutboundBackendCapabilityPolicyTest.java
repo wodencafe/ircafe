@@ -19,8 +19,7 @@ class OutboundBackendCapabilityPolicyTest {
 
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
   private final IrcBackendClientService irc = mock(IrcBackendClientService.class);
-  private final IrcBackendAvailabilityPort backendAvailability =
-      mock(IrcBackendAvailabilityPort.class);
+  private final IrcBackendAvailabilityPort backendAvailability = irc;
   private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
   private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
       new OutboundBackendFeatureRegistry(
@@ -62,8 +61,7 @@ class OutboundBackendCapabilityPolicyTest {
 
   @Test
   void featureUnavailableMessageUsesBackendReasonWhenPresent() {
-    when(backendAvailability.backendAvailabilityReason("matrix"))
-        .thenReturn("Matrix backend is not available yet");
+    when(irc.backendAvailabilityReason("matrix")).thenReturn("Matrix backend is not available yet");
 
     assertEquals(
         "Matrix backend is not available yet.",
@@ -75,7 +73,7 @@ class OutboundBackendCapabilityPolicyTest {
 
   @Test
   void featureUnavailableMessageFallsBackWhenNoBackendReason() {
-    when(backendAvailability.backendAvailabilityReason("libera")).thenReturn("");
+    when(irc.backendAvailabilityReason("libera")).thenReturn("");
 
     assertEquals(
         "MONITOR capability is unavailable on this server.",

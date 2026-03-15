@@ -35,6 +35,7 @@ import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.irc.roster.UserhostQueryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.testutil.FunctionalTestWiringSupport;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
@@ -325,7 +326,7 @@ class DetachedChannelLifecycleFunctionalTest {
 
     TrayNotificationsPort tray = mock(TrayNotificationsPort.class);
     ConnectionCoordinator connectionCoordinator =
-        new ConnectionCoordinator(
+        FunctionalTestWiringSupport.newConnectionCoordinator(
             lifecycle,
             backendAvailability,
             quasselControl,

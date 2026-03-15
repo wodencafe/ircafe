@@ -11,7 +11,6 @@ import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.backend.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
-import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -35,6 +34,7 @@ import javax.swing.SwingUtilities;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -92,9 +92,15 @@ public class ConnectionCoordinator {
         new PersistedTargetRestore(List.of(), List.of());
   }
 
+  /**
+   * Primary constructor used by Spring wiring. Keep the dependency surface narrow so the routing
+   * backend bean can satisfy injection via the specific capability ports it actually implements.
+   */
+  @Autowired
   public ConnectionCoordinator(
       @Qualifier("ircConnectionLifecyclePort") IrcConnectionLifecyclePort irc,
-      @Qualifier("ircClientService") IrcBackendClientService ircClientService,
+      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
+      @Qualifier("ircClientService") QuasselCoreControlPort quasselControl,
       UiPort ui,
       ServerRegistry serverRegistry,
       ServerCatalog serverCatalog,
@@ -102,10 +108,8 @@ public class ConnectionCoordinator {
       LogProperties logProps,
       TrayNotificationsPort trayNotificationService) {
     this.irc = Objects.requireNonNull(irc, "irc");
-    IrcBackendClientService backendService =
-        Objects.requireNonNull(ircClientService, "ircClientService");
-    this.backendAvailability = backendService;
-    this.quasselControl = backendService;
+    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
+    this.quasselControl = Objects.requireNonNull(quasselControl, "quasselControl");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
@@ -132,6 +136,28 @@ public class ConnectionCoordinator {
     }
 
     updateConnectionUi();
+  }
+
+  @Deprecated(forRemoval = false)
+  public ConnectionCoordinator(
+      IrcConnectionLifecyclePort irc,
+      cafe.woden.ircclient.irc.backend.IrcBackendClientService ircClientService,
+      UiPort ui,
+      ServerRegistry serverRegistry,
+      ServerCatalog serverCatalog,
+      ConnectionRuntimeConfigPort runtimeConfig,
+      LogProperties logProps,
+      TrayNotificationsPort trayNotificationService) {
+    this(
+        irc,
+        ircClientService,
+        ircClientService,
+        ui,
+        serverRegistry,
+        serverCatalog,
+        runtimeConfig,
+        logProps,
+        trayNotificationService);
   }
 
   @PreDestroy
