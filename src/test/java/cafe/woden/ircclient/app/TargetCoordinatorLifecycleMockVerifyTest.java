@@ -74,6 +74,27 @@ class TargetCoordinatorLifecycleMockVerifyTest {
   }
 
   @Test
+  void closeAttachedChannelWithReasonForgetsAndClosesBeforeParting() {
+    UiPort ui = mock(UiPort.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+
+    when(ui.isChannelDisconnected(channel)).thenReturn(false);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.partChannel("libera", "#ircafe", "later")).thenReturn(Completable.complete());
+
+    coordinator.closeChannel(channel, "later");
+
+    InOrder inOrder = inOrder(runtimeConfig, ui, irc);
+    inOrder.verify(runtimeConfig).forgetJoinedChannel("libera", "#ircafe");
+    inOrder.verify(ui).closeTarget(channel);
+    inOrder.verify(irc).partChannel("libera", "#ircafe", "later");
+  }
+
+  @Test
   void joinThenJoinedEventTransitionsFromDetachedToAttachedWithoutPart() {
     UiPort ui = mock(UiPort.class);
     IrcBackendClientService irc = mock(IrcBackendClientService.class);

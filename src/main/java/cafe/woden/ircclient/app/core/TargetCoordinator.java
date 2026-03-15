@@ -440,10 +440,15 @@ public class TargetCoordinator implements ActiveTargetPort {
    * persisted joined-channel state.
    */
   public void closeChannel(TargetRef target) {
+    closeChannel(target, null);
+  }
+
+  public void closeChannel(TargetRef target, String reason) {
     if (target == null || !target.isChannel()) return;
 
     String sid = Objects.toString(target.serverId(), "").trim();
     if (sid.isEmpty()) return;
+    String msg = Objects.toString(reason, "").trim();
 
     TargetRef status = new TargetRef(sid, "status");
     ensureTargetExists(status);
@@ -470,7 +475,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     channelsClosedByUser.add(target);
     disposables.add(
         targetMembership
-            .partChannel(sid, target.target(), null)
+            .partChannel(sid, target.target(), msg.isEmpty() ? null : msg)
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
   }

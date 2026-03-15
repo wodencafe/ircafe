@@ -122,17 +122,17 @@ class OutboundJoinPartCommandServiceTest {
     service.handlePart(disposables, "", "");
 
     verify(ui).appendStatus(status, "(part)", "Select a server first.");
-    verify(targetCoordinator, never()).disconnectChannel(any(TargetRef.class), anyString());
+    verify(targetCoordinator, never()).closeChannel(any(TargetRef.class), anyString());
   }
 
   @Test
-  void partWithoutExplicitChannelDetachesActiveChannelWithTrimmedReason() {
+  void partWithoutExplicitChannelClosesActiveChannelWithTrimmedReason() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
 
     service.handlePart(disposables, "", "  be right back  ");
 
-    verify(targetCoordinator).disconnectChannel(chan, "be right back");
+    verify(targetCoordinator).closeChannel(chan, "be right back");
   }
 
   @Test
@@ -145,22 +145,22 @@ class OutboundJoinPartCommandServiceTest {
     verify(ui)
         .appendStatus(
             status, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
-    verify(targetCoordinator, never()).disconnectChannel(any(TargetRef.class), anyString());
+    verify(targetCoordinator, never()).closeChannel(any(TargetRef.class), anyString());
   }
 
   @Test
-  void partWithExplicitChannelDetachesChannelOnActiveServer() {
+  void partWithExplicitChannelClosesChannelOnActiveServer() {
     TargetRef status = new TargetRef("libera", "status");
     TargetRef expected = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);
 
     service.handlePart(disposables, "  #ircafe ", "  later ");
 
-    verify(targetCoordinator).disconnectChannel(expected, "later");
+    verify(targetCoordinator).closeChannel(expected, "later");
   }
 
   @Test
-  void partWithMatrixRoomIdDetachesChannelLikeTarget() {
+  void partWithMatrixRoomIdClosesChannelLikeTarget() {
     TargetRef status = new TargetRef("matrix", "status");
     TargetRef room = new TargetRef("matrix", "!abc123:matrix.org");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);
@@ -169,11 +169,11 @@ class OutboundJoinPartCommandServiceTest {
 
     service.handlePart(disposables, "!abc123:matrix.org", "later");
 
-    verify(targetCoordinator).disconnectChannel(room, "later");
+    verify(targetCoordinator).closeChannel(room, "later");
   }
 
   @Test
-  void partWithMatrixRoomIdEncodedInReasonDetachesChannelLikeTarget() {
+  void partWithMatrixRoomIdEncodedInReasonClosesChannelLikeTarget() {
     TargetRef status = new TargetRef("matrix", "status");
     TargetRef room = new TargetRef("matrix", "!abc123:matrix.org");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);
@@ -182,7 +182,7 @@ class OutboundJoinPartCommandServiceTest {
 
     service.handlePart(disposables, "", "!abc123:matrix.org later");
 
-    verify(targetCoordinator).disconnectChannel(room, "later");
+    verify(targetCoordinator).closeChannel(room, "later");
   }
 
   @Test
@@ -195,11 +195,11 @@ class OutboundJoinPartCommandServiceTest {
     verify(ui)
         .appendStatus(
             status, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
-    verify(targetCoordinator, never()).disconnectChannel(any(TargetRef.class), anyString());
+    verify(targetCoordinator, never()).closeChannel(any(TargetRef.class), anyString());
   }
 
   @Test
-  void partFromActiveMatrixRoomIdDetachesChannelLikeTarget() {
+  void partFromActiveMatrixRoomIdClosesChannelLikeTarget() {
     TargetRef room = new TargetRef("matrix", "!abc123:matrix.org");
     when(targetCoordinator.getActiveTarget()).thenReturn(room);
     when(serverCatalog.find("matrix"))
@@ -207,11 +207,11 @@ class OutboundJoinPartCommandServiceTest {
 
     service.handlePart(disposables, "", "later");
 
-    verify(targetCoordinator).disconnectChannel(room, "later");
+    verify(targetCoordinator).closeChannel(room, "later");
   }
 
   @Test
-  void partFromActiveChannelWithReasonPrefixedMatrixRoomTargetsExplicitRoom() {
+  void partFromActiveChannelWithReasonPrefixedMatrixRoomClosesExplicitRoom() {
     TargetRef activeRoom = new TargetRef("matrix", "!active:matrix.org");
     TargetRef explicitRoom = new TargetRef("matrix", "!other:matrix.org");
     when(targetCoordinator.getActiveTarget()).thenReturn(activeRoom);
@@ -220,19 +220,19 @@ class OutboundJoinPartCommandServiceTest {
 
     service.handlePart(disposables, "", "!other:matrix.org later");
 
-    verify(targetCoordinator).disconnectChannel(explicitRoom, "later");
-    verify(targetCoordinator, never()).disconnectChannel(activeRoom, "!other:matrix.org later");
+    verify(targetCoordinator).closeChannel(explicitRoom, "later");
+    verify(targetCoordinator, never()).closeChannel(activeRoom, "!other:matrix.org later");
   }
 
   @Test
-  void partWithExplicitNonChannelShowsUsageAndDoesNotDetach() {
+  void partWithExplicitNonChannelShowsUsageAndDoesNotClose() {
     TargetRef status = new TargetRef("libera", "status");
     when(targetCoordinator.getActiveTarget()).thenReturn(status);
 
     service.handlePart(disposables, "alice", "bye");
 
     verify(ui).appendStatus(status, "(part)", "Usage: /part [#channel] [reason]");
-    verify(targetCoordinator, never()).disconnectChannel(any(TargetRef.class), anyString());
+    verify(targetCoordinator, never()).closeChannel(any(TargetRef.class), anyString());
   }
 
   private static IrcProperties.Server serverWithBackend(

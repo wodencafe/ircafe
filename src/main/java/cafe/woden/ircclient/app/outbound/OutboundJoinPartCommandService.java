@@ -129,7 +129,7 @@ final class OutboundJoinPartCommandService {
     }
 
     if (target.isChannel()) {
-      targetCoordinator.disconnectChannel(target, msg);
+      targetCoordinator.closeChannel(target, msg);
       return;
     }
 
