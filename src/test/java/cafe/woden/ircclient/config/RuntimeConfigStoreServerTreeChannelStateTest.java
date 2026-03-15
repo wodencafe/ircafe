@@ -15,6 +15,36 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
   @TempDir Path tempDir;
 
   @Test
+  void forgettingLastJoinedChannelKeepsExplicitEmptyAutoJoinOverrideAcrossRestart()
+      throws Exception {
+    Path cfg = tempDir.resolve("ircafe.yml");
+    Files.writeString(
+        cfg,
+        """
+        irc:
+          servers:
+            - id: libera
+              autoJoin:
+                - "#alpha"
+        """);
+
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(
+            cfg.toString(), new IrcProperties(null, List.of(server("libera", List.of("#alpha")))));
+
+    store.forgetJoinedChannel("libera", "#alpha");
+
+    assertEquals(List.of(), store.readJoinedChannels("libera"));
+    assertEquals(java.util.Map.of("libera", List.of()), store.readExplicitServerAutoJoinById());
+
+    ServerRegistry registry =
+        new ServerRegistry(
+            new IrcProperties(null, List.of(server("libera", List.of("#alpha")))), store);
+
+    assertEquals(List.of(), registry.require("libera").autoJoin());
+  }
+
+  @Test
   void channelStateReadsSortModeOrderAndAutoReattachFlags() throws Exception {
     Path cfg = tempDir.resolve("ircafe.yml");
     Files.writeString(
@@ -243,5 +273,21 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
 
     store.rememberServerTreeChannelPinned("libera", "#alpha", false);
     assertFalse(store.readServerTreeChannelPinned("libera", "#alpha", true));
+  }
+
+  private static IrcProperties.Server server(String id, List<String> autoJoin) {
+    return new IrcProperties.Server(
+        id,
+        "irc.example.net",
+        6697,
+        true,
+        "",
+        "ircafe",
+        "ircafe",
+        "IRCafe User",
+        null,
+        autoJoin,
+        List.of(),
+        null);
   }
 }

@@ -17,6 +17,8 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
 import cafe.woden.ircclient.irc.pircbotx.support.Ircv3MultilineAccumulator;
 import cafe.woden.ircclient.irc.playback.*;
+import java.io.IOException;
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -121,6 +123,55 @@ class PircbotxConnectionSessionHandlerTest {
     assertEquals(null, reconnectReason.get());
     assertFalse(conn.suppressAutoReconnectOnce.get());
     assertEquals(1, events.size());
+  }
+
+  @Test
+  void onDisconnectUsesNestedProxyFailureMessageWhenTopLevelReasonIsDisconnected() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> events = new ArrayList<>();
+    AtomicReference<String> reconnectReason = new AtomicReference<>();
+    PircbotxConnectionSessionHandler handler =
+        newHandler(conn, events, c -> {}, (c, reason) -> reconnectReason.set(reason));
+    PircBotX bot = mock(PircBotX.class);
+    DisconnectEvent event = mock(DisconnectEvent.class);
+    when(event.getBot()).thenReturn(bot);
+    when(event.getDisconnectException())
+        .thenReturn(
+            new RuntimeException(
+                "Disconnected", new SocketException("SOCKS authentication failed")));
+    conn.botRef.set(bot);
+
+    handler.onDisconnect(event);
+
+    IrcEvent.Disconnected disconnected =
+        assertInstanceOf(IrcEvent.Disconnected.class, events.getFirst().event());
+    assertEquals("SOCKS authentication failed", disconnected.reason());
+    assertEquals("SOCKS authentication failed", reconnectReason.get());
+  }
+
+  @Test
+  void onDisconnectSkipsConnectWrapperMessageWhenCauseIsMoreSpecific() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> events = new ArrayList<>();
+    AtomicReference<String> reconnectReason = new AtomicReference<>();
+    PircbotxConnectionSessionHandler handler =
+        newHandler(conn, events, c -> {}, (c, reason) -> reconnectReason.set(reason));
+    PircBotX bot = mock(PircBotX.class);
+    DisconnectEvent event = mock(DisconnectEvent.class);
+    when(event.getBot()).thenReturn(bot);
+    when(event.getDisconnectException())
+        .thenReturn(
+            new RuntimeException(
+                "Exception encountered during connect",
+                new IOException("Connection refused by SOCKS proxy")));
+    conn.botRef.set(bot);
+
+    handler.onDisconnect(event);
+
+    IrcEvent.Disconnected disconnected =
+        assertInstanceOf(IrcEvent.Disconnected.class, events.getFirst().event());
+    assertEquals("Connection refused by SOCKS proxy", disconnected.reason());
+    assertEquals("Connection refused by SOCKS proxy", reconnectReason.get());
   }
 
   private static PircbotxConnectionSessionHandler newHandler(
