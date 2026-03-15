@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import org.junit.jupiter.api.Test;
 
 class BackendRoutingIrcClientServiceTest {
@@ -181,6 +182,40 @@ class BackendRoutingIrcClientServiceTest {
     service.sendRaw("missing", "PING").blockingAwait();
 
     verify(ircBackend).sendRaw("missing", "PING");
+  }
+
+  @Test
+  void delegatesLagProbeStrategyToConfiguredBackend() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+    IrcBackendClientService quasselBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(quasselBackend.backend()).thenReturn(IrcProperties.Server.Backend.QUASSEL_CORE);
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(quasselBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("irc"))
+        .thenReturn(Optional.of(server("irc", IrcProperties.Server.Backend.IRC)));
+    when(serverCatalog.find("quassel"))
+        .thenReturn(Optional.of(server("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+    when(ircBackend.shouldRequestLagProbe("irc")).thenReturn(false);
+    when(quasselBackend.shouldRequestLagProbe("quassel")).thenReturn(true);
+    when(ircBackend.isLagProbeReady("irc")).thenReturn(true);
+    when(quasselBackend.isLagProbeReady("quassel")).thenReturn(false);
+    when(ircBackend.lastMeasuredLagMs("irc")).thenReturn(OptionalLong.of(111L));
+    when(quasselBackend.lastMeasuredLagMs("quassel")).thenReturn(OptionalLong.of(222L));
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, quasselBackend));
+
+    assertFalse(service.shouldRequestLagProbe("irc"));
+    assertTrue(service.shouldRequestLagProbe("quassel"));
+    assertTrue(service.isLagProbeReady("irc"));
+    assertFalse(service.isLagProbeReady("quassel"));
+    assertEquals(111L, service.lastMeasuredLagMs("irc").orElseThrow());
+    assertEquals(222L, service.lastMeasuredLagMs("quassel").orElseThrow());
   }
 
   @Test

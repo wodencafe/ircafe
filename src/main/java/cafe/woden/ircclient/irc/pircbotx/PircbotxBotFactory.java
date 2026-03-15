@@ -163,7 +163,7 @@ public class PircbotxBotFactory {
           new MultiSaslCapHandler(user, secret, mech, s.sasl().disconnectOnFailure()));
     }
 
-    return new PircBotX(builder.buildConfiguration());
+    return new PircbotxLagAwareBot(builder.buildConfiguration());
   }
 
   private static ThreadedListenerManager createOrderedListenerManager(String serverId) {

@@ -418,6 +418,16 @@ public class BackendRoutingIrcClientService
   }
 
   @Override
+  public boolean shouldRequestLagProbe(String serverId) {
+    return routeActiveOrConfigured(serverId).shouldRequestLagProbe(serverId);
+  }
+
+  @Override
+  public boolean isLagProbeReady(String serverId) {
+    return routeActiveOrConfigured(serverId).isLagProbeReady(serverId);
+  }
+
+  @Override
   public OptionalLong lastMeasuredLagMs(String serverId) {
     return routeActiveOrConfigured(serverId).lastMeasuredLagMs(serverId);
   }

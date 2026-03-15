@@ -39,7 +39,6 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxAwayNotifyInputParser.class);
   private static final int MAX_ACCOUNT_TAG_KEYS = 8_192;
-  private static final String LAG_PING_TOKEN_PREFIX = "ircafe-lag-";
 
   private final String serverId;
   private final Consumer<ServerIrcEvent> sink;
@@ -91,9 +90,8 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     if (command == null) return;
 
     if ("PONG".equalsIgnoreCase(command)) {
-      String lagToken = extractLagProbeToken(parsedLine, line);
-      if (!lagToken.isBlank()) {
-        conn.observeLagProbePong(lagToken, System.currentTimeMillis());
+      String lagToken = extractTrailingParamToken(parsedLine, line);
+      if (conn.observeLagProbePong(lagToken, System.currentTimeMillis())) {
         return;
       }
       observePassiveLagSampleFromServerTime(tags, line);
@@ -488,31 +486,19 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     return Ircv3ServerTime.parseServerTimeFromRawLine(rawLine);
   }
 
-  private static String extractLagProbeToken(List<String> parsedLine, String rawLine) {
+  private static String extractTrailingParamToken(List<String> parsedLine, String rawLine) {
     if (parsedLine != null) {
       for (int i = parsedLine.size() - 1; i >= 0; i--) {
-        String token = stripLeadingColon(parsedLine.get(i));
-        if (looksLikeLagToken(token)) return token;
+        String token = stripLeadingColon(parsedLine.get(i)).trim();
+        if (!token.isEmpty()) return token;
       }
     }
 
     String raw = Objects.toString(rawLine, "").trim();
     if (raw.isEmpty()) return "";
-    String lower = raw.toLowerCase(Locale.ROOT);
-    int idx = lower.lastIndexOf(LAG_PING_TOKEN_PREFIX);
-    if (idx < 0 || idx >= raw.length()) return "";
-    String tail = raw.substring(idx).trim();
-    int space = tail.indexOf(' ');
-    if (space > 0) {
-      tail = tail.substring(0, space);
-    }
-    return stripLeadingColon(tail);
-  }
-
-  private static boolean looksLikeLagToken(String token) {
-    String normalized = Objects.toString(token, "").trim();
-    if (normalized.isEmpty()) return false;
-    return normalized.toLowerCase(Locale.ROOT).startsWith(LAG_PING_TOKEN_PREFIX);
+    int tailStart = raw.lastIndexOf(' ');
+    String tail = tailStart >= 0 ? raw.substring(tailStart + 1) : raw;
+    return stripLeadingColon(tail).trim();
   }
 
   private void observeMultilineCapValuesFromCapLine(String sub, String capList) {

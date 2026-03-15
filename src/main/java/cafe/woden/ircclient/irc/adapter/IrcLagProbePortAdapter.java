@@ -32,6 +32,16 @@ public class IrcLagProbePortAdapter implements IrcLagProbePort {
   }
 
   @Override
+  public boolean shouldRequestLagProbe(String serverId) {
+    return delegate.shouldRequestLagProbe(serverId);
+  }
+
+  @Override
+  public boolean isLagProbeReady(String serverId) {
+    return delegate.isLagProbeReady(serverId);
+  }
+
+  @Override
   public OptionalLong lastMeasuredLagMs(String serverId) {
     return delegate.lastMeasuredLagMs(serverId);
   }

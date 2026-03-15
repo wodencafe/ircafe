@@ -314,19 +314,20 @@ final class PircbotxConnectionState {
     lagProbeSentAtMs.set(sent);
   }
 
-  void observeLagProbePong(String token, long observedAtMs) {
+  boolean observeLagProbePong(String token, long observedAtMs) {
     String observedToken = normalizeLagToken(token);
-    if (observedToken.isEmpty()) return;
+    if (observedToken.isEmpty()) return false;
     String expected = lagProbeToken.get();
-    if (expected.isEmpty()) return;
-    if (!Objects.equals(expected, observedToken)) return;
-    if (!lagProbeToken.compareAndSet(expected, "")) return;
+    if (expected.isEmpty()) return false;
+    if (!Objects.equals(expected, observedToken)) return false;
+    if (!lagProbeToken.compareAndSet(expected, "")) return false;
 
     long sentAt = lagProbeSentAtMs.getAndSet(0L);
     long now = observedAtMs > 0 ? observedAtMs : System.currentTimeMillis();
     long lagMs = Math.max(0L, now - sentAt);
     lagLastMeasuredMs.set(lagMs);
     lagLastMeasuredAtMs.set(now);
+    return true;
   }
 
   void observePassiveLagSample(long lagMs, long observedAtMs) {

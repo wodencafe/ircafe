@@ -202,6 +202,9 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
                       disconnectOnSaslFailure);
 
               PircBotX bot = botFactory.build(s, version, listener);
+              if (bot instanceof PircbotxLagAwareBot lagAwareBot) {
+                lagAwareBot.setLagProbeObserver(c::beginLagProbe);
+              }
               c.botRef.set(bot);
               inputParserHookInstaller.installAwayNotifyHook(bot, serverId, c, bus::onNext);
 
@@ -895,7 +898,7 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
                 throw new IllegalStateException("Not connected: " + sid);
               }
               if (!c.registrationComplete.get()) {
-                return;
+                throw new IllegalStateException("Registration not complete: " + sid);
               }
 
               String token =
@@ -904,6 +907,23 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
               bot.sendRaw().rawLine("PING :" + token);
             })
         .subscribeOn(RxVirtualSchedulers.io());
+  }
+
+  @Override
+  public boolean shouldRequestLagProbe(String serverId) {
+    return false;
+  }
+
+  @Override
+  public boolean isLagProbeReady(String serverId) {
+    try {
+      String sid = Objects.toString(serverId, "").trim();
+      if (sid.isEmpty()) return false;
+      PircbotxConnectionState c = conn(sid);
+      return c != null && c.botRef.get() != null && c.registrationComplete.get();
+    } catch (Exception ignored) {
+      return false;
+    }
   }
 
   @Override

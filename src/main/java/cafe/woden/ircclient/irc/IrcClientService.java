@@ -284,6 +284,23 @@ public interface IrcClientService {
   }
 
   /**
+   * @return true when callers should trigger active lag probes; false when the transport already
+   *     produces its own lag samples and callers should only read {@link #lastMeasuredLagMs(String)
+   *     }.
+   */
+  default boolean shouldRequestLagProbe(String serverId) {
+    return true;
+  }
+
+  /**
+   * @return true when lag probes may be requested on this connection. Implementations may return
+   *     false while transport/session registration is still in progress.
+   */
+  default boolean isLagProbeReady(String serverId) {
+    return currentNick(serverId).isPresent();
+  }
+
+  /**
    * @return most recent measured lag (milliseconds) for a server, if available.
    */
   default OptionalLong lastMeasuredLagMs(String serverId) {

@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc.pircbotx;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -35,7 +36,7 @@ class PircbotxIrcClientServiceLagProbeTest {
   }
 
   @Test
-  void requestLagProbeSkipsPingUntilRegistrationCompletes() throws Exception {
+  void requestLagProbeFailsUntilRegistrationCompletes() throws Exception {
     PircbotxIrcClientService service = newService();
     PircbotxConnectionState c = conn(service, "libera");
 
@@ -45,7 +46,8 @@ class PircbotxIrcClientServiceLagProbeTest {
     c.botRef.set(bot);
     c.registrationComplete.set(false);
 
-    service.requestLagProbe("libera").blockingAwait();
+    assertThrows(
+        IllegalStateException.class, () -> service.requestLagProbe("libera").blockingAwait());
 
     verify(outputRaw, never()).rawLine(argThat(v -> v != null && v.startsWith("PING :")));
   }

@@ -17,6 +17,14 @@ public interface IrcLagProbePort {
     return Completable.complete();
   }
 
+  default boolean shouldRequestLagProbe(String serverId) {
+    return true;
+  }
+
+  default boolean isLagProbeReady(String serverId) {
+    return currentNick(serverId).isPresent();
+  }
+
   default OptionalLong lastMeasuredLagMs(String serverId) {
     return OptionalLong.empty();
   }
@@ -39,6 +47,16 @@ public interface IrcLagProbePort {
       @Override
       public Completable requestLagProbe(String serverId) {
         return irc.requestLagProbe(serverId);
+      }
+
+      @Override
+      public boolean shouldRequestLagProbe(String serverId) {
+        return irc.shouldRequestLagProbe(serverId);
+      }
+
+      @Override
+      public boolean isLagProbeReady(String serverId) {
+        return irc.isLagProbeReady(serverId);
       }
 
       @Override

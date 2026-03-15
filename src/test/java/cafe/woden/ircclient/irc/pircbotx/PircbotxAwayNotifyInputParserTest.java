@@ -915,6 +915,29 @@ class PircbotxAwayNotifyInputParserTest {
     assertEquals("", conn.lagProbeToken.get());
   }
 
+  @Test
+  void numericPongTokenMatchesTransportPingLagProbe() throws Exception {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    conn.beginLagProbe("1742097600", System.currentTimeMillis() - 650L);
+    parser.processCommand(
+        "*",
+        source("server"),
+        "PONG",
+        ":server PONG server :1742097600",
+        List.of("server", ":1742097600"),
+        ImmutableMap.of());
+
+    long lagMs = conn.lagMsIfFresh(System.currentTimeMillis());
+    assertTrue(lagMs >= 300L, "transport RTT sample should be recorded from numeric PONG tokens");
+    assertTrue(lagMs <= 5_000L, "transport RTT should stay within a sane test range");
+    assertEquals("", conn.lagProbeToken.get());
+  }
+
   private static UserHostmask source(String nick) {
     UserHostmask s = mock(UserHostmask.class);
     when(s.getNick()).thenReturn(nick);
