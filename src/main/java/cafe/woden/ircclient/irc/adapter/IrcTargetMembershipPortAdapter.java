@@ -5,8 +5,6 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.port.*;
 import io.reactivex.rxjava3.core.Completable;
 import java.util.Optional;
-import lombok.AccessLevel;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -14,13 +12,12 @@ import org.springframework.stereotype.Component;
 /** Spring adapter exposing target-membership operations via a narrow port. */
 @Component("ircTargetMembershipPort")
 @InfrastructureLayer
-@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class IrcTargetMembershipPortAdapter implements IrcTargetMembershipPort {
 
   private final IrcTargetMembershipPort delegate;
 
   public IrcTargetMembershipPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this(IrcTargetMembershipPort.from(irc));
+    this.delegate = IrcTargetMembershipPort.from(irc);
   }
 
   @Override

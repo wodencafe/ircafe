@@ -33,9 +33,7 @@ import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
-import lombok.AccessLevel;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.pircbotx.PircBotX;
 import org.slf4j.Logger;
@@ -44,7 +42,6 @@ import org.springframework.stereotype.Service;
 
 @Service
 @InfrastructureLayer
-@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class PircbotxIrcClientService implements IrcBackendClientService {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxIrcClientService.class);
@@ -80,18 +77,19 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
       BouncerDiscoveryEventPort bouncerDiscoveryEvents,
       PircbotxConnectionTimersRx timers,
       ServerIsupportStatePort serverIsupportState) {
-    this(
-        serverCatalog,
-        inputParserHookInstaller,
-        botFactory,
-        bridgeListenerFactory,
-        timers,
-        bouncerDiscoveryEvents,
-        bouncerBackends,
-        runtimeConfig,
-        serverIsupportState,
-        stsPolicies,
-        Objects.requireNonNull(props, "props").client().version());
+    this.serverCatalog = serverCatalog;
+    this.inputParserHookInstaller = inputParserHookInstaller;
+    this.botFactory = botFactory;
+    this.bridgeListenerFactory =
+        Objects.requireNonNull(bridgeListenerFactory, "bridgeListenerFactory");
+    this.timers = timers;
+    this.bouncerDiscoveryEvents =
+        Objects.requireNonNull(bouncerDiscoveryEvents, "bouncerDiscoveryEvents");
+    this.bouncerBackends = Objects.requireNonNull(bouncerBackends, "bouncerBackends");
+    this.runtimeConfig = runtimeConfig;
+    this.serverIsupportState = Objects.requireNonNull(serverIsupportState, "serverIsupportState");
+    this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
+    this.version = Objects.requireNonNull(props, "props").client().version();
   }
 
   @Override

@@ -6,8 +6,6 @@ import cafe.woden.ircclient.irc.port.*;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import java.util.Optional;
-import lombok.AccessLevel;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -15,13 +13,12 @@ import org.springframework.stereotype.Component;
 /** Spring adapter exposing mediator interaction operations via a narrow port. */
 @Component("ircMediatorInteractionPort")
 @InfrastructureLayer
-@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class IrcMediatorInteractionPortAdapter implements IrcMediatorInteractionPort {
 
   private final IrcMediatorInteractionPort delegate;
 
   public IrcMediatorInteractionPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this(IrcMediatorInteractionPort.from(irc));
+    this.delegate = IrcMediatorInteractionPort.from(irc);
   }
 
   @Override

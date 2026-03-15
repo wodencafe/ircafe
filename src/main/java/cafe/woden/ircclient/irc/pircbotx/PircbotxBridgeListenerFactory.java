@@ -13,16 +13,13 @@ import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import lombok.AccessLevel;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
 /** Assembles per-connection bridge listeners from Spring-managed and runtime dependencies. */
 @Component
 @InfrastructureLayer
-@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class PircbotxBridgeListenerFactory {
 
   @NonNull private final BouncerBackendRegistry bouncerBackends;
@@ -39,13 +36,14 @@ public class PircbotxBridgeListenerFactory {
       ServerIsupportStatePort serverIsupportState,
       SojuProperties sojuProps,
       ZncProperties zncProps) {
-    this(
-        bouncerBackends,
-        bouncerDiscoveryEvents,
-        playbackCursorProvider,
-        serverIsupportState,
-        Objects.requireNonNull(sojuProps, "sojuProps").discovery().enabled(),
-        Objects.requireNonNull(zncProps, "zncProps").discovery().enabled());
+    this.bouncerBackends = Objects.requireNonNull(bouncerBackends, "bouncerBackends");
+    this.bouncerDiscoveryEvents = bouncerDiscoveryEvents;
+    this.playbackCursorProvider =
+        Objects.requireNonNull(playbackCursorProvider, "playbackCursorProvider");
+    this.serverIsupportState = Objects.requireNonNull(serverIsupportState, "serverIsupportState");
+    this.sojuDiscoveryEnabled =
+        Objects.requireNonNull(sojuProps, "sojuProps").discovery().enabled();
+    this.zncDiscoveryEnabled = Objects.requireNonNull(zncProps, "zncProps").discovery().enabled();
   }
 
   PircbotxBridgeListener create(
