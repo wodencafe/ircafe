@@ -280,7 +280,9 @@ class SpringModulithIncrementalAdoptionTest {
             .getPackage()
             .getAnnotation(org.springframework.modulith.ApplicationModule.class);
     org.springframework.modulith.ApplicationModule uiModuleAnnotation =
-        SwingUiPort.class.getPackage().getAnnotation(org.springframework.modulith.ApplicationModule.class);
+        SwingUiPort.class
+            .getPackage()
+            .getAnnotation(org.springframework.modulith.ApplicationModule.class);
 
     assertThat(appModuleAnnotation).isNotNull();
     assertThat(appModuleAnnotation.allowedDependencies())
@@ -361,12 +363,15 @@ class SpringModulithIncrementalAdoptionTest {
     assertThat(TrayNotificationService.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
     assertThat(LoggingAppHistoryPortsAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
         .isTrue();
-    assertThat(LoggingTargetLogMaintenancePortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
+    assertThat(
+            LoggingTargetLogMaintenancePortAdapter.class.isAnnotationPresent(
+                SecondaryAdapter.class))
         .isTrue();
     assertThat(NotificationRuleMatcher.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
     assertThat(IrcEventNotificationService.class.isAnnotationPresent(SecondaryAdapter.class))
         .isTrue();
-    assertThat(MonitorIsonFallbackService.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
+    assertThat(MonitorIsonFallbackService.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
     assertThat(MonitorListService.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
   }
 

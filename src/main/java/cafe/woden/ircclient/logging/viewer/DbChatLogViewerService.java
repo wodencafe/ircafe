@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.logging.viewer;
 
 import cafe.woden.ircclient.logging.ChatLogRepository;
-import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.logging.LogLine;
 import cafe.woden.ircclient.logging.LogRow;
+import cafe.woden.ircclient.model.LogKind;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;

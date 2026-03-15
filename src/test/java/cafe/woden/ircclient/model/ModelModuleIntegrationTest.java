@@ -20,6 +20,7 @@ import org.springframework.test.context.bean.override.convention.TestBean;
 class ModelModuleIntegrationTest {
 
   private final ApplicationContext applicationContext;
+
   ModelModuleIntegrationTest(ApplicationContext applicationContext) {
     this.applicationContext = applicationContext;
   }

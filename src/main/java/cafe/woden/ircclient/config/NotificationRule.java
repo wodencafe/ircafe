@@ -1,9 +1,8 @@
 package cafe.woden.ircclient.config;
 
-import org.jmolecules.ddd.annotation.ValueObject;
-
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /** User-configured notification rule. */
 @ValueObject
