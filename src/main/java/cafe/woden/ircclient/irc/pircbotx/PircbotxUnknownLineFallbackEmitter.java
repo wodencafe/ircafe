@@ -30,6 +30,7 @@ final class PircbotxUnknownLineFallbackEmitter {
       LoggerFactory.getLogger(PircbotxUnknownLineFallbackEmitter.class);
 
   @NonNull private final String serverId;
+  @NonNull private final PircbotxConnectionState conn;
 
   @NonNull private final PircbotxBouncerDiscoveryCoordinator bouncerDiscovery;
   @NonNull private final PircbotxChatHistoryBatchCollector chatHistoryBatches;
@@ -55,6 +56,7 @@ final class PircbotxUnknownLineFallbackEmitter {
       Function<PircBotX, String> selfNickResolver) {
     this(
         serverId,
+        conn,
         bouncerDiscovery,
         chatHistoryBatches,
         serverResponses,
@@ -118,6 +120,9 @@ final class PircbotxUnknownLineFallbackEmitter {
     PircbotxChannelModeParsers.ParsedRpl324 parsed =
         PircbotxChannelModeParsers.parseRpl324(normalizedRawLine);
     if (parsed != null) {
+      if (!conn.tryClaimChannelMode324(parsed.channel(), parsed.details())) {
+        return;
+      }
       emit.accept(
           new ServerIrcEvent(
               serverId,

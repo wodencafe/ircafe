@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -214,6 +215,89 @@ class InboundModeEventHandlerTest {
 
     verify(ui, never())
         .appendNotice(eq(new TargetRef(SERVER_ID, CHANNEL)), eq("(mode)"), eq(snapshotSummary));
+  }
+
+  @Test
+  void deduplicatesIdenticalSnapshotObservedTwiceInQuickSuccession() {
+    String snapshotDetails = "+Cnt";
+    String snapshotSummary = "Channel modes: topic locked, no outside messages, +C";
+    when(modeFormattingService.describeCurrentChannelModes(SERVER_ID, snapshotDetails))
+        .thenReturn(snapshotSummary);
+    IrcEvent.ChannelModeObserved snapshot =
+        new IrcEvent.ChannelModeObserved(
+            Instant.now(),
+            CHANNEL,
+            "",
+            snapshotDetails,
+            IrcEvent.ChannelModeKind.SNAPSHOT,
+            IrcEvent.ChannelModeProvenance.NUMERIC_324);
+
+    handler.handleChannelModeObserved(SERVER_ID, snapshot);
+    handler.handleChannelModeObserved(SERVER_ID, snapshot);
+
+    verify(ui)
+        .appendNotice(eq(new TargetRef(SERVER_ID, CHANNEL)), eq("(mode)"), eq(snapshotSummary));
+  }
+
+  @Test
+  void deduplicatesEquivalentSnapshotAcrossDifferentProvenance() {
+    String snapshotDetails = "+Cnt";
+    String snapshotSummary = "Channel modes: topic locked, no outside messages, +C";
+    when(modeFormattingService.describeCurrentChannelModes(SERVER_ID, snapshotDetails))
+        .thenReturn(snapshotSummary);
+    when(joinModeBurstService.hasActiveJoinModeBuffer(SERVER_ID, CHANNEL)).thenReturn(true);
+
+    handler.handleChannelModeObserved(
+        SERVER_ID,
+        new IrcEvent.ChannelModeObserved(
+            Instant.now(),
+            CHANNEL,
+            "",
+            snapshotDetails,
+            IrcEvent.ChannelModeKind.SNAPSHOT,
+            IrcEvent.ChannelModeProvenance.LIVE_MODE_EVENT));
+    handler.handleChannelModeObserved(
+        SERVER_ID,
+        new IrcEvent.ChannelModeObserved(
+            Instant.now(),
+            CHANNEL,
+            "",
+            snapshotDetails,
+            IrcEvent.ChannelModeKind.SNAPSHOT,
+            IrcEvent.ChannelModeProvenance.NUMERIC_324));
+
+    verify(ui)
+        .appendNotice(eq(new TargetRef(SERVER_ID, CHANNEL)), eq("(mode)"), eq(snapshotSummary));
+  }
+
+  @Test
+  void doesNotDeduplicateIdenticalDeltaModeEvents() {
+    String deltaDetails = "+o Alice";
+    String rendered = "mode line";
+    when(modeFormattingService.prettyModeChange(SERVER_ID, "ChanServ", CHANNEL, deltaDetails))
+        .thenReturn(List.of(rendered));
+
+    handler.handleChannelModeObserved(
+        SERVER_ID,
+        new IrcEvent.ChannelModeObserved(
+            Instant.now(),
+            CHANNEL,
+            "ChanServ",
+            deltaDetails,
+            IrcEvent.ChannelModeKind.DELTA,
+            IrcEvent.ChannelModeProvenance.LIVE_MODE_EVENT));
+    handler.handleChannelModeObserved(
+        SERVER_ID,
+        new IrcEvent.ChannelModeObserved(
+            Instant.now(),
+            CHANNEL,
+            "ChanServ",
+            deltaDetails,
+            IrcEvent.ChannelModeKind.DELTA,
+            IrcEvent.ChannelModeProvenance.LIVE_MODE_EVENT));
+
+    verify(ui, times(2))
+        .appendNotice(eq(new TargetRef(SERVER_ID, CHANNEL)), eq("(mode)"), eq(rendered));
   }
 
   private static final class InMemoryModeRoutingStatePort implements ModeRoutingPort {

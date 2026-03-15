@@ -9,6 +9,9 @@ import cafe.woden.ircclient.state.api.ModeVocabulary;
 import cafe.woden.ircclient.state.api.NegotiatedModeSemantics;
 import cafe.woden.ircclient.state.api.RecentStatusModePort;
 import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
@@ -21,6 +24,9 @@ import org.springframework.stereotype.Component;
 @ApplicationLayer
 @RequiredArgsConstructor
 public class InboundModeEventHandler {
+  private static final long RECENT_MODE_SNAPSHOT_TTL_MS = 1_500L;
+  private static final int RECENT_MODE_SNAPSHOT_MAX = 512;
+
   private final UiPort ui;
   private final ModeRoutingPort modeRoutingState;
   private final JoinModeBurstService joinModeBurstService;
@@ -28,6 +34,8 @@ public class InboundModeEventHandler {
   private final ChannelFlagModeStatePort channelFlagModeState;
   private final RecentStatusModePort recentStatusModeState;
   private final ServerIsupportStatePort serverIsupportState;
+  private final ConcurrentHashMap<RecentModeSnapshotKey, Long> recentModeSnapshots =
+      new ConcurrentHashMap<>();
 
   public void onJoinedChannel(String serverId, String channel) {
     if (serverId == null || channel == null) return;
@@ -49,6 +57,8 @@ public class InboundModeEventHandler {
     joinModeBurstService.clearServer(serverId);
     channelFlagModeState.clearServer(serverId);
     recentStatusModeState.clearServer(serverId);
+    String sid = normalizeServerId(serverId);
+    recentModeSnapshots.keySet().removeIf(k -> Objects.equals(k.serverId(), sid));
   }
 
   public void onLeftChannel(String serverId, String channel) {
@@ -56,12 +66,16 @@ public class InboundModeEventHandler {
     joinModeBurstService.clearChannel(serverId, channel);
     channelFlagModeState.clearChannel(serverId, channel);
     recentStatusModeState.clearChannel(serverId, channel);
+    recentModeSnapshots.keySet().removeIf(k -> k.matches(serverId, channel));
     ui.setChannelModeSnapshot(serverId, channel, "", "");
   }
 
   public void handleChannelModeObserved(String serverId, IrcEvent.ChannelModeObserved ev) {
     if (serverId == null || ev == null) return;
     IrcEvent.ChannelModeKind effectiveKind = effectiveModeKind(serverId, ev);
+    if (!tryClaimRecentModeSnapshot(serverId, ev.channel(), ev.details(), effectiveKind)) {
+      return;
+    }
     if (effectiveKind == IrcEvent.ChannelModeKind.SNAPSHOT) {
       handleChannelModeSnapshot(serverId, ev.channel(), ev.details(), ev.provenance());
       return;
@@ -267,5 +281,50 @@ public class InboundModeEventHandler {
     String first = modeToks[0];
     if (first.indexOf('+') < 0 && first.indexOf('-') < 0) return "";
     return det;
+  }
+
+  private boolean tryClaimRecentModeSnapshot(
+      String serverId, String channel, String details, IrcEvent.ChannelModeKind effectiveKind) {
+    if (effectiveKind != IrcEvent.ChannelModeKind.SNAPSHOT) return true;
+    RecentModeSnapshotKey key = RecentModeSnapshotKey.of(serverId, channel, details);
+    if (key == null) return true;
+
+    long now = System.currentTimeMillis();
+    cleanupRecentModeSnapshots(now);
+
+    Long previous = recentModeSnapshots.put(key, now);
+    return previous == null || (now - previous.longValue()) > RECENT_MODE_SNAPSHOT_TTL_MS;
+  }
+
+  private void cleanupRecentModeSnapshots(long now) {
+    long cutoff = now - RECENT_MODE_SNAPSHOT_TTL_MS;
+    recentModeSnapshots.entrySet().removeIf(e -> e.getValue() == null || e.getValue() < cutoff);
+    if (recentModeSnapshots.size() > RECENT_MODE_SNAPSHOT_MAX) {
+      recentModeSnapshots.clear();
+    }
+  }
+
+  private static String normalizeServerId(String serverId) {
+    return Objects.toString(serverId, "").trim();
+  }
+
+  private static String normalizeChannel(String channel) {
+    String value = Objects.toString(channel, "").trim();
+    return value.isEmpty() ? "" : value.toLowerCase(Locale.ROOT);
+  }
+
+  private record RecentModeSnapshotKey(String serverId, String channelLower, String details) {
+    static RecentModeSnapshotKey of(String serverId, String channel, String details) {
+      String sid = normalizeServerId(serverId);
+      String channelLower = normalizeChannel(channel);
+      String normalizedDetails = normalizeModeDetailsForSnapshot(details);
+      if (sid.isEmpty() || channelLower.isEmpty() || normalizedDetails.isEmpty()) return null;
+      return new RecentModeSnapshotKey(sid, channelLower, normalizedDetails);
+    }
+
+    boolean matches(String serverId, String channel) {
+      return Objects.equals(this.serverId, normalizeServerId(serverId))
+          && Objects.equals(this.channelLower, normalizeChannel(channel));
+    }
   }
 }

@@ -25,6 +25,8 @@ import org.pircbotx.PircBotX;
 final class PircbotxConnectionState {
   private static final long PRIVATE_TARGET_HINT_TTL_MS = 120_000L;
   private static final int PRIVATE_TARGET_HINT_MAX = 1_024;
+  private static final long CHANNEL_MODE_324_DEDUPE_TTL_MS = 2_000L;
+  private static final int CHANNEL_MODE_324_DEDUPE_MAX = 256;
   private static final long LAG_SAMPLE_STALE_AFTER_MS = 120_000L;
   private static final long MAX_PASSIVE_LAG_SAMPLE_MS = TimeUnit.MINUTES.toMillis(5);
 
@@ -196,6 +198,7 @@ final class PircbotxConnectionState {
       new ConcurrentHashMap<>();
   private final Map<String, PrivateTargetHint> privateTargetHintByFingerprint =
       new ConcurrentHashMap<>();
+  private final Map<String, Long> recentChannelMode324ByKey = new ConcurrentHashMap<>();
 
   PircbotxConnectionState(String serverId) {
     this.serverId = serverId;
@@ -249,6 +252,7 @@ final class PircbotxConnectionState {
     registrationComplete.set(false);
     resetLagProbeState();
     clearPrivateTargetHints();
+    recentChannelMode324ByKey.clear();
   }
 
   void rememberPrivateTargetHint(
@@ -358,6 +362,17 @@ final class PircbotxConnectionState {
     privateTargetHintByFingerprint.clear();
   }
 
+  boolean tryClaimChannelMode324(String channel, String details) {
+    String key = channelMode324Key(channel, details);
+    if (key.isEmpty()) return true;
+
+    long now = System.currentTimeMillis();
+    cleanupRecentChannelMode324(now);
+
+    Long previous = recentChannelMode324ByKey.put(key, now);
+    return previous == null || (now - previous.longValue()) > CHANNEL_MODE_324_DEDUPE_TTL_MS;
+  }
+
   private static boolean isUsableById(PrivateTargetHint hint, String from, String kind, long now) {
     if (hint == null) return false;
     if (hint.observedAtMs() + PRIVATE_TARGET_HINT_TTL_MS < now) return false;
@@ -389,6 +404,18 @@ final class PircbotxConnectionState {
     }
   }
 
+  private void cleanupRecentChannelMode324(long now) {
+    long cutoff = now - CHANNEL_MODE_324_DEDUPE_TTL_MS;
+    recentChannelMode324ByKey
+        .entrySet()
+        .removeIf(e -> e.getValue() == null || e.getValue() < cutoff);
+
+    // Keep this short-lived dedupe map hard-bounded even during very large join bursts.
+    if (recentChannelMode324ByKey.size() > CHANNEL_MODE_324_DEDUPE_MAX) {
+      recentChannelMode324ByKey.clear();
+    }
+  }
+
   private static String normalizeLower(String raw) {
     String s = Objects.toString(raw, "").trim();
     return s.isEmpty() ? "" : s.toLowerCase(java.util.Locale.ROOT);
@@ -417,6 +444,19 @@ final class PircbotxConnectionState {
 
   private static String normalizeLagToken(String raw) {
     return Objects.toString(raw, "").trim();
+  }
+
+  private static String channelMode324Key(String channel, String details) {
+    String normalizedChannel = normalizeLower(channel);
+    String normalizedDetails = normalizeWhitespace(details);
+    if (normalizedChannel.isEmpty() || normalizedDetails.isEmpty()) return "";
+    return normalizedChannel + '\n' + normalizedDetails;
+  }
+
+  private static String normalizeWhitespace(String raw) {
+    String value = Objects.toString(raw, "").trim();
+    if (value.isEmpty()) return "";
+    return value.replaceAll("\\s+", " ");
   }
 
   private static String fingerprint(String fromLower, String kind, String payload) {

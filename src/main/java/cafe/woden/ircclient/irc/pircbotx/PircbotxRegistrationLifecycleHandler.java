@@ -71,6 +71,9 @@ final class PircbotxRegistrationLifecycleHandler {
   private void handleChannelMode(PircBotX bot, String line) {
     PircbotxChannelModeParsers.ParsedRpl324 parsed = PircbotxChannelModeParsers.parseRpl324(line);
     if (parsed != null) {
+      if (!conn.tryClaimChannelMode324(parsed.channel(), parsed.details())) {
+        return;
+      }
       emit.accept(
           new ServerIrcEvent(
               serverId,
