@@ -12,8 +12,6 @@ import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
-import cafe.woden.ircclient.net.SocksProxySocketFactory;
-import cafe.woden.ircclient.net.SocksProxySslSocketFactory;
 import cafe.woden.ircclient.util.VirtualThreads;
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
@@ -61,6 +59,10 @@ public class PircbotxBotFactory {
 
   public PircBotX build(IrcProperties.Server s, String version, ListenerAdapter listener) {
     ProxyPlan plan = proxyResolver.planForServer(s.id());
+    // PircBotX creates the socket first and applies its own connect/read timeouts during the
+    // later connect step, so the resolved proxy plan must be copied into the configuration too.
+    int connectTimeoutMs = Math.max(1, plan.connectTimeoutMs());
+    int readTimeoutMs = Math.max(1, plan.readTimeoutMs());
 
     SSLSocketFactory ssl = NetTlsContext.sslSocketFactory();
 
@@ -68,8 +70,8 @@ public class PircbotxBotFactory {
     if (plan.enabled()) {
       socketFactory =
           s.tls()
-              ? new SocksProxySslSocketFactory(plan.cfg(), ssl)
-              : new SocksProxySocketFactory(plan.cfg());
+              ? new PircbotxSocksSocketFactory(plan.cfg(), s.host(), s.port(), ssl)
+              : new PircbotxSocksSocketFactory(plan.cfg(), s.host(), s.port());
     } else {
       socketFactory =
           s.tls()
@@ -85,6 +87,8 @@ public class PircbotxBotFactory {
             .setVersion(version)
             .addServer(s.host(), s.port())
             .setSocketFactory(socketFactory)
+            .setSocketConnectTimeout(connectTimeoutMs)
+            .setSocketTimeout(readTimeoutMs)
             .setCapEnabled(true)
             .setAutoNickChange(true)
             .setAutoReconnect(false);
