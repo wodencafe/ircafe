@@ -100,6 +100,11 @@ public final class ServerTreeTargetRemovalStateCoordinator {
     String key = context.foldChannelKey(ref.target());
     if (sid.isEmpty() || key.isEmpty()) return;
 
+    if (runtimeConfig != null) {
+      // Removing a channel node from the tree is a permanent close, not a detach.
+      runtimeConfig.forgetJoinedChannel(sid, ref.target());
+    }
+
     Map<String, Boolean> autoByChannel = channelAutoReattachByServer.get(sid);
     if (autoByChannel != null) {
       autoByChannel.remove(key);

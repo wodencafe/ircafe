@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -92,6 +93,30 @@ class TargetCoordinatorLifecycleMockVerifyTest {
     inOrder.verify(runtimeConfig).forgetJoinedChannel("libera", "#ircafe");
     inOrder.verify(ui).closeTarget(channel);
     inOrder.verify(irc).partChannel("libera", "#ircafe", "later");
+  }
+
+  @Test
+  void staleSelectionForClosedChannelIsIgnored() {
+    UiPort ui = mock(UiPort.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+
+    when(ui.isChannelDisconnected(channel)).thenReturn(false);
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(irc.partChannel("libera", "#ircafe", null)).thenReturn(Completable.complete());
+
+    coordinator.closeChannel(channel);
+    clearInvocations(ui, irc);
+
+    coordinator.onTargetSelected(channel);
+    coordinator.onTargetActivated(channel);
+
+    verify(ui, never()).ensureTargetExists(channel);
+    verify(ui, never()).setChatActiveTarget(channel);
+    verify(irc, never()).requestNames("libera", "#ircafe");
   }
 
   @Test

@@ -137,6 +137,7 @@ public class TargetCoordinator implements ActiveTargetPort {
   public void onTargetActivated(TargetRef target) {
     if (target == null) return;
     if (isClosedPrivateTargetByUser(target)) return;
+    if (isClosedChannelByUser(target)) return;
 
     ensureTargetExists(target);
     // Do NOT change the main Chat dock's displayed transcript.
@@ -147,6 +148,7 @@ public class TargetCoordinator implements ActiveTargetPort {
   public void onTargetSelected(TargetRef target) {
     if (target == null) return;
     if (isClosedPrivateTargetByUser(target)) return;
+    if (isClosedChannelByUser(target)) return;
 
     ensureTargetExists(target);
 
@@ -450,10 +452,14 @@ public class TargetCoordinator implements ActiveTargetPort {
     if (sid.isEmpty()) return;
     String msg = Objects.toString(reason, "").trim();
 
+    // Guard against stale tree selection/activation events racing behind the close action.
+    channelsClosedByUser.add(target);
+
     TargetRef status = new TargetRef(sid, "status");
     ensureTargetExists(status);
     ensureTargetExists(target);
     boolean detached = ui.isChannelDisconnected(target);
+    boolean connected = connectionCoordinator.isConnected(sid);
 
     if (Objects.equals(activeTarget, target)) {
       applyTargetContext(status);
@@ -463,7 +469,6 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     detachedChannelsByUserOrKick.remove(target);
     bouncerDetachedChannels.remove(target);
-    channelsClosedByUser.remove(target);
     runtimeConfig.forgetJoinedChannel(sid, target.target());
     syncRuntimeAutoJoinForReconnect(sid);
     userListStore.clear(sid, target.target());
@@ -471,9 +476,8 @@ public class TargetCoordinator implements ActiveTargetPort {
     ui.appendStatus(status, "(ui)", "Closed " + target.target());
     ui.closeTarget(target);
 
-    boolean shouldPart = !detached && connectionCoordinator.isConnected(sid);
+    boolean shouldPart = !detached && connected;
     if (!shouldPart) return;
-    channelsClosedByUser.add(target);
     disposables.add(
         targetMembership
             .partChannel(sid, target.target(), msg.isEmpty() ? null : msg)
@@ -495,6 +499,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     ensureTargetExists(status);
     ensureTargetExists(target);
     String msg = Objects.toString(reason, "").trim();
+    boolean connected = connectionCoordinator.isConnected(sid);
 
     channelsClosedByUser.remove(target);
     detachedChannelsByUserOrKick.add(target);
@@ -507,7 +512,7 @@ public class TargetCoordinator implements ActiveTargetPort {
       ui.setChatActiveTarget(target);
     }
 
-    if (!connectionCoordinator.isConnected(sid)) {
+    if (!connected) {
       ui.appendStatus(status, "(disconnect)", "Disconnected from " + target.target());
       return;
     }
@@ -1030,6 +1035,10 @@ public class TargetCoordinator implements ActiveTargetPort {
 
   private void ensureTargetExists(TargetRef target) {
     ui.ensureTargetExists(target);
+  }
+
+  private boolean isClosedChannelByUser(TargetRef target) {
+    return target != null && target.isChannel() && channelsClosedByUser.contains(target);
   }
 
   /**
