@@ -146,6 +146,7 @@ final class OutboundInviteCommandService {
 
     if (shouldPersistJoinedChannel(invite.serverId())) {
       runtimeConfig.rememberJoinedChannel(invite.serverId(), invite.channel());
+      targetCoordinator.syncRuntimeAutoJoinForReconnect(invite.serverId());
     }
     ui.appendStatus(
         status, "(invite)", "Joining " + invite.channel() + " from invite #" + invite.id() + "...");

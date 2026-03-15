@@ -90,6 +90,7 @@ class OutboundInviteCommandServiceTest {
     service.handleInviteJoin(disposables, "12");
 
     verify(runtimeConfig).rememberJoinedChannel("libera", "#ircafe");
+    verify(targetCoordinator).syncRuntimeAutoJoinForReconnect("libera");
     verify(irc).joinChannel("libera", "#ircafe");
     verify(pendingInviteState).remove(12L);
   }
@@ -124,6 +125,7 @@ class OutboundInviteCommandServiceTest {
     service.handleInviteJoin(disposables, "13");
 
     verify(runtimeConfig, never()).rememberJoinedChannel("quassel", "#ircafe");
+    verify(targetCoordinator, never()).syncRuntimeAutoJoinForReconnect("quassel");
     verify(irc).joinChannel("quassel", "#ircafe");
     verify(pendingInviteState).remove(13L);
   }

@@ -20,6 +20,7 @@ import java.util.function.Consumer;
 import org.pircbotx.InputParser;
 import org.pircbotx.PircBotX;
 import org.pircbotx.UserHostmask;
+import org.pircbotx.exception.DaoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -384,14 +385,22 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
     if (code == 1) {
       conn.registrationComplete.set(true);
     }
-    if (code != 324) {
-      super.processServerResponse(code, line, parsedLine);
-      return;
-    }
-
     try {
       super.processServerResponse(code, line, parsedLine);
+      return;
     } catch (RuntimeException ex) {
+      if (isIgnorableMissingChannelNumeric(code, parsedLine, ex)) {
+        log.debug(
+            "[{}] ignoring late numeric {} for channel already removed from DAO: channel={} line={}",
+            serverId,
+            code,
+            channelForIgnorableMissingChannelNumeric(code, parsedLine),
+            Objects.toString(line, ""));
+        return;
+      }
+      if (code != 324) {
+        throw ex;
+      }
       PircbotxChannelModeParsers.ParsedRpl324 parsed = parseRpl324Fallback(line, parsedLine);
       if (parsed != null) {
         log.warn(
@@ -415,6 +424,28 @@ final class PircbotxAwayNotifyInputParser extends InputParser {
             ex);
       }
     }
+  }
+
+  private static boolean isIgnorableMissingChannelNumeric(
+      int code, List<String> parsedLine, RuntimeException ex) {
+    if (!(ex instanceof DaoException dao)
+        || dao.getReason() != DaoException.Reason.UNKNOWN_CHANNEL) {
+      return false;
+    }
+    return !channelForIgnorableMissingChannelNumeric(code, parsedLine).isBlank();
+  }
+
+  private static String channelForIgnorableMissingChannelNumeric(
+      int code, List<String> parsedLine) {
+    if (parsedLine == null || parsedLine.isEmpty()) return "";
+    int channelIndex =
+        switch (code) {
+          case 353 -> 2;
+          case 366, 367, 368, 728, 729 -> 1;
+          default -> -1;
+        };
+    if (channelIndex < 0 || parsedLine.size() <= channelIndex) return "";
+    return stripLeadingColon(parsedLine.get(channelIndex)).trim();
   }
 
   private static PircbotxChannelModeParsers.ParsedRpl324 parseRpl324Fallback(

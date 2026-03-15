@@ -48,6 +48,7 @@ final class OutboundJoinPartCommandService {
 
     if (shouldPersistJoinedChannel(at.serverId())) {
       runtimeConfig.rememberJoinedChannel(at.serverId(), chan);
+      targetCoordinator.syncRuntimeAutoJoinForReconnect(at.serverId());
     }
 
     // Route join results back to the origin buffer; ui-only surfaces route to status.

@@ -779,6 +779,31 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void joinedChannelSyncsRuntimeAutoJoinForReconnect() throws Exception {
+    when(targetCoordinator.onJoinedChannel("libera", "#ircafe")).thenReturn(true);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent("libera", new IrcEvent.JoinedChannel(Instant.now(), "#ircafe")));
+
+    verify(runtimeConfig).rememberJoinedChannel("libera", "#ircafe");
+    verify(targetCoordinator).syncRuntimeAutoJoinForReconnect("libera");
+  }
+
+  @Test
+  void joinedChannelOnQuasselSkipsRuntimeAutoJoinSync() throws Exception {
+    when(targetCoordinator.onJoinedChannel("quassel", "#ircafe{net:5}")).thenReturn(true);
+    when(serverRegistry.find("quassel"))
+        .thenReturn(
+            Optional.of(serverWithBackend("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent("quassel", new IrcEvent.JoinedChannel(Instant.now(), "#ircafe{net:5}")));
+
+    verify(runtimeConfig, never()).rememberJoinedChannel("quassel", "#ircafe{net:5}");
+    verify(targetCoordinator, never()).syncRuntimeAutoJoinForReconnect("quassel");
+  }
+
+  @Test
   void channelRedirectRemapsJoinOriginAndInitiatesJoinOnRedirectTarget() throws Exception {
     TargetRef origin = new TargetRef("libera", "status");
     when(joinRoutingState.recentOriginIfFresh("libera", "#old", Duration.ofSeconds(15)))

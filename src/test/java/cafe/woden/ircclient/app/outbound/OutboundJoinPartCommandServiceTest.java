@@ -61,6 +61,7 @@ class OutboundJoinPartCommandServiceTest {
     service.handleJoin(disposables, "#secret", "hunter2");
 
     verify(runtimeConfig).rememberJoinedChannel("libera", "#secret");
+    verify(targetCoordinator).syncRuntimeAutoJoinForReconnect("libera");
     verify(joinRoutingState).rememberOrigin("libera", "#secret", status);
     verify(irc).sendRaw("libera", "JOIN #secret hunter2");
   }
@@ -78,6 +79,7 @@ class OutboundJoinPartCommandServiceTest {
     service.handleJoin(disposables, "#room:example.org", "hunter2");
 
     verify(runtimeConfig).rememberJoinedChannel("matrix", "#room:example.org");
+    verify(targetCoordinator).syncRuntimeAutoJoinForReconnect("matrix");
     verify(joinRoutingState).rememberOrigin("matrix", "#room:example.org", status);
     verify(irc).sendRaw("matrix", "JOIN #room:example.org hunter2");
   }
@@ -93,6 +95,7 @@ class OutboundJoinPartCommandServiceTest {
     service.handleJoin(disposables, "#ircafe", "");
 
     verify(joinRoutingState).rememberOrigin("libera", "#ircafe", status);
+    verify(targetCoordinator).syncRuntimeAutoJoinForReconnect("libera");
     verify(irc).joinChannel("libera", "#ircafe");
   }
 
@@ -109,6 +112,7 @@ class OutboundJoinPartCommandServiceTest {
     service.handleJoin(disposables, "#ircafe", "");
 
     verify(runtimeConfig, never()).rememberJoinedChannel("quassel", "#ircafe");
+    verify(targetCoordinator, never()).syncRuntimeAutoJoinForReconnect("quassel");
     verify(joinRoutingState).rememberOrigin("quassel", "#ircafe", status);
     verify(irc).joinChannel("quassel", "#ircafe");
   }

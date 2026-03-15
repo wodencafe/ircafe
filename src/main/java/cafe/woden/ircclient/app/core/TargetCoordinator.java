@@ -465,6 +465,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     bouncerDetachedChannels.remove(target);
     channelsClosedByUser.remove(target);
     runtimeConfig.forgetJoinedChannel(sid, target.target());
+    syncRuntimeAutoJoinForReconnect(sid);
     userListStore.clear(sid, target.target());
     targetChatHistoryPort.reset(target);
     ui.appendStatus(status, "(ui)", "Closed " + target.target());
@@ -568,6 +569,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     channelsClosedByUser.remove(target);
     if (!isQuasselCoreServer(sid)) {
       runtimeConfig.rememberJoinedChannel(sid, target.target());
+      syncRuntimeAutoJoinForReconnect(sid);
     }
     detachedChannelsByUserOrKick.remove(target);
     bouncerDetachedChannels.remove(target);
@@ -694,6 +696,15 @@ public class TargetCoordinator implements ActiveTargetPort {
       ui.setChatActiveTarget(target);
     }
     return true;
+  }
+
+  public void syncRuntimeAutoJoinForReconnect(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty() || isQuasselCoreServer(sid)) return;
+    try {
+      serverRegistry.syncRuntimeAutoJoin(sid, runtimeConfig.readJoinedChannels(sid));
+    } catch (Exception ignored) {
+    }
   }
 
   private boolean supportsBouncerDetach(String serverId) {

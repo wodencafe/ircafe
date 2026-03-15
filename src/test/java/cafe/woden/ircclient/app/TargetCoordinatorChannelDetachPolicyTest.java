@@ -27,6 +27,7 @@ import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.irc.roster.UserhostQueryService;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class TargetCoordinatorChannelDetachPolicyTest {
@@ -57,16 +58,20 @@ class TargetCoordinatorChannelDetachPolicyTest {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
-    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    TargetCoordinator coordinator =
+        newCoordinator(ui, irc, connectionCoordinator, runtimeConfig, serverRegistry);
 
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(ui.isChannelDisconnected(chan)).thenReturn(false);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
     when(irc.partChannel("libera", "#ircafe", null)).thenReturn(Completable.complete());
+    when(runtimeConfig.readJoinedChannels("libera")).thenReturn(List.of());
 
     coordinator.closeChannel(chan);
 
     verify(runtimeConfig).forgetJoinedChannel("libera", "#ircafe");
+    verify(serverRegistry).syncRuntimeAutoJoin("libera", List.of());
     verify(ui).closeTarget(chan);
     verify(irc).partChannel(eq("libera"), eq("#ircafe"), isNull());
   }
@@ -179,14 +184,18 @@ class TargetCoordinatorChannelDetachPolicyTest {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
     RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
-    TargetCoordinator coordinator = newCoordinator(ui, irc, connectionCoordinator, runtimeConfig);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    TargetCoordinator coordinator =
+        newCoordinator(ui, irc, connectionCoordinator, runtimeConfig, serverRegistry);
 
     TargetRef chan = new TargetRef("libera", "#queued-join");
     when(connectionCoordinator.isConnected("libera")).thenReturn(false);
+    when(runtimeConfig.readJoinedChannels("libera")).thenReturn(List.of("#queued-join"));
 
     coordinator.joinChannel(chan);
 
     verify(runtimeConfig).rememberJoinedChannel("libera", "#queued-join");
+    verify(serverRegistry).syncRuntimeAutoJoin("libera", List.of("#queued-join"));
     verify(ui, atLeastOnce()).setChannelDisconnected(chan, true);
     verify(irc, never()).joinChannel("libera", "#queued-join");
   }
@@ -315,12 +324,22 @@ class TargetCoordinatorChannelDetachPolicyTest {
       IrcBackendClientService irc,
       ConnectionCoordinator connectionCoordinator,
       RuntimeConfigStore runtimeConfig) {
+    return newCoordinator(
+        ui, irc, connectionCoordinator, runtimeConfig, mock(ServerRegistry.class));
+  }
+
+  private static TargetCoordinator newCoordinator(
+      UiPort ui,
+      IrcBackendClientService irc,
+      ConnectionCoordinator connectionCoordinator,
+      RuntimeConfigStore runtimeConfig,
+      ServerRegistry serverRegistry) {
     return new TargetCoordinator(
         ui,
         mock(UserListStore.class),
         IrcTargetMembershipPort.from(irc),
         irc,
-        mock(ServerRegistry.class),
+        serverRegistry,
         runtimeConfig,
         connectionCoordinator,
         mock(IgnoreListQueryPort.class),

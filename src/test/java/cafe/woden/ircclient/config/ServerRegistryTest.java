@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -162,6 +163,23 @@ class ServerRegistryTest {
         new ServerRegistry(new IrcProperties(null, List.of(boundServer)), runtimeConfig);
 
     assertEquals(List.of("#app-default", "#still-app"), registry.require("libera").autoJoin());
+  }
+
+  @Test
+  void syncRuntimeAutoJoinUpdatesInMemoryWithoutPersistingServers() {
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    when(runtimeConfig.readExplicitServerAutoJoinById()).thenReturn(java.util.Map.of());
+    IrcProperties.Server boundServer =
+        server("libera", "irc.libera.chat", List.of("#app-default", "#still-app"));
+
+    ServerRegistry registry =
+        new ServerRegistry(new IrcProperties(null, List.of(boundServer)), runtimeConfig);
+
+    registry.syncRuntimeAutoJoin("libera", List.of("#runtime-only"));
+
+    assertEquals(List.of("#runtime-only"), registry.require("libera").autoJoin());
+    verify(runtimeConfig).readExplicitServerAutoJoinById();
+    verify(runtimeConfig, never()).writeServers(any());
   }
 
   private static IrcProperties.Server server(String id, String host) {

@@ -1674,6 +1674,7 @@ public class IrcMediator implements MediatorControlPort {
 
         if (!isQuasselCoreServer(sid)) {
           runtimeConfig.rememberJoinedChannel(sid, ev.channel());
+          targetCoordinator.syncRuntimeAutoJoinForReconnect(sid);
         }
         inboundModeEventHandler.onJoinedChannel(sid, ev.channel());
         userInfoEnrichmentService.enqueueWhoChannelPrioritized(sid, ev.channel());

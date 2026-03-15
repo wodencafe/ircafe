@@ -826,6 +826,27 @@ class PircbotxAwayNotifyInputParserTest {
   }
 
   @Test
+  void lateNamesRepliesForMissingChannelDoNotThrow() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircbotxAwayNotifyInputParser parser =
+        new PircbotxAwayNotifyInputParser(
+            dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    assertDoesNotThrow(
+        () ->
+            parser.processServerResponse(
+                353, ":server 353 me = #ircafe :alice", List.of("me", "=", "#ircafe", ":alice")));
+    assertDoesNotThrow(
+        () ->
+            parser.processServerResponse(
+                366,
+                ":server 366 me #ircafe :End of /NAMES list.",
+                List.of("me", "#ircafe", ":End of /NAMES list.")));
+    assertTrue(out.isEmpty());
+  }
+
+  @Test
   void pongWithServerTimeTagUpdatesPassiveLagSample() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
