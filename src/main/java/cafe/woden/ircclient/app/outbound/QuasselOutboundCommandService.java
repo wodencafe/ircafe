@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Single;
@@ -39,12 +40,12 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
   private final Map<String, QuasselNetworkVerbHandler> quasselNetworkVerbHandlers;
 
   QuasselOutboundCommandService(
-      @Qualifier("ircClientService") QuasselCoreControlPort quasselControl,
+      @Qualifier("ircClientService") IrcBackendClientService ircClientService,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       QuasselOutboundCommandSupport quasselCommandSupport) {
-    this.quasselControl = Objects.requireNonNull(quasselControl, "quasselControl");
+    this.quasselControl = Objects.requireNonNull(ircClientService, "ircClientService");
     this.ui = Objects.requireNonNull(ui, "ui");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");

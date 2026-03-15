@@ -16,7 +16,7 @@ import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.PushyProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.irc.IrcHeartbeatMaintenanceService;
+import cafe.woden.ircclient.irc.backend.IrcHeartbeatMaintenanceService;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.UserCommandAlias;
 import cafe.woden.ircclient.notifications.IrcEventNotificationRulesBus;

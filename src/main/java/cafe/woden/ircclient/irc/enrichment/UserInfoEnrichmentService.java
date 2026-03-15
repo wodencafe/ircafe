@@ -5,6 +5,7 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
+import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.runtime.IrcRuntimeSettings;
 import cafe.woden.ircclient.irc.runtime.IrcRuntimeSettingsProvider;
 import io.reactivex.rxjava3.core.Completable;
@@ -98,12 +99,12 @@ public class UserInfoEnrichmentService {
 
   public UserInfoEnrichmentService(
       IrcClientService irc,
-      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
+      @Qualifier("ircClientService") IrcBackendClientService ircClientService,
       ObjectProvider<IrcRuntimeSettingsProvider> settingsProvider,
       UserInfoEnrichmentPlanner planner,
       @Qualifier(ExecutorConfig.USER_INFO_ENRICHMENT_SCHEDULER) ScheduledExecutorService exec) {
     this.irc = Objects.requireNonNull(irc, "irc");
-    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
+    this.backendAvailability = Objects.requireNonNull(ircClientService, "ircClientService");
     this.settingsProvider = Objects.requireNonNull(settingsProvider, "settingsProvider");
     this.planner = Objects.requireNonNull(planner, "planner");
     this.exec = Objects.requireNonNull(exec, "exec");

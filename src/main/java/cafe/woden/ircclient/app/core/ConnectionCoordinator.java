@@ -11,6 +11,7 @@ import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.backend.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
+import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -93,8 +94,7 @@ public class ConnectionCoordinator {
 
   public ConnectionCoordinator(
       @Qualifier("ircConnectionLifecyclePort") IrcConnectionLifecyclePort irc,
-      @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
-      @Qualifier("ircClientService") QuasselCoreControlPort quasselControl,
+      @Qualifier("ircClientService") IrcBackendClientService ircClientService,
       UiPort ui,
       ServerRegistry serverRegistry,
       ServerCatalog serverCatalog,
@@ -102,8 +102,10 @@ public class ConnectionCoordinator {
       LogProperties logProps,
       TrayNotificationsPort trayNotificationService) {
     this.irc = Objects.requireNonNull(irc, "irc");
-    this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
-    this.quasselControl = Objects.requireNonNull(quasselControl, "quasselControl");
+    IrcBackendClientService backendService =
+        Objects.requireNonNull(ircClientService, "ircClientService");
+    this.backendAvailability = backendService;
+    this.quasselControl = backendService;
     this.ui = Objects.requireNonNull(ui, "ui");
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");

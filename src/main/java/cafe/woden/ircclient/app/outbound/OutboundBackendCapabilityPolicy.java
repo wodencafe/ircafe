@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
+import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import java.util.Objects;
 import lombok.NonNull;
@@ -25,7 +25,7 @@ final class OutboundBackendCapabilityPolicy {
 
   @NonNull
   @Qualifier("ircClientService")
-  private final IrcBackendAvailabilityPort backendAvailability;
+  private final IrcBackendClientService ircClientService;
 
   IrcProperties.Server.Backend backendForServer(String serverId) {
     return commandTargetPolicy.backendForServer(serverId);
@@ -121,7 +121,7 @@ final class OutboundBackendCapabilityPolicy {
 
   String backendAvailabilityReason(String serverId) {
     try {
-      return Objects.toString(backendAvailability.backendAvailabilityReason(serverId), "").trim();
+      return Objects.toString(ircClientService.backendAvailabilityReason(serverId), "").trim();
     } catch (Exception ignored) {
       return "";
     }

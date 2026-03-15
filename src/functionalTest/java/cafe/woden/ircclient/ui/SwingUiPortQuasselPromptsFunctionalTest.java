@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
-import cafe.woden.ircclient.irc.QuasselCoreControlPort;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
