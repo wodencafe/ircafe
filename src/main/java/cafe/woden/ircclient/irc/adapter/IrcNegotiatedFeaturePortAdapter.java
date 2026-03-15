@@ -3,6 +3,8 @@ package cafe.woden.ircclient.irc.adapter;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.port.*;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -10,12 +12,13 @@ import org.springframework.stereotype.Component;
 /** Spring adapter exposing negotiated-feature checks via a narrow capability port. */
 @Component("ircNegotiatedFeaturePort")
 @InfrastructureLayer
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class IrcNegotiatedFeaturePortAdapter implements IrcNegotiatedFeaturePort {
 
   private final IrcNegotiatedFeaturePort delegate;
 
   public IrcNegotiatedFeaturePortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.delegate = IrcNegotiatedFeaturePort.from(irc);
+    this(IrcNegotiatedFeaturePort.from(irc));
   }
 
   @Override

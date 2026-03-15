@@ -2,11 +2,12 @@ package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /** Shared IRCv3 raw-line builders for message mutation command handlers. */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 final class MessageMutationOutboundCommandLineBuilder {
-
-  private MessageMutationOutboundCommandLineBuilder() {}
 
   static String buildReplyRawLine(TargetRef target, String replyToMessageId, String message) {
     String outTarget = normalizeTarget(target);

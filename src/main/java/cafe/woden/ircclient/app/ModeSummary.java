@@ -6,13 +6,14 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 final class ModeSummary {
 
   // Preference order for the "join burst" / summary display.
   private static final List<Character> ORDER = List.of('t', 'n', 's', 'p', 'i', 'm', 'r');
-
-  private ModeSummary() {}
 
   static String describeBufferedJoinModes(Set<Character> plus, Set<Character> minus) {
     List<String> parts = new ArrayList<>();

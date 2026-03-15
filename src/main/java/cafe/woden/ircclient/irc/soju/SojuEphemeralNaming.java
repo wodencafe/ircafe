@@ -2,6 +2,8 @@ package cafe.woden.ircclient.irc.soju;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * Naming + username rules for ephemeral Soju network entries.
@@ -9,12 +11,11 @@ import java.util.Objects;
  * <p>The configured Soju host is treated as the "Bouncer Control" session. Discovered networks are
  * represented as ephemeral servers and are not persisted.
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class SojuEphemeralNaming {
 
   public static final String EPHEMERAL_ID_PREFIX = "soju:";
   public static final String DEFAULT_CLIENT_SUFFIX = "ircafe";
-
-  private SojuEphemeralNaming() {}
 
   /**
    * Derived identifying info for an ephemeral Soju network server.

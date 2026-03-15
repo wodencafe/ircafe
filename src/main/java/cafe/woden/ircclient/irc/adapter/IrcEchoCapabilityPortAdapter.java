@@ -3,6 +3,8 @@ package cafe.woden.ircclient.irc.adapter;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.port.*;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -10,12 +12,13 @@ import org.springframework.stereotype.Component;
 /** Spring adapter exposing echo-message capability checks via a narrow port. */
 @Component("ircEchoCapabilityPort")
 @InfrastructureLayer
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public class IrcEchoCapabilityPortAdapter implements IrcEchoCapabilityPort {
 
   private final IrcEchoCapabilityPort delegate;
 
   public IrcEchoCapabilityPortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
-    this.delegate = IrcEchoCapabilityPort.from(irc);
+    this(IrcEchoCapabilityPort.from(irc));
   }
 
   @Override
