@@ -28,8 +28,7 @@ class PircbotxSocksSocketFactoryTest {
     try (FakeSocks5Proxy proxy = new FakeSocks5Proxy()) {
       RecordingSslSocketFactory sslFactory = new RecordingSslSocketFactory();
       IrcProperties.Proxy cfg =
-          new IrcProperties.Proxy(
-              true, proxy.host(), proxy.port(), "", "", true, 2_000, 3_000);
+          new IrcProperties.Proxy(true, proxy.host(), proxy.port(), "", "", true, 2_000, 3_000);
       PircbotxSocksSocketFactory factory =
           new PircbotxSocksSocketFactory(cfg, "irc.example.test", 6697, sslFactory);
 

@@ -131,9 +131,7 @@ final class PircbotxSocksSocketFactory extends SocketFactory {
       String host = resolvedHost(requested);
       int port = resolvedPort(requested);
       SocketAddress remote =
-          cfg.remoteDns()
-              ? InetSocketAddress.createUnresolved(host, port)
-              : requested;
+          cfg.remoteDns() ? InetSocketAddress.createUnresolved(host, port) : requested;
 
       int connectTimeoutMs = timeout > 0 ? timeout : configuredConnectTimeoutMs();
       transport.connect(remote, connectTimeoutMs);
