@@ -15,6 +15,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
@@ -23,6 +26,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixRoomDirectoryClient {
 
   private static final int DEFAULT_PUBLIC_ROOMS_LIMIT = 100;
@@ -37,11 +41,7 @@ final class MatrixRoomDirectoryClient {
 
   private static final ObjectMapper JSON = new ObjectMapper();
 
-  private final ServerProxyResolver proxyResolver;
-
-  MatrixRoomDirectoryClient(ServerProxyResolver proxyResolver) {
-    this.proxyResolver = Objects.requireNonNull(proxyResolver, "proxyResolver");
-  }
+  @NonNull private final ServerProxyResolver proxyResolver;
 
   ResolveResult resolveRoomAlias(
       String serverId, IrcProperties.Server server, String accessToken, String roomAlias) {

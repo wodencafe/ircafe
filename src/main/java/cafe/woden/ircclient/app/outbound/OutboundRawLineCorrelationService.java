@@ -5,25 +5,19 @@ import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Correlates outbound raw lines with labeled-response routing metadata when available. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 final class OutboundRawLineCorrelationService {
 
-  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
-  private final LabeledResponseRoutingPort labeledResponseRoutingState;
-
-  OutboundRawLineCorrelationService(
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      LabeledResponseRoutingPort labeledResponseRoutingState) {
-    this.backendCapabilityPolicy =
-        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
-    this.labeledResponseRoutingState =
-        Objects.requireNonNull(labeledResponseRoutingState, "labeledResponseRoutingState");
-  }
+  @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  @NonNull private final LabeledResponseRoutingPort labeledResponseRoutingState;
 
   PreparedRawLine prepare(TargetRef origin, String rawLine) {
     String line = rawLine == null ? "" : rawLine.trim();

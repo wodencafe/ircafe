@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.coordinator;
 
-import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
-import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import org.jmolecules.architecture.layered.InterfaceLayer;

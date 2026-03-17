@@ -2,19 +2,24 @@ package cafe.woden.ircclient.ui.coordinator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
-import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import cafe.woden.ircclient.ui.UserListDockable;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
+import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -302,6 +307,46 @@ class ChatChannelListCoordinatorTest {
   }
 
   @Test
+  void bindModeRefreshCallbackUsesDirectServerSendWhenCoordinatorHasIrcContext() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(channelListPanel.currentServerId()).thenReturn("libera");
+    when(irc.sendRaw("libera", "MODE #ircafe")).thenReturn(Completable.complete());
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> new TargetRef("other", "status"),
+            sid -> "",
+            (sid, channel) -> "",
+            (sid, channel) -> List.of(),
+            irc,
+            modeRoutingState);
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    BiConsumer<String, String> modeRefresh = captureModeRefreshCallback(channelListPanel);
+    modeRefresh.accept("libera", "#ircafe");
+
+    verify(modeRoutingState)
+        .putPendingModeTarget(eq("libera"), eq("#ircafe"), eq(new TargetRef("libera", "#ircafe")));
+    verify(irc).sendRaw("libera", "MODE #ircafe");
+    verify(outboundLineBus, never()).emit(anyString());
+    disposables.dispose();
+  }
+
+  @Test
   void bindModeSetCallbackEmitsModeSetCommand() {
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
     ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
@@ -436,6 +481,47 @@ class ChatChannelListCoordinatorTest {
   }
 
   @Test
+  void bindTreeModeRefreshRequestUsesDirectServerSendWhenCoordinatorHasIrcContext() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    FlowableProcessor<TargetRef> modeRefresh = PublishProcessor.<TargetRef>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(serverTree.channelModeRefreshRequests()).thenReturn(modeRefresh.onBackpressureBuffer());
+    when(irc.sendRaw("libera", "MODE #ircafe")).thenReturn(Completable.complete());
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            sid -> "",
+            (sid, channel) -> "",
+            (sid, channel) -> List.of(),
+            irc,
+            modeRoutingState);
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    modeRefresh.onNext(new TargetRef("libera", "#ircafe"));
+
+    verify(serverTree).selectTarget(TargetRef.channelList("libera"));
+    verify(modeRoutingState)
+        .putPendingModeTarget(eq("libera"), eq("#ircafe"), eq(new TargetRef("libera", "#ircafe")));
+    verify(irc).sendRaw("libera", "MODE #ircafe");
+    verify(outboundLineBus, never()).emit(anyString());
+    disposables.dispose();
+  }
+
+  @Test
   void bindTreeModeSetRequestEmitsModeSetCommandWhenEditable() {
     ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
     ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
@@ -469,6 +555,49 @@ class ChatChannelListCoordinatorTest {
 
     verify(serverTree).selectTarget(TargetRef.channelList("libera"));
     verify(outboundLineBus).emit("/mode #ircafe +m");
+    disposables.dispose();
+  }
+
+  @Test
+  void bindTreeModeSetRequestUsesDirectServerSendWhenCoordinatorHasIrcContext() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    FlowableProcessor<ServerTreeDockable.ChannelModeSetRequest> modeSet =
+        PublishProcessor.<ServerTreeDockable.ChannelModeSetRequest>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(serverTree.channelModeSetRequests()).thenReturn(modeSet.onBackpressureBuffer());
+    when(userListStore.get("libera", "#ircafe"))
+        .thenReturn(List.of(new NickInfo("me", "@", null, null)));
+    when(irc.sendRaw("libera", "MODE #ircafe +m")).thenReturn(Completable.complete());
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            sid -> "me",
+            (sid, channel) -> "",
+            (sid, channel) -> List.of(),
+            irc,
+            modeRoutingState);
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    modeSet.onNext(
+        new ServerTreeDockable.ChannelModeSetRequest(new TargetRef("libera", "#ircafe"), "+m"));
+
+    verify(serverTree).selectTarget(TargetRef.channelList("libera"));
+    verify(irc).sendRaw("libera", "MODE #ircafe +m");
+    verify(outboundLineBus, never()).emit(anyString());
     disposables.dispose();
   }
 

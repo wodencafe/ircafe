@@ -8,11 +8,11 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
-import cafe.woden.ircclient.irc.BackendNotAvailableException;
-import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
-import cafe.woden.ircclient.irc.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.irc.QuasselCoreControlPort;
+import cafe.woden.ircclient.irc.backend.BackendNotAvailableException;
+import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
+import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Scheduler;
@@ -34,6 +34,7 @@ import javax.swing.SwingUtilities;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -91,6 +92,11 @@ public class ConnectionCoordinator {
         new PersistedTargetRestore(List.of(), List.of());
   }
 
+  /**
+   * Primary constructor used by Spring wiring. Keep the dependency surface narrow so the routing
+   * backend bean can satisfy injection via the specific capability ports it actually implements.
+   */
+  @Autowired
   public ConnectionCoordinator(
       @Qualifier("ircConnectionLifecyclePort") IrcConnectionLifecyclePort irc,
       @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
@@ -130,6 +136,28 @@ public class ConnectionCoordinator {
     }
 
     updateConnectionUi();
+  }
+
+  @Deprecated(forRemoval = false)
+  public ConnectionCoordinator(
+      IrcConnectionLifecyclePort irc,
+      cafe.woden.ircclient.irc.backend.IrcBackendClientService ircClientService,
+      UiPort ui,
+      ServerRegistry serverRegistry,
+      ServerCatalog serverCatalog,
+      ConnectionRuntimeConfigPort runtimeConfig,
+      LogProperties logProps,
+      TrayNotificationsPort trayNotificationService) {
+    this(
+        irc,
+        ircClientService,
+        ircClientService,
+        ui,
+        serverRegistry,
+        serverCatalog,
+        runtimeConfig,
+        logProps,
+        trayNotificationService);
   }
 
   @PreDestroy

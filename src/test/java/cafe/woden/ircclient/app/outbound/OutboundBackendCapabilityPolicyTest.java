@@ -8,9 +8,9 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
-import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
-import cafe.woden.ircclient.irc.IrcBackendClientService;
-import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
+import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -19,8 +19,7 @@ class OutboundBackendCapabilityPolicyTest {
 
   private final ServerCatalog serverCatalog = mock(ServerCatalog.class);
   private final IrcBackendClientService irc = mock(IrcBackendClientService.class);
-  private final IrcBackendAvailabilityPort backendAvailability =
-      mock(IrcBackendAvailabilityPort.class);
+  private final IrcBackendAvailabilityPort backendAvailability = irc;
   private final CommandTargetPolicy commandTargetPolicy = new CommandTargetPolicy(serverCatalog);
   private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry =
       new OutboundBackendFeatureRegistry(
@@ -62,8 +61,7 @@ class OutboundBackendCapabilityPolicyTest {
 
   @Test
   void featureUnavailableMessageUsesBackendReasonWhenPresent() {
-    when(backendAvailability.backendAvailabilityReason("matrix"))
-        .thenReturn("Matrix backend is not available yet");
+    when(irc.backendAvailabilityReason("matrix")).thenReturn("Matrix backend is not available yet");
 
     assertEquals(
         "Matrix backend is not available yet.",
@@ -75,7 +73,7 @@ class OutboundBackendCapabilityPolicyTest {
 
   @Test
   void featureUnavailableMessageFallsBackWhenNoBackendReason() {
-    when(backendAvailability.backendAvailabilityReason("libera")).thenReturn("");
+    when(irc.backendAvailabilityReason("libera")).thenReturn("");
 
     assertEquals(
         "MONITOR capability is unavailable on this server.",

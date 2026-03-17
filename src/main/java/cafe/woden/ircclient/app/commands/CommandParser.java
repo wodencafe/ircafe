@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.commands;
 
-import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
@@ -11,18 +12,11 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class CommandParser {
 
-  private final FilterCommandParser filterCommandParser;
-  private final BackendNamedCommandParser backendNamedCommandParser;
-
-  public CommandParser(
-      FilterCommandParser filterCommandParser,
-      BackendNamedCommandParser backendNamedCommandParser) {
-    this.filterCommandParser = Objects.requireNonNull(filterCommandParser, "filterCommandParser");
-    this.backendNamedCommandParser =
-        Objects.requireNonNull(backendNamedCommandParser, "backendNamedCommandParser");
-  }
+  @NonNull private final FilterCommandParser filterCommandParser;
+  @NonNull private final BackendNamedCommandParser backendNamedCommandParser;
 
   public ParsedInput parse(String raw) {
     String line = raw == null ? "" : raw.trim();

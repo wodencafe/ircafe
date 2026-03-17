@@ -1,0 +1,48 @@
+package cafe.woden.ircclient.irc.adapter;
+
+import cafe.woden.ircclient.irc.*;
+import cafe.woden.ircclient.irc.backend.*;
+import cafe.woden.ircclient.irc.port.*;
+import io.reactivex.rxjava3.core.Completable;
+import java.util.Optional;
+import java.util.OptionalLong;
+import org.jmolecules.architecture.layered.InfrastructureLayer;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
+
+/** Spring adapter exposing lag probe operations via a narrow port. */
+@Component("ircLagProbePort")
+@InfrastructureLayer
+public class IrcLagProbePortAdapter implements IrcLagProbePort {
+
+  private final IrcLagProbePort delegate;
+
+  public IrcLagProbePortAdapter(@Qualifier("ircClientService") IrcClientService irc) {
+    this.delegate = IrcLagProbePort.from(irc);
+  }
+
+  @Override
+  public Optional<String> currentNick(String serverId) {
+    return delegate.currentNick(serverId);
+  }
+
+  @Override
+  public Completable requestLagProbe(String serverId) {
+    return delegate.requestLagProbe(serverId);
+  }
+
+  @Override
+  public boolean shouldRequestLagProbe(String serverId) {
+    return delegate.shouldRequestLagProbe(serverId);
+  }
+
+  @Override
+  public boolean isLagProbeReady(String serverId) {
+    return delegate.isLagProbeReady(serverId);
+  }
+
+  @Override
+  public OptionalLong lastMeasuredLagMs(String serverId) {
+    return delegate.lastMeasuredLagMs(serverId);
+  }
+}

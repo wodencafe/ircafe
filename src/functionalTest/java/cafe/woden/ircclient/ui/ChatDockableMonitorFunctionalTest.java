@@ -17,13 +17,16 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
+import cafe.woden.ircclient.testutil.FunctionalTestWiringSupport;
 import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
@@ -119,6 +122,9 @@ class ChatDockableMonitorFunctionalTest {
     BackendUiProfileProvider backendUiProfileProvider = mock(BackendUiProfileProvider.class);
     MessageActionCapabilityPolicy messageActionCapabilityPolicy =
         mock(MessageActionCapabilityPolicy.class);
+    ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
+    ServerIsupportStatePort serverIsupportState =
+        FunctionalTestWiringSupport.fallbackIsupportState();
     ActiveInputRouter activeInputRouter = new ActiveInputRouter();
     IgnoreListService ignoreListService = mock(IgnoreListService.class);
     IgnoreStatusService ignoreStatusService = mock(IgnoreStatusService.class);
@@ -147,13 +153,15 @@ class ChatDockableMonitorFunctionalTest {
     onEdt(
         () ->
             holder.chat =
-                new ChatDockable(
+                FunctionalTestWiringSupport.newChatDockable(
                     transcripts,
                     serverTree,
                     notificationStore,
                     activationBus,
                     outboundBus,
                     irc,
+                    modeRoutingState,
+                    serverIsupportState,
                     backendUiProfileProvider,
                     messageActionCapabilityPolicy,
                     activeInputRouter,

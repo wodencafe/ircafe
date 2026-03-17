@@ -11,12 +11,16 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
 /** Sets Matrix presence state via {@code /_matrix/client/v3/presence/{userId}/status}. */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixPresenceClient {
 
   private static final Map<String, String> REQUEST_HEADERS =
@@ -28,11 +32,7 @@ final class MatrixPresenceClient {
 
   private static final ObjectMapper JSON = new ObjectMapper();
 
-  private final ServerProxyResolver proxyResolver;
-
-  MatrixPresenceClient(ServerProxyResolver proxyResolver) {
-    this.proxyResolver = Objects.requireNonNull(proxyResolver, "proxyResolver");
-  }
+  @NonNull private final ServerProxyResolver proxyResolver;
 
   PresenceResult setAwayStatus(
       String serverId,

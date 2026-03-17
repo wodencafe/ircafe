@@ -22,15 +22,17 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.logging.LogLineFactory;
-import cafe.woden.ircclient.logging.LoggingUiPortDecorator;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
+import cafe.woden.ircclient.testutil.FunctionalTestWiringSupport;
 import cafe.woden.ircclient.ui.backend.BackendUiContext;
 import cafe.woden.ircclient.ui.backend.BackendUiProfile;
 import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
@@ -149,6 +151,9 @@ class ChannelListLoggingDecoratorFunctionalTest {
             invocation -> BackendUiProfile.ircOnly(invocation.getArgument(0, String.class)));
     MessageActionCapabilityPolicy messageActionCapabilityPolicy =
         mock(MessageActionCapabilityPolicy.class);
+    ModeRoutingPort modeRoutingState = mock(ModeRoutingPort.class);
+    ServerIsupportStatePort serverIsupportState =
+        FunctionalTestWiringSupport.fallbackIsupportState();
     ActiveInputRouter activeInputRouter = new ActiveInputRouter();
     IgnoreListService ignoreListService = mock(IgnoreListService.class);
     IgnoreStatusService ignoreStatusService = mock(IgnoreStatusService.class);
@@ -176,13 +181,15 @@ class ChannelListLoggingDecoratorFunctionalTest {
     onEdt(
         () ->
             holder.chat =
-                new ChatDockable(
+                FunctionalTestWiringSupport.newChatDockable(
                     transcripts,
                     serverTree,
                     notificationStore,
                     activationBus,
                     outboundBus,
                     irc,
+                    modeRoutingState,
+                    serverIsupportState,
                     backendUiProfileProvider,
                     messageActionCapabilityPolicy,
                     activeInputRouter,
@@ -226,7 +233,8 @@ class ChannelListLoggingDecoratorFunctionalTest {
             mock(ChatDockManager.class),
             activeInputRouter);
     UiPort loggingUiPort =
-        new LoggingUiPortDecorator(swingUiPort, line -> {}, new LogLineFactory(), logProps);
+        FunctionalTestWiringSupport.newLoggingUiPort(
+            swingUiPort, line -> {}, new LogLineFactory(), logProps);
 
     ChannelListPanel panel = field(chat, "channelListPanel", ChannelListPanel.class);
     JTable listTable = field(panel, "listTable", JTable.class);

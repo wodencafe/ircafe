@@ -10,11 +10,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.UiTranscriptPort;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
-import cafe.woden.ircclient.model.LogLine;
 import cafe.woden.ircclient.model.TargetRef;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,7 +34,7 @@ class LoggingUiPortDecoratorTest {
 
   @Test
   void appendChatAtWithMetadataPersistsMessageIdentity() throws Exception {
-    UiPort delegate = mock(UiPort.class);
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
     AtomicReference<LogLine> captured = new AtomicReference<>();
     LoggingUiPortDecorator d = newDecorator(delegate, captured);
 
@@ -58,7 +57,7 @@ class LoggingUiPortDecoratorTest {
 
   @Test
   void appendActionAtWithMetadataPersistsMessageIdentity() throws Exception {
-    UiPort delegate = mock(UiPort.class);
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
     AtomicReference<LogLine> captured = new AtomicReference<>();
     LoggingUiPortDecorator d = newDecorator(delegate, captured);
 
@@ -78,7 +77,7 @@ class LoggingUiPortDecoratorTest {
 
   @Test
   void appendNoticeAtWithMetadataPersistsMessageIdentity() throws Exception {
-    UiPort delegate = mock(UiPort.class);
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
     AtomicReference<LogLine> captured = new AtomicReference<>();
     LoggingUiPortDecorator d = newDecorator(delegate, captured);
 
@@ -98,7 +97,7 @@ class LoggingUiPortDecoratorTest {
 
   @Test
   void appendStatusAtWithMetadataPersistsMessageIdentity() throws Exception {
-    UiPort delegate = mock(UiPort.class);
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
     AtomicReference<LogLine> captured = new AtomicReference<>();
     LoggingUiPortDecorator d = newDecorator(delegate, captured);
 
@@ -118,7 +117,7 @@ class LoggingUiPortDecoratorTest {
 
   @Test
   void resolvePendingOutgoingChatPersistsPendingAndIdentityMetadata() throws Exception {
-    UiPort delegate = mock(UiPort.class);
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
     AtomicReference<LogLine> captured = new AtomicReference<>();
     LoggingUiPortDecorator d = newDecorator(delegate, captured);
 
@@ -143,7 +142,7 @@ class LoggingUiPortDecoratorTest {
 
   @Test
   void resolvePendingOutgoingChatWithoutMatchDoesNotPersist() {
-    UiPort delegate = mock(UiPort.class);
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
     AtomicReference<LogLine> captured = new AtomicReference<>();
     LoggingUiPortDecorator d = newDecorator(delegate, captured);
 
@@ -163,7 +162,7 @@ class LoggingUiPortDecoratorTest {
 
   @Test
   void appendSpoilerChatAtWithMetadataPersistsMessageIdentity() throws Exception {
-    UiPort delegate = mock(UiPort.class);
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
     AtomicReference<LogLine> captured = new AtomicReference<>();
     LoggingUiPortDecorator d = newDecorator(delegate, captured);
 
@@ -184,7 +183,7 @@ class LoggingUiPortDecoratorTest {
 
   @Test
   void privateMessageLoggingCanBeDisabledIndependently() {
-    UiPort delegate = mock(UiPort.class);
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
     AtomicReference<LogLine> captured = new AtomicReference<>();
     LoggingUiPortDecorator d = newDecorator(delegate, captured, LOGGING_PM_OFF);
 
@@ -197,7 +196,7 @@ class LoggingUiPortDecoratorTest {
 
   @Test
   void duplicateMessageIdIsLoggedOnlyOnce() {
-    UiPort delegate = mock(UiPort.class);
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
     AtomicInteger writes = new AtomicInteger();
     AtomicReference<LogLine> captured = new AtomicReference<>();
     ChatLogWriter writer =
@@ -224,7 +223,7 @@ class LoggingUiPortDecoratorTest {
 
   @Test
   void duplicateLineWithoutMessageIdUsesFallbackFingerprintDedupe() {
-    UiPort delegate = mock(UiPort.class);
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
     AtomicInteger writes = new AtomicInteger();
     ChatLogWriter writer = line -> writes.incrementAndGet();
     LoggingUiPortDecorator d =
@@ -241,27 +240,13 @@ class LoggingUiPortDecoratorTest {
   }
 
   @Test
-  void channelListMethodsAreForwardedThroughDecoratorChain() {
-    UiPort delegate = mock(UiPort.class);
-    AtomicReference<LogLine> captured = new AtomicReference<>();
-    LoggingUiPortDecorator d = newDecorator(delegate, captured);
-
-    d.beginChannelList("srv", "Loading ALIS search results...");
-    d.appendChannelListEntry("srv", "#chan", 42, "topic");
-    d.endChannelList("srv", "End of output.");
-
-    verify(delegate).beginChannelList("srv", "Loading ALIS search results...");
-    verify(delegate).appendChannelListEntry("srv", "#chan", 42, "topic");
-    verify(delegate).endChannelList("srv", "End of output.");
-  }
-
   private static LoggingUiPortDecorator newDecorator(
-      UiPort delegate, AtomicReference<LogLine> captured) {
+      UiTranscriptPort delegate, AtomicReference<LogLine> captured) {
     return newDecorator(delegate, captured, LOGGING_ON);
   }
 
   private static LoggingUiPortDecorator newDecorator(
-      UiPort delegate, AtomicReference<LogLine> captured, LogProperties props) {
+      UiTranscriptPort delegate, AtomicReference<LogLine> captured, LogProperties props) {
     ChatLogWriter writer = captured::set;
     return new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), props);
   }

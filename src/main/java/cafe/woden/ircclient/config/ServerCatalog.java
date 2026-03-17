@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
@@ -16,15 +18,11 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class ServerCatalog {
 
-  private final ServerRegistry serverRegistry;
-  private final EphemeralServerRegistry ephemeralServers;
-
-  public ServerCatalog(ServerRegistry serverRegistry, EphemeralServerRegistry ephemeralServers) {
-    this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
-    this.ephemeralServers = Objects.requireNonNull(ephemeralServers, "ephemeralServers");
-  }
+  @NonNull private final ServerRegistry serverRegistry;
+  @NonNull private final EphemeralServerRegistry ephemeralServers;
 
   public Optional<IrcProperties.Server> find(String serverId) {
     String id = norm(serverId);

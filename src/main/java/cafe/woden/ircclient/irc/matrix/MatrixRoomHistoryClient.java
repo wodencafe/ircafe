@@ -14,12 +14,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
 /** Fetches Matrix room history via {@code /_matrix/client/v3/rooms/{roomId}/messages}. */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixRoomHistoryClient {
 
   private static final Map<String, String> REQUEST_HEADERS =
@@ -33,11 +37,7 @@ final class MatrixRoomHistoryClient {
   private static final Set<String> MEDIA_MSGTYPES =
       Set.of("m.image", "m.file", "m.video", "m.audio");
 
-  private final ServerProxyResolver proxyResolver;
-
-  MatrixRoomHistoryClient(ServerProxyResolver proxyResolver) {
-    this.proxyResolver = Objects.requireNonNull(proxyResolver, "proxyResolver");
-  }
+  @NonNull private final ServerProxyResolver proxyResolver;
 
   HistoryResult fetchMessagesBefore(
       String serverId,

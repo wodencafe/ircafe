@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.state;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.modulith.AbstractApplicationModuleIntegrationTest;
@@ -33,6 +35,7 @@ class StateModuleIntegrationTest extends AbstractApplicationModuleIntegrationTes
   private final LabeledResponseRoutingPort labeledResponseRoutingPort;
   private final PendingEchoMessagePort pendingEchoMessagePort;
   private final PendingInvitePort pendingInvitePort;
+  private final AwayStatusStore awayStatusStore;
 
   StateModuleIntegrationTest(
       ApplicationContext applicationContext,
@@ -44,7 +47,8 @@ class StateModuleIntegrationTest extends AbstractApplicationModuleIntegrationTes
       ChatHistoryRequestRoutingPort chatHistoryRequestRoutingPort,
       LabeledResponseRoutingPort labeledResponseRoutingPort,
       PendingEchoMessagePort pendingEchoMessagePort,
-      PendingInvitePort pendingInvitePort) {
+      PendingInvitePort pendingInvitePort,
+      AwayStatusStore awayStatusStore) {
     this.applicationContext = applicationContext;
     this.whoisRoutingState = whoisRoutingState;
     this.whoisRoutingPort = whoisRoutingPort;
@@ -55,6 +59,7 @@ class StateModuleIntegrationTest extends AbstractApplicationModuleIntegrationTes
     this.labeledResponseRoutingPort = labeledResponseRoutingPort;
     this.pendingEchoMessagePort = pendingEchoMessagePort;
     this.pendingInvitePort = pendingInvitePort;
+    this.awayStatusStore = awayStatusStore;
   }
 
   @Test
@@ -77,7 +82,26 @@ class StateModuleIntegrationTest extends AbstractApplicationModuleIntegrationTes
     assertNotNull(labeledResponseRoutingPort);
     assertNotNull(pendingEchoMessagePort);
     assertNotNull(pendingInvitePort);
+    assertNotNull(awayStatusStore);
     assertEquals(WhoisRoutingState.class, AopUtils.getTargetClass(whoisRoutingPort));
+  }
+
+  @Test
+  void awayStatusStoreSupportsBasicPutGetAndClearFlow() {
+    String serverId = "libera";
+    String nick = "Alice";
+    Instant at = Instant.now();
+
+    assertFalse(awayStatusStore.isAway(serverId, nick));
+
+    boolean changed = awayStatusStore.put(serverId, nick, true, "brb", at);
+    assertTrue(changed);
+    assertTrue(awayStatusStore.isAway(serverId, nick));
+    assertTrue(awayStatusStore.get(serverId, nick).isPresent());
+    assertEquals("brb", awayStatusStore.get(serverId, nick).orElseThrow().message());
+
+    assertTrue(awayStatusStore.clear(serverId, nick));
+    assertFalse(awayStatusStore.get(serverId, nick).isPresent());
   }
 
   @Test

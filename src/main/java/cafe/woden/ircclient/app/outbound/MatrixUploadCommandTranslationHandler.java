@@ -1,19 +1,17 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.config.IrcProperties;
-import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixUploadCommandTranslationHandler implements UploadCommandTranslationHandler {
-  private final MatrixOutboundCommandSupport matrixCommandSupport;
-
-  MatrixUploadCommandTranslationHandler(MatrixOutboundCommandSupport matrixCommandSupport) {
-    this.matrixCommandSupport =
-        Objects.requireNonNull(matrixCommandSupport, "matrixCommandSupport");
-  }
+  @NonNull private final MatrixOutboundCommandSupport matrixCommandSupport;
 
   @Override
   public IrcProperties.Server.Backend backend() {

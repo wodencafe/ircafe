@@ -2,7 +2,7 @@ package cafe.woden.ircclient.ignore;
 
 import cafe.woden.ircclient.ignore.api.IgnoreLevels;
 import cafe.woden.ircclient.ignore.api.IgnoreTextPatternMode;
-import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;

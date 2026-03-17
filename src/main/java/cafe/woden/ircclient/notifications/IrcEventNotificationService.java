@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import lombok.RequiredArgsConstructor;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +25,9 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Lazy
+@SecondaryAdapter
 @ApplicationLayer
+@RequiredArgsConstructor
 public class IrcEventNotificationService implements IrcEventNotifierPort {
 
   private static final Logger log = LoggerFactory.getLogger(IrcEventNotificationService.class);
@@ -33,20 +37,9 @@ public class IrcEventNotificationService implements IrcEventNotifierPort {
   private final TrayNotificationsPort trayNotificationService;
   private final NotificationStore notificationStore;
   private final PushyNotificationService pushyNotificationService;
-  private final ExecutorService scriptExecutor;
 
-  public IrcEventNotificationService(
-      IrcEventNotificationRulesBus rulesBus,
-      TrayNotificationsPort trayNotificationService,
-      NotificationStore notificationStore,
-      PushyNotificationService pushyNotificationService,
-      @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService scriptExecutor) {
-    this.rulesBus = rulesBus;
-    this.trayNotificationService = trayNotificationService;
-    this.notificationStore = notificationStore;
-    this.pushyNotificationService = pushyNotificationService;
-    this.scriptExecutor = scriptExecutor;
-  }
+  @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR)
+  private final ExecutorService scriptExecutor;
 
   /** Returns true if at least one rule matched and actions were evaluated. */
   @Override

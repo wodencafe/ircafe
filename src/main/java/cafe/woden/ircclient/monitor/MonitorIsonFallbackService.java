@@ -6,8 +6,8 @@ import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.irc.PircbotxIsonParsers;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.presence.IsonParsers;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Scheduler;
@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Component;
 
 /** ISON-based monitor fallback when IRC MONITOR is unavailable on a connected server. */
 @Component
+@SecondaryAdapter
 @ApplicationLayer
 public class MonitorIsonFallbackService implements MonitorFallbackPort {
   private static final Logger log = LoggerFactory.getLogger(MonitorIsonFallbackService.class);
@@ -253,7 +255,7 @@ public class MonitorIsonFallbackService implements MonitorFallbackPort {
     PollCycle cycle = pollByServer.get(sid);
     if (cycle == null) return;
 
-    List<String> online = PircbotxIsonParsers.parseRpl303IsonOnlineNicks(sr.rawLine());
+    List<String> online = IsonParsers.parseRpl303IsonOnlineNicks(sr.rawLine());
     if (online == null) return;
     synchronized (cycle.lock) {
       for (String nick : online) {

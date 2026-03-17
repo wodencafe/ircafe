@@ -52,6 +52,7 @@ public class MainFrame extends JFrame {
 
   private final RuntimeConfigStore runtimeConfigStore;
   private final ServerTreeDockable serverTree;
+  private final LagIndicatorService lagIndicatorService;
   private final AtomicBoolean selectedTargetPersistedOnShutdown = new AtomicBoolean(false);
   private final boolean preserveDockLayoutEnabled;
   private volatile boolean layoutSnapshotPersistedOnWindowClosing;
@@ -72,6 +73,7 @@ public class MainFrame extends JFrame {
     super(AppVersion.windowTitle());
     this.runtimeConfigStore = runtimeConfigStore;
     this.serverTree = serverTree;
+    this.lagIndicatorService = lagIndicatorService;
 
     // Window/taskbar icon (best-effort, cross-platform).
     try {
@@ -109,6 +111,9 @@ public class MainFrame extends JFrame {
     RootDockingPanel root = new RootDockingPanel(this);
     add(root, BorderLayout.CENTER);
     add(statusBar, BorderLayout.SOUTH);
+
+    // Force initialization so lag polling starts even when the service bean is lazy.
+    this.lagIndicatorService.setEnabled(runtimeConfigStore.readLagIndicatorEnabled(true));
 
     registerDockableIfNeeded(chat);
     registerDockableIfNeeded(serverTree);

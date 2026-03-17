@@ -24,17 +24,18 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
-import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
-import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
-import cafe.woden.ircclient.irc.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
-import cafe.woden.ircclient.irc.QuasselCoreControlPort;
-import cafe.woden.ircclient.irc.UserListStore;
-import cafe.woden.ircclient.irc.UserhostQueryService;
+import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
+import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
+import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
+import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
+import cafe.woden.ircclient.irc.roster.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserhostQueryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.testutil.FunctionalTestWiringSupport;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
@@ -325,7 +326,7 @@ class DetachedChannelLifecycleFunctionalTest {
 
     TrayNotificationsPort tray = mock(TrayNotificationsPort.class);
     ConnectionCoordinator connectionCoordinator =
-        new ConnectionCoordinator(
+        FunctionalTestWiringSupport.newConnectionCoordinator(
             lifecycle,
             backendAvailability,
             quasselControl,

@@ -4,32 +4,21 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles Matrix-specific outbound command logic and semantic /upload translation. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 final class MatrixOutboundCommandService implements SemanticUploadCommandHandler {
 
-  private final UiPort ui;
-  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
-  private final MatrixOutboundCommandSupport matrixCommandSupport;
-  private final BackendUploadCommandRegistry backendUploadCommandRegistry;
-
-  MatrixOutboundCommandService(
-      UiPort ui,
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      MatrixOutboundCommandSupport matrixCommandSupport,
-      BackendUploadCommandRegistry backendUploadCommandRegistry) {
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.backendCapabilityPolicy =
-        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
-    this.matrixCommandSupport =
-        Objects.requireNonNull(matrixCommandSupport, "matrixCommandSupport");
-    this.backendUploadCommandRegistry =
-        Objects.requireNonNull(backendUploadCommandRegistry, "backendUploadCommandRegistry");
-  }
+  @NonNull private final UiPort ui;
+  @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  @NonNull private final MatrixOutboundCommandSupport matrixCommandSupport;
+  @NonNull private final BackendUploadCommandRegistry backendUploadCommandRegistry;
 
   @Override
   public void appendUploadHelp(TargetRef out) {

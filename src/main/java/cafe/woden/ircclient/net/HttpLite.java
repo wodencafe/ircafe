@@ -17,6 +17,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.zip.GZIPInputStream;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * Very small HTTP helper for GET requests that works with SOCKS proxies.
@@ -24,11 +26,10 @@ import java.util.zip.GZIPInputStream;
  * <p>We intentionally use {@link HttpURLConnection} here (instead of {@code
  * java.net.http.HttpClient}) because the JDK HttpClient does not support SOCKS proxies.
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class HttpLite {
 
   public static final int DEFAULT_MAX_REDIRECTS = 5;
-
-  private HttpLite() {}
 
   public static final class Headers {
     private final Map<String, List<String>> raw;

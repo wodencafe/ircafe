@@ -5,6 +5,8 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import java.util.Optional;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
@@ -16,13 +18,10 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class CommandTargetPolicy {
 
-  private final ServerCatalog serverCatalog;
-
-  public CommandTargetPolicy(ServerCatalog serverCatalog) {
-    this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
-  }
+  @NonNull private final ServerCatalog serverCatalog;
 
   public IrcProperties.Server.Backend backendForServer(String serverId) {
     String sid = normalize(serverId);

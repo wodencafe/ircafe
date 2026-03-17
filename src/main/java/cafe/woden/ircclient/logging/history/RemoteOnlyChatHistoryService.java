@@ -2,11 +2,11 @@ package cafe.woden.ircclient.logging.history;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
-import cafe.woden.ircclient.irc.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
+import cafe.woden.ircclient.logging.LogLine;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
-import cafe.woden.ircclient.model.LogLine;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
 import java.awt.Point;
@@ -33,6 +33,8 @@ import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import javax.swing.text.Position;
 import javax.swing.text.StyledDocument;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +50,7 @@ import org.springframework.stereotype.Component;
     havingValue = "false",
     matchIfMissing = true)
 @InfrastructureLayer
+@RequiredArgsConstructor
 public class RemoteOnlyChatHistoryService implements ChatHistoryService {
 
   private static final Logger log = LoggerFactory.getLogger(RemoteOnlyChatHistoryService.class);
@@ -61,12 +64,18 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_TIMEOUT_SECONDS = 18;
   private static final int DEFAULT_REMOTE_ZNC_PLAYBACK_WINDOW_MINUTES = 360;
 
-  private final IrcClientService irc;
-  private final IrcBouncerPlaybackPort bouncerPlayback;
-  private final ChatHistoryBatchBus batchBus;
-  private final ZncPlaybackBus zncPlaybackBus;
-  private final ChatHistoryTranscriptPort transcripts;
+  @NonNull private final IrcClientService irc;
 
+  @NonNull
+  @Qualifier("ircClientService")
+  private final IrcBouncerPlaybackPort bouncerPlayback;
+
+  @NonNull private final ChatHistoryBatchBus batchBus;
+  private final ZncPlaybackBus zncPlaybackBus;
+  @NonNull private final ChatHistoryTranscriptPort transcripts;
+
+  @NonNull
+  @Qualifier(ExecutorConfig.REMOTE_CHAT_HISTORY_EXECUTOR)
   private final ExecutorService exec;
 
   private final ConcurrentHashMap<TargetRef, LogCursor> oldestCursor = new ConcurrentHashMap<>();
@@ -75,21 +84,6 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   private final ConcurrentHashMap<TargetRef, Boolean> handlerInstalled = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<TargetRef, DocumentListener> docListeners =
       new ConcurrentHashMap<>();
-
-  public RemoteOnlyChatHistoryService(
-      IrcClientService irc,
-      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
-      ChatHistoryBatchBus batchBus,
-      ZncPlaybackBus zncPlaybackBus,
-      ChatHistoryTranscriptPort transcripts,
-      @Qualifier(ExecutorConfig.REMOTE_CHAT_HISTORY_EXECUTOR) ExecutorService exec) {
-    this.irc = Objects.requireNonNull(irc, "irc");
-    this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
-    this.batchBus = Objects.requireNonNull(batchBus, "batchBus");
-    this.zncPlaybackBus = zncPlaybackBus;
-    this.transcripts = Objects.requireNonNull(transcripts, "transcripts");
-    this.exec = Objects.requireNonNull(exec, "exec");
-  }
 
   @Override
   public void onTargetSelected(TargetRef target) {

@@ -5,11 +5,12 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
-import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
+import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -17,33 +18,19 @@ import org.springframework.stereotype.Component;
 /** Handles outbound /join and /part command flow. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 final class OutboundJoinPartCommandService {
 
+  @NonNull
+  @Qualifier("ircTargetMembershipPort")
   private final IrcTargetMembershipPort targetMembership;
-  private final UiPort ui;
-  private final ConnectionCoordinator connectionCoordinator;
-  private final TargetCoordinator targetCoordinator;
-  private final CommandTargetPolicy commandTargetPolicy;
-  private final ChatCommandRuntimeConfigPort runtimeConfig;
-  private final JoinRoutingPort joinRoutingState;
 
-  OutboundJoinPartCommandService(
-      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      CommandTargetPolicy commandTargetPolicy,
-      ChatCommandRuntimeConfigPort runtimeConfig,
-      JoinRoutingPort joinRoutingState) {
-    this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.connectionCoordinator =
-        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
-    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
-    this.joinRoutingState = Objects.requireNonNull(joinRoutingState, "joinRoutingState");
-  }
+  @NonNull private final UiPort ui;
+  @NonNull private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final CommandTargetPolicy commandTargetPolicy;
+  @NonNull private final ChatCommandRuntimeConfigPort runtimeConfig;
+  @NonNull private final JoinRoutingPort joinRoutingState;
 
   void handleJoin(CompositeDisposable disposables, String channel, String key) {
     TargetRef at = targetCoordinator.getActiveTarget();
@@ -61,6 +48,7 @@ final class OutboundJoinPartCommandService {
 
     if (shouldPersistJoinedChannel(at.serverId())) {
       runtimeConfig.rememberJoinedChannel(at.serverId(), chan);
+      targetCoordinator.syncRuntimeAutoJoinForReconnect(at.serverId());
     }
 
     // Route join results back to the origin buffer; ui-only surfaces route to status.
@@ -142,7 +130,7 @@ final class OutboundJoinPartCommandService {
     }
 
     if (target.isChannel()) {
-      targetCoordinator.disconnectChannel(target, msg);
+      targetCoordinator.closeChannel(target, msg);
       return;
     }
 

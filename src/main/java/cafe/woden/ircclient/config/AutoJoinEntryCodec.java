@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * Encodes/decodes extra non-channel entries stored in {@code irc.servers[].autoJoin}.
@@ -12,11 +14,10 @@ import java.util.Objects;
  * <p>We keep PM auto-open entries in the same list using a stable prefix so existing config wiring
  * remains unchanged.
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class AutoJoinEntryCodec {
 
   private static final String PM_PREFIX = "query:";
-
-  private AutoJoinEntryCodec() {}
 
   public static boolean isPrivateMessageEntry(String raw) {
     return !decodePrivateMessageNick(raw).isEmpty();

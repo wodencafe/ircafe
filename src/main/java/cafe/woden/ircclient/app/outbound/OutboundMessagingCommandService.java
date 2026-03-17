@@ -4,8 +4,8 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.IrcEchoCapabilityPort;
-import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -14,12 +14,15 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /query, /msg, /notice, /me and shared message send flow. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 final class OutboundMessagingCommandService {
 
   private enum MultilineSendDecision {
@@ -28,37 +31,14 @@ final class OutboundMessagingCommandService {
     CANCEL
   }
 
-  private final IrcClientService irc;
-  private final IrcEchoCapabilityPort echoCapabilityPort;
-  private final IrcNegotiatedFeaturePort negotiatedFeaturePort;
-  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
-  private final UiPort ui;
-  private final ConnectionCoordinator connectionCoordinator;
-  private final TargetCoordinator targetCoordinator;
-  private final PendingEchoMessagePort pendingEchoMessageState;
-
-  OutboundMessagingCommandService(
-      IrcClientService irc,
-      IrcEchoCapabilityPort echoCapabilityPort,
-      IrcNegotiatedFeaturePort negotiatedFeaturePort,
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      PendingEchoMessagePort pendingEchoMessageState) {
-    this.irc = Objects.requireNonNull(irc, "irc");
-    this.echoCapabilityPort = Objects.requireNonNull(echoCapabilityPort, "echoCapabilityPort");
-    this.negotiatedFeaturePort =
-        Objects.requireNonNull(negotiatedFeaturePort, "negotiatedFeaturePort");
-    this.backendCapabilityPolicy =
-        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.connectionCoordinator =
-        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.pendingEchoMessageState =
-        Objects.requireNonNull(pendingEchoMessageState, "pendingEchoMessageState");
-  }
+  @NonNull private final IrcClientService irc;
+  @NonNull private final IrcEchoCapabilityPort echoCapabilityPort;
+  @NonNull private final IrcNegotiatedFeaturePort negotiatedFeaturePort;
+  @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  @NonNull private final UiPort ui;
+  @NonNull private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final PendingEchoMessagePort pendingEchoMessageState;
 
   void handleQuery(String nick) {
     TargetRef at = targetCoordinator.getActiveTarget();

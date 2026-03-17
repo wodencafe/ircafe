@@ -1,9 +1,9 @@
 package cafe.woden.ircclient.logging.viewer;
 
 import cafe.woden.ircclient.logging.ChatLogRepository;
+import cafe.woden.ircclient.logging.LogLine;
+import cafe.woden.ircclient.logging.LogRow;
 import cafe.woden.ircclient.model.LogKind;
-import cafe.woden.ircclient.model.LogLine;
-import cafe.woden.ircclient.model.LogRow;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
@@ -16,8 +16,11 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 /** DB-backed log viewer service. */
+@RequiredArgsConstructor
 public final class DbChatLogViewerService implements ChatLogViewerService {
 
   private static final int DEFAULT_LIMIT = 500;
@@ -63,11 +66,7 @@ public final class DbChatLogViewerService implements ChatLogViewerService {
     "end of motd"
   };
 
-  private final ChatLogRepository repo;
-
-  public DbChatLogViewerService(ChatLogRepository repo) {
-    this.repo = Objects.requireNonNull(repo, "repo");
-  }
+  @NonNull private final ChatLogRepository repo;
 
   @Override
   public boolean enabled() {

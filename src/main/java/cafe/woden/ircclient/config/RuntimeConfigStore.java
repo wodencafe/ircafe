@@ -9,7 +9,6 @@ import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;
 import cafe.woden.ircclient.model.InterceptorRuleMode;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
-import cafe.woden.ircclient.model.NotificationRule;
 import cafe.woden.ircclient.model.RegexSpec;
 import cafe.woden.ircclient.model.TagSpec;
 import cafe.woden.ircclient.model.UserCommandAlias;
@@ -1102,11 +1101,9 @@ public class RuntimeConfigStore
             continue;
           nextAutoJoin.add(encoded);
         }
-        if (nextAutoJoin.isEmpty()) {
-          serverMap.remove("autoJoin");
-        } else {
-          serverMap.put("autoJoin", nextAutoJoin);
-        }
+        // Keep an explicit empty override so restart logic doesn't fall back to seeded defaults
+        // after the user closes-and-parts their last auto-reattach channel.
+        serverMap.put("autoJoin", nextAutoJoin);
         irc.put("servers", servers);
       }
 

@@ -2,7 +2,7 @@ package cafe.woden.ircclient.ui.servertree.view;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
-import cafe.woden.ircclient.irc.PircbotxBotFactory;
+import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityCatalog;
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.state.ServerRuntimeMetadata;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
@@ -274,7 +274,7 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     java.util.TreeSet<String> allCapabilities =
         new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     allCapabilities.addAll(sortedObserved.keySet());
-    for (String capability : PircbotxBotFactory.requestableCapabilities()) {
+    for (String capability : Ircv3CapabilityCatalog.requestableCapabilities()) {
       String normalized =
           Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
       if (!normalized.isEmpty()) {
@@ -551,7 +551,7 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     }
 
     boolean requestable = false;
-    for (String candidate : PircbotxBotFactory.requestableCapabilities()) {
+    for (String candidate : Ircv3CapabilityCatalog.requestableCapabilities()) {
       if (cap.equalsIgnoreCase(Objects.toString(candidate, "").trim())) {
         requestable = true;
         break;

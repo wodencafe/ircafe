@@ -3,9 +3,11 @@ package cafe.woden.ircclient.app.api;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import java.util.List;
 import java.util.function.Consumer;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** App-owned contract for persisting remote history batches. */
+@SecondaryPort
 @ApplicationLayer
 public interface ChatHistoryIngestionPort {
 

@@ -7,8 +7,10 @@ import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.model.TargetRef;
-import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
@@ -17,7 +19,9 @@ import org.springframework.stereotype.Component;
  * services/buses.
  */
 @Component
+@SecondaryAdapter
 @InfrastructureLayer
+@RequiredArgsConstructor
 public class LoggingAppHistoryPortsAdapter
     implements ChatHistoryIngestionPort,
         ChatHistoryIngestEventsPort,
@@ -25,24 +29,11 @@ public class LoggingAppHistoryPortsAdapter
         ZncPlaybackEventsPort,
         TargetChatHistoryPort {
 
-  private final ChatHistoryIngestor ingestor;
-  private final ChatHistoryIngestBus ingestBus;
-  private final ChatHistoryBatchBus batchBus;
-  private final ZncPlaybackBus playbackBus;
-  private final ChatHistoryService historyService;
-
-  public LoggingAppHistoryPortsAdapter(
-      ChatHistoryIngestor ingestor,
-      ChatHistoryIngestBus ingestBus,
-      ChatHistoryBatchBus batchBus,
-      ZncPlaybackBus playbackBus,
-      ChatHistoryService historyService) {
-    this.ingestor = Objects.requireNonNull(ingestor, "ingestor");
-    this.ingestBus = Objects.requireNonNull(ingestBus, "ingestBus");
-    this.batchBus = Objects.requireNonNull(batchBus, "batchBus");
-    this.playbackBus = Objects.requireNonNull(playbackBus, "playbackBus");
-    this.historyService = Objects.requireNonNull(historyService, "historyService");
-  }
+  @NonNull private final ChatHistoryIngestor ingestor;
+  @NonNull private final ChatHistoryIngestBus ingestBus;
+  @NonNull private final ChatHistoryBatchBus batchBus;
+  @NonNull private final ZncPlaybackBus playbackBus;
+  @NonNull private final ChatHistoryService historyService;
 
   @Override
   public void ingestAsync(

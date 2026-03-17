@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app.commands;
 
-import cafe.woden.ircclient.irc.IrcCurrentNickPort;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.model.UserCommandAlias;
 import cafe.woden.ircclient.util.AppVersion;
@@ -17,6 +17,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -24,6 +26,7 @@ import org.springframework.stereotype.Component;
 /** Expands user-defined slash-command aliases before regular command parsing. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class UserCommandAliasEngine {
 
   private static final int MAX_EXPANSION_DEPTH = 8;
@@ -31,15 +34,11 @@ public class UserCommandAliasEngine {
       DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss yyyy", Locale.ENGLISH)
           .withZone(ZoneId.systemDefault());
 
-  private final UserCommandAliasesBus aliasesBus;
-  private final IrcCurrentNickPort currentNickPort;
+  @NonNull private final UserCommandAliasesBus aliasesBus;
 
-  public UserCommandAliasEngine(
-      UserCommandAliasesBus aliasesBus,
-      @Qualifier("ircCurrentNickPort") IrcCurrentNickPort currentNickPort) {
-    this.aliasesBus = Objects.requireNonNull(aliasesBus, "aliasesBus");
-    this.currentNickPort = Objects.requireNonNull(currentNickPort, "currentNickPort");
-  }
+  @NonNull
+  @Qualifier("ircCurrentNickPort")
+  private final IrcCurrentNickPort currentNickPort;
 
   public ExpansionResult expand(String raw, TargetRef contextTarget) {
     String line = Objects.toString(raw, "").trim();

@@ -8,7 +8,7 @@ import static org.mockito.Mockito.mock;
 import cafe.woden.ircclient.config.IgnoreProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
-import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;

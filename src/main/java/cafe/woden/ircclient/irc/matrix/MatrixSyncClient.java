@@ -15,12 +15,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
 /** Fetches Matrix room timeline updates via {@code /_matrix/client/v3/sync}. */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixSyncClient {
 
   private static final Map<String, String> REQUEST_HEADERS =
@@ -34,11 +38,7 @@ final class MatrixSyncClient {
   private static final Set<String> MEDIA_MSGTYPES =
       Set.of("m.image", "m.file", "m.video", "m.audio");
 
-  private final ServerProxyResolver proxyResolver;
-
-  MatrixSyncClient(ServerProxyResolver proxyResolver) {
-    this.proxyResolver = Objects.requireNonNull(proxyResolver, "proxyResolver");
-  }
+  @NonNull private final ServerProxyResolver proxyResolver;
 
   SyncResult sync(
       String serverId,

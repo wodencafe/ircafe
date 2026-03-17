@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 
 /** Backend-specific outbound command feature adapter. */
 interface OutboundBackendFeatureAdapter {

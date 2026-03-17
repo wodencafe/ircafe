@@ -5,10 +5,15 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ChannelFlagModeStatePort;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.ModeVocabulary;
+import cafe.woden.ircclient.state.api.NegotiatedModeSemantics;
 import cafe.woden.ircclient.state.api.RecentStatusModePort;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,29 +22,20 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 public class InboundModeEventHandler {
-  private static final Logger log = LoggerFactory.getLogger(InboundModeEventHandler.class);
+  private static final long RECENT_MODE_SNAPSHOT_TTL_MS = 1_500L;
+  private static final int RECENT_MODE_SNAPSHOT_MAX = 512;
+
   private final UiPort ui;
   private final ModeRoutingPort modeRoutingState;
   private final JoinModeBurstService joinModeBurstService;
   private final ModeFormattingService modeFormattingService;
   private final ChannelFlagModeStatePort channelFlagModeState;
   private final RecentStatusModePort recentStatusModeState;
-
-  public InboundModeEventHandler(
-      UiPort ui,
-      ModeRoutingPort modeRoutingState,
-      JoinModeBurstService joinModeBurstService,
-      ModeFormattingService modeFormattingService,
-      ChannelFlagModeStatePort channelFlagModeState,
-      RecentStatusModePort recentStatusModeState) {
-    this.ui = ui;
-    this.modeRoutingState = modeRoutingState;
-    this.joinModeBurstService = joinModeBurstService;
-    this.modeFormattingService = modeFormattingService;
-    this.channelFlagModeState = channelFlagModeState;
-    this.recentStatusModeState = recentStatusModeState;
-  }
+  private final ServerIsupportStatePort serverIsupportState;
+  private final ConcurrentHashMap<RecentModeSnapshotKey, Long> recentModeSnapshots =
+      new ConcurrentHashMap<>();
 
   public void onJoinedChannel(String serverId, String channel) {
     if (serverId == null || channel == null) return;
@@ -61,6 +57,8 @@ public class InboundModeEventHandler {
     joinModeBurstService.clearServer(serverId);
     channelFlagModeState.clearServer(serverId);
     recentStatusModeState.clearServer(serverId);
+    String sid = normalizeServerId(serverId);
+    recentModeSnapshots.keySet().removeIf(k -> Objects.equals(k.serverId(), sid));
   }
 
   public void onLeftChannel(String serverId, String channel) {
@@ -68,12 +66,17 @@ public class InboundModeEventHandler {
     joinModeBurstService.clearChannel(serverId, channel);
     channelFlagModeState.clearChannel(serverId, channel);
     recentStatusModeState.clearChannel(serverId, channel);
+    recentModeSnapshots.keySet().removeIf(k -> k.matches(serverId, channel));
     ui.setChannelModeSnapshot(serverId, channel, "", "");
   }
 
   public void handleChannelModeObserved(String serverId, IrcEvent.ChannelModeObserved ev) {
     if (serverId == null || ev == null) return;
-    if (ev.kind() == IrcEvent.ChannelModeKind.SNAPSHOT) {
+    IrcEvent.ChannelModeKind effectiveKind = effectiveModeKind(serverId, ev);
+    if (!tryClaimRecentModeSnapshot(serverId, ev.channel(), ev.details(), effectiveKind)) {
+      return;
+    }
+    if (effectiveKind == IrcEvent.ChannelModeKind.SNAPSHOT) {
       handleChannelModeSnapshot(serverId, ev.channel(), ev.details(), ev.provenance());
       return;
     }
@@ -88,7 +91,8 @@ public class InboundModeEventHandler {
 
     // Weak signal: if this is a status-mode change (+v/+o/+h/+a/+q) we may see a MODE echo right
     // after.
-    if (containsStatusMode(details)) {
+    ModeVocabulary vocabulary = serverIsupportState.vocabularyForServer(serverId);
+    if (containsStatusMode(vocabulary, details)) {
       recentStatusModeState.markStatusMode(serverId, channel);
     }
 
@@ -103,56 +107,25 @@ public class InboundModeEventHandler {
             serverId,
             channel,
             rawModes,
-            modeFormattingService.describeCurrentChannelModes(rawModes));
+            modeFormattingService.describeCurrentChannelModes(serverId, rawModes));
       }
     }
 
     if (joinModeBurstService.handleChannelModeChanged(serverId, channel, details)) {
-      if (log.isDebugEnabled()) {
-        log.debug(
-            "MODEDBG handler ChannelModeChanged consumedByJoinBurst serverId={} channel={} by={} details={}",
-            serverId,
-            channel,
-            by,
-            clip(details));
-      }
       return;
     }
 
     // Suppress no-op flag echoes like "+Cnst" that appear after a status change.
     if (flagOnly) {
       if (!hadFlagState && recentStatusModeState.isRecent(serverId, channel, 2000L)) {
-        if (log.isDebugEnabled()) {
-          log.debug(
-              "MODEDBG handler suppress echo (no flag state yet) serverId={} channel={} details={}",
-              serverId,
-              channel,
-              clip(details));
-        }
         return;
       }
       if (!changedFlagState) {
-        if (log.isDebugEnabled()) {
-          log.debug(
-              "MODEDBG handler suppress no-op flag delta serverId={} channel={} details={}",
-              serverId,
-              channel,
-              clip(details));
-        }
         return;
       }
     }
 
-    var lines = modeFormattingService.prettyModeChange(by, channel, details);
-    if (log.isDebugEnabled()) {
-      log.debug(
-          "MODEDBG handler ChannelModeChanged serverId={} channel={} by={} details={} -> {} lines",
-          serverId,
-          channel,
-          by,
-          clip(details),
-          lines.size());
-    }
+    var lines = modeFormattingService.prettyModeChange(serverId, by, channel, details);
     for (String line : lines) {
       ui.appendNotice(chan, "(mode)", line);
     }
@@ -163,6 +136,19 @@ public class InboundModeEventHandler {
     String d = details.trim();
     if (d.isEmpty()) return false;
     return d.indexOf(' ') < 0;
+  }
+
+  private IrcEvent.ChannelModeKind effectiveModeKind(
+      String serverId, IrcEvent.ChannelModeObserved ev) {
+    if (ev == null) return IrcEvent.ChannelModeKind.DELTA;
+    if (ev.provenance() != IrcEvent.ChannelModeProvenance.LIVE_MODE_EVENT) return ev.kind();
+    if (!java.util.Objects.toString(ev.by(), "").trim().isEmpty()) {
+      return IrcEvent.ChannelModeKind.DELTA;
+    }
+    ModeVocabulary vocabulary = serverIsupportState.vocabularyForServer(serverId);
+    return NegotiatedModeSemantics.looksLikeSnapshotModeDetails(vocabulary, ev.details())
+        ? IrcEvent.ChannelModeKind.SNAPSHOT
+        : IrcEvent.ChannelModeKind.DELTA;
   }
 
   private void handleChannelModeSnapshot(
@@ -190,12 +176,14 @@ public class InboundModeEventHandler {
     if (out == null) out = chan;
     ui.ensureTargetExists(out);
 
-    String summary = modeFormattingService.describeCurrentChannelModes(details);
+    String summary = modeFormattingService.describeCurrentChannelModes(serverId, details);
     String rawModes = normalizeModeDetailsForSnapshot(details);
     if (!rawModes.isBlank() || (summary != null && !summary.isBlank())) {
       ui.setChannelModeSnapshot(serverId, channel, rawModes, summary);
     }
-    if (summary == null || summary.isBlank()) return;
+    if (summary == null || summary.isBlank()) {
+      return;
+    }
 
     boolean outputIsChannel = out.equals(chan);
     if (joinModeBurstService.shouldSuppressModesListedSummary(serverId, channel, outputIsChannel)) {
@@ -204,14 +192,6 @@ public class InboundModeEventHandler {
 
     if (shouldSuppressLiveModeSnapshot(
         provenance, hadPendingModeTarget, outputIsChannel, joinBootstrapActive)) {
-      if (log.isDebugEnabled()) {
-        log.debug(
-            "MODEDBG handler suppress live snapshot echo serverId={} channel={} provenance={} details={}",
-            serverId,
-            channel,
-            provenance,
-            clip(details));
-      }
       return;
     }
 
@@ -221,15 +201,6 @@ public class InboundModeEventHandler {
         && outputIsChannel
         && recentStatusModeState.isRecent(serverId, channel, 2000L)
         && (!hadFlagState || !changedFlagState)) {
-      if (log.isDebugEnabled()) {
-        log.debug(
-            "MODEDBG handler suppress 324 status echo serverId={} channel={} details={} hadFlagState={} changedFlagState={}",
-            serverId,
-            channel,
-            clip(details),
-            hadFlagState,
-            changedFlagState);
-      }
       return;
     }
     ui.appendNotice(out, "(mode)", summary);
@@ -245,7 +216,7 @@ public class InboundModeEventHandler {
     return !joinBootstrapActive;
   }
 
-  private static boolean containsStatusMode(String details) {
+  private static boolean containsStatusMode(ModeVocabulary vocabulary, String details) {
     if (details == null) return false;
     String d = details.trim();
     if (d.isEmpty()) return false;
@@ -269,42 +240,13 @@ public class InboundModeEventHandler {
         continue;
       }
       String arg = null;
-      if (modeTakesArg(c, adding) && argIdx < argTokens.length) {
+      if (NegotiatedModeSemantics.takesArgument(vocabulary, c, adding)
+          && argIdx < argTokens.length) {
         arg = argTokens[argIdx++];
       }
-      // Common prefix/status modes (network-dependent).
-      if (c == 'a' || c == 'o' || c == 'h' || c == 'v') return true;
-      // +q is ambiguous across networks: owner status vs quiet-mask list mode.
-      if (c == 'q' && !looksLikeQuietMaskTarget(arg)) return true;
+      if (NegotiatedModeSemantics.isStatusMode(vocabulary, c, arg)) return true;
     }
     return false;
-  }
-
-  private static boolean modeTakesArg(char mode, boolean adding) {
-    return switch (mode) {
-      case 'o', 'v', 'h', 'a', 'q', 'y', 'b', 'e', 'I', 'k', 'f', 'j' -> true;
-      case 'l' -> adding;
-      default -> false;
-    };
-  }
-
-  private static boolean looksLikeQuietMaskTarget(String arg) {
-    String a = (arg == null) ? "" : arg.trim();
-    if (a.isEmpty()) return false;
-    return a.indexOf('!') >= 0
-        || a.indexOf('@') >= 0
-        || a.indexOf('*') >= 0
-        || a.indexOf('$') >= 0
-        || a.indexOf(':') >= 0;
-  }
-
-  private static String clip(Object v) {
-    if (v == null) return "<null>";
-    String s = String.valueOf(v);
-    if (s == null) return "<null>";
-    s = s.replace('\n', ' ').replace('\r', ' ');
-    if (s.length() > 220) return s.substring(0, 217) + "...";
-    return s;
   }
 
   private static String normalizeModeDetailsForSnapshot(String details) {
@@ -339,5 +281,50 @@ public class InboundModeEventHandler {
     String first = modeToks[0];
     if (first.indexOf('+') < 0 && first.indexOf('-') < 0) return "";
     return det;
+  }
+
+  private boolean tryClaimRecentModeSnapshot(
+      String serverId, String channel, String details, IrcEvent.ChannelModeKind effectiveKind) {
+    if (effectiveKind != IrcEvent.ChannelModeKind.SNAPSHOT) return true;
+    RecentModeSnapshotKey key = RecentModeSnapshotKey.of(serverId, channel, details);
+    if (key == null) return true;
+
+    long now = System.currentTimeMillis();
+    cleanupRecentModeSnapshots(now);
+
+    Long previous = recentModeSnapshots.put(key, now);
+    return previous == null || (now - previous.longValue()) > RECENT_MODE_SNAPSHOT_TTL_MS;
+  }
+
+  private void cleanupRecentModeSnapshots(long now) {
+    long cutoff = now - RECENT_MODE_SNAPSHOT_TTL_MS;
+    recentModeSnapshots.entrySet().removeIf(e -> e.getValue() == null || e.getValue() < cutoff);
+    if (recentModeSnapshots.size() > RECENT_MODE_SNAPSHOT_MAX) {
+      recentModeSnapshots.clear();
+    }
+  }
+
+  private static String normalizeServerId(String serverId) {
+    return Objects.toString(serverId, "").trim();
+  }
+
+  private static String normalizeChannel(String channel) {
+    String value = Objects.toString(channel, "").trim();
+    return value.isEmpty() ? "" : value.toLowerCase(Locale.ROOT);
+  }
+
+  private record RecentModeSnapshotKey(String serverId, String channelLower, String details) {
+    static RecentModeSnapshotKey of(String serverId, String channel, String details) {
+      String sid = normalizeServerId(serverId);
+      String channelLower = normalizeChannel(channel);
+      String normalizedDetails = normalizeModeDetailsForSnapshot(details);
+      if (sid.isEmpty() || channelLower.isEmpty() || normalizedDetails.isEmpty()) return null;
+      return new RecentModeSnapshotKey(sid, channelLower, normalizedDetails);
+    }
+
+    boolean matches(String serverId, String channel) {
+      return Objects.equals(this.serverId, normalizeServerId(serverId))
+          && Objects.equals(this.channelLower, normalizeChannel(channel));
+    }
   }
 }

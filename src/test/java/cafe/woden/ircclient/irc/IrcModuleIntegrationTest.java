@@ -7,8 +7,29 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
+import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.irc.adapter.BouncerIrcConnectionPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcConnectionLifecyclePortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcCurrentNickPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcMediatorInteractionPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcReadMarkerPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcShutdownPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcTypingPortAdapter;
+import cafe.woden.ircclient.irc.backend.BackendRoutingIrcClientService;
+import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
+import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.port.IrcShutdownPort;
+import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
+import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.net.ServerProxyResolver;
+import cafe.woden.ircclient.state.api.ModeVocabulary;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import java.util.Optional;
@@ -42,6 +63,12 @@ class IrcModuleIntegrationTest {
 
   @TestBean(name = "matrixIrcClientService")
   IrcBackendClientService matrixIrcClientService;
+
+  @TestBean BouncerBackendRegistry bouncerBackendRegistry;
+
+  @TestBean BouncerDiscoveryEventPort bouncerDiscoveryEventPort;
+
+  @TestBean ServerIsupportStatePort serverIsupportStatePort;
 
   private final ApplicationContext applicationContext;
   private final BackendRoutingIrcClientService backendRoutingIrcClientService;
@@ -103,6 +130,32 @@ class IrcModuleIntegrationTest {
   @SuppressWarnings("unused")
   static IrcBackendClientService matrixIrcClientService() {
     return backendStub(IrcProperties.Server.Backend.MATRIX);
+  }
+
+  @SuppressWarnings("unused")
+  static BouncerBackendRegistry bouncerBackendRegistry() {
+    return new BouncerBackendRegistry(java.util.List.of());
+  }
+
+  @SuppressWarnings("unused")
+  static BouncerDiscoveryEventPort bouncerDiscoveryEventPort() {
+    return BouncerDiscoveryEventPort.noOp();
+  }
+
+  @SuppressWarnings("unused")
+  static ServerIsupportStatePort serverIsupportStatePort() {
+    return new ServerIsupportStatePort() {
+      @Override
+      public void applyIsupportToken(String serverId, String tokenName, String tokenValue) {}
+
+      @Override
+      public ModeVocabulary vocabularyForServer(String serverId) {
+        return ModeVocabulary.fallback();
+      }
+
+      @Override
+      public void clearServer(String serverId) {}
+    };
   }
 
   private static IrcBackendClientService backendStub(IrcProperties.Server.Backend backendType) {

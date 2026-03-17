@@ -3,7 +3,6 @@ package cafe.woden.ircclient.logging;
 import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
-import cafe.woden.ircclient.model.LogLine;
 import cafe.woden.ircclient.model.TargetRef;
 import java.time.Clock;
 import java.util.Locale;

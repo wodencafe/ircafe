@@ -16,6 +16,8 @@ import cafe.woden.ircclient.notifications.NotificationStore;
 import cafe.woden.ircclient.state.ChannelFlagModeState;
 import cafe.woden.ircclient.state.ModeRoutingState;
 import cafe.woden.ircclient.state.RecentStatusModeState;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
+import cafe.woden.ircclient.testutil.FunctionalTestWiringSupport;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
@@ -103,14 +105,20 @@ class ModeSnapshotSuppressionFunctionalTest {
         .thenReturn(false);
     when(joinModeBurstService.hasActiveJoinModeBuffer(anyString(), anyString())).thenReturn(false);
 
+    ServerIsupportStatePort serverIsupportState =
+        FunctionalTestWiringSupport.fallbackIsupportState();
+    ModeFormattingService modeFormattingService =
+        FunctionalTestWiringSupport.newModeFormattingService(serverIsupportState);
+
     InboundModeEventHandler handler =
-        new InboundModeEventHandler(
+        FunctionalTestWiringSupport.newInboundModeEventHandler(
             ui,
             new ModeRoutingState(),
             joinModeBurstService,
-            new ModeFormattingService(),
+            modeFormattingService,
             new ChannelFlagModeState(),
-            new RecentStatusModeState());
+            new RecentStatusModeState(),
+            serverIsupportState);
 
     return new Fixture(handler, transcripts);
   }

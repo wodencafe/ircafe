@@ -7,7 +7,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixLocalEchoEmitter {
   private static final String CTCP_ACTION_PREFIX = "\u0001ACTION ";
   private static final String CTCP_SUFFIX = "\u0001";
@@ -24,11 +28,7 @@ final class MatrixLocalEchoEmitter {
     String targetForRoom(String roomId);
   }
 
-  private final Consumer<ServerIrcEvent> eventEmitter;
-
-  MatrixLocalEchoEmitter(Consumer<ServerIrcEvent> eventEmitter) {
-    this.eventEmitter = Objects.requireNonNull(eventEmitter, "eventEmitter");
-  }
+  @NonNull private final Consumer<ServerIrcEvent> eventEmitter;
 
   void emitChannelMessage(
       String serverId, SessionView session, String roomId, String text, String eventId) {

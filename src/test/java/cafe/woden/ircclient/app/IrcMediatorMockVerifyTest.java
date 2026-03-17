@@ -39,13 +39,13 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
-import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
-import cafe.woden.ircclient.irc.IrcReadMarkerPort;
-import cafe.woden.ircclient.irc.IrcTypingPort;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
-import cafe.woden.ircclient.irc.UserListStore;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.port.IrcTypingPort;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
@@ -56,6 +56,7 @@ import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -113,6 +114,7 @@ class IrcMediatorMockVerifyTest {
       mock(LabeledResponseRoutingPort.class);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final PendingInvitePort pendingInviteState = mock(PendingInvitePort.class);
+  private final ServerIsupportStatePort serverIsupportState = mock(ServerIsupportStatePort.class);
   private final InboundModeEventHandler inboundModeEventHandler =
       mock(InboundModeEventHandler.class);
   private final IrcEventNotifierPort ircEventNotifierPort = mock(IrcEventNotifierPort.class);
@@ -155,6 +157,7 @@ class IrcMediatorMockVerifyTest {
           labeledResponseRoutingState,
           pendingEchoMessageState,
           pendingInviteState,
+          serverIsupportState,
           inboundModeEventHandler,
           ircEventNotifierPort,
           interceptorIngestPort,
@@ -773,6 +776,31 @@ class IrcMediatorMockVerifyTest {
 
     verify(ui).setReadMarker(new TargetRef("libera", "#ircafe"), 0L);
     verify(ui).clearUnread(new TargetRef("libera", "#ircafe"));
+  }
+
+  @Test
+  void joinedChannelSyncsRuntimeAutoJoinForReconnect() throws Exception {
+    when(targetCoordinator.onJoinedChannel("libera", "#ircafe")).thenReturn(true);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent("libera", new IrcEvent.JoinedChannel(Instant.now(), "#ircafe")));
+
+    verify(runtimeConfig).rememberJoinedChannel("libera", "#ircafe");
+    verify(targetCoordinator).syncRuntimeAutoJoinForReconnect("libera");
+  }
+
+  @Test
+  void joinedChannelOnQuasselSkipsRuntimeAutoJoinSync() throws Exception {
+    when(targetCoordinator.onJoinedChannel("quassel", "#ircafe{net:5}")).thenReturn(true);
+    when(serverRegistry.find("quassel"))
+        .thenReturn(
+            Optional.of(serverWithBackend("quassel", IrcProperties.Server.Backend.QUASSEL_CORE)));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent("quassel", new IrcEvent.JoinedChannel(Instant.now(), "#ircafe{net:5}")));
+
+    verify(runtimeConfig, never()).rememberJoinedChannel("quassel", "#ircafe{net:5}");
+    verify(targetCoordinator, never()).syncRuntimeAutoJoinForReconnect("quassel");
   }
 
   @Test

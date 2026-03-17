@@ -3,8 +3,8 @@ package cafe.woden.ircclient.app.outbound;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.irc.IrcEchoCapabilityPort;
-import cafe.woden.ircclient.irc.IrcTargetMembershipPort;
+import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
+import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -12,6 +12,8 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -19,44 +21,24 @@ import org.springframework.stereotype.Component;
 /** Handles reply/reaction/edit/redaction outbound command flows. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 final class OutboundMessageMutationCommandService implements OutboundHelpContributor {
 
+  @NonNull
+  @Qualifier("ircTargetMembershipPort")
   private final IrcTargetMembershipPort targetMembership;
-  private final IrcEchoCapabilityPort echoCapabilityPort;
-  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
-  private final MessageMutationOutboundCommandsRouter messageMutationOutboundCommandsRouter;
-  private final UiPort ui;
-  private final ConnectionCoordinator connectionCoordinator;
-  private final TargetCoordinator targetCoordinator;
-  private final PendingEchoMessagePort pendingEchoMessageState;
-  private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
-  OutboundMessageMutationCommandService(
-      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
-      IrcEchoCapabilityPort echoCapabilityPort,
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
-      MessageMutationOutboundCommandsRouter messageMutationOutboundCommandsRouter,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      PendingEchoMessagePort pendingEchoMessageState,
-      OutboundRawLineCorrelationService rawLineCorrelationService) {
-    this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
-    this.echoCapabilityPort = Objects.requireNonNull(echoCapabilityPort, "echoCapabilityPort");
-    this.backendCapabilityPolicy =
-        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
-    this.messageMutationOutboundCommandsRouter =
-        Objects.requireNonNull(
-            messageMutationOutboundCommandsRouter, "messageMutationOutboundCommandsRouter");
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.connectionCoordinator =
-        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.pendingEchoMessageState =
-        Objects.requireNonNull(pendingEchoMessageState, "pendingEchoMessageState");
-    this.rawLineCorrelationService =
-        Objects.requireNonNull(rawLineCorrelationService, "rawLineCorrelationService");
-  }
+  @NonNull private final IrcEchoCapabilityPort echoCapabilityPort;
+  @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+
+  @NonNull
+  private final MessageMutationOutboundCommandsRouter messageMutationOutboundCommandsRouter;
+
+  @NonNull private final UiPort ui;
+  @NonNull private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final PendingEchoMessagePort pendingEchoMessageState;
+  @NonNull private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
   @Override
   public void appendGeneralHelp(TargetRef out) {

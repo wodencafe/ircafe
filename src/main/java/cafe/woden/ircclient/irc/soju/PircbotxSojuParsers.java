@@ -3,10 +3,12 @@ package cafe.woden.ircclient.irc.soju;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /** Small parsing helpers for soju bouncer extensions. */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PircbotxSojuParsers {
-  private PircbotxSojuParsers() {}
 
   /**
    * Parsed form of a {@code BOUNCER NETWORK} response.

@@ -12,12 +12,16 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
 /** Sends Matrix room messages via the client API. */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixRoomMessageSender {
 
   private static final Map<String, String> REQUEST_HEADERS =
@@ -33,11 +37,7 @@ final class MatrixRoomMessageSender {
   private static final Set<String> MEDIA_MSGTYPES =
       Set.of("m.image", "m.file", "m.video", "m.audio");
 
-  private final ServerProxyResolver proxyResolver;
-
-  MatrixRoomMessageSender(ServerProxyResolver proxyResolver) {
-    this.proxyResolver = Objects.requireNonNull(proxyResolver, "proxyResolver");
-  }
+  @NonNull private final ServerProxyResolver proxyResolver;
 
   SendResult sendRoomMessage(
       String serverId,

@@ -13,9 +13,9 @@ import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
-import cafe.woden.ircclient.irc.IrcReadMarkerPort;
-import cafe.woden.ircclient.irc.IrcTypingPort;
-import cafe.woden.ircclient.irc.UserListStore;
+import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.port.IrcTypingPort;
+import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -23,6 +23,8 @@ import cafe.woden.ircclient.monitor.MonitorListService;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import cafe.woden.ircclient.ui.application.InboundDedupDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.JfrDiagnosticsPanel;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
@@ -198,6 +200,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
       IrcClientService irc,
+      ModeRoutingPort modeRoutingState,
+      ServerIsupportStatePort serverIsupportState,
       BackendUiProfileProvider backendUiProfileProvider,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ActiveInputRouter activeInputRouter,
@@ -231,6 +235,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
     this.activeInputRouter = activeInputRouter;
     this.proxyResolver = proxyResolver;
+    channelListPanel.setModeVocabularyProvider(
+        java.util.Objects.requireNonNull(serverIsupportState, "serverIsupportState")
+            ::vocabularyForServer);
 
     this.interceptorStore = java.util.Objects.requireNonNull(interceptorStore, "interceptorStore");
     this.dockTitleCoordinator =
@@ -269,6 +276,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             serverTree,
             outboundBus,
             irc,
+            modeRoutingState,
             backendUiProfileProvider,
             userListStore,
             usersDock,
@@ -490,6 +498,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       ServerTreeDockable serverTree,
       OutboundLineBus outboundBus,
       IrcClientService irc,
+      ModeRoutingPort modeRoutingState,
       BackendUiProfileProvider backendUiProfileProvider,
       UserListStore userListStore,
       UserListDockable usersDock,
@@ -503,7 +512,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     NotificationsPanel notificationsPanel = createNotificationsPanel(notificationStore);
     ChatChannelListCoordinator channelListCoordinator =
         createChannelListCoordinator(
-            serverTree, outboundBus, backendUiProfileProvider, userListStore, usersDock, irc);
+            serverTree,
+            outboundBus,
+            backendUiProfileProvider,
+            userListStore,
+            usersDock,
+            irc,
+            modeRoutingState);
     channelListCoordinator.bind(disposables);
     ChatMonitorCoordinator monitorCoordinator =
         new ChatMonitorCoordinator(monitorPanel, monitorListService, () -> activeTarget);
@@ -544,7 +559,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       BackendUiProfileProvider backendUiProfileProvider,
       UserListStore userListStore,
       UserListDockable usersDock,
-      IrcClientService irc) {
+      IrcClientService irc,
+      ModeRoutingPort modeRoutingState) {
     channelListPanel.setBackendUiProfile(backendUiProfileProvider.profileForServer(""));
     return new ChatChannelListCoordinator(
         channelListPanel,
@@ -555,7 +571,9 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         () -> activeTarget,
         sid -> irc.currentNick(sid).orElse(""),
         (serverId, channel) -> topicFor(new TargetRef(serverId, channel)),
-        banListCoordinator::snapshot);
+        banListCoordinator::snapshot,
+        irc,
+        modeRoutingState);
   }
 
   private ChatInterceptorCoordinator createInterceptorCoordinator(

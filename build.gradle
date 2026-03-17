@@ -349,10 +349,18 @@ if (System.getenv("CI") == "true") {
 }
 
 dependencies {
-    compileOnly 'org.projectlombok:lombok:1.18.42'
+    def lombokVersion = '1.18.42'
+
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+    testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
+    testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+    functionalTestCompileOnly "org.projectlombok:lombok:${lombokVersion}"
+    functionalTestAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
     implementation 'org.jmolecules:jmolecules-ddd:2.0.1'
     implementation 'org.jmolecules:jmolecules-layered-architecture:2.0.1'
+    implementation 'org.jmolecules:jmolecules-hexagonal-architecture:2.0.1'
     def springModulithVersion = (project.findProperty('springModulithVersion') ?: '2.0.3').toString()
     implementation platform("org.springframework.modulith:spring-modulith-bom:${springModulithVersion}")
     implementation 'org.springframework.modulith:spring-modulith-starter-core'

@@ -1,16 +1,19 @@
 package cafe.woden.ircclient.app;
 
+import cafe.woden.ircclient.state.api.ModeVocabulary;
+import cafe.woden.ircclient.state.api.NegotiatedModeSemantics;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 final class ModeSummary {
 
   // Preference order for the "join burst" / summary display.
   private static final List<Character> ORDER = List.of('t', 'n', 's', 'p', 'i', 'm', 'r');
-
-  private ModeSummary() {}
 
   static String describeBufferedJoinModes(Set<Character> plus, Set<Character> minus) {
     List<String> parts = new ArrayList<>();
@@ -27,6 +30,10 @@ final class ModeSummary {
   }
 
   static String describeCurrentChannelModes(String details) {
+    return describeCurrentChannelModes(ModeVocabulary.fallback(), details);
+  }
+
+  static String describeCurrentChannelModes(ModeVocabulary vocabulary, String details) {
     if (details == null) return "";
     String d = details.trim();
     if (d.isEmpty()) return "";
@@ -77,6 +84,10 @@ final class ModeSummary {
           extras.add("channel key removed");
         }
         continue;
+      }
+
+      if (NegotiatedModeSemantics.takesArgument(vocabulary, c, sign == '+')) {
+        if (argIdx < args.size()) argIdx++;
       }
 
       if (sign == '+') plus.add(c);

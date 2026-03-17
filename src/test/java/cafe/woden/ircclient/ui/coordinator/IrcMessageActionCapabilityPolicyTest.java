@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.irc.IrcBackendClientService;
-import cafe.woden.ircclient.irc.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import org.junit.jupiter.api.Test;
 
 class IrcMessageActionCapabilityPolicyTest {

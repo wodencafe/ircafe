@@ -16,9 +16,9 @@ import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
-import cafe.woden.ircclient.irc.IrcBackendClientService;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.backend.BackendRoutingIrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.modulith.AbstractApplicationModuleIntegrationTest;
 import io.reactivex.rxjava3.core.Completable;
@@ -43,13 +43,13 @@ class PerformModuleIntegrationTest extends AbstractApplicationModuleIntegrationT
 
   private final ApplicationContext applicationContext;
   private final PerformOnConnectService performOnConnectService;
-  private final IrcBackendClientService ircClientService;
+  private final BackendRoutingIrcClientService ircClientService;
   private final UiPort uiPort;
 
   PerformModuleIntegrationTest(
       ApplicationContext applicationContext,
       PerformOnConnectService performOnConnectService,
-      IrcBackendClientService ircClientService,
+      @Qualifier("ircClientService") BackendRoutingIrcClientService ircClientService,
       @Qualifier("swingUiPort") UiPort uiPort) {
     this.applicationContext = applicationContext;
     this.performOnConnectService = performOnConnectService;

@@ -12,15 +12,20 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Server-scoped monitor nick list persistence/cache. */
 @Component
+@SecondaryAdapter
 @ApplicationLayer
+@RequiredArgsConstructor
 public class MonitorListService implements MonitorRosterPort {
 
-  private final RuntimeConfigStore runtimeConfig;
+  @NonNull private final RuntimeConfigStore runtimeConfig;
   private final ConcurrentHashMap<String, List<String>> nicksByServer = new ConcurrentHashMap<>();
   private final FlowableProcessor<Change> changes =
       PublishProcessor.<Change>create().toSerialized();
@@ -33,10 +38,6 @@ public class MonitorListService implements MonitorRosterPort {
   }
 
   public record Change(String serverId, ChangeKind kind) {}
-
-  public MonitorListService(RuntimeConfigStore runtimeConfig) {
-    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
-  }
 
   public Flowable<Change> changes() {
     return changes.onBackpressureBuffer();

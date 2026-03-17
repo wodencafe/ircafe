@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.irc.PlaybackCursorProvider;
-import cafe.woden.ircclient.irc.PlaybackCursorProviderConfig;
+import cafe.woden.ircclient.irc.playback.PlaybackCursorProvider;
+import cafe.woden.ircclient.irc.playback.PlaybackCursorProviderConfig;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestResult;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestor;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestorConfig;

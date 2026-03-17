@@ -9,8 +9,8 @@ import cafe.woden.ircclient.bouncer.BouncerBackendDiscoveryHandler;
 import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
-import cafe.woden.ircclient.irc.PircbotxIrcClientService;
-import cafe.woden.ircclient.irc.QuasselCoreControlPort;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxIrcClientService;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -73,8 +73,8 @@ class ArchitectureGuardrailsTest {
         @Override
         public boolean test(JavaClass input) {
           String name = input.getName();
-          return name.equals("cafe.woden.ircclient.irc.PircbotxZncParsers")
-              || name.startsWith("cafe.woden.ircclient.irc.PircbotxZncParsers$")
+          return name.equals("cafe.woden.ircclient.irc.pircbotx.parse.PircbotxZncParsers")
+              || name.startsWith("cafe.woden.ircclient.irc.pircbotx.parse.PircbotxZncParsers$")
               || name.equals("cafe.woden.ircclient.irc.soju.PircbotxSojuParsers")
               || name.startsWith("cafe.woden.ircclient.irc.soju.PircbotxSojuParsers$");
         }
@@ -429,7 +429,7 @@ class ArchitectureGuardrailsTest {
           .doNotHaveFullyQualifiedName("cafe.woden.ircclient.ui.backend.BackendUiProfileProvider")
           .should()
           .dependOnClassesThat()
-          .haveFullyQualifiedName("cafe.woden.ircclient.irc.IrcBackendModePort")
+          .haveFullyQualifiedName("cafe.woden.ircclient.irc.backend.IrcBackendModePort")
           .because(
               "backend mode checks in UI should stay centralized behind backend-ui profile/context services");
 

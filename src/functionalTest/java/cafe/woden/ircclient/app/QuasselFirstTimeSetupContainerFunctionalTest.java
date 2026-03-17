@@ -16,19 +16,20 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
-import cafe.woden.ircclient.irc.IrcBackendAvailabilityPort;
-import cafe.woden.ircclient.irc.IrcConnectionLifecyclePort;
 import cafe.woden.ircclient.irc.IrcEvent;
-import cafe.woden.ircclient.irc.QuasselCoreAuthHandshake;
-import cafe.woden.ircclient.irc.QuasselCoreControlPort;
-import cafe.woden.ircclient.irc.QuasselCoreDatastreamCodec;
-import cafe.woden.ircclient.irc.QuasselCoreIrcClientService;
-import cafe.woden.ircclient.irc.QuasselCoreProtocolProbe;
-import cafe.woden.ircclient.irc.QuasselCoreSocketConnector;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
+import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
+import cafe.woden.ircclient.irc.quassel.QuasselCoreAuthHandshake;
+import cafe.woden.ircclient.irc.quassel.QuasselCoreDatastreamCodec;
+import cafe.woden.ircclient.irc.quassel.QuasselCoreIrcClientService;
+import cafe.woden.ircclient.irc.quassel.QuasselCoreProtocolProbe;
+import cafe.woden.ircclient.irc.quassel.QuasselCoreSocketConnector;
+import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.testutil.FunctionalTestWiringSupport;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import cafe.woden.ircclient.ui.UserListDockable;
@@ -185,7 +186,7 @@ class QuasselFirstTimeSetupContainerFunctionalTest {
       TrayNotificationsPort trayNotifications = mock(TrayNotificationsPort.class);
 
       ConnectionCoordinator coordinator =
-          new ConnectionCoordinator(
+          FunctionalTestWiringSupport.newConnectionCoordinator(
               IrcConnectionLifecyclePort.from(service),
               IrcBackendAvailabilityPort.from(service),
               QuasselCoreControlPort.from(service),
@@ -351,7 +352,7 @@ class QuasselFirstTimeSetupContainerFunctionalTest {
       TrayNotificationsPort trayNotifications = mock(TrayNotificationsPort.class);
 
       ConnectionCoordinator coordinator =
-          new ConnectionCoordinator(
+          FunctionalTestWiringSupport.newConnectionCoordinator(
               IrcConnectionLifecyclePort.from(service),
               IrcBackendAvailabilityPort.from(service),
               QuasselCoreControlPort.from(service),

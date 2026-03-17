@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * Holds the current <em>default</em> SOCKS proxy settings in a globally accessible place.
@@ -18,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * class intentionally does <b>not</b> set them. All networking that should be proxied must use an
  * explicit {@link java.net.Proxy} (see {@link ProxyPlan} / {@link ServerProxyResolver}).
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class NetProxyContext {
 
   private static final IrcProperties.Proxy DEFAULT =
@@ -32,8 +35,6 @@ public final class NetProxyContext {
 
   /** Ensures we install our Authenticator once. */
   private static final AtomicBoolean AUTH_INSTALLED = new AtomicBoolean(false);
-
-  private NetProxyContext() {}
 
   public static void configure(IrcProperties.Proxy cfg) {
     cfg = normalize(cfg);

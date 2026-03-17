@@ -6,6 +6,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.UiTranscriptPort;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import org.junit.jupiter.api.Test;
@@ -32,8 +33,11 @@ class LoggingUiPortConfigTest {
         .run(
             ctx -> {
               UiPort ui = ctx.getBean(UiPort.class);
-              assertInstanceOf(LoggingUiPortDecorator.class, ui);
-              // SwingUiPort + primary LoggingUiPortDecorator
+              assertInstanceOf(TranscriptDecoratingUiPort.class, ui);
+              assertInstanceOf(
+                  LoggingUiPortDecorator.class,
+                  ctx.getBean("loggingTranscriptUiPort", UiTranscriptPort.class));
+              // SwingUiPort + primary TranscriptDecoratingUiPort
               assertEquals(2, ctx.getBeansOfType(UiPort.class).size());
             });
   }
@@ -56,8 +60,11 @@ class LoggingUiPortConfigTest {
         .run(
             ctx -> {
               UiPort selected = ctx.getBean(UiPort.class);
-              assertInstanceOf(LoggingUiPortDecorator.class, selected);
-              // baseUiPort + SwingUiPort + primary LoggingUiPortDecorator
+              assertInstanceOf(TranscriptDecoratingUiPort.class, selected);
+              assertInstanceOf(
+                  LoggingUiPortDecorator.class,
+                  ctx.getBean("loggingTranscriptUiPort", UiTranscriptPort.class));
+              // baseUiPort + SwingUiPort + primary TranscriptDecoratingUiPort
               assertEquals(3, ctx.getBeansOfType(UiPort.class).size());
             });
   }

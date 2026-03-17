@@ -5,24 +5,18 @@ import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
 import cafe.woden.ircclient.ui.servertree.policy.ServerTreeServerLeafInsertPolicy;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.BiConsumer;
 import javax.swing.tree.DefaultMutableTreeNode;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 /** Ensures each server root has a channel-list leaf with stable insert positioning. */
+@RequiredArgsConstructor
 public final class ServerTreeChannelListNodeEnsurer {
-  private final String channelListLabel;
-  private final Map<TargetRef, DefaultMutableTreeNode> leaves;
-  private final BiConsumer<DefaultMutableTreeNode, int[]> nodesWereInserted;
 
-  public ServerTreeChannelListNodeEnsurer(
-      String channelListLabel,
-      Map<TargetRef, DefaultMutableTreeNode> leaves,
-      BiConsumer<DefaultMutableTreeNode, int[]> nodesWereInserted) {
-    this.channelListLabel = Objects.requireNonNull(channelListLabel, "channelListLabel");
-    this.leaves = Objects.requireNonNull(leaves, "leaves");
-    this.nodesWereInserted = Objects.requireNonNull(nodesWereInserted, "nodesWereInserted");
-  }
+  @NonNull private final String channelListLabel;
+  @NonNull private final Map<TargetRef, DefaultMutableTreeNode> leaves;
+  @NonNull private final BiConsumer<DefaultMutableTreeNode, int[]> nodesWereInserted;
 
   public DefaultMutableTreeNode ensureChannelListNode(ServerNodes serverNodes) {
     if (serverNodes == null

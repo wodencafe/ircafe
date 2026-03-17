@@ -12,6 +12,8 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 /**
  * Holds the current TLS settings in a globally accessible place.
@@ -23,6 +25,7 @@ import javax.net.ssl.X509TrustManager;
  * checks. This makes man-in-the-middle attacks trivial. Only enable if you fully understand the
  * risks.
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class NetTlsContext {
 
   private static final IrcProperties.Client.Tls DEFAULT = new IrcProperties.Client.Tls(false);
@@ -44,8 +47,6 @@ public final class NetTlsContext {
       };
 
   private static final AtomicReference<SSLSocketFactory> TRUST_ALL_SSL = new AtomicReference<>();
-
-  private NetTlsContext() {}
 
   public static void configure(IrcProperties.Client.Tls cfg) {
     cfg = normalize(cfg);

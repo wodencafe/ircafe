@@ -104,6 +104,36 @@ public class ServerRegistry {
     persistAndEmit();
   }
 
+  /**
+   * Updates the in-memory auto-join list for an existing persisted server without rewriting the
+   * runtime config file.
+   *
+   * <p>This is used after runtime config mutations that already persisted the authoritative
+   * auto-join override on disk; reconnect logic needs the in-process registry view refreshed too.
+   */
+  public synchronized void syncRuntimeAutoJoin(String serverId, List<String> autoJoin) {
+    String requestedId = Objects.toString(serverId, "").trim();
+    if (requestedId.isEmpty()) return;
+
+    String storedId = null;
+    for (String id : byId.keySet()) {
+      if (id != null && id.equalsIgnoreCase(requestedId)) {
+        storedId = id;
+        break;
+      }
+    }
+    if (storedId == null) return;
+
+    IrcProperties.Server existing = byId.get(storedId);
+    if (existing == null) return;
+
+    List<String> nextAutoJoin = autoJoin == null ? List.of() : List.copyOf(autoJoin);
+    if (Objects.equals(existing.autoJoin(), nextAutoJoin)) return;
+
+    byId.put(storedId, existing.withAutoJoin(nextAutoJoin));
+    updates.onNext(snapshot());
+  }
+
   private void persistAndEmit() {
     List<IrcProperties.Server> snap = snapshot();
     // Persist the full list into the runtime YAML.

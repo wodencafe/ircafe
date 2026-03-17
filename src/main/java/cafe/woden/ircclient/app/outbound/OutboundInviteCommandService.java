@@ -7,7 +7,7 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer;
-import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
@@ -15,6 +15,8 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -22,43 +24,22 @@ import org.springframework.stereotype.Component;
 /** Handles outbound invite command flow: /invite and pending invite actions. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 final class OutboundInviteCommandService {
 
+  @NonNull
+  @Qualifier("ircMediatorInteractionPort")
   private final IrcMediatorInteractionPort mediatorIrc;
-  private final UiPort ui;
-  private final ConnectionCoordinator connectionCoordinator;
-  private final TargetCoordinator targetCoordinator;
-  private final CommandTargetPolicy commandTargetPolicy;
-  private final OutboundRawLineCorrelationService rawLineCorrelationService;
-  private final ChatCommandRuntimeConfigPort runtimeConfig;
-  private final PendingInvitePort pendingInviteState;
-  private final WhoisRoutingPort whoisRoutingState;
-  private final IgnoreListCommandPort ignoreListService;
 
-  OutboundInviteCommandService(
-      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      CommandTargetPolicy commandTargetPolicy,
-      OutboundRawLineCorrelationService rawLineCorrelationService,
-      ChatCommandRuntimeConfigPort runtimeConfig,
-      PendingInvitePort pendingInviteState,
-      WhoisRoutingPort whoisRoutingState,
-      IgnoreListCommandPort ignoreListService) {
-    this.mediatorIrc = Objects.requireNonNull(mediatorIrc, "mediatorIrc");
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.connectionCoordinator =
-        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.commandTargetPolicy = Objects.requireNonNull(commandTargetPolicy, "commandTargetPolicy");
-    this.rawLineCorrelationService =
-        Objects.requireNonNull(rawLineCorrelationService, "rawLineCorrelationService");
-    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
-    this.pendingInviteState = Objects.requireNonNull(pendingInviteState, "pendingInviteState");
-    this.whoisRoutingState = Objects.requireNonNull(whoisRoutingState, "whoisRoutingState");
-    this.ignoreListService = Objects.requireNonNull(ignoreListService, "ignoreListService");
-  }
+  @NonNull private final UiPort ui;
+  @NonNull private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final CommandTargetPolicy commandTargetPolicy;
+  @NonNull private final OutboundRawLineCorrelationService rawLineCorrelationService;
+  @NonNull private final ChatCommandRuntimeConfigPort runtimeConfig;
+  @NonNull private final PendingInvitePort pendingInviteState;
+  @NonNull private final WhoisRoutingPort whoisRoutingState;
+  @NonNull private final IgnoreListCommandPort ignoreListService;
 
   void handleInvite(CompositeDisposable disposables, String nick, String channel) {
     TargetRef at = targetCoordinator.getActiveTarget();
@@ -165,6 +146,7 @@ final class OutboundInviteCommandService {
 
     if (shouldPersistJoinedChannel(invite.serverId())) {
       runtimeConfig.rememberJoinedChannel(invite.serverId(), invite.channel());
+      targetCoordinator.syncRuntimeAutoJoinForReconnect(invite.serverId());
     }
     ui.appendStatus(
         status, "(invite)", "Joining " + invite.channel() + " from invite #" + invite.id() + "...");

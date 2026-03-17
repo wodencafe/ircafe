@@ -13,8 +13,8 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
-import cafe.woden.ircclient.irc.IrcBackendClientService;
-import cafe.woden.ircclient.irc.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
@@ -90,6 +90,7 @@ class OutboundInviteCommandServiceTest {
     service.handleInviteJoin(disposables, "12");
 
     verify(runtimeConfig).rememberJoinedChannel("libera", "#ircafe");
+    verify(targetCoordinator).syncRuntimeAutoJoinForReconnect("libera");
     verify(irc).joinChannel("libera", "#ircafe");
     verify(pendingInviteState).remove(12L);
   }
@@ -124,6 +125,7 @@ class OutboundInviteCommandServiceTest {
     service.handleInviteJoin(disposables, "13");
 
     verify(runtimeConfig, never()).rememberJoinedChannel("quassel", "#ircafe");
+    verify(targetCoordinator, never()).syncRuntimeAutoJoinForReconnect("quassel");
     verify(irc).joinChannel("quassel", "#ircafe");
     verify(pendingInviteState).remove(13L);
   }

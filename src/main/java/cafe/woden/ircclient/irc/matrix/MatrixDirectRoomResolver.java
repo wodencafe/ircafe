@@ -12,12 +12,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import lombok.AccessLevel;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.stereotype.Component;
 
 /** Resolves per-peer Matrix DM rooms by creating/locating direct rooms via {@code /createRoom}. */
 @Component
 @InfrastructureLayer
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MatrixDirectRoomResolver {
 
   private static final Map<String, String> REQUEST_HEADERS =
@@ -29,11 +33,7 @@ final class MatrixDirectRoomResolver {
 
   private static final ObjectMapper JSON = new ObjectMapper();
 
-  private final ServerProxyResolver proxyResolver;
-
-  MatrixDirectRoomResolver(ServerProxyResolver proxyResolver) {
-    this.proxyResolver = Objects.requireNonNull(proxyResolver, "proxyResolver");
-  }
+  @NonNull private final ServerProxyResolver proxyResolver;
 
   ResolveResult resolveDirectRoom(
       String serverId, IrcProperties.Server server, String accessToken, String peerUserId) {

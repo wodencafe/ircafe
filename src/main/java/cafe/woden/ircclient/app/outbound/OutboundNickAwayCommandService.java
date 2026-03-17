@@ -8,37 +8,23 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.util.Objects;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /nick and /away command flow. */
 @Component
 @ApplicationLayer
+@RequiredArgsConstructor
 final class OutboundNickAwayCommandService {
 
-  private final IrcClientService irc;
-  private final UiPort ui;
-  private final ConnectionCoordinator connectionCoordinator;
-  private final TargetCoordinator targetCoordinator;
-  private final ChatCommandRuntimeConfigPort runtimeConfig;
-  private final AwayRoutingPort awayRoutingState;
-
-  OutboundNickAwayCommandService(
-      IrcClientService irc,
-      UiPort ui,
-      ConnectionCoordinator connectionCoordinator,
-      TargetCoordinator targetCoordinator,
-      ChatCommandRuntimeConfigPort runtimeConfig,
-      AwayRoutingPort awayRoutingState) {
-    this.irc = Objects.requireNonNull(irc, "irc");
-    this.ui = Objects.requireNonNull(ui, "ui");
-    this.connectionCoordinator =
-        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
-    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
-    this.awayRoutingState = Objects.requireNonNull(awayRoutingState, "awayRoutingState");
-  }
+  @NonNull private final IrcClientService irc;
+  @NonNull private final UiPort ui;
+  @NonNull private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final TargetCoordinator targetCoordinator;
+  @NonNull private final ChatCommandRuntimeConfigPort runtimeConfig;
+  @NonNull private final AwayRoutingPort awayRoutingState;
 
   void handleNick(CompositeDisposable disposables, String newNick) {
     TargetRef at = targetCoordinator.getActiveTarget();
