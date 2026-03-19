@@ -1,0 +1,84 @@
+def javaRelease = project.ext.javaRelease
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(javaRelease)
+    }
+}
+
+def projectJavaLauncher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(javaRelease)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = javaRelease
+    options.warnings = false
+    // Keep CI output clean: suppress javac lint warnings for normal compile/test tasks.
+    options.compilerArgs.removeAll { it.startsWith("-Xlint") }
+    options.compilerArgs += ["-Xlint:none"]
+
+    // Disable Error Prone during normal compile/test to avoid warning noise.
+    // The dedicated `errorProneApplyMain` task remains enabled for manual autofix runs.
+    if (name != 'errorProneApplyMain') {
+        options.errorprone.enabled = false
+    }
+}
+
+tasks.withType(Test).configureEach {
+    javaLauncher = projectJavaLauncher
+    systemProperty 'java.awt.headless', 'true'
+    // Reduce per-test scheduler teardown latency while preserving graceful shutdown behavior.
+    systemProperty 'ircafe.rx.shutdown.grace.ms', (findProperty('testRxShutdownGraceMs') ?: '200').toString()
+
+    // Opt-in parallel test JVMs: ./gradlew test -PtestMaxParallelForks=4
+    String maxParallelForksValue = (findProperty('testMaxParallelForks') ?: '').toString().trim()
+    if (!maxParallelForksValue.isEmpty()) {
+        maxParallelForks = Math.max(1, Integer.parseInt(maxParallelForksValue))
+    }
+    // Allow opt-in integration tests to be controlled from Gradle CLI:
+    //   ./gradlew integrationTest -Dquassel.it.enabled=true ...
+    //   ./gradlew integrationTest -Dirc.it.container.e2e.enabled=true ...
+    //   ./gradlew integrationTest -Dmatrix.it.container.enabled=true ...
+    // Forward only the scoped test-control properties.
+    System.getProperties().each { key, value ->
+        String k = key == null ? '' : key.toString()
+        if (!k.startsWith('quassel.it.') && !k.startsWith('irc.it.') && !k.startsWith('matrix.it.')) {
+            return
+        }
+        systemProperty k, value
+    }
+
+    // Long Swing-heavy test runs can accumulate heap/metaspace pressure in one JVM.
+    // Use a larger heap and periodic process recycling for stability.
+    maxHeapSize = (findProperty('testMaxHeap') ?: '1536m').toString()
+    long forkEveryValue = Long.parseLong((findProperty('testForkEvery') ?: '200').toString())
+    if (forkEveryValue > 0L) {
+        forkEvery = forkEveryValue
+    }
+}
+
+tasks.withType(JavaExec).configureEach {
+    javaLauncher = projectJavaLauncher
+}
+
+springBoot {
+    mainClass = 'cafe.woden.ircclient.IrcSwingApp'
+
+    // Generate META-INF/build-info.properties (build.version, build.time, ...)
+    // so the UI can display version + build date.
+    buildInfo()
+}
+
+// Ensure build-info exists for bootRun/IDE runs too.
+tasks.matching { it.name == 'bootRun' }.configureEach {
+    dependsOn tasks.matching { it.name == 'bootBuildInfo' }
+}
+tasks.matching { it.name == 'processResources' }.configureEach {
+    dependsOn tasks.matching { it.name == 'bootBuildInfo' }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
