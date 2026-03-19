@@ -23,6 +23,7 @@ import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
+import javax.swing.JMenuItem;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -233,6 +234,68 @@ class ChannelListPanelManagedOrderTest {
   }
 
   @Test
+  void clearListButtonClearsCurrentServerRows() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ChannelListPanel panel = new ChannelListPanel();
+            panel.setServerId("libera");
+            panel.beginList("libera", "Loaded channel list.");
+            panel.appendEntries(
+                "libera",
+                List.of(
+                    new ChannelListPanel.ListEntryRow("#alpha", 12, "Alpha topic"),
+                    new ChannelListPanel.ListEntryRow("#beta", 4, "Beta topic")));
+            panel.endList("libera", "Loaded channel list.");
+
+            JButton clearListButton = field(panel, "clearListButton", JButton.class);
+            JTable listTable = field(panel, "listTable", JTable.class);
+            assertTrue(clearListButton.getToolTipText().toLowerCase(Locale.ROOT).contains("clear"));
+            assertEquals(2, listTable.getRowCount());
+
+            clearListButton.doClick();
+
+            assertEquals(0, listTable.getRowCount());
+            assertFalse(clearListButton.isEnabled());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void listContextMenuUsesSelectReconnectAndJoinLabelsByManagedState() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ChannelListPanel panel = new ChannelListPanel();
+            panel.setServerId("libera");
+            JMenuItem joinItem = field(panel, "listJoinSelectMenuItem", JMenuItem.class);
+
+            panel.setManagedChannels(
+                "libera",
+                List.of(new ChannelListPanel.ManagedChannelRow("#alpha", false, true)),
+                ChannelListPanel.ManagedSortMode.CUSTOM);
+            invokeOneArg(panel, "prepareListContextMenuForChannel", String.class, "#alpha");
+            assertEquals("Select Channel", joinItem.getText());
+
+            panel.setManagedChannels(
+                "libera",
+                List.of(new ChannelListPanel.ManagedChannelRow("#beta", true, true)),
+                ChannelListPanel.ManagedSortMode.CUSTOM);
+            invokeOneArg(panel, "prepareListContextMenuForChannel", String.class, "#beta");
+            assertEquals("Reconnect Channel", joinItem.getText());
+
+            panel.setManagedChannels("libera", List.of(), ChannelListPanel.ManagedSortMode.CUSTOM);
+            invokeOneArg(panel, "prepareListContextMenuForChannel", String.class, "#gamma");
+            assertEquals("Join Channel", joinItem.getText());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
   void managedModesFallbackUsesUnknownLabel() throws Exception {
     onEdt(
         () -> {
@@ -434,6 +497,13 @@ class ChannelListPanelManagedOrderTest {
     Method method = target.getClass().getDeclaredMethod(methodName);
     method.setAccessible(true);
     method.invoke(target);
+  }
+
+  private static void invokeOneArg(
+      Object target, String methodName, Class<?> parameterType, Object argument) throws Exception {
+    Method method = target.getClass().getDeclaredMethod(methodName, parameterType);
+    method.setAccessible(true);
+    method.invoke(target, argument);
   }
 
   private static void invokeStaticRepaintIfSized(JButton button) throws Exception {

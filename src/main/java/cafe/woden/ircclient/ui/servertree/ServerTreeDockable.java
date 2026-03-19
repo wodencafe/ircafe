@@ -1744,6 +1744,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     startupSelectionRestorer.tryRestoreAfterEnsure(ref);
   }
 
+  public boolean hasTarget(TargetRef ref) {
+    return ref != null && leaves.containsKey(ref);
+  }
+
   private DefaultMutableTreeNode ensureChannelListNodeForEnsureNode(ServerNodes sn) {
     return channelListNodeEnsurer.ensureChannelListNode(sn);
   }

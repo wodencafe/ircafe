@@ -74,6 +74,11 @@ final class SwingUiViewStatePort implements UiViewStatePort {
   }
 
   @Override
+  public boolean hasTarget(TargetRef target) {
+    return edt.call(() -> serverTree.hasTarget(target), false);
+  }
+
+  @Override
   public void selectTarget(TargetRef target) {
     edt.run(() -> serverTree.selectTarget(target));
   }

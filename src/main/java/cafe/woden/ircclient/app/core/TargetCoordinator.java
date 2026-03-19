@@ -572,6 +572,19 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     String sid = Objects.toString(target.serverId(), "").trim();
     if (sid.isEmpty()) return;
+    boolean connected = connectionCoordinator.isConnected(sid);
+
+    if (connected && ui.hasTarget(target) && !ui.isChannelDisconnected(target)) {
+      channelsClosedByUser.remove(target);
+      if (!isQuasselCoreServer(sid)) {
+        runtimeConfig.rememberJoinedChannel(sid, target.target());
+        syncRuntimeAutoJoinForReconnect(sid);
+      }
+      applyTargetContext(target);
+      ui.setChatActiveTarget(target);
+      ui.selectTarget(target);
+      return;
+    }
 
     TargetRef status = new TargetRef(sid, "status");
     ensureTargetExists(status);
@@ -587,7 +600,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     // Keep detached until JOIN is confirmed by the server.
     ui.setChannelDisconnected(target, true);
 
-    if (!connectionCoordinator.isConnected(sid)) {
+    if (!connected) {
       ui.appendStatus(status, "(conn)", "Not connected (join queued in config only)");
       return;
     }

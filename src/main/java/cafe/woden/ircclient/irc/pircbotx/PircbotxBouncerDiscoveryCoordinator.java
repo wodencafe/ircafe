@@ -42,7 +42,6 @@ public final class PircbotxBouncerDiscoveryCoordinator {
   private final PircbotxConnectionState conn;
   private final boolean sojuDiscoveryEnabled;
   private final boolean zncDiscoveryEnabled;
-  private final BouncerBackendRegistry bouncerBackends;
   private final BouncerDiscoveryEventPort bouncerDiscoveryEvents;
   private final SojuBouncerDiscoveryAdapter sojuDiscoveryAdapter =
       new SojuBouncerDiscoveryAdapter();
@@ -62,7 +61,7 @@ public final class PircbotxBouncerDiscoveryCoordinator {
     this.conn = Objects.requireNonNull(conn, "conn");
     this.sojuDiscoveryEnabled = sojuDiscoveryEnabled;
     this.zncDiscoveryEnabled = zncDiscoveryEnabled;
-    this.bouncerBackends = Objects.requireNonNull(bouncerBackends, "bouncerBackends");
+    Objects.requireNonNull(bouncerBackends, "bouncerBackends");
     this.bouncerDiscoveryEvents =
         bouncerDiscoveryEvents == null ? BouncerDiscoveryEventPort.noOp() : bouncerDiscoveryEvents;
     this.unknownLineDiscoveryAdapters = buildUnknownLineDiscoveryAdapters(sojuDiscoveryEnabled);
@@ -204,10 +203,6 @@ public final class PircbotxBouncerDiscoveryCoordinator {
   }
 
   public void onDisconnect() {
-    for (String backendId : bouncerBackends.backendIds()) {
-      notifyOriginDisconnected(backendId);
-    }
-
     try {
       conn.sojuNetworksByNetId.clear();
       conn.sojuListNetworksRequestedThisSession.set(false);
@@ -365,14 +360,6 @@ public final class PircbotxBouncerDiscoveryCoordinator {
           serverId,
           Objects.toString(network.backendId(), "bouncer"),
           e);
-    }
-  }
-
-  private void notifyOriginDisconnected(String backendId) {
-    try {
-      bouncerDiscoveryEvents.onOriginDisconnected(backendId, serverId);
-    } catch (Exception e) {
-      log.debug("[{}] {} disconnect cleanup failed: {}", serverId, backendId, e.toString());
     }
   }
 

@@ -122,6 +122,11 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
+  public boolean hasTarget(TargetRef target) {
+    return delegate.hasTarget(target);
+  }
+
+  @Override
   public void selectTarget(TargetRef target) {
     delegate.selectTarget(target);
   }

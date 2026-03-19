@@ -42,8 +42,10 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
@@ -189,6 +191,10 @@ public final class ChannelListPanel extends JPanel {
   private final JButton runAlisButton = new JButton();
   private final JButton runMatrixNextButton = new JButton();
   private final JButton listDetailsButton = new JButton();
+  private final JButton clearListButton = new JButton();
+  private final JPopupMenu listContextMenu = new JPopupMenu();
+  private final JMenuItem listJoinSelectMenuItem = new JMenuItem();
+  private final JMenuItem listShowDetailsMenuItem = new JMenuItem("Show Details");
 
   private final ManagedChannelTableModel managedModel = new ManagedChannelTableModel();
   private final JTable managedTable = new JTable(managedModel);
@@ -262,7 +268,7 @@ public final class ChannelListPanel extends JPanel {
     root.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
     JPanel controls =
-        new JPanel(new MigLayout("insets 0, fillx", "[][][][]push[][grow,fill]", "[]"));
+        new JPanel(new MigLayout("insets 0, fillx", "[][][][][]push[][grow,fill]", "[]"));
     configureActionButton(
         runListButton,
         "refresh",
@@ -292,10 +298,15 @@ public final class ChannelListPanel extends JPanel {
         listDetailsButton, "eye", "Show details for selected channel", "Show details");
     listDetailsButton.addActionListener(e -> showServerListDetailsForSelection());
 
+    configureActionButton(
+        clearListButton, "trash", "Clear the current /LIST rows for this server", "Clear /list");
+    clearListButton.addActionListener(e -> clearCurrentServerListData());
+
     controls.add(runListButton);
     controls.add(runAlisButton);
     controls.add(runMatrixNextButton);
     controls.add(listDetailsButton);
+    controls.add(clearListButton);
     controls.add(new JLabel("Filter:"), "gapleft 12");
     controls.add(filterField, "pushx,growx");
 
@@ -349,16 +360,22 @@ public final class ChannelListPanel extends JPanel {
     listTable.addMouseListener(
         new MouseAdapter() {
           @Override
+          public void mousePressed(MouseEvent e) {
+            maybeShowListContextMenu(e);
+          }
+
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            maybeShowListContextMenu(e);
+          }
+
+          @Override
           public void mouseClicked(MouseEvent e) {
             if (!SwingUtilities.isLeftMouseButton(e)) return;
             int viewRow = listTable.rowAtPoint(e.getPoint());
             if (viewRow < 0) return;
             if (e.getClickCount() < 2) return;
-            int modelRow = listTable.convertRowIndexToModel(viewRow);
-            String channel = listModel.channelAt(modelRow);
-            if (channel == null || channel.isBlank()) return;
-            Consumer<String> cb = onJoinChannel;
-            if (cb != null) cb.accept(channel);
+            joinServerListChannelAtViewRow(viewRow);
           }
         });
 
@@ -381,6 +398,7 @@ public final class ChannelListPanel extends JPanel {
     JScrollPane scroll = new JScrollPane(listTable);
     scroll.setBorder(null);
     root.add(scroll, BorderLayout.CENTER);
+    configureListContextMenu();
     updateListActionPresentation();
     updateListButtons();
     return root;
@@ -1056,6 +1074,18 @@ public final class ChannelListPanel extends JPanel {
     }
   }
 
+  private void clearCurrentServerListData() {
+    String sid = normalizeServerId(this.serverId);
+    if (sid.isEmpty()) return;
+    rowsByServer.remove(sid);
+    statusByServer.remove(sid);
+    loadingByServer.remove(sid);
+    requestTypeByServer.remove(sid);
+    listTable.clearSelection();
+    refreshListRows();
+    refreshOpenDetailsDialog();
+  }
+
   private void emitRunListRequest() {
     Runnable cb = onRunListRequest;
     if (cb != null) SwingUtilities.invokeLater(cb);
@@ -1213,9 +1243,11 @@ public final class ChannelListPanel extends JPanel {
     boolean hasServer = !this.serverId.isBlank();
     boolean busy = isCurrentServerListLoading();
     ChannelListUxMode mode = uxModeForServer(this.serverId);
+    String sid = normalizeServerId(this.serverId);
 
     applyListActionPresentation(mode.actionPresentation());
     listDetailsButton.setEnabled(row >= 0 && hasServer);
+    clearListButton.setEnabled(hasServer && !busy && hasClearableListData(sid));
     runListButton.setEnabled(hasServer && !busy);
     runAlisButton.setEnabled(hasServer && !busy);
     runMatrixNextButton.setEnabled(hasServer && !busy && mode.isPagingActionEnabled(this.serverId));
@@ -1379,10 +1411,7 @@ public final class ChannelListPanel extends JPanel {
   }
 
   private void showServerListDetailsForSelection() {
-    int viewRow = listTable.getSelectedRow();
-    if (viewRow < 0) return;
-    int modelRow = listTable.convertRowIndexToModel(viewRow);
-    Row selected = listModel.rowAt(modelRow);
+    Row selected = selectedServerListRow();
     if (selected == null) return;
 
     String sid = this.serverId;
@@ -1854,6 +1883,82 @@ public final class ChannelListPanel extends JPanel {
 
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
+  }
+
+  private void configureListContextMenu() {
+    listJoinSelectMenuItem.addActionListener(e -> joinSelectedServerListChannel());
+    listShowDetailsMenuItem.setIcon(SvgIcons.action("eye", ACTION_ICON_SIZE));
+    listShowDetailsMenuItem.addActionListener(e -> showServerListDetailsForSelection());
+    listContextMenu.add(listJoinSelectMenuItem);
+    listContextMenu.add(listShowDetailsMenuItem);
+  }
+
+  private void maybeShowListContextMenu(MouseEvent event) {
+    if (event == null || !event.isPopupTrigger()) return;
+    int viewRow = listTable.rowAtPoint(event.getPoint());
+    if (viewRow < 0) return;
+    listTable.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+    Row selected = selectedServerListRow();
+    if (selected == null) return;
+    prepareListContextMenuForChannel(selected.channel());
+    listContextMenu.show(listTable, event.getX(), event.getY());
+  }
+
+  private void joinSelectedServerListChannel() {
+    Row selected = selectedServerListRow();
+    if (selected == null) return;
+    triggerServerListChannelAction(selected.channel());
+  }
+
+  private void joinServerListChannelAtViewRow(int viewRow) {
+    if (viewRow < 0) return;
+    int modelRow = listTable.convertRowIndexToModel(viewRow);
+    String channel = listModel.channelAt(modelRow);
+    triggerServerListChannelAction(channel);
+  }
+
+  private void triggerServerListChannelAction(String channel) {
+    String ch = normalizeChannel(channel);
+    if (ch.isEmpty()) return;
+    Consumer<String> cb = onJoinChannel;
+    if (cb != null) cb.accept(ch);
+  }
+
+  private void prepareListContextMenuForChannel(String channel) {
+    String ch = normalizeChannel(channel);
+    ManagedChannelRow managed = findManagedRowByChannel(this.serverId, ch);
+    if (managed != null && !managed.detached()) {
+      listJoinSelectMenuItem.setText("Select Channel");
+      listJoinSelectMenuItem.setIcon(SvgIcons.action("channel", ACTION_ICON_SIZE));
+      listJoinSelectMenuItem.setToolTipText("Select this channel without sending JOIN again");
+      listJoinSelectMenuItem.getAccessibleContext().setAccessibleName("Select channel");
+      return;
+    }
+    if (managed != null) {
+      listJoinSelectMenuItem.setText("Reconnect Channel");
+      listJoinSelectMenuItem.setIcon(SvgIcons.action("play", ACTION_ICON_SIZE));
+      listJoinSelectMenuItem.setToolTipText("Reconnect and select this channel");
+      listJoinSelectMenuItem.getAccessibleContext().setAccessibleName("Reconnect channel");
+      return;
+    }
+    listJoinSelectMenuItem.setText("Join Channel");
+    listJoinSelectMenuItem.setIcon(SvgIcons.action("play", ACTION_ICON_SIZE));
+    listJoinSelectMenuItem.setToolTipText("Join and select this channel");
+    listJoinSelectMenuItem.getAccessibleContext().setAccessibleName("Join channel");
+  }
+
+  private Row selectedServerListRow() {
+    int viewRow = listTable.getSelectedRow();
+    if (viewRow < 0) return null;
+    int modelRow = listTable.convertRowIndexToModel(viewRow);
+    return listModel.rowAt(modelRow);
+  }
+
+  private boolean hasClearableListData(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+    if (!rowsByServer.getOrDefault(sid, new ArrayList<>()).isEmpty()) return true;
+    return !Objects.toString(statusByServer.get(sid), "").trim().isEmpty();
   }
 
   private boolean isCurrentServerListLoading() {

@@ -205,6 +205,11 @@ public class SwingUiPort implements UiPort {
   }
 
   @Override
+  public boolean hasTarget(TargetRef target) {
+    return viewStatePort.hasTarget(target);
+  }
+
+  @Override
   public void selectTarget(TargetRef target) {
     viewStatePort.selectTarget(target);
   }

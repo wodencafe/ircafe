@@ -13,6 +13,10 @@ public interface UiViewStatePort {
 
   void ensureTargetExists(TargetRef target);
 
+  default boolean hasTarget(TargetRef target) {
+    return false;
+  }
+
   void selectTarget(TargetRef target);
 
   void closeTarget(TargetRef target);

@@ -5,12 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.bouncer.GenericBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
@@ -18,10 +20,13 @@ import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
 import cafe.woden.ircclient.irc.pircbotx.support.Ircv3MultilineAccumulator;
 import cafe.woden.ircclient.irc.playback.*;
+import cafe.woden.ircclient.irc.soju.SojuBouncerNetworkMappingStrategy;
+import cafe.woden.ircclient.irc.znc.ZncBouncerNetworkMappingStrategy;
 import java.io.IOException;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -106,6 +111,39 @@ class PircbotxConnectionSessionHandlerTest {
   }
 
   @Test
+  void onUnexpectedDisconnectDoesNotRemoveExternallyDiscoveredBouncerNetworks() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> events = new ArrayList<>();
+    AtomicReference<String> reconnectReason = new AtomicReference<>();
+    BouncerBackendRegistry bouncerBackends = mock(BouncerBackendRegistry.class);
+    when(bouncerBackends.backendIds())
+        .thenReturn(
+            Set.of(
+                SojuBouncerNetworkMappingStrategy.BACKEND_ID,
+                ZncBouncerNetworkMappingStrategy.BACKEND_ID,
+                GenericBouncerNetworkMappingStrategy.BACKEND_ID));
+    BouncerDiscoveryEventPort bouncerDiscoveryEvents = mock(BouncerDiscoveryEventPort.class);
+    PircbotxConnectionSessionHandler handler =
+        newHandler(
+            conn,
+            events,
+            c -> {},
+            (c, reason) -> reconnectReason.set(reason),
+            bouncerBackends,
+            bouncerDiscoveryEvents);
+    PircBotX bot = mock(PircBotX.class);
+    DisconnectEvent event = mock(DisconnectEvent.class);
+    when(event.getBot()).thenReturn(bot);
+    when(event.getDisconnectException()).thenReturn(new IllegalStateException("socket closed"));
+    conn.botRef.set(bot);
+
+    handler.onDisconnect(event);
+
+    assertEquals("socket closed", reconnectReason.get());
+    verifyNoInteractions(bouncerDiscoveryEvents);
+  }
+
+  @Test
   void onDisconnectDoesNotReconnectWhenSuppressed() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> events = new ArrayList<>();
@@ -180,14 +218,30 @@ class PircbotxConnectionSessionHandlerTest {
       List<ServerIrcEvent> events,
       java.util.function.Consumer<PircbotxConnectionState> heartbeatStopper,
       java.util.function.BiConsumer<PircbotxConnectionState, String> reconnectScheduler) {
+    return newHandler(
+        conn,
+        events,
+        heartbeatStopper,
+        reconnectScheduler,
+        new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
+        BouncerDiscoveryEventPort.noOp());
+  }
+
+  private static PircbotxConnectionSessionHandler newHandler(
+      PircbotxConnectionState conn,
+      List<ServerIrcEvent> events,
+      java.util.function.Consumer<PircbotxConnectionState> heartbeatStopper,
+      java.util.function.BiConsumer<PircbotxConnectionState, String> reconnectScheduler,
+      BouncerBackendRegistry bouncerBackends,
+      BouncerDiscoveryEventPort bouncerDiscoveryEvents) {
     PircbotxBouncerDiscoveryCoordinator bouncerDiscovery =
         new PircbotxBouncerDiscoveryCoordinator(
             "libera",
             conn,
             false,
             false,
-            new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
-            BouncerDiscoveryEventPort.noOp());
+            bouncerBackends,
+            bouncerDiscoveryEvents);
     PircbotxChatHistoryBatchCollector chatHistoryBatches =
         new PircbotxChatHistoryBatchCollector("libera", events::add);
     PircbotxServerResponseEmitter serverResponses =

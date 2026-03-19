@@ -222,6 +222,33 @@ class TargetCoordinatorChannelDetachPolicyTest {
   }
 
   @Test
+  void joinChannelAlreadyAttachedSelectsExistingTargetWithoutRejoining() {
+    UiPort ui = mock(UiPort.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    ConnectionCoordinator connectionCoordinator = mock(ConnectionCoordinator.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    TargetCoordinator coordinator =
+        newCoordinator(ui, userListStore, irc, connectionCoordinator, runtimeConfig);
+
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+    when(connectionCoordinator.isConnected("libera")).thenReturn(true);
+    when(ui.hasTarget(chan)).thenReturn(true);
+    when(ui.isChannelDisconnected(chan)).thenReturn(false);
+    when(userListStore.get("libera", "#ircafe")).thenReturn(List.of());
+    when(irc.currentNick("libera")).thenReturn(java.util.Optional.empty());
+    when(irc.requestNames("libera", "#ircafe")).thenReturn(Completable.complete());
+
+    coordinator.joinChannel(chan);
+
+    verify(runtimeConfig).rememberJoinedChannel("libera", "#ircafe");
+    verify(ui).selectTarget(chan);
+    verify(ui).setChatActiveTarget(chan);
+    verify(ui, never()).setChannelDisconnected(chan, true);
+    verify(irc, never()).joinChannel("libera", "#ircafe");
+  }
+
+  @Test
   void joinedChannelWithoutSuppressionAttachesNormally() {
     UiPort ui = mock(UiPort.class);
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
@@ -325,7 +352,22 @@ class TargetCoordinatorChannelDetachPolicyTest {
       ConnectionCoordinator connectionCoordinator,
       RuntimeConfigStore runtimeConfig) {
     return newCoordinator(
-        ui, irc, connectionCoordinator, runtimeConfig, mock(ServerRegistry.class));
+        ui,
+        mock(UserListStore.class),
+        irc,
+        connectionCoordinator,
+        runtimeConfig,
+        mock(ServerRegistry.class));
+  }
+
+  private static TargetCoordinator newCoordinator(
+      UiPort ui,
+      UserListStore userListStore,
+      IrcBackendClientService irc,
+      ConnectionCoordinator connectionCoordinator,
+      RuntimeConfigStore runtimeConfig) {
+    return newCoordinator(
+        ui, userListStore, irc, connectionCoordinator, runtimeConfig, mock(ServerRegistry.class));
   }
 
   private static TargetCoordinator newCoordinator(
@@ -334,9 +376,20 @@ class TargetCoordinatorChannelDetachPolicyTest {
       ConnectionCoordinator connectionCoordinator,
       RuntimeConfigStore runtimeConfig,
       ServerRegistry serverRegistry) {
+    return newCoordinator(
+        ui, mock(UserListStore.class), irc, connectionCoordinator, runtimeConfig, serverRegistry);
+  }
+
+  private static TargetCoordinator newCoordinator(
+      UiPort ui,
+      UserListStore userListStore,
+      IrcBackendClientService irc,
+      ConnectionCoordinator connectionCoordinator,
+      RuntimeConfigStore runtimeConfig,
+      ServerRegistry serverRegistry) {
     return new TargetCoordinator(
         ui,
-        mock(UserListStore.class),
+        userListStore,
         IrcTargetMembershipPort.from(irc),
         irc,
         serverRegistry,
