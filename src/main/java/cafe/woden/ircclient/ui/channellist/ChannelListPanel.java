@@ -1846,6 +1846,12 @@ public final class ChannelListPanel extends JPanel {
     button.getAccessibleContext().setAccessibleName(accessibleName);
   }
 
+  private static void repaintIfSized(JComponent component) {
+    if (component == null) return;
+    if (component.getWidth() <= 0 || component.getHeight() <= 0) return;
+    component.repaint();
+  }
+
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
   }
@@ -1915,7 +1921,7 @@ public final class ChannelListPanel extends JPanel {
   private void applyAlisActivityIcon() {
     runAlisButton.setIcon(runAlisActivityIcon);
     runAlisButton.setDisabledIcon(runAlisActivityIcon);
-    runAlisButton.repaint();
+    repaintIfSized(runAlisButton);
   }
 
   private void onAlisActivityTick() {
@@ -1924,7 +1930,7 @@ public final class ChannelListPanel extends JPanel {
       if (alisSpinnerAngleDeg >= 360) {
         alisSpinnerAngleDeg -= 360;
       }
-      runAlisButton.repaint();
+      repaintIfSized(runAlisButton);
       return;
     }
 
@@ -1940,7 +1946,7 @@ public final class ChannelListPanel extends JPanel {
           return;
         }
       }
-      runAlisButton.repaint();
+      repaintIfSized(runAlisButton);
       return;
     }
 
@@ -1959,7 +1965,7 @@ public final class ChannelListPanel extends JPanel {
     }
     runAlisButton.setIcon(runAlisDefaultIcon);
     runAlisButton.setDisabledIcon(runAlisDefaultDisabledIcon);
-    runAlisButton.repaint();
+    repaintIfSized(runAlisButton);
   }
 
   @Override

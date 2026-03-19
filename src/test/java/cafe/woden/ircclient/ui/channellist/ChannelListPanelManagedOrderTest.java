@@ -342,6 +342,27 @@ class ChannelListPanelManagedOrderTest {
     onEdt(() -> assertSame(defaultAlisIcon, runAlisButton.getIcon()));
   }
 
+  @Test
+  void repaintIfSizedSkipsZeroSizedButtons() throws Exception {
+    TrackingButton button = new TrackingButton();
+
+    onEdt(
+        () -> {
+          try {
+            int initialRepaintCount = button.repaintCount;
+            invokeStaticRepaintIfSized(button);
+            assertEquals(initialRepaintCount, button.repaintCount);
+
+            button.setSize(28, 28);
+            int sizedRepaintCount = button.repaintCount;
+            invokeStaticRepaintIfSized(button);
+            assertEquals(sizedRepaintCount + 1, button.repaintCount);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
   private static <T> T field(Object target, String name, Class<T> type) throws Exception {
     Field f = target.getClass().getDeclaredField(name);
     f.setAccessible(true);
@@ -415,6 +436,12 @@ class ChannelListPanelManagedOrderTest {
     method.invoke(target);
   }
 
+  private static void invokeStaticRepaintIfSized(JButton button) throws Exception {
+    Method method = ChannelListPanel.class.getDeclaredMethod("repaintIfSized", javax.swing.JComponent.class);
+    method.setAccessible(true);
+    method.invoke(null, button);
+  }
+
   private static Object newChannelDetailsDialogState(
       JDialog dialog, String serverId, String channel, ChannelListPanel.ChannelDetailsSource source)
       throws Exception {
@@ -461,5 +488,14 @@ class ChannelListPanelManagedOrderTest {
   @FunctionalInterface
   private interface ThrowingSupplier<T> {
     T get() throws Exception;
+  }
+
+  private static final class TrackingButton extends JButton {
+    private int repaintCount;
+
+    @Override
+    public void repaint() {
+      repaintCount++;
+    }
   }
 }
