@@ -1,0 +1,208 @@
+name: Manual Test Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Branch, tag, or SHA to build. Leave blank to use the Actions UI branch selector."
+        required: false
+        type: string
+      target:
+        description: "Artifact to build and attach to this workflow run"
+        required: true
+        type: choice
+        options:
+          - jar
+          - flatpak
+          - linux
+          - windows
+          - mac
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ inputs.target }}
+    runs-on: ${{ inputs.target == 'windows' && 'windows-latest' || inputs.target == 'mac' && 'macos-15' || 'ubuntu-latest' }}
+
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref != '' && inputs.source_ref || github.ref }}
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare build metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source_ref="${{ inputs.source_ref }}"
+          if [[ -z "$source_ref" ]]; then
+            source_ref="${GITHUB_REF_NAME}"
+          fi
+
+          ref_slug="$(printf '%s' "$source_ref" | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/^-+//; s/-+$//')"
+          if [[ -z "$ref_slug" ]]; then
+            ref_slug="detached"
+          fi
+          ref_slug="${ref_slug:0:40}"
+
+          short_sha="$(git rev-parse --short=8 HEAD)"
+          release_version="0.0.0"
+          build_label="${ref_slug}-${short_sha}-run${GITHUB_RUN_NUMBER}"
+
+          case "${{ inputs.target }}" in
+            jar)
+              artifact_name="ircafe-${build_label}-bootjar"
+              artifact_path="build/libs/ircafe-${release_version}.jar"
+              ;;
+            flatpak)
+              artifact_name="ircafe-${build_label}-linux-x64-flatpak"
+              artifact_path="ircafe-${build_label}-linux-x64.flatpak"
+              ;;
+            linux)
+              artifact_name="ircafe-${build_label}-linux-x64"
+              artifact_path="ircafe-${build_label}-linux-x64.tar.gz"
+              ;;
+            windows)
+              artifact_name="ircafe-${build_label}-windows-x64"
+              artifact_path="ircafe-${build_label}-windows-x64.zip"
+              ;;
+            mac)
+              artifact_name="ircafe-${build_label}-macos-arm64"
+              artifact_path="ircafe-${build_label}-macos-arm64.zip"
+              ;;
+            *)
+              echo "::error::Unsupported build target: ${{ inputs.target }}"
+              exit 1
+              ;;
+          esac
+
+          echo "SOURCE_REF=${source_ref}" >> "$GITHUB_ENV"
+          echo "REF_SLUG=${ref_slug}" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=${short_sha}" >> "$GITHUB_ENV"
+          echo "RELEASE_VERSION=${release_version}" >> "$GITHUB_ENV"
+          echo "BUILD_LABEL=${build_label}" >> "$GITHUB_ENV"
+          echo "ARTIFACT_NAME=${artifact_name}" >> "$GITHUB_ENV"
+          echo "ARTIFACT_PATH=${artifact_path}" >> "$GITHUB_ENV"
+
+      - name: Build bootJar
+        if: inputs.target == 'jar'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon clean bootJar -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
+          test -f "${ARTIFACT_PATH}"
+
+      - name: Build app-image with jpackage
+        if: inputs.target == 'linux' || inputs.target == 'windows' || inputs.target == 'mac'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon clean jpackage -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
+
+      - name: Verify terminal-notifier bundle (macOS)
+        if: inputs.target == 'mac'
+        shell: bash
+        run: |
+          set -euo pipefail
+          notifier_path="build/dist/IRCafe.app/Contents/Resources/terminal-notifier.app/Contents/MacOS/terminal-notifier"
+          if [[ ! -f "$notifier_path" ]]; then
+            echo "::error::Missing terminal-notifier binary at expected path: $notifier_path"
+            echo "Contents/Resources snapshot:"
+            find build/dist/IRCafe.app/Contents/Resources -maxdepth 4 -mindepth 1 -print || true
+            exit 1
+          fi
+
+      - name: Archive Linux app-image
+        if: inputs.target == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd build/dist
+          tar -czf "../../${ARTIFACT_PATH}" .
+
+      - name: Archive macOS app-image
+        if: inputs.target == 'mac'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd build/dist
+          ditto -c -k --sequesterRsrc --keepParent "IRCafe.app" "../../${ARTIFACT_PATH}"
+
+      - name: Archive Windows app-image
+        if: inputs.target == 'windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build\dist\* -DestinationPath $env:ARTIFACT_PATH
+
+      - name: Build Flatpak bundle
+        if: inputs.target == 'flatpak'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon clean jpackage generateFlatpakMetainfo -Pversion=${RELEASE_VERSION} --info --stacktrace -x test
+
+      - name: Install Flatpak tooling
+        if: inputs.target == 'flatpak'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak remotes --user
+          flatpak --version
+          flatpak-builder --version
+
+      - name: Package Flatpak bundle
+        if: inputs.target == 'flatpak'
+        shell: bash
+        run: |
+          set -euo pipefail
+          flatpak-builder \
+            --user \
+            --force-clean \
+            --repo=build/flatpak/repo \
+            --default-branch=stable \
+            --install-deps-from=flathub \
+            build/flatpak/workdir \
+            packaging/flatpak/cafe.woden.IRCafe.yml
+
+          flatpak build-bundle \
+            build/flatpak/repo \
+            "${ARTIFACT_PATH}" \
+            cafe.woden.IRCafe \
+            stable \
+            --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
+
+      - name: Upload selected artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          if-no-files-found: error
+          retention-days: 14
+          path: ${{ env.ARTIFACT_PATH }}
+
+      - name: Add run summary
+        shell: bash
+        run: |
+          {
+            echo "### Manual test build"
+            echo
+            echo "- Source ref: \`${SOURCE_REF}\`"
+            echo "- Commit: \`${SHORT_SHA}\`"
+            echo "- Target: \`${{ inputs.target }}\`"
+            echo "- Artifact: \`${ARTIFACT_NAME}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
