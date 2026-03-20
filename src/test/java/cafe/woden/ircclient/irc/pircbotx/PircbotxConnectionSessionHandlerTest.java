@@ -236,12 +236,7 @@ class PircbotxConnectionSessionHandlerTest {
       BouncerDiscoveryEventPort bouncerDiscoveryEvents) {
     PircbotxBouncerDiscoveryCoordinator bouncerDiscovery =
         new PircbotxBouncerDiscoveryCoordinator(
-            "libera",
-            conn,
-            false,
-            false,
-            bouncerBackends,
-            bouncerDiscoveryEvents);
+            "libera", conn, false, false, bouncerBackends, bouncerDiscoveryEvents);
     PircbotxChatHistoryBatchCollector chatHistoryBatches =
         new PircbotxChatHistoryBatchCollector("libera", events::add);
     PircbotxServerResponseEmitter serverResponses =

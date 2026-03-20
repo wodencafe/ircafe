@@ -42,7 +42,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 @InfrastructureLayer
-public class PircbotxIrcClientService implements IrcBackendClientService {
+public class PircbotxIrcClientService
+    implements IrcBackendClientService, IrcDisconnectWithSourcePort {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxIrcClientService.class);
   private static final DateTimeFormatter MARKREAD_TS_FMT =
@@ -235,26 +236,44 @@ public class PircbotxIrcClientService implements IrcBackendClientService {
 
   @Override
   public Completable disconnect(String serverId) {
-    return disconnect(serverId, null);
+    return disconnect(serverId, null, DisconnectRequestSource.USER_REQUEST);
   }
 
   @Override
   public Completable disconnect(String serverId, String reason) {
+    return disconnect(serverId, reason, DisconnectRequestSource.USER_REQUEST);
+  }
+
+  @Override
+  public Completable disconnect(String serverId, String reason, DisconnectRequestSource source) {
     return Completable.fromAction(
             () -> {
               PircbotxConnectionState c = conn(serverId);
+              DisconnectRequestSource requestSource =
+                  source == null ? DisconnectRequestSource.UNKNOWN : source;
+              boolean clearDiscoveredNetworks = requestSource.clearDiscoveredBouncerNetworks();
+              String renderedReason = Objects.toString(reason, "").trim();
+              boolean hasBot = c.botRef.get() != null;
+
+              log.info(
+                  "[{}] disconnect requested: source={}, reason={}, hasBot={}, clearDiscoveredBouncerNetworks={}",
+                  serverId,
+                  requestSource,
+                  renderedReason.isEmpty() ? "(default)" : renderedReason,
+                  hasBot,
+                  clearDiscoveredNetworks);
               serverIsupportState.clearServer(serverId);
               c.manualDisconnect.set(true);
               cancelReconnect(c);
               timers.stopHeartbeat(c);
               c.resetLagProbeState();
 
-              // If this server was acting as a bouncer origin, drop any discovered ephemeral
-              // networks.
-              for (String backendId : bouncerBackends.backendIds()) {
-                try {
-                  bouncerDiscoveryEvents.onOriginDisconnected(backendId, serverId);
-                } catch (Exception ignored) {
+              if (clearDiscoveredNetworks) {
+                for (String backendId : bouncerBackends.backendIds()) {
+                  try {
+                    bouncerDiscoveryEvents.onOriginDisconnected(backendId, serverId);
+                  } catch (Exception ignored) {
+                  }
                 }
               }
 

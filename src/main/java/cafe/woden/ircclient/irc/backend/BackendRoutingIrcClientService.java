@@ -2,7 +2,9 @@ package cafe.woden.ircclient.irc.backend;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.irc.DisconnectRequestSource;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcDisconnectWithSourcePort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
@@ -34,6 +36,7 @@ import org.springframework.stereotype.Service;
 @InfrastructureLayer
 public class BackendRoutingIrcClientService
     implements IrcClientService,
+        IrcDisconnectWithSourcePort,
         IrcHeartbeatMaintenanceService,
         IrcBackendAvailabilityPort,
         IrcBackendModePort,
@@ -156,6 +159,21 @@ public class BackendRoutingIrcClientService
     return routeActiveOrConfigured(serverId)
         .disconnect(serverId, reason)
         .doOnComplete(() -> clearActiveOwnership(sid));
+  }
+
+  @Override
+  public Completable disconnect(String serverId, String reason, DisconnectRequestSource source) {
+    String sid = normalizeServerId(serverId);
+    IrcBackendClientService delegate = routeActiveOrConfigured(serverId);
+    Completable disconnect;
+    if (delegate instanceof IrcDisconnectWithSourcePort sourceAware) {
+      disconnect =
+          sourceAware.disconnect(
+              serverId, reason, source == null ? DisconnectRequestSource.UNKNOWN : source);
+    } else {
+      disconnect = delegate.disconnect(serverId, reason);
+    }
+    return disconnect.doOnComplete(() -> clearActiveOwnership(sid));
   }
 
   @Override

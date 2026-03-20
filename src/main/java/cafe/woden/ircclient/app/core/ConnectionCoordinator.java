@@ -8,6 +8,7 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
+import cafe.woden.ircclient.irc.DisconnectRequestSource;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.backend.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
@@ -261,7 +262,7 @@ public class ConnectionCoordinator {
     Set<String> serverIds = serverRegistry.serverIds();
 
     for (String sid : serverIds) {
-      requestDisconnect(sid, reason, false);
+      requestDisconnect(sid, reason, false, DisconnectRequestSource.USER_REQUEST);
     }
   }
 
@@ -272,7 +273,7 @@ public class ConnectionCoordinator {
   public void disconnectOne(String serverId, String reason) {
     String sid = normalizedKnownServerId(serverId, "(disc)");
     if (sid == null) return;
-    requestDisconnect(sid, reason, true);
+    requestDisconnect(sid, reason, true, DisconnectRequestSource.USER_REQUEST);
   }
 
   public void reconnectAll() {
@@ -315,7 +316,9 @@ public class ConnectionCoordinator {
     updateConnectionUi();
 
     io.reactivex.rxjava3.core.Completable reconnect =
-        irc.disconnect(sid).onErrorComplete().andThen(irc.connect(sid));
+        irc.disconnect(sid, null, DisconnectRequestSource.RECONNECT)
+            .onErrorComplete()
+            .andThen(irc.connect(sid));
 
     disposables.add(
         reconnect
@@ -520,7 +523,11 @@ public class ConnectionCoordinator {
     if (refreshUiNow) updateConnectionUi();
   }
 
-  private void requestDisconnect(String sid, String reason, boolean announceWhenAlreadyOffline) {
+  private void requestDisconnect(
+      String sid,
+      String reason,
+      boolean announceWhenAlreadyOffline,
+      DisconnectRequestSource source) {
     String id = Objects.toString(sid, "").trim();
     if (id.isEmpty()) return;
 
@@ -544,7 +551,7 @@ public class ConnectionCoordinator {
     }
 
     disposables.add(
-        irc.disconnect(id, reason)
+        irc.disconnect(id, reason, source)
             .observeOn(EDT_SCHEDULER)
             .subscribe(
                 () -> {},
@@ -601,7 +608,7 @@ public class ConnectionCoordinator {
         ui.appendStatus(status, "(servers)", "Server removed from configuration; disconnecting…");
         setDesiredOnline(sid, false);
         disposables.add(
-            irc.disconnect(sid)
+            irc.disconnect(sid, null, DisconnectRequestSource.SERVER_REMOVED)
                 .observeOn(EDT_SCHEDULER)
                 .subscribe(
                     () -> {}, err -> ui.appendError(status, "(disc-error)", String.valueOf(err))));
@@ -649,7 +656,7 @@ public class ConnectionCoordinator {
         if (!isDesiredOnline(id) && previous == ConnectionState.DISCONNECTING) {
           ui.ensureTargetExists(status);
           ui.appendStatus(status, "(conn)", "Connection attempt suppressed (server set offline)");
-          requestDisconnect(id, null, false);
+          requestDisconnect(id, null, false, DisconnectRequestSource.USER_REQUEST);
           return ConnectivityChange.CHANGED;
         }
         if (!isDesiredOnline(id)) {
@@ -680,7 +687,7 @@ public class ConnectionCoordinator {
         if (!isDesiredOnline(id) && previous == ConnectionState.DISCONNECTING) {
           ui.ensureTargetExists(status);
           ui.appendStatus(status, "(conn)", "Connected while marked offline; disconnecting…");
-          requestDisconnect(id, null, false);
+          requestDisconnect(id, null, false, DisconnectRequestSource.USER_REQUEST);
           return ConnectivityChange.CHANGED;
         }
         if (!isDesiredOnline(id)) {
@@ -764,7 +771,7 @@ public class ConnectionCoordinator {
         if (!isDesiredOnline(id) && previous == ConnectionState.DISCONNECTING) {
           ui.ensureTargetExists(status);
           ui.appendStatus(status, "(conn)", "Reconnect suppressed (server set offline)");
-          requestDisconnect(id, null, false);
+          requestDisconnect(id, null, false, DisconnectRequestSource.USER_REQUEST);
           return ConnectivityChange.CHANGED;
         }
         if (!isDesiredOnline(id)) {

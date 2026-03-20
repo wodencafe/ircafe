@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
@@ -97,5 +98,57 @@ class PircbotxIrcClientServiceDisconnectTest {
         .onOriginDisconnected(eq(ZncBouncerNetworkMappingStrategy.BACKEND_ID), eq("libera"));
     verify(bouncerDiscoveryEvents)
         .onOriginDisconnected(eq(GenericBouncerNetworkMappingStrategy.BACKEND_ID), eq("libera"));
+  }
+
+  @Test
+  void reconnectDisconnectDoesNotClearBouncerOriginNetworks() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    PircbotxInputParserHookInstaller inputParserHookInstaller =
+        mock(PircbotxInputParserHookInstaller.class);
+    PircbotxBotFactory botFactory = mock(PircbotxBotFactory.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    Ircv3StsPolicyService stsPolicies = mock(Ircv3StsPolicyService.class);
+    BouncerBackendRegistry bouncerBackends = mock(BouncerBackendRegistry.class);
+    BouncerDiscoveryEventPort bouncerDiscoveryEvents = mock(BouncerDiscoveryEventPort.class);
+    PircbotxConnectionTimersRx timers = mock(PircbotxConnectionTimersRx.class);
+    ServerIsupportState serverIsupportState = new ServerIsupportState();
+    PircbotxBridgeListenerFactory bridgeListenerFactory =
+        new PircbotxBridgeListenerFactory(
+            bouncerBackends,
+            bouncerDiscoveryEvents,
+            new NoOpPlaybackCursorProvider(),
+            serverIsupportState,
+            new SojuProperties(null, null),
+            new ZncProperties(null, null));
+
+    PircbotxIrcClientService service =
+        new PircbotxIrcClientService(
+            new IrcProperties(null, List.of()),
+            serverCatalog,
+            inputParserHookInstaller,
+            botFactory,
+            bridgeListenerFactory,
+            runtimeConfig,
+            stsPolicies,
+            bouncerBackends,
+            bouncerDiscoveryEvents,
+            timers,
+            serverIsupportState);
+
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+
+    service.disconnect("libera", null, DisconnectRequestSource.RECONNECT).blockingAwait();
+
+    events.awaitCount(1);
+    events.assertValueCount(1);
+    ServerIrcEvent emitted = events.values().getFirst();
+    assertEquals("libera", emitted.serverId());
+    IrcEvent.Disconnected disconnected =
+        assertInstanceOf(IrcEvent.Disconnected.class, emitted.event());
+    assertEquals("Client requested disconnect", disconnected.reason());
+
+    verify(timers).cancelReconnect(any(PircbotxConnectionState.class));
+    verify(timers).stopHeartbeat(any(PircbotxConnectionState.class));
+    verifyNoInteractions(bouncerDiscoveryEvents);
   }
 }

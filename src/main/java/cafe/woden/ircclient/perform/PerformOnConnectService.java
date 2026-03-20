@@ -5,7 +5,9 @@ import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.irc.DisconnectRequestSource;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcDisconnectWithSourcePort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
@@ -270,6 +272,9 @@ public class PerformOnConnectService {
 
       case ParsedInput.Quit cmd -> {
         String reason = Objects.toString(cmd.reason(), "").trim();
+        if (irc instanceof IrcDisconnectWithSourcePort sourceAware) {
+          yield sourceAware.disconnect(serverId, reason, DisconnectRequestSource.AUTOMATION);
+        }
         yield irc.disconnect(serverId, reason);
       }
 

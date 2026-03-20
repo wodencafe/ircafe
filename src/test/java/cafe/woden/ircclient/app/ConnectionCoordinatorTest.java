@@ -166,7 +166,7 @@ class ConnectionCoordinatorTest {
                 server("hybrid", "irc.example.net", 6697, true, IrcProperties.Server.Backend.IRC)));
     when(serverCatalog.containsId("hybrid")).thenReturn(true);
     when(irc.connect("hybrid")).thenReturn(Completable.complete());
-    when(irc.disconnect("hybrid")).thenReturn(Completable.complete());
+    when(irc.disconnect("hybrid", null)).thenReturn(Completable.complete());
     when(runtimeConfig.readPrivateMessageTargets("hybrid")).thenReturn(List.of());
     when(runtimeConfig.readKnownChannels("hybrid")).thenReturn(List.of());
 
@@ -194,7 +194,7 @@ class ConnectionCoordinatorTest {
                 IrcProperties.Server.Backend.QUASSEL_CORE)),
         null);
 
-    verify(irc, times(1)).disconnect("hybrid");
+    verify(irc, times(1)).disconnect("hybrid", null);
     verify(irc, times(1)).connect("hybrid");
   }
 
