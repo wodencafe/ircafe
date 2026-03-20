@@ -51,8 +51,10 @@ import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
@@ -223,8 +225,7 @@ public class IrcMediator implements MediatorControlPort {
 
   private void bindLabeledResponseTimeoutTicker() {
     disposables.add(
-        Flowable.interval(5, TimeUnit.SECONDS)
-            .observeOn(AppSchedulers.edt())
+        timeoutMaintenanceTicks(Schedulers.computation(), AppSchedulers.edt())
             .subscribe(
                 tick -> {
                   handleLabeledRequestTimeouts();
@@ -235,6 +236,15 @@ public class IrcMediator implements MediatorControlPort {
                         targetCoordinator.safeStatusTarget(),
                         "(label-timeout)",
                         String.valueOf(err))));
+  }
+
+  static Flowable<Long> timeoutMaintenanceTicks(
+      Scheduler intervalScheduler, Scheduler observeScheduler) {
+    Objects.requireNonNull(intervalScheduler, "intervalScheduler");
+    Objects.requireNonNull(observeScheduler, "observeScheduler");
+    return Flowable.interval(5, 5, TimeUnit.SECONDS, intervalScheduler)
+        .onBackpressureLatest()
+        .observeOn(observeScheduler);
   }
 
   private void bindIrcv3CapabilityToggleSubscriptions() {
