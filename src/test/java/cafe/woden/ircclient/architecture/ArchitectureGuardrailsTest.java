@@ -612,6 +612,46 @@ class ArchitectureGuardrailsTest {
               "ui.servers should persist startup auto-connect state via config::api ports, not RuntimeConfigStore directly");
 
   @ArchTest
+  static final ArchRule ui_filter_should_not_depend_on_runtime_config_store_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui.filter..")
+          .should()
+          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+          .because(
+              "ui.filter should persist local transcript filter settings via config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule ui_nickcolors_should_not_depend_on_runtime_config_store_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui.nickcolors..")
+          .should()
+          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+          .because(
+              "ui.nickcolors should persist per-nick override settings via config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule ui_settings_bus_should_not_depend_on_runtime_config_store_directly =
+      noClasses()
+          .that()
+          .haveFullyQualifiedName("cafe.woden.ircclient.ui.settings.UiSettingsBus")
+          .should()
+          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+          .because(
+              "UiSettingsBus should derive persisted UI defaults through config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule theme_selection_dialog_should_not_depend_on_runtime_config_store_directly =
+      noClasses()
+          .that()
+          .haveFullyQualifiedName("cafe.woden.ircclient.ui.settings.ThemeSelectionDialog")
+          .should()
+          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+          .because(
+              "ThemeSelectionDialog should persist theme settings through config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
   static final ArchRule ui_ignore_should_not_depend_on_app_internal_or_irc_packages =
       noClasses()
           .that()

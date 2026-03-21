@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.settings;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
@@ -56,7 +56,7 @@ public class ThemeSelectionDialog {
 
   private final ThemeManager themeManager;
   private final UiSettingsBus settingsBus;
-  private final RuntimeConfigStore runtimeConfig;
+  private final UiSettingsRuntimeConfigPort runtimeConfig;
 
   private JDialog dialog;
   private JList<ThemeManager.ThemeOption> themeList;
@@ -68,7 +68,9 @@ public class ThemeSelectionDialog {
   private String pendingPreviewThemeId;
 
   public ThemeSelectionDialog(
-      ThemeManager themeManager, UiSettingsBus settingsBus, RuntimeConfigStore runtimeConfig) {
+      ThemeManager themeManager,
+      UiSettingsBus settingsBus,
+      UiSettingsRuntimeConfigPort runtimeConfig) {
     this.themeManager = themeManager;
     this.settingsBus = settingsBus;
     this.runtimeConfig = runtimeConfig;

@@ -5,12 +5,14 @@ import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.FilterSettingsConfigPort;
 import cafe.woden.ircclient.config.api.IgnoreRulesConfigPort;
 import cafe.woden.ircclient.config.api.InterceptorConfigPort;
 import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
 import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
 import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
+import cafe.woden.ircclient.config.api.NickColorOverridesConfigPort;
 import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
@@ -55,11 +57,13 @@ public class RuntimeConfigStore
         ConnectionRuntimeConfigPort,
         CtcpReplyRuntimeConfigPort,
         DiagnosticsRuntimeConfigPort,
+        FilterSettingsConfigPort,
         IgnoreRulesConfigPort,
         InterceptorConfigPort,
         Ircv3StsPolicyConfigPort,
         IrcSessionRuntimeConfigPort,
         MonitorRosterConfigPort,
+        NickColorOverridesConfigPort,
         ServerAutoConnectRuntimeConfigPort,
         UiShellRuntimeConfigPort,
         UiSettingsRuntimeConfigPort,

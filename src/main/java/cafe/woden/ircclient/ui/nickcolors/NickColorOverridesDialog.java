@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.nickcolors;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.NickColorOverridesConfigPort;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
 import cafe.woden.ircclient.ui.chat.NickColorService;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
@@ -47,14 +47,14 @@ import org.springframework.stereotype.Component;
 public class NickColorOverridesDialog {
 
   private final NickColorService nickColors;
-  private final RuntimeConfigStore runtimeConfig;
+  private final NickColorOverridesConfigPort runtimeConfig;
   private final ChatTranscriptStore transcripts;
 
   private JDialog dialog;
 
   public NickColorOverridesDialog(
       NickColorService nickColors,
-      RuntimeConfigStore runtimeConfig,
+      NickColorOverridesConfigPort runtimeConfig,
       ChatTranscriptStore transcripts) {
     this.nickColors = nickColors;
     this.runtimeConfig = runtimeConfig;

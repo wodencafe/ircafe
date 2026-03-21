@@ -7,6 +7,14 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public interface UiSettingsRuntimeConfigPort {
 
+  boolean runtimeConfigFileExistedOnStartup();
+
+  Optional<Boolean> readTrayCloseToTrayIfPresent();
+
+  void rememberTrayCloseToTray(boolean enabled);
+
+  boolean readChatSmoothWheelScrollingEnabled(boolean defaultValue);
+
   void rememberUiSettings(String theme, String chatFontFamily, int chatFontSize);
 
   Optional<String> readStartupThemePending();
