@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui.servertree.composition;
 
 import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
 import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
@@ -258,14 +258,14 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
   }
 
   private static boolean readServerAutoConnectOnStart(
-      RuntimeConfigStore runtimeConfig, String serverId, boolean defaultValue) {
+      ServerAutoConnectRuntimeConfigPort runtimeConfig, String serverId, boolean defaultValue) {
     return runtimeConfig == null
         ? defaultValue
         : runtimeConfig.readServerAutoConnectOnStart(serverId, defaultValue);
   }
 
   private static void rememberServerAutoConnectOnStart(
-      RuntimeConfigStore runtimeConfig, String serverId, boolean enabled) {
+      ServerAutoConnectRuntimeConfigPort runtimeConfig, String serverId, boolean enabled) {
     if (runtimeConfig == null) return;
     runtimeConfig.rememberServerAutoConnectOnStart(serverId, enabled);
   }
@@ -465,7 +465,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerTreeInterceptorActions interceptorActions,
       ServerDialogs serverDialogs,
       Component ownerComponent,
-      RuntimeConfigStore runtimeConfig,
+      ServerAutoConnectRuntimeConfigPort runtimeConfig,
       ServerTreeNodeBadgeUpdater nodeBadgeUpdater,
       ServerTreeBouncerDetachPolicy bouncerDetachPolicy,
       Predicate<TargetRef> isChannelDisconnected,

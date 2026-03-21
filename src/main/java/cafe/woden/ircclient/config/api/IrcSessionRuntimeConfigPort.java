@@ -13,6 +13,10 @@ public interface IrcSessionRuntimeConfigPort {
 
   void forgetJoinedChannel(String serverId, String channel);
 
+  void rememberPrivateMessageTarget(String serverId, String nick);
+
+  void forgetPrivateMessageTarget(String serverId, String nick);
+
   List<String> readJoinedChannels(String serverId);
 
   void rememberIrcv3CapabilityEnabled(String capability, boolean enabled);

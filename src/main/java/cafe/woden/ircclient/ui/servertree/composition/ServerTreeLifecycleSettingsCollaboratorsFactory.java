@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.composition;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
@@ -173,7 +174,7 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
       ServerTreeNetworkGroupManager networkGroupManager,
       UiSettingsBus settingsBus,
       JfrRuntimeEventsService jfrRuntimeEventsService,
-      RuntimeConfigStore runtimeConfig,
+      UiSettingsRuntimeConfigPort runtimeConfig,
       BooleanSupplier typingIndicatorsTreeEnabled,
       Consumer<Boolean> setTypingIndicatorsTreeEnabled,
       Runnable clearTypingIndicatorsIfReady,

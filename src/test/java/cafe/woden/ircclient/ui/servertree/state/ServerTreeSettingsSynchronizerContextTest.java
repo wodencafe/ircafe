@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTypingIndicatorStyle;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -21,7 +21,7 @@ class ServerTreeSettingsSynchronizerContextTest {
   @Test
   void contextDelegatesSettingsSynchronizerOperations() {
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    UiSettingsRuntimeConfigPort runtimeConfig = mock(UiSettingsRuntimeConfigPort.class);
     JfrRuntimeEventsService jfrRuntimeEventsService = mock(JfrRuntimeEventsService.class);
     AtomicBoolean typingEnabled = new AtomicBoolean(true);
     AtomicBoolean typingCleared = new AtomicBoolean(false);

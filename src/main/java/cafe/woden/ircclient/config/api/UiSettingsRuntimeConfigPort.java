@@ -17,6 +17,8 @@ public interface UiSettingsRuntimeConfigPort {
 
   boolean readChatHistoryLockViewportDuringLoadOlder(boolean defaultValue);
 
+  int readServerTreeUnreadBadgeScalePercent(int defaultValue);
+
   void rememberUiSettings(String theme, String chatFontFamily, int chatFontSize);
 
   Optional<String> readStartupThemePending();

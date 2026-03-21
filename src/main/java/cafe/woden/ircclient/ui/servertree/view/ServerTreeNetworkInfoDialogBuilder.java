@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.view;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityCatalog;
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.state.ServerRuntimeMetadata;
@@ -117,10 +117,11 @@ public final class ServerTreeNetworkInfoDialogBuilder {
           new CapabilityFeatureDefinition("Typing", List.of("typing"), List.of()),
           new CapabilityFeatureDefinition("Read markers", List.of("draft/read-marker"), List.of()));
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final IrcSessionRuntimeConfigPort runtimeConfig;
   private final Context context;
 
-  public ServerTreeNetworkInfoDialogBuilder(RuntimeConfigStore runtimeConfig, Context context) {
+  public ServerTreeNetworkInfoDialogBuilder(
+      IrcSessionRuntimeConfigPort runtimeConfig, Context context) {
     this.runtimeConfig = runtimeConfig;
     this.context = Objects.requireNonNull(context, "context");
   }

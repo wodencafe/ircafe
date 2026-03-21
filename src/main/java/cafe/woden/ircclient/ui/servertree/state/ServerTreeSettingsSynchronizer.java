@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.state;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeTypingIndicatorStyle;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
@@ -20,7 +20,7 @@ public final class ServerTreeSettingsSynchronizer {
 
     JfrRuntimeEventsService jfrRuntimeEventsService();
 
-    RuntimeConfigStore runtimeConfig();
+    UiSettingsRuntimeConfigPort runtimeConfig();
 
     boolean typingIndicatorsTreeEnabled();
 
@@ -46,7 +46,7 @@ public final class ServerTreeSettingsSynchronizer {
   public static Context context(
       UiSettingsBus settingsBus,
       JfrRuntimeEventsService jfrRuntimeEventsService,
-      RuntimeConfigStore runtimeConfig,
+      UiSettingsRuntimeConfigPort runtimeConfig,
       Supplier<Boolean> typingIndicatorsTreeEnabled,
       Consumer<Boolean> setTypingIndicatorsTreeEnabled,
       Runnable clearTypingIndicatorsFromTree,
@@ -80,7 +80,7 @@ public final class ServerTreeSettingsSynchronizer {
       }
 
       @Override
-      public RuntimeConfigStore runtimeConfig() {
+      public UiSettingsRuntimeConfigPort runtimeConfig() {
         return runtimeConfig;
       }
 
@@ -247,7 +247,7 @@ public final class ServerTreeSettingsSynchronizer {
   private void syncUnreadBadgeScaleFromRuntimeConfig() {
     int next = defaultBadgeScalePercent;
     try {
-      RuntimeConfigStore runtimeConfig = context.runtimeConfig();
+      UiSettingsRuntimeConfigPort runtimeConfig = context.runtimeConfig();
       if (runtimeConfig != null) {
         next = runtimeConfig.readServerTreeUnreadBadgeScalePercent(defaultBadgeScalePercent);
       }
