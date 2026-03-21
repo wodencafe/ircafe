@@ -2,8 +2,8 @@ package cafe.woden.ircclient.ui.shell;
 
 import cafe.woden.ircclient.app.ApplicationShutdownCoordinator;
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.diagnostics.RuntimeJfrService;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
@@ -142,7 +142,7 @@ public class AppMenuBar extends JMenuBar {
 
   private final UiProperties uiProps;
   private final UiSettingsBus settingsBus;
-  private final RuntimeConfigStore runtimeConfig;
+  private final UiShellRuntimeConfigPort runtimeConfig;
   private final TrayNotificationService trayNotificationService;
   private final PushyNotificationService pushyNotificationService;
   private final NotificationSoundService notificationSoundService;
@@ -184,7 +184,7 @@ public class AppMenuBar extends JMenuBar {
       ThemeSelectionDialog themeSelectionDialog,
       ThemeManager themeManager,
       UiSettingsBus settingsBus,
-      RuntimeConfigStore runtimeConfig,
+      UiShellRuntimeConfigPort runtimeConfig,
       TrayNotificationService trayNotificationService,
       PushyNotificationService pushyNotificationService,
       NotificationSoundService notificationSoundService,
@@ -2383,7 +2383,7 @@ public class AppMenuBar extends JMenuBar {
       String themeId,
       ThemeManager themeManager,
       UiSettingsBus settingsBus,
-      RuntimeConfigStore runtimeConfig) {
+      UiShellRuntimeConfigPort runtimeConfig) {
     String next = ThemeIdUtils.normalizeThemeId(themeId);
     UiSettings cur = settingsBus != null ? settingsBus.get() : null;
     if (cur == null) return;

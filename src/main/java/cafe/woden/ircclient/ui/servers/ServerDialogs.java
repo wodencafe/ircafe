@@ -2,8 +2,8 @@ package cafe.woden.ircclient.ui.servers;
 
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
 import java.awt.Window;
 import java.util.Objects;
 import java.util.Optional;
@@ -19,12 +19,12 @@ import org.springframework.stereotype.Component;
 public class ServerDialogs {
   private final ServerRegistry serverRegistry;
   private final EphemeralServerRegistry ephemeralServers;
-  private final RuntimeConfigStore runtimeConfig;
+  private final ServerAutoConnectRuntimeConfigPort runtimeConfig;
 
   public ServerDialogs(
       ServerRegistry serverRegistry,
       EphemeralServerRegistry ephemeralServers,
-      RuntimeConfigStore runtimeConfig) {
+      ServerAutoConnectRuntimeConfigPort runtimeConfig) {
     this.serverRegistry = serverRegistry;
     this.ephemeralServers = ephemeralServers;
     this.runtimeConfig = runtimeConfig;

@@ -582,6 +582,36 @@ class ArchitectureGuardrailsTest {
               "logging support should resolve runtime paths via config::api ports, not RuntimeConfigStore directly");
 
   @ArchTest
+  static final ArchRule ui_shell_should_not_depend_on_runtime_config_store_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui.shell..")
+          .should()
+          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+          .because(
+              "ui.shell should persist UI chrome state via config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule ui_tray_should_not_depend_on_runtime_config_store_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui.tray..")
+          .should()
+          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+          .because(
+              "ui.tray should persist tray state via config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule ui_servers_should_not_depend_on_runtime_config_store_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui.servers..")
+          .should()
+          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+          .because(
+              "ui.servers should persist startup auto-connect state via config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
   static final ArchRule ui_ignore_should_not_depend_on_app_internal_or_irc_packages =
       noClasses()
           .that()

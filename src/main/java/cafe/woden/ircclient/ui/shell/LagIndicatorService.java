@@ -3,7 +3,7 @@ package cafe.woden.ircclient.ui.shell;
 import static com.google.common.base.Verify.verify;
 
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.irc.port.IrcLagProbePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.util.VirtualThreads;
@@ -40,7 +40,7 @@ public class LagIndicatorService {
   private static final long PROBE_RESULT_WAIT_MS = 750L;
   private static final long PROBE_RESULT_POLL_MS = 50L;
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final UiShellRuntimeConfigPort runtimeConfig;
   private final StatusBar statusBar;
   private final ActiveTargetPort activeTargetPort;
   private final IrcLagProbePort lagProbePort;
@@ -53,7 +53,7 @@ public class LagIndicatorService {
   private final Map<String, Long> lastFallbackProbeAtMsByServer = new ConcurrentHashMap<>();
 
   public LagIndicatorService(
-      RuntimeConfigStore runtimeConfig,
+      UiShellRuntimeConfigPort runtimeConfig,
       StatusBar statusBar,
       ActiveTargetPort activeTargetPort,
       @Qualifier("ircLagProbePort") IrcLagProbePort lagProbePort) {

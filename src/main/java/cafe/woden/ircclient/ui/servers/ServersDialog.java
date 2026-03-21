@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui.servers;
 
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
 import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
 import com.formdev.flatlaf.FlatClientProperties;
@@ -32,7 +32,7 @@ public class ServersDialog extends JDialog {
   private static final Logger log = LoggerFactory.getLogger(ServersDialog.class);
 
   private final ServerRegistry serverRegistry;
-  private final RuntimeConfigStore runtimeConfig;
+  private final ServerAutoConnectRuntimeConfigPort runtimeConfig;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final DefaultListModel<IrcProperties.Server> model = new DefaultListModel<>();
@@ -44,7 +44,9 @@ public class ServersDialog extends JDialog {
   private final JButton closeBtn = new JButton("Close");
 
   public ServersDialog(
-      Window parent, ServerRegistry serverRegistry, RuntimeConfigStore runtimeConfig) {
+      Window parent,
+      ServerRegistry serverRegistry,
+      ServerAutoConnectRuntimeConfigPort runtimeConfig) {
     super(parent, "Servers", ModalityType.APPLICATION_MODAL);
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");

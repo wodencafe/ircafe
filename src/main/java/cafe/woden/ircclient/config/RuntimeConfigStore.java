@@ -11,7 +11,9 @@ import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
 import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
 import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
+import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
 import cafe.woden.ircclient.model.FilterRule;
 import cafe.woden.ircclient.model.FilterScopeOverride;
@@ -58,6 +60,8 @@ public class RuntimeConfigStore
         Ircv3StsPolicyConfigPort,
         IrcSessionRuntimeConfigPort,
         MonitorRosterConfigPort,
+        ServerAutoConnectRuntimeConfigPort,
+        UiShellRuntimeConfigPort,
         UiSettingsRuntimeConfigPort,
         UserCommandAliasesConfigPort {
 

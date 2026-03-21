@@ -40,7 +40,9 @@ import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
 import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
+import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
@@ -177,6 +179,8 @@ class SpringModulithIncrementalAdoptionTest {
         IrcSessionRuntimeConfigPort.class,
         MonitorRosterConfigPort.class,
         RuntimeConfigPathPort.class,
+        ServerAutoConnectRuntimeConfigPort.class,
+        UiShellRuntimeConfigPort.class,
         UiSettingsRuntimeConfigPort.class,
         UserCommandAliasesConfigPort.class);
 
@@ -333,6 +337,7 @@ class SpringModulithIncrementalAdoptionTest {
             "app::outbound",
             "bouncer",
             "config",
+            "config::api",
             "dcc",
             "diagnostics",
             "ignore",

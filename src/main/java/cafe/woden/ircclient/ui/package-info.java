@@ -7,6 +7,7 @@
       "app::outbound",
       "bouncer",
       "config",
+      "config::api",
       "dcc",
       "diagnostics",
       "ignore",
