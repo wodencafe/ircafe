@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.interaction;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
@@ -29,10 +30,8 @@ public final class ServerTreeInteractionSetupCoordinator {
       Predicate<DefaultMutableTreeNode> isChannelListLeafNode,
       Function<DefaultMutableTreeNode, String> owningServerIdForNode,
       Function<String, ServerNodes> serverNodes,
-      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeRootSiblingNode>
-          rootSiblingNodeKindForNode,
-      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeBuiltInLayoutNode>
-          builtInLayoutNodeKindForNode,
+      Function<DefaultMutableTreeNode, ServerTreeRootSiblingNode> rootSiblingNodeKindForNode,
+      Function<DefaultMutableTreeNode, ServerTreeBuiltInLayoutNode> builtInLayoutNodeKindForNode,
       BiFunction<ServerNodes, Integer, Integer> rootBuiltInInsertIndex,
       Consumer<String> persistOrderAndResortAfterManualMove,
       Consumer<String> persistBuiltInLayoutFromTree,

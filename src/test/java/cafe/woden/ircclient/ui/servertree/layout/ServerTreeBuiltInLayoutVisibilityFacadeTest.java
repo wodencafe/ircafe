@@ -4,7 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
@@ -26,23 +29,23 @@ class ServerTreeBuiltInLayoutVisibilityFacadeTest {
         newFacade(new HashSet<>(), new AtomicInteger());
 
     assertEquals(
-        RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR,
+        ServerTreeBuiltInLayoutNode.MONITOR,
         facade.builtInLayoutNodeKindForNode(new DefaultMutableTreeNode("monitor")));
     assertEquals(
-        RuntimeConfigStore.ServerTreeBuiltInLayoutNode.INTERCEPTORS,
+        ServerTreeBuiltInLayoutNode.INTERCEPTORS,
         facade.builtInLayoutNodeKindForNode(new DefaultMutableTreeNode("interceptors")));
     assertEquals(
-        RuntimeConfigStore.ServerTreeBuiltInLayoutNode.LOG_VIEWER,
+        ServerTreeBuiltInLayoutNode.LOG_VIEWER,
         facade.builtInLayoutNodeKindForNode(new DefaultMutableTreeNode(TargetRef.logViewer("s"))));
 
     assertEquals(
-        RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER,
+        ServerTreeRootSiblingNode.OTHER,
         facade.rootSiblingNodeKindForNode(new DefaultMutableTreeNode("other")));
     assertEquals(
-        RuntimeConfigStore.ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
+        ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
         facade.rootSiblingNodeKindForNode(new DefaultMutableTreeNode("pm")));
     assertEquals(
-        RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST,
+        ServerTreeRootSiblingNode.CHANNEL_LIST,
         facade.rootSiblingNodeKindForNode(new DefaultMutableTreeNode(TargetRef.channelList("s"))));
   }
 
@@ -64,27 +67,20 @@ class ServerTreeBuiltInLayoutVisibilityFacadeTest {
     ServerTreeBuiltInLayoutVisibilityFacade facade =
         newFacade(new HashSet<>(), new AtomicInteger());
 
-    RuntimeConfigStore.ServerTreeBuiltInLayout layout =
-        new RuntimeConfigStore.ServerTreeBuiltInLayout(
-            List.of(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER),
-            List.of(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.LOG_VIEWER));
-    RuntimeConfigStore.ServerTreeRootSiblingOrder order =
-        new RuntimeConfigStore.ServerTreeRootSiblingOrder(
-            List.of(
-                RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER,
-                RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST));
+    ServerTreeBuiltInLayout layout =
+        new ServerTreeBuiltInLayout(
+            List.of(ServerTreeBuiltInLayoutNode.SERVER),
+            List.of(ServerTreeBuiltInLayoutNode.LOG_VIEWER));
+    ServerTreeRootSiblingOrder order =
+        new ServerTreeRootSiblingOrder(
+            List.of(ServerTreeRootSiblingNode.OTHER, ServerTreeRootSiblingNode.CHANNEL_LIST));
 
     facade.rememberBuiltInLayout("libera", layout);
     facade.rememberRootSiblingOrder("libera", order);
 
     assertTrue(
-        facade
-            .builtInLayout("libera")
-            .rootOrder()
-            .contains(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER));
-    assertEquals(
-        RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER,
-        facade.rootSiblingOrder("libera").order().get(0));
+        facade.builtInLayout("libera").rootOrder().contains(ServerTreeBuiltInLayoutNode.SERVER));
+    assertEquals(ServerTreeRootSiblingNode.OTHER, facade.rootSiblingOrder("libera").order().get(0));
   }
 
   @Test
@@ -129,36 +125,33 @@ class ServerTreeBuiltInLayoutVisibilityFacadeTest {
         new ServerTreeLayoutPersistenceCoordinator(
             new ServerTreeLayoutPersistenceCoordinator.Context() {
               @Override
-              public RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
+              public ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
                   DefaultMutableTreeNode node) {
                 return null;
               }
 
               @Override
-              public RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
+              public ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
                   DefaultMutableTreeNode node) {
                 return null;
               }
 
               @Override
-              public RuntimeConfigStore.ServerTreeRootSiblingOrder currentRootSiblingOrder(
-                  String serverId) {
-                return RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults();
+              public ServerTreeRootSiblingOrder currentRootSiblingOrder(String serverId) {
+                return ServerTreeRootSiblingOrder.defaults();
               }
 
               @Override
-              public RuntimeConfigStore.ServerTreeBuiltInLayout currentBuiltInLayout(
-                  String serverId) {
-                return RuntimeConfigStore.ServerTreeBuiltInLayout.defaults();
+              public ServerTreeBuiltInLayout currentBuiltInLayout(String serverId) {
+                return ServerTreeBuiltInLayout.defaults();
               }
 
               @Override
               public void persistRootSiblingOrder(
-                  String serverId, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {}
+                  String serverId, ServerTreeRootSiblingOrder order) {}
 
               @Override
-              public void persistBuiltInLayout(
-                  String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {}
+              public void persistBuiltInLayout(String serverId, ServerTreeBuiltInLayout layout) {}
             });
     Map<String, ServerNodes> nodesByServer = new HashMap<>();
     Map<TargetRef, DefaultMutableTreeNode> leaves = new HashMap<>();
@@ -188,15 +181,15 @@ class ServerTreeBuiltInLayoutVisibilityFacadeTest {
               }
 
               @Override
-              public RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
+              public ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
                   DefaultMutableTreeNode node) {
                 if (node == null) return null;
                 Object userObject = node.getUserObject();
                 if ("other".equals(userObject)) {
-                  return RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER;
+                  return ServerTreeRootSiblingNode.OTHER;
                 }
                 if ("pm".equals(userObject)) {
-                  return RuntimeConfigStore.ServerTreeRootSiblingNode.PRIVATE_MESSAGES;
+                  return ServerTreeRootSiblingNode.PRIVATE_MESSAGES;
                 }
                 return null;
               }

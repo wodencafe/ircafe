@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.layout;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -13,31 +16,26 @@ import javax.swing.tree.DefaultMutableTreeNode;
 public final class ServerTreeLayoutPersistenceCoordinator {
 
   public interface Context {
-    RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
-        DefaultMutableTreeNode node);
+    ServerTreeRootSiblingNode rootSiblingNodeKindForNode(DefaultMutableTreeNode node);
 
-    RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
-        DefaultMutableTreeNode node);
+    ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(DefaultMutableTreeNode node);
 
-    RuntimeConfigStore.ServerTreeRootSiblingOrder currentRootSiblingOrder(String serverId);
+    ServerTreeRootSiblingOrder currentRootSiblingOrder(String serverId);
 
-    RuntimeConfigStore.ServerTreeBuiltInLayout currentBuiltInLayout(String serverId);
+    ServerTreeBuiltInLayout currentBuiltInLayout(String serverId);
 
-    void persistRootSiblingOrder(
-        String serverId, RuntimeConfigStore.ServerTreeRootSiblingOrder order);
+    void persistRootSiblingOrder(String serverId, ServerTreeRootSiblingOrder order);
 
-    void persistBuiltInLayout(String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout);
+    void persistBuiltInLayout(String serverId, ServerTreeBuiltInLayout layout);
   }
 
   public static Context context(
-      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeRootSiblingNode>
-          rootSiblingNodeKindForNode,
-      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeBuiltInLayoutNode>
-          builtInLayoutNodeKindForNode,
-      Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> currentRootSiblingOrder,
-      Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> currentBuiltInLayout,
-      BiConsumer<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> persistRootSiblingOrder,
-      BiConsumer<String, RuntimeConfigStore.ServerTreeBuiltInLayout> persistBuiltInLayout) {
+      Function<DefaultMutableTreeNode, ServerTreeRootSiblingNode> rootSiblingNodeKindForNode,
+      Function<DefaultMutableTreeNode, ServerTreeBuiltInLayoutNode> builtInLayoutNodeKindForNode,
+      Function<String, ServerTreeRootSiblingOrder> currentRootSiblingOrder,
+      Function<String, ServerTreeBuiltInLayout> currentBuiltInLayout,
+      BiConsumer<String, ServerTreeRootSiblingOrder> persistRootSiblingOrder,
+      BiConsumer<String, ServerTreeBuiltInLayout> persistBuiltInLayout) {
     Objects.requireNonNull(rootSiblingNodeKindForNode, "rootSiblingNodeKindForNode");
     Objects.requireNonNull(builtInLayoutNodeKindForNode, "builtInLayoutNodeKindForNode");
     Objects.requireNonNull(currentRootSiblingOrder, "currentRootSiblingOrder");
@@ -46,37 +44,32 @@ public final class ServerTreeLayoutPersistenceCoordinator {
     Objects.requireNonNull(persistBuiltInLayout, "persistBuiltInLayout");
     return new Context() {
       @Override
-      public RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
-          DefaultMutableTreeNode node) {
+      public ServerTreeRootSiblingNode rootSiblingNodeKindForNode(DefaultMutableTreeNode node) {
         return rootSiblingNodeKindForNode.apply(node);
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
-          DefaultMutableTreeNode node) {
+      public ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(DefaultMutableTreeNode node) {
         return builtInLayoutNodeKindForNode.apply(node);
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeRootSiblingOrder currentRootSiblingOrder(
-          String serverId) {
+      public ServerTreeRootSiblingOrder currentRootSiblingOrder(String serverId) {
         return currentRootSiblingOrder.apply(serverId);
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeBuiltInLayout currentBuiltInLayout(String serverId) {
+      public ServerTreeBuiltInLayout currentBuiltInLayout(String serverId) {
         return currentBuiltInLayout.apply(serverId);
       }
 
       @Override
-      public void persistRootSiblingOrder(
-          String serverId, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
+      public void persistRootSiblingOrder(String serverId, ServerTreeRootSiblingOrder order) {
         persistRootSiblingOrder.accept(serverId, order);
       }
 
       @Override
-      public void persistBuiltInLayout(
-          String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
+      public void persistBuiltInLayout(String serverId, ServerTreeBuiltInLayout layout) {
         persistBuiltInLayout.accept(serverId, layout);
       }
     };
@@ -92,29 +85,27 @@ public final class ServerTreeLayoutPersistenceCoordinator {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty() || serverNode == null) return;
 
-    ArrayList<RuntimeConfigStore.ServerTreeRootSiblingNode> order = new ArrayList<>();
-    EnumSet<RuntimeConfigStore.ServerTreeRootSiblingNode> seen =
-        EnumSet.noneOf(RuntimeConfigStore.ServerTreeRootSiblingNode.class);
+    ArrayList<ServerTreeRootSiblingNode> order = new ArrayList<>();
+    EnumSet<ServerTreeRootSiblingNode> seen = EnumSet.noneOf(ServerTreeRootSiblingNode.class);
 
     for (int i = 0; i < serverNode.getChildCount(); i++) {
       DefaultMutableTreeNode child = (DefaultMutableTreeNode) serverNode.getChildAt(i);
-      RuntimeConfigStore.ServerTreeRootSiblingNode nodeKind =
-          context.rootSiblingNodeKindForNode(child);
+      ServerTreeRootSiblingNode nodeKind = context.rootSiblingNodeKindForNode(child);
       if (nodeKind == null || seen.contains(nodeKind)) continue;
       order.add(nodeKind);
       seen.add(nodeKind);
     }
 
-    RuntimeConfigStore.ServerTreeRootSiblingOrder current = context.currentRootSiblingOrder(sid);
-    for (RuntimeConfigStore.ServerTreeRootSiblingNode nodeKind : current.order()) {
+    ServerTreeRootSiblingOrder current = context.currentRootSiblingOrder(sid);
+    for (ServerTreeRootSiblingNode nodeKind : current.order()) {
       if (nodeKind == null || seen.contains(nodeKind)) continue;
       order.add(nodeKind);
       seen.add(nodeKind);
     }
 
-    RuntimeConfigStore.ServerTreeRootSiblingOrder next =
+    ServerTreeRootSiblingOrder next =
         ServerTreeRootSiblingOrderCoordinator.normalizeOrder(
-            new RuntimeConfigStore.ServerTreeRootSiblingOrder(List.copyOf(order)));
+            new ServerTreeRootSiblingOrder(List.copyOf(order)));
     context.persistRootSiblingOrder(sid, next);
   }
 
@@ -123,15 +114,13 @@ public final class ServerTreeLayoutPersistenceCoordinator {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty() || serverNode == null || otherNode == null) return;
 
-    ArrayList<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> rootOrder = new ArrayList<>();
-    ArrayList<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> otherOrder = new ArrayList<>();
-    EnumSet<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> seen =
-        EnumSet.noneOf(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.class);
+    ArrayList<ServerTreeBuiltInLayoutNode> rootOrder = new ArrayList<>();
+    ArrayList<ServerTreeBuiltInLayoutNode> otherOrder = new ArrayList<>();
+    EnumSet<ServerTreeBuiltInLayoutNode> seen = EnumSet.noneOf(ServerTreeBuiltInLayoutNode.class);
 
     for (int i = 0; i < serverNode.getChildCount(); i++) {
       DefaultMutableTreeNode child = (DefaultMutableTreeNode) serverNode.getChildAt(i);
-      RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKind =
-          context.builtInLayoutNodeKindForNode(child);
+      ServerTreeBuiltInLayoutNode nodeKind = context.builtInLayoutNodeKindForNode(child);
       if (nodeKind == null || seen.contains(nodeKind)) continue;
       rootOrder.add(nodeKind);
       seen.add(nodeKind);
@@ -139,29 +128,27 @@ public final class ServerTreeLayoutPersistenceCoordinator {
 
     for (int i = 0; i < otherNode.getChildCount(); i++) {
       DefaultMutableTreeNode child = (DefaultMutableTreeNode) otherNode.getChildAt(i);
-      RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKind =
-          context.builtInLayoutNodeKindForNode(child);
+      ServerTreeBuiltInLayoutNode nodeKind = context.builtInLayoutNodeKindForNode(child);
       if (nodeKind == null || seen.contains(nodeKind)) continue;
       otherOrder.add(nodeKind);
       seen.add(nodeKind);
     }
 
-    RuntimeConfigStore.ServerTreeBuiltInLayout current = context.currentBuiltInLayout(sid);
-    for (RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKind : current.rootOrder()) {
+    ServerTreeBuiltInLayout current = context.currentBuiltInLayout(sid);
+    for (ServerTreeBuiltInLayoutNode nodeKind : current.rootOrder()) {
       if (nodeKind == null || seen.contains(nodeKind)) continue;
       rootOrder.add(nodeKind);
       seen.add(nodeKind);
     }
-    for (RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKind : current.otherOrder()) {
+    for (ServerTreeBuiltInLayoutNode nodeKind : current.otherOrder()) {
       if (nodeKind == null || seen.contains(nodeKind)) continue;
       otherOrder.add(nodeKind);
       seen.add(nodeKind);
     }
 
-    RuntimeConfigStore.ServerTreeBuiltInLayout next =
+    ServerTreeBuiltInLayout next =
         ServerTreeBuiltInLayoutCoordinator.normalizeLayout(
-            new RuntimeConfigStore.ServerTreeBuiltInLayout(
-                List.copyOf(rootOrder), List.copyOf(otherOrder)));
+            new ServerTreeBuiltInLayout(List.copyOf(rootOrder), List.copyOf(otherOrder)));
     context.persistBuiltInLayout(sid, next);
   }
 

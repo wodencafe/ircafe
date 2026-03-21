@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.layout;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort;
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import java.util.HashMap;
 import java.util.Map;
@@ -11,19 +11,19 @@ import java.util.function.UnaryOperator;
 final class ServerTreePerServerNormalizedStore<T> {
 
   interface Persistence<T> {
-    Map<String, T> read(RuntimeConfigStore runtimeConfig);
+    Map<String, T> read(ServerTreeLayoutConfigPort runtimeConfig);
 
-    void write(RuntimeConfigStore runtimeConfig, String serverId, T value);
+    void write(ServerTreeLayoutConfigPort runtimeConfig, String serverId, T value);
   }
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final ServerTreeLayoutConfigPort runtimeConfig;
   private final T defaults;
   private final UnaryOperator<T> normalize;
   private final Persistence<T> persistence;
   private final Map<String, T> byServer = new HashMap<>();
 
   ServerTreePerServerNormalizedStore(
-      RuntimeConfigStore runtimeConfig,
+      ServerTreeLayoutConfigPort runtimeConfig,
       T defaults,
       UnaryOperator<T> normalize,
       Persistence<T> persistence) {

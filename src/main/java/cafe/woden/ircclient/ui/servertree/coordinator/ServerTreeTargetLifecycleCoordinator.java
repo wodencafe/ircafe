@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
@@ -47,21 +49,19 @@ public final class ServerTreeTargetLifecycleCoordinator {
 
     ServerNodes addServerRoot(String serverId);
 
-    RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(TargetRef ref);
+    ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(TargetRef ref);
 
-    RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout(String serverId);
+    ServerTreeBuiltInLayout builtInLayout(String serverId);
 
-    RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder(String serverId);
+    ServerTreeRootSiblingOrder rootSiblingOrder(String serverId);
 
     DefaultMutableTreeNode backendSpecificParent(TargetRef ref, ServerNodes serverNodes);
 
     DefaultMutableTreeNode ensureChannelListNode(ServerNodes serverNodes);
 
-    void applyBuiltInLayoutToTree(
-        ServerNodes serverNodes, RuntimeConfigStore.ServerTreeBuiltInLayout layout);
+    void applyBuiltInLayoutToTree(ServerNodes serverNodes, ServerTreeBuiltInLayout layout);
 
-    void applyRootSiblingOrderToTree(
-        ServerNodes serverNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder order);
+    void applyRootSiblingOrderToTree(ServerNodes serverNodes, ServerTreeRootSiblingOrder order);
 
     void persistBuiltInLayoutFromTree(String serverId);
 
@@ -94,15 +94,13 @@ public final class ServerTreeTargetLifecycleCoordinator {
       Consumer<Boolean> setDccTransfersNodesVisible,
       Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility,
       Function<String, ServerNodes> addServerRoot,
-      Function<TargetRef, RuntimeConfigStore.ServerTreeBuiltInLayoutNode>
-          builtInLayoutNodeKindForRef,
-      Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayout,
-      Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> rootSiblingOrder,
+      Function<TargetRef, ServerTreeBuiltInLayoutNode> builtInLayoutNodeKindForRef,
+      Function<String, ServerTreeBuiltInLayout> builtInLayout,
+      Function<String, ServerTreeRootSiblingOrder> rootSiblingOrder,
       BiFunction<TargetRef, ServerNodes, DefaultMutableTreeNode> backendSpecificParent,
       Function<ServerNodes, DefaultMutableTreeNode> ensureChannelListNode,
-      BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeBuiltInLayout> applyBuiltInLayoutToTree,
-      BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder>
-          applyRootSiblingOrderToTree,
+      BiConsumer<ServerNodes, ServerTreeBuiltInLayout> applyBuiltInLayoutToTree,
+      BiConsumer<ServerNodes, ServerTreeRootSiblingOrder> applyRootSiblingOrderToTree,
       Consumer<String> persistBuiltInLayoutFromTree,
       Predicate<TargetRef> isPrivateMessageTarget,
       Supplier<Boolean> shouldPersistPrivateMessageList,
@@ -187,18 +185,17 @@ public final class ServerTreeTargetLifecycleCoordinator {
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(
-          TargetRef ref) {
+      public ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(TargetRef ref) {
         return builtInLayoutNodeKindForRef.apply(ref);
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout(String serverId) {
+      public ServerTreeBuiltInLayout builtInLayout(String serverId) {
         return builtInLayout.apply(serverId);
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
+      public ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
         return rootSiblingOrder.apply(serverId);
       }
 
@@ -214,13 +211,13 @@ public final class ServerTreeTargetLifecycleCoordinator {
 
       @Override
       public void applyBuiltInLayoutToTree(
-          ServerNodes serverNodes, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
+          ServerNodes serverNodes, ServerTreeBuiltInLayout layout) {
         applyBuiltInLayoutToTree.accept(serverNodes, layout);
       }
 
       @Override
       public void applyRootSiblingOrderToTree(
-          ServerNodes serverNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
+          ServerNodes serverNodes, ServerTreeRootSiblingOrder order) {
         applyRootSiblingOrderToTree.accept(serverNodes, order);
       }
 
@@ -347,9 +344,8 @@ public final class ServerTreeTargetLifecycleCoordinator {
       if (sn == null) return;
     }
 
-    RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInKind =
-        context.builtInLayoutNodeKindForRef(ref);
-    RuntimeConfigStore.ServerTreeBuiltInLayout layout = context.builtInLayout(serverId);
+    ServerTreeBuiltInLayoutNode builtInKind = context.builtInLayoutNodeKindForRef(ref);
+    ServerTreeBuiltInLayout layout = context.builtInLayout(serverId);
     ServerNodes resolvedServerNodes = sn;
     DefaultMutableTreeNode parent = context.backendSpecificParent(ref, resolvedServerNodes);
     if (leaves.containsKey(ref)) {

@@ -74,6 +74,7 @@ import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort;
 import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
@@ -267,6 +268,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(ServerAutoConnectRuntimeConfigPort.class, ApplicationLayer.class);
     assertAnnotated(ServerTreeBuiltInVisibilityConfigPort.class, ApplicationLayer.class);
     assertAnnotated(ServerTreeChannelStateConfigPort.class, ApplicationLayer.class);
+    assertAnnotated(ServerTreeLayoutConfigPort.class, ApplicationLayer.class);
     assertAnnotated(UiShellRuntimeConfigPort.class, ApplicationLayer.class);
     assertAnnotated(UiSettingsRuntimeConfigPort.class, ApplicationLayer.class);
     assertAnnotated(UserCommandAliasesConfigPort.class, ApplicationLayer.class);

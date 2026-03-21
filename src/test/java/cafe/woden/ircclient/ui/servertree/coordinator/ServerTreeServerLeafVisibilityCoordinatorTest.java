@@ -6,7 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
@@ -29,15 +30,11 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
     Fixture fixture = new Fixture(serverId);
     AtomicInteger layoutApplyCount = new AtomicInteger();
     AtomicInteger orderApplyCount = new AtomicInteger();
-    AtomicReference<RuntimeConfigStore.ServerTreeBuiltInLayout> appliedLayout =
-        new AtomicReference<>();
-    AtomicReference<RuntimeConfigStore.ServerTreeRootSiblingOrder> appliedOrder =
-        new AtomicReference<>();
+    AtomicReference<ServerTreeBuiltInLayout> appliedLayout = new AtomicReference<>();
+    AtomicReference<ServerTreeRootSiblingOrder> appliedOrder = new AtomicReference<>();
 
-    RuntimeConfigStore.ServerTreeBuiltInLayout layout =
-        RuntimeConfigStore.ServerTreeBuiltInLayout.defaults();
-    RuntimeConfigStore.ServerTreeRootSiblingOrder order =
-        RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults();
+    ServerTreeBuiltInLayout layout = ServerTreeBuiltInLayout.defaults();
+    ServerTreeRootSiblingOrder order = ServerTreeRootSiblingOrder.defaults();
 
     ServerTreeServerLeafVisibilityCoordinator coordinator =
         new ServerTreeServerLeafVisibilityCoordinator(
@@ -106,8 +103,8 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
             value -> value == null ? "" : value.trim(),
             sid -> fixture.serverNodesById.get(sid),
             sid -> new ServerBuiltInNodesVisibility(true, true, true, false, false),
-            sid -> RuntimeConfigStore.ServerTreeBuiltInLayout.defaults(),
-            sid -> RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults(),
+            sid -> ServerTreeBuiltInLayout.defaults(),
+            sid -> ServerTreeRootSiblingOrder.defaults(),
             (sn, next) -> {},
             (sn, next) -> {},
             sid -> "Server",
@@ -147,8 +144,8 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
             value -> value == null ? "" : value.trim(),
             sid -> fixture.serverNodesById.get(sid),
             sid -> new ServerBuiltInNodesVisibility(true, true, true, true, true),
-            sid -> RuntimeConfigStore.ServerTreeBuiltInLayout.defaults(),
-            sid -> RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults(),
+            sid -> ServerTreeBuiltInLayout.defaults(),
+            sid -> ServerTreeRootSiblingOrder.defaults(),
             (sn, next) -> {
               // Simulate persisted layout reattaching groups under root "Other".
               if (fixture.nodes.monitorNode.getParent() != fixture.nodes.otherNode) {
@@ -199,8 +196,8 @@ class ServerTreeServerLeafVisibilityCoordinatorTest {
             value -> value == null ? "" : value.trim(),
             sid -> fixture.serverNodesById.get(sid),
             sid -> new ServerBuiltInNodesVisibility(true, true, true, true, true),
-            sid -> RuntimeConfigStore.ServerTreeBuiltInLayout.defaults(),
-            sid -> RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults(),
+            sid -> ServerTreeBuiltInLayout.defaults(),
+            sid -> ServerTreeRootSiblingOrder.defaults(),
             (sn, next) -> {},
             (sn, next) -> {},
             sid -> "Server",

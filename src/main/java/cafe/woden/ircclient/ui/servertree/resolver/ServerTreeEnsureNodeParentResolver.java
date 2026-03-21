@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.resolver;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -19,14 +20,14 @@ public final class ServerTreeEnsureNodeParentResolver {
   public DefaultMutableTreeNode resolveParent(
       TargetRef ref,
       ParentNodes nodes,
-      RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInKind,
-      RuntimeConfigStore.ServerTreeBuiltInLayout layout,
+      ServerTreeBuiltInLayoutNode builtInKind,
+      ServerTreeBuiltInLayout layout,
       Supplier<DefaultMutableTreeNode> ensureChannelListNode) {
     if (ref == null || nodes == null) return null;
     DefaultMutableTreeNode serverNode = nodes.serverNode();
     DefaultMutableTreeNode otherNode = nodes.otherNode();
-    RuntimeConfigStore.ServerTreeBuiltInLayout safeLayout =
-        layout == null ? RuntimeConfigStore.ServerTreeBuiltInLayout.defaults() : layout;
+    ServerTreeBuiltInLayout safeLayout =
+        layout == null ? ServerTreeBuiltInLayout.defaults() : layout;
 
     if (ref.isStatus()
         || ref.isNotifications()
@@ -58,13 +59,12 @@ public final class ServerTreeEnsureNodeParentResolver {
   private static DefaultMutableTreeNode rootOrOther(
       DefaultMutableTreeNode serverNode,
       DefaultMutableTreeNode otherNode,
-      RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInKind,
-      RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
+      ServerTreeBuiltInLayoutNode builtInKind,
+      ServerTreeBuiltInLayout layout) {
     if (serverNode == null) return null;
     if (builtInKind != null
         && otherNode != null
-        && !Objects.requireNonNullElse(
-                layout, RuntimeConfigStore.ServerTreeBuiltInLayout.defaults())
+        && !Objects.requireNonNullElse(layout, ServerTreeBuiltInLayout.defaults())
             .rootOrder()
             .contains(builtInKind)) {
       return otherNode;

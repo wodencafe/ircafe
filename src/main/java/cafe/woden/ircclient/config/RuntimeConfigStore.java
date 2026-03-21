@@ -23,6 +23,11 @@ import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort;
 import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelPreference;
 import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelSortMode;
 import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelState;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
@@ -76,6 +81,7 @@ public class RuntimeConfigStore
         NickColorOverridesConfigPort,
         ServerTreeBuiltInVisibilityConfigPort,
         ServerTreeChannelStateConfigPort,
+        ServerTreeLayoutConfigPort,
         ServerAutoConnectRuntimeConfigPort,
         UiShellRuntimeConfigPort,
         UiSettingsRuntimeConfigPort,
@@ -109,104 +115,6 @@ public class RuntimeConfigStore
   private static final String DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE = "{base}/{network}";
   public static final String DEFAULT_QUIT_MESSAGE =
       ChatCommandRuntimeConfigPort.DEFAULT_QUIT_MESSAGE;
-
-  public enum ServerTreeBuiltInLayoutNode {
-    SERVER("server"),
-    NOTIFICATIONS("notifications"),
-    LOG_VIEWER("logViewer"),
-    FILTERS("filters"),
-    IGNORES("ignores"),
-    MONITOR("monitor"),
-    INTERCEPTORS("interceptors");
-
-    private final String token;
-
-    ServerTreeBuiltInLayoutNode(String token) {
-      this.token = token;
-    }
-
-    public String token() {
-      return token;
-    }
-
-    public static ServerTreeBuiltInLayoutNode fromToken(String token) {
-      String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
-      return switch (raw) {
-        case "server", "status" -> SERVER;
-        case "notifications", "notification" -> NOTIFICATIONS;
-        case "logviewer", "log-viewer", "log_viewer", "logviewernode", "log_viewer_node" ->
-            LOG_VIEWER;
-        case "filters", "weechatfilters", "weechat-filters", "weechat_filters" -> FILTERS;
-        case "ignores", "ignore" -> IGNORES;
-        case "monitor" -> MONITOR;
-        case "interceptors", "interceptor" -> INTERCEPTORS;
-        default -> null;
-      };
-    }
-  }
-
-  public record ServerTreeBuiltInLayout(
-      List<ServerTreeBuiltInLayoutNode> rootOrder, List<ServerTreeBuiltInLayoutNode> otherOrder) {
-    public static ServerTreeBuiltInLayout defaults() {
-      return new ServerTreeBuiltInLayout(
-          List.of(),
-          List.of(
-              ServerTreeBuiltInLayoutNode.SERVER,
-              ServerTreeBuiltInLayoutNode.NOTIFICATIONS,
-              ServerTreeBuiltInLayoutNode.LOG_VIEWER,
-              ServerTreeBuiltInLayoutNode.FILTERS,
-              ServerTreeBuiltInLayoutNode.IGNORES,
-              ServerTreeBuiltInLayoutNode.MONITOR,
-              ServerTreeBuiltInLayoutNode.INTERCEPTORS));
-    }
-
-    public boolean isDefaultLayout() {
-      return this.equals(defaults());
-    }
-  }
-
-  public enum ServerTreeRootSiblingNode {
-    CHANNEL_LIST("channelList"),
-    NOTIFICATIONS("notifications"),
-    OTHER("other"),
-    PRIVATE_MESSAGES("privateMessages");
-
-    private final String token;
-
-    ServerTreeRootSiblingNode(String token) {
-      this.token = token;
-    }
-
-    public String token() {
-      return token;
-    }
-
-    public static ServerTreeRootSiblingNode fromToken(String token) {
-      String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
-      return switch (raw) {
-        case "channellist", "channel-list", "channel_list" -> CHANNEL_LIST;
-        case "notifications", "notification" -> NOTIFICATIONS;
-        case "other" -> OTHER;
-        case "privatemessages", "private-messages", "private_messages", "pm" -> PRIVATE_MESSAGES;
-        default -> null;
-      };
-    }
-  }
-
-  public record ServerTreeRootSiblingOrder(List<ServerTreeRootSiblingNode> order) {
-    public static ServerTreeRootSiblingOrder defaults() {
-      return new ServerTreeRootSiblingOrder(
-          List.of(
-              ServerTreeRootSiblingNode.CHANNEL_LIST,
-              ServerTreeRootSiblingNode.NOTIFICATIONS,
-              ServerTreeRootSiblingNode.OTHER,
-              ServerTreeRootSiblingNode.PRIVATE_MESSAGES));
-    }
-
-    public boolean isDefaultOrder() {
-      return this.equals(defaults());
-    }
-  }
 
   private final Path file;
   private final IrcProperties defaults;

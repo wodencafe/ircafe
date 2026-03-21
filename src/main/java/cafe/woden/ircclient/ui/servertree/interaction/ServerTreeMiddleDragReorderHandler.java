@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.interaction;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import java.awt.Cursor;
 import java.awt.Rectangle;
@@ -37,11 +38,9 @@ public final class ServerTreeMiddleDragReorderHandler extends MouseAdapter {
 
     ServerNodes serverNodes(String serverId);
 
-    RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
-        DefaultMutableTreeNode node);
+    ServerTreeRootSiblingNode rootSiblingNodeKindForNode(DefaultMutableTreeNode node);
 
-    RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
-        DefaultMutableTreeNode node);
+    ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(DefaultMutableTreeNode node);
 
     int minInsertIndex(DefaultMutableTreeNode parentNode);
 
@@ -74,10 +73,8 @@ public final class ServerTreeMiddleDragReorderHandler extends MouseAdapter {
       Predicate<DefaultMutableTreeNode> isMovableBuiltInNode,
       Function<DefaultMutableTreeNode, String> owningServerIdForNode,
       Function<String, ServerNodes> serverNodes,
-      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeRootSiblingNode>
-          rootSiblingNodeKindForNode,
-      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeBuiltInLayoutNode>
-          builtInLayoutNodeKindForNode,
+      Function<DefaultMutableTreeNode, ServerTreeRootSiblingNode> rootSiblingNodeKindForNode,
+      Function<DefaultMutableTreeNode, ServerTreeBuiltInLayoutNode> builtInLayoutNodeKindForNode,
       ToIntFunction<DefaultMutableTreeNode> minInsertIndex,
       ToIntFunction<DefaultMutableTreeNode> maxInsertIndex,
       BiFunction<ServerNodes, Integer, Integer> rootBuiltInInsertIndex,
@@ -146,14 +143,12 @@ public final class ServerTreeMiddleDragReorderHandler extends MouseAdapter {
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
-          DefaultMutableTreeNode node) {
+      public ServerTreeRootSiblingNode rootSiblingNodeKindForNode(DefaultMutableTreeNode node) {
         return rootSiblingNodeKindForNode.apply(node);
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
-          DefaultMutableTreeNode node) {
+      public ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(DefaultMutableTreeNode node) {
         return builtInLayoutNodeKindForNode.apply(node);
       }
 
@@ -420,8 +415,7 @@ public final class ServerTreeMiddleDragReorderHandler extends MouseAdapter {
     ServerNodes serverNodes = context.serverNodes(sid);
     if (serverNodes == null || serverNodes.serverNode == null) return null;
     if (dragParent != serverNodes.serverNode) return null;
-    RuntimeConfigStore.ServerTreeRootSiblingNode draggedKind =
-        context.rootSiblingNodeKindForNode(dragNode);
+    ServerTreeRootSiblingNode draggedKind = context.rootSiblingNodeKindForNode(dragNode);
     if (draggedKind == null) return null;
     JTree tree = context.tree();
 
@@ -439,7 +433,7 @@ public final class ServerTreeMiddleDragReorderHandler extends MouseAdapter {
     }
 
     DefaultMutableTreeNode targetParent = (DefaultMutableTreeNode) targetNode.getParent();
-    if (draggedKind == RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS
+    if (draggedKind == ServerTreeRootSiblingNode.NOTIFICATIONS
         && targetParent == serverNodes.otherNode) {
       int idx = serverNodes.otherNode.getIndex(targetNode);
       if (idx < 0) idx = serverNodes.otherNode.getChildCount();
@@ -465,7 +459,7 @@ public final class ServerTreeMiddleDragReorderHandler extends MouseAdapter {
     Rectangle bounds = tree.getPathBounds(new TreePath(anchor.getPath()));
     boolean after = bounds != null && e.getY() > (bounds.y + (bounds.height / 2));
     if (anchor == serverNodes.otherNode
-        && draggedKind == RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS
+        && draggedKind == ServerTreeRootSiblingNode.NOTIFICATIONS
         && after) {
       int otherIdx =
           clampBuiltInInsertIndex(
@@ -582,8 +576,7 @@ public final class ServerTreeMiddleDragReorderHandler extends MouseAdapter {
     if (sid.isEmpty()) return;
     ServerNodes serverNodes = context.serverNodes(sid);
     if (serverNodes == null) return;
-    RuntimeConfigStore.ServerTreeBuiltInLayoutNode draggedKind =
-        context.builtInLayoutNodeKindForNode(dragNode);
+    ServerTreeBuiltInLayoutNode draggedKind = context.builtInLayoutNodeKindForNode(dragNode);
 
     TreeDropTarget target = computeBuiltInDropTarget(e);
     if (target == null || target.parent() == null) return;
@@ -604,7 +597,7 @@ public final class ServerTreeMiddleDragReorderHandler extends MouseAdapter {
     model.insertNodeInto(dragNode, targetParent, desiredAfterRemoval);
     dragParent = targetParent;
     context.persistBuiltInLayout(sid);
-    if (draggedKind == RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS
+    if (draggedKind == ServerTreeBuiltInLayoutNode.NOTIFICATIONS
         && targetParent == serverNodes.serverNode) {
       context.persistRootSiblingOrder(sid);
     }
@@ -627,8 +620,7 @@ public final class ServerTreeMiddleDragReorderHandler extends MouseAdapter {
     if (sid.isEmpty()) return;
     ServerNodes serverNodes = context.serverNodes(sid);
     if (serverNodes == null || serverNodes.serverNode == null) return;
-    RuntimeConfigStore.ServerTreeRootSiblingNode draggedKind =
-        context.rootSiblingNodeKindForNode(dragNode);
+    ServerTreeRootSiblingNode draggedKind = context.rootSiblingNodeKindForNode(dragNode);
     if (draggedKind == null) return;
 
     TreeDropTarget target = computeRootSiblingDropTarget(e);
@@ -636,7 +628,7 @@ public final class ServerTreeMiddleDragReorderHandler extends MouseAdapter {
     DefaultMutableTreeNode targetParent = target.parent();
     if (targetParent != serverNodes.serverNode && targetParent != serverNodes.otherNode) return;
     if (targetParent == serverNodes.otherNode
-        && draggedKind != RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS) {
+        && draggedKind != ServerTreeRootSiblingNode.NOTIFICATIONS) {
       return;
     }
     int desiredAfterRemoval = target.insertBeforeIndex();

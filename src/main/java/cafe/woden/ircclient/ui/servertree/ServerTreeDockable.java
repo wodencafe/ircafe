@@ -8,6 +8,10 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
@@ -457,6 +461,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             uiHooks::isServerNode);
     ServerTreeLayoutCollaborators layoutCollaborators =
         ServerTreeLayoutCollaboratorsFactory.create(
+            runtimeConfig,
             runtimeConfig,
             ServerTreeBuiltInVisibilityCoordinator.context(
                 ServerTreeDockable::normalizeServerId, servers::keySet, this::syncUiLeafVisibility),
@@ -1188,21 +1193,19 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return builtInLayoutVisibilityFacade.builtInNodesVisibility(serverId);
   }
 
-  private RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout(String serverId) {
+  private ServerTreeBuiltInLayout builtInLayout(String serverId) {
     return builtInLayoutVisibilityFacade.builtInLayout(serverId);
   }
 
-  private void persistBuiltInLayoutForServer(
-      String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
+  private void persistBuiltInLayoutForServer(String serverId, ServerTreeBuiltInLayout layout) {
     builtInLayoutVisibilityFacade.rememberBuiltInLayout(serverId, layout);
   }
 
-  private RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
+  private ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
     return builtInLayoutVisibilityFacade.rootSiblingOrder(serverId);
   }
 
-  private void persistRootSiblingOrderForServer(
-      String serverId, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
+  private void persistRootSiblingOrderForServer(String serverId, ServerTreeRootSiblingOrder order) {
     builtInLayoutVisibilityFacade.rememberRootSiblingOrder(serverId, order);
   }
 
@@ -1229,18 +1232,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return serverNodeResolver.firstServerIdOrEmpty(startupSelectionRestorer::rememberedSelection);
   }
 
-  private RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(
-      TargetRef ref) {
+  private ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(TargetRef ref) {
     return builtInLayoutVisibilityFacade.builtInLayoutNodeKindForRef(ref);
   }
 
-  private RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
-      DefaultMutableTreeNode node) {
+  private ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(DefaultMutableTreeNode node) {
     return builtInLayoutVisibilityFacade.builtInLayoutNodeKindForNode(node);
   }
 
-  private RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
-      DefaultMutableTreeNode node) {
+  private ServerTreeRootSiblingNode rootSiblingNodeKindForNode(DefaultMutableTreeNode node) {
     return builtInLayoutVisibilityFacade.rootSiblingNodeKindForNode(node);
   }
 
@@ -1718,13 +1718,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     selectionFallbackPolicy.selectStartupDefaultForServer(serverId);
   }
 
-  private void applyBuiltInLayoutToTree(
-      ServerNodes sn, RuntimeConfigStore.ServerTreeBuiltInLayout requestedLayout) {
+  private void applyBuiltInLayoutToTree(ServerNodes sn, ServerTreeBuiltInLayout requestedLayout) {
     builtInLayoutVisibilityFacade.applyBuiltInLayoutToTree(sn, requestedLayout);
   }
 
   private void applyRootSiblingOrderToTree(
-      ServerNodes sn, RuntimeConfigStore.ServerTreeRootSiblingOrder requestedOrder) {
+      ServerNodes sn, ServerTreeRootSiblingOrder requestedOrder) {
     builtInLayoutVisibilityFacade.applyRootSiblingOrderToTree(sn, requestedOrder);
   }
 

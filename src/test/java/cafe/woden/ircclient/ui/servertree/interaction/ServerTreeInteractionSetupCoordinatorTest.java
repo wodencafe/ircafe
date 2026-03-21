@@ -4,7 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.view.ServerTreeServerActionOverlay;
 import io.github.andrewauclair.moderndocking.Dockable;
@@ -52,8 +53,8 @@ class ServerTreeInteractionSetupCoordinatorTest {
                 __ -> false,
                 __ -> "libera",
                 __ -> null,
-                __ -> RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST,
-                __ -> RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
+                __ -> ServerTreeRootSiblingNode.CHANNEL_LIST,
+                __ -> ServerTreeBuiltInLayoutNode.SERVER,
                 (__1, __2) -> 0,
                 __ -> {},
                 __ -> {},

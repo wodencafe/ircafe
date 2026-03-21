@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
@@ -27,12 +28,10 @@ public final class ServerTreeServerLeafVisibilityCoordinator {
   private final Function<String, String> normalizeServerId;
   private final Function<String, ServerNodes> serverNodesForServer;
   private final Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility;
-  private final Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayout;
-  private final Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> rootSiblingOrder;
-  private final BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeBuiltInLayout>
-      applyBuiltInLayoutToTree;
-  private final BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder>
-      applyRootSiblingOrderToTree;
+  private final Function<String, ServerTreeBuiltInLayout> builtInLayout;
+  private final Function<String, ServerTreeRootSiblingOrder> rootSiblingOrder;
+  private final BiConsumer<ServerNodes, ServerTreeBuiltInLayout> applyBuiltInLayoutToTree;
+  private final BiConsumer<ServerNodes, ServerTreeRootSiblingOrder> applyRootSiblingOrderToTree;
   private final Function<String, String> statusLeafLabelForServer;
   private final Predicate<String> isQuasselServer;
   private final BooleanSupplier showDccTransfersNodes;
@@ -49,11 +48,10 @@ public final class ServerTreeServerLeafVisibilityCoordinator {
       Function<String, String> normalizeServerId,
       Function<String, ServerNodes> serverNodesForServer,
       Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility,
-      Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayout,
-      Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> rootSiblingOrder,
-      BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeBuiltInLayout> applyBuiltInLayoutToTree,
-      BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder>
-          applyRootSiblingOrderToTree,
+      Function<String, ServerTreeBuiltInLayout> builtInLayout,
+      Function<String, ServerTreeRootSiblingOrder> rootSiblingOrder,
+      BiConsumer<ServerNodes, ServerTreeBuiltInLayout> applyBuiltInLayoutToTree,
+      BiConsumer<ServerNodes, ServerTreeRootSiblingOrder> applyRootSiblingOrderToTree,
       Function<String, String> statusLeafLabelForServer,
       Predicate<String> isQuasselServer,
       BooleanSupplier showDccTransfersNodes,

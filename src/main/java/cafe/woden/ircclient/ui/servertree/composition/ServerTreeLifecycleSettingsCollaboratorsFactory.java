@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.composition;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
@@ -161,8 +162,8 @@ public final class ServerTreeLifecycleSettingsCollaboratorsFactory {
       NotificationStore notificationStore,
       InterceptorStore interceptorStore,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
-      Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayout,
-      Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> rootSiblingOrder,
+      Function<String, ServerTreeBuiltInLayout> builtInLayout,
+      Function<String, ServerTreeRootSiblingOrder> rootSiblingOrder,
       ServerTreeServerRootLifecycleManager.BiLayoutConsumer applyBuiltInLayoutToTree,
       ServerTreeServerRootLifecycleManager.BiRootOrderConsumer applyRootSiblingOrderToTree,
       DefaultTreeModel model,

@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.interaction;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeClassifier;
 import cafe.woden.ircclient.ui.servertree.model.ServerTreeNodeData;
@@ -27,9 +28,9 @@ public final class ServerTreeDragReorderSupport {
   private final ServerTreeNodeClassifier nodeClassifier;
   private final Predicate<DefaultMutableTreeNode> isServerNode;
   private final Predicate<DefaultMutableTreeNode> isChannelListLeafNode;
-  private final Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeBuiltInLayoutNode>
+  private final Function<DefaultMutableTreeNode, ServerTreeBuiltInLayoutNode>
       builtInLayoutNodeKindForNode;
-  private final Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeRootSiblingNode>
+  private final Function<DefaultMutableTreeNode, ServerTreeRootSiblingNode>
       rootSiblingNodeKindForNode;
   private final Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode;
 
@@ -60,10 +61,8 @@ public final class ServerTreeDragReorderSupport {
       ServerTreeNodeClassifier nodeClassifier,
       Predicate<DefaultMutableTreeNode> isServerNode,
       Predicate<DefaultMutableTreeNode> isChannelListLeafNode,
-      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeBuiltInLayoutNode>
-          builtInLayoutNodeKindForNode,
-      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeRootSiblingNode>
-          rootSiblingNodeKindForNode,
+      Function<DefaultMutableTreeNode, ServerTreeBuiltInLayoutNode> builtInLayoutNodeKindForNode,
+      Function<DefaultMutableTreeNode, ServerTreeRootSiblingNode> rootSiblingNodeKindForNode,
       Function<DefaultMutableTreeNode, String> backendIdForNetworksGroupNode) {
     this.tree = Objects.requireNonNull(tree, "tree");
     this.servers = Objects.requireNonNull(servers, "servers");
@@ -89,8 +88,7 @@ public final class ServerTreeDragReorderSupport {
   }
 
   public boolean isMovableBuiltInNode(DefaultMutableTreeNode node) {
-    RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKind =
-        builtInLayoutNodeKindForNode.apply(node);
+    ServerTreeBuiltInLayoutNode nodeKind = builtInLayoutNodeKindForNode.apply(node);
     if (nodeKind == null) return false;
     String sid = nodeClassifier.owningServerIdForNode(node);
     if (sid.isBlank()) return false;
