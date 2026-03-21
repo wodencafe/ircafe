@@ -630,6 +630,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 tree,
                 model,
                 runtimeConfig,
+                runtimeConfig,
                 channelStateStore,
                 interceptorStore,
                 runtimeState,

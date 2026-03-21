@@ -19,6 +19,10 @@ import cafe.woden.ircclient.config.api.NickColorOverridesConfigPort;
 import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort;
 import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort.ServerTreeBuiltInNodesVisibility;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelPreference;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelSortMode;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelState;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
@@ -71,6 +75,7 @@ public class RuntimeConfigStore
         MonitorRosterConfigPort,
         NickColorOverridesConfigPort,
         ServerTreeBuiltInVisibilityConfigPort,
+        ServerTreeChannelStateConfigPort,
         ServerAutoConnectRuntimeConfigPort,
         UiShellRuntimeConfigPort,
         UiSettingsRuntimeConfigPort,
@@ -200,73 +205,6 @@ public class RuntimeConfigStore
 
     public boolean isDefaultOrder() {
       return this.equals(defaults());
-    }
-  }
-
-  public enum ServerTreeChannelSortMode {
-    ALPHABETICAL("alphabetical"),
-    MOST_RECENT_ACTIVITY("most-recent-activity"),
-    MOST_UNREAD_MESSAGES("most-unread-messages"),
-    MOST_UNREAD_NOTIFICATIONS("most-unread-notifications"),
-    CUSTOM("custom");
-
-    private final String token;
-
-    ServerTreeChannelSortMode(String token) {
-      this.token = token;
-    }
-
-    public String token() {
-      return token;
-    }
-
-    public static ServerTreeChannelSortMode fromToken(String token) {
-      String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
-      if ("alphabetical".equals(raw) || "alpha".equals(raw) || "a-z".equals(raw)) {
-        return ALPHABETICAL;
-      }
-      if ("most-recent-activity".equals(raw)
-          || "recent-activity".equals(raw)
-          || "recent".equals(raw)
-          || "activity".equals(raw)) {
-        return MOST_RECENT_ACTIVITY;
-      }
-      if ("most-unread-messages".equals(raw)
-          || "most-unread-message".equals(raw)
-          || "unread-messages".equals(raw)
-          || "unread-message".equals(raw)
-          || "unread".equals(raw)) {
-        return MOST_UNREAD_MESSAGES;
-      }
-      if ("most-unread-notifications".equals(raw)
-          || "most-unread-notification".equals(raw)
-          || "unread-notifications".equals(raw)
-          || "unread-notification".equals(raw)
-          || "mentions".equals(raw)
-          || "highlights".equals(raw)) {
-        return MOST_UNREAD_NOTIFICATIONS;
-      }
-      return CUSTOM;
-    }
-  }
-
-  public record ServerTreeChannelPreference(
-      String channel, boolean autoReattach, boolean pinned, boolean muted) {
-    public ServerTreeChannelPreference(String channel, boolean autoReattach) {
-      this(channel, autoReattach, false, false);
-    }
-
-    public ServerTreeChannelPreference(String channel, boolean autoReattach, boolean pinned) {
-      this(channel, autoReattach, pinned, false);
-    }
-  }
-
-  public record ServerTreeChannelState(
-      ServerTreeChannelSortMode sortMode,
-      List<String> customOrder,
-      List<ServerTreeChannelPreference> channels) {
-    public static ServerTreeChannelState defaults() {
-      return new ServerTreeChannelState(ServerTreeChannelSortMode.CUSTOM, List.of(), List.of());
     }
   }
 

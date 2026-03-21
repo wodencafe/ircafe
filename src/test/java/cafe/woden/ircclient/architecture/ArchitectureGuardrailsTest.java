@@ -746,6 +746,18 @@ class ArchitectureGuardrailsTest {
 
   @ArchTest
   static final ArchRule
+      server_tree_channel_state_coordinator_should_not_depend_on_runtime_config_store_directly =
+          noClasses()
+              .that()
+              .haveFullyQualifiedName(
+                  "cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator")
+              .should()
+              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+              .because(
+                  "ServerTreeChannelStateCoordinator should persist channel state through config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule
       server_tree_view_interaction_collaborators_factory_should_not_depend_on_runtime_config_store_directly =
           noClasses()
               .that()
@@ -755,6 +767,18 @@ class ArchitectureGuardrailsTest {
               .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
               .because(
                   "ServerTreeViewInteractionCollaboratorsFactory should resolve server auto-connect state through config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule
+      server_tree_state_interaction_collaborators_factory_should_not_depend_on_runtime_config_store_directly =
+          noClasses()
+              .that()
+              .haveFullyQualifiedName(
+                  "cafe.woden.ircclient.ui.servertree.composition.ServerTreeStateInteractionCollaboratorsFactory")
+              .should()
+              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+              .because(
+                  "ServerTreeStateInteractionCollaboratorsFactory should wire server-tree collaborators through config::api ports, not RuntimeConfigStore directly");
 
   @ArchTest
   static final ArchRule ui_ignore_should_not_depend_on_app_internal_or_irc_packages =

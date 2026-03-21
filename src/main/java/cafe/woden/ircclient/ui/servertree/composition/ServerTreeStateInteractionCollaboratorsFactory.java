@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.composition;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
@@ -59,7 +60,7 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
             Objects.requireNonNull(in.serverStateCleanerContext(), "serverStateCleanerContext"));
     ServerTreeChannelStateCoordinator channelStateCoordinator =
         new ServerTreeChannelStateCoordinator(
-            in.runtimeConfig(),
+            in.channelStateConfig(),
             in.channelStateStore(),
             in.model(),
             Objects.requireNonNull(
@@ -79,7 +80,7 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
     ServerTreeTargetRemovalStateCoordinator targetRemovalStateCoordinator =
         new ServerTreeTargetRemovalStateCoordinator(
             in.privateMessageOnlineStateStore(),
-            in.runtimeConfig(),
+            in.sessionRuntimeConfig(),
             in.channelStateStore(),
             Objects.requireNonNull(
                 in.targetRemovalStateCoordinatorContext(), "targetRemovalStateCoordinatorContext"));
@@ -111,7 +112,8 @@ public final class ServerTreeStateInteractionCollaboratorsFactory {
   public record Inputs(
       JTree tree,
       DefaultTreeModel model,
-      RuntimeConfigStore runtimeConfig,
+      IrcSessionRuntimeConfigPort sessionRuntimeConfig,
+      ServerTreeChannelStateConfigPort channelStateConfig,
       ServerTreeChannelStateStore channelStateStore,
       InterceptorStore interceptorStore,
       ServerTreeRuntimeState runtimeState,
