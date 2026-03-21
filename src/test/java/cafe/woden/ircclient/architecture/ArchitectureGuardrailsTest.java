@@ -685,6 +685,30 @@ class ArchitectureGuardrailsTest {
                   "EmbedLoadPolicyDialog should edit embed policy state through config::api ports, not RuntimeConfigStore directly");
 
   @ArchTest
+  static final ArchRule
+      server_tree_startup_selection_restorer_should_not_depend_on_runtime_config_store_directly =
+          noClasses()
+              .that()
+              .haveFullyQualifiedName(
+                  "cafe.woden.ircclient.ui.servertree.policy.ServerTreeStartupSelectionRestorer")
+              .should()
+              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+              .because(
+                  "ServerTreeStartupSelectionRestorer should read remembered UI selection through config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule
+      server_tree_built_in_visibility_coordinator_should_not_depend_on_runtime_config_store_directly =
+          noClasses()
+              .that()
+              .haveFullyQualifiedName(
+                  "cafe.woden.ircclient.ui.servertree.state.ServerTreeBuiltInVisibilityCoordinator")
+              .should()
+              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+              .because(
+                  "ServerTreeBuiltInVisibilityCoordinator should persist built-in visibility through config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
   static final ArchRule ui_ignore_should_not_depend_on_app_internal_or_irc_packages =
       noClasses()
           .that()

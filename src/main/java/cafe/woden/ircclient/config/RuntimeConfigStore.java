@@ -17,6 +17,8 @@ import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
 import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
 import cafe.woden.ircclient.config.api.NickColorOverridesConfigPort;
 import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort.ServerTreeBuiltInNodesVisibility;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
@@ -68,6 +70,7 @@ public class RuntimeConfigStore
         IrcSessionRuntimeConfigPort,
         MonitorRosterConfigPort,
         NickColorOverridesConfigPort,
+        ServerTreeBuiltInVisibilityConfigPort,
         ServerAutoConnectRuntimeConfigPort,
         UiShellRuntimeConfigPort,
         UiSettingsRuntimeConfigPort,
@@ -101,21 +104,6 @@ public class RuntimeConfigStore
   private static final String DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE = "{base}/{network}";
   public static final String DEFAULT_QUIT_MESSAGE =
       ChatCommandRuntimeConfigPort.DEFAULT_QUIT_MESSAGE;
-
-  public record ServerTreeBuiltInNodesVisibility(
-      boolean server,
-      boolean notifications,
-      boolean logViewer,
-      boolean monitor,
-      boolean interceptors) {
-    public static ServerTreeBuiltInNodesVisibility defaults() {
-      return new ServerTreeBuiltInNodesVisibility(true, true, true, true, true);
-    }
-
-    public boolean isDefaultVisible() {
-      return server && notifications && logViewer && monitor && interceptors;
-    }
-  }
 
   public enum ServerTreeBuiltInLayoutNode {
     SERVER("server"),
@@ -279,17 +267,6 @@ public class RuntimeConfigStore
       List<ServerTreeChannelPreference> channels) {
     public static ServerTreeChannelState defaults() {
       return new ServerTreeChannelState(ServerTreeChannelSortMode.CUSTOM, List.of(), List.of());
-    }
-  }
-
-  public record LastSelectedTarget(String serverId, String target) {
-    public LastSelectedTarget {
-      serverId = Objects.toString(serverId, "").trim();
-      target = Objects.toString(target, "").trim();
-    }
-
-    public boolean isValid() {
-      return !serverId.isEmpty() && !target.isEmpty();
     }
   }
 

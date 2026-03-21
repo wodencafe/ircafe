@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.model;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort;
 
 public record ServerBuiltInNodesVisibility(
     boolean server,
@@ -35,8 +35,9 @@ public record ServerBuiltInNodesVisibility(
     return new ServerBuiltInNodesVisibility(server, notifications, logViewer, monitor, visible);
   }
 
-  public RuntimeConfigStore.ServerTreeBuiltInNodesVisibility toRuntimeVisibility() {
-    return new RuntimeConfigStore.ServerTreeBuiltInNodesVisibility(
+  public ServerTreeBuiltInVisibilityConfigPort.ServerTreeBuiltInNodesVisibility
+      toRuntimeVisibility() {
+    return new ServerTreeBuiltInVisibilityConfigPort.ServerTreeBuiltInNodesVisibility(
         server, notifications, logViewer, monitor, interceptors);
   }
 }

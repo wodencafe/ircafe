@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -22,7 +23,8 @@ class RuntimeConfigStoreLastSelectedTargetTest {
 
     store.rememberLastSelectedTarget("libera", "#ircafe");
 
-    RuntimeConfigStore.LastSelectedTarget selected = store.readLastSelectedTarget().orElseThrow();
+    UiShellRuntimeConfigPort.LastSelectedTarget selected =
+        store.readLastSelectedTarget().orElseThrow();
     assertEquals("libera", selected.serverId());
     assertEquals("#ircafe", selected.target());
   }

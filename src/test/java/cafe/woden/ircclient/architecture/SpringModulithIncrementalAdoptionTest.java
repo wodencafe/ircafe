@@ -44,6 +44,7 @@ import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
 import cafe.woden.ircclient.config.api.NickColorOverridesConfigPort;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
@@ -186,6 +187,7 @@ class SpringModulithIncrementalAdoptionTest {
         NickColorOverridesConfigPort.class,
         RuntimeConfigPathPort.class,
         ServerAutoConnectRuntimeConfigPort.class,
+        ServerTreeBuiltInVisibilityConfigPort.class,
         UiShellRuntimeConfigPort.class,
         UiSettingsRuntimeConfigPort.class,
         UserCommandAliasesConfigPort.class);

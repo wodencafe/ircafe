@@ -72,6 +72,7 @@ import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
 import cafe.woden.ircclient.config.api.NickColorOverridesConfigPort;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort;
 import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
@@ -263,6 +264,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(NickColorOverridesConfigPort.class, ApplicationLayer.class);
     assertAnnotated(RuntimeConfigPathPort.class, ApplicationLayer.class);
     assertAnnotated(ServerAutoConnectRuntimeConfigPort.class, ApplicationLayer.class);
+    assertAnnotated(ServerTreeBuiltInVisibilityConfigPort.class, ApplicationLayer.class);
     assertAnnotated(UiShellRuntimeConfigPort.class, ApplicationLayer.class);
     assertAnnotated(UiSettingsRuntimeConfigPort.class, ApplicationLayer.class);
     assertAnnotated(UserCommandAliasesConfigPort.class, ApplicationLayer.class);
