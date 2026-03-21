@@ -43,7 +43,7 @@ public class PircbotxInputParserHookInstaller {
       InputParser replacement = new PircbotxIrcv3InputParser(bot, sid, conn, sink, stsPolicies);
       boolean swapped = swapInputParser(bot, replacement);
       if (swapped) {
-        log.info(
+        log.debug(
             "[{}] installed IRCv3 InputParser hook (away/account/extended-join/account-tag/setname/chghost/tags/cap)",
             sid);
       } else {

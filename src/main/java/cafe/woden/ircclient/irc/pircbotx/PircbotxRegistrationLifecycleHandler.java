@@ -139,7 +139,7 @@ final class PircbotxRegistrationLifecycleHandler {
     boolean extendedMonitorCap = conn.extendedMonitorCapAcked.get();
     boolean monitorSupported = conn.monitorSupported.get();
     long monitorMaxTargets = conn.monitorMaxTargets.get();
-    log.info(
+    log.debug(
         "[{}] negotiated caps: server-time={} standard-replies={} echo-message={} cap-notify={} labeled-response={} "
             + "setname={} chghost={} sts={} multiline={} multiline(final)={} multiline(final,max-bytes)={} "
             + "multiline(final,max-lines)={} multiline(draft)={} multiline(draft,max-bytes)={} "
@@ -203,7 +203,7 @@ final class PircbotxRegistrationLifecycleHandler {
       } else {
         reason = "unknown";
       }
-      log.warn("[{}] IRCv3 typing indicators are unavailable ({})", serverId, reason);
+      log.debug("[{}] IRCv3 typing indicators are unavailable ({})", serverId, reason);
     }
   }
 }

@@ -594,7 +594,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
 
       if (enabled && PircbotxZncParsers.seemsZncCap(capName)) {
         if (conn.zncDetected.compareAndSet(false, true)) {
-          log.info("[{}] detected ZNC via CAP {}: {}", serverId, action, capName);
+          log.debug("[{}] detected ZNC via CAP {}: {}", serverId, action, capName);
         }
       }
 
@@ -659,7 +659,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
 
     try {
       bot.sendCAP().request("message-tags");
-      log.info(
+      log.debug(
           "[{}] fallback CAP REQ sent for message-tags (downstream capability remained unenabled)",
           serverId);
     } catch (Exception ex) {
@@ -719,7 +719,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
 
     try {
       bot.sendCAP().request(req.toArray(new String[0]));
-      log.info("[{}] fallback CAP REQ sent for {}", serverId, String.join(", ", req));
+      log.debug("[{}] fallback CAP REQ sent for {}", serverId, String.join(", ", req));
     } catch (Exception ex) {
       if (requestedBatch) {
         conn.batchFallbackReqSent.set(false);
@@ -841,7 +841,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "znc.in/playback" -> {
         boolean prev = conn.zncPlaybackCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: znc.in/playback {}",
               serverId,
               sourceAction,
@@ -851,21 +851,21 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "batch" -> {
         boolean prev = conn.batchCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: batch {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
       case "draft/chathistory", "chathistory" -> {
         boolean prev = conn.chatHistoryCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       case "soju.im/bouncer-networks" -> {
         boolean prev = conn.sojuBouncerNetworksCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: soju.im/bouncer-networks {}",
               serverId,
               sourceAction,
@@ -875,7 +875,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "server-time" -> {
         boolean prev = conn.serverTimeCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: server-time {}",
               serverId,
               sourceAction,
@@ -885,7 +885,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "standard-replies" -> {
         boolean prev = conn.standardRepliesCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: standard-replies {}",
               serverId,
               sourceAction,
@@ -895,7 +895,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "echo-message" -> {
         boolean prev = conn.echoMessageCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: echo-message {}",
               serverId,
               sourceAction,
@@ -905,7 +905,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "cap-notify" -> {
         boolean prev = conn.capNotifyCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: cap-notify {}",
               serverId,
               sourceAction,
@@ -915,7 +915,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "labeled-response" -> {
         boolean prev = conn.labeledResponseCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: labeled-response {}",
               serverId,
               sourceAction,
@@ -925,21 +925,22 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "setname" -> {
         boolean prev = conn.setnameCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: setname {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
       case "chghost" -> {
         boolean prev = conn.chghostCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: chghost {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
       case "sts" -> {
         boolean prev = conn.stsCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info("[{}] CAP {}: sts {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
+          log.debug(
+              "[{}] CAP {}: sts {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
       case "multiline" -> {
@@ -949,7 +950,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
           conn.multilineMaxLines.set(0L);
         }
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: multiline {}",
               serverId,
               sourceAction,
@@ -963,7 +964,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
           conn.draftMultilineMaxLines.set(0L);
         }
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: draft/multiline {}",
               serverId,
               sourceAction,
@@ -973,7 +974,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "draft/reply" -> {
         boolean prev = conn.draftReplyCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: draft/reply {}",
               serverId,
               sourceAction,
@@ -983,7 +984,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "draft/channel-context" -> {
         boolean prev = conn.draftChannelContextCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: draft/channel-context {}",
               serverId,
               sourceAction,
@@ -993,7 +994,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "draft/react" -> {
         boolean prev = conn.draftReactCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: draft/react {}",
               serverId,
               sourceAction,
@@ -1003,7 +1004,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "draft/unreact" -> {
         boolean prev = conn.draftUnreactCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: draft/unreact {}",
               serverId,
               sourceAction,
@@ -1013,21 +1014,21 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "draft/message-edit", "message-edit" -> {
         boolean prev = conn.draftMessageEditCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       case "draft/message-redaction", "message-redaction" -> {
         boolean prev = conn.draftMessageRedactionCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       case "message-tags" -> {
         boolean prev = conn.messageTagsCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: message-tags {}",
               serverId,
               sourceAction,
@@ -1037,28 +1038,28 @@ final class PircbotxIrcv3InputParser extends InputParser {
       case "typing", "draft/typing" -> {
         boolean prev = conn.typingCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       case "draft/read-marker", "read-marker" -> {
         boolean prev = conn.readMarkerCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
       case "monitor" -> {
         boolean prev = conn.monitorCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: monitor {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
         }
       }
       case "extended-monitor", "draft/extended-monitor" -> {
         boolean prev = conn.extendedMonitorCapAcked.getAndSet(enabled);
         if (prev != enabled) {
-          log.info(
+          log.debug(
               "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
         }
       }
