@@ -6,12 +6,12 @@ import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
+import cafe.woden.ircclient.config.api.ServerTreeRuntimeConfigPort;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
@@ -275,7 +275,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private static final int CAPABILITY_TRANSITION_LOG_LIMIT = 200;
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final ServerTreeRuntimeConfigPort runtimeConfig;
   private final LogProperties logProps;
 
   private final Map<String, String> serverDisplayNames = new HashMap<>();
@@ -357,7 +357,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
-      RuntimeConfigStore runtimeConfig,
+      ServerTreeRuntimeConfigPort runtimeConfig,
       LogProperties logProps,
       SojuAutoConnectStore sojuAutoConnect,
       ZncAutoConnectStore zncAutoConnect,
@@ -385,7 +385,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
-      RuntimeConfigStore runtimeConfig,
+      ServerTreeRuntimeConfigPort runtimeConfig,
       LogProperties logProps,
       GenericBouncerAutoConnectStore genericAutoConnect,
       SojuAutoConnectStore sojuAutoConnect,
@@ -415,7 +415,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   @org.springframework.beans.factory.annotation.Autowired
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
-      RuntimeConfigStore runtimeConfig,
+      ServerTreeRuntimeConfigPort runtimeConfig,
       LogProperties logProps,
       GenericBouncerAutoConnectStore genericAutoConnect,
       SojuAutoConnectStore sojuAutoConnect,

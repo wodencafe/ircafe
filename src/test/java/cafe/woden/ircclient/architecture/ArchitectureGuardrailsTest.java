@@ -781,17 +781,14 @@ class ArchitectureGuardrailsTest {
                   "ServerTreeStateInteractionCollaboratorsFactory should wire server-tree collaborators through config::api ports, not RuntimeConfigStore directly");
 
   @ArchTest
-  static final ArchRule
-      server_tree_non_dockable_types_should_not_depend_on_runtime_config_store_directly =
-          noClasses()
-              .that()
-              .resideInAPackage("cafe.woden.ircclient.ui.servertree..")
-              .and()
-              .doNotHaveFullyQualifiedName("cafe.woden.ircclient.ui.servertree.ServerTreeDockable")
-              .should()
-              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
-              .because(
-                  "server-tree collaborators should resolve persisted state through config::api ports, leaving only the dockable constructor seam for a later extraction");
+  static final ArchRule server_tree_types_should_not_depend_on_runtime_config_store_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui.servertree..")
+          .should()
+          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+          .because(
+              "server-tree collaborators should resolve persisted state through config::api ports instead of RuntimeConfigStore directly");
 
   @ArchTest
   static final ArchRule ui_ignore_should_not_depend_on_app_internal_or_irc_packages =
