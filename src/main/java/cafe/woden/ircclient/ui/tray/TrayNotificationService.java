@@ -48,6 +48,7 @@ import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -99,6 +100,7 @@ public class TrayNotificationService implements TrayNotificationsPort {
   private volatile boolean twoSlicesInitialized;
   private volatile URL twoSlicesIconUrl;
 
+  @Autowired
   public TrayNotificationService(
       UiSettingsBus settingsBus,
       ObjectProvider<TrayService> trayServiceProvider,
