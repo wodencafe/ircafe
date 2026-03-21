@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -28,9 +29,9 @@ class RuntimeConfigStoreIrcv3StsPoliciesTest {
         86_400L,
         "duration=86400,port=6697,preload");
 
-    Map<String, RuntimeConfigStore.Ircv3StsPolicySnapshot> policies = store.readIrcv3StsPolicies();
+    Map<String, Ircv3StsPolicyConfigPort.StsPolicySnapshot> policies = store.readIrcv3StsPolicies();
     assertEquals(1, policies.size());
-    RuntimeConfigStore.Ircv3StsPolicySnapshot policy = policies.get("irc.example.net");
+    Ircv3StsPolicyConfigPort.StsPolicySnapshot policy = policies.get("irc.example.net");
     assertNotNull(policy);
     assertEquals(1_900_000_000_000L, policy.expiresAtEpochMs());
     assertEquals(Integer.valueOf(6697), policy.port());

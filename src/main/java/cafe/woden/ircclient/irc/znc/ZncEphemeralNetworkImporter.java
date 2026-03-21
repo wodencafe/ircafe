@@ -5,8 +5,8 @@ import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
 import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.api.BouncerDiscoveryConfigPort;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
@@ -33,7 +33,7 @@ public class ZncEphemeralNetworkImporter implements BouncerBackendDiscoveryHandl
       ServerRegistry serverRegistry,
       EphemeralServerRegistry ephemeralServers,
       ZncAutoConnectStore autoConnect,
-      RuntimeConfigStore runtimeConfig,
+      BouncerDiscoveryConfigPort runtimeConfig,
       BouncerConnectionPort connectionPort) {
     this.orchestrator =
         new BouncerNetworkDiscoveryOrchestrator(

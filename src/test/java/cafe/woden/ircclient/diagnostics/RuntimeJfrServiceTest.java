@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
 import java.lang.reflect.Field;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +12,7 @@ class RuntimeJfrServiceTest {
 
   @Test
   void statusReportAndCaptureSnapshotUseUnavailableMessageWhenJfrDisabled() throws Exception {
-    RuntimeConfigStore runtimeConfigStore = mock(RuntimeConfigStore.class);
+    DiagnosticsRuntimeConfigPort runtimeConfigStore = mock(DiagnosticsRuntimeConfigPort.class);
     JfrSnapshotSummarizer snapshotSummarizer = mock(JfrSnapshotSummarizer.class);
     RuntimeJfrService service = new RuntimeJfrService(runtimeConfigStore, snapshotSummarizer);
 

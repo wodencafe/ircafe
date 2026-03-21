@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.bouncer;
 
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.BouncerDiscoveryConfigPort;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -21,9 +21,9 @@ public class GenericBouncerNetworkMappingStrategy implements BouncerNetworkMappi
   public static final String NETWORKS_GROUP_LABEL = "Bouncer Networks";
   private static final boolean DEFAULT_PREFER_LOGIN_HINT = true;
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final BouncerDiscoveryConfigPort runtimeConfig;
 
-  public GenericBouncerNetworkMappingStrategy(RuntimeConfigStore runtimeConfig) {
+  public GenericBouncerNetworkMappingStrategy(BouncerDiscoveryConfigPort runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
   }
 

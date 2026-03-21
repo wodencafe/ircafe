@@ -3,8 +3,9 @@ package cafe.woden.ircclient.irc.pircbotx;
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
@@ -61,7 +62,8 @@ public class PircbotxIrcClientService
   private final PircbotxConnectionTimersRx timers;
   @NonNull private final BouncerDiscoveryEventPort bouncerDiscoveryEvents;
   @NonNull private final BouncerBackendRegistry bouncerBackends;
-  private final RuntimeConfigStore runtimeConfig;
+  private final CtcpReplyRuntimeConfigPort runtimeConfig;
+  private final ChatCommandRuntimeConfigPort chatCommandRuntimeConfig;
   @NonNull private final ServerIsupportStatePort serverIsupportState;
   @NonNull private final Ircv3StsPolicyService stsPolicies;
   private final String version;
@@ -72,7 +74,8 @@ public class PircbotxIrcClientService
       PircbotxInputParserHookInstaller inputParserHookInstaller,
       PircbotxBotFactory botFactory,
       PircbotxBridgeListenerFactory bridgeListenerFactory,
-      RuntimeConfigStore runtimeConfig,
+      CtcpReplyRuntimeConfigPort runtimeConfig,
+      ChatCommandRuntimeConfigPort chatCommandRuntimeConfig,
       Ircv3StsPolicyService stsPolicies,
       BouncerBackendRegistry bouncerBackends,
       BouncerDiscoveryEventPort bouncerDiscoveryEvents,
@@ -87,7 +90,9 @@ public class PircbotxIrcClientService
     this.bouncerDiscoveryEvents =
         Objects.requireNonNull(bouncerDiscoveryEvents, "bouncerDiscoveryEvents");
     this.bouncerBackends = Objects.requireNonNull(bouncerBackends, "bouncerBackends");
-    this.runtimeConfig = runtimeConfig;
+    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
+    this.chatCommandRuntimeConfig =
+        Objects.requireNonNull(chatCommandRuntimeConfig, "chatCommandRuntimeConfig");
     this.serverIsupportState = Objects.requireNonNull(serverIsupportState, "serverIsupportState");
     this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
     this.version = Objects.requireNonNull(props, "props").client().version();
@@ -1268,7 +1273,7 @@ public class PircbotxIrcClientService
   @Override
   public void shutdownNow() {
     shuttingDown.set(true);
-    String shutdownQuitReason = runtimeConfig.readDefaultQuitMessage();
+    String shutdownQuitReason = chatCommandRuntimeConfig.readDefaultQuitMessage();
     for (PircbotxConnectionState c : connections.values()) {
       if (c == null) continue;
       try {

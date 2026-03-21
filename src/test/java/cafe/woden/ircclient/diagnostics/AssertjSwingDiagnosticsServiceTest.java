@@ -10,8 +10,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -28,7 +28,7 @@ class AssertjSwingDiagnosticsServiceTest {
   void startReportsDisabledWhenConfiguredOff() {
     ApplicationDiagnosticsService diagnostics = mock(ApplicationDiagnosticsService.class);
     UiProperties uiProps = mock(UiProperties.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    DiagnosticsRuntimeConfigPort runtimeConfig = mock(DiagnosticsRuntimeConfigPort.class);
     @SuppressWarnings("unchecked")
     ObjectProvider<NotificationSoundService> soundProvider = mock(ObjectProvider.class);
     @SuppressWarnings("unchecked")
@@ -54,7 +54,7 @@ class AssertjSwingDiagnosticsServiceTest {
   void shutdownCancelsExistingWatchdogTask() throws Exception {
     ApplicationDiagnosticsService diagnostics = mock(ApplicationDiagnosticsService.class);
     UiProperties uiProps = mock(UiProperties.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    DiagnosticsRuntimeConfigPort runtimeConfig = mock(DiagnosticsRuntimeConfigPort.class);
     @SuppressWarnings("unchecked")
     ObjectProvider<NotificationSoundService> soundProvider = mock(ObjectProvider.class);
     @SuppressWarnings("unchecked")
@@ -78,7 +78,7 @@ class AssertjSwingDiagnosticsServiceTest {
   void markFrozenPublishesEdtStackLinesToDiagnostics() throws Exception {
     ApplicationDiagnosticsService diagnostics = mock(ApplicationDiagnosticsService.class);
     UiProperties uiProps = mock(UiProperties.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    DiagnosticsRuntimeConfigPort runtimeConfig = mock(DiagnosticsRuntimeConfigPort.class);
     @SuppressWarnings("unchecked")
     ObjectProvider<NotificationSoundService> soundProvider = mock(ObjectProvider.class);
     @SuppressWarnings("unchecked")

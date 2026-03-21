@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.diagnostics;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.nio.file.Files;
@@ -28,7 +28,7 @@ public class RuntimeJfrService {
   private static final DateTimeFormatter TS_FMT =
       DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(java.time.ZoneId.systemDefault());
 
-  private final RuntimeConfigStore runtimeConfigStore;
+  private final DiagnosticsRuntimeConfigPort runtimeConfig;
   private final JfrSnapshotSummarizer snapshotSummarizer;
   private Recording recording;
   private boolean unavailable;
@@ -36,8 +36,8 @@ public class RuntimeJfrService {
   private Path latestSnapshot;
 
   public RuntimeJfrService(
-      RuntimeConfigStore runtimeConfigStore, JfrSnapshotSummarizer snapshotSummarizer) {
-    this.runtimeConfigStore = runtimeConfigStore;
+      DiagnosticsRuntimeConfigPort runtimeConfig, JfrSnapshotSummarizer snapshotSummarizer) {
+    this.runtimeConfig = runtimeConfig;
     this.snapshotSummarizer = snapshotSummarizer;
   }
 
@@ -123,7 +123,7 @@ public class RuntimeJfrService {
   }
 
   private Path snapshotDirectory() {
-    Path cfg = runtimeConfigStore != null ? runtimeConfigStore.runtimeConfigPath() : null;
+    Path cfg = runtimeConfig != null ? runtimeConfig.runtimeConfigPath() : null;
     Path base = cfg != null ? cfg.getParent() : null;
     if (base == null) {
       base = Path.of(System.getProperty("java.io.tmpdir"), "ircafe");

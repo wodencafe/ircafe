@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.irc.ircv3;
 
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -43,10 +43,10 @@ public class Ircv3StsPolicyService {
   }
 
   private final ConcurrentMap<String, StsPolicy> byHostLower = new ConcurrentHashMap<>();
-  private final RuntimeConfigStore runtimeConfig;
+  private final Ircv3StsPolicyConfigPort runtimeConfig;
 
   @Autowired
-  public Ircv3StsPolicyService(RuntimeConfigStore runtimeConfig) {
+  public Ircv3StsPolicyService(Ircv3StsPolicyConfigPort runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
     loadPersistedPolicies();
   }
@@ -123,21 +123,22 @@ public class Ircv3StsPolicyService {
   }
 
   private void loadPersistedPolicies() {
-    RuntimeConfigStore store = runtimeConfig;
+    Ircv3StsPolicyConfigPort store = runtimeConfig;
     if (store == null) return;
 
-    Map<String, RuntimeConfigStore.Ircv3StsPolicySnapshot> persisted = store.readIrcv3StsPolicies();
+    Map<String, Ircv3StsPolicyConfigPort.StsPolicySnapshot> persisted =
+        store.readIrcv3StsPolicies();
     if (persisted == null || persisted.isEmpty()) return;
 
     long now = System.currentTimeMillis();
     int loaded = 0;
     int dropped = 0;
-    for (Map.Entry<String, RuntimeConfigStore.Ircv3StsPolicySnapshot> entry :
+    for (Map.Entry<String, Ircv3StsPolicyConfigPort.StsPolicySnapshot> entry :
         persisted.entrySet()) {
       String hostLower = normalizeHost(entry.getKey());
       if (hostLower.isEmpty()) continue;
 
-      RuntimeConfigStore.Ircv3StsPolicySnapshot snapshot = entry.getValue();
+      Ircv3StsPolicyConfigPort.StsPolicySnapshot snapshot = entry.getValue();
       if (snapshot == null) continue;
 
       long expiresAtEpochMs = snapshot.expiresAtEpochMs();
@@ -225,7 +226,7 @@ public class Ircv3StsPolicyService {
   }
 
   private void persistPolicy(StsPolicy policy) {
-    RuntimeConfigStore store = runtimeConfig;
+    Ircv3StsPolicyConfigPort store = runtimeConfig;
     if (store == null || policy == null) return;
     store.rememberIrcv3StsPolicy(
         policy.hostLower(),
@@ -237,7 +238,7 @@ public class Ircv3StsPolicyService {
   }
 
   private void forgetPersistedPolicy(String hostLower) {
-    RuntimeConfigStore store = runtimeConfig;
+    Ircv3StsPolicyConfigPort store = runtimeConfig;
     if (store == null) return;
     store.forgetIrcv3StsPolicy(hostLower);
   }

@@ -22,8 +22,8 @@ import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
@@ -109,7 +109,7 @@ public class IrcMediator implements MediatorControlPort {
   private final CommandParser commandParser;
   private final UserCommandAliasEngine userCommandAliasEngine;
   private final ServerRegistry serverRegistry;
-  private final RuntimeConfigStore runtimeConfig;
+  private final IrcSessionRuntimeConfigPort runtimeConfig;
   private final ConnectionCoordinator connectionCoordinator;
   private final MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder;
   private final MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder;

@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.monitor;
 
 import cafe.woden.ircclient.app.api.MonitorRosterPort;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -25,7 +25,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class MonitorListService implements MonitorRosterPort {
 
-  @NonNull private final RuntimeConfigStore runtimeConfig;
+  @NonNull private final MonitorRosterConfigPort runtimeConfig;
   private final ConcurrentHashMap<String, List<String>> nicksByServer = new ConcurrentHashMap<>();
   private final FlowableProcessor<Change> changes =
       PublishProcessor.<Change>create().toSerialized();

@@ -28,9 +28,19 @@ import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
 import cafe.woden.ircclient.config.NotificationRule;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.BouncerDiscoveryConfigPort;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.IgnoreRulesConfigPort;
+import cafe.woden.ircclient.config.api.InterceptorConfigPort;
 import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
+import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
+import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
+import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
+import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.AssertjSwingDiagnosticsService;
@@ -154,9 +164,19 @@ class SpringModulithIncrementalAdoptionTest {
     assertNamedInterfaceContains(
         configModule,
         "api",
+        BouncerDiscoveryConfigPort.class,
         InviteAutoJoinConfigPort.class,
         ChatCommandRuntimeConfigPort.class,
-        ConnectionRuntimeConfigPort.class);
+        ConnectionRuntimeConfigPort.class,
+        CtcpReplyRuntimeConfigPort.class,
+        DiagnosticsRuntimeConfigPort.class,
+        IgnoreRulesConfigPort.class,
+        InterceptorConfigPort.class,
+        Ircv3StsPolicyConfigPort.class,
+        IrcSessionRuntimeConfigPort.class,
+        MonitorRosterConfigPort.class,
+        RuntimeConfigPathPort.class,
+        UserCommandAliasesConfigPort.class);
 
     ApplicationModule bouncerModule = moduleFor(modules, AbstractBouncerAutoConnectStore.class);
     assertThat(bouncerModule).isNotEqualTo(appModule);

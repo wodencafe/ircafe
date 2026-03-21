@@ -7,8 +7,8 @@ import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
@@ -59,7 +59,7 @@ public class TargetCoordinator implements ActiveTargetPort {
   private final IrcBouncerPlaybackPort bouncerPlayback;
 
   @NonNull private final ServerRegistry serverRegistry;
-  @NonNull private final RuntimeConfigStore runtimeConfig;
+  @NonNull private final IrcSessionRuntimeConfigPort runtimeConfig;
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final IgnoreListQueryPort ignoreList;
   @NonNull private final UserhostQueryService userhostQueryService;

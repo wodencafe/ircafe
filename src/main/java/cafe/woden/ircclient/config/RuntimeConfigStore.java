@@ -1,8 +1,17 @@
 package cafe.woden.ircclient.config;
 
+import cafe.woden.ircclient.config.api.BouncerDiscoveryConfigPort;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.IgnoreRulesConfigPort;
+import cafe.woden.ircclient.config.api.InterceptorConfigPort;
 import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
+import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
+import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
+import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
 import cafe.woden.ircclient.model.FilterRule;
 import cafe.woden.ircclient.model.FilterScopeOverride;
 import cafe.woden.ircclient.model.InterceptorDefinition;
@@ -37,7 +46,18 @@ import org.yaml.snakeyaml.Yaml;
 @Component
 @ApplicationLayer
 public class RuntimeConfigStore
-    implements ChatCommandRuntimeConfigPort, InviteAutoJoinConfigPort, ConnectionRuntimeConfigPort {
+    implements BouncerDiscoveryConfigPort,
+        ChatCommandRuntimeConfigPort,
+        InviteAutoJoinConfigPort,
+        ConnectionRuntimeConfigPort,
+        CtcpReplyRuntimeConfigPort,
+        DiagnosticsRuntimeConfigPort,
+        IgnoreRulesConfigPort,
+        InterceptorConfigPort,
+        Ircv3StsPolicyConfigPort,
+        IrcSessionRuntimeConfigPort,
+        MonitorRosterConfigPort,
+        UserCommandAliasesConfigPort {
 
   private static final Logger log = LoggerFactory.getLogger(RuntimeConfigStore.class);
   private static final java.util.Set<String> KNOWN_IGNORE_LEVELS =
@@ -713,10 +733,12 @@ public class RuntimeConfigStore
     rememberServerTreeChannel(serverId, channel);
   }
 
+  @Override
   public synchronized void forgetJoinedChannel(String serverId, String channel) {
     forgetServerTreeChannel(serverId, channel);
   }
 
+  @Override
   public synchronized List<String> readJoinedChannels(String serverId) {
     return readServerAutoJoinChannels(serverId);
   }
@@ -739,6 +761,7 @@ public class RuntimeConfigStore
     return out.isEmpty() ? List.of() : List.copyOf(out);
   }
 
+  @Override
   public synchronized boolean readServerTreeChannelAutoReattach(
       String serverId, String channel, boolean defaultValue) {
     String sid = Objects.toString(serverId, "").trim();
@@ -1423,6 +1446,7 @@ public class RuntimeConfigStore
         });
   }
 
+  @Override
   public synchronized void replaceMonitorNicks(String serverId, List<String> nicks) {
     updateServer(
         serverId,
@@ -1436,6 +1460,7 @@ public class RuntimeConfigStore
         });
   }
 
+  @Override
   public synchronized List<String> readMonitorNicks(String serverId) {
     try {
       if (file.toString().isBlank()) return List.of();
@@ -3019,6 +3044,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized List<UserCommandAlias> readUserCommandAliases() {
     try {
       if (file.toString().isBlank()) return List.of();
@@ -3056,6 +3082,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized boolean readUnknownCommandAsRawEnabled(boolean defaultValue) {
     try {
       if (file.toString().isBlank()) return defaultValue;
@@ -3674,18 +3701,22 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized boolean readCtcpAutoRepliesEnabled(boolean defaultValue) {
     return readCtcpAutoReplyValue("enabled", defaultValue);
   }
 
+  @Override
   public synchronized boolean readCtcpAutoReplyVersionEnabled(boolean defaultValue) {
     return readCtcpAutoReplyValue("version", defaultValue);
   }
 
+  @Override
   public synchronized boolean readCtcpAutoReplyPingEnabled(boolean defaultValue) {
     return readCtcpAutoReplyValue("ping", defaultValue);
   }
 
+  @Override
   public synchronized boolean readCtcpAutoReplyTimeEnabled(boolean defaultValue) {
     return readCtcpAutoReplyValue("time", defaultValue);
   }
@@ -4966,20 +4997,14 @@ public class RuntimeConfigStore
     }
   }
 
-  /** Persisted IRCv3 STS policy snapshot under {@code ircafe.ircv3.stsPolicies.<host>}. */
-  public record Ircv3StsPolicySnapshot(
-      long expiresAtEpochMs,
-      Integer port,
-      boolean preload,
-      long durationSeconds,
-      String rawValue) {}
-
   /**
    * Reads persisted IRCv3 STS policy snapshots under {@code ircafe.ircv3.stsPolicies}.
    *
    * <p>Entries with invalid hosts or missing/invalid expiry are ignored.
    */
-  public synchronized Map<String, Ircv3StsPolicySnapshot> readIrcv3StsPolicies() {
+  @Override
+  public synchronized Map<String, Ircv3StsPolicyConfigPort.StsPolicySnapshot>
+      readIrcv3StsPolicies() {
     try {
       if (file.toString().isBlank()) return Map.of();
       if (!Files.exists(file)) return Map.of();
@@ -4994,7 +5019,7 @@ public class RuntimeConfigStore
       Object policiesObj = ircv3.get("stsPolicies");
       if (!(policiesObj instanceof Map<?, ?> policies)) return Map.of();
 
-      Map<String, Ircv3StsPolicySnapshot> out = new LinkedHashMap<>();
+      Map<String, Ircv3StsPolicyConfigPort.StsPolicySnapshot> out = new LinkedHashMap<>();
       for (Map.Entry<?, ?> entry : policies.entrySet()) {
         String host = normalizeHostKey(Objects.toString(entry.getKey(), ""));
         if (host == null) continue;
@@ -5013,7 +5038,8 @@ public class RuntimeConfigStore
 
         out.put(
             host,
-            new Ircv3StsPolicySnapshot(expiresAtEpochMs, port, preload, durationSeconds, rawValue));
+            new Ircv3StsPolicyConfigPort.StsPolicySnapshot(
+                expiresAtEpochMs, port, preload, durationSeconds, rawValue));
       }
       return out;
     } catch (Exception e) {
@@ -5023,6 +5049,7 @@ public class RuntimeConfigStore
   }
 
   /** Persists one IRCv3 STS policy snapshot under {@code ircafe.ircv3.stsPolicies.<host>}. */
+  @Override
   public synchronized void rememberIrcv3StsPolicy(
       String host,
       long expiresAtEpochMs,
@@ -5072,6 +5099,7 @@ public class RuntimeConfigStore
   }
 
   /** Removes a persisted IRCv3 STS policy snapshot from {@code ircafe.ircv3.stsPolicies}. */
+  @Override
   public synchronized void forgetIrcv3StsPolicy(String host) {
     try {
       if (file.toString().isBlank()) return;
@@ -5158,6 +5186,7 @@ public class RuntimeConfigStore
    * Returns whether a given IRCv3 capability should be requested, falling back to {@code
    * defaultEnabled} when no explicit override is present.
    */
+  @Override
   public synchronized boolean isIrcv3CapabilityEnabled(String capability, boolean defaultEnabled) {
     String key = normalizeCapabilityKey(capability);
     if (key == null) return defaultEnabled;
@@ -5170,6 +5199,7 @@ public class RuntimeConfigStore
    *
    * <p>Default behavior is "enabled", so enabled values are removed to keep YAML concise.
    */
+  @Override
   public synchronized void rememberIrcv3CapabilityEnabled(String capability, boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -6346,6 +6376,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -6377,6 +6408,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMaskLevels(
       String serverId, String mask, List<String> levels) {
     try {
@@ -6427,6 +6459,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMaskChannels(
       String serverId, String mask, List<String> channels) {
     try {
@@ -6475,6 +6508,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMaskExpiresAt(
       String serverId, String mask, Long expiresAtEpochMs) {
     try {
@@ -6521,6 +6555,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMaskPattern(
       String serverId, String mask, String pattern, String modeToken) {
     try {
@@ -6583,6 +6618,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMaskReplies(
       String serverId, String mask, boolean repliesEnabled) {
     try {
@@ -6677,6 +6713,7 @@ public class RuntimeConfigStore
     };
   }
 
+  @Override
   public synchronized void forgetIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -6783,6 +6820,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberSoftIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -6814,6 +6852,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void forgetSoftIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -6859,6 +6898,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberHardIgnoreIncludesCtcp(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -6875,6 +6915,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberSoftIgnoreIncludesCtcp(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -6918,16 +6959,19 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberSojuAutoConnectNetwork(
       String bouncerServerId, String networkName, boolean enabled) {
     rememberBouncerAutoConnectNetwork("soju", bouncerServerId, networkName, enabled);
   }
 
+  @Override
   public synchronized void rememberZncAutoConnectNetwork(
       String bouncerServerId, String networkName, boolean enabled) {
     rememberBouncerAutoConnectNetwork("znc", bouncerServerId, networkName, enabled);
   }
 
+  @Override
   public synchronized Map<String, Map<String, Boolean>> readGenericBouncerAutoConnectRules() {
     try {
       if (file.toString().isBlank()) return Map.of();
@@ -6968,11 +7012,13 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberGenericBouncerAutoConnectNetwork(
       String bouncerServerId, String networkName, boolean enabled) {
     rememberBouncerAutoConnectNetwork("bouncer", bouncerServerId, networkName, enabled);
   }
 
+  @Override
   public synchronized String readGenericBouncerLoginTemplate(String defaultValue) {
     String fallback = normalizeGenericBouncerLoginTemplate(defaultValue);
     try {
@@ -6997,6 +7043,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized boolean readGenericBouncerPreferLoginHint(boolean defaultValue) {
     try {
       if (file.toString().isBlank()) return defaultValue;

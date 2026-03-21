@@ -9,9 +9,12 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.config.IrcProperties;
+import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
+import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
@@ -981,6 +984,7 @@ class PircbotxContainerNetworkE2eIntegrationTest {
 
     BouncerBackendRegistry bouncerBackends = mock(BouncerBackendRegistry.class);
     BouncerDiscoveryEventPort bouncerDiscoveryEvents = mock(BouncerDiscoveryEventPort.class);
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
     when(bouncerBackends.backendIds()).thenReturn(Set.of());
 
     ScheduledExecutorService heartbeatExec =
@@ -1006,7 +1010,8 @@ class PircbotxContainerNetworkE2eIntegrationTest {
             hookInstaller,
             botFactory,
             bridgeListenerFactory,
-            null,
+            (CtcpReplyRuntimeConfigPort) runtimeConfig,
+            (ChatCommandRuntimeConfigPort) runtimeConfig,
             stsPolicies,
             bouncerBackends,
             bouncerDiscoveryEvents,

@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ignore;
 
 import cafe.woden.ircclient.config.IgnoreProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.IgnoreRulesConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreAddMaskResult;
 import cafe.woden.ircclient.ignore.api.IgnoreLevels;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
@@ -25,7 +25,7 @@ import org.springframework.stereotype.Component;
 @ApplicationLayer
 public class IgnoreListService implements IgnoreListQueryPort, IgnoreListCommandPort {
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final IgnoreRulesConfigPort runtimeConfig;
 
   private volatile boolean hardIgnoreIncludesCtcp;
 
@@ -117,7 +117,7 @@ public class IgnoreListService implements IgnoreListQueryPort, IgnoreListCommand
     runtimeConfig.rememberSoftIgnoreIncludesCtcp(enabled);
   }
 
-  public IgnoreListService(IgnoreProperties props, RuntimeConfigStore runtimeConfig) {
+  public IgnoreListService(IgnoreProperties props, IgnoreRulesConfigPort runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
     this.hardIgnoreIncludesCtcp =
         (props == null) ? true : Boolean.TRUE.equals(props.hardIgnoreIncludesCtcp());

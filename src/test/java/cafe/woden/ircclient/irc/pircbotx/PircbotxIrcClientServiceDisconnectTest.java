@@ -16,6 +16,8 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.ZncProperties;
+import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
@@ -71,7 +73,8 @@ class PircbotxIrcClientServiceDisconnectTest {
             inputParserHookInstaller,
             botFactory,
             bridgeListenerFactory,
-            runtimeConfig,
+            (CtcpReplyRuntimeConfigPort) runtimeConfig,
+            (ChatCommandRuntimeConfigPort) runtimeConfig,
             stsPolicies,
             bouncerBackends,
             bouncerDiscoveryEvents,
@@ -128,7 +131,8 @@ class PircbotxIrcClientServiceDisconnectTest {
             inputParserHookInstaller,
             botFactory,
             bridgeListenerFactory,
-            runtimeConfig,
+            (CtcpReplyRuntimeConfigPort) runtimeConfig,
+            (ChatCommandRuntimeConfigPort) runtimeConfig,
             stsPolicies,
             bouncerBackends,
             bouncerDiscoveryEvents,

@@ -507,7 +507,8 @@ class ChannelListPanelManagedOrderTest {
   }
 
   private static void invokeStaticRepaintIfSized(JButton button) throws Exception {
-    Method method = ChannelListPanel.class.getDeclaredMethod("repaintIfSized", javax.swing.JComponent.class);
+    Method method =
+        ChannelListPanel.class.getDeclaredMethod("repaintIfSized", javax.swing.JComponent.class);
     method.setAccessible(true);
     method.invoke(null, button);
   }

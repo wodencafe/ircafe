@@ -5,8 +5,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +16,7 @@ class JhiccupDiagnosticsServiceTest {
   void startReportsDisabledWhenFeatureOff() {
     ApplicationDiagnosticsService diagnostics = mock(ApplicationDiagnosticsService.class);
     UiProperties uiProps = mock(UiProperties.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    DiagnosticsRuntimeConfigPort runtimeConfig = mock(DiagnosticsRuntimeConfigPort.class);
     when(uiProps.appDiagnostics())
         .thenReturn(
             new UiProperties.AppDiagnostics(
@@ -35,7 +35,7 @@ class JhiccupDiagnosticsServiceTest {
   void startReportsMissingJarPathWhenEnabledWithoutPath() {
     ApplicationDiagnosticsService diagnostics = mock(ApplicationDiagnosticsService.class);
     UiProperties uiProps = mock(UiProperties.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    DiagnosticsRuntimeConfigPort runtimeConfig = mock(DiagnosticsRuntimeConfigPort.class);
     when(uiProps.appDiagnostics())
         .thenReturn(
             new UiProperties.AppDiagnostics(
@@ -56,7 +56,7 @@ class JhiccupDiagnosticsServiceTest {
   void startReportsMissingJarFile() {
     ApplicationDiagnosticsService diagnostics = mock(ApplicationDiagnosticsService.class);
     UiProperties uiProps = mock(UiProperties.class);
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    DiagnosticsRuntimeConfigPort runtimeConfig = mock(DiagnosticsRuntimeConfigPort.class);
     when(runtimeConfig.runtimeConfigPath()).thenReturn(Path.of("/tmp/ircafe/runtime.yml"));
     when(uiProps.appDiagnostics())
         .thenReturn(

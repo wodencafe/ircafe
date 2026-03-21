@@ -2,8 +2,8 @@ package cafe.woden.ircclient.irc.pircbotx;
 
 import cafe.woden.ircclient.config.AutoJoinEntryCodec;
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.SojuProperties;
+import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
@@ -56,7 +56,7 @@ public class PircbotxBotFactory {
 
   private final ServerProxyResolver proxyResolver;
   private final SojuProperties sojuProps;
-  private final RuntimeConfigStore runtimeConfig;
+  private final IrcSessionRuntimeConfigPort runtimeConfig;
 
   public PircBotX build(IrcProperties.Server s, String version, ListenerAdapter listener) {
     ProxyPlan plan = proxyResolver.planForServer(s.id());
