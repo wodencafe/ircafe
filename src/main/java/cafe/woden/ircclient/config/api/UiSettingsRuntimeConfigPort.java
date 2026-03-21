@@ -15,6 +15,8 @@ public interface UiSettingsRuntimeConfigPort {
 
   boolean readChatSmoothWheelScrollingEnabled(boolean defaultValue);
 
+  boolean readChatHistoryLockViewportDuringLoadOlder(boolean defaultValue);
+
   void rememberUiSettings(String theme, String chatFontFamily, int chatFontSize);
 
   Optional<String> readStartupThemePending();

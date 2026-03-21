@@ -10,6 +10,7 @@ import cafe.woden.ircclient.config.NotificationRule;
 import cafe.woden.ircclient.config.PushyProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import cafe.woden.ircclient.irc.backend.IrcHeartbeatMaintenanceService;
 import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityCatalog;
 import cafe.woden.ircclient.model.BuiltInSound;
@@ -334,7 +335,7 @@ public class PreferencesDialog {
         new java.util.concurrent.atomic.AtomicReference<>(committedThemeId.get());
     final java.util.concurrent.atomic.AtomicReference<UiSettings> committedUiSettings =
         new java.util.concurrent.atomic.AtomicReference<>(current);
-    final java.util.concurrent.atomic.AtomicReference<RuntimeConfigStore.EmbedLoadPolicySnapshot>
+    final java.util.concurrent.atomic.AtomicReference<EmbedLoadPolicySnapshot>
         pendingEmbedLoadPolicy =
             new java.util.concurrent.atomic.AtomicReference<>(
                 embedLoadPolicyBus != null
@@ -1860,10 +1861,10 @@ public class PreferencesDialog {
             runtimeConfig.rememberLinkPreviewsEnabled(next.linkPreviewsEnabled());
             runtimeConfig.rememberLinkPreviewsCollapsedByDefault(
                 next.linkPreviewsCollapsedByDefault());
-            RuntimeConfigStore.EmbedLoadPolicySnapshot embedPolicyV =
+            EmbedLoadPolicySnapshot embedPolicyV =
                 pendingEmbedLoadPolicy.get() != null
                     ? pendingEmbedLoadPolicy.get()
-                    : RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults();
+                    : EmbedLoadPolicySnapshot.defaults();
             runtimeConfig.rememberEmbedLoadPolicy(embedPolicyV);
             if (embedLoadPolicyBus != null) {
               embedLoadPolicyBus.set(embedPolicyV);
@@ -7066,18 +7067,17 @@ public class PreferencesDialog {
 
   private JButton buildAdvancedEmbedPolicyButton(
       Window owner,
-      java.util.concurrent.atomic.AtomicReference<RuntimeConfigStore.EmbedLoadPolicySnapshot>
-          pendingEmbedLoadPolicy) {
+      java.util.concurrent.atomic.AtomicReference<EmbedLoadPolicySnapshot> pendingEmbedLoadPolicy) {
     JButton advanced = new JButton("Advanced Policy...");
     advanced.setToolTipText(
         "Open advanced allow/deny controls for embed/link loading by user, channel, URL/domain, and network.");
     advanced.addActionListener(
         e -> {
           if (embedLoadPolicyDialog == null || pendingEmbedLoadPolicy == null) return;
-          RuntimeConfigStore.EmbedLoadPolicySnapshot current =
+          EmbedLoadPolicySnapshot current =
               pendingEmbedLoadPolicy.get() != null
                   ? pendingEmbedLoadPolicy.get()
-                  : RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults();
+                  : EmbedLoadPolicySnapshot.defaults();
           embedLoadPolicyDialog.open(owner, current).ifPresent(pendingEmbedLoadPolicy::set);
         });
     return advanced;

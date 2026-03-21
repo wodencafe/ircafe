@@ -61,6 +61,7 @@ import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort;
 import cafe.woden.ircclient.config.api.FilterSettingsConfigPort;
 import cafe.woden.ircclient.config.api.IgnoreRulesConfigPort;
 import cafe.woden.ircclient.config.api.InterceptorConfigPort;
@@ -252,6 +253,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(ConnectionRuntimeConfigPort.class, ApplicationLayer.class);
     assertAnnotated(CtcpReplyRuntimeConfigPort.class, ApplicationLayer.class);
     assertAnnotated(DiagnosticsRuntimeConfigPort.class, ApplicationLayer.class);
+    assertAnnotated(EmbedLoadPolicyConfigPort.class, ApplicationLayer.class);
     assertAnnotated(FilterSettingsConfigPort.class, ApplicationLayer.class);
     assertAnnotated(IgnoreRulesConfigPort.class, ApplicationLayer.class);
     assertAnnotated(InterceptorConfigPort.class, ApplicationLayer.class);

@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.ui.settings;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicyScope;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import cafe.woden.ircclient.ui.chat.embed.EmbedLoadPolicyMatcher;
 import java.awt.Color;
 import java.awt.Dialog;
@@ -40,36 +42,32 @@ import org.springframework.stereotype.Component;
 @Lazy
 public class EmbedLoadPolicyDialog {
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final EmbedLoadPolicyConfigPort runtimeConfig;
 
-  public EmbedLoadPolicyDialog(RuntimeConfigStore runtimeConfig) {
+  public EmbedLoadPolicyDialog(EmbedLoadPolicyConfigPort runtimeConfig) {
     this.runtimeConfig = runtimeConfig;
   }
 
-  public Optional<RuntimeConfigStore.EmbedLoadPolicySnapshot> open(
-      Window owner, RuntimeConfigStore.EmbedLoadPolicySnapshot seed) {
+  public Optional<EmbedLoadPolicySnapshot> open(Window owner, EmbedLoadPolicySnapshot seed) {
     if (!SwingUtilities.isEventDispatchThread()) {
-      final RuntimeConfigStore.EmbedLoadPolicySnapshot[] out = {
-        RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults()
-      };
+      final EmbedLoadPolicySnapshot[] out = {EmbedLoadPolicySnapshot.defaults()};
       final boolean[] changed = {false};
       try {
         SwingUtilities.invokeAndWait(
             () -> {
-              Optional<RuntimeConfigStore.EmbedLoadPolicySnapshot> result = open(owner, seed);
+              Optional<EmbedLoadPolicySnapshot> result = open(owner, seed);
               changed[0] = result.isPresent();
-              out[0] = result.orElse(RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults());
+              out[0] = result.orElse(EmbedLoadPolicySnapshot.defaults());
             });
       } catch (Exception ignored) {
       }
       return changed[0] ? Optional.of(out[0]) : Optional.empty();
     }
 
-    RuntimeConfigStore.EmbedLoadPolicySnapshot initial =
-        seed == null ? RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults() : seed;
+    EmbedLoadPolicySnapshot initial = seed == null ? EmbedLoadPolicySnapshot.defaults() : seed;
 
-    final RuntimeConfigStore.EmbedLoadPolicyScope[] globalRef = {initial.global()};
-    final LinkedHashMap<String, RuntimeConfigStore.EmbedLoadPolicyScope> byServerRef =
+    final EmbedLoadPolicyScope[] globalRef = {initial.global()};
+    final LinkedHashMap<String, EmbedLoadPolicyScope> byServerRef =
         new LinkedHashMap<>(initial.byServer());
 
     List<ScopeOption> options = buildScopeOptions(initial);
@@ -126,7 +124,7 @@ public class EmbedLoadPolicyDialog {
     root.add(tabs, "grow");
     root.add(buttons, "growx");
 
-    final RuntimeConfigStore.EmbedLoadPolicySnapshot[] result = {null};
+    final EmbedLoadPolicySnapshot[] result = {null};
     Runnable refreshValidation = () -> save.setEnabled(validateAllPatternTables(controls));
     installValidationListeners(controls, refreshValidation);
 
@@ -135,7 +133,7 @@ public class EmbedLoadPolicyDialog {
           ScopeOption selected = (ScopeOption) scope.getSelectedItem();
           if (selected == null) return;
           stopTableEditing(controls);
-          RuntimeConfigStore.EmbedLoadPolicyScope currentScope = readScopeFromControls(controls);
+          EmbedLoadPolicyScope currentScope = readScopeFromControls(controls);
           if (selected.global()) {
             globalRef[0] = currentScope;
           } else {
@@ -151,14 +149,14 @@ public class EmbedLoadPolicyDialog {
         () -> {
           ScopeOption selected = (ScopeOption) scope.getSelectedItem();
           if (selected == null) return;
-          RuntimeConfigStore.EmbedLoadPolicyScope show;
+          EmbedLoadPolicyScope show;
           boolean editable = true;
           if (selected.global()) {
             inheritGlobal.setVisible(false);
             show = globalRef[0];
           } else {
             inheritGlobal.setVisible(true);
-            RuntimeConfigStore.EmbedLoadPolicyScope override = byServerRef.get(selected.serverId());
+            EmbedLoadPolicyScope override = byServerRef.get(selected.serverId());
             boolean usesGlobal = override == null;
             inheritGlobal.setSelected(usesGlobal);
             show = usesGlobal ? globalRef[0] : override;
@@ -183,8 +181,7 @@ public class EmbedLoadPolicyDialog {
           if (inheritGlobal.isSelected()) {
             byServerRef.remove(selected.serverId());
           } else if (!byServerRef.containsKey(selected.serverId())) {
-            byServerRef.put(
-                selected.serverId(), RuntimeConfigStore.EmbedLoadPolicyScope.defaults());
+            byServerRef.put(selected.serverId(), EmbedLoadPolicyScope.defaults());
           }
           loadSelection.run();
         });
@@ -209,7 +206,7 @@ public class EmbedLoadPolicyDialog {
             return;
           }
           applySelection.run();
-          result[0] = new RuntimeConfigStore.EmbedLoadPolicySnapshot(globalRef[0], byServerRef);
+          result[0] = new EmbedLoadPolicySnapshot(globalRef[0], byServerRef);
           dialog.dispose();
         });
     cancel.addActionListener(e -> dialog.dispose());
@@ -223,7 +220,7 @@ public class EmbedLoadPolicyDialog {
     return Optional.ofNullable(result[0]);
   }
 
-  private List<ScopeOption> buildScopeOptions(RuntimeConfigStore.EmbedLoadPolicySnapshot initial) {
+  private List<ScopeOption> buildScopeOptions(EmbedLoadPolicySnapshot initial) {
     LinkedHashMap<String, ScopeOption> out = new LinkedHashMap<>();
     out.put("", new ScopeOption("", "Global (all networks)", true));
 
@@ -429,10 +426,9 @@ public class EmbedLoadPolicyDialog {
         model, table, add, remove, up, down, panel, validation, invalidRows);
   }
 
-  private static RuntimeConfigStore.EmbedLoadPolicyScope readScopeFromControls(
-      PolicyControls controls) {
+  private static EmbedLoadPolicyScope readScopeFromControls(PolicyControls controls) {
     stopTableEditing(controls);
-    return new RuntimeConfigStore.EmbedLoadPolicyScope(
+    return new EmbedLoadPolicyScope(
         readPatternRows(controls.userWhitelist().model()),
         readPatternRows(controls.userBlacklist().model()),
         readPatternRows(controls.channelWhitelist().model()),
@@ -446,10 +442,8 @@ public class EmbedLoadPolicyDialog {
         readPatternRows(controls.domainBlacklist().model()));
   }
 
-  private static void writeScopeToControls(
-      RuntimeConfigStore.EmbedLoadPolicyScope scope, PolicyControls controls) {
-    RuntimeConfigStore.EmbedLoadPolicyScope s =
-        scope == null ? RuntimeConfigStore.EmbedLoadPolicyScope.defaults() : scope;
+  private static void writeScopeToControls(EmbedLoadPolicyScope scope, PolicyControls controls) {
+    EmbedLoadPolicyScope s = scope == null ? EmbedLoadPolicyScope.defaults() : scope;
     writePatternRows(controls.userWhitelist().model(), s.userWhitelist());
     writePatternRows(controls.userBlacklist().model(), s.userBlacklist());
     writePatternRows(controls.channelWhitelist().model(), s.channelWhitelist());

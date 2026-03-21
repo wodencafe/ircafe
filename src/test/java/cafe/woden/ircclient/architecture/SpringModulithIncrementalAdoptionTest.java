@@ -33,6 +33,7 @@ import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort;
 import cafe.woden.ircclient.config.api.FilterSettingsConfigPort;
 import cafe.woden.ircclient.config.api.IgnoreRulesConfigPort;
 import cafe.woden.ircclient.config.api.InterceptorConfigPort;
@@ -175,6 +176,7 @@ class SpringModulithIncrementalAdoptionTest {
         ConnectionRuntimeConfigPort.class,
         CtcpReplyRuntimeConfigPort.class,
         DiagnosticsRuntimeConfigPort.class,
+        EmbedLoadPolicyConfigPort.class,
         FilterSettingsConfigPort.class,
         IgnoreRulesConfigPort.class,
         InterceptorConfigPort.class,

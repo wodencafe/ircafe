@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.context.annotation.Lazy;
@@ -12,22 +13,20 @@ import org.springframework.stereotype.Component;
 @Lazy
 public class EmbedLoadPolicyBus {
 
-  private volatile RuntimeConfigStore.EmbedLoadPolicySnapshot current;
+  private volatile EmbedLoadPolicySnapshot current;
 
-  public EmbedLoadPolicyBus(RuntimeConfigStore runtimeConfig) {
-    RuntimeConfigStore.EmbedLoadPolicySnapshot initial =
+  public EmbedLoadPolicyBus(EmbedLoadPolicyConfigPort runtimeConfig) {
+    EmbedLoadPolicySnapshot initial =
         runtimeConfig != null ? runtimeConfig.readEmbedLoadPolicy() : null;
-    this.current =
-        initial == null ? RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults() : initial;
+    this.current = initial == null ? EmbedLoadPolicySnapshot.defaults() : initial;
   }
 
-  public RuntimeConfigStore.EmbedLoadPolicySnapshot get() {
+  public EmbedLoadPolicySnapshot get() {
     return current;
   }
 
-  public void set(RuntimeConfigStore.EmbedLoadPolicySnapshot next) {
-    RuntimeConfigStore.EmbedLoadPolicySnapshot normalized =
-        next == null ? RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults() : next;
+  public void set(EmbedLoadPolicySnapshot next) {
+    EmbedLoadPolicySnapshot normalized = next == null ? EmbedLoadPolicySnapshot.defaults() : next;
     this.current = Objects.requireNonNull(normalized, "normalized");
   }
 }

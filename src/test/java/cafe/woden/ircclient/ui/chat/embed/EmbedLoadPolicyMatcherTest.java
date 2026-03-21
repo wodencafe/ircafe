@@ -5,7 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicyScope;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import cafe.woden.ircclient.irc.IrcEvent.AccountState;
 import cafe.woden.ircclient.irc.IrcEvent.AwayState;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
@@ -50,8 +51,8 @@ class EmbedLoadPolicyMatcherTest {
                 AccountState.LOGGED_IN,
                 "alice")));
 
-    RuntimeConfigStore.EmbedLoadPolicyScope scope =
-        new RuntimeConfigStore.EmbedLoadPolicyScope(
+    EmbedLoadPolicyScope scope =
+        new EmbedLoadPolicyScope(
             List.of(),
             List.of(),
             List.of(),
@@ -63,7 +64,7 @@ class EmbedLoadPolicyMatcherTest {
             List.of(),
             List.of(),
             List.of("*.evil.example"));
-    when(bus.get()).thenReturn(new RuntimeConfigStore.EmbedLoadPolicySnapshot(scope, Map.of()));
+    when(bus.get()).thenReturn(new EmbedLoadPolicySnapshot(scope, Map.of()));
 
     EmbedLoadPolicyMatcher matcher = new EmbedLoadPolicyMatcher(bus, users);
     TargetRef ref = new TargetRef("libera", "#chat");
@@ -105,11 +106,11 @@ class EmbedLoadPolicyMatcherTest {
                 AccountState.LOGGED_OUT,
                 null)));
 
-    RuntimeConfigStore.EmbedLoadPolicyScope scope =
-        new RuntimeConfigStore.EmbedLoadPolicyScope(
+    EmbedLoadPolicyScope scope =
+        new EmbedLoadPolicyScope(
             List.of(), List.of(), List.of(), List.of(), true, true, 0, List.of(), List.of(),
             List.of(), List.of());
-    when(bus.get()).thenReturn(new RuntimeConfigStore.EmbedLoadPolicySnapshot(scope, Map.of()));
+    when(bus.get()).thenReturn(new EmbedLoadPolicySnapshot(scope, Map.of()));
 
     EmbedLoadPolicyMatcher matcher = new EmbedLoadPolicyMatcher(bus, users);
     TargetRef ref = new TargetRef("libera", "#chat");
@@ -149,8 +150,8 @@ class EmbedLoadPolicyMatcherTest {
                 AccountState.LOGGED_IN,
                 "alice")));
 
-    RuntimeConfigStore.EmbedLoadPolicyScope global =
-        new RuntimeConfigStore.EmbedLoadPolicyScope(
+    EmbedLoadPolicyScope global =
+        new EmbedLoadPolicyScope(
             List.of("host:*.trusted.net"),
             List.of(),
             List.of(),
@@ -162,8 +163,8 @@ class EmbedLoadPolicyMatcherTest {
             List.of(),
             List.of(),
             List.of());
-    RuntimeConfigStore.EmbedLoadPolicyScope oftcOverride =
-        new RuntimeConfigStore.EmbedLoadPolicyScope(
+    EmbedLoadPolicyScope oftcOverride =
+        new EmbedLoadPolicyScope(
             List.of("host:*.oftc.net"),
             List.of(),
             List.of(),
@@ -176,9 +177,7 @@ class EmbedLoadPolicyMatcherTest {
             List.of(),
             List.of());
 
-    when(bus.get())
-        .thenReturn(
-            new RuntimeConfigStore.EmbedLoadPolicySnapshot(global, Map.of("oftc", oftcOverride)));
+    when(bus.get()).thenReturn(new EmbedLoadPolicySnapshot(global, Map.of("oftc", oftcOverride)));
 
     EmbedLoadPolicyMatcher matcher = new EmbedLoadPolicyMatcher(bus, users);
 

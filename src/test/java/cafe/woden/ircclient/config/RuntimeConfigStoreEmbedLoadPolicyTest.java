@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicyScope;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -22,11 +24,10 @@ class RuntimeConfigStoreEmbedLoadPolicyTest {
         new RuntimeConfigStore(
             cfg.toString(), new IrcProperties(null, List.of(server("libera"), server("oftc"))));
 
-    assertEquals(
-        RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults(), store.readEmbedLoadPolicy());
+    assertEquals(EmbedLoadPolicySnapshot.defaults(), store.readEmbedLoadPolicy());
 
-    RuntimeConfigStore.EmbedLoadPolicyScope global =
-        new RuntimeConfigStore.EmbedLoadPolicyScope(
+    EmbedLoadPolicyScope global =
+        new EmbedLoadPolicyScope(
             List.of("nick:trusted*", "host:*.trusted.net"),
             List.of("nick:re:^spam.*"),
             List.of("#safe*"),
@@ -39,8 +40,8 @@ class RuntimeConfigStoreEmbedLoadPolicyTest {
             List.of("*.imgur.com"),
             List.of("bad.example"));
 
-    RuntimeConfigStore.EmbedLoadPolicyScope libera =
-        new RuntimeConfigStore.EmbedLoadPolicyScope(
+    EmbedLoadPolicyScope libera =
+        new EmbedLoadPolicyScope(
             List.of("nick:libera-friend"),
             List.of(),
             List.of(),
@@ -53,28 +54,27 @@ class RuntimeConfigStoreEmbedLoadPolicyTest {
             List.of(),
             List.of("tracker.example"));
 
-    RuntimeConfigStore.EmbedLoadPolicySnapshot snapshot =
-        new RuntimeConfigStore.EmbedLoadPolicySnapshot(
+    EmbedLoadPolicySnapshot snapshot =
+        new EmbedLoadPolicySnapshot(
             global,
             Map.of(
                 "libera",
                 libera,
                 // Default scope entries are dropped when normalized.
                 "oftc",
-                RuntimeConfigStore.EmbedLoadPolicyScope.defaults()));
+                EmbedLoadPolicyScope.defaults()));
 
     store.rememberEmbedLoadPolicy(snapshot);
 
-    RuntimeConfigStore.EmbedLoadPolicySnapshot readBack = store.readEmbedLoadPolicy();
+    EmbedLoadPolicySnapshot readBack = store.readEmbedLoadPolicy();
     assertEquals(global, readBack.global());
     assertEquals(Map.of("libera", libera), readBack.byServer());
 
     String yaml = Files.readString(cfg);
     assertTrue(yaml.contains("embedLoadPolicy"));
 
-    store.rememberEmbedLoadPolicy(RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults());
-    assertEquals(
-        RuntimeConfigStore.EmbedLoadPolicySnapshot.defaults(), store.readEmbedLoadPolicy());
+    store.rememberEmbedLoadPolicy(EmbedLoadPolicySnapshot.defaults());
+    assertEquals(EmbedLoadPolicySnapshot.defaults(), store.readEmbedLoadPolicy());
     assertFalse(Files.readString(cfg).contains("embedLoadPolicy"));
   }
 
@@ -95,7 +95,7 @@ class RuntimeConfigStoreEmbedLoadPolicyTest {
     RuntimeConfigStore store =
         new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of(server("libera"))));
 
-    RuntimeConfigStore.EmbedLoadPolicySnapshot policy = store.readEmbedLoadPolicy();
+    EmbedLoadPolicySnapshot policy = store.readEmbedLoadPolicy();
     assertTrue(policy.global().requireLoggedIn());
     assertEquals(List.of(), policy.global().userWhitelist());
     assertEquals(Map.of(), policy.byServer());

@@ -652,6 +652,39 @@ class ArchitectureGuardrailsTest {
               "ThemeSelectionDialog should persist theme settings through config::api ports, not RuntimeConfigStore directly");
 
   @ArchTest
+  static final ArchRule
+      chat_history_transcript_port_adapter_should_not_depend_on_runtime_config_store_directly =
+          noClasses()
+              .that()
+              .haveFullyQualifiedName(
+                  "cafe.woden.ircclient.ui.chat.ChatHistoryTranscriptPortAdapter")
+              .should()
+              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+              .because(
+                  "ChatHistoryTranscriptPortAdapter should resolve persisted chat history UI settings through config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule ui_chat_embed_should_not_depend_on_runtime_config_store_directly =
+      noClasses()
+          .that()
+          .resideInAPackage("cafe.woden.ircclient.ui.chat.embed..")
+          .should()
+          .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+          .because(
+              "ui.chat.embed should resolve embed policy state through config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
+  static final ArchRule
+      embed_load_policy_dialog_should_not_depend_on_runtime_config_store_directly =
+          noClasses()
+              .that()
+              .haveFullyQualifiedName("cafe.woden.ircclient.ui.settings.EmbedLoadPolicyDialog")
+              .should()
+              .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
+              .because(
+                  "EmbedLoadPolicyDialog should edit embed policy state through config::api ports, not RuntimeConfigStore directly");
+
+  @ArchTest
   static final ArchRule ui_ignore_should_not_depend_on_app_internal_or_irc_packages =
       noClasses()
           .that()

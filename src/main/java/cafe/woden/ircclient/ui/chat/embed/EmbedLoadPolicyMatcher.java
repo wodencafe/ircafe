@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.chat.embed;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicyScope;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import cafe.woden.ircclient.ignore.IgnoreMaskMatcher;
 import cafe.woden.ircclient.irc.IrcEvent.AccountState;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
@@ -42,8 +43,8 @@ public class EmbedLoadPolicyMatcher {
     String normalizedUrl = Objects.toString(url, "").trim();
     if (target == null || normalizedUrl.isEmpty()) return true;
 
-    RuntimeConfigStore.EmbedLoadPolicySnapshot policy = policyBus.get();
-    RuntimeConfigStore.EmbedLoadPolicyScope scope = policy.scopeForServer(target.serverId());
+    EmbedLoadPolicySnapshot policy = policyBus.get();
+    EmbedLoadPolicyScope scope = policy.scopeForServer(target.serverId());
     if (scope == null || scope.isDefaultScope()) return true;
 
     SenderFacts sender = resolveSenderFacts(target, fromNick, ircv3Tags);

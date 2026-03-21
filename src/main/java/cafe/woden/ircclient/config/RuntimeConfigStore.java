@@ -5,6 +5,9 @@ import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicyScope;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import cafe.woden.ircclient.config.api.FilterSettingsConfigPort;
 import cafe.woden.ircclient.config.api.IgnoreRulesConfigPort;
 import cafe.woden.ircclient.config.api.InterceptorConfigPort;
@@ -57,6 +60,7 @@ public class RuntimeConfigStore
         ConnectionRuntimeConfigPort,
         CtcpReplyRuntimeConfigPort,
         DiagnosticsRuntimeConfigPort,
+        EmbedLoadPolicyConfigPort,
         FilterSettingsConfigPort,
         IgnoreRulesConfigPort,
         InterceptorConfigPort,
@@ -286,82 +290,6 @@ public class RuntimeConfigStore
 
     public boolean isValid() {
       return !serverId.isEmpty() && !target.isEmpty();
-    }
-  }
-
-  public record EmbedLoadPolicyScope(
-      List<String> userWhitelist,
-      List<String> userBlacklist,
-      List<String> channelWhitelist,
-      List<String> channelBlacklist,
-      boolean requireVoiceOrOp,
-      boolean requireLoggedIn,
-      int minAccountAgeDays,
-      List<String> linkWhitelist,
-      List<String> linkBlacklist,
-      List<String> domainWhitelist,
-      List<String> domainBlacklist) {
-    public EmbedLoadPolicyScope {
-      userWhitelist = sanitizePolicyPatternList(userWhitelist);
-      userBlacklist = sanitizePolicyPatternList(userBlacklist);
-      channelWhitelist = sanitizePolicyPatternList(channelWhitelist);
-      channelBlacklist = sanitizePolicyPatternList(channelBlacklist);
-      linkWhitelist = sanitizePolicyPatternList(linkWhitelist);
-      linkBlacklist = sanitizePolicyPatternList(linkBlacklist);
-      domainWhitelist = sanitizePolicyPatternList(domainWhitelist);
-      domainBlacklist = sanitizePolicyPatternList(domainBlacklist);
-      if (minAccountAgeDays < 0) minAccountAgeDays = 0;
-    }
-
-    public static EmbedLoadPolicyScope defaults() {
-      return new EmbedLoadPolicyScope(
-          List.of(), List.of(), List.of(), List.of(), false, false, 0, List.of(), List.of(),
-          List.of(), List.of());
-    }
-
-    public boolean isDefaultScope() {
-      return this.equals(defaults());
-    }
-  }
-
-  public record EmbedLoadPolicySnapshot(
-      EmbedLoadPolicyScope global, Map<String, EmbedLoadPolicyScope> byServer) {
-    public EmbedLoadPolicySnapshot {
-      if (global == null) global = EmbedLoadPolicyScope.defaults();
-
-      LinkedHashMap<String, EmbedLoadPolicyScope> normalized = new LinkedHashMap<>();
-      if (byServer != null) {
-        for (Map.Entry<String, EmbedLoadPolicyScope> entry : byServer.entrySet()) {
-          String serverId = Objects.toString(entry.getKey(), "").trim();
-          if (serverId.isEmpty()) continue;
-          EmbedLoadPolicyScope scope =
-              entry.getValue() == null ? EmbedLoadPolicyScope.defaults() : entry.getValue();
-          if (scope.isDefaultScope()) continue;
-          normalized.put(serverId, scope);
-        }
-      }
-      byServer = normalized.isEmpty() ? Map.of() : Map.copyOf(normalized);
-    }
-
-    public static EmbedLoadPolicySnapshot defaults() {
-      return new EmbedLoadPolicySnapshot(EmbedLoadPolicyScope.defaults(), Map.of());
-    }
-
-    public boolean isDefaultPolicy() {
-      return this.equals(defaults());
-    }
-
-    public EmbedLoadPolicyScope scopeForServer(String serverId) {
-      String sid = Objects.toString(serverId, "").trim();
-      if (sid.isEmpty() || byServer == null || byServer.isEmpty()) return global;
-      EmbedLoadPolicyScope exact = byServer.get(sid);
-      if (exact != null) return exact;
-      for (Map.Entry<String, EmbedLoadPolicyScope> entry : byServer.entrySet()) {
-        if (sid.equalsIgnoreCase(Objects.toString(entry.getKey(), "").trim())) {
-          return entry.getValue();
-        }
-      }
-      return global;
     }
   }
 
