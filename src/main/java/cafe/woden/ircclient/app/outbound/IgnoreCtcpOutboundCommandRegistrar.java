@@ -5,6 +5,7 @@ import cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService;
 import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistrar;
 import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistry;
 import cafe.woden.ircclient.app.outbound.ignore.OutboundIgnoreCommandService;
+import cafe.woden.ircclient.app.outbound.spi.LocalFilterCommandHandler;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;

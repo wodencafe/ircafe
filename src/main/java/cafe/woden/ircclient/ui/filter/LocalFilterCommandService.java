@@ -3,7 +3,7 @@ package cafe.woden.ircclient.ui.filter;
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.FilterCommand;
-import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
+import cafe.woden.ircclient.app.outbound.spi.LocalFilterCommandHandler;
 import cafe.woden.ircclient.config.api.FilterSettingsConfigPort;
 import cafe.woden.ircclient.model.FilterAction;
 import cafe.woden.ircclient.model.FilterDirection;

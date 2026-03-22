@@ -26,11 +26,14 @@ import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.IrcMediator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.BackendNamedOutboundCommandHandler;
-import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
 import cafe.woden.ircclient.app.outbound.OutboundBackendFeatureAdapter;
+import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.SemanticUploadCommandHandler;
 import cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler;
+import cafe.woden.ircclient.app.outbound.dispatch.DefaultOutboundCommandDispatcher;
+import cafe.woden.ircclient.app.outbound.dispatch.ObservedOutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
+import cafe.woden.ircclient.app.outbound.spi.LocalFilterCommandHandler;
 import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
@@ -430,6 +433,7 @@ class SpringModulithIncrementalAdoptionTest {
     assertThat(MediatorControlPort.class.isAnnotationPresent(PrimaryPort.class)).isTrue();
     assertThat(ActiveTargetPort.class.isAnnotationPresent(PrimaryPort.class)).isTrue();
     assertThat(UiEventPort.class.isAnnotationPresent(PrimaryPort.class)).isTrue();
+    assertThat(OutboundCommandDispatcher.class.isAnnotationPresent(PrimaryPort.class)).isTrue();
 
     assertThat(UiPromptPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
     assertThat(UiPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
@@ -506,6 +510,10 @@ class SpringModulithIncrementalAdoptionTest {
     assertThat(BouncerIrcConnectionPortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
         .isTrue();
     assertThat(SwingUiEventAdapter.class.isAnnotationPresent(PrimaryAdapter.class)).isTrue();
+    assertThat(DefaultOutboundCommandDispatcher.class.isAnnotationPresent(PrimaryAdapter.class))
+        .isTrue();
+    assertThat(ObservedOutboundCommandDispatcher.class.isAnnotationPresent(PrimaryAdapter.class))
+        .isTrue();
     assertThat(IrcConnectionLifecyclePortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
         .isTrue();
     assertThat(IrcCurrentNickPortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))

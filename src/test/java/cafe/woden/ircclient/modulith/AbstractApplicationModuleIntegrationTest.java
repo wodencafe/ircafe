@@ -12,7 +12,7 @@ import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
-import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
+import cafe.woden.ircclient.app.outbound.spi.LocalFilterCommandHandler;
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;

@@ -31,6 +31,7 @@ import cafe.woden.ircclient.app.outbound.messaging.OutboundSayQuoteCommandServic
 import cafe.woden.ircclient.app.outbound.monitor.OutboundMonitorCommandService;
 import cafe.woden.ircclient.app.outbound.mutation.OutboundMessageMutationCommandService;
 import cafe.woden.ircclient.app.outbound.readmarker.OutboundReadMarkerCommandService;
+import cafe.woden.ircclient.app.outbound.spi.LocalFilterCommandHandler;
 import cafe.woden.ircclient.app.outbound.upload.OutboundUploadCommandService;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
