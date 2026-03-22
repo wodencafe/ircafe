@@ -1,7 +1,8 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.help;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.OutboundHelpContributor;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,14 +16,14 @@ import org.springframework.stereotype.Component;
 /** Handles outbound /help command flow. */
 @Component
 @ApplicationLayer
-final class OutboundHelpCommandService {
+public final class OutboundHelpCommandService {
 
   private final UiPort ui;
   private final TargetCoordinator targetCoordinator;
   private final List<OutboundHelpContributor> helpContributors;
   private final Map<String, HelpTopicHandler> helpTopicHandlers;
 
-  OutboundHelpCommandService(
+  public OutboundHelpCommandService(
       UiPort ui,
       TargetCoordinator targetCoordinator,
       List<OutboundHelpContributor> helpContributors) {
@@ -33,7 +34,7 @@ final class OutboundHelpCommandService {
     this.helpTopicHandlers = buildHelpTopicHandlers();
   }
 
-  void handleHelp(String topic) {
+  public void handleHelp(String topic) {
     TargetRef at = targetCoordinator.getActiveTarget();
     TargetRef out = (at != null) ? at : targetCoordinator.safeStatusTarget();
     String t = normalizeHelpTopic(topic);

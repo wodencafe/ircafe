@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.help;
 
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -9,18 +9,18 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.CommandTargetPolicy;
+import cafe.woden.ircclient.app.outbound.OutboundCommandAvailabilitySupport;
+import cafe.woden.ircclient.app.outbound.OutboundConnectionStatusSupport;
+import cafe.woden.ircclient.app.outbound.OutboundHelpContributor;
 import cafe.woden.ircclient.app.outbound.backend.*;
 import cafe.woden.ircclient.app.outbound.readmarker.OutboundReadMarkerCommandService;
 import cafe.woden.ircclient.app.outbound.upload.OutboundUploadCommandService;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
-import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
-import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
-import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -49,29 +49,6 @@ class OutboundHelpCommandServiceTest {
       new OutboundCommandAvailabilitySupport(outboundBackendCapabilityPolicy);
   private final OutboundConnectionStatusSupport outboundConnectionStatusSupport =
       new OutboundConnectionStatusSupport(ui, connectionCoordinator);
-  private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
-  private final LabeledResponseRoutingPort labeledResponseRoutingState =
-      mock(LabeledResponseRoutingPort.class);
-  private final OutboundRawLineCorrelationService rawLineCorrelationService =
-      new OutboundRawLineCorrelationService(
-          outboundBackendCapabilityPolicy, labeledResponseRoutingState);
-  private final MessageMutationOutboundCommandsRouter messageMutationOutboundCommandsRouter =
-      new MessageMutationOutboundCommandsRouter(
-          List.of(
-              new IrcMessageMutationOutboundCommands(),
-              new MatrixMessageMutationOutboundCommands(),
-              new QuasselMessageMutationOutboundCommands()));
-  private final OutboundMessageMutationSendSupport outboundMessageMutationSendSupport =
-      new OutboundMessageMutationSendSupport(
-          IrcTargetMembershipPort.from(irc),
-          IrcEchoCapabilityPort.from(irc),
-          outboundBackendCapabilityPolicy,
-          messageMutationOutboundCommandsRouter,
-          ui,
-          outboundConnectionStatusSupport,
-          targetCoordinator,
-          pendingEchoMessageState,
-          rawLineCorrelationService);
   private final OutboundUploadCommandService outboundUploadCommandService =
       mock(OutboundUploadCommandService.class);
   private final OutboundHelpContributor uploadHelpContributor =
@@ -86,13 +63,31 @@ class OutboundHelpCommandServiceTest {
           return Map.of("upload", outboundUploadCommandService::appendUploadHelp);
         }
       };
-  private final OutboundMessageMutationCommandService messageMutationCommandService =
-      new OutboundMessageMutationCommandService(
-          outboundBackendCapabilityPolicy,
-          outboundCommandAvailabilitySupport,
-          ui,
-          targetCoordinator,
-          outboundMessageMutationSendSupport);
+  private final OutboundHelpContributor messageMutationHelpContributor =
+      new OutboundHelpContributor() {
+        @Override
+        public void appendGeneralHelp(TargetRef out) {
+          ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
+          ui.appendStatus(
+              out,
+              "(help)",
+              "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
+          ui.appendStatus(
+              out,
+              "(help)",
+              "/unreact <msgid> <reaction-token> (requires draft/unreact + draft/reply)");
+          appendEditHelp(out);
+          appendRedactHelp(out);
+        }
+
+        @Override
+        public Map<String, Consumer<TargetRef>> topicHelpHandlers() {
+          return Map.of(
+              "edit", OutboundHelpCommandServiceTest.this::appendEditHelp,
+              "redact", OutboundHelpCommandServiceTest.this::appendRedactHelp,
+              "delete", OutboundHelpCommandServiceTest.this::appendRedactHelp);
+        }
+      };
   private final OutboundReadMarkerCommandService readMarkerCommandService =
       new OutboundReadMarkerCommandService(
           IrcReadMarkerPort.from(irc),
@@ -105,7 +100,37 @@ class OutboundHelpCommandServiceTest {
       new OutboundHelpCommandService(
           ui,
           targetCoordinator,
-          List.of(uploadHelpContributor, messageMutationCommandService, readMarkerCommandService));
+          List.of(uploadHelpContributor, messageMutationHelpContributor, readMarkerCommandService));
+
+  private void appendEditHelp(TargetRef out) {
+    TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
+    String serverId = target.serverId();
+    boolean available = outboundBackendCapabilityPolicy.supportsMessageEdit(serverId);
+    ui.appendStatus(
+        target,
+        "(help)",
+        "/edit <msgid> <message>"
+            + (available
+                ? ""
+                : outboundCommandAvailabilitySupport.helpAvailabilitySuffix(
+                    serverId, false, "requires negotiated draft/message-edit or message-edit")));
+  }
+
+  private void appendRedactHelp(TargetRef out) {
+    TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
+    String serverId = target.serverId();
+    boolean available = outboundBackendCapabilityPolicy.supportsMessageRedaction(serverId);
+    ui.appendStatus(
+        target,
+        "(help)",
+        "/redact <msgid> [reason] (alias: /delete)"
+            + (available
+                ? ""
+                : outboundCommandAvailabilitySupport.helpAvailabilitySuffix(
+                    serverId,
+                    false,
+                    "requires negotiated draft/message-redaction or message-redaction")));
+  }
 
   @Test
   void helpAnnotatesEditAndRedactAsUnavailableWhenCapsNotNegotiated() {

@@ -21,6 +21,7 @@ import cafe.woden.ircclient.app.outbound.chathistory.OutboundChatHistoryCommandS
 import cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService;
 import cafe.woden.ircclient.app.outbound.dispatch.DefaultOutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistrar;
+import cafe.woden.ircclient.app.outbound.help.OutboundHelpCommandService;
 import cafe.woden.ircclient.app.outbound.identity.OutboundNickAwayCommandService;
 import cafe.woden.ircclient.app.outbound.ignore.OutboundIgnoreCommandService;
 import cafe.woden.ircclient.app.outbound.invite.OutboundInviteCommandService;
