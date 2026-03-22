@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.ignore.api.IgnoreLevels;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -77,25 +76,13 @@ class OutboundIgnoreOptionParsingPropertyTest {
         expected.add(level.toUpperCase(Locale.ROOT));
       }
 
-      @SuppressWarnings("unchecked")
-      List<String> parsed = (List<String>) invokePrivate("parseIrssiLevelsToken", token.toString());
+      List<String> parsed = IgnoreCommandParsingSupport.parseIrssiLevelsToken(token.toString());
       assertEquals(expected, parsed, () -> "parsed levels mismatch for token: " + token);
     }
   }
 
   private static OptionalLong parseIrssiDurationMs(String token) {
-    return (OptionalLong) invokePrivate("parseIrssiDurationMs", token);
-  }
-
-  private static Object invokePrivate(String methodName, String arg) {
-    try {
-      Method method =
-          OutboundIgnoreCommandService.class.getDeclaredMethod(methodName, String.class);
-      method.setAccessible(true);
-      return method.invoke(null, arg);
-    } catch (Exception ex) {
-      throw new RuntimeException(ex);
-    }
+    return IgnoreCommandParsingSupport.parseIrssiDurationMs(token);
   }
 
   private static String randomCase(String text, Random random) {
