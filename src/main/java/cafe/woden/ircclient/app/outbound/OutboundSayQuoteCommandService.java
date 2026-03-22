@@ -26,7 +26,7 @@ final class OutboundSayQuoteCommandService {
   @NonNull private final UiPort ui;
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final TargetCoordinator targetCoordinator;
-  @NonNull private final OutboundRawLineCorrelationService rawLineCorrelationService;
+  @NonNull private final OutboundRawCommandSupport rawCommandSupport;
   @NonNull private final OutboundMessagingCommandService outboundMessagingCommandService;
 
   void handleSay(CompositeDisposable disposables, String msg) {
@@ -66,7 +66,7 @@ final class OutboundSayQuoteCommandService {
     }
 
     // Prevent accidental multi-line injection.
-    if (line.indexOf('\n') >= 0 || line.indexOf('\r') >= 0) {
+    if (OutboundRawCommandSupport.containsLineBreaks(line)) {
       ui.appendStatus(status, "(quote)", "Refusing to send multi-line /quote input.");
       return;
     }
@@ -77,11 +77,9 @@ final class OutboundSayQuoteCommandService {
     }
 
     TargetRef correlationOrigin = at.isUiOnly() ? status : at;
-    PreparedRawLine prepared = prepareCorrelatedRawLine(correlationOrigin, line);
-
-    // Echo a safe preview of what we are sending (avoid leaking secrets).
-    String echo = OutboundRawLineCorrelationService.redactIfSensitive(line);
-    ui.appendStatus(status, "(quote)", "→ " + withLabelHint(echo, prepared.label()));
+    OutboundRawCommandSupport.PreparedRawLine prepared =
+        rawCommandSupport.prepare(correlationOrigin, line);
+    ui.appendStatus(status, "(quote)", "→ " + rawCommandSupport.safePreview(line, prepared));
 
     disposables.add(
         targetMembership
@@ -101,7 +99,7 @@ final class OutboundSayQuoteCommandService {
     if (line.isEmpty()) return;
 
     // Prevent accidental multi-line injection.
-    if (line.indexOf('\n') >= 0 || line.indexOf('\r') >= 0) {
+    if (OutboundRawCommandSupport.containsLineBreaks(line)) {
       ui.appendStatus(status, "(raw)", "Refusing to send multi-line input.");
       return;
     }
@@ -111,15 +109,8 @@ final class OutboundSayQuoteCommandService {
       return;
     }
 
-    PreparedRawLine prepared = prepareCorrelatedRawLine(status, line);
-
-    // Echo a safe preview of what we are sending (avoid leaking secrets).
-    ui.appendStatus(
-        status,
-        "(raw)",
-        "→ "
-            + withLabelHint(
-                OutboundRawLineCorrelationService.redactIfSensitive(line), prepared.label()));
+    OutboundRawCommandSupport.PreparedRawLine prepared = rawCommandSupport.prepare(status, line);
+    ui.appendStatus(status, "(raw)", "→ " + rawCommandSupport.safePreview(line, prepared));
 
     disposables.add(
         targetMembership
@@ -127,19 +118,4 @@ final class OutboundSayQuoteCommandService {
             .subscribe(
                 () -> {}, err -> ui.appendError(status, "(raw-error)", String.valueOf(err))));
   }
-
-  private PreparedRawLine prepareCorrelatedRawLine(TargetRef origin, String rawLine) {
-    OutboundRawLineCorrelationService.PreparedRawLine prepared =
-        rawLineCorrelationService.prepare(origin, rawLine);
-    return new PreparedRawLine(prepared.line(), prepared.label());
-  }
-
-  private static String withLabelHint(String preview, String label) {
-    String p = Objects.toString(preview, "").trim();
-    String l = Objects.toString(label, "").trim();
-    if (l.isEmpty()) return p;
-    return p + " {label=" + l + "}";
-  }
-
-  private record PreparedRawLine(String line, String label) {}
 }

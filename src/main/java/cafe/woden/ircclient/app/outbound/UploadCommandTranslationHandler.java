@@ -1,9 +1,13 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.config.IrcProperties;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Backend translator for semantic /upload command arguments into outbound protocol lines. */
-interface UploadCommandTranslationHandler {
+@SecondaryPort
+@ApplicationLayer
+public interface UploadCommandTranslationHandler {
 
   IrcProperties.Server.Backend backend();
 

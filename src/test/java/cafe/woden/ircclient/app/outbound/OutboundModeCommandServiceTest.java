@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
@@ -40,6 +41,8 @@ class OutboundModeCommandServiceTest {
       mock(LabeledResponseRoutingPort.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
       new OutboundRawLineCorrelationService(backendCapabilityPolicy, labeledResponseRoutingState);
+  private final OutboundRawCommandSupport rawCommandSupport =
+      new OutboundRawCommandSupport(rawLineCorrelationService);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final OutboundModeCommandService service =
@@ -50,7 +53,7 @@ class OutboundModeCommandServiceTest {
           targetCoordinator,
           commandTargetPolicy,
           modeRoutingState,
-          rawLineCorrelationService);
+          rawCommandSupport);
 
   @AfterEach
   void tearDown() {

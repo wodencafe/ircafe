@@ -373,7 +373,7 @@ class ArchitectureGuardrailsTest {
           .resideInAPackage("cafe.woden.ircclient.app.outbound..")
           .and()
           .doNotHaveFullyQualifiedName(
-              "cafe.woden.ircclient.app.outbound.QuasselOutboundCommandService")
+              "cafe.woden.ircclient.app.outbound.backend.QuasselOutboundCommandService")
           .should()
           .dependOnClassesThat()
           .areAssignableTo(QuasselCoreControlPort.class)
@@ -387,13 +387,13 @@ class ArchitectureGuardrailsTest {
           .resideInAPackage("cafe.woden.ircclient.app.outbound..")
           .and()
           .doNotHaveFullyQualifiedName(
-              "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandService")
+              "cafe.woden.ircclient.app.outbound.backend.MatrixOutboundCommandService")
           .and()
           .doNotHaveFullyQualifiedName(
-              "cafe.woden.ircclient.app.outbound.BackendUploadCommandRegistry")
+              "cafe.woden.ircclient.app.outbound.backend.BackendUploadCommandRegistry")
           .and()
           .doNotHaveFullyQualifiedName(
-              "cafe.woden.ircclient.app.outbound.MatrixUploadCommandTranslationHandler")
+              "cafe.woden.ircclient.app.outbound.backend.MatrixUploadCommandTranslationHandler")
           .and()
           .doNotHaveFullyQualifiedName(
               "cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler")
@@ -412,17 +412,17 @@ class ArchitectureGuardrailsTest {
               .resideInAPackage("cafe.woden.ircclient.app.outbound..")
               .and()
               .doNotHaveFullyQualifiedName(
-                  "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupport")
+                  "cafe.woden.ircclient.app.outbound.backend.MatrixOutboundCommandSupport")
               .and()
               .doNotHaveFullyQualifiedName(
-                  "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandService")
+                  "cafe.woden.ircclient.app.outbound.backend.MatrixOutboundCommandService")
               .and()
               .doNotHaveFullyQualifiedName(
-                  "cafe.woden.ircclient.app.outbound.MatrixUploadCommandTranslationHandler")
+                  "cafe.woden.ircclient.app.outbound.backend.MatrixUploadCommandTranslationHandler")
               .should()
               .dependOnClassesThat()
               .haveFullyQualifiedName(
-                  "cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupport")
+                  "cafe.woden.ircclient.app.outbound.backend.MatrixOutboundCommandSupport")
               .because(
                   "matrix upload payload shaping should remain isolated to dedicated matrix outbound services");
 

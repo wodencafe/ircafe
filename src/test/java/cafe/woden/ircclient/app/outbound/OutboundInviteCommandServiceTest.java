@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
@@ -41,6 +42,8 @@ class OutboundInviteCommandServiceTest {
       mock(LabeledResponseRoutingPort.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
       new OutboundRawLineCorrelationService(backendCapabilityPolicy, labeledResponseRoutingState);
+  private final OutboundRawCommandSupport rawCommandSupport =
+      new OutboundRawCommandSupport(rawLineCorrelationService);
   private final ChatCommandRuntimeConfigPort runtimeConfig =
       mock(ChatCommandRuntimeConfigPort.class);
   private final PendingInvitePort pendingInviteState = mock(PendingInvitePort.class);
@@ -53,7 +56,7 @@ class OutboundInviteCommandServiceTest {
           connectionCoordinator,
           targetCoordinator,
           commandTargetPolicy,
-          rawLineCorrelationService,
+          rawCommandSupport,
           runtimeConfig,
           pendingInviteState,
           whoisRoutingState,

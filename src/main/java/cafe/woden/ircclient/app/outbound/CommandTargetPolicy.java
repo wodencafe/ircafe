@@ -52,6 +52,15 @@ public class CommandTargetPolicy {
     return isChannelLikeTargetForServer(target.serverId(), target.target());
   }
 
+  public String resolveChannelOrNull(TargetRef active, String explicitChannel) {
+    String channel = normalize(explicitChannel);
+    if (!channel.isEmpty()) {
+      String sid = active == null ? "" : active.serverId();
+      return isChannelLikeTargetForServer(sid, channel) ? channel : null;
+    }
+    return isChannelLikeTarget(active) ? active.target() : null;
+  }
+
   public static boolean looksLikeMatrixRoomId(String token) {
     String value = normalize(token);
     if (!value.startsWith("!")) return false;

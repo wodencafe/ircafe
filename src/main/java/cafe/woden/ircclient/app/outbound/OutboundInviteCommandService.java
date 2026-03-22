@@ -35,7 +35,7 @@ final class OutboundInviteCommandService {
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final CommandTargetPolicy commandTargetPolicy;
-  @NonNull private final OutboundRawLineCorrelationService rawLineCorrelationService;
+  @NonNull private final OutboundRawCommandSupport rawCommandSupport;
   @NonNull private final ChatCommandRuntimeConfigPort runtimeConfig;
   @NonNull private final PendingInvitePort pendingInviteState;
   @NonNull private final WhoisRoutingPort whoisRoutingState;
@@ -49,7 +49,7 @@ final class OutboundInviteCommandService {
     }
 
     String n = Objects.toString(nick, "").trim();
-    String ch = resolveChannelOrNull(at, channel);
+    String ch = commandTargetPolicy.resolveChannelOrNull(at, channel);
 
     if (n.isEmpty() || ch == null) {
       ui.appendStatus(at, "(invite)", "Usage: /invite <nick> [#channel]");
@@ -62,7 +62,8 @@ final class OutboundInviteCommandService {
       return;
     }
 
-    if (containsCrlf(ch) || containsCrlf(n)) {
+    if (OutboundRawCommandSupport.containsLineBreaks(ch)
+        || OutboundRawCommandSupport.containsLineBreaks(n)) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(invite)",
@@ -73,9 +74,9 @@ final class OutboundInviteCommandService {
     String line = "INVITE " + n + " " + ch;
     TargetRef out = new TargetRef(at.serverId(), ch);
     TargetRef status = new TargetRef(at.serverId(), "status");
-    PreparedRawLine prepared = prepareCorrelatedRawLine(out, line);
+    OutboundRawCommandSupport.PreparedRawLine prepared = rawCommandSupport.prepare(out, line);
     ui.ensureTargetExists(out);
-    ui.appendStatus(out, "(invite)", "→ " + withLabelHint(line, prepared.label()));
+    ui.appendStatus(out, "(invite)", "→ " + rawCommandSupport.preview(line, prepared));
 
     disposables.add(
         mediatorIrc
@@ -139,7 +140,7 @@ final class OutboundInviteCommandService {
       ui.appendStatus(status, "(conn)", "Not connected");
       return;
     }
-    if (containsCrlf(invite.channel())) {
+    if (OutboundRawCommandSupport.containsLineBreaks(invite.channel())) {
       ui.appendStatus(status, "(invite)", "Refusing to send multi-line /invjoin input.");
       return;
     }
@@ -301,42 +302,12 @@ final class OutboundInviteCommandService {
     return invite;
   }
 
-  private String resolveChannelOrNull(TargetRef active, String explicitChannel) {
-    String ch = Objects.toString(explicitChannel, "").trim();
-    if (!ch.isEmpty()) {
-      String sid = active == null ? "" : active.serverId();
-      if (commandTargetPolicy.isChannelLikeTargetForServer(sid, ch)) return ch;
-      return null;
-    }
-    if (commandTargetPolicy.isChannelLikeTarget(active)) return active.target();
-    return null;
-  }
-
-  private PreparedRawLine prepareCorrelatedRawLine(TargetRef origin, String rawLine) {
-    OutboundRawLineCorrelationService.PreparedRawLine prepared =
-        rawLineCorrelationService.prepare(origin, rawLine);
-    return new PreparedRawLine(prepared.line(), prepared.label());
-  }
-
-  private record PreparedRawLine(String line, String label) {}
-
-  private static String withLabelHint(String preview, String label) {
-    String p = Objects.toString(preview, "").trim();
-    String l = Objects.toString(label, "").trim();
-    if (l.isEmpty()) return p;
-    return p + " {label=" + l + "}";
-  }
-
   private static Boolean parseOnOff(String raw) {
     return switch (Objects.toString(raw, "").trim().toLowerCase(Locale.ROOT)) {
       case "on", "true", "1", "yes" -> Boolean.TRUE;
       case "off", "false", "0", "no" -> Boolean.FALSE;
       default -> null;
     };
-  }
-
-  private static boolean containsCrlf(String s) {
-    return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);
   }
 
   private boolean shouldPersistJoinedChannel(String serverId) {

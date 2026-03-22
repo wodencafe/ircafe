@@ -28,7 +28,7 @@ final class OutboundUploadCommandService implements OutboundHelpContributor {
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final SemanticUploadCommandHandler semanticUploadCommandHandler;
-  @NonNull private final OutboundRawLineCorrelationService rawLineCorrelationService;
+  @NonNull private final OutboundRawCommandSupport rawCommandSupport;
 
   void appendUploadHelp(TargetRef out) {
     semanticUploadCommandHandler.appendUploadHelp(out);
@@ -72,12 +72,11 @@ final class OutboundUploadCommandService implements OutboundHelpContributor {
       return;
     }
     String line = uploadPreparation.line();
-    if (containsCrlf(line)) {
+    if (OutboundRawCommandSupport.containsLineBreaks(line)) {
       ui.appendStatus(status, "(upload)", "Refusing to send multi-line /upload input.");
       return;
     }
-    OutboundRawLineCorrelationService.PreparedRawLine prepared =
-        rawLineCorrelationService.prepare(at, line);
+    OutboundRawCommandSupport.PreparedRawLine prepared = rawCommandSupport.prepare(at, line);
 
     disposables.add(
         targetMembership
@@ -89,9 +88,5 @@ final class OutboundUploadCommandService implements OutboundHelpContributor {
                         targetCoordinator.safeStatusTarget(),
                         "(upload-error)",
                         String.valueOf(err))));
-  }
-
-  private static boolean containsCrlf(String input) {
-    return input != null && (input.indexOf('\n') >= 0 || input.indexOf('\r') >= 0);
   }
 }

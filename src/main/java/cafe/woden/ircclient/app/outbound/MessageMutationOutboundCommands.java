@@ -4,9 +4,13 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Map;
 import java.util.Objects;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Backend-specific payload shaping for reply/react/edit/redact outbound commands. */
-interface MessageMutationOutboundCommands {
+@SecondaryPort
+@ApplicationLayer
+public interface MessageMutationOutboundCommands {
 
   IrcProperties.Server.Backend backend();
 

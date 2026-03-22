@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
@@ -41,6 +42,8 @@ class OutboundSayQuoteCommandServiceTest {
       mock(OutboundBackendCapabilityPolicy.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
       new OutboundRawLineCorrelationService(backendCapabilityPolicy, labeledResponseRoutingState);
+  private final OutboundRawCommandSupport rawCommandSupport =
+      new OutboundRawCommandSupport(rawLineCorrelationService);
   private final OutboundMessagingCommandService outboundMessagingCommandService =
       new OutboundMessagingCommandService(
           irc,
@@ -57,7 +60,7 @@ class OutboundSayQuoteCommandServiceTest {
           ui,
           connectionCoordinator,
           targetCoordinator,
-          rawLineCorrelationService,
+          rawCommandSupport,
           outboundMessagingCommandService);
   private final CompositeDisposable disposables = new CompositeDisposable();
 

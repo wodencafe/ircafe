@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
@@ -34,6 +35,8 @@ class OutboundNamesWhoListCommandServiceTest {
       mock(LabeledResponseRoutingPort.class);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
       new OutboundRawLineCorrelationService(backendCapabilityPolicy, labeledResponseRoutingState);
+  private final OutboundRawCommandSupport rawCommandSupport =
+      new OutboundRawCommandSupport(rawLineCorrelationService);
   private final OutboundNamesWhoListCommandService service =
       new OutboundNamesWhoListCommandService(
           IrcTargetMembershipPort.from(irc),
@@ -41,7 +44,7 @@ class OutboundNamesWhoListCommandServiceTest {
           connectionCoordinator,
           targetCoordinator,
           commandTargetPolicy,
-          rawLineCorrelationService);
+          rawCommandSupport);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   @AfterEach

@@ -4,6 +4,8 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistrar;
+import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistry;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import lombok.AccessLevel;

@@ -2,9 +2,13 @@ package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Backend-specific outbound command feature adapter. */
-interface OutboundBackendFeatureAdapter {
+@SecondaryPort
+@ApplicationLayer
+public interface OutboundBackendFeatureAdapter {
 
   IrcProperties.Server.Backend backend();
 
