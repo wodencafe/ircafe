@@ -67,6 +67,7 @@ public class PircbotxIrcClientService
   @NonNull private final ServerIsupportStatePort serverIsupportState;
   @NonNull private final Ircv3StsPolicyService stsPolicies;
   private final String version;
+  private final PircbotxCtcpAutoReplyHandler ctcpAutoReplyHandler;
 
   public PircbotxIrcClientService(
       IrcProperties props,
@@ -96,6 +97,7 @@ public class PircbotxIrcClientService
     this.serverIsupportState = Objects.requireNonNull(serverIsupportState, "serverIsupportState");
     this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
     this.version = Objects.requireNonNull(props, "props").client().version();
+    this.ctcpAutoReplyHandler = new PircbotxCtcpAutoReplyHandler(this.version, this.runtimeConfig);
   }
 
   @Override
@@ -204,7 +206,7 @@ public class PircbotxIrcClientService
                       bus,
                       timers::stopHeartbeat,
                       this::scheduleReconnect,
-                      this::handleCtcpIfPresent,
+                      ctcpAutoReplyHandler::handleIfPresent,
                       disconnectOnSaslFailure);
 
               PircBotX bot = botFactory.build(s, version, listener);
@@ -1129,134 +1131,6 @@ public class PircbotxIrcClientService
     PircBotX bot = conn(serverId).botRef.get();
     if (bot == null) throw new IllegalStateException("Not connected: " + serverId);
     return bot;
-  }
-
-  private boolean handleCtcpIfPresent(PircBotX bot, String fromNick, String message) {
-    if (message == null || message.length() < 2) return false;
-    if (message.charAt(0) != 0x01 || message.charAt(message.length() - 1) != 0x01) return false;
-
-    String n1 = null;
-    String n2 = null;
-    String n3 = null;
-
-    // Some servers may echo our own outbound CTCP requests back to us (IRCv3 echo-message).
-    // Never treat those as inbound CTCP requests, or we'll reply to ourselves.
-    try {
-      if (fromNick != null && !fromNick.isBlank()) {
-        String from = fromNick.trim();
-
-        try {
-          n1 = PircbotxUtil.safeStr(bot::getNick, null);
-        } catch (Exception ignored) {
-        }
-        try {
-          if (bot.getUserBot() != null) n2 = bot.getUserBot().getNick();
-        } catch (Exception ignored) {
-        }
-        try {
-          Object cfg = bot.getConfiguration();
-          if (cfg != null) {
-            try {
-              java.lang.reflect.Method m = cfg.getClass().getMethod("getNick");
-              Object n = m.invoke(cfg);
-              if (n != null) n3 = String.valueOf(n);
-            } catch (Exception ignored) {
-            }
-          }
-        } catch (Exception ignored) {
-        }
-
-        boolean selfEcho =
-            (n1 != null && !n1.isBlank() && from.equalsIgnoreCase(n1.trim()))
-                || (n2 != null && !n2.isBlank() && from.equalsIgnoreCase(n2.trim()))
-                || (n3 != null && !n3.isBlank() && from.equalsIgnoreCase(n3.trim()));
-        if (selfEcho) {
-          log.debug(
-              "[ircafe] CTCPDBG service-drop-self from={} n1={} n2={} n3={} message={}",
-              from,
-              Objects.toString(n1, ""),
-              Objects.toString(n2, ""),
-              Objects.toString(n3, ""),
-              message.replace('\u0001', '|'));
-          return true;
-        }
-      }
-    } catch (Exception ignored) {
-    }
-
-    String inner = message.substring(1, message.length() - 1).trim();
-    if (inner.isEmpty()) return false;
-
-    String cmd = inner;
-    int sp = inner.indexOf(' ');
-    if (sp >= 0) cmd = inner.substring(0, sp);
-
-    cmd = cmd.trim().toUpperCase(Locale.ROOT);
-    log.debug(
-        "[ircafe] CTCPDBG service-eval from={} cmd={} inner={} n1={} n2={} n3={}",
-        Objects.toString(fromNick, ""),
-        cmd,
-        inner,
-        Objects.toString(n1, ""),
-        Objects.toString(n2, ""),
-        Objects.toString(n3, ""));
-    if (!isCtcpAutoReplyEnabled(cmd)) {
-      log.debug(
-          "[ircafe] CTCPDBG service-drop-disabled from={} cmd={}",
-          Objects.toString(fromNick, ""),
-          cmd);
-      // Treat known CTCP requests as handled even when auto-replies are disabled.
-      return "VERSION".equals(cmd) || "PING".equals(cmd) || "TIME".equals(cmd);
-    }
-    if ("VERSION".equals(cmd)) {
-      String v = (version == null) ? "IRCafe" : version;
-      log.debug(
-          "[ircafe] CTCPDBG service-send cmd=VERSION to={} payload={}",
-          Objects.toString(fromNick, ""),
-          ("VERSION " + v));
-      bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), "VERSION " + v + "");
-      return true;
-    }
-
-    if ("PING".equals(cmd)) {
-      String payload = "";
-      int sp2 = inner.indexOf(' ');
-      if (sp2 >= 0 && sp2 + 1 < inner.length()) payload = inner.substring(sp2 + 1).trim();
-      String body = payload.isEmpty() ? "PING" : "PING " + payload + "";
-      log.debug(
-          "[ircafe] CTCPDBG service-send cmd=PING to={} payload={}",
-          Objects.toString(fromNick, ""),
-          body.replace('\u0001', '|'));
-      bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), body);
-      return true;
-    }
-
-    if ("TIME".equals(cmd)) {
-      String now = java.time.ZonedDateTime.now().toString();
-      log.debug(
-          "[ircafe] CTCPDBG service-send cmd=TIME to={} payload=TIME {}",
-          Objects.toString(fromNick, ""),
-          now);
-      bot.sendIRC().notice(PircbotxUtil.sanitizeNick(fromNick), "TIME " + now + "");
-      return true;
-    }
-
-    return false;
-  }
-
-  private boolean isCtcpAutoReplyEnabled(String command) {
-    if (runtimeConfig == null) return true;
-    String cmd = (command == null) ? "" : command.trim().toUpperCase(Locale.ROOT);
-    if (!"VERSION".equals(cmd) && !"PING".equals(cmd) && !"TIME".equals(cmd)) {
-      return true;
-    }
-    if (!runtimeConfig.readCtcpAutoRepliesEnabled(true)) return false;
-    return switch (cmd) {
-      case "VERSION" -> runtimeConfig.readCtcpAutoReplyVersionEnabled(true);
-      case "PING" -> runtimeConfig.readCtcpAutoReplyPingEnabled(true);
-      case "TIME" -> runtimeConfig.readCtcpAutoReplyTimeEnabled(true);
-      default -> true;
-    };
   }
 
   private void cancelReconnect(PircbotxConnectionState c) {
