@@ -410,17 +410,17 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.OutboundCtcpWhoisCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.DccCommandSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.dcc.DccCommandSupport", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.DccChatSessionSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.dcc.DccChatSessionSupport", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.DccFileTransferIoSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.dcc.DccFileTransferIoSupport", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.DccOfferCommandSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.dcc.DccOfferCommandSupport", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.DccInboundOfferSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.dcc.DccInboundOfferSupport", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundDccCommandService", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundHelpCommandService", ApplicationLayer.class);
     assertAnnotatedByName(

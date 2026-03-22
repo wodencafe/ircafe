@@ -6,7 +6,7 @@ import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
-import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
+import cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;

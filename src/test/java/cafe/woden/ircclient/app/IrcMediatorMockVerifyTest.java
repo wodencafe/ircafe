@@ -51,7 +51,7 @@ import cafe.woden.ircclient.app.core.MediatorTargetUiSupport;
 import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
-import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
+import cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
