@@ -151,9 +151,11 @@ import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.znc.ZncEphemeralNetworkImporter;
 import cafe.woden.ircclient.logging.LogLine;
+import cafe.woden.ircclient.model.FilterScopeOverride;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
+import cafe.woden.ircclient.model.RegexSpec;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.model.UserCommandAlias;
 import cafe.woden.ircclient.monitor.MonitorIsonFallbackService;
@@ -191,6 +193,7 @@ import cafe.woden.ircclient.state.api.CtcpRoutingPort;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
+import cafe.woden.ircclient.state.api.ModeVocabulary;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
 import cafe.woden.ircclient.state.api.RecentStatusModePort;
@@ -199,6 +202,7 @@ import cafe.woden.ircclient.ui.SwingUiEventAdapter;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import java.lang.annotation.Annotation;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.jmolecules.architecture.layered.DomainLayer;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.jmolecules.ddd.annotation.ValueObject;
@@ -765,6 +769,14 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(InterceptorRule.class, ValueObject.class);
     assertAnnotated(InterceptorHit.class, ValueObject.class);
     assertAnnotated(ResolvedBouncerNetwork.class, ValueObject.class);
+    assertAnnotated(RegexSpec.class, ValueObject.class);
+    assertAnnotated(FilterScopeOverride.class, ValueObject.class);
+    assertAnnotated(ModeVocabulary.class, ValueObject.class);
+  }
+
+  @Test
+  void sharedModelPackageRemainsDomainLayerAnnotated() {
+    assertPackageAnnotated(TargetRef.class.getPackage(), DomainLayer.class);
   }
 
   @Test
@@ -873,6 +885,13 @@ class JmoleculesIncrementalAdoptionTest {
     assertTrue(
         type.isAnnotationPresent(marker),
         () -> type.getName() + " must be annotated with @" + marker.getSimpleName());
+  }
+
+  private static void assertPackageAnnotated(
+      Package typePackage, Class<? extends Annotation> marker) {
+    assertTrue(
+        typePackage.isAnnotationPresent(marker),
+        () -> typePackage.getName() + " must be annotated with @" + marker.getSimpleName());
   }
 
   private static boolean isMainSourceType(Class<?> type) {
