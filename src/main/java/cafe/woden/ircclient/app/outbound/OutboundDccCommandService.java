@@ -11,13 +11,9 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.Closeable;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -25,7 +21,6 @@ import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -37,7 +32,6 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -71,6 +65,7 @@ public class OutboundDccCommandService {
   private final ExecutorService io;
 
   private final DccCommandSupport dccCommandSupport;
+  private final DccChatSessionSupport dccChatSessionSupport;
   private final DccInboundOfferSupport dccInboundOfferSupport;
 
   private final ConcurrentMap<String, PendingChatOffer> pendingChatOffers =
@@ -96,6 +91,8 @@ public class OutboundDccCommandService {
     this.connectionCoordinator = connectionCoordinator;
     this.io = io;
     this.dccCommandSupport = new DccCommandSupport(ui, targetCoordinator, dccTransferStore);
+    this.dccChatSessionSupport =
+        new DccChatSessionSupport(ui, mediatorIrc, io, dccCommandSupport, chatSessions);
     this.dccInboundOfferSupport =
         new DccInboundOfferSupport(dccCommandSupport, pendingChatOffers, pendingSendOffers);
   }
@@ -245,7 +242,7 @@ public class OutboundDccCommandService {
     TargetRef pm = ensurePmTarget(sid, nick);
     try (ServerSocket ignored = listener) {
       Socket socket = listener.accept();
-      startChatSession(sid, nick, socket, "connected (outgoing)");
+      dccChatSessionSupport.startChatSession(sid, nick, socket, "connected (outgoing)");
     } catch (SocketTimeoutException e) {
       ui.appendStatus(pm, DCC_TAG, "DCC CHAT offer to " + nick + " timed out.");
       upsertTransfer(
@@ -489,7 +486,7 @@ public class OutboundDccCommandService {
           try {
             socket.connect(new InetSocketAddress(offer.host(), offer.port()), CONNECT_TIMEOUT_MS);
             socket.setSoTimeout(IO_TIMEOUT_MS);
-            startChatSession(sid, n, socket, "connected (incoming)");
+            dccChatSessionSupport.startChatSession(sid, n, socket, "connected (incoming)");
           } catch (Exception e) {
             closeQuietly(socket);
             ui.appendError(pm, DCC_ERR_TAG, "DCC CHAT connect failed: " + e.getMessage());
@@ -616,25 +613,8 @@ public class OutboundDccCommandService {
       return;
     }
 
-    String key = peerKey(sid, n);
-    DccChatSession session = chatSessions.get(key);
-    if (session == null) {
+    if (!dccChatSessionSupport.sendChatMessage(sid, n, message)) {
       ui.appendStatus(out, DCC_TAG, "No active DCC chat session with " + n + ".");
-      return;
-    }
-
-    TargetRef pm = ensurePmTarget(sid, n);
-    try {
-      synchronized (session.writeLock()) {
-        session.writer().write(message);
-        session.writer().write("\r\n");
-        session.writer().flush();
-      }
-      String me = mediatorIrc.currentNick(sid).orElse("me");
-      ui.appendChat(pm, "(" + me + ")", "[DCC] " + message, true);
-    } catch (Exception e) {
-      ui.appendError(pm, DCC_ERR_TAG, "Failed to write DCC chat message: " + e.getMessage());
-      closeChatSessionInternal(sid, n, "write-failed", true);
     }
   }
 
@@ -645,7 +625,8 @@ public class OutboundDccCommandService {
       return;
     }
 
-    boolean closed = closeChatSessionInternal(sid, n, "Closed DCC CHAT session.", true);
+    boolean closed =
+        dccChatSessionSupport.closeChatSession(sid, n, "Closed DCC CHAT session.", true);
     if (!closed) {
       ui.appendStatus(out, DCC_TAG, "No active DCC chat session with " + n + ".");
     }
@@ -727,126 +708,6 @@ public class OutboundDccCommandService {
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc close <nick>");
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc list");
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc panel");
-  }
-
-  private void startChatSession(String sid, String nick, Socket socket, String connectedText)
-      throws IOException {
-    String key = peerKey(sid, nick);
-    DccChatSession previous = chatSessions.remove(key);
-    if (previous != null) {
-      closeQuietly(previous.socket());
-    }
-
-    BufferedWriter writer =
-        new BufferedWriter(
-            new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
-    DccChatSession session =
-        new DccChatSession(sid, nick, socket, writer, new Object(), new AtomicBoolean(false));
-    chatSessions.put(key, session);
-
-    TargetRef pm = ensurePmTarget(sid, nick);
-    ui.appendStatus(pm, DCC_TAG, "DCC CHAT " + connectedText + " with " + nick + ".");
-    if (connectedText != null && connectedText.contains("outgoing")) {
-      upsertTransfer(
-          sid,
-          nick,
-          transferEntryId(sid, nick, "chat-out"),
-          "Chat (outgoing)",
-          "Connected",
-          "",
-          null,
-          DccTransferStore.ActionHint.NONE);
-    }
-    if (connectedText != null && connectedText.contains("incoming")) {
-      upsertTransfer(
-          sid,
-          nick,
-          transferEntryId(sid, nick, "chat-in"),
-          "Chat (incoming)",
-          "Connected",
-          "",
-          null,
-          DccTransferStore.ActionHint.NONE);
-    }
-    upsertTransfer(
-        sid,
-        nick,
-        transferEntryId(sid, nick, "chat-active"),
-        "Chat",
-        "Active",
-        connectedText,
-        null,
-        DccTransferStore.ActionHint.CLOSE_CHAT);
-
-    io.execute(() -> readDccChatLoop(key, session));
-  }
-
-  private void readDccChatLoop(String key, DccChatSession session) {
-    TargetRef pm = ensurePmTarget(session.serverId(), session.nick());
-    try (BufferedReader reader =
-        new BufferedReader(
-            new InputStreamReader(session.socket().getInputStream(), StandardCharsets.UTF_8))) {
-      String line;
-      while ((line = reader.readLine()) != null) {
-        String text = line;
-        if (text.endsWith("\r")) {
-          text = text.substring(0, text.length() - 1);
-        }
-        ui.appendChat(pm, session.nick(), "[DCC] " + text, false);
-        markUnreadIfInactive(pm);
-      }
-      if (!session.closing().get()) {
-        ui.appendStatus(pm, DCC_TAG, session.nick() + " closed the DCC CHAT session.");
-        upsertTransfer(
-            session.serverId(),
-            session.nick(),
-            transferEntryId(session.serverId(), session.nick(), "chat-active"),
-            "Chat",
-            "Peer closed",
-            "",
-            null,
-            DccTransferStore.ActionHint.NONE);
-      }
-    } catch (Exception e) {
-      if (!session.closing().get()) {
-        ui.appendError(pm, DCC_ERR_TAG, "DCC chat connection lost: " + e.getMessage());
-        upsertTransfer(
-            session.serverId(),
-            session.nick(),
-            transferEntryId(session.serverId(), session.nick(), "chat-active"),
-            "Chat",
-            "Connection lost",
-            e.getMessage(),
-            null,
-            DccTransferStore.ActionHint.NONE);
-      }
-    } finally {
-      chatSessions.remove(key, session);
-      closeQuietly(session.socket());
-    }
-  }
-
-  private boolean closeChatSessionInternal(
-      String sid, String nick, String message, boolean announce) {
-    String key = peerKey(sid, nick);
-    DccChatSession session = chatSessions.remove(key);
-    if (session == null) return false;
-    session.closing().set(true);
-    closeQuietly(session.socket());
-    if (announce) {
-      TargetRef pm = ensurePmTarget(sid, nick);
-      ui.appendStatus(pm, DCC_TAG, message);
-    }
-    upsertTransfer(
-        sid,
-        nick,
-        transferEntryId(sid, nick, "chat-active"),
-        "Chat",
-        "Closed",
-        "",
-        null,
-        DccTransferStore.ActionHint.NONE);
-    return true;
   }
 
   private void sendFileToSocket(
@@ -1126,13 +987,7 @@ public class OutboundDccCommandService {
 
   @PreDestroy
   void shutdown() {
-    for (DccChatSession session : chatSessions.values()) {
-      if (session != null) {
-        session.closing().set(true);
-        closeQuietly(session.socket());
-      }
-    }
-    chatSessions.clear();
+    dccChatSessionSupport.shutdown();
 
     for (ServerSocket listener : outgoingChatListeners.values()) closeQuietly(listener);
     for (ServerSocket listener : outgoingSendListeners.values()) closeQuietly(listener);
@@ -1142,12 +997,4 @@ public class OutboundDccCommandService {
     pendingChatOffers.clear();
     pendingSendOffers.clear();
   }
-
-  private record DccChatSession(
-      String serverId,
-      String nick,
-      Socket socket,
-      BufferedWriter writer,
-      Object writeLock,
-      AtomicBoolean closing) {}
 }
