@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.irc.IrcClientService;
@@ -36,8 +35,8 @@ final class OutboundMessagingCommandService {
   @NonNull private final IrcEchoCapabilityPort echoCapabilityPort;
   @NonNull private final IrcNegotiatedFeaturePort negotiatedFeaturePort;
   @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  @NonNull private final OutboundConnectionStatusSupport outboundConnectionStatusSupport;
   @NonNull private final UiPort ui;
-  @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final PendingEchoMessagePort pendingEchoMessageState;
 
@@ -115,8 +114,7 @@ final class OutboundMessagingCommandService {
       return;
     }
 
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+    if (!outboundConnectionStatusSupport.ensureConnectedStatusOnly(at)) {
       return;
     }
 
@@ -141,12 +139,7 @@ final class OutboundMessagingCommandService {
     String m = message == null ? "" : message.trim();
     if (m.isEmpty()) return;
 
-    if (!connectionCoordinator.isConnected(target.serverId())) {
-      TargetRef status = new TargetRef(target.serverId(), "status");
-      ui.appendStatus(status, "(conn)", "Not connected");
-      if (!target.isStatus()) {
-        ui.appendStatus(target, "(conn)", "Not connected");
-      }
+    if (!outboundConnectionStatusSupport.ensureConnected(target)) {
       return;
     }
 
@@ -207,12 +200,7 @@ final class OutboundMessagingCommandService {
     String m = message == null ? "" : message.trim();
     if (t.isEmpty() || m.isEmpty()) return;
 
-    if (!connectionCoordinator.isConnected(echoTarget.serverId())) {
-      TargetRef status = new TargetRef(echoTarget.serverId(), "status");
-      ui.appendStatus(status, "(conn)", "Not connected");
-      if (!echoTarget.isStatus()) {
-        ui.appendStatus(echoTarget, "(conn)", "Not connected");
-      }
+    if (!outboundConnectionStatusSupport.ensureConnected(echoTarget)) {
       return;
     }
 

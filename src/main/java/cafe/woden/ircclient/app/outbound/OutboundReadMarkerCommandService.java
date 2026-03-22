@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
@@ -25,8 +24,8 @@ final class OutboundReadMarkerCommandService implements OutboundHelpContributor 
   @NonNull private final IrcReadMarkerPort readMarkerPort;
   @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   @NonNull private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport;
+  @NonNull private final OutboundConnectionStatusSupport outboundConnectionStatusSupport;
   @NonNull private final UiPort ui;
-  @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final TargetCoordinator targetCoordinator;
 
   @Override
@@ -57,8 +56,7 @@ final class OutboundReadMarkerCommandService implements OutboundHelpContributor 
       return;
     }
     TargetRef status = new TargetRef(at.serverId(), "status");
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
+    if (!outboundConnectionStatusSupport.ensureConnectedStatusOnly(at)) {
       return;
     }
     if (!backendCapabilityPolicy.supportsReadMarker(at.serverId())) {

@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.MessageMutationOutboundCommandsRouter;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
@@ -34,7 +33,7 @@ final class OutboundMessageMutationSendSupport {
   private final MessageMutationOutboundCommandsRouter messageMutationOutboundCommandsRouter;
 
   @NonNull private final UiPort ui;
-  @NonNull private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final OutboundConnectionStatusSupport outboundConnectionStatusSupport;
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final PendingEchoMessagePort pendingEchoMessageState;
   @NonNull private final OutboundRawLineCorrelationService rawLineCorrelationService;
@@ -197,13 +196,7 @@ final class OutboundMessageMutationSendSupport {
   }
 
   private boolean ensureConnected(TargetRef target) {
-    if (connectionCoordinator.isConnected(target.serverId())) return true;
-    TargetRef status = new TargetRef(target.serverId(), "status");
-    ui.appendStatus(status, "(conn)", "Not connected");
-    if (!target.isStatus()) {
-      ui.appendStatus(target, "(conn)", "Not connected");
-    }
-    return false;
+    return outboundConnectionStatusSupport.ensureConnected(target);
   }
 
   private String currentNick(String serverId) {

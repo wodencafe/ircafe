@@ -48,6 +48,8 @@ class OutboundMessageMutationCommandServiceTest {
           irc);
   private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport =
       new OutboundCommandAvailabilitySupport(outboundBackendCapabilityPolicy);
+  private final OutboundConnectionStatusSupport outboundConnectionStatusSupport =
+      new OutboundConnectionStatusSupport(ui, connectionCoordinator);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
@@ -67,7 +69,7 @@ class OutboundMessageMutationCommandServiceTest {
           outboundBackendCapabilityPolicy,
           messageMutationOutboundCommandsRouter,
           ui,
-          connectionCoordinator,
+          outboundConnectionStatusSupport,
           targetCoordinator,
           pendingEchoMessageState,
           rawLineCorrelationService);

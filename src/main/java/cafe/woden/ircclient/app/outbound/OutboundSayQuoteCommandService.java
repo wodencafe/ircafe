@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -24,7 +23,7 @@ final class OutboundSayQuoteCommandService {
   private final IrcTargetMembershipPort targetMembership;
 
   @NonNull private final UiPort ui;
-  @NonNull private final ConnectionCoordinator connectionCoordinator;
+  @NonNull private final OutboundConnectionStatusSupport outboundConnectionStatusSupport;
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final OutboundRawCommandSupport rawCommandSupport;
   @NonNull private final OutboundMessagingCommandService outboundMessagingCommandService;
@@ -71,8 +70,7 @@ final class OutboundSayQuoteCommandService {
       return;
     }
 
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
+    if (!outboundConnectionStatusSupport.ensureConnectedStatusOnly(at)) {
       return;
     }
 
@@ -104,8 +102,7 @@ final class OutboundSayQuoteCommandService {
       return;
     }
 
-    if (!connectionCoordinator.isConnected(sid)) {
-      ui.appendStatus(status, "(conn)", "Not connected");
+    if (!outboundConnectionStatusSupport.ensureConnectedStatusOnly(sid)) {
       return;
     }
 

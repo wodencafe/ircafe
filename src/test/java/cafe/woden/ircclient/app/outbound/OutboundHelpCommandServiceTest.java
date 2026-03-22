@@ -45,6 +45,8 @@ class OutboundHelpCommandServiceTest {
           irc);
   private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport =
       new OutboundCommandAvailabilitySupport(outboundBackendCapabilityPolicy);
+  private final OutboundConnectionStatusSupport outboundConnectionStatusSupport =
+      new OutboundConnectionStatusSupport(ui, connectionCoordinator);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
@@ -64,7 +66,7 @@ class OutboundHelpCommandServiceTest {
           outboundBackendCapabilityPolicy,
           messageMutationOutboundCommandsRouter,
           ui,
-          connectionCoordinator,
+          outboundConnectionStatusSupport,
           targetCoordinator,
           pendingEchoMessageState,
           rawLineCorrelationService);
@@ -94,8 +96,8 @@ class OutboundHelpCommandServiceTest {
           IrcReadMarkerPort.from(irc),
           outboundBackendCapabilityPolicy,
           outboundCommandAvailabilitySupport,
+          outboundConnectionStatusSupport,
           ui,
-          connectionCoordinator,
           targetCoordinator);
   private final OutboundHelpCommandService service =
       new OutboundHelpCommandService(

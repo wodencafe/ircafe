@@ -45,13 +45,15 @@ class OutboundReadMarkerCommandServiceTest {
           irc);
   private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport =
       new OutboundCommandAvailabilitySupport(outboundBackendCapabilityPolicy);
+  private final OutboundConnectionStatusSupport outboundConnectionStatusSupport =
+      new OutboundConnectionStatusSupport(ui, connectionCoordinator);
   private final OutboundReadMarkerCommandService service =
       new OutboundReadMarkerCommandService(
           IrcReadMarkerPort.from(irc),
           outboundBackendCapabilityPolicy,
           outboundCommandAvailabilitySupport,
+          outboundConnectionStatusSupport,
           ui,
-          connectionCoordinator,
           targetCoordinator);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
