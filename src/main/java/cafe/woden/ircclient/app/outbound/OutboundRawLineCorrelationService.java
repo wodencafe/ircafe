@@ -15,12 +15,12 @@ import org.springframework.stereotype.Component;
 @Component
 @ApplicationLayer
 @RequiredArgsConstructor
-final class OutboundRawLineCorrelationService {
+public final class OutboundRawLineCorrelationService {
 
   @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   @NonNull private final LabeledResponseRoutingPort labeledResponseRoutingState;
 
-  PreparedRawLine prepare(TargetRef origin, String rawLine) {
+  public PreparedRawLine prepare(TargetRef origin, String rawLine) {
     String line = rawLine == null ? "" : rawLine.trim();
     if (line.isEmpty() || origin == null) return new PreparedRawLine(line, "");
     if (!supportsLabeledResponse(origin.serverId())) return new PreparedRawLine(line, "");
@@ -43,7 +43,7 @@ final class OutboundRawLineCorrelationService {
     return backendCapabilityPolicy.supportsLabeledResponse(serverId);
   }
 
-  static String redactIfSensitive(String raw) {
+  public static String redactIfSensitive(String raw) {
     String s = raw == null ? "" : raw.trim();
     if (s.isEmpty()) return s;
 
@@ -56,5 +56,5 @@ final class OutboundRawLineCorrelationService {
     return s;
   }
 
-  record PreparedRawLine(String line, String label) {}
+  public record PreparedRawLine(String line, String label) {}
 }

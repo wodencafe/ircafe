@@ -11,27 +11,27 @@ import org.springframework.stereotype.Component;
 @Component
 @ApplicationLayer
 @RequiredArgsConstructor
-final class OutboundRawCommandSupport {
+public final class OutboundRawCommandSupport {
 
   @NonNull private final OutboundRawLineCorrelationService rawLineCorrelationService;
 
-  PreparedRawLine prepare(TargetRef origin, String rawLine) {
+  public PreparedRawLine prepare(TargetRef origin, String rawLine) {
     OutboundRawLineCorrelationService.PreparedRawLine prepared =
         rawLineCorrelationService.prepare(origin, rawLine);
     return new PreparedRawLine(prepared.line(), prepared.label());
   }
 
-  String preview(String rawLine, PreparedRawLine prepared) {
+  public String preview(String rawLine, PreparedRawLine prepared) {
     return withLabelHint(rawLine, prepared == null ? "" : prepared.label());
   }
 
-  String safePreview(String rawLine, PreparedRawLine prepared) {
+  public String safePreview(String rawLine, PreparedRawLine prepared) {
     return withLabelHint(
         OutboundRawLineCorrelationService.redactIfSensitive(rawLine),
         prepared == null ? "" : prepared.label());
   }
 
-  static boolean containsLineBreaks(String input) {
+  public static boolean containsLineBreaks(String input) {
     return input != null && (input.indexOf('\n') >= 0 || input.indexOf('\r') >= 0);
   }
 
@@ -42,5 +42,5 @@ final class OutboundRawCommandSupport {
     return p + " {label=" + l + "}";
   }
 
-  record PreparedRawLine(String line, String label) {}
+  public record PreparedRawLine(String line, String label) {}
 }

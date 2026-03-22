@@ -1,8 +1,10 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.invite;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.CommandTargetPolicy;
+import cafe.woden.ircclient.app.outbound.OutboundRawCommandSupport;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
@@ -19,7 +21,7 @@ import org.springframework.stereotype.Component;
 /** Handles outbound invite command flow: /invite and pending invite actions. */
 @Component
 @ApplicationLayer
-final class OutboundInviteCommandService {
+public final class OutboundInviteCommandService {
 
   @NonNull
   @Qualifier("ircMediatorInteractionPort")
@@ -32,7 +34,7 @@ final class OutboundInviteCommandService {
   @NonNull private final OutboundRawCommandSupport rawCommandSupport;
   @NonNull private final PendingInviteCommandSupport pendingInviteCommandSupport;
 
-  OutboundInviteCommandService(
+  public OutboundInviteCommandService(
       @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
@@ -63,7 +65,7 @@ final class OutboundInviteCommandService {
             Objects.requireNonNull(ignoreListService, "ignoreListService"));
   }
 
-  void handleInvite(CompositeDisposable disposables, String nick, String channel) {
+  public void handleInvite(CompositeDisposable disposables, String nick, String channel) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(invite)", "Select a server first.");
@@ -107,27 +109,27 @@ final class OutboundInviteCommandService {
                 () -> {}, err -> ui.appendError(status, "(invite-error)", String.valueOf(err))));
   }
 
-  void handleInviteList(String serverId) {
+  public void handleInviteList(String serverId) {
     pendingInviteCommandSupport.handleInviteList(serverId);
   }
 
-  void handleInviteJoin(CompositeDisposable disposables, String inviteToken) {
+  public void handleInviteJoin(CompositeDisposable disposables, String inviteToken) {
     pendingInviteCommandSupport.handleInviteJoin(disposables, inviteToken);
   }
 
-  void handleInviteIgnore(String inviteToken) {
+  public void handleInviteIgnore(String inviteToken) {
     pendingInviteCommandSupport.handleInviteIgnore(inviteToken);
   }
 
-  void handleInviteWhois(CompositeDisposable disposables, String inviteToken) {
+  public void handleInviteWhois(CompositeDisposable disposables, String inviteToken) {
     pendingInviteCommandSupport.handleInviteWhois(disposables, inviteToken);
   }
 
-  void handleInviteBlock(String inviteToken) {
+  public void handleInviteBlock(String inviteToken) {
     pendingInviteCommandSupport.handleInviteBlock(inviteToken);
   }
 
-  void handleInviteAutoJoin(String mode) {
+  public void handleInviteAutoJoin(String mode) {
     pendingInviteCommandSupport.handleInviteAutoJoin(mode);
   }
 }
