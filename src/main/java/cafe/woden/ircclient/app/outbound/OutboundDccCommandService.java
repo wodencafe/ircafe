@@ -66,11 +66,11 @@ public class OutboundDccCommandService {
 
   private final TargetCoordinator targetCoordinator;
   private final ConnectionCoordinator connectionCoordinator;
-  private final DccTransferStore dccTransferStore;
 
   @Qualifier(ExecutorConfig.OUTBOUND_DCC_EXECUTOR)
   private final ExecutorService io;
 
+  private final DccCommandSupport dccCommandSupport;
   private final DccInboundOfferSupport dccInboundOfferSupport;
 
   private final ConcurrentMap<String, PendingChatOffer> pendingChatOffers =
@@ -94,11 +94,10 @@ public class OutboundDccCommandService {
     this.mediatorIrc = mediatorIrc;
     this.targetCoordinator = targetCoordinator;
     this.connectionCoordinator = connectionCoordinator;
-    this.dccTransferStore = dccTransferStore;
     this.io = io;
+    this.dccCommandSupport = new DccCommandSupport(ui, targetCoordinator, dccTransferStore);
     this.dccInboundOfferSupport =
-        new DccInboundOfferSupport(
-            ui, targetCoordinator, dccTransferStore, pendingChatOffers, pendingSendOffers);
+        new DccInboundOfferSupport(dccCommandSupport, pendingChatOffers, pendingSendOffers);
   }
 
   public void handleDcc(
@@ -963,16 +962,11 @@ public class OutboundDccCommandService {
   }
 
   private TargetRef ensurePmTarget(String sid, String nick) {
-    TargetRef pm = new TargetRef(sid, nick);
-    ui.ensureTargetExists(pm);
-    return pm;
+    return dccCommandSupport.ensurePmTarget(sid, nick);
   }
 
   private void markUnreadIfInactive(TargetRef target) {
-    TargetRef active = targetCoordinator.getActiveTarget();
-    if (!target.equals(active)) {
-      ui.markUnread(target);
-    }
+    dccCommandSupport.markUnreadIfInactive(target);
   }
 
   private void upsertTransfer(
@@ -984,7 +978,8 @@ public class OutboundDccCommandService {
       String detail,
       Integer progressPercent,
       DccTransferStore.ActionHint actionHint) {
-    upsertTransfer(sid, nick, entryId, kind, status, detail, "", progressPercent, actionHint);
+    dccCommandSupport.upsertTransfer(
+        sid, nick, entryId, kind, status, detail, progressPercent, actionHint);
   }
 
   private void upsertTransfer(
@@ -997,16 +992,12 @@ public class OutboundDccCommandService {
       String localPath,
       Integer progressPercent,
       DccTransferStore.ActionHint actionHint) {
-    if (dccTransferStore == null) return;
-    dccTransferStore.upsert(
-        sid, entryId, nick, kind, status, detail, localPath, progressPercent, actionHint);
+    dccCommandSupport.upsertTransfer(
+        sid, nick, entryId, kind, status, detail, localPath, progressPercent, actionHint);
   }
 
   private static String transferEntryId(String sid, String nick, String suffix) {
-    String server = normalizeToken(sid).toLowerCase(Locale.ROOT);
-    String peer = normalizeNick(nick).toLowerCase(Locale.ROOT);
-    String sfx = normalizeToken(suffix).toLowerCase(Locale.ROOT);
-    return server + "|" + peer + "|" + sfx;
+    return DccCommandSupport.transferEntryId(sid, nick, suffix);
   }
 
   private static void replaceListener(
@@ -1028,32 +1019,19 @@ public class OutboundDccCommandService {
   }
 
   private static String sanitizeOfferFileName(String fileName) {
-    String name = Objects.toString(fileName, "").trim();
-    if (name.isEmpty()) return "download.bin";
-    name = name.replace('\\', '/');
-    int slash = name.lastIndexOf('/');
-    if (slash >= 0 && slash + 1 < name.length()) {
-      name = name.substring(slash + 1);
-    }
-    name = name.replace("\r", "_").replace("\n", "_").replace("\u0000", "_");
-    if (name.isBlank()) return "download.bin";
-    return name;
+    return DccCommandSupport.sanitizeOfferFileName(fileName);
   }
 
   private static String normalizeToken(String raw) {
-    return Objects.toString(raw, "").trim();
+    return DccCommandSupport.normalizeToken(raw);
   }
 
   private static String normalizeNick(String raw) {
-    String nick = normalizeToken(raw);
-    if (nick.indexOf(' ') >= 0) return "";
-    return nick;
+    return DccCommandSupport.normalizeNick(raw);
   }
 
   private static String peerKey(String sid, String nick) {
-    return normalizeToken(sid).toLowerCase(Locale.ROOT)
-        + "\u0000"
-        + normalizeToken(nick).toLowerCase(Locale.ROOT);
+    return DccCommandSupport.peerKey(sid, nick);
   }
 
   private static InetAddress resolveAdvertisableIpv4() {
@@ -1127,14 +1105,7 @@ public class OutboundDccCommandService {
   }
 
   private static String formatBytes(long bytes) {
-    if (bytes < 0L) return "?";
-    if (bytes < 1024L) return bytes + " B";
-    double kb = bytes / 1024.0;
-    if (kb < 1024.0) return String.format(Locale.ROOT, "%.1f KiB", kb);
-    double mb = kb / 1024.0;
-    if (mb < 1024.0) return String.format(Locale.ROOT, "%.1f MiB", mb);
-    double gb = mb / 1024.0;
-    return String.format(Locale.ROOT, "%.2f GiB", gb);
+    return DccCommandSupport.formatBytes(bytes);
   }
 
   private static void closeQuietly(Closeable c) {

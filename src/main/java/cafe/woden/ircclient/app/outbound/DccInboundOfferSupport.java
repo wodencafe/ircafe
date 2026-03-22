@@ -1,7 +1,5 @@
 package cafe.woden.ircclient.app.outbound;
 
-import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.model.TargetRef;
 import java.net.InetAddress;
@@ -22,16 +20,14 @@ final class DccInboundOfferSupport {
 
   private static final String DCC_TAG = "(dcc)";
 
-  @NonNull private final UiPort ui;
-  @NonNull private final TargetCoordinator targetCoordinator;
-  private final DccTransferStore dccTransferStore;
+  @NonNull private final DccCommandSupport dccCommandSupport;
   @NonNull private final ConcurrentMap<String, PendingChatOffer> pendingChatOffers;
   @NonNull private final ConcurrentMap<String, PendingSendOffer> pendingSendOffers;
 
   boolean handleInboundDccOffer(
       Instant at, String serverId, String fromNick, String dccArgument, boolean spoiler) {
-    String sid = normalizeToken(serverId);
-    String nick = normalizeNick(fromNick);
+    String sid = DccCommandSupport.normalizeToken(serverId);
+    String nick = DccCommandSupport.normalizeNick(fromNick);
     if (sid.isEmpty() || nick.isEmpty()) return false;
 
     List<String> tokens = splitDccTokens(dccArgument);
@@ -57,7 +53,7 @@ final class DccInboundOfferSupport {
       return true;
     }
 
-    String fileName = sanitizeOfferFileName(tokens.get(1));
+    String fileName = DccCommandSupport.sanitizeOfferFileName(tokens.get(1));
     Integer port = parsePort(tokens.get(2));
     Long offset = parseLong(tokens.get(3));
     if (port == null || offset == null || offset < 0L) {
@@ -65,13 +61,13 @@ final class DccInboundOfferSupport {
       return true;
     }
 
-    upsertTransfer(
+    dccCommandSupport.upsertTransfer(
         sid,
         fromNick,
-        transferEntryId(sid, fromNick, "control-resume"),
+        DccCommandSupport.transferEntryId(sid, fromNick, "control-resume"),
         "Control",
         "RESUME received",
-        fileName + " (port " + port + ", offset " + formatBytes(offset) + ")",
+        fileName + " (port " + port + ", offset " + DccCommandSupport.formatBytes(offset) + ")",
         null,
         DccTransferStore.ActionHint.NONE);
     postInboundDccStatus(
@@ -98,7 +94,7 @@ final class DccInboundOfferSupport {
       return true;
     }
 
-    String fileName = sanitizeOfferFileName(tokens.get(1));
+    String fileName = DccCommandSupport.sanitizeOfferFileName(tokens.get(1));
     Integer port = parsePort(tokens.get(2));
     Long offset = parseLong(tokens.get(3));
     if (port == null || offset == null || offset < 0L) {
@@ -106,13 +102,13 @@ final class DccInboundOfferSupport {
       return true;
     }
 
-    upsertTransfer(
+    dccCommandSupport.upsertTransfer(
         sid,
         fromNick,
-        transferEntryId(sid, fromNick, "control-accept"),
+        DccCommandSupport.transferEntryId(sid, fromNick, "control-accept"),
         "Control",
         "ACCEPT received",
-        fileName + " (port " + port + ", offset " + formatBytes(offset) + ")",
+        fileName + " (port " + port + ", offset " + DccCommandSupport.formatBytes(offset) + ")",
         null,
         DccTransferStore.ActionHint.NONE);
     postInboundDccStatus(
@@ -141,7 +137,7 @@ final class DccInboundOfferSupport {
 
     int hostIdx;
     int portIdx;
-    String protocol = normalizeToken(tokens.get(1)).toLowerCase(Locale.ROOT);
+    String protocol = DccCommandSupport.normalizeToken(tokens.get(1)).toLowerCase(Locale.ROOT);
     if ("chat".equals(protocol)) {
       if (tokens.size() < 4) {
         postInboundDccStatus(at, sid, fromNick, "Malformed DCC CHAT offer.", spoiler);
@@ -162,11 +158,12 @@ final class DccInboundOfferSupport {
     }
 
     pendingChatOffers.put(
-        peerKey(sid, fromNick), new PendingChatOffer(sid, fromNick, host, port, atOrNow(at)));
-    upsertTransfer(
+        DccCommandSupport.peerKey(sid, fromNick),
+        new PendingChatOffer(sid, fromNick, host, port, atOrNow(at)));
+    dccCommandSupport.upsertTransfer(
         sid,
         fromNick,
-        transferEntryId(sid, fromNick, "chat-in"),
+        DccCommandSupport.transferEntryId(sid, fromNick, "chat-in"),
         "Chat (incoming)",
         "Offer received",
         host.getHostAddress() + ":" + port,
@@ -196,7 +193,7 @@ final class DccInboundOfferSupport {
       return true;
     }
 
-    String fileName = sanitizeOfferFileName(tokens.get(1));
+    String fileName = DccCommandSupport.sanitizeOfferFileName(tokens.get(1));
     InetAddress host = parseDccHost(tokens.get(2));
     Integer port = parsePort(tokens.get(3));
     Long size = parseLong(tokens.get(4));
@@ -206,15 +203,15 @@ final class DccInboundOfferSupport {
     }
 
     pendingSendOffers.put(
-        peerKey(sid, fromNick),
+        DccCommandSupport.peerKey(sid, fromNick),
         new PendingSendOffer(sid, fromNick, fileName, host, port, size, atOrNow(at)));
-    upsertTransfer(
+    dccCommandSupport.upsertTransfer(
         sid,
         fromNick,
-        transferEntryId(sid, fromNick, "send-in"),
+        DccCommandSupport.transferEntryId(sid, fromNick, "send-in"),
         "Receive file (incoming)",
         "Offer received",
-        fileName + " (" + formatBytes(size) + ")",
+        fileName + " (" + DccCommandSupport.formatBytes(size) + ")",
         0,
         DccTransferStore.ActionHint.GET_FILE);
 
@@ -227,7 +224,7 @@ final class DccInboundOfferSupport {
             + ": "
             + fileName
             + " ("
-            + formatBytes(size)
+            + DccCommandSupport.formatBytes(size)
             + "). Accept with /dcc get "
             + fromNick
             + " or right-click nick -> DCC -> Get Pending File.",
@@ -237,53 +234,13 @@ final class DccInboundOfferSupport {
 
   private void postInboundDccStatus(
       Instant at, String sid, String fromNick, String text, boolean spoiler) {
-    TargetRef pm = ensurePmTarget(sid, fromNick);
+    TargetRef pm = dccCommandSupport.ensurePmTarget(sid, fromNick);
     if (spoiler) {
-      ui.appendSpoilerChatAt(pm, atOrNow(at), DCC_TAG, text);
+      dccCommandSupport.appendSpoilerChatAt(pm, atOrNow(at), DCC_TAG, text);
     } else {
-      ui.appendStatusAt(pm, atOrNow(at), DCC_TAG, text);
+      dccCommandSupport.appendStatusAt(pm, atOrNow(at), DCC_TAG, text);
     }
-    markUnreadIfInactive(pm);
-  }
-
-  private TargetRef ensurePmTarget(String sid, String nick) {
-    TargetRef pm = new TargetRef(sid, nick);
-    ui.ensureTargetExists(pm);
-    return pm;
-  }
-
-  private void markUnreadIfInactive(TargetRef target) {
-    TargetRef active = targetCoordinator.getActiveTarget();
-    if (!target.equals(active)) {
-      ui.markUnread(target);
-    }
-  }
-
-  private void upsertTransfer(
-      String sid,
-      String nick,
-      String entryId,
-      String kind,
-      String status,
-      String detail,
-      Integer progressPercent,
-      DccTransferStore.ActionHint actionHint) {
-    if (dccTransferStore == null) return;
-    dccTransferStore.upsert(
-        sid, entryId, nick, kind, status, detail, "", progressPercent, actionHint);
-  }
-
-  static String peerKey(String sid, String nick) {
-    return normalizeToken(sid).toLowerCase(Locale.ROOT)
-        + "\u0000"
-        + normalizeToken(nick).toLowerCase(Locale.ROOT);
-  }
-
-  static String transferEntryId(String sid, String nick, String suffix) {
-    String server = normalizeToken(sid).toLowerCase(Locale.ROOT);
-    String peer = normalizeNick(nick).toLowerCase(Locale.ROOT);
-    String sfx = normalizeToken(suffix).toLowerCase(Locale.ROOT);
-    return server + "|" + peer + "|" + sfx;
+    dccCommandSupport.markUnreadIfInactive(pm);
   }
 
   private static List<String> splitDccTokens(String raw) {
@@ -312,35 +269,12 @@ final class DccInboundOfferSupport {
     return out;
   }
 
-  private static String sanitizeOfferFileName(String fileName) {
-    String name = Objects.toString(fileName, "").trim();
-    if (name.isEmpty()) return "download.bin";
-    name = name.replace('\\', '/');
-    int slash = name.lastIndexOf('/');
-    if (slash >= 0 && slash + 1 < name.length()) {
-      name = name.substring(slash + 1);
-    }
-    name = name.replace("\r", "_").replace("\n", "_").replace("\u0000", "_");
-    if (name.isBlank()) return "download.bin";
-    return name;
-  }
-
-  private static String normalizeToken(String raw) {
-    return Objects.toString(raw, "").trim();
-  }
-
-  private static String normalizeNick(String raw) {
-    String nick = normalizeToken(raw);
-    if (nick.indexOf(' ') >= 0) return "";
-    return nick;
-  }
-
   private static Instant atOrNow(Instant at) {
     return (at == null) ? Instant.now() : at;
   }
 
   private static InetAddress parseDccHost(String token) {
-    String s = normalizeToken(token);
+    String s = DccCommandSupport.normalizeToken(token);
     if (s.isEmpty()) return null;
     try {
       if (s.indexOf('.') >= 0 || s.indexOf(':') >= 0) {
@@ -370,21 +304,10 @@ final class DccInboundOfferSupport {
 
   private static Long parseLong(String token) {
     try {
-      return Long.parseLong(normalizeToken(token));
+      return Long.parseLong(DccCommandSupport.normalizeToken(token));
     } catch (Exception ignored) {
       return null;
     }
-  }
-
-  private static String formatBytes(long bytes) {
-    if (bytes < 0L) return "?";
-    if (bytes < 1024L) return bytes + " B";
-    double kb = bytes / 1024.0;
-    if (kb < 1024.0) return String.format(Locale.ROOT, "%.1f KiB", kb);
-    double mb = kb / 1024.0;
-    if (mb < 1024.0) return String.format(Locale.ROOT, "%.1f MiB", mb);
-    double gb = mb / 1024.0;
-    return String.format(Locale.ROOT, "%.2f GiB", gb);
   }
 }
 
