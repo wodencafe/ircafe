@@ -3,7 +3,7 @@ package cafe.woden.ircclient.app.outbound.chathistory;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.OutboundHelpContributor;
+import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpContributor;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;

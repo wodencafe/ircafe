@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app.outbound.backend;
 
-import cafe.woden.ircclient.app.outbound.OutboundBackendFeatureAdapter;
+import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.LinkedHashMap;
 import java.util.List;

@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.backend.spi;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;

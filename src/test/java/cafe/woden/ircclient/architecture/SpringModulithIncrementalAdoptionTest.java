@@ -25,15 +25,15 @@ import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.IrcMediator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.BackendNamedOutboundCommandHandler;
-import cafe.woden.ircclient.app.outbound.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
-import cafe.woden.ircclient.app.outbound.SemanticUploadCommandHandler;
-import cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler;
+import cafe.woden.ircclient.app.outbound.backend.spi.BackendNamedOutboundCommandHandler;
+import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.dispatch.DefaultOutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.dispatch.ObservedOutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
 import cafe.woden.ircclient.app.outbound.spi.LocalFilterCommandHandler;
+import cafe.woden.ircclient.app.outbound.upload.spi.SemanticUploadCommandHandler;
+import cafe.woden.ircclient.app.outbound.upload.spi.UploadCommandTranslationHandler;
 import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
@@ -397,7 +397,7 @@ class SpringModulithIncrementalAdoptionTest {
             "app",
             "app::api",
             "app::commands",
-            "app::outbound",
+            "app::outbound-filter",
             "bouncer",
             "config",
             "config::api",
@@ -580,7 +580,7 @@ class SpringModulithIncrementalAdoptionTest {
         TrayNotificationsPort.class);
     assertNamedInterfaceContains(
         appModule, "commands", UserCommandAliasesBus.class, FilterCommand.class);
-    assertNamedInterfaceContains(appModule, "outbound", LocalFilterCommandHandler.class);
+    assertNamedInterfaceContains(appModule, "outbound-filter", LocalFilterCommandHandler.class);
   }
 
   private static void assertNamedInterfaceContains(

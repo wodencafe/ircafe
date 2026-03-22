@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.app.outbound.backend;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.outbound.SemanticUploadCommandHandler;
-import cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler;
+import cafe.woden.ircclient.app.outbound.upload.spi.SemanticUploadCommandHandler;
+import cafe.woden.ircclient.app.outbound.upload.spi.UploadCommandTranslationHandler;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;

@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.app.outbound.*;
+import cafe.woden.ircclient.app.outbound.CommandTargetPolicy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;

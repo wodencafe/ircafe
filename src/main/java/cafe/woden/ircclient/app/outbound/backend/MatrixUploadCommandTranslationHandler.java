@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app.outbound.backend;
 
-import cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler;
+import cafe.woden.ircclient.app.outbound.upload.spi.UploadCommandTranslationHandler;
 import cafe.woden.ircclient.config.IrcProperties;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;

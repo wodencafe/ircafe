@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.backend.spi;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;

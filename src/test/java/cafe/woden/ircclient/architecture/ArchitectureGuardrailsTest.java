@@ -396,11 +396,11 @@ class ArchitectureGuardrailsTest {
               "cafe.woden.ircclient.app.outbound.backend.MatrixUploadCommandTranslationHandler")
           .and()
           .doNotHaveFullyQualifiedName(
-              "cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler")
+              "cafe.woden.ircclient.app.outbound.upload.spi.UploadCommandTranslationHandler")
           .should()
           .dependOnClassesThat()
           .haveFullyQualifiedName(
-              "cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler")
+              "cafe.woden.ircclient.app.outbound.upload.spi.UploadCommandTranslationHandler")
           .because(
               "semantic /upload backend translation should stay behind dedicated matrix upload services");
 

@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.upload.spi;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import org.jmolecules.architecture.hexagonal.SecondaryPort;

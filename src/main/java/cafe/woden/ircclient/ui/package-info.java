@@ -4,7 +4,7 @@
       "app",
       "app::api",
       "app::commands",
-      "app::outbound",
+      "app::outbound-filter",
       "bouncer",
       "config",
       "config::api",

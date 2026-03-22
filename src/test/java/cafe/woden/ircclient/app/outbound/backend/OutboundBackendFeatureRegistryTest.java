@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.app.outbound.*;
+import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.List;
 import org.junit.jupiter.api.Test;

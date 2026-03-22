@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.help.spi;
 
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Map;

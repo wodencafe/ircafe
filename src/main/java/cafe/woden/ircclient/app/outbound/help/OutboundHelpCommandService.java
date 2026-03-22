@@ -2,7 +2,7 @@ package cafe.woden.ircclient.app.outbound.help;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.OutboundHelpContributor;
+import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpContributor;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.LinkedHashMap;
 import java.util.List;

@@ -2,7 +2,7 @@ package cafe.woden.ircclient.app.outbound.backend;
 
 import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
 import cafe.woden.ircclient.app.commands.ParsedInput;
-import cafe.woden.ircclient.app.outbound.BackendNamedOutboundCommandHandler;
+import cafe.woden.ircclient.app.outbound.backend.spi.BackendNamedOutboundCommandHandler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
 import java.util.Set;
