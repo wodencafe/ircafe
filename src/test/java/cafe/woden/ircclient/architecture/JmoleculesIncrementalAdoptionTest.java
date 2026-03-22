@@ -468,9 +468,11 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundModeCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundMonitorCommandSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.monitor.OutboundMonitorCommandSupport",
+        ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundMonitorCommandService", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.monitor.OutboundMonitorCommandService",
+        ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundTargetMembershipCommandSupport",
         ApplicationLayer.class);

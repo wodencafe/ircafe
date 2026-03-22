@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound.backend;
+package cafe.woden.ircclient.app.outbound.monitor;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -11,7 +11,11 @@ import cafe.woden.ircclient.app.api.MonitorRosterPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.*;
+import cafe.woden.ircclient.app.outbound.CommandTargetPolicy;
+import cafe.woden.ircclient.app.outbound.backend.MatrixOutboundBackendFeatureAdapter;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendFeatureRegistry;
+import cafe.woden.ircclient.app.outbound.backend.QuasselOutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
