@@ -1,8 +1,10 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.channel;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.CommandTargetPolicy;
+import cafe.woden.ircclient.app.outbound.OutboundRawCommandSupport;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -14,13 +16,13 @@ import org.springframework.stereotype.Component;
 /** Handles outbound /names, /who, and /list command flow. */
 @Component
 @ApplicationLayer
-final class OutboundNamesWhoListCommandService {
+public final class OutboundNamesWhoListCommandService {
 
   private final OutboundTargetMembershipCommandSupport targetMembershipCommandSupport;
 
   @NonNull private final CommandTargetPolicy commandTargetPolicy;
 
-  OutboundNamesWhoListCommandService(
+  public OutboundNamesWhoListCommandService(
       @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
@@ -39,7 +41,7 @@ final class OutboundNamesWhoListCommandService {
             rawCommandSupport);
   }
 
-  void handleNames(CompositeDisposable disposables, String channel) {
+  public void handleNames(CompositeDisposable disposables, String channel) {
     TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(names)");
     if (at == null) {
       return;
@@ -66,7 +68,7 @@ final class OutboundNamesWhoListCommandService {
     targetMembershipCommandSupport.requestNames(disposables, at.serverId(), out, ch);
   }
 
-  void handleWho(CompositeDisposable disposables, String args) {
+  public void handleWho(CompositeDisposable disposables, String args) {
     TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(who)");
     if (at == null) {
       return;
@@ -99,7 +101,7 @@ final class OutboundNamesWhoListCommandService {
         disposables, at.serverId(), out, "(who)", line, "(who-error)");
   }
 
-  void handleList(CompositeDisposable disposables, String args) {
+  public void handleList(CompositeDisposable disposables, String args) {
     TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(list)");
     if (at == null) {
       return;

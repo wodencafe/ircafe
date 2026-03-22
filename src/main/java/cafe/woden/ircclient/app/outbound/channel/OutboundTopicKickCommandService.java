@@ -1,8 +1,10 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.channel;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.CommandTargetPolicy;
+import cafe.woden.ircclient.app.outbound.OutboundRawCommandSupport;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -13,12 +15,12 @@ import org.springframework.stereotype.Component;
 /** Handles outbound /topic and /kick command flow. */
 @Component
 @ApplicationLayer
-final class OutboundTopicKickCommandService {
+public final class OutboundTopicKickCommandService {
 
   private final CommandTargetPolicy commandTargetPolicy;
   private final OutboundTargetMembershipCommandSupport targetMembershipCommandSupport;
 
-  OutboundTopicKickCommandService(
+  public OutboundTopicKickCommandService(
       @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
@@ -36,7 +38,7 @@ final class OutboundTopicKickCommandService {
             rawCommandSupport);
   }
 
-  void handleTopic(CompositeDisposable disposables, String first, String rest) {
+  public void handleTopic(CompositeDisposable disposables, String first, String rest) {
     TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(topic)");
     if (at == null) {
       return;
@@ -80,7 +82,8 @@ final class OutboundTopicKickCommandService {
         disposables, at.serverId(), out, "(topic)", line, "(topic-error)");
   }
 
-  void handleKick(CompositeDisposable disposables, String channel, String nick, String reason) {
+  public void handleKick(
+      CompositeDisposable disposables, String channel, String nick, String reason) {
     TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(kick)");
     if (at == null) {
       return;

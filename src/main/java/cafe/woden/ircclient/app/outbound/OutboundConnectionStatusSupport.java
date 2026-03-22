@@ -13,20 +13,20 @@ import org.springframework.stereotype.Component;
 @Component
 @ApplicationLayer
 @RequiredArgsConstructor
-final class OutboundConnectionStatusSupport {
+public final class OutboundConnectionStatusSupport {
 
   @NonNull private final UiPort ui;
   @NonNull private final ConnectionCoordinator connectionCoordinator;
 
-  boolean ensureConnected(TargetRef target) {
+  public boolean ensureConnected(TargetRef target) {
     return ensureConnected(target, true);
   }
 
-  boolean ensureConnectedStatusOnly(TargetRef target) {
+  public boolean ensureConnectedStatusOnly(TargetRef target) {
     return ensureConnected(target, false);
   }
 
-  boolean ensureConnectedStatusOnly(String serverId) {
+  public boolean ensureConnectedStatusOnly(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) {
       return false;

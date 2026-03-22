@@ -468,7 +468,8 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.OutboundMultilineMessageSupport",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundModeCommandService", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.channel.OutboundModeCommandService",
+        ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.monitor.OutboundMonitorCommandSupport",
         ApplicationLayer.class);
@@ -476,10 +477,10 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.monitor.OutboundMonitorCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundTargetMembershipCommandSupport",
+        "cafe.woden.ircclient.app.outbound.channel.OutboundTargetMembershipCommandSupport",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundNamesWhoListCommandService",
+        "cafe.woden.ircclient.app.outbound.channel.OutboundNamesWhoListCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.identity.OutboundNickAwayCommandService",
@@ -495,7 +496,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundSayQuoteCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundTopicKickCommandService",
+        "cafe.woden.ircclient.app.outbound.channel.OutboundTopicKickCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundUploadCommandService", ApplicationLayer.class);
