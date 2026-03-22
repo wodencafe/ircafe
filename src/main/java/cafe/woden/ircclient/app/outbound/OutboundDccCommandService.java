@@ -31,16 +31,13 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Enumeration;
-import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -54,7 +51,6 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
-@RequiredArgsConstructor
 public class OutboundDccCommandService {
   private static final int OFFER_ACCEPT_TIMEOUT_MS = 120_000;
   private static final int CONNECT_TIMEOUT_MS = 20_000;
@@ -75,6 +71,8 @@ public class OutboundDccCommandService {
   @Qualifier(ExecutorConfig.OUTBOUND_DCC_EXECUTOR)
   private final ExecutorService io;
 
+  private final DccInboundOfferSupport dccInboundOfferSupport;
+
   private final ConcurrentMap<String, PendingChatOffer> pendingChatOffers =
       new ConcurrentHashMap<>();
   private final ConcurrentMap<String, PendingSendOffer> pendingSendOffers =
@@ -84,6 +82,24 @@ public class OutboundDccCommandService {
       new ConcurrentHashMap<>();
   private final ConcurrentMap<String, ServerSocket> outgoingSendListeners =
       new ConcurrentHashMap<>();
+
+  public OutboundDccCommandService(
+      UiPort ui,
+      IrcMediatorInteractionPort mediatorIrc,
+      TargetCoordinator targetCoordinator,
+      ConnectionCoordinator connectionCoordinator,
+      DccTransferStore dccTransferStore,
+      ExecutorService io) {
+    this.ui = ui;
+    this.mediatorIrc = mediatorIrc;
+    this.targetCoordinator = targetCoordinator;
+    this.connectionCoordinator = connectionCoordinator;
+    this.dccTransferStore = dccTransferStore;
+    this.io = io;
+    this.dccInboundOfferSupport =
+        new DccInboundOfferSupport(
+            ui, targetCoordinator, dccTransferStore, pendingChatOffers, pendingSendOffers);
+  }
 
   public void handleDcc(
       CompositeDisposable disposables, String subcommand, String nick, String argument) {
@@ -127,106 +143,8 @@ public class OutboundDccCommandService {
    */
   public boolean handleInboundDccOffer(
       Instant at, String serverId, String fromNick, String dccArgument, boolean spoiler) {
-    String sid = normalizeToken(serverId);
-    String nick = normalizeNick(fromNick);
-    if (sid.isEmpty() || nick.isEmpty()) return false;
-
-    List<String> tokens = splitDccTokens(dccArgument);
-    if (tokens.isEmpty()) return false;
-
-    String verb = tokens.get(0).toUpperCase(Locale.ROOT);
-    return switch (verb) {
-      case "CHAT" -> consumeInboundChatOffer(at, sid, nick, tokens, spoiler);
-      case "SEND" -> consumeInboundSendOffer(at, sid, nick, tokens, spoiler);
-      case "RESUME" -> consumeInboundResumeControl(at, sid, nick, tokens, spoiler);
-      case "ACCEPT" -> consumeInboundAcceptControl(at, sid, nick, tokens, spoiler);
-      default -> {
-        postInboundDccStatus(at, sid, nick, "Received unsupported DCC command: " + verb, spoiler);
-        yield true;
-      }
-    };
-  }
-
-  private boolean consumeInboundResumeControl(
-      Instant at, String sid, String fromNick, List<String> tokens, boolean spoiler) {
-    if (tokens.size() < 4) {
-      postInboundDccStatus(at, sid, fromNick, "Malformed DCC RESUME control message.", spoiler);
-      return true;
-    }
-
-    String fileName = sanitizeOfferFileName(tokens.get(1));
-    Integer port = parsePort(tokens.get(2));
-    Long offset = parseLong(tokens.get(3));
-    if (port == null || offset == null || offset < 0L) {
-      postInboundDccStatus(at, sid, fromNick, "Malformed DCC RESUME control message.", spoiler);
-      return true;
-    }
-
-    upsertTransfer(
-        sid,
-        fromNick,
-        transferEntryId(sid, fromNick, "control-resume"),
-        "Control",
-        "RESUME received",
-        fileName + " (port " + port + ", offset " + formatBytes(offset) + ")",
-        null,
-        DccTransferStore.ActionHint.NONE);
-    postInboundDccStatus(
-        at,
-        sid,
-        fromNick,
-        "DCC RESUME control from "
-            + fromNick
-            + " for "
-            + fileName
-            + " at byte "
-            + offset
-            + " (port "
-            + port
-            + ").",
-        spoiler);
-    return true;
-  }
-
-  private boolean consumeInboundAcceptControl(
-      Instant at, String sid, String fromNick, List<String> tokens, boolean spoiler) {
-    if (tokens.size() < 4) {
-      postInboundDccStatus(at, sid, fromNick, "Malformed DCC ACCEPT control message.", spoiler);
-      return true;
-    }
-
-    String fileName = sanitizeOfferFileName(tokens.get(1));
-    Integer port = parsePort(tokens.get(2));
-    Long offset = parseLong(tokens.get(3));
-    if (port == null || offset == null || offset < 0L) {
-      postInboundDccStatus(at, sid, fromNick, "Malformed DCC ACCEPT control message.", spoiler);
-      return true;
-    }
-
-    upsertTransfer(
-        sid,
-        fromNick,
-        transferEntryId(sid, fromNick, "control-accept"),
-        "Control",
-        "ACCEPT received",
-        fileName + " (port " + port + ", offset " + formatBytes(offset) + ")",
-        null,
-        DccTransferStore.ActionHint.NONE);
-    postInboundDccStatus(
-        at,
-        sid,
-        fromNick,
-        "DCC ACCEPT control from "
-            + fromNick
-            + " for "
-            + fileName
-            + " at byte "
-            + offset
-            + " (port "
-            + port
-            + ").",
-        spoiler);
-    return true;
+    return dccInboundOfferSupport.handleInboundDccOffer(
+        at, serverId, fromNick, dccArgument, spoiler);
   }
 
   private void offerChat(CompositeDisposable disposables, String sid, TargetRef out, String nick) {
@@ -812,120 +730,6 @@ public class OutboundDccCommandService {
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc panel");
   }
 
-  private boolean consumeInboundChatOffer(
-      Instant at, String sid, String fromNick, List<String> tokens, boolean spoiler) {
-    if (tokens.size() < 3) {
-      postInboundDccStatus(at, sid, fromNick, "Malformed DCC CHAT offer.", spoiler);
-      return true;
-    }
-
-    int hostIdx;
-    int portIdx;
-    String protocol = normalizeToken(tokens.get(1)).toLowerCase(Locale.ROOT);
-    if ("chat".equals(protocol)) {
-      if (tokens.size() < 4) {
-        postInboundDccStatus(at, sid, fromNick, "Malformed DCC CHAT offer.", spoiler);
-        return true;
-      }
-      hostIdx = 2;
-      portIdx = 3;
-    } else {
-      hostIdx = 1;
-      portIdx = 2;
-    }
-
-    InetAddress host = parseDccHost(tokens.get(hostIdx));
-    Integer port = parsePort(tokens.get(portIdx));
-    if (host == null || port == null) {
-      postInboundDccStatus(at, sid, fromNick, "Malformed DCC CHAT address/port.", spoiler);
-      return true;
-    }
-
-    pendingChatOffers.put(
-        peerKey(sid, fromNick), new PendingChatOffer(sid, fromNick, host, port, atOrNow(at)));
-    upsertTransfer(
-        sid,
-        fromNick,
-        transferEntryId(sid, fromNick, "chat-in"),
-        "Chat (incoming)",
-        "Offer received",
-        host.getHostAddress() + ":" + port,
-        null,
-        DccTransferStore.ActionHint.ACCEPT_CHAT);
-    postInboundDccStatus(
-        at,
-        sid,
-        fromNick,
-        "DCC CHAT offer from "
-            + fromNick
-            + " at "
-            + host.getHostAddress()
-            + ":"
-            + port
-            + ". Accept with /dcc accept "
-            + fromNick
-            + " or right-click nick -> DCC -> Accept Chat Offer.",
-        spoiler);
-    return true;
-  }
-
-  private boolean consumeInboundSendOffer(
-      Instant at, String sid, String fromNick, List<String> tokens, boolean spoiler) {
-    if (tokens.size() < 5) {
-      postInboundDccStatus(at, sid, fromNick, "Malformed DCC SEND offer.", spoiler);
-      return true;
-    }
-
-    String fileName = sanitizeOfferFileName(tokens.get(1));
-    InetAddress host = parseDccHost(tokens.get(2));
-    Integer port = parsePort(tokens.get(3));
-    Long size = parseLong(tokens.get(4));
-    if (host == null || port == null || size == null || size < 0L) {
-      postInboundDccStatus(at, sid, fromNick, "Malformed DCC SEND offer.", spoiler);
-      return true;
-    }
-
-    pendingSendOffers.put(
-        peerKey(sid, fromNick),
-        new PendingSendOffer(sid, fromNick, fileName, host, port, size, atOrNow(at)));
-    upsertTransfer(
-        sid,
-        fromNick,
-        transferEntryId(sid, fromNick, "send-in"),
-        "Receive file (incoming)",
-        "Offer received",
-        fileName + " (" + formatBytes(size) + ")",
-        0,
-        DccTransferStore.ActionHint.GET_FILE);
-
-    postInboundDccStatus(
-        at,
-        sid,
-        fromNick,
-        "DCC SEND offer from "
-            + fromNick
-            + ": "
-            + fileName
-            + " ("
-            + formatBytes(size)
-            + "). Accept with /dcc get "
-            + fromNick
-            + " or right-click nick -> DCC -> Get Pending File.",
-        spoiler);
-    return true;
-  }
-
-  private void postInboundDccStatus(
-      Instant at, String sid, String fromNick, String text, boolean spoiler) {
-    TargetRef pm = ensurePmTarget(sid, fromNick);
-    if (spoiler) {
-      ui.appendSpoilerChatAt(pm, atOrNow(at), DCC_TAG, text);
-    } else {
-      ui.appendStatusAt(pm, atOrNow(at), DCC_TAG, text);
-    }
-    markUnreadIfInactive(pm);
-  }
-
   private void startChatSession(String sid, String nick, Socket socket, String connectedText)
       throws IOException {
     String key = peerKey(sid, nick);
@@ -1158,10 +962,6 @@ public class OutboundDccCommandService {
     return (int) p;
   }
 
-  private static Instant atOrNow(Instant at) {
-    return (at == null) ? Instant.now() : at;
-  }
-
   private TargetRef ensurePmTarget(String sid, String nick) {
     TargetRef pm = new TargetRef(sid, nick);
     ui.ensureTargetExists(pm);
@@ -1221,32 +1021,6 @@ public class OutboundDccCommandService {
     closeQuietly(socket);
   }
 
-  private static List<String> splitDccTokens(String raw) {
-    String s = Objects.toString(raw, "").trim();
-    if (s.isEmpty()) return List.of();
-
-    ArrayList<String> out = new ArrayList<>();
-    StringBuilder current = new StringBuilder();
-    boolean inQuotes = false;
-    for (int i = 0; i < s.length(); i++) {
-      char ch = s.charAt(i);
-      if (ch == '"') {
-        inQuotes = !inQuotes;
-        continue;
-      }
-      if (!inQuotes && Character.isWhitespace(ch)) {
-        if (!current.isEmpty()) {
-          out.add(current.toString());
-          current.setLength(0);
-        }
-        continue;
-      }
-      current.append(ch);
-    }
-    if (!current.isEmpty()) out.add(current.toString());
-    return out;
-  }
-
   private static String encodeDccFileName(String name) {
     String n = sanitizeOfferFileName(name);
     if (n.indexOf(' ') >= 0) return "\"" + n.replace("\"", "_") + "\"";
@@ -1280,43 +1054,6 @@ public class OutboundDccCommandService {
     return normalizeToken(sid).toLowerCase(Locale.ROOT)
         + "\u0000"
         + normalizeToken(nick).toLowerCase(Locale.ROOT);
-  }
-
-  private static InetAddress parseDccHost(String token) {
-    String s = normalizeToken(token);
-    if (s.isEmpty()) return null;
-    try {
-      if (s.indexOf('.') >= 0 || s.indexOf(':') >= 0) {
-        return InetAddress.getByName(s);
-      }
-      long packed = Long.parseLong(s);
-      long u = packed & 0xFFFF_FFFFL;
-      byte[] bytes =
-          new byte[] {
-            (byte) ((u >>> 24) & 0xFF),
-            (byte) ((u >>> 16) & 0xFF),
-            (byte) ((u >>> 8) & 0xFF),
-            (byte) (u & 0xFF)
-          };
-      return InetAddress.getByAddress(bytes);
-    } catch (Exception ignored) {
-      return null;
-    }
-  }
-
-  private static Integer parsePort(String token) {
-    Long v = parseLong(token);
-    if (v == null) return null;
-    if (v <= 0L || v > 65535L) return null;
-    return v.intValue();
-  }
-
-  private static Long parseLong(String token) {
-    try {
-      return Long.parseLong(normalizeToken(token));
-    } catch (Exception ignored) {
-      return null;
-    }
   }
 
   private static InetAddress resolveAdvertisableIpv4() {
@@ -1434,18 +1171,6 @@ public class OutboundDccCommandService {
     pendingChatOffers.clear();
     pendingSendOffers.clear();
   }
-
-  private record PendingChatOffer(
-      String serverId, String fromNick, InetAddress host, int port, Instant offeredAt) {}
-
-  private record PendingSendOffer(
-      String serverId,
-      String fromNick,
-      String fileName,
-      InetAddress host,
-      int port,
-      long size,
-      Instant offeredAt) {}
 
   private record DccChatSession(
       String serverId,
