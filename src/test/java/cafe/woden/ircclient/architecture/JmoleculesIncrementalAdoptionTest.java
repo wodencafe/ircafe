@@ -364,7 +364,7 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.CommandTargetPolicy", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy", ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.backend.MessageMutationOutboundCommandsRouter",
         ApplicationLayer.class);
@@ -406,10 +406,10 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.identity.NickCommandSupport", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundCommandAvailabilitySupport",
+        "cafe.woden.ircclient.app.outbound.support.OutboundCommandAvailabilitySupport",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundConnectionStatusSupport",
+        "cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport",
         ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundConnectionLifecycleCommandService",
@@ -489,10 +489,11 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.identity.OutboundNickAwayCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundRawLineCorrelationService",
+        "cafe.woden.ircclient.app.outbound.support.OutboundRawLineCorrelationService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundRawCommandSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.support.OutboundRawCommandSupport",
+        ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.readmarker.OutboundReadMarkerCommandService",
         ApplicationLayer.class);

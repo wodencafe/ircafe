@@ -2,7 +2,7 @@ package cafe.woden.ircclient.app.outbound.messaging;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.OutboundConnectionStatusSupport;
+import cafe.woden.ircclient.app.outbound.support.OutboundConnectionStatusSupport;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
 import cafe.woden.ircclient.model.TargetRef;

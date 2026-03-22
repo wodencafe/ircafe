@@ -8,7 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.outbound.CommandTargetPolicy;
+import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.app.outbound.upload.spi.SemanticUploadCommandHandler;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;

@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app.outbound.backend;
 
-import cafe.woden.ircclient.app.outbound.CommandTargetPolicy;
+import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;

@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.support;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;

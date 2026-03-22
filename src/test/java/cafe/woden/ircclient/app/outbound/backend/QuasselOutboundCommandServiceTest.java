@@ -19,7 +19,7 @@ import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.CommandTargetPolicy;
+import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;

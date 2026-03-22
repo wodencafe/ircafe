@@ -2,9 +2,9 @@ package cafe.woden.ircclient.app.outbound.mutation;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.OutboundCommandAvailabilitySupport;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpContributor;
+import cafe.woden.ircclient.app.outbound.support.OutboundCommandAvailabilitySupport;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Map;
