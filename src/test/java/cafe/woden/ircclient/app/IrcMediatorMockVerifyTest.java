@@ -41,6 +41,7 @@ import cafe.woden.ircclient.app.core.MediatorInboundTextEventHandler;
 import cafe.woden.ircclient.app.core.MediatorInviteEventHandler;
 import cafe.woden.ircclient.app.core.MediatorIrcv3EventHandler;
 import cafe.woden.ircclient.app.core.MediatorIrcv3PresenceEventHandler;
+import cafe.woden.ircclient.app.core.MediatorNotificationSupport;
 import cafe.woden.ircclient.app.core.MediatorOutboundUiActionHandler;
 import cafe.woden.ircclient.app.core.MediatorRosterStatusEventHandler;
 import cafe.woden.ircclient.app.core.MediatorServerStatusEventHandler;
@@ -216,6 +217,13 @@ class IrcMediatorMockVerifyTest {
           irc, notificationRuleMatcherPort, inboundIgnorePolicy);
   private final MediatorTargetUiSupport mediatorTargetUiSupport =
       new MediatorTargetUiSupport(ui, targetCoordinator, eventPreparationService);
+  private final MediatorNotificationSupport mediatorNotificationSupport =
+      new MediatorNotificationSupport(
+          ircEventNotifierPort,
+          interceptorIngestPort,
+          userListStore,
+          targetCoordinator,
+          mediatorTargetUiSupport);
   private final MediatorInboundTextEventHandler mediatorInboundTextEventHandler =
       new MediatorInboundTextEventHandler(
           negotiatedFeaturePort,
@@ -247,16 +255,14 @@ class IrcMediatorMockVerifyTest {
           mediatorAlertNotificationHandler,
           mediatorChannelStateEventHandler,
           mediatorOutboundUiActionHandler,
+          mediatorNotificationSupport,
           mediatorTargetUiSupport,
           mediatorConnectionSubscriptionBinder,
           mediatorUiSubscriptionBinder,
           targetCoordinator,
           eventPreparationService,
           mediatorInboundTextEventHandler,
-          userListStore,
-          pendingEchoMessageState,
-          ircEventNotifierPort,
-          interceptorIngestPort);
+          pendingEchoMessageState);
 
   @Test
   void startBindsUiIrcAndConnectionCollaboratorsInOrderOnce() {

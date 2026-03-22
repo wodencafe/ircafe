@@ -2,8 +2,6 @@ package cafe.woden.ircclient.app.core;
 
 import cafe.woden.ircclient.app.AppSchedulers;
 import cafe.woden.ircclient.app.api.InterceptorEventType;
-import cafe.woden.ircclient.app.api.InterceptorIngestPort;
-import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.MediatorControlPort;
 import cafe.woden.ircclient.app.api.UiPort;
@@ -13,7 +11,6 @@ import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
-import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
@@ -62,6 +59,7 @@ public class IrcMediator implements MediatorControlPort {
   private final MediatorAlertNotificationHandler mediatorAlertNotificationHandler;
   private final MediatorChannelStateEventHandler mediatorChannelStateEventHandler;
   private final MediatorOutboundUiActionHandler mediatorOutboundUiActionHandler;
+  private final MediatorNotificationSupport mediatorNotificationSupport;
   private final MediatorTargetUiSupport mediatorTargetUiSupport;
   private final MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder;
   private final MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder;
@@ -71,10 +69,7 @@ public class IrcMediator implements MediatorControlPort {
   private final MediatorInboundEventPreparationService eventPreparationService;
   private final MediatorInboundTextEventHandler mediatorInboundTextEventHandler;
 
-  private final UserListStore userListStore;
   private final PendingEchoMessagePort pendingEchoMessageState;
-  private final IrcEventNotifierPort ircEventNotifierPort;
-  private final InterceptorIngestPort interceptorIngestPort;
 
   private final CompositeDisposable disposables = new CompositeDisposable();
 
@@ -123,16 +118,14 @@ public class IrcMediator implements MediatorControlPort {
       MediatorAlertNotificationHandler mediatorAlertNotificationHandler,
       MediatorChannelStateEventHandler mediatorChannelStateEventHandler,
       MediatorOutboundUiActionHandler mediatorOutboundUiActionHandler,
+      MediatorNotificationSupport mediatorNotificationSupport,
       MediatorTargetUiSupport mediatorTargetUiSupport,
       MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder,
       MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder,
       TargetCoordinator targetCoordinator,
       MediatorInboundEventPreparationService eventPreparationService,
       MediatorInboundTextEventHandler mediatorInboundTextEventHandler,
-      UserListStore userListStore,
-      PendingEchoMessagePort pendingEchoMessageState,
-      IrcEventNotifierPort ircEventNotifierPort,
-      InterceptorIngestPort interceptorIngestPort) {
+      PendingEchoMessagePort pendingEchoMessageState) {
     this.irc = irc;
     this.ui = ui;
     this.serverRegistry = serverRegistry;
@@ -147,16 +140,14 @@ public class IrcMediator implements MediatorControlPort {
     this.mediatorAlertNotificationHandler = mediatorAlertNotificationHandler;
     this.mediatorChannelStateEventHandler = mediatorChannelStateEventHandler;
     this.mediatorOutboundUiActionHandler = mediatorOutboundUiActionHandler;
+    this.mediatorNotificationSupport = mediatorNotificationSupport;
     this.mediatorTargetUiSupport = mediatorTargetUiSupport;
     this.mediatorConnectionSubscriptionBinder = mediatorConnectionSubscriptionBinder;
     this.mediatorUiSubscriptionBinder = mediatorUiSubscriptionBinder;
     this.targetCoordinator = targetCoordinator;
     this.eventPreparationService = eventPreparationService;
     this.mediatorInboundTextEventHandler = mediatorInboundTextEventHandler;
-    this.userListStore = userListStore;
     this.pendingEchoMessageState = pendingEchoMessageState;
-    this.ircEventNotifierPort = ircEventNotifierPort;
-    this.interceptorIngestPort = interceptorIngestPort;
   }
 
   private final class ConnectivityLifecycleCallbacks
@@ -197,13 +188,13 @@ public class IrcMediator implements MediatorControlPort {
         String hostmask,
         String text,
         InterceptorEventType eventType) {
-      IrcMediator.this.recordInterceptorEvent(
+      mediatorNotificationSupport.recordInterceptorEvent(
           serverId, target, actorNick, hostmask, text, eventType);
     }
 
     @Override
     public String learnedHostmaskForNick(String sid, String nick) {
-      return IrcMediator.this.learnedHostmaskForNick(sid, nick);
+      return mediatorNotificationSupport.learnedHostmaskForNick(sid, nick);
     }
 
     @Override
@@ -214,7 +205,8 @@ public class IrcMediator implements MediatorControlPort {
         String sourceNick,
         String title,
         String body) {
-      return IrcMediator.this.notifyIrcEvent(eventType, serverId, channel, sourceNick, title, body);
+      return mediatorNotificationSupport.notifyIrcEvent(
+          eventType, serverId, channel, sourceNick, title, body);
     }
   }
 
@@ -232,13 +224,13 @@ public class IrcMediator implements MediatorControlPort {
         String hostmask,
         String text,
         InterceptorEventType eventType) {
-      IrcMediator.this.recordInterceptorEvent(
+      mediatorNotificationSupport.recordInterceptorEvent(
           serverId, target, actorNick, hostmask, text, eventType);
     }
 
     @Override
     public String learnedHostmaskForNick(String sid, String nick) {
-      return IrcMediator.this.learnedHostmaskForNick(sid, nick);
+      return mediatorNotificationSupport.learnedHostmaskForNick(sid, nick);
     }
 
     @Override
@@ -249,7 +241,8 @@ public class IrcMediator implements MediatorControlPort {
         String sourceNick,
         String title,
         String body) {
-      return IrcMediator.this.notifyIrcEvent(eventType, serverId, channel, sourceNick, title, body);
+      return mediatorNotificationSupport.notifyIrcEvent(
+          eventType, serverId, channel, sourceNick, title, body);
     }
 
     @Override
@@ -283,7 +276,8 @@ public class IrcMediator implements MediatorControlPort {
         String sourceNick,
         String title,
         String body) {
-      return IrcMediator.this.notifyIrcEvent(eventType, serverId, channel, sourceNick, title, body);
+      return mediatorNotificationSupport.notifyIrcEvent(
+          eventType, serverId, channel, sourceNick, title, body);
     }
 
     @Override
@@ -294,13 +288,13 @@ public class IrcMediator implements MediatorControlPort {
         String hostmask,
         String text,
         InterceptorEventType eventType) {
-      IrcMediator.this.recordInterceptorEvent(
+      mediatorNotificationSupport.recordInterceptorEvent(
           serverId, target, actorNick, hostmask, text, eventType);
     }
 
     @Override
     public String learnedHostmaskForNick(String sid, String nick) {
-      return IrcMediator.this.learnedHostmaskForNick(sid, nick);
+      return mediatorNotificationSupport.learnedHostmaskForNick(sid, nick);
     }
 
     @Override
@@ -341,7 +335,8 @@ public class IrcMediator implements MediatorControlPort {
         String sourceNick,
         String title,
         String body) {
-      return IrcMediator.this.notifyIrcEvent(eventType, serverId, channel, sourceNick, title, body);
+      return mediatorNotificationSupport.notifyIrcEvent(
+          eventType, serverId, channel, sourceNick, title, body);
     }
 
     @Override
@@ -352,13 +347,13 @@ public class IrcMediator implements MediatorControlPort {
         String hostmask,
         String text,
         InterceptorEventType eventType) {
-      IrcMediator.this.recordInterceptorEvent(
+      mediatorNotificationSupport.recordInterceptorEvent(
           serverId, target, actorNick, hostmask, text, eventType);
     }
 
     @Override
     public String learnedHostmaskForNick(String serverId, String nick) {
-      return IrcMediator.this.learnedHostmaskForNick(serverId, nick);
+      return mediatorNotificationSupport.learnedHostmaskForNick(serverId, nick);
     }
   }
 
@@ -415,7 +410,8 @@ public class IrcMediator implements MediatorControlPort {
         String sourceNick,
         String title,
         String body) {
-      return IrcMediator.this.notifyIrcEvent(eventType, serverId, channel, sourceNick, title, body);
+      return mediatorNotificationSupport.notifyIrcEvent(
+          eventType, serverId, channel, sourceNick, title, body);
     }
   }
 
@@ -457,11 +453,11 @@ public class IrcMediator implements MediatorControlPort {
         String actorNick,
         String text,
         InterceptorEventType eventType) {
-      IrcMediator.this.recordInterceptorEvent(
+      mediatorNotificationSupport.recordInterceptorEvent(
           serverId,
           target,
           actorNick,
-          IrcMediator.this.learnedHostmaskForNick(serverId, actorNick),
+          mediatorNotificationSupport.learnedHostmaskForNick(serverId, actorNick),
           text,
           eventType);
     }
@@ -476,7 +472,7 @@ public class IrcMediator implements MediatorControlPort {
         String body,
         String ctcpCommand,
         String ctcpValue) {
-      return IrcMediator.this.notifyIrcEvent(
+      return mediatorNotificationSupport.notifyIrcEvent(
           eventType, serverId, channel, sourceNick, title, body, ctcpCommand, ctcpValue);
     }
 
@@ -908,83 +904,6 @@ public class IrcMediator implements MediatorControlPort {
 
   private void handleUserHostmaskObserved(String sid, IrcEvent.UserHostmaskObserved ev) {
     mediatorChannelStateEventHandler.handleUserHostmaskObserved(sid, ev);
-  }
-
-  private boolean notifyIrcEvent(
-      IrcEventNotificationRule.EventType eventType,
-      String serverId,
-      String channel,
-      String sourceNick,
-      String title,
-      String body) {
-    return notifyIrcEvent(eventType, serverId, channel, sourceNick, title, body, null, null);
-  }
-
-  private boolean notifyIrcEvent(
-      IrcEventNotificationRule.EventType eventType,
-      String serverId,
-      String channel,
-      String sourceNick,
-      String title,
-      String body,
-      String ctcpCommand,
-      String ctcpValue) {
-    if (eventType == null || ircEventNotifierPort == null) return false;
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return false;
-    if (mediatorTargetUiSupport.isMutedChannel(sid, channel)) return false;
-
-    String src = Objects.toString(sourceNick, "").trim();
-    Boolean sourceIsSelf = src.isEmpty() ? null : mediatorTargetUiSupport.isFromSelf(sid, src);
-    TargetRef active = targetCoordinator != null ? targetCoordinator.getActiveTarget() : null;
-    String activeSid = active != null ? active.serverId() : null;
-    String activeTgt = active != null ? active.target() : null;
-    try {
-      return ircEventNotifierPort.notifyConfigured(
-          eventType,
-          sid,
-          channel,
-          src,
-          sourceIsSelf,
-          title,
-          body,
-          activeSid,
-          activeTgt,
-          ctcpCommand,
-          ctcpValue);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private void recordInterceptorEvent(
-      String serverId,
-      String channel,
-      String fromNick,
-      String fromHostmask,
-      String text,
-      InterceptorEventType eventType) {
-    if (interceptorIngestPort == null) return;
-    String sid = Objects.toString(serverId, "").trim();
-    String from = Objects.toString(fromNick, "").trim();
-    if (sid.isEmpty() || from.isEmpty()) return;
-    if (mediatorTargetUiSupport.isFromSelf(sid, from)) return;
-    interceptorIngestPort.ingestEvent(
-        sid,
-        channel,
-        from,
-        Objects.toString(fromHostmask, "").trim(),
-        Objects.toString(text, "").trim(),
-        eventType);
-  }
-
-  private String learnedHostmaskForNick(String serverId, String nick) {
-    if (userListStore == null) return "";
-    String sid = Objects.toString(serverId, "").trim();
-    String n = Objects.toString(nick, "").trim();
-    if (sid.isEmpty() || n.isEmpty()) return "";
-    String hostmask = userListStore.getLearnedHostmask(sid, n);
-    return Objects.toString(hostmask, "").trim();
   }
 
   private void failPendingEchoesForServer(String sid, String reason) {
