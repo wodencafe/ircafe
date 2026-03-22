@@ -13,7 +13,6 @@ import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.core.Single;
@@ -22,7 +21,6 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -60,6 +58,7 @@ public class IrcMediator implements MediatorControlPort {
   private final MediatorChannelStateEventHandler mediatorChannelStateEventHandler;
   private final MediatorOutboundUiActionHandler mediatorOutboundUiActionHandler;
   private final MediatorNotificationSupport mediatorNotificationSupport;
+  private final MediatorPendingEchoFailureHandler mediatorPendingEchoFailureHandler;
   private final MediatorTargetUiSupport mediatorTargetUiSupport;
   private final MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder;
   private final MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder;
@@ -68,8 +67,6 @@ public class IrcMediator implements MediatorControlPort {
 
   private final MediatorInboundEventPreparationService eventPreparationService;
   private final MediatorInboundTextEventHandler mediatorInboundTextEventHandler;
-
-  private final PendingEchoMessagePort pendingEchoMessageState;
 
   private final CompositeDisposable disposables = new CompositeDisposable();
 
@@ -119,13 +116,13 @@ public class IrcMediator implements MediatorControlPort {
       MediatorChannelStateEventHandler mediatorChannelStateEventHandler,
       MediatorOutboundUiActionHandler mediatorOutboundUiActionHandler,
       MediatorNotificationSupport mediatorNotificationSupport,
+      MediatorPendingEchoFailureHandler mediatorPendingEchoFailureHandler,
       MediatorTargetUiSupport mediatorTargetUiSupport,
       MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder,
       MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder,
       TargetCoordinator targetCoordinator,
       MediatorInboundEventPreparationService eventPreparationService,
-      MediatorInboundTextEventHandler mediatorInboundTextEventHandler,
-      PendingEchoMessagePort pendingEchoMessageState) {
+      MediatorInboundTextEventHandler mediatorInboundTextEventHandler) {
     this.irc = irc;
     this.ui = ui;
     this.serverRegistry = serverRegistry;
@@ -141,20 +138,20 @@ public class IrcMediator implements MediatorControlPort {
     this.mediatorChannelStateEventHandler = mediatorChannelStateEventHandler;
     this.mediatorOutboundUiActionHandler = mediatorOutboundUiActionHandler;
     this.mediatorNotificationSupport = mediatorNotificationSupport;
+    this.mediatorPendingEchoFailureHandler = mediatorPendingEchoFailureHandler;
     this.mediatorTargetUiSupport = mediatorTargetUiSupport;
     this.mediatorConnectionSubscriptionBinder = mediatorConnectionSubscriptionBinder;
     this.mediatorUiSubscriptionBinder = mediatorUiSubscriptionBinder;
     this.targetCoordinator = targetCoordinator;
     this.eventPreparationService = eventPreparationService;
     this.mediatorInboundTextEventHandler = mediatorInboundTextEventHandler;
-    this.pendingEchoMessageState = pendingEchoMessageState;
   }
 
   private final class ConnectivityLifecycleCallbacks
       implements MediatorConnectivityLifecycleOrchestrator.Callbacks {
     @Override
     public void failPendingEchoesForServer(String serverId, String reason) {
-      IrcMediator.this.failPendingEchoesForServer(serverId, reason);
+      mediatorPendingEchoFailureHandler.failPendingEchoesForServer(serverId, reason);
     }
 
     @Override
@@ -904,17 +901,5 @@ public class IrcMediator implements MediatorControlPort {
 
   private void handleUserHostmaskObserved(String sid, IrcEvent.UserHostmaskObserved ev) {
     mediatorChannelStateEventHandler.handleUserHostmaskObserved(sid, ev);
-  }
-
-  private void failPendingEchoesForServer(String sid, String reason) {
-    if (sid == null || sid.isBlank()) return;
-    Instant now = Instant.now();
-    for (PendingEchoMessagePort.PendingOutboundChat pending :
-        pendingEchoMessageState.drainServer(sid)) {
-      TargetRef target = pending.target();
-      if (target == null) continue;
-      ui.failPendingOutgoingChat(
-          target, pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
-    }
   }
 }

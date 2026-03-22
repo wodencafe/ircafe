@@ -43,6 +43,7 @@ import cafe.woden.ircclient.app.core.MediatorIrcv3EventHandler;
 import cafe.woden.ircclient.app.core.MediatorIrcv3PresenceEventHandler;
 import cafe.woden.ircclient.app.core.MediatorNotificationSupport;
 import cafe.woden.ircclient.app.core.MediatorOutboundUiActionHandler;
+import cafe.woden.ircclient.app.core.MediatorPendingEchoFailureHandler;
 import cafe.woden.ircclient.app.core.MediatorRosterStatusEventHandler;
 import cafe.woden.ircclient.app.core.MediatorServerStatusEventHandler;
 import cafe.woden.ircclient.app.core.MediatorTargetUiSupport;
@@ -224,6 +225,8 @@ class IrcMediatorMockVerifyTest {
           userListStore,
           targetCoordinator,
           mediatorTargetUiSupport);
+  private final MediatorPendingEchoFailureHandler mediatorPendingEchoFailureHandler =
+      new MediatorPendingEchoFailureHandler(ui, pendingEchoMessageState);
   private final MediatorInboundTextEventHandler mediatorInboundTextEventHandler =
       new MediatorInboundTextEventHandler(
           negotiatedFeaturePort,
@@ -256,13 +259,13 @@ class IrcMediatorMockVerifyTest {
           mediatorChannelStateEventHandler,
           mediatorOutboundUiActionHandler,
           mediatorNotificationSupport,
+          mediatorPendingEchoFailureHandler,
           mediatorTargetUiSupport,
           mediatorConnectionSubscriptionBinder,
           mediatorUiSubscriptionBinder,
           targetCoordinator,
           eventPreparationService,
-          mediatorInboundTextEventHandler,
-          pendingEchoMessageState);
+          mediatorInboundTextEventHandler);
 
   @Test
   void startBindsUiIrcAndConnectionCollaboratorsInOrderOnce() {
