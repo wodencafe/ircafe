@@ -1,8 +1,9 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.chathistory;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.OutboundHelpContributor;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Component;
 /** Handles outbound /chathistory command flow and targeted /help chathistory output. */
 @Component
 @ApplicationLayer
-final class OutboundChatHistoryCommandService implements OutboundHelpContributor {
+public final class OutboundChatHistoryCommandService implements OutboundHelpContributor {
 
   private static final DateTimeFormatter CHATHISTORY_TS_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
@@ -30,7 +31,7 @@ final class OutboundChatHistoryCommandService implements OutboundHelpContributor
   private final TargetCoordinator targetCoordinator;
   private final OutboundChatHistoryRequestSupport chatHistoryRequestSupport;
 
-  OutboundChatHistoryCommandService(
+  public OutboundChatHistoryCommandService(
       IrcClientService irc,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
@@ -55,11 +56,11 @@ final class OutboundChatHistoryCommandService implements OutboundHelpContributor
     return Map.of("chathistory", this::appendChatHistoryUsage);
   }
 
-  void handleChatHistoryBefore(CompositeDisposable disposables, int limit) {
+  public void handleChatHistoryBefore(CompositeDisposable disposables, int limit) {
     handleChatHistoryBefore(disposables, limit, "");
   }
 
-  void handleChatHistoryBefore(CompositeDisposable disposables, int limit, String selector) {
+  public void handleChatHistoryBefore(CompositeDisposable disposables, int limit, String selector) {
     TargetRef at = chatHistoryRequestSupport.resolveChatHistoryTargetOrNull();
     if (at == null) return;
 
@@ -92,7 +93,7 @@ final class OutboundChatHistoryCommandService implements OutboundHelpContributor
         () -> irc.requestChatHistoryBefore(at.serverId(), at.target(), selectorFinal, limitFinal));
   }
 
-  void handleChatHistoryLatest(CompositeDisposable disposables, int limit, String selector) {
+  public void handleChatHistoryLatest(CompositeDisposable disposables, int limit, String selector) {
     TargetRef at = chatHistoryRequestSupport.resolveChatHistoryTargetOrNull();
     if (at == null) return;
 
@@ -127,7 +128,7 @@ final class OutboundChatHistoryCommandService implements OutboundHelpContributor
         () -> irc.requestChatHistoryLatest(at.serverId(), at.target(), selectorFinal, limitFinal));
   }
 
-  void handleChatHistoryAround(CompositeDisposable disposables, String selector, int limit) {
+  public void handleChatHistoryAround(CompositeDisposable disposables, String selector, int limit) {
     TargetRef at = chatHistoryRequestSupport.resolveChatHistoryTargetOrNull();
     if (at == null) return;
 
@@ -159,7 +160,7 @@ final class OutboundChatHistoryCommandService implements OutboundHelpContributor
         () -> irc.requestChatHistoryAround(at.serverId(), at.target(), selectorFinal, limitFinal));
   }
 
-  void handleChatHistoryBetween(
+  public void handleChatHistoryBetween(
       CompositeDisposable disposables, String startSelector, String endSelector, int limit) {
     TargetRef at = chatHistoryRequestSupport.resolveChatHistoryTargetOrNull();
     if (at == null) return;
