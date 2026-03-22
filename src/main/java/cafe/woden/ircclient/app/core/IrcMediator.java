@@ -1,35 +1,22 @@
 package cafe.woden.ircclient.app.core;
 
 import cafe.woden.ircclient.app.AppSchedulers;
-import cafe.woden.ircclient.app.InboundModeEventHandler;
 import cafe.woden.ircclient.app.api.InterceptorEventType;
 import cafe.woden.ircclient.app.api.InterceptorIngestPort;
 import cafe.woden.ircclient.app.api.IrcEventNotifierPort;
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.MediatorControlPort;
-import cafe.woden.ircclient.app.api.MonitorFallbackPort;
-import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
-import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
-import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
-import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.config.ServerRegistry;
-import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.state.api.CtcpRoutingPort;
-import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
-import cafe.woden.ircclient.state.api.ModeVocabulary;
-import cafe.woden.ircclient.state.api.NegotiatedModeSemantics;
 import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
-import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
-import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.core.Single;
@@ -38,13 +25,8 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -63,21 +45,12 @@ import org.springframework.stereotype.Component;
 public class IrcMediator implements MediatorControlPort {
 
   private static final Scheduler IRC_EVENT_PREPARE_SCHEDULER = Schedulers.computation();
-  private static final Duration LABELED_RESPONSE_CORRELATION_WINDOW = Duration.ofMinutes(2);
-  private static final Duration LABELED_RESPONSE_TIMEOUT = Duration.ofSeconds(30);
-  private static final Duration PENDING_ECHO_TIMEOUT = Duration.ofSeconds(45);
-  private static final int PENDING_ECHO_TIMEOUT_BATCH_MAX = 64;
-  private static final long NETSPLIT_NOTIFY_DEBOUNCE_MS = 20_000L;
-  private static final int NETSPLIT_NOTIFY_MAX_KEYS = 512;
 
   @Qualifier("ircMediatorInteractionPort")
   private final IrcMediatorInteractionPort irc;
 
   private final UiPort ui;
-  private final CommandParser commandParser;
-  private final UserCommandAliasEngine userCommandAliasEngine;
   private final ServerRegistry serverRegistry;
-  private final IrcSessionRuntimeConfigPort runtimeConfig;
   private final ConnectionCoordinator connectionCoordinator;
   private final MediatorConnectivityLifecycleOrchestrator mediatorConnectivityLifecycleOrchestrator;
   private final MediatorServerStatusEventHandler mediatorServerStatusEventHandler;
@@ -86,10 +59,12 @@ public class IrcMediator implements MediatorControlPort {
   private final MediatorRosterStatusEventHandler mediatorRosterStatusEventHandler;
   private final MediatorIrcv3PresenceEventHandler mediatorIrcv3PresenceEventHandler;
   private final MediatorIrcv3EventHandler mediatorIrcv3EventHandler;
+  private final MediatorAlertNotificationHandler mediatorAlertNotificationHandler;
+  private final MediatorChannelStateEventHandler mediatorChannelStateEventHandler;
+  private final MediatorOutboundUiActionHandler mediatorOutboundUiActionHandler;
+  private final MediatorTargetUiSupport mediatorTargetUiSupport;
   private final MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder;
   private final MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder;
-  private final MediatorHistoryIngestOrchestrator mediatorHistoryIngestOrchestrator;
-  private final OutboundCommandDispatcher outboundCommandDispatcher;
 
   private final TargetCoordinator targetCoordinator;
 
@@ -97,17 +72,9 @@ public class IrcMediator implements MediatorControlPort {
   private final MediatorInboundTextEventHandler mediatorInboundTextEventHandler;
 
   private final UserListStore userListStore;
-  private final WhoisRoutingPort whoisRoutingState;
-  private final CtcpRoutingPort ctcpRoutingState;
-
-  private final LabeledResponseRoutingPort labeledResponseRoutingState;
   private final PendingEchoMessagePort pendingEchoMessageState;
-
-  private final ServerIsupportStatePort serverIsupportState;
-  private final InboundModeEventHandler inboundModeEventHandler;
   private final IrcEventNotifierPort ircEventNotifierPort;
   private final InterceptorIngestPort interceptorIngestPort;
-  private final MonitorFallbackPort monitorFallbackPort;
 
   private final CompositeDisposable disposables = new CompositeDisposable();
 
@@ -121,16 +88,17 @@ public class IrcMediator implements MediatorControlPort {
       new InviteEventCallbacks();
   private final MediatorChannelMembershipEventHandler.Callbacks channelMembershipEventCallbacks =
       new ChannelMembershipEventCallbacks();
+  private final MediatorChannelStateEventHandler.Callbacks channelStateEventCallbacks =
+      new ChannelStateEventCallbacks();
   private final MediatorRosterStatusEventHandler.Callbacks rosterStatusEventCallbacks =
       new RosterStatusEventCallbacks();
   private final MediatorIrcv3PresenceEventHandler.Callbacks ircv3PresenceEventCallbacks =
       new Ircv3PresenceEventCallbacks();
   private final MediatorIrcv3EventHandler.Callbacks ircv3EventCallbacks = new Ircv3EventCallbacks();
+  private final MediatorAlertNotificationHandler.Callbacks alertNotificationCallbacks =
+      new AlertNotificationCallbacks();
   private final MediatorInboundTextEventHandler.Callbacks inboundTextEventCallbacks =
       new InboundTextEventCallbacks();
-
-  // Dedup cache
-  private final Map<String, Long> lastNetsplitNotifyAtMs = new ConcurrentHashMap<>();
 
   public record InboundMessageDedupDiagnostics(
       String serverId,
@@ -143,10 +111,7 @@ public class IrcMediator implements MediatorControlPort {
   public IrcMediator(
       @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort irc,
       UiPort ui,
-      CommandParser commandParser,
-      UserCommandAliasEngine userCommandAliasEngine,
       ServerRegistry serverRegistry,
-      IrcSessionRuntimeConfigPort runtimeConfig,
       ConnectionCoordinator connectionCoordinator,
       MediatorConnectivityLifecycleOrchestrator mediatorConnectivityLifecycleOrchestrator,
       MediatorServerStatusEventHandler mediatorServerStatusEventHandler,
@@ -155,29 +120,22 @@ public class IrcMediator implements MediatorControlPort {
       MediatorRosterStatusEventHandler mediatorRosterStatusEventHandler,
       MediatorIrcv3PresenceEventHandler mediatorIrcv3PresenceEventHandler,
       MediatorIrcv3EventHandler mediatorIrcv3EventHandler,
+      MediatorAlertNotificationHandler mediatorAlertNotificationHandler,
+      MediatorChannelStateEventHandler mediatorChannelStateEventHandler,
+      MediatorOutboundUiActionHandler mediatorOutboundUiActionHandler,
+      MediatorTargetUiSupport mediatorTargetUiSupport,
       MediatorConnectionSubscriptionBinder mediatorConnectionSubscriptionBinder,
       MediatorUiSubscriptionBinder mediatorUiSubscriptionBinder,
-      MediatorHistoryIngestOrchestrator mediatorHistoryIngestOrchestrator,
-      OutboundCommandDispatcher outboundCommandDispatcher,
       TargetCoordinator targetCoordinator,
       MediatorInboundEventPreparationService eventPreparationService,
       MediatorInboundTextEventHandler mediatorInboundTextEventHandler,
       UserListStore userListStore,
-      WhoisRoutingPort whoisRoutingState,
-      CtcpRoutingPort ctcpRoutingState,
-      LabeledResponseRoutingPort labeledResponseRoutingState,
       PendingEchoMessagePort pendingEchoMessageState,
-      ServerIsupportStatePort serverIsupportState,
-      InboundModeEventHandler inboundModeEventHandler,
       IrcEventNotifierPort ircEventNotifierPort,
-      InterceptorIngestPort interceptorIngestPort,
-      MonitorFallbackPort monitorFallbackPort) {
+      InterceptorIngestPort interceptorIngestPort) {
     this.irc = irc;
     this.ui = ui;
-    this.commandParser = commandParser;
-    this.userCommandAliasEngine = userCommandAliasEngine;
     this.serverRegistry = serverRegistry;
-    this.runtimeConfig = runtimeConfig;
     this.connectionCoordinator = connectionCoordinator;
     this.mediatorConnectivityLifecycleOrchestrator = mediatorConnectivityLifecycleOrchestrator;
     this.mediatorServerStatusEventHandler = mediatorServerStatusEventHandler;
@@ -186,23 +144,19 @@ public class IrcMediator implements MediatorControlPort {
     this.mediatorRosterStatusEventHandler = mediatorRosterStatusEventHandler;
     this.mediatorIrcv3PresenceEventHandler = mediatorIrcv3PresenceEventHandler;
     this.mediatorIrcv3EventHandler = mediatorIrcv3EventHandler;
+    this.mediatorAlertNotificationHandler = mediatorAlertNotificationHandler;
+    this.mediatorChannelStateEventHandler = mediatorChannelStateEventHandler;
+    this.mediatorOutboundUiActionHandler = mediatorOutboundUiActionHandler;
+    this.mediatorTargetUiSupport = mediatorTargetUiSupport;
     this.mediatorConnectionSubscriptionBinder = mediatorConnectionSubscriptionBinder;
     this.mediatorUiSubscriptionBinder = mediatorUiSubscriptionBinder;
-    this.mediatorHistoryIngestOrchestrator = mediatorHistoryIngestOrchestrator;
-    this.outboundCommandDispatcher = outboundCommandDispatcher;
     this.targetCoordinator = targetCoordinator;
     this.eventPreparationService = eventPreparationService;
     this.mediatorInboundTextEventHandler = mediatorInboundTextEventHandler;
     this.userListStore = userListStore;
-    this.whoisRoutingState = whoisRoutingState;
-    this.ctcpRoutingState = ctcpRoutingState;
-    this.labeledResponseRoutingState = labeledResponseRoutingState;
     this.pendingEchoMessageState = pendingEchoMessageState;
-    this.serverIsupportState = serverIsupportState;
-    this.inboundModeEventHandler = inboundModeEventHandler;
     this.ircEventNotifierPort = ircEventNotifierPort;
     this.interceptorIngestPort = interceptorIngestPort;
-    this.monitorFallbackPort = monitorFallbackPort;
   }
 
   private final class ConnectivityLifecycleCallbacks
@@ -214,7 +168,7 @@ public class IrcMediator implements MediatorControlPort {
 
     @Override
     public void clearNetsplitDebounceForServer(String serverId) {
-      IrcMediator.this.clearNetsplitDebounceForServer(serverId);
+      mediatorAlertNotificationHandler.clearNetsplitDebounceForServer(serverId);
     }
   }
 
@@ -222,28 +176,17 @@ public class IrcMediator implements MediatorControlPort {
       implements MediatorServerStatusEventHandler.Callbacks {
     @Override
     public TargetRef safeStatusTarget() {
-      return IrcMediator.this.safeStatusTarget();
+      return mediatorTargetUiSupport.safeStatusTarget();
     }
 
     @Override
     public void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
-      IrcMediator.this.postTo(dest, markUnreadIfNotActive, write);
-    }
-
-    @Override
-    public void handleStandardReply(String sid, TargetRef status, IrcEvent.StandardReply event) {
-      IrcMediator.this.handleStandardReply(sid, status, event);
-    }
-
-    @Override
-    public void handleServerResponseLine(
-        String sid, TargetRef status, IrcEvent.ServerResponseLine event) {
-      IrcMediator.this.handleServerResponseLine(sid, status, event);
+      mediatorTargetUiSupport.postTo(dest, markUnreadIfNotActive, write);
     }
 
     @Override
     public TargetRef resolveActiveOrStatus(String sid, TargetRef status) {
-      return IrcMediator.this.resolveActiveOrStatus(sid, status);
+      return mediatorTargetUiSupport.resolveActiveOrStatus(sid, status);
     }
 
     @Override
@@ -278,7 +221,7 @@ public class IrcMediator implements MediatorControlPort {
   private final class InviteEventCallbacks implements MediatorInviteEventHandler.Callbacks {
     @Override
     public void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
-      IrcMediator.this.postTo(dest, markUnreadIfNotActive, write);
+      mediatorTargetUiSupport.postTo(dest, markUnreadIfNotActive, write);
     }
 
     @Override
@@ -311,7 +254,7 @@ public class IrcMediator implements MediatorControlPort {
 
     @Override
     public boolean isMutedChannel(String serverId, String channel) {
-      return IrcMediator.this.isMutedChannel(serverId, channel);
+      return mediatorTargetUiSupport.isMutedChannel(serverId, channel);
     }
 
     @Override
@@ -329,7 +272,7 @@ public class IrcMediator implements MediatorControlPort {
 
     @Override
     public void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
-      IrcMediator.this.postTo(dest, markUnreadIfNotActive, write);
+      mediatorTargetUiSupport.postTo(dest, markUnreadIfNotActive, write);
     }
 
     @Override
@@ -362,27 +305,60 @@ public class IrcMediator implements MediatorControlPort {
 
     @Override
     public TargetRef resolveActiveOrStatus(String sid, TargetRef status) {
-      return IrcMediator.this.resolveActiveOrStatus(sid, status);
+      return mediatorTargetUiSupport.resolveActiveOrStatus(sid, status);
     }
 
     @Override
     public TargetRef safeStatusTarget() {
-      return IrcMediator.this.safeStatusTarget();
+      return mediatorTargetUiSupport.safeStatusTarget();
     }
 
     @Override
     public void markPrivateMessagePeerOffline(String serverId, String nick) {
-      IrcMediator.this.markPrivateMessagePeerOffline(serverId, nick);
+      mediatorTargetUiSupport.markPrivateMessagePeerOffline(serverId, nick);
     }
 
     @Override
     public void maybeNotifyUserKlineFromQuit(String serverId, IrcEvent.UserQuitChannel event) {
-      IrcMediator.this.maybeNotifyUserKlineFromQuit(serverId, event);
+      mediatorAlertNotificationHandler.maybeNotifyUserKlineFromQuit(
+          alertNotificationCallbacks, serverId, event);
     }
 
     @Override
     public void maybeNotifyNetsplitDetected(String serverId, IrcEvent.UserQuitChannel event) {
-      IrcMediator.this.maybeNotifyNetsplitDetected(serverId, event);
+      mediatorAlertNotificationHandler.maybeNotifyNetsplitDetected(
+          alertNotificationCallbacks, serverId, event);
+    }
+  }
+
+  private final class ChannelStateEventCallbacks
+      implements MediatorChannelStateEventHandler.Callbacks {
+    @Override
+    public boolean notifyIrcEvent(
+        IrcEventNotificationRule.EventType eventType,
+        String serverId,
+        String channel,
+        String sourceNick,
+        String title,
+        String body) {
+      return IrcMediator.this.notifyIrcEvent(eventType, serverId, channel, sourceNick, title, body);
+    }
+
+    @Override
+    public void recordInterceptorEvent(
+        String serverId,
+        String target,
+        String actorNick,
+        String hostmask,
+        String text,
+        InterceptorEventType eventType) {
+      IrcMediator.this.recordInterceptorEvent(
+          serverId, target, actorNick, hostmask, text, eventType);
+    }
+
+    @Override
+    public String learnedHostmaskForNick(String serverId, String nick) {
+      return IrcMediator.this.learnedHostmaskForNick(serverId, nick);
     }
   }
 
@@ -390,12 +366,12 @@ public class IrcMediator implements MediatorControlPort {
       implements MediatorRosterStatusEventHandler.Callbacks {
     @Override
     public void markPrivateMessagePeerOnline(String serverId, String nick) {
-      IrcMediator.this.markPrivateMessagePeerOnline(serverId, nick);
+      mediatorTargetUiSupport.markPrivateMessagePeerOnline(serverId, nick);
     }
 
     @Override
     public void markPrivateMessagePeerOffline(String serverId, String nick) {
-      IrcMediator.this.markPrivateMessagePeerOffline(serverId, nick);
+      mediatorTargetUiSupport.markPrivateMessagePeerOffline(serverId, nick);
     }
   }
 
@@ -403,29 +379,43 @@ public class IrcMediator implements MediatorControlPort {
       implements MediatorIrcv3PresenceEventHandler.Callbacks {
     @Override
     public boolean isFromSelf(String serverId, String from) {
-      return IrcMediator.this.isFromSelf(serverId, from);
+      return mediatorTargetUiSupport.isFromSelf(serverId, from);
     }
 
     @Override
     public void markPrivateMessagePeerOnline(String serverId, String nick) {
-      IrcMediator.this.markPrivateMessagePeerOnline(serverId, nick);
+      mediatorTargetUiSupport.markPrivateMessagePeerOnline(serverId, nick);
     }
 
     @Override
     public TargetRef resolveIrcv3Target(String sid, String target, String from, TargetRef status) {
-      return IrcMediator.this.resolveIrcv3Target(sid, target, from, status);
+      return mediatorTargetUiSupport.resolveIrcv3Target(sid, target, from, status);
     }
 
     @Override
     public TargetRef resolveActiveOrStatus(String sid, TargetRef status) {
-      return IrcMediator.this.resolveActiveOrStatus(sid, status);
+      return mediatorTargetUiSupport.resolveActiveOrStatus(sid, status);
     }
   }
 
   private final class Ircv3EventCallbacks implements MediatorIrcv3EventHandler.Callbacks {
     @Override
     public TargetRef resolveIrcv3Target(String sid, String target, String from, TargetRef status) {
-      return IrcMediator.this.resolveIrcv3Target(sid, target, from, status);
+      return mediatorTargetUiSupport.resolveIrcv3Target(sid, target, from, status);
+    }
+  }
+
+  private final class AlertNotificationCallbacks
+      implements MediatorAlertNotificationHandler.Callbacks {
+    @Override
+    public boolean notifyIrcEvent(
+        IrcEventNotificationRule.EventType eventType,
+        String serverId,
+        String channel,
+        String sourceNick,
+        String title,
+        String body) {
+      return IrcMediator.this.notifyIrcEvent(eventType, serverId, channel, sourceNick, title, body);
     }
   }
 
@@ -442,22 +432,22 @@ public class IrcMediator implements MediatorControlPort {
         TargetRef active,
         boolean markUnreadIfNotActive,
         Consumer<TargetRef> write) {
-      IrcMediator.this.postTo(dest, active, markUnreadIfNotActive, write);
+      mediatorTargetUiSupport.postTo(dest, active, markUnreadIfNotActive, write);
     }
 
     @Override
     public void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
-      IrcMediator.this.postTo(dest, markUnreadIfNotActive, write);
+      mediatorTargetUiSupport.postTo(dest, markUnreadIfNotActive, write);
     }
 
     @Override
     public boolean isFromSelf(String serverId, String from) {
-      return IrcMediator.this.isFromSelf(serverId, from);
+      return mediatorTargetUiSupport.isFromSelf(serverId, from);
     }
 
     @Override
     public void markPrivateMessagePeerOnline(String serverId, String nick) {
-      IrcMediator.this.markPrivateMessagePeerOnline(serverId, nick);
+      mediatorTargetUiSupport.markPrivateMessagePeerOnline(serverId, nick);
     }
 
     @Override
@@ -492,17 +482,17 @@ public class IrcMediator implements MediatorControlPort {
 
     @Override
     public TargetRef safeStatusTarget() {
-      return IrcMediator.this.safeStatusTarget();
+      return mediatorTargetUiSupport.safeStatusTarget();
     }
 
     @Override
     public TargetRef resolveActiveOrStatus(String sid, TargetRef status) {
-      return IrcMediator.this.resolveActiveOrStatus(sid, status);
+      return mediatorTargetUiSupport.resolveActiveOrStatus(sid, status);
     }
 
     @Override
     public boolean isMutedChannel(TargetRef target) {
-      return IrcMediator.this.isMutedChannel(target);
+      return mediatorTargetUiSupport.isMutedChannel(target);
     }
   }
 
@@ -579,8 +569,9 @@ public class IrcMediator implements MediatorControlPort {
         timeoutMaintenanceTicks(Schedulers.computation(), AppSchedulers.edt())
             .subscribe(
                 tick -> {
-                  handleLabeledRequestTimeouts();
-                  handlePendingEchoTimeouts();
+                  mediatorServerStatusEventHandler.handleLabeledRequestTimeouts(
+                      serverStatusEventCallbacks);
+                  mediatorServerStatusEventHandler.handlePendingEchoTimeouts();
                 },
                 err ->
                     ui.appendError(
@@ -610,166 +601,15 @@ public class IrcMediator implements MediatorControlPort {
   }
 
   private void handleUserActionRequest(UserActionRequest req) {
-    if (req == null) return;
-    TargetRef ctx =
-        req.contextTarget() != null ? req.contextTarget() : targetCoordinator.getActiveTarget();
-    if (ctx == null) ctx = targetCoordinator.safeStatusTarget();
-    final var fCtx = ctx;
-    String sid = ctx.serverId();
-    String nick = req.nick() == null ? "" : req.nick().trim();
-    if (sid == null || sid.isBlank() || nick.isBlank()) return;
-
-    switch (req.action()) {
-      case OPEN_QUERY ->
-          targetCoordinator.openPrivateConversation(new PrivateMessageRequest(sid, nick));
-
-      case WHOIS -> {
-        whoisRoutingState.put(sid, nick, ctx);
-        ui.appendStatus(ctx, "(whois)", "Requesting WHOIS for " + nick + "...");
-        Disposable d =
-            irc.whois(sid, nick)
-                .subscribe(() -> {}, err -> ui.appendError(fCtx, "(whois)", err.toString()));
-        disposables.add(d);
-      }
-
-      case CTCP_VERSION -> {
-        ctcpRoutingState.put(sid, nick, "VERSION", null, ctx);
-        ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " VERSION");
-        disposables.add(
-            irc.sendPrivateMessage(sid, nick, "\u0001VERSION\u0001")
-                .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
-      }
-
-      case CTCP_PING -> {
-        String token = Long.toString(System.currentTimeMillis());
-        ctcpRoutingState.put(sid, nick, "PING", token, ctx);
-        ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " PING");
-        disposables.add(
-            irc.sendPrivateMessage(sid, nick, "\u0001PING " + token + "\u0001")
-                .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
-      }
-
-      case CTCP_TIME -> {
-        ctcpRoutingState.put(sid, nick, "TIME", null, ctx);
-        ui.appendStatus(ctx, "(ctcp)", "\u2192 " + nick + " TIME");
-        disposables.add(
-            irc.sendPrivateMessage(sid, nick, "\u0001TIME\u0001")
-                .subscribe(() -> {}, err -> ui.appendError(fCtx, "(ctcp)", err.toString())));
-      }
-
-      case OP -> handleNickModeUserAction(ctx, nick, "+o");
-
-      case DEOP -> handleNickModeUserAction(ctx, nick, "-o");
-
-      case VOICE -> handleNickModeUserAction(ctx, nick, "+v");
-
-      case DEVOICE -> handleNickModeUserAction(ctx, nick, "-v");
-
-      case KICK -> handleKickUserAction(ctx, nick);
-
-      case BAN -> handleBanUserAction(ctx, nick);
-    }
-  }
-
-  private void handleNickModeUserAction(TargetRef ctx, String nick, String mode) {
-    if (ctx == null || !ctx.isChannel()) return;
-    String line = "MODE " + ctx.target() + " " + mode + " " + nick;
-    sendUserActionRaw(ctx, "(mode)", "(mode-error)", line);
-  }
-
-  private void handleKickUserAction(TargetRef ctx, String nick) {
-    if (ctx == null || !ctx.isChannel()) return;
-    String line = "KICK " + ctx.target() + " " + nick;
-    sendUserActionRaw(ctx, "(kick)", "(kick-error)", line);
-  }
-
-  private void handleBanUserAction(TargetRef ctx, String nick) {
-    if (ctx == null || !ctx.isChannel()) return;
-    String mask = looksLikeMask(nick) ? nick : (nick + "!*@*");
-    String line = "MODE " + ctx.target() + " +b " + mask;
-    sendUserActionRaw(ctx, "(mode)", "(mode-error)", line);
-  }
-
-  private void sendUserActionRaw(TargetRef out, String statusTag, String errorTag, String line) {
-    if (out == null) return;
-    String sid = Objects.toString(out.serverId(), "").trim();
-    String sendLine = Objects.toString(line, "").trim();
-    if (sid.isBlank() || sendLine.isBlank()) return;
-
-    TargetRef status = new TargetRef(sid, "status");
-    if (!connectionCoordinator.isConnected(sid)) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-    if (containsCrlf(sendLine)) {
-      ui.appendStatus(status, statusTag, "Refusing to send multi-line input.");
-      return;
-    }
-
-    ensureTargetExists(out);
-    ui.appendStatus(out, statusTag, "\u2192 " + sendLine);
-    disposables.add(
-        irc.sendRaw(sid, sendLine)
-            .subscribe(() -> {}, err -> ui.appendError(status, errorTag, String.valueOf(err))));
-  }
-
-  private static boolean containsCrlf(String s) {
-    if (s == null || s.isEmpty()) return false;
-    return s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0;
-  }
-
-  private static boolean looksLikeMask(String s) {
-    if (s == null) return false;
-    return s.indexOf('!') >= 0 || s.indexOf('@') >= 0 || s.indexOf('*') >= 0 || s.indexOf('?') >= 0;
+    mediatorOutboundUiActionHandler.handleUserActionRequest(disposables, req);
   }
 
   private void handleIrcv3CapabilityToggleRequest(Ircv3CapabilityToggleRequest req) {
-    if (req == null) return;
-
-    String sid = Objects.toString(req.serverId(), "").trim();
-    String cap = normalizeIrcv3CapabilityKey(req.capability());
-    if (sid.isEmpty() || cap.isEmpty()) return;
-
-    boolean enabled = req.enabled();
-    runtimeConfig.rememberIrcv3CapabilityEnabled(cap, enabled);
-    TargetRef status = new TargetRef(sid, "status");
-
-    if (!connectionCoordinator.isConnected(sid)) {
-      ui.appendStatus(
-          status,
-          "(cap)",
-          "Saved "
-              + cap
-              + " as "
-              + (enabled ? "enabled" : "disabled")
-              + "; connect/reconnect to apply.");
-      return;
-    }
-
-    ui.appendStatus(
-        status,
-        "(cap)",
-        "Requesting CAP " + (enabled ? "enable" : "disable") + " for " + cap + "...");
-    disposables.add(
-        irc.setIrcv3CapabilityEnabled(sid, cap, enabled)
-            .subscribe(() -> {}, err -> ui.appendError(status, "(cap)", String.valueOf(err))));
-  }
-
-  private static String normalizeIrcv3CapabilityKey(String capability) {
-    return Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
+    mediatorOutboundUiActionHandler.handleIrcv3CapabilityToggleRequest(disposables, req);
   }
 
   private void observeChannelActivity(String serverId, String channel) {
-    String sid = Objects.toString(serverId, "").trim();
-    String ch = Objects.toString(channel, "").trim();
-    if (sid.isEmpty() || ch.isEmpty()) return;
-    try {
-      TargetRef target = new TargetRef(sid, ch);
-      if (!target.isChannel()) return;
-    } catch (IllegalArgumentException ignored) {
-      return;
-    }
-    targetCoordinator.onChannelActivityObserved(sid, ch);
+    mediatorChannelStateEventHandler.observeChannelActivity(serverId, channel);
   }
 
   public void stop() {
@@ -794,29 +634,11 @@ public class IrcMediator implements MediatorControlPort {
   }
 
   private void handleOutgoingLine(String raw) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    TargetRef ctx = (at != null) ? at : targetCoordinator.safeStatusTarget();
-
-    UserCommandAliasEngine.ExpansionResult expanded = userCommandAliasEngine.expand(raw, ctx);
-
-    for (String warning : expanded.warnings()) {
-      if (warning == null || warning.isBlank()) continue;
-      TargetRef out =
-          (ctx != null)
-              ? new TargetRef(ctx.serverId(), "status")
-              : targetCoordinator.safeStatusTarget();
-      ui.appendStatus(out, "(alias)", warning);
-    }
-
-    for (String line : expanded.lines()) {
-      if (line == null || line.isBlank()) continue;
-      outboundCommandDispatcher.dispatch(disposables, commandParser.parse(line));
-    }
+    mediatorOutboundUiActionHandler.handleOutgoingLine(disposables, raw);
   }
 
   private void handleBackendNamedCommandRequest(ParsedInput.BackendNamed command) {
-    if (command == null) return;
-    outboundCommandDispatcher.dispatch(disposables, command);
+    mediatorOutboundUiActionHandler.handleBackendNamedCommandRequest(disposables, command);
   }
 
   private void onServerIrcEvent(ServerIrcEvent se) {
@@ -1057,7 +879,7 @@ public class IrcMediator implements MediatorControlPort {
       }
 
       case IrcEvent.Error ev -> {
-        handleError(sid, status, ev);
+        mediatorServerStatusEventHandler.handleError(serverStatusEventCallbacks, sid, status, ev);
       }
 
       default -> {}
@@ -1065,75 +887,27 @@ public class IrcMediator implements MediatorControlPort {
   }
 
   private void handleChannelModeObserved(String sid, IrcEvent.ChannelModeObserved ev) {
-    observeChannelActivity(sid, ev.channel());
-    inboundModeEventHandler.handleChannelModeObserved(sid, ev);
-    if (ev.kind() == IrcEvent.ChannelModeKind.DELTA) {
-      maybeNotifyModeEvents(sid, ev);
-      recordInterceptorEvent(
-          sid,
-          ev.channel(),
-          ev.by(),
-          learnedHostmaskForNick(sid, ev.by()),
-          ev.details(),
-          InterceptorEventType.MODE);
-    }
+    mediatorChannelStateEventHandler.handleChannelModeObserved(channelStateEventCallbacks, sid, ev);
   }
 
   private void handleChannelTopicUpdated(String sid, IrcEvent.ChannelTopicUpdated ev) {
-    observeChannelActivity(sid, ev.channel());
-    inboundModeEventHandler.onChannelTopicUpdated(sid, ev.channel());
-    TargetRef chan = new TargetRef(sid, ev.channel());
-    ensureTargetExists(chan);
-    ui.setChannelTopic(chan, ev.topic());
-    String channel = Objects.toString(ev.channel(), "").trim();
-    String topic = Objects.toString(ev.topic(), "").trim();
-    String body;
-    if (topic.isEmpty()) {
-      body = "Topic cleared in " + channel;
-    } else {
-      body = "Topic changed in " + channel + ": " + topic;
-    }
-    notifyIrcEvent(
-        IrcEventNotificationRule.EventType.TOPIC_CHANGED,
-        sid,
-        channel,
-        null,
-        "Topic changed" + (channel.isEmpty() ? "" : " in " + channel),
-        body);
-    recordInterceptorEvent(
-        sid,
-        channel,
-        "server",
-        "",
-        topic.isEmpty() ? "(topic cleared)" : topic,
-        InterceptorEventType.TOPIC);
+    mediatorChannelStateEventHandler.handleChannelTopicUpdated(channelStateEventCallbacks, sid, ev);
   }
 
   private void handleChatHistoryBatchReceived(String sid, IrcEvent.ChatHistoryBatchReceived ev) {
-    observeChannelActivity(sid, ev.target());
-    mediatorHistoryIngestOrchestrator.onChatHistoryBatchReceived(sid, ev);
+    mediatorChannelStateEventHandler.handleChatHistoryBatchReceived(sid, ev);
   }
 
   private void handleZncPlaybackBatchReceived(String sid, IrcEvent.ZncPlaybackBatchReceived ev) {
-    mediatorHistoryIngestOrchestrator.onZncPlaybackBatchReceived(sid, ev);
+    mediatorChannelStateEventHandler.handleZncPlaybackBatchReceived(sid, ev);
   }
 
   private void handleNickListUpdated(String sid, IrcEvent.NickListUpdated ev) {
-    observeChannelActivity(sid, ev.channel());
-    inboundModeEventHandler.onNickListUpdated(sid, ev.channel());
-    targetCoordinator.onNickListUpdated(sid, ev);
+    mediatorChannelStateEventHandler.handleNickListUpdated(sid, ev);
   }
 
   private void handleUserHostmaskObserved(String sid, IrcEvent.UserHostmaskObserved ev) {
-    targetCoordinator.onUserHostmaskObserved(sid, ev);
-  }
-
-  private void handleError(String sid, TargetRef status, IrcEvent.Error ev) {
-    TargetRef dest = status != null ? status : safeStatusTarget();
-    connectionCoordinator.noteConnectionError(sid, ev.message());
-    ui.appendError(dest, "(error)", ev.message());
-    recordInterceptorEvent(sid, "status", "server", "", ev.message(), InterceptorEventType.ERROR);
-    maybeNotifyKline(sid, ev.message(), "Server restriction");
+    mediatorChannelStateEventHandler.handleUserHostmaskObserved(sid, ev);
   }
 
   private boolean notifyIrcEvent(
@@ -1158,10 +932,10 @@ public class IrcMediator implements MediatorControlPort {
     if (eventType == null || ircEventNotifierPort == null) return false;
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
-    if (isMutedChannel(sid, channel)) return false;
+    if (mediatorTargetUiSupport.isMutedChannel(sid, channel)) return false;
 
     String src = Objects.toString(sourceNick, "").trim();
-    Boolean sourceIsSelf = src.isEmpty() ? null : isFromSelf(sid, src);
+    Boolean sourceIsSelf = src.isEmpty() ? null : mediatorTargetUiSupport.isFromSelf(sid, src);
     TargetRef active = targetCoordinator != null ? targetCoordinator.getActiveTarget() : null;
     String activeSid = active != null ? active.serverId() : null;
     String activeTgt = active != null ? active.target() : null;
@@ -1183,321 +957,6 @@ public class IrcMediator implements MediatorControlPort {
     }
   }
 
-  private void maybeNotifyKline(String serverId, String message, String title) {
-    String msg = Objects.toString(message, "").trim();
-    if (msg.isEmpty()) return;
-    if (!looksLikeKlineMessage(msg)) return;
-    notifyIrcEvent(IrcEventNotificationRule.EventType.YOU_KLINED, serverId, null, null, title, msg);
-  }
-
-  private void maybeNotifyUserKlineFromQuit(String serverId, IrcEvent.UserQuitChannel ev) {
-    if (ev == null) return;
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return;
-
-    String nick = Objects.toString(ev.nick(), "").trim();
-    if (nick.isEmpty()) return;
-    if (isFromSelf(sid, nick)) return;
-
-    String reason = Objects.toString(ev.reason(), "").trim();
-    if (!looksLikeKlineMessage(reason)) return;
-
-    String channel = Objects.toString(ev.channel(), "").trim();
-    String body = nick + " appears to be restricted";
-    if (!reason.isEmpty()) body = body + " (" + reason + ")";
-    if (!channel.isEmpty()) body = body + " in " + channel;
-
-    notifyIrcEvent(
-        IrcEventNotificationRule.EventType.KLINED,
-        sid,
-        channel,
-        nick,
-        "User restricted" + (channel.isEmpty() ? "" : " in " + channel),
-        body);
-  }
-
-  private void maybeNotifyNetsplitDetected(String serverId, IrcEvent.UserQuitChannel ev) {
-    if (ev == null) return;
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return;
-
-    NetsplitServers split = parseNetsplitServers(ev.reason());
-    if (split == null) return;
-
-    long now = System.currentTimeMillis();
-    String key = (sid + "|" + split.left() + "|" + split.right()).toLowerCase(Locale.ROOT);
-    Long previous = lastNetsplitNotifyAtMs.put(key, now);
-    if (previous != null && (now - previous) < NETSPLIT_NOTIFY_DEBOUNCE_MS) {
-      return;
-    }
-
-    if (lastNetsplitNotifyAtMs.size() > NETSPLIT_NOTIFY_MAX_KEYS) {
-      long cutoff = now - (NETSPLIT_NOTIFY_DEBOUNCE_MS * 3L);
-      lastNetsplitNotifyAtMs
-          .entrySet()
-          .removeIf(e -> e.getValue() == null || e.getValue() < cutoff);
-    }
-
-    String channel = Objects.toString(ev.channel(), "").trim();
-    String nick = Objects.toString(ev.nick(), "").trim();
-    String body = "Possible netsplit detected (" + split.left() + " ↔ " + split.right() + ")";
-    if (!channel.isEmpty()) body = body + " in " + channel;
-    if (!nick.isEmpty()) body = body + " after " + nick + " quit";
-
-    notifyIrcEvent(
-        IrcEventNotificationRule.EventType.NETSPLIT_DETECTED,
-        sid,
-        channel,
-        nick,
-        "Netsplit detected",
-        body);
-  }
-
-  private void clearNetsplitDebounceForServer(String serverId) {
-    String sid = Objects.toString(serverId, "").trim().toLowerCase(Locale.ROOT);
-    if (sid.isEmpty()) return;
-    String prefix = sid + "|";
-    lastNetsplitNotifyAtMs.keySet().removeIf(k -> k != null && k.startsWith(prefix));
-  }
-
-  private static NetsplitServers parseNetsplitServers(String reason) {
-    String r = Objects.toString(reason, "").trim();
-    if (r.isEmpty()) return null;
-    String[] parts = r.split("\\s+");
-    if (parts.length != 2) return null;
-    String left = parts[0].trim();
-    String right = parts[1].trim();
-    if (!looksLikeIrcServerToken(left) || !looksLikeIrcServerToken(right)) return null;
-    return new NetsplitServers(left, right);
-  }
-
-  private static boolean looksLikeIrcServerToken(String token) {
-    String s = Objects.toString(token, "").trim();
-    if (s.length() < 3 || s.length() > 255) return false;
-    if (!s.contains(".")) return false;
-    for (int i = 0; i < s.length(); i++) {
-      char c = s.charAt(i);
-      boolean ok = Character.isLetterOrDigit(c) || c == '.' || c == '-' || c == '_' || c == ':';
-      if (!ok) return false;
-    }
-    return true;
-  }
-
-  private record NetsplitServers(String left, String right) {}
-
-  private static boolean looksLikeKlineMessage(String message) {
-    String m = Objects.toString(message, "").trim().toLowerCase(Locale.ROOT);
-    if (m.isEmpty()) return false;
-    return m.contains("k-line")
-        || m.contains("klined")
-        || m.contains("kline")
-        || m.contains("g-line")
-        || m.contains("gline")
-        || m.contains("z-line")
-        || m.contains("zline")
-        || m.contains("akill")
-        || m.contains("autokill")
-        || m.contains("banned from this server");
-  }
-
-  private void maybeNotifyModeEvents(String serverId, IrcEvent.ChannelModeObserved ev) {
-    if (serverId == null || ev == null) return;
-
-    String channel = Objects.toString(ev.channel(), "").trim();
-    if (channel.isEmpty()) return;
-
-    String actor = Objects.toString(ev.by(), "").trim();
-    String by = actor.isEmpty() ? "Someone" : actor;
-
-    for (ModeChangeToken ch : parseModeChanges(serverId, ev.details())) {
-      if (ch == null) continue;
-
-      IrcEventNotificationRule.EventType type = null;
-      switch (ch.mode()) {
-        case 'o' ->
-            type =
-                ch.add()
-                    ? IrcEventNotificationRule.EventType.OPPED
-                    : IrcEventNotificationRule.EventType.DEOPPED;
-        case 'v' ->
-            type =
-                ch.add()
-                    ? IrcEventNotificationRule.EventType.VOICED
-                    : IrcEventNotificationRule.EventType.DEVOICED;
-        case 'h' ->
-            type =
-                ch.add()
-                    ? IrcEventNotificationRule.EventType.HALF_OPPED
-                    : IrcEventNotificationRule.EventType.DEHALF_OPPED;
-        case 'b' -> {
-          if (ch.add()) type = IrcEventNotificationRule.EventType.BANNED;
-        }
-        default -> {}
-      }
-      if (type == null) continue;
-
-      String arg = Objects.toString(ch.arg(), "").trim();
-      String body =
-          switch (type) {
-            case OPPED ->
-                by + " gave operator to " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
-            case DEOPPED ->
-                by
-                    + " removed operator from "
-                    + (arg.isEmpty() ? "(unknown)" : arg)
-                    + " in "
-                    + channel;
-            case VOICED ->
-                by + " gave voice to " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
-            case DEVOICED ->
-                by
-                    + " removed voice from "
-                    + (arg.isEmpty() ? "(unknown)" : arg)
-                    + " in "
-                    + channel;
-            case HALF_OPPED ->
-                by + " gave half-op to " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
-            case DEHALF_OPPED ->
-                by
-                    + " removed half-op from "
-                    + (arg.isEmpty() ? "(unknown)" : arg)
-                    + " in "
-                    + channel;
-            case BANNED ->
-                by + " set ban " + (arg.isEmpty() ? "(unknown)" : arg) + " in " + channel;
-            default -> by + " changed mode in " + channel;
-          };
-
-      notifyIrcEvent(type, serverId, channel, actor, "Mode change in " + channel, body);
-
-      IrcEventNotificationRule.EventType selfType = selfTargetedModeEventType(type);
-      if (selfType != null && isSelfModeTargetForEvent(serverId, type, arg)) {
-        String selfTitle = selfTargetedModeTitle(selfType, channel);
-        String selfBody = selfTargetedModeBody(selfType, by, channel);
-        notifyIrcEvent(selfType, serverId, channel, actor, selfTitle, selfBody);
-      }
-    }
-  }
-
-  private boolean isSelfModeTargetForEvent(
-      String serverId, IrcEventNotificationRule.EventType baseType, String rawTarget) {
-    if (baseType == IrcEventNotificationRule.EventType.BANNED) {
-      return isSelfBanTarget(serverId, rawTarget);
-    }
-    return isSelfModeTarget(serverId, rawTarget);
-  }
-
-  private boolean isSelfModeTarget(String serverId, String rawTargetNick) {
-    String target = normalizeNickForCompare(rawTargetNick);
-    if (target == null || target.isBlank()) return false;
-    return isFromSelf(serverId, target);
-  }
-
-  private boolean isSelfBanTarget(String serverId, String rawBanTarget) {
-    String target = Objects.toString(rawBanTarget, "").trim();
-    if (target.isEmpty()) return false;
-
-    if (isSelfModeTarget(serverId, target)) return true;
-
-    String me = irc.currentNick(serverId).orElse("");
-    if (me.isBlank()) return false;
-    return target.toLowerCase(Locale.ROOT).contains(me.toLowerCase(Locale.ROOT));
-  }
-
-  private static IrcEventNotificationRule.EventType selfTargetedModeEventType(
-      IrcEventNotificationRule.EventType baseType) {
-    if (baseType == null) return null;
-    return switch (baseType) {
-      case OPPED -> IrcEventNotificationRule.EventType.YOU_OPPED;
-      case DEOPPED -> IrcEventNotificationRule.EventType.YOU_DEOPPED;
-      case VOICED -> IrcEventNotificationRule.EventType.YOU_VOICED;
-      case DEVOICED -> IrcEventNotificationRule.EventType.YOU_DEVOICED;
-      case HALF_OPPED -> IrcEventNotificationRule.EventType.YOU_HALF_OPPED;
-      case DEHALF_OPPED -> IrcEventNotificationRule.EventType.YOU_DEHALF_OPPED;
-      case BANNED -> IrcEventNotificationRule.EventType.YOU_BANNED;
-      default -> null;
-    };
-  }
-
-  private static String selfTargetedModeTitle(
-      IrcEventNotificationRule.EventType selfType, String channel) {
-    if (selfType == null) return "Mode change in " + channel;
-    return switch (selfType) {
-      case YOU_OPPED -> "You were opped in " + channel;
-      case YOU_DEOPPED -> "You were de-opped in " + channel;
-      case YOU_VOICED -> "You were voiced in " + channel;
-      case YOU_DEVOICED -> "You were de-voiced in " + channel;
-      case YOU_HALF_OPPED -> "You were half-opped in " + channel;
-      case YOU_DEHALF_OPPED -> "You were de-half-opped in " + channel;
-      case YOU_BANNED -> "You were banned in " + channel;
-      default -> "Mode change in " + channel;
-    };
-  }
-
-  private static String selfTargetedModeBody(
-      IrcEventNotificationRule.EventType selfType, String by, String channel) {
-    if (selfType == null) return by + " changed your mode in " + channel;
-    return switch (selfType) {
-      case YOU_OPPED -> by + " gave you operator in " + channel;
-      case YOU_DEOPPED -> by + " removed your operator in " + channel;
-      case YOU_VOICED -> by + " gave you voice in " + channel;
-      case YOU_DEVOICED -> by + " removed your voice in " + channel;
-      case YOU_HALF_OPPED -> by + " gave you half-op in " + channel;
-      case YOU_DEHALF_OPPED -> by + " removed your half-op in " + channel;
-      case YOU_BANNED -> by + " set a ban matching you in " + channel;
-      default -> by + " changed your mode in " + channel;
-    };
-  }
-
-  private List<ModeChangeToken> parseModeChanges(String serverId, String details) {
-    String d = Objects.toString(details, "").trim();
-    if (d.isEmpty()) return List.of();
-
-    String[] parts = d.split("\\s+");
-    if (parts.length == 0) return List.of();
-
-    int modeIdx = -1;
-    for (int i = 0; i < parts.length; i++) {
-      String token = parts[i];
-      if (token.indexOf('+') >= 0 || token.indexOf('-') >= 0) {
-        modeIdx = i;
-        break;
-      }
-    }
-    if (modeIdx < 0) return List.of();
-
-    String modeSeq = parts[modeIdx];
-    List<String> args = new java.util.ArrayList<>();
-    for (int i = modeIdx + 1; i < parts.length; i++) {
-      args.add(parts[i]);
-    }
-
-    boolean add = true;
-    int argIdx = 0;
-    List<ModeChangeToken> out = new java.util.ArrayList<>();
-    ModeVocabulary vocabulary = serverIsupportState.vocabularyForServer(serverId);
-    for (int i = 0; i < modeSeq.length(); i++) {
-      char c = modeSeq.charAt(i);
-      if (c == '+') {
-        add = true;
-        continue;
-      }
-      if (c == '-') {
-        add = false;
-        continue;
-      }
-
-      String arg = null;
-      if (NegotiatedModeSemantics.takesArgument(vocabulary, c, add) && argIdx < args.size()) {
-        arg = args.get(argIdx++);
-      }
-      out.add(new ModeChangeToken(add, c, arg));
-    }
-    return out;
-  }
-
-  private record ModeChangeToken(boolean add, char mode, String arg) {}
-
   private void recordInterceptorEvent(
       String serverId,
       String channel,
@@ -1509,7 +968,7 @@ public class IrcMediator implements MediatorControlPort {
     String sid = Objects.toString(serverId, "").trim();
     String from = Objects.toString(fromNick, "").trim();
     if (sid.isEmpty() || from.isEmpty()) return;
-    if (isFromSelf(sid, from)) return;
+    if (mediatorTargetUiSupport.isFromSelf(sid, from)) return;
     interceptorIngestPort.ingestEvent(
         sid,
         channel,
@@ -1538,479 +997,5 @@ public class IrcMediator implements MediatorControlPort {
       ui.failPendingOutgoingChat(
           target, pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
     }
-  }
-
-  private void maybeHandlePendingPrivateMessageDeliveryError(
-      String sid, IrcEvent.ServerResponseLine ev) {
-    if (sid == null || sid.isBlank() || ev == null) return;
-    if (ev.code() != 401) return; // ERR_NOSUCHNICK
-
-    ParsedIrcLine pl = parseIrcLineForMetadata(ev.rawLine());
-    if (pl == null) return;
-    if (pl.params() == null || pl.params().size() < 2) return;
-
-    String targetToken = Objects.toString(pl.params().get(1), "").trim();
-    if (targetToken.isEmpty()) return;
-
-    final TargetRef pmTarget;
-    try {
-      pmTarget = new TargetRef(sid, targetToken);
-    } catch (IllegalArgumentException ignored) {
-      return;
-    }
-    if (pmTarget.isChannel() || pmTarget.isUiOnly() || pmTarget.isStatus()) return;
-
-    PendingEchoMessagePort.PendingOutboundChat pending =
-        pendingEchoMessageState.consumeOldestByTarget(pmTarget).orElse(null);
-    if (pending == null) return;
-
-    String reason = Objects.toString(pl.trailing(), "").trim();
-    if (reason.isEmpty()) {
-      reason = Objects.toString(ev.message(), "").trim();
-    }
-    if (reason.isEmpty()) {
-      reason = "No such nick/channel";
-    }
-
-    String pendingReason = "[" + ev.code() + "] " + reason;
-    ui.failPendingOutgoingChat(
-        pmTarget, pending.pendingId(), ev.at(), pending.fromNick(), pending.text(), pendingReason);
-
-    ensureTargetExists(pmTarget);
-    ui.appendErrorAt(
-        pmTarget,
-        ev.at(),
-        "(send)",
-        "Cannot deliver to " + pmTarget.target() + " [" + ev.code() + "]: " + reason);
-  }
-
-  private void updateServerMetadataFromServerResponseLine(
-      String serverId, IrcEvent.ServerResponseLine ev) {
-    if (ev == null) return;
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return;
-
-    ParsedIrcLine pl = parseIrcLineForMetadata(ev.rawLine());
-    if (pl == null) return;
-
-    String cmd = Objects.toString(pl.command(), "").trim();
-    if (cmd.isEmpty()) return;
-
-    if ("004".equals(cmd) || ev.code() == 4) {
-      List<String> params = pl.params();
-      String serverName = params.size() >= 2 ? params.get(1) : "";
-      String version = params.size() >= 3 ? params.get(2) : "";
-      String userModes = params.size() >= 4 ? params.get(3) : "";
-      String channelModes = params.size() >= 5 ? params.get(4) : "";
-      ui.setServerVersionDetails(sid, serverName, version, userModes, channelModes);
-      return;
-    }
-
-    if ("351".equals(cmd) || ev.code() == 351) {
-      List<String> params = pl.params();
-      String version = params.size() >= 2 ? params.get(1) : "";
-      String serverName = params.size() >= 3 ? params.get(2) : "";
-      ui.setServerVersionDetails(sid, serverName, version, "", "");
-      return;
-    }
-
-    if ("005".equals(cmd) || ev.code() == 5) {
-      List<String> params = pl.params();
-      int start = params.size() >= 1 ? 1 : 0; // skip nick/target
-      for (int i = start; i < params.size(); i++) {
-        String tok = Objects.toString(params.get(i), "").trim();
-        if (tok.isEmpty()) continue;
-
-        if (tok.startsWith("-") && tok.length() > 1) {
-          ui.setServerIsupportToken(sid, tok.substring(1), null);
-          serverIsupportState.applyIsupportToken(sid, tok.substring(1), null);
-          continue;
-        }
-
-        int eq = tok.indexOf('=');
-        if (eq >= 0) {
-          String key = tok.substring(0, eq).trim();
-          String value = tok.substring(eq + 1).trim();
-          if (!key.isEmpty()) {
-            ui.setServerIsupportToken(sid, key, value);
-            serverIsupportState.applyIsupportToken(sid, key, value);
-          }
-          continue;
-        }
-
-        // Tokens without "=" still represent support (for example WHOX).
-        ui.setServerIsupportToken(sid, tok, "");
-        serverIsupportState.applyIsupportToken(sid, tok, "");
-      }
-    }
-  }
-
-  private record ParsedIrcLine(
-      String prefix, String command, List<String> params, String trailing) {}
-
-  private static ParsedIrcLine parseIrcLineForMetadata(String rawLine) {
-    String s = Objects.toString(rawLine, "").trim();
-    if (s.isEmpty()) return null;
-
-    // Strip IRCv3 tags (@aaa=bbb;ccc ...).
-    if (s.startsWith("@")) {
-      int sp = s.indexOf(' ');
-      if (sp <= 0 || sp >= s.length() - 1) return null;
-      s = s.substring(sp + 1).trim();
-    }
-
-    String prefix = "";
-    if (s.startsWith(":")) {
-      int sp = s.indexOf(' ');
-      if (sp <= 1 || sp >= s.length() - 1) return null;
-      prefix = s.substring(1, sp).trim();
-      s = s.substring(sp + 1).trim();
-    }
-
-    String trailing = "";
-    int trailStart = s.indexOf(" :");
-    if (trailStart >= 0) {
-      trailing = s.substring(trailStart + 2).trim();
-      s = s.substring(0, trailStart).trim();
-    }
-
-    if (s.isEmpty()) return null;
-    String[] toks = s.split("\\s+");
-    if (toks.length == 0) return null;
-
-    String command = toks[0].trim();
-    if (command.isEmpty()) return null;
-
-    List<String> params = new java.util.ArrayList<>();
-    for (int i = 1; i < toks.length; i++) {
-      String tok = Objects.toString(toks[i], "").trim();
-      if (!tok.isEmpty()) params.add(tok);
-    }
-
-    return new ParsedIrcLine(prefix, command, List.copyOf(params), trailing);
-  }
-
-  private void handleServerResponseLine(
-      String sid, TargetRef status, IrcEvent.ServerResponseLine ev) {
-    ensureTargetExists(status);
-    String msg = Objects.toString(ev.message(), "");
-    String rendered = "[" + ev.code() + "] " + msg;
-    updateServerMetadataFromServerResponseLine(sid, ev);
-    maybeHandlePendingPrivateMessageDeliveryError(sid, ev);
-    boolean suppressStatusLine =
-        (ev.code() == 322); // /LIST entry rows are shown in the dedicated channel-list panel.
-    if (ev.code() == 303 && monitorFallbackPort.shouldSuppressIsonServerResponse(sid)) {
-      suppressStatusLine = true;
-    }
-    if (ev.code() == 321) {
-      rendered =
-          "[321] "
-              + (msg.isBlank()
-                  ? "Channel list follows (see Channel List)."
-                  : (msg + " (see Channel List)."));
-    } else if (ev.code() == 323 && !msg.isBlank()) {
-      rendered = "[323] " + msg + " (see Channel List).";
-    }
-    String label = Objects.toString(ev.ircv3Tags().get("label"), "").trim();
-    if (!label.isBlank()) {
-      LabeledResponseRoutingPort.PendingLabeledRequest pending =
-          labeledResponseRoutingState.findIfFresh(sid, label, LABELED_RESPONSE_CORRELATION_WINDOW);
-      if (pending != null && pending.originTarget() != null) {
-        TargetRef dest = normalizeLabeledDestination(sid, status, pending.originTarget());
-        LabeledResponseRoutingPort.PendingLabeledRequest transitioned =
-            labeledResponseRoutingState.markOutcomeIfPending(
-                sid, label, LabeledResponseRoutingPort.Outcome.SUCCESS, ev.at());
-        if (transitioned != null) {
-          appendLabeledOutcome(
-              dest,
-              ev.at(),
-              label,
-              transitioned.requestPreview(),
-              transitioned.outcome(),
-              "response received");
-        }
-
-        String preview = Objects.toString(pending.requestPreview(), "").trim();
-        String correlated = preview.isBlank() ? rendered : (rendered + " \u2190 " + preview);
-        if (!suppressStatusLine) {
-          postTo(
-              dest,
-              true,
-              d ->
-                  ui.appendStatusAt(
-                      d, ev.at(), "(server)", correlated, ev.messageId(), ev.ircv3Tags()));
-        }
-        return;
-      }
-      rendered = rendered + " {label=" + label + "}";
-    }
-    if (!suppressStatusLine) {
-      ui.appendStatusAt(status, ev.at(), "(server)", rendered, ev.messageId(), ev.ircv3Tags());
-    }
-
-    if (ev.code() == 465 || ev.code() == 466 || ev.code() == 463 || ev.code() == 464) {
-      String msgTrim = Objects.toString(ev.message(), "").trim();
-      String body =
-          msgTrim.isBlank()
-              ? ("Server response [" + ev.code() + "]")
-              : ("[" + ev.code() + "] " + msgTrim);
-      notifyIrcEvent(
-          IrcEventNotificationRule.EventType.YOU_KLINED,
-          sid,
-          null,
-          null,
-          "Server restriction",
-          body);
-    } else {
-      maybeNotifyKline(sid, ev.message(), "Server restriction");
-    }
-  }
-
-  private void handleStandardReply(String sid, TargetRef status, IrcEvent.StandardReply ev) {
-    ensureTargetExists(status);
-    String rendered = renderStandardReply(ev);
-    String label = Objects.toString(ev.ircv3Tags().get("label"), "").trim();
-    if (!label.isBlank()) {
-      LabeledResponseRoutingPort.PendingLabeledRequest pending =
-          labeledResponseRoutingState.findIfFresh(sid, label, LABELED_RESPONSE_CORRELATION_WINDOW);
-      if (pending != null && pending.originTarget() != null) {
-        TargetRef dest = normalizeLabeledDestination(sid, status, pending.originTarget());
-        LabeledResponseRoutingPort.Outcome outcome =
-            (ev.kind() == IrcEvent.StandardReplyKind.FAIL)
-                ? LabeledResponseRoutingPort.Outcome.FAILURE
-                : LabeledResponseRoutingPort.Outcome.SUCCESS;
-        LabeledResponseRoutingPort.PendingLabeledRequest transitioned =
-            labeledResponseRoutingState.markOutcomeIfPending(sid, label, outcome, ev.at());
-        if (transitioned != null) {
-          appendLabeledOutcome(
-              dest,
-              ev.at(),
-              label,
-              transitioned.requestPreview(),
-              transitioned.outcome(),
-              ev.description());
-        }
-
-        String preview = Objects.toString(pending.requestPreview(), "").trim();
-        String correlated = preview.isBlank() ? rendered : (rendered + " \u2190 " + preview);
-        postTo(
-            dest,
-            true,
-            d ->
-                ui.appendStatusAt(
-                    d, ev.at(), "(standard-reply)", correlated, ev.messageId(), ev.ircv3Tags()));
-        return;
-      }
-      rendered = rendered + " {label=" + label + "}";
-    }
-    ui.appendStatusAt(
-        status, ev.at(), "(standard-reply)", rendered, ev.messageId(), ev.ircv3Tags());
-    maybeNotifyKline(sid, ev.description(), "Server restriction");
-  }
-
-  private void handleLabeledRequestTimeouts() {
-    List<LabeledResponseRoutingPort.TimedOutLabeledRequest> timedOut =
-        labeledResponseRoutingState.collectTimedOut(LABELED_RESPONSE_TIMEOUT, 32);
-    if (timedOut == null || timedOut.isEmpty()) return;
-    for (LabeledResponseRoutingPort.TimedOutLabeledRequest timeout : timedOut) {
-      if (timeout == null || timeout.request() == null) continue;
-      TargetRef status = new TargetRef(timeout.serverId(), "status");
-      TargetRef dest =
-          normalizeLabeledDestination(timeout.serverId(), status, timeout.request().originTarget());
-      appendLabeledOutcome(
-          dest,
-          timeout.timedOutAt(),
-          timeout.label(),
-          timeout.request().requestPreview(),
-          LabeledResponseRoutingPort.Outcome.TIMEOUT,
-          "no reply within " + LABELED_RESPONSE_TIMEOUT.toSeconds() + "s");
-    }
-  }
-
-  private void handlePendingEchoTimeouts() {
-    Instant now = Instant.now();
-    List<PendingEchoMessagePort.PendingOutboundChat> timedOut =
-        pendingEchoMessageState.collectTimedOut(
-            PENDING_ECHO_TIMEOUT, PENDING_ECHO_TIMEOUT_BATCH_MAX, now);
-    if (timedOut == null || timedOut.isEmpty()) return;
-
-    String reason =
-        "Timed out waiting for server echo after " + PENDING_ECHO_TIMEOUT.toSeconds() + "s";
-    for (PendingEchoMessagePort.PendingOutboundChat pending : timedOut) {
-      if (pending == null || pending.target() == null) continue;
-      ui.failPendingOutgoingChat(
-          pending.target(), pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
-    }
-  }
-
-  private static String renderStandardReply(IrcEvent.StandardReply ev) {
-    if (ev == null) return "";
-    StringBuilder out = new StringBuilder();
-    out.append(ev.kind().name());
-    String cmd = Objects.toString(ev.command(), "").trim();
-    if (!cmd.isBlank()) out.append(' ').append(cmd);
-    String code = Objects.toString(ev.code(), "").trim();
-    if (!code.isBlank()) out.append(' ').append(code);
-    String context = Objects.toString(ev.context(), "").trim();
-    if (!context.isBlank()) out.append(" [").append(context).append(']');
-    String desc = Objects.toString(ev.description(), "").trim();
-    if (!desc.isBlank()) out.append(": ").append(desc);
-    return out.toString();
-  }
-
-  private void appendLabeledOutcome(
-      TargetRef dest,
-      Instant at,
-      String label,
-      String requestPreview,
-      LabeledResponseRoutingPort.Outcome outcome,
-      String detail) {
-    String lbl = Objects.toString(label, "").trim();
-    if (lbl.isEmpty()) return;
-    String preview = Objects.toString(requestPreview, "").trim();
-    String d = Objects.toString(detail, "").trim();
-    String state =
-        switch (outcome) {
-          case FAILURE -> "failed";
-          case TIMEOUT -> "timed out";
-          case SUCCESS -> "completed";
-          case PENDING -> "pending";
-        };
-
-    StringBuilder text =
-        new StringBuilder("Request ").append(state).append(" {label=").append(lbl).append('}');
-    if (!preview.isBlank()) text.append(": ").append(preview);
-    if (!d.isBlank()) text.append(" (").append(d).append(')');
-    String from =
-        switch (outcome) {
-          case FAILURE -> "(label-fail)";
-          case TIMEOUT -> "(label-timeout)";
-          case SUCCESS -> "(label-ok)";
-          case PENDING -> "(label)";
-        };
-    ui.appendStatusAt(dest, at == null ? Instant.now() : at, from, text.toString());
-  }
-
-  private TargetRef normalizeLabeledDestination(String sid, TargetRef status, TargetRef origin) {
-    if (origin == null) return status;
-    TargetRef dest = origin;
-    if (!Objects.equals(dest.serverId(), sid)) {
-      dest = new TargetRef(sid, dest.target());
-    }
-    if (dest.isUiOnly()) {
-      return status;
-    }
-    return dest;
-  }
-
-  private boolean isFromSelf(String serverId, String from) {
-    return eventPreparationService.isFromSelf(serverId, from);
-  }
-
-  private void markPrivateMessagePeerOnline(String serverId, String rawNick) {
-    String nick = normalizePrivateMessagePeer(rawNick);
-    if (nick.isEmpty()) return;
-    if (isFromSelf(serverId, nick)) return;
-    ui.setPrivateMessageOnlineState(serverId, nick, true);
-  }
-
-  private void maybeMarkPrivateMessagePeerOnlineForCtcp(
-      String serverId, IrcEvent.CtcpRequestReceived event, TargetRef destination) {
-    if (event == null || destination == null) return;
-    if (event.channel() != null && !event.channel().isBlank()) return;
-
-    String from = normalizePrivateMessagePeer(event.from());
-    if (from.isEmpty()) return;
-
-    String destinationPeer = normalizePrivateMessagePeer(destination.target());
-    if (destinationPeer.isEmpty()) return;
-    if (!from.equalsIgnoreCase(destinationPeer)) return;
-
-    markPrivateMessagePeerOnline(serverId, from);
-  }
-
-  private void markPrivateMessagePeerOffline(String serverId, String rawNick) {
-    String nick = normalizePrivateMessagePeer(rawNick);
-    if (nick.isEmpty()) return;
-    if (isFromSelf(serverId, nick)) return;
-    ui.setPrivateMessageOnlineState(serverId, nick, false);
-  }
-
-  private static String normalizeNickForCompare(String raw) {
-    return MediatorInboundEventPreparationService.normalizeNickForCompare(raw);
-  }
-
-  private static String normalizePrivateMessagePeer(String raw) {
-    String n = normalizeNickForCompare(raw);
-    n = Objects.toString(n, "").trim();
-    if (n.isEmpty()) return "";
-    if ("server".equalsIgnoreCase(n)) return "";
-    if (n.startsWith("*")) return "";
-    return n;
-  }
-
-  private TargetRef resolveIrcv3Target(String sid, String target, String from, TargetRef status) {
-    String t = Objects.toString(target, "").trim();
-    if (!t.isEmpty() && (t.startsWith("#") || t.startsWith("&"))) {
-      return new TargetRef(sid, t);
-    }
-    String f = Objects.toString(from, "").trim();
-    if (!f.isEmpty() && !"server".equalsIgnoreCase(f)) {
-      return new TargetRef(sid, f);
-    }
-    return resolveActiveOrStatus(sid, status);
-  }
-
-  private void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
-    postTo(dest, targetCoordinator.getActiveTarget(), markUnreadIfNotActive, write);
-  }
-
-  /** Prefer the active target for {@code sid}, otherwise fall back to {@code status}. */
-  private TargetRef resolveActiveOrStatus(String sid, TargetRef status) {
-    TargetRef active = targetCoordinator.getActiveTarget();
-    if (active != null && Objects.equals(active.serverId(), sid)) return active;
-    return status != null ? status : safeStatusTarget();
-  }
-
-  private void postTo(
-      TargetRef dest, TargetRef active, boolean markUnreadIfNotActive, Consumer<TargetRef> write) {
-    if (dest == null) dest = safeStatusTarget();
-    ensureTargetExists(dest);
-
-    if (write != null) {
-      write.accept(dest);
-    }
-
-    if (markUnreadIfNotActive && active != null && !dest.equals(active) && !isMutedChannel(dest)) {
-      ui.markUnread(dest);
-    }
-  }
-
-  private boolean isMutedChannel(TargetRef target) {
-    if (target == null || !target.isChannel()) return false;
-    try {
-      return ui.isChannelMuted(target);
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private boolean isMutedChannel(String serverId, String channel) {
-    String sid = Objects.toString(serverId, "").trim();
-    String ch = Objects.toString(channel, "").trim();
-    if (sid.isEmpty() || ch.isEmpty()) return false;
-    try {
-      return isMutedChannel(new TargetRef(sid, ch));
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private void ensureTargetExists(TargetRef target) {
-    ui.ensureTargetExists(target);
-  }
-
-  private TargetRef safeStatusTarget() {
-    return targetCoordinator.safeStatusTarget();
   }
 }

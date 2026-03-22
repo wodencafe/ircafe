@@ -30,7 +30,9 @@ import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.IrcMediator;
+import cafe.woden.ircclient.app.core.MediatorAlertNotificationHandler;
 import cafe.woden.ircclient.app.core.MediatorChannelMembershipEventHandler;
+import cafe.woden.ircclient.app.core.MediatorChannelStateEventHandler;
 import cafe.woden.ircclient.app.core.MediatorConnectionSubscriptionBinder;
 import cafe.woden.ircclient.app.core.MediatorConnectivityLifecycleOrchestrator;
 import cafe.woden.ircclient.app.core.MediatorHistoryIngestOrchestrator;
@@ -39,8 +41,10 @@ import cafe.woden.ircclient.app.core.MediatorInboundTextEventHandler;
 import cafe.woden.ircclient.app.core.MediatorInviteEventHandler;
 import cafe.woden.ircclient.app.core.MediatorIrcv3EventHandler;
 import cafe.woden.ircclient.app.core.MediatorIrcv3PresenceEventHandler;
+import cafe.woden.ircclient.app.core.MediatorOutboundUiActionHandler;
 import cafe.woden.ircclient.app.core.MediatorRosterStatusEventHandler;
 import cafe.woden.ircclient.app.core.MediatorServerStatusEventHandler;
+import cafe.woden.ircclient.app.core.MediatorTargetUiSupport;
 import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
@@ -144,8 +148,18 @@ class IrcMediatorMockVerifyTest {
               pendingInviteState,
               serverIsupportState,
               inboundModeEventHandler);
+  private final MonitorFallbackPort monitorFallbackPort = mock(MonitorFallbackPort.class);
   private final MediatorServerStatusEventHandler mediatorServerStatusEventHandler =
-      new MediatorServerStatusEventHandler(irc, ui, awayRoutingState, whoisRoutingState);
+      new MediatorServerStatusEventHandler(
+          irc,
+          ui,
+          awayRoutingState,
+          whoisRoutingState,
+          monitorFallbackPort,
+          labeledResponseRoutingState,
+          pendingEchoMessageState,
+          serverIsupportState,
+          connectionCoordinator);
   private final IrcEventNotifierPort ircEventNotifierPort = mock(IrcEventNotifierPort.class);
   private final MediatorInviteEventHandler mediatorInviteEventHandler =
       new MediatorInviteEventHandler(
@@ -171,15 +185,37 @@ class IrcMediatorMockVerifyTest {
       new MediatorIrcv3PresenceEventHandler(irc, typingPort, readMarkerPort, ui, uiSettingsPort);
   private final MediatorIrcv3EventHandler mediatorIrcv3EventHandler =
       new MediatorIrcv3EventHandler(negotiatedFeaturePort, ui, targetCoordinator);
+  private final MediatorAlertNotificationHandler mediatorAlertNotificationHandler =
+      new MediatorAlertNotificationHandler(irc, serverIsupportState);
+  private final MediatorChannelStateEventHandler mediatorChannelStateEventHandler =
+      new MediatorChannelStateEventHandler(
+          ui,
+          targetCoordinator,
+          inboundModeEventHandler,
+          mediatorHistoryIngestOrchestrator,
+          mediatorAlertNotificationHandler);
+  private final MediatorOutboundUiActionHandler mediatorOutboundUiActionHandler =
+      new MediatorOutboundUiActionHandler(
+          irc,
+          ui,
+          commandParser,
+          userCommandAliasEngine,
+          runtimeConfig,
+          connectionCoordinator,
+          outboundCommandDispatcher,
+          targetCoordinator,
+          whoisRoutingState,
+          ctcpRoutingState);
   private final cafe.woden.ircclient.app.api.InterceptorIngestPort interceptorIngestPort =
       mock(cafe.woden.ircclient.app.api.InterceptorIngestPort.class);
   private final InboundIgnorePolicyPort inboundIgnorePolicy = mock(InboundIgnorePolicyPort.class);
-  private final MonitorFallbackPort monitorFallbackPort = mock(MonitorFallbackPort.class);
   private final ApplicationEventPublisher applicationEventPublisher =
       mock(ApplicationEventPublisher.class);
   private final MediatorInboundEventPreparationService eventPreparationService =
       new MediatorInboundEventPreparationService(
           irc, notificationRuleMatcherPort, inboundIgnorePolicy);
+  private final MediatorTargetUiSupport mediatorTargetUiSupport =
+      new MediatorTargetUiSupport(ui, targetCoordinator, eventPreparationService);
   private final MediatorInboundTextEventHandler mediatorInboundTextEventHandler =
       new MediatorInboundTextEventHandler(
           negotiatedFeaturePort,
@@ -199,10 +235,7 @@ class IrcMediatorMockVerifyTest {
       new IrcMediator(
           irc,
           ui,
-          commandParser,
-          userCommandAliasEngine,
           serverRegistry,
-          runtimeConfig,
           connectionCoordinator,
           mediatorConnectivityLifecycleOrchestrator,
           mediatorServerStatusEventHandler,
@@ -211,23 +244,19 @@ class IrcMediatorMockVerifyTest {
           mediatorRosterStatusEventHandler,
           mediatorIrcv3PresenceEventHandler,
           mediatorIrcv3EventHandler,
+          mediatorAlertNotificationHandler,
+          mediatorChannelStateEventHandler,
+          mediatorOutboundUiActionHandler,
+          mediatorTargetUiSupport,
           mediatorConnectionSubscriptionBinder,
           mediatorUiSubscriptionBinder,
-          mediatorHistoryIngestOrchestrator,
-          outboundCommandDispatcher,
           targetCoordinator,
           eventPreparationService,
           mediatorInboundTextEventHandler,
           userListStore,
-          whoisRoutingState,
-          ctcpRoutingState,
-          labeledResponseRoutingState,
           pendingEchoMessageState,
-          serverIsupportState,
-          inboundModeEventHandler,
           ircEventNotifierPort,
-          interceptorIngestPort,
-          monitorFallbackPort);
+          interceptorIngestPort);
 
   @Test
   void startBindsUiIrcAndConnectionCollaboratorsInOrderOnce() {

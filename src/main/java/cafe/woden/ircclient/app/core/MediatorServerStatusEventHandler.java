@@ -1,14 +1,20 @@
 package cafe.woden.ircclient.app.core;
 
 import cafe.woden.ircclient.app.api.InterceptorEventType;
+import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.AwayRoutingPort;
+import cafe.woden.ircclient.state.api.LabeledResponseRoutingPort;
+import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
+import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 import lombok.RequiredArgsConstructor;
@@ -21,15 +27,15 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class MediatorServerStatusEventHandler {
   private static final Duration AWAY_ORIGIN_MAX_AGE = Duration.ofSeconds(15);
+  private static final Duration LABELED_RESPONSE_CORRELATION_WINDOW = Duration.ofMinutes(2);
+  private static final Duration LABELED_RESPONSE_TIMEOUT = Duration.ofSeconds(30);
+  private static final Duration PENDING_ECHO_TIMEOUT = Duration.ofSeconds(45);
+  private static final int PENDING_ECHO_TIMEOUT_BATCH_MAX = 64;
 
   interface Callbacks {
     TargetRef safeStatusTarget();
 
     void postTo(TargetRef dest, boolean markUnreadIfNotActive, Consumer<TargetRef> write);
-
-    void handleStandardReply(String sid, TargetRef status, IrcEvent.StandardReply event);
-
-    void handleServerResponseLine(String sid, TargetRef status, IrcEvent.ServerResponseLine event);
 
     TargetRef resolveActiveOrStatus(String sid, TargetRef status);
 
@@ -56,6 +62,11 @@ public class MediatorServerStatusEventHandler {
   private final UiPort ui;
   private final AwayRoutingPort awayRoutingState;
   private final WhoisRoutingPort whoisRoutingState;
+  private final MonitorFallbackPort monitorFallbackPort;
+  private final LabeledResponseRoutingPort labeledResponseRoutingState;
+  private final PendingEchoMessagePort pendingEchoMessageState;
+  private final ServerIsupportStatePort serverIsupportState;
+  private final ConnectionCoordinator connectionCoordinator;
 
   public void handleNickChanged(String sid, TargetRef status, IrcEvent.NickChanged event) {
     irc.currentNick(sid)
@@ -113,7 +124,7 @@ public class MediatorServerStatusEventHandler {
 
   public void handleStandardReplyEvent(
       Callbacks callbacks, String sid, TargetRef status, IrcEvent.StandardReply event) {
-    callbacks.handleStandardReply(sid, status, event);
+    handleStandardReply(callbacks, sid, status, event);
     callbacks.recordInterceptorEvent(
         sid,
         "status",
@@ -150,13 +161,22 @@ public class MediatorServerStatusEventHandler {
 
   public void handleServerResponseLineEvent(
       Callbacks callbacks, String sid, TargetRef status, IrcEvent.ServerResponseLine event) {
-    callbacks.handleServerResponseLine(sid, status, event);
+    handleServerResponseLine(callbacks, sid, status, event);
     String rawLine = Objects.toString(event.rawLine(), "").trim();
     if (rawLine.isEmpty()) {
       rawLine = Objects.toString(event.message(), "").trim();
     }
     callbacks.recordInterceptorEvent(
         sid, "status", "server", "", rawLine, InterceptorEventType.SERVER);
+  }
+
+  public void handleError(Callbacks callbacks, String sid, TargetRef status, IrcEvent.Error event) {
+    TargetRef dest = status != null ? status : callbacks.safeStatusTarget();
+    connectionCoordinator.noteConnectionError(sid, event.message());
+    ui.appendError(dest, "(error)", event.message());
+    callbacks.recordInterceptorEvent(
+        sid, "status", "server", "", event.message(), InterceptorEventType.ERROR);
+    maybeNotifyKline(callbacks, sid, event.message(), "Server restriction");
   }
 
   public void handleAwayStatusChanged(
@@ -207,7 +227,453 @@ public class MediatorServerStatusEventHandler {
         });
   }
 
+  public void handleLabeledRequestTimeouts(Callbacks callbacks) {
+    List<LabeledResponseRoutingPort.TimedOutLabeledRequest> timedOut =
+        labeledResponseRoutingState.collectTimedOut(LABELED_RESPONSE_TIMEOUT, 32);
+    if (timedOut == null || timedOut.isEmpty()) {
+      return;
+    }
+    for (LabeledResponseRoutingPort.TimedOutLabeledRequest timeout : timedOut) {
+      if (timeout == null || timeout.request() == null) {
+        continue;
+      }
+      TargetRef status = new TargetRef(timeout.serverId(), "status");
+      TargetRef dest =
+          normalizeLabeledDestination(timeout.serverId(), status, timeout.request().originTarget());
+      appendLabeledOutcome(
+          dest,
+          timeout.timedOutAt(),
+          timeout.label(),
+          timeout.request().requestPreview(),
+          LabeledResponseRoutingPort.Outcome.TIMEOUT,
+          "no reply within " + LABELED_RESPONSE_TIMEOUT.toSeconds() + "s");
+    }
+  }
+
+  public void handlePendingEchoTimeouts() {
+    Instant now = Instant.now();
+    List<PendingEchoMessagePort.PendingOutboundChat> timedOut =
+        pendingEchoMessageState.collectTimedOut(
+            PENDING_ECHO_TIMEOUT, PENDING_ECHO_TIMEOUT_BATCH_MAX, now);
+    if (timedOut == null || timedOut.isEmpty()) {
+      return;
+    }
+
+    String reason =
+        "Timed out waiting for server echo after " + PENDING_ECHO_TIMEOUT.toSeconds() + "s";
+    for (PendingEchoMessagePort.PendingOutboundChat pending : timedOut) {
+      if (pending == null || pending.target() == null) {
+        continue;
+      }
+      ui.failPendingOutgoingChat(
+          pending.target(), pending.pendingId(), now, pending.fromNick(), pending.text(), reason);
+    }
+  }
+
   private static TargetRef statusOrSafe(Callbacks callbacks, TargetRef status) {
     return status != null ? status : callbacks.safeStatusTarget();
+  }
+
+  private void handleServerResponseLine(
+      Callbacks callbacks, String sid, TargetRef status, IrcEvent.ServerResponseLine event) {
+    ui.ensureTargetExists(status);
+    String msg = Objects.toString(event.message(), "");
+    String rendered = "[" + event.code() + "] " + msg;
+    updateServerMetadataFromServerResponseLine(sid, event);
+    maybeHandlePendingPrivateMessageDeliveryError(sid, event);
+    boolean suppressStatusLine =
+        event.code() == 322; // /LIST entry rows are shown in the dedicated channel-list panel.
+    if (event.code() == 303 && monitorFallbackPort.shouldSuppressIsonServerResponse(sid)) {
+      suppressStatusLine = true;
+    }
+    if (event.code() == 321) {
+      rendered =
+          "[321] "
+              + (msg.isBlank()
+                  ? "Channel list follows (see Channel List)."
+                  : (msg + " (see Channel List)."));
+    } else if (event.code() == 323 && !msg.isBlank()) {
+      rendered = "[323] " + msg + " (see Channel List).";
+    }
+    String label = Objects.toString(event.ircv3Tags().get("label"), "").trim();
+    if (!label.isBlank()) {
+      LabeledResponseRoutingPort.PendingLabeledRequest pending =
+          labeledResponseRoutingState.findIfFresh(sid, label, LABELED_RESPONSE_CORRELATION_WINDOW);
+      if (pending != null && pending.originTarget() != null) {
+        TargetRef dest = normalizeLabeledDestination(sid, status, pending.originTarget());
+        LabeledResponseRoutingPort.PendingLabeledRequest transitioned =
+            labeledResponseRoutingState.markOutcomeIfPending(
+                sid, label, LabeledResponseRoutingPort.Outcome.SUCCESS, event.at());
+        if (transitioned != null) {
+          appendLabeledOutcome(
+              dest,
+              event.at(),
+              label,
+              transitioned.requestPreview(),
+              transitioned.outcome(),
+              "response received");
+        }
+
+        String preview = Objects.toString(pending.requestPreview(), "").trim();
+        String correlated = preview.isBlank() ? rendered : (rendered + " \u2190 " + preview);
+        if (!suppressStatusLine) {
+          callbacks.postTo(
+              dest,
+              true,
+              target ->
+                  ui.appendStatusAt(
+                      target,
+                      event.at(),
+                      "(server)",
+                      correlated,
+                      event.messageId(),
+                      event.ircv3Tags()));
+        }
+        return;
+      }
+      rendered = rendered + " {label=" + label + "}";
+    }
+    if (!suppressStatusLine) {
+      ui.appendStatusAt(
+          status, event.at(), "(server)", rendered, event.messageId(), event.ircv3Tags());
+    }
+
+    if (event.code() == 465 || event.code() == 466 || event.code() == 463 || event.code() == 464) {
+      String msgTrim = Objects.toString(event.message(), "").trim();
+      String body =
+          msgTrim.isBlank()
+              ? ("Server response [" + event.code() + "]")
+              : ("[" + event.code() + "] " + msgTrim);
+      callbacks.notifyIrcEvent(
+          IrcEventNotificationRule.EventType.YOU_KLINED,
+          sid,
+          null,
+          null,
+          "Server restriction",
+          body);
+    } else {
+      maybeNotifyKline(callbacks, sid, event.message(), "Server restriction");
+    }
+  }
+
+  private void handleStandardReply(
+      Callbacks callbacks, String sid, TargetRef status, IrcEvent.StandardReply event) {
+    ui.ensureTargetExists(status);
+    String rendered = renderStandardReply(event);
+    String label = Objects.toString(event.ircv3Tags().get("label"), "").trim();
+    if (!label.isBlank()) {
+      LabeledResponseRoutingPort.PendingLabeledRequest pending =
+          labeledResponseRoutingState.findIfFresh(sid, label, LABELED_RESPONSE_CORRELATION_WINDOW);
+      if (pending != null && pending.originTarget() != null) {
+        TargetRef dest = normalizeLabeledDestination(sid, status, pending.originTarget());
+        LabeledResponseRoutingPort.Outcome outcome =
+            event.kind() == IrcEvent.StandardReplyKind.FAIL
+                ? LabeledResponseRoutingPort.Outcome.FAILURE
+                : LabeledResponseRoutingPort.Outcome.SUCCESS;
+        LabeledResponseRoutingPort.PendingLabeledRequest transitioned =
+            labeledResponseRoutingState.markOutcomeIfPending(sid, label, outcome, event.at());
+        if (transitioned != null) {
+          appendLabeledOutcome(
+              dest,
+              event.at(),
+              label,
+              transitioned.requestPreview(),
+              transitioned.outcome(),
+              event.description());
+        }
+
+        String preview = Objects.toString(pending.requestPreview(), "").trim();
+        String correlated = preview.isBlank() ? rendered : (rendered + " \u2190 " + preview);
+        callbacks.postTo(
+            dest,
+            true,
+            target ->
+                ui.appendStatusAt(
+                    target,
+                    event.at(),
+                    "(standard-reply)",
+                    correlated,
+                    event.messageId(),
+                    event.ircv3Tags()));
+        return;
+      }
+      rendered = rendered + " {label=" + label + "}";
+    }
+    ui.appendStatusAt(
+        status, event.at(), "(standard-reply)", rendered, event.messageId(), event.ircv3Tags());
+    maybeNotifyKline(callbacks, sid, event.description(), "Server restriction");
+  }
+
+  private void maybeNotifyKline(
+      Callbacks callbacks, String serverId, String message, String title) {
+    String msg = Objects.toString(message, "").trim();
+    if (msg.isEmpty() || !MediatorAlertNotificationHandler.looksLikeKlineMessage(msg)) {
+      return;
+    }
+    callbacks.notifyIrcEvent(
+        IrcEventNotificationRule.EventType.YOU_KLINED, serverId, null, null, title, msg);
+  }
+
+  private void maybeHandlePendingPrivateMessageDeliveryError(
+      String sid, IrcEvent.ServerResponseLine event) {
+    if (sid == null || sid.isBlank() || event == null || event.code() != 401) {
+      return;
+    }
+
+    ParsedIrcLine parsedLine = parseIrcLineForMetadata(event.rawLine());
+    if (parsedLine == null || parsedLine.params() == null || parsedLine.params().size() < 2) {
+      return;
+    }
+
+    String targetToken = Objects.toString(parsedLine.params().get(1), "").trim();
+    if (targetToken.isEmpty()) {
+      return;
+    }
+
+    final TargetRef pmTarget;
+    try {
+      pmTarget = new TargetRef(sid, targetToken);
+    } catch (IllegalArgumentException ignored) {
+      return;
+    }
+    if (pmTarget.isChannel() || pmTarget.isUiOnly() || pmTarget.isStatus()) {
+      return;
+    }
+
+    PendingEchoMessagePort.PendingOutboundChat pending =
+        pendingEchoMessageState.consumeOldestByTarget(pmTarget).orElse(null);
+    if (pending == null) {
+      return;
+    }
+
+    String reason = Objects.toString(parsedLine.trailing(), "").trim();
+    if (reason.isEmpty()) {
+      reason = Objects.toString(event.message(), "").trim();
+    }
+    if (reason.isEmpty()) {
+      reason = "No such nick/channel";
+    }
+
+    String pendingReason = "[" + event.code() + "] " + reason;
+    ui.failPendingOutgoingChat(
+        pmTarget,
+        pending.pendingId(),
+        event.at(),
+        pending.fromNick(),
+        pending.text(),
+        pendingReason);
+
+    ui.ensureTargetExists(pmTarget);
+    ui.appendErrorAt(
+        pmTarget,
+        event.at(),
+        "(send)",
+        "Cannot deliver to " + pmTarget.target() + " [" + event.code() + "]: " + reason);
+  }
+
+  private void updateServerMetadataFromServerResponseLine(
+      String serverId, IrcEvent.ServerResponseLine event) {
+    if (event == null) {
+      return;
+    }
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) {
+      return;
+    }
+
+    ParsedIrcLine parsedLine = parseIrcLineForMetadata(event.rawLine());
+    if (parsedLine == null) {
+      return;
+    }
+
+    String cmd = Objects.toString(parsedLine.command(), "").trim();
+    if (cmd.isEmpty()) {
+      return;
+    }
+
+    if ("004".equals(cmd) || event.code() == 4) {
+      List<String> params = parsedLine.params();
+      String serverName = params.size() >= 2 ? params.get(1) : "";
+      String version = params.size() >= 3 ? params.get(2) : "";
+      String userModes = params.size() >= 4 ? params.get(3) : "";
+      String channelModes = params.size() >= 5 ? params.get(4) : "";
+      ui.setServerVersionDetails(sid, serverName, version, userModes, channelModes);
+      return;
+    }
+
+    if ("351".equals(cmd) || event.code() == 351) {
+      List<String> params = parsedLine.params();
+      String version = params.size() >= 2 ? params.get(1) : "";
+      String serverName = params.size() >= 3 ? params.get(2) : "";
+      ui.setServerVersionDetails(sid, serverName, version, "", "");
+      return;
+    }
+
+    if ("005".equals(cmd) || event.code() == 5) {
+      List<String> params = parsedLine.params();
+      int start = params.size() >= 1 ? 1 : 0;
+      for (int i = start; i < params.size(); i++) {
+        String tok = Objects.toString(params.get(i), "").trim();
+        if (tok.isEmpty()) {
+          continue;
+        }
+
+        if (tok.startsWith("-") && tok.length() > 1) {
+          ui.setServerIsupportToken(sid, tok.substring(1), null);
+          serverIsupportState.applyIsupportToken(sid, tok.substring(1), null);
+          continue;
+        }
+
+        int eq = tok.indexOf('=');
+        if (eq >= 0) {
+          String key = tok.substring(0, eq).trim();
+          String value = tok.substring(eq + 1).trim();
+          if (!key.isEmpty()) {
+            ui.setServerIsupportToken(sid, key, value);
+            serverIsupportState.applyIsupportToken(sid, key, value);
+          }
+          continue;
+        }
+
+        ui.setServerIsupportToken(sid, tok, "");
+        serverIsupportState.applyIsupportToken(sid, tok, "");
+      }
+    }
+  }
+
+  private record ParsedIrcLine(
+      String prefix, String command, List<String> params, String trailing) {}
+
+  private static ParsedIrcLine parseIrcLineForMetadata(String rawLine) {
+    String s = Objects.toString(rawLine, "").trim();
+    if (s.isEmpty()) {
+      return null;
+    }
+
+    if (s.startsWith("@")) {
+      int sp = s.indexOf(' ');
+      if (sp <= 0 || sp >= s.length() - 1) {
+        return null;
+      }
+      s = s.substring(sp + 1).trim();
+    }
+
+    String prefix = "";
+    if (s.startsWith(":")) {
+      int sp = s.indexOf(' ');
+      if (sp <= 1 || sp >= s.length() - 1) {
+        return null;
+      }
+      prefix = s.substring(1, sp).trim();
+      s = s.substring(sp + 1).trim();
+    }
+
+    String trailing = "";
+    int trailStart = s.indexOf(" :");
+    if (trailStart >= 0) {
+      trailing = s.substring(trailStart + 2).trim();
+      s = s.substring(0, trailStart).trim();
+    }
+
+    if (s.isEmpty()) {
+      return null;
+    }
+    String[] toks = s.split("\\s+");
+    if (toks.length == 0) {
+      return null;
+    }
+
+    String command = toks[0].trim();
+    if (command.isEmpty()) {
+      return null;
+    }
+
+    List<String> params = new java.util.ArrayList<>();
+    for (int i = 1; i < toks.length; i++) {
+      String tok = Objects.toString(toks[i], "").trim();
+      if (!tok.isEmpty()) {
+        params.add(tok);
+      }
+    }
+
+    return new ParsedIrcLine(prefix, command, List.copyOf(params), trailing);
+  }
+
+  private static String renderStandardReply(IrcEvent.StandardReply event) {
+    if (event == null) {
+      return "";
+    }
+    StringBuilder out = new StringBuilder();
+    out.append(event.kind().name());
+    String cmd = Objects.toString(event.command(), "").trim();
+    if (!cmd.isBlank()) {
+      out.append(' ').append(cmd);
+    }
+    String code = Objects.toString(event.code(), "").trim();
+    if (!code.isBlank()) {
+      out.append(' ').append(code);
+    }
+    String context = Objects.toString(event.context(), "").trim();
+    if (!context.isBlank()) {
+      out.append(" [").append(context).append(']');
+    }
+    String desc = Objects.toString(event.description(), "").trim();
+    if (!desc.isBlank()) {
+      out.append(": ").append(desc);
+    }
+    return out.toString();
+  }
+
+  private void appendLabeledOutcome(
+      TargetRef dest,
+      Instant at,
+      String label,
+      String requestPreview,
+      LabeledResponseRoutingPort.Outcome outcome,
+      String detail) {
+    String lbl = Objects.toString(label, "").trim();
+    if (lbl.isEmpty()) {
+      return;
+    }
+    String preview = Objects.toString(requestPreview, "").trim();
+    String d = Objects.toString(detail, "").trim();
+    String state =
+        switch (outcome) {
+          case FAILURE -> "failed";
+          case TIMEOUT -> "timed out";
+          case SUCCESS -> "completed";
+          case PENDING -> "pending";
+        };
+
+    StringBuilder text =
+        new StringBuilder("Request ").append(state).append(" {label=").append(lbl).append('}');
+    if (!preview.isBlank()) {
+      text.append(": ").append(preview);
+    }
+    if (!d.isBlank()) {
+      text.append(" (").append(d).append(')');
+    }
+    String from =
+        switch (outcome) {
+          case FAILURE -> "(label-fail)";
+          case TIMEOUT -> "(label-timeout)";
+          case SUCCESS -> "(label-ok)";
+          case PENDING -> "(label)";
+        };
+    ui.appendStatusAt(dest, at == null ? Instant.now() : at, from, text.toString());
+  }
+
+  private TargetRef normalizeLabeledDestination(String sid, TargetRef status, TargetRef origin) {
+    if (origin == null) {
+      return status;
+    }
+    TargetRef dest = origin;
+    if (!Objects.equals(dest.serverId(), sid)) {
+      dest = new TargetRef(sid, dest.target());
+    }
+    if (dest.isUiOnly()) {
+      return status;
+    }
+    return dest;
   }
 }
