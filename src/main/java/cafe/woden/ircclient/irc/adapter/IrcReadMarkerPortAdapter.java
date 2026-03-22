@@ -5,12 +5,14 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.port.*;
 import io.reactivex.rxjava3.core.Completable;
 import java.time.Instant;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Spring adapter exposing read-marker send capability via a narrow port. */
 @Component("ircReadMarkerPort")
+@SecondaryAdapter
 @InfrastructureLayer
 public class IrcReadMarkerPortAdapter implements IrcReadMarkerPort {
 

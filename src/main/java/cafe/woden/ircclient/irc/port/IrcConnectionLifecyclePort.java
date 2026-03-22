@@ -6,8 +6,12 @@ import cafe.woden.ircclient.irc.IrcDisconnectWithSourcePort;
 import io.reactivex.rxjava3.core.Completable;
 import java.util.Objects;
 import java.util.Optional;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Connection lifecycle operations used by connection orchestration. */
+@SecondaryPort
+@ApplicationLayer
 public interface IrcConnectionLifecyclePort {
 
   default Completable connect(String serverId) {

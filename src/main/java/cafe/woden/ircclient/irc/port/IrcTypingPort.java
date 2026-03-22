@@ -2,8 +2,12 @@ package cafe.woden.ircclient.irc.port;
 
 import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Typing capability/readiness + send API used by UI coordinators. */
+@SecondaryPort
+@ApplicationLayer
 public interface IrcTypingPort {
 
   default boolean isTypingAvailable(String serverId) {

@@ -6,12 +6,14 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.port.*;
 import io.reactivex.rxjava3.core.Completable;
 import java.util.Optional;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Spring adapter exposing connect/disconnect/currentNick via a narrow lifecycle port. */
 @Component("ircConnectionLifecyclePort")
+@SecondaryAdapter
 @InfrastructureLayer
 public class IrcConnectionLifecyclePortAdapter implements IrcConnectionLifecyclePort {
 

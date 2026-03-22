@@ -24,7 +24,9 @@ import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.UiPromptPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
@@ -121,6 +123,16 @@ import cafe.woden.ircclient.irc.pircbotx.PircbotxInputParserHookInstaller;
 import cafe.woden.ircclient.irc.pircbotx.PircbotxIrcClientService;
 import cafe.woden.ircclient.irc.playback.NoOpPlaybackCursorProvider;
 import cafe.woden.ircclient.irc.playback.PlaybackCursorProviderConfig;
+import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
+import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
+import cafe.woden.ircclient.irc.port.IrcLagProbePort;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.port.IrcShutdownPort;
+import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
+import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.irc.quassel.QuasselCoreIrcClientService;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.irc.roster.UserhostQueryService;
@@ -175,6 +187,7 @@ import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
 import cafe.woden.ircclient.state.api.RecentStatusModePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
+import cafe.woden.ircclient.ui.SwingUiEventAdapter;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import java.lang.annotation.Annotation;
 import org.jmolecules.architecture.layered.ApplicationLayer;
@@ -191,7 +204,9 @@ class JmoleculesIncrementalAdoptionTest {
 
   @Test
   void layeredMarkersArePresentOnInitialBoundaryTypes() {
+    assertAnnotated(UiEventPort.class, ApplicationLayer.class);
     assertAnnotated(UiPort.class, ApplicationLayer.class);
+    assertAnnotated(UiPromptPort.class, ApplicationLayer.class);
     assertAnnotated(IrcClientService.class, ApplicationLayer.class);
     assertAnnotated(IrcMediator.class, ApplicationLayer.class);
     assertAnnotated(ConnectionCoordinator.class, ApplicationLayer.class);
@@ -240,6 +255,16 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(NotificationRuleMatcherPort.class, ApplicationLayer.class);
     assertAnnotated(MonitorFallbackPort.class, ApplicationLayer.class);
     assertAnnotated(MonitorRosterPort.class, ApplicationLayer.class);
+    assertAnnotated(IrcConnectionLifecyclePort.class, ApplicationLayer.class);
+    assertAnnotated(IrcCurrentNickPort.class, ApplicationLayer.class);
+    assertAnnotated(IrcEchoCapabilityPort.class, ApplicationLayer.class);
+    assertAnnotated(IrcLagProbePort.class, ApplicationLayer.class);
+    assertAnnotated(IrcMediatorInteractionPort.class, ApplicationLayer.class);
+    assertAnnotated(IrcNegotiatedFeaturePort.class, ApplicationLayer.class);
+    assertAnnotated(IrcReadMarkerPort.class, ApplicationLayer.class);
+    assertAnnotated(IrcShutdownPort.class, ApplicationLayer.class);
+    assertAnnotated(IrcTargetMembershipPort.class, ApplicationLayer.class);
+    assertAnnotated(IrcTypingPort.class, ApplicationLayer.class);
     assertAnnotated(AwayRoutingPort.class, ApplicationLayer.class);
     assertAnnotated(CtcpRoutingPort.class, ApplicationLayer.class);
     assertAnnotated(ChatHistoryRequestRoutingPort.class, ApplicationLayer.class);
@@ -446,6 +471,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(IgnoreStatusService.class, ApplicationLayer.class);
     assertAnnotated(InboundIgnorePolicy.class, ApplicationLayer.class);
 
+    assertAnnotated(SwingUiEventAdapter.class, InterfaceLayer.class);
     assertAnnotated(SwingUiPort.class, InterfaceLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.ui.ChatDockable", InterfaceLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.ui.CommandHistoryStore", InterfaceLayer.class);
@@ -530,7 +556,9 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(MatrixIrcClientService.class, InfrastructureLayer.class);
     assertAnnotated(QuasselCoreIrcClientService.class, InfrastructureLayer.class);
 
+    assertTrue(UiEventPort.class.isInterface(), "UiEventPort should remain an interface");
     assertTrue(UiPort.class.isInterface(), "UiPort should remain an interface");
+    assertTrue(UiPromptPort.class.isInterface(), "UiPromptPort should remain an interface");
     assertTrue(
         MediatorControlPort.class.isInterface(), "MediatorControlPort should remain an interface");
     assertTrue(ActiveTargetPort.class.isInterface(), "ActiveTargetPort should remain an interface");
@@ -543,6 +571,28 @@ class JmoleculesIncrementalAdoptionTest {
         MonitorFallbackPort.class.isInterface(), "MonitorFallbackPort should remain an interface");
     assertTrue(
         MonitorRosterPort.class.isInterface(), "MonitorRosterPort should remain an interface");
+    assertTrue(
+        IrcConnectionLifecyclePort.class.isInterface(),
+        "IrcConnectionLifecyclePort should remain an interface");
+    assertTrue(
+        IrcCurrentNickPort.class.isInterface(), "IrcCurrentNickPort should remain an interface");
+    assertTrue(
+        IrcEchoCapabilityPort.class.isInterface(),
+        "IrcEchoCapabilityPort should remain an interface");
+    assertTrue(IrcLagProbePort.class.isInterface(), "IrcLagProbePort should remain an interface");
+    assertTrue(
+        IrcMediatorInteractionPort.class.isInterface(),
+        "IrcMediatorInteractionPort should remain an interface");
+    assertTrue(
+        IrcNegotiatedFeaturePort.class.isInterface(),
+        "IrcNegotiatedFeaturePort should remain an interface");
+    assertTrue(
+        IrcReadMarkerPort.class.isInterface(), "IrcReadMarkerPort should remain an interface");
+    assertTrue(IrcShutdownPort.class.isInterface(), "IrcShutdownPort should remain an interface");
+    assertTrue(
+        IrcTargetMembershipPort.class.isInterface(),
+        "IrcTargetMembershipPort should remain an interface");
+    assertTrue(IrcTypingPort.class.isInterface(), "IrcTypingPort should remain an interface");
     assertTrue(
         ChatHistoryIngestionPort.class.isInterface(),
         "ChatHistoryIngestionPort should remain an interface");

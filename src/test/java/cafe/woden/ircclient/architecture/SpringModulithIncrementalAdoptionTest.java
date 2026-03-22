@@ -17,7 +17,9 @@ import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.UiPromptPort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
 import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
@@ -25,6 +27,7 @@ import cafe.woden.ircclient.app.core.IrcMediator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
 import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
+import cafe.woden.ircclient.bouncer.BouncerConnectionPort;
 import cafe.woden.ircclient.bouncer.BouncerNetworkDiscoveryOrchestrator;
 import cafe.woden.ircclient.config.NotificationRule;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
@@ -66,6 +69,19 @@ import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.ignore.api.InboundIgnorePolicyPort;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcDisconnectWithSourcePort;
+import cafe.woden.ircclient.irc.adapter.BouncerIrcConnectionPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcConnectionLifecyclePortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcCurrentNickPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcEchoCapabilityPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcLagProbePortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcMediatorInteractionPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcNegotiatedFeaturePortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcReadMarkerPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcShutdownPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcTargetMembershipPortAdapter;
+import cafe.woden.ircclient.irc.adapter.IrcTypingPortAdapter;
+import cafe.woden.ircclient.irc.backend.BackendRoutingIrcClientService;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
 import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityCatalog;
 import cafe.woden.ircclient.irc.ircv3.Ircv3DraftNormalizer;
@@ -73,6 +89,16 @@ import cafe.woden.ircclient.irc.matrix.MatrixIrcClientService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.playback.PlaybackCursorProvider;
 import cafe.woden.ircclient.irc.playback.PlaybackCursorProviderConfig;
+import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
+import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
+import cafe.woden.ircclient.irc.port.IrcLagProbePort;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
+import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
+import cafe.woden.ircclient.irc.port.IrcShutdownPort;
+import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
+import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.irc.presence.IsonParsers;
 import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.irc.roster.UserhostQueryService;
@@ -108,6 +134,7 @@ import cafe.woden.ircclient.state.api.PendingEchoMessagePort;
 import cafe.woden.ircclient.state.api.PendingInvitePort;
 import cafe.woden.ircclient.state.api.RecentStatusModePort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
+import cafe.woden.ircclient.ui.SwingUiEventAdapter;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
@@ -120,6 +147,7 @@ import cafe.woden.ircclient.ui.tray.TrayNotificationService;
 import cafe.woden.ircclient.ui.tray.TrayService;
 import cafe.woden.ircclient.util.VirtualThreads;
 import org.jmolecules.architecture.hexagonal.Application;
+import org.jmolecules.architecture.hexagonal.PrimaryAdapter;
 import org.jmolecules.architecture.hexagonal.PrimaryPort;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.hexagonal.SecondaryPort;
@@ -268,6 +296,19 @@ class SpringModulithIncrementalAdoptionTest {
         IrcBouncerPlaybackPort.class,
         PlaybackCursorProvider.class,
         PlaybackCursorProviderConfig.class);
+    assertNamedInterfaceContains(
+        ircModule,
+        "port",
+        IrcConnectionLifecyclePort.class,
+        IrcCurrentNickPort.class,
+        IrcEchoCapabilityPort.class,
+        IrcLagProbePort.class,
+        IrcMediatorInteractionPort.class,
+        IrcNegotiatedFeaturePort.class,
+        IrcReadMarkerPort.class,
+        IrcShutdownPort.class,
+        IrcTargetMembershipPort.class,
+        IrcTypingPort.class);
     assertNamedInterfaceContains(ircModule, "presence", IsonParsers.class);
 
     ApplicationModule ignoreModule = moduleFor(modules, InboundIgnorePolicy.class);
@@ -383,8 +424,51 @@ class SpringModulithIncrementalAdoptionTest {
   void hexagonalRolesAreDeclaredOnAppPortsAndAdapters() {
     assertThat(MediatorControlPort.class.isAnnotationPresent(PrimaryPort.class)).isTrue();
     assertThat(ActiveTargetPort.class.isAnnotationPresent(PrimaryPort.class)).isTrue();
+    assertThat(UiEventPort.class.isAnnotationPresent(PrimaryPort.class)).isTrue();
 
+    assertThat(UiPromptPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
     assertThat(UiPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    for (Class<?> type :
+        new Class<?>[] {
+          BouncerDiscoveryConfigPort.class,
+          ChatCommandRuntimeConfigPort.class,
+          ConnectionRuntimeConfigPort.class,
+          CtcpReplyRuntimeConfigPort.class,
+          DiagnosticsRuntimeConfigPort.class,
+          EmbedLoadPolicyConfigPort.class,
+          FilterSettingsConfigPort.class,
+          IgnoreRulesConfigPort.class,
+          InterceptorConfigPort.class,
+          InviteAutoJoinConfigPort.class,
+          IrcSessionRuntimeConfigPort.class,
+          Ircv3StsPolicyConfigPort.class,
+          MonitorRosterConfigPort.class,
+          NickColorOverridesConfigPort.class,
+          RuntimeConfigPathPort.class,
+          ServerAutoConnectRuntimeConfigPort.class,
+          ServerTreeBuiltInVisibilityConfigPort.class,
+          ServerTreeChannelStateConfigPort.class,
+          ServerTreeLayoutConfigPort.class,
+          ServerTreeRuntimeConfigPort.class,
+          UiSettingsRuntimeConfigPort.class,
+          UiShellRuntimeConfigPort.class,
+          UserCommandAliasesConfigPort.class
+        }) {
+      assertThat(type.isAnnotationPresent(SecondaryPort.class)).as(type.getSimpleName()).isTrue();
+    }
+    assertThat(BouncerConnectionPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcDisconnectWithSourcePort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcBouncerPlaybackPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcConnectionLifecyclePort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcCurrentNickPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcEchoCapabilityPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcLagProbePort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcMediatorInteractionPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcNegotiatedFeaturePort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcReadMarkerPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcShutdownPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcTargetMembershipPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(IrcTypingPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
     assertThat(TargetChatHistoryPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
     assertThat(TargetLogMaintenancePort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
     assertThat(TrayNotificationsPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
@@ -400,6 +484,28 @@ class SpringModulithIncrementalAdoptionTest {
 
     assertThat(IrcMediator.class.isAnnotationPresent(Application.class)).isTrue();
     assertThat(TargetCoordinator.class.isAnnotationPresent(Application.class)).isTrue();
+    assertThat(RuntimeConfigStore.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
+    assertThat(BackendRoutingIrcClientService.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
+    assertThat(BouncerIrcConnectionPortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
+    assertThat(SwingUiEventAdapter.class.isAnnotationPresent(PrimaryAdapter.class)).isTrue();
+    assertThat(IrcConnectionLifecyclePortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
+    assertThat(IrcCurrentNickPortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
+    assertThat(IrcEchoCapabilityPortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
+    assertThat(IrcLagProbePortAdapter.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
+    assertThat(IrcMediatorInteractionPortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
+    assertThat(IrcNegotiatedFeaturePortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
+    assertThat(IrcReadMarkerPortAdapter.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
+    assertThat(IrcShutdownPortAdapter.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
+    assertThat(IrcTargetMembershipPortAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
+        .isTrue();
+    assertThat(IrcTypingPortAdapter.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
     assertThat(SwingUiPort.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
     assertThat(TrayNotificationService.class.isAnnotationPresent(SecondaryAdapter.class)).isTrue();
     assertThat(LoggingAppHistoryPortsAdapter.class.isAnnotationPresent(SecondaryAdapter.class))
@@ -431,7 +537,9 @@ class SpringModulithIncrementalAdoptionTest {
     assertNamedInterfaceContains(
         appModule,
         "api",
+        UiEventPort.class,
         UiPort.class,
+        UiPromptPort.class,
         ActiveTargetPort.class,
         MediatorControlPort.class,
         ChatHistoryIngestionPort.class,

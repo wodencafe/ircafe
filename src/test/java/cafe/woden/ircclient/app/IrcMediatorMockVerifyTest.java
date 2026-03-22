@@ -21,6 +21,7 @@ import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
@@ -96,6 +97,7 @@ class IrcMediatorMockVerifyTest {
   private final IrcReadMarkerPort readMarkerPort = mock(IrcReadMarkerPort.class);
   private final IrcNegotiatedFeaturePort negotiatedFeaturePort =
       mock(IrcNegotiatedFeaturePort.class);
+  private final UiEventPort uiEvents = mock(UiEventPort.class);
   private final UiPort ui = mock(UiPort.class);
   private final CommandParser commandParser = mock(CommandParser.class);
   private final UserCommandAliasEngine userCommandAliasEngine = mock(UserCommandAliasEngine.class);
@@ -245,6 +247,7 @@ class IrcMediatorMockVerifyTest {
   private final IrcMediator mediator =
       new IrcMediator(
           irc,
+          uiEvents,
           ui,
           serverRegistry,
           connectionCoordinator,
@@ -270,21 +273,29 @@ class IrcMediatorMockVerifyTest {
   @Test
   void startBindsUiIrcAndConnectionCollaboratorsInOrderOnce() {
     when(irc.events()).thenReturn(Flowable.never());
-    when(ui.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
+    when(uiEvents.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
 
     mediator.start();
     mediator.start();
 
     InOrder inOrder =
-        inOrder(mediatorUiSubscriptionBinder, irc, ui, mediatorConnectionSubscriptionBinder);
+        inOrder(mediatorUiSubscriptionBinder, irc, uiEvents, mediatorConnectionSubscriptionBinder);
     inOrder
         .verify(mediatorUiSubscriptionBinder)
-        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
+        .bind(
+            eq(uiEvents),
+            eq(ui),
+            eq(targetCoordinator),
+            any(CompositeDisposable.class),
+            any(),
+            any(),
+            any());
     inOrder.verify(irc).events();
-    inOrder.verify(ui).ircv3CapabilityToggleRequests();
+    inOrder.verify(uiEvents).ircv3CapabilityToggleRequests();
     inOrder
         .verify(mediatorConnectionSubscriptionBinder)
         .bind(
+            eq(uiEvents),
             eq(ui),
             eq(connectionCoordinator),
             eq(targetCoordinator),
@@ -292,9 +303,17 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class));
 
     verify(mediatorUiSubscriptionBinder, times(1))
-        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
+        .bind(
+            eq(uiEvents),
+            eq(ui),
+            eq(targetCoordinator),
+            any(CompositeDisposable.class),
+            any(),
+            any(),
+            any());
     verify(mediatorConnectionSubscriptionBinder, times(1))
         .bind(
+            eq(uiEvents),
             eq(ui),
             eq(connectionCoordinator),
             eq(targetCoordinator),
@@ -333,7 +352,7 @@ class IrcMediatorMockVerifyTest {
   @Test
   void quasselNetworkManagerRequestFromUiBinderOpensNetworkManager() {
     when(irc.events()).thenReturn(Flowable.never());
-    when(ui.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
+    when(uiEvents.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
 
     mediator.start();
 
@@ -343,6 +362,7 @@ class IrcMediatorMockVerifyTest {
             (Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
     verify(mediatorUiSubscriptionBinder)
         .bind(
+            eq(uiEvents),
             eq(ui),
             eq(targetCoordinator),
             any(CompositeDisposable.class),
@@ -367,7 +387,7 @@ class IrcMediatorMockVerifyTest {
   @Test
   void quasselSetupRequestFromUiBinderOpensSetupFlow() {
     when(irc.events()).thenReturn(Flowable.never());
-    when(ui.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
+    when(uiEvents.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
 
     mediator.start();
 
@@ -377,6 +397,7 @@ class IrcMediatorMockVerifyTest {
             (Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
     verify(mediatorUiSubscriptionBinder)
         .bind(
+            eq(uiEvents),
             eq(ui),
             eq(targetCoordinator),
             any(CompositeDisposable.class),

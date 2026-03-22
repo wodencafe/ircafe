@@ -5,9 +5,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Runtime-config contract for advanced embed and link loading policy state. */
+@SecondaryPort
 @ApplicationLayer
 public interface EmbedLoadPolicyConfigPort {
 

@@ -4,8 +4,12 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import io.reactivex.rxjava3.core.Completable;
 import java.util.Objects;
 import java.util.Optional;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Channel/query target membership operations used by target coordination. */
+@SecondaryPort
+@ApplicationLayer
 public interface IrcTargetMembershipPort {
 
   default Completable joinChannel(String serverId, String channel) {

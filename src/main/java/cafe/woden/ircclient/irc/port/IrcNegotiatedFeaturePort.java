@@ -1,8 +1,12 @@
 package cafe.woden.ircclient.irc.port;
 
 import cafe.woden.ircclient.irc.IrcClientService;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Read-only negotiated feature/capability view for a server connection. */
+@SecondaryPort
+@ApplicationLayer
 public interface IrcNegotiatedFeaturePort {
 
   default boolean isChatHistoryAvailable(String serverId) {

@@ -7,4 +7,4 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @SecondaryPort
 @ApplicationLayer
 public interface UiPort
-    extends UiInteractionPort, UiViewStatePort, UiChannelListPort, UiTranscriptPort {}
+    extends UiPromptPort, UiViewStatePort, UiChannelListPort, UiTranscriptPort {}

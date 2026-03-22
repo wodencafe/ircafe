@@ -1,10 +1,8 @@
 package cafe.woden.ircclient.app.api;
 
-import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
-import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -21,99 +19,14 @@ public abstract class UiPortDecorator implements UiPort {
   }
 
   @Override
-  public Flowable<TargetRef> targetSelections() {
-    return delegate.targetSelections();
-  }
-
-  @Override
-  public Flowable<TargetRef> targetActivations() {
-    return delegate.targetActivations();
-  }
-
-  @Override
-  public Flowable<PrivateMessageRequest> privateMessageRequests() {
-    return delegate.privateMessageRequests();
-  }
-
-  @Override
-  public Flowable<UserActionRequest> userActionRequests() {
-    return delegate.userActionRequests();
-  }
-
-  @Override
-  public Flowable<String> outboundLines() {
-    return delegate.outboundLines();
-  }
-
-  @Override
   public boolean confirmMultilineSplitFallback(
       TargetRef target, int lineCount, long payloadUtf8Bytes, String reason) {
     return delegate.confirmMultilineSplitFallback(target, lineCount, payloadUtf8Bytes, reason);
   }
 
   @Override
-  public Flowable<Object> connectClicks() {
-    return delegate.connectClicks();
-  }
-
-  @Override
-  public Flowable<Object> disconnectClicks() {
-    return delegate.disconnectClicks();
-  }
-
-  @Override
-  public Flowable<String> connectServerRequests() {
-    return delegate.connectServerRequests();
-  }
-
-  @Override
-  public Flowable<String> disconnectServerRequests() {
-    return delegate.disconnectServerRequests();
-  }
-
-  @Override
-  public Flowable<ParsedInput.BackendNamed> backendNamedCommandRequests() {
-    return delegate.backendNamedCommandRequests();
-  }
-
-  @Override
   public void openQuasselNetworkManager(String serverId) {
     delegate.openQuasselNetworkManager(serverId);
-  }
-
-  @Override
-  public Flowable<TargetRef> closeTargetRequests() {
-    return delegate.closeTargetRequests();
-  }
-
-  @Override
-  public Flowable<TargetRef> joinChannelRequests() {
-    return delegate.joinChannelRequests();
-  }
-
-  @Override
-  public Flowable<TargetRef> disconnectChannelRequests() {
-    return delegate.disconnectChannelRequests();
-  }
-
-  @Override
-  public Flowable<TargetRef> bouncerDetachChannelRequests() {
-    return delegate.bouncerDetachChannelRequests();
-  }
-
-  @Override
-  public Flowable<TargetRef> closeChannelRequests() {
-    return delegate.closeChannelRequests();
-  }
-
-  @Override
-  public Flowable<TargetRef> clearLogRequests() {
-    return delegate.clearLogRequests();
-  }
-
-  @Override
-  public Flowable<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests() {
-    return delegate.ircv3CapabilityToggleRequests();
   }
 
   @Override

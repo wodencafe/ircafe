@@ -1,16 +1,12 @@
 package cafe.woden.ircclient.ui;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
-import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
-import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
 import cafe.woden.ircclient.app.api.UiChannelListPort;
-import cafe.woden.ircclient.app.api.UiInteractionPort;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.api.UiPromptPort;
 import cafe.woden.ircclient.app.api.UiTranscriptPort;
 import cafe.woden.ircclient.app.api.UiViewStatePort;
-import cafe.woden.ircclient.app.api.UserActionRequest;
-import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.irc.IrcEvent.NickInfo;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -25,13 +21,13 @@ import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.shell.StatusBar;
-import io.reactivex.rxjava3.core.Flowable;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -42,10 +38,18 @@ import org.springframework.stereotype.Component;
 @Lazy
 public class SwingUiPort implements UiPort {
 
-  private final UiInteractionPort interactionPort;
+  private final UiPromptPort promptPort;
   private final UiViewStatePort viewStatePort;
   private final UiChannelListPort channelListPort;
   private final UiTranscriptPort transcriptPort;
+
+  @Autowired
+  public SwingUiPort(SwingUiPortDelegates delegates) {
+    this.promptPort = delegates.promptPort();
+    this.viewStatePort = delegates.viewStatePort();
+    this.channelListPort = delegates.channelListPort();
+    this.transcriptPort = delegates.transcriptPort();
+  }
 
   public SwingUiPort(
       ServerTreeDockable serverTree,
@@ -61,10 +65,8 @@ public class SwingUiPort implements UiPort {
       OutboundLineBus outboundBus,
       ChatDockManager chatDockManager,
       ActiveInputRouter activeInputRouter) {
-    SwingEdtExecutor edt = new SwingEdtExecutor();
-    this.viewStatePort =
-        new SwingUiViewStatePort(
-            edt,
+    this(
+        new SwingUiPortDelegates(
             serverTree,
             chat,
             transcripts,
@@ -72,131 +74,36 @@ public class SwingUiPort implements UiPort {
             notificationStore,
             users,
             statusBar,
-            chatDockManager,
-            activeInputRouter);
-    this.channelListPort = new SwingUiChannelListPort(edt, serverTree, chat);
-    this.transcriptPort =
-        new SwingUiTranscriptPort(edt, serverTree, chat, transcripts, users, chatDockManager);
-    this.interactionPort =
-        new SwingUiInteractionPort(
-            edt,
-            serverTree,
-            chat,
-            users,
             connectBtn,
             disconnectBtn,
             activationBus,
             outboundBus,
-            viewStatePort);
-  }
-
-  @Override
-  public Flowable<TargetRef> targetSelections() {
-    return interactionPort.targetSelections();
-  }
-
-  @Override
-  public Flowable<TargetRef> targetActivations() {
-    return interactionPort.targetActivations();
-  }
-
-  @Override
-  public Flowable<PrivateMessageRequest> privateMessageRequests() {
-    return interactionPort.privateMessageRequests();
-  }
-
-  @Override
-  public Flowable<UserActionRequest> userActionRequests() {
-    return interactionPort.userActionRequests();
-  }
-
-  @Override
-  public Flowable<String> outboundLines() {
-    return interactionPort.outboundLines();
+            chatDockManager,
+            activeInputRouter,
+            new SwingUiBackendCommandBridge()));
   }
 
   @Override
   public boolean confirmMultilineSplitFallback(
       TargetRef target, int lineCount, long payloadUtf8Bytes, String reason) {
-    return interactionPort.confirmMultilineSplitFallback(
-        target, lineCount, payloadUtf8Bytes, reason);
-  }
-
-  @Override
-  public Flowable<Object> connectClicks() {
-    return interactionPort.connectClicks();
-  }
-
-  @Override
-  public Flowable<Object> disconnectClicks() {
-    return interactionPort.disconnectClicks();
-  }
-
-  @Override
-  public Flowable<String> connectServerRequests() {
-    return interactionPort.connectServerRequests();
-  }
-
-  @Override
-  public Flowable<String> disconnectServerRequests() {
-    return interactionPort.disconnectServerRequests();
-  }
-
-  @Override
-  public Flowable<ParsedInput.BackendNamed> backendNamedCommandRequests() {
-    return interactionPort.backendNamedCommandRequests();
+    return promptPort.confirmMultilineSplitFallback(target, lineCount, payloadUtf8Bytes, reason);
   }
 
   @Override
   public void openQuasselNetworkManager(String serverId) {
-    interactionPort.openQuasselNetworkManager(serverId);
-  }
-
-  @Override
-  public Flowable<TargetRef> closeTargetRequests() {
-    return interactionPort.closeTargetRequests();
-  }
-
-  @Override
-  public Flowable<TargetRef> joinChannelRequests() {
-    return interactionPort.joinChannelRequests();
-  }
-
-  @Override
-  public Flowable<TargetRef> disconnectChannelRequests() {
-    return interactionPort.disconnectChannelRequests();
-  }
-
-  @Override
-  public Flowable<TargetRef> bouncerDetachChannelRequests() {
-    return interactionPort.bouncerDetachChannelRequests();
-  }
-
-  @Override
-  public Flowable<TargetRef> closeChannelRequests() {
-    return interactionPort.closeChannelRequests();
-  }
-
-  @Override
-  public Flowable<TargetRef> clearLogRequests() {
-    return interactionPort.clearLogRequests();
-  }
-
-  @Override
-  public Flowable<Ircv3CapabilityToggleRequest> ircv3CapabilityToggleRequests() {
-    return interactionPort.ircv3CapabilityToggleRequests();
+    promptPort.openQuasselNetworkManager(serverId);
   }
 
   @Override
   public Optional<QuasselCoreControlPort.QuasselCoreSetupRequest> promptQuasselCoreSetup(
       String serverId, QuasselCoreControlPort.QuasselCoreSetupPrompt prompt) {
-    return interactionPort.promptQuasselCoreSetup(serverId, prompt);
+    return promptPort.promptQuasselCoreSetup(serverId, prompt);
   }
 
   @Override
   public Optional<QuasselNetworkManagerAction> promptQuasselNetworkManagerAction(
       String serverId, List<QuasselCoreControlPort.QuasselCoreNetworkSummary> networks) {
-    return interactionPort.promptQuasselNetworkManagerAction(serverId, networks);
+    return promptPort.promptQuasselNetworkManagerAction(serverId, networks);
   }
 
   @Override

@@ -6,8 +6,12 @@ import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import java.util.Objects;
 import java.util.Optional;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Mediator-facing IRC stream and command operations. */
+@SecondaryPort
+@ApplicationLayer
 public interface IrcMediatorInteractionPort {
 
   default Flowable<ServerIrcEvent> events() {

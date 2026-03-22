@@ -20,6 +20,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Service;
  */
 @Service("ircClientService")
 @Primary
+@SecondaryAdapter
 @InfrastructureLayer
 public class BackendRoutingIrcClientService
     implements IrcClientService,

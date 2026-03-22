@@ -1,9 +1,11 @@
 package cafe.woden.ircclient.config.api;
 
 import java.util.Map;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Runtime-config contract for persisted IRCv3 STS policy state. */
+@SecondaryPort
 @ApplicationLayer
 public interface Ircv3StsPolicyConfigPort {
 

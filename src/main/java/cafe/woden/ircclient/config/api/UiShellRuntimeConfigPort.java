@@ -2,9 +2,11 @@ package cafe.woden.ircclient.config.api;
 
 import java.util.Objects;
 import java.util.Optional;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Runtime-config contract for persisted shell and tray UI chrome state. */
+@SecondaryPort
 @ApplicationLayer
 public interface UiShellRuntimeConfigPort
     extends RuntimeConfigPathPort, UiSettingsRuntimeConfigPort {

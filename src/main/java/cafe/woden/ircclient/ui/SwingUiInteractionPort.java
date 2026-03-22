@@ -16,8 +16,6 @@ import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import io.reactivex.rxjava3.core.Flowable;
-import io.reactivex.rxjava3.processors.FlowableProcessor;
-import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,8 +36,7 @@ final class SwingUiInteractionPort implements UiInteractionPort {
   private final TargetActivationBus activationBus;
   private final OutboundLineBus outboundBus;
   private final UiViewStatePort viewStatePort;
-  private final FlowableProcessor<String> quasselNetworkManagerRequestsFromApp =
-      PublishProcessor.<String>create().toSerialized();
+  private final SwingUiBackendCommandBridge backendCommandBridge;
 
   SwingUiInteractionPort(
       SwingEdtExecutor edt,
@@ -50,7 +47,8 @@ final class SwingUiInteractionPort implements UiInteractionPort {
       DisconnectButton disconnectBtn,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus,
-      UiViewStatePort viewStatePort) {
+      UiViewStatePort viewStatePort,
+      SwingUiBackendCommandBridge backendCommandBridge) {
     this.edt = Objects.requireNonNull(edt, "edt");
     this.serverTree = Objects.requireNonNull(serverTree, "serverTree");
     this.chat = Objects.requireNonNull(chat, "chat");
@@ -60,6 +58,8 @@ final class SwingUiInteractionPort implements UiInteractionPort {
     this.activationBus = Objects.requireNonNull(activationBus, "activationBus");
     this.outboundBus = Objects.requireNonNull(outboundBus, "outboundBus");
     this.viewStatePort = Objects.requireNonNull(viewStatePort, "viewStatePort");
+    this.backendCommandBridge =
+        Objects.requireNonNull(backendCommandBridge, "backendCommandBridge");
   }
 
   @Override
@@ -151,7 +151,7 @@ final class SwingUiInteractionPort implements UiInteractionPort {
     Flowable<String> networkManagerRequests =
         Flowable.mergeArray(
                 serverTree.quasselNetworkManagerRequests(),
-                quasselNetworkManagerRequestsFromApp.onBackpressureLatest())
+                backendCommandBridge.quasselNetworkManagerRequestsFromApp())
             .onBackpressureBuffer();
     return Flowable.mergeArray(
             setupRequests.map(
@@ -171,9 +171,7 @@ final class SwingUiInteractionPort implements UiInteractionPort {
 
   @Override
   public void openQuasselNetworkManager(String serverId) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return;
-    quasselNetworkManagerRequestsFromApp.onNext(sid);
+    backendCommandBridge.openQuasselNetworkManager(serverId);
   }
 
   @Override

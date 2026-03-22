@@ -4,8 +4,12 @@ import io.reactivex.rxjava3.core.Completable;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** IRC bouncer capability and playback extension operations. */
+@SecondaryPort
+@ApplicationLayer
 public interface IrcBouncerPlaybackPort {
   /**
    * @return true if the connection negotiated {@code znc.in/playback} (ZNC playback module).

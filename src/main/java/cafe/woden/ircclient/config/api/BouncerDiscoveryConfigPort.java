@@ -2,9 +2,11 @@ package cafe.woden.ircclient.config.api;
 
 import java.util.List;
 import java.util.Map;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Runtime-config contract used by bouncer discovery, mapping, and auto-connect flows. */
+@SecondaryPort
 @ApplicationLayer
 public interface BouncerDiscoveryConfigPort {
 

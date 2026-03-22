@@ -50,6 +50,7 @@ class UiModuleIntegrationTest {
     ConfigurableListableBeanFactory beanFactory = applicationContext.getBeanFactory();
 
     assertEquals(1, beanFactory.getBeanNamesForType(SwingUiPort.class, true, false).length);
+    assertEquals(1, beanFactory.getBeanNamesForType(SwingUiEventAdapter.class, true, false).length);
     assertEquals(1, beanFactory.getBeanNamesForType(MainFrame.class, true, false).length);
     assertEquals(1, beanFactory.getBeanNamesForType(ChatDockManager.class, true, false).length);
     assertEquals(1, beanFactory.getBeanNamesForType(FilterEngine.class, true, false).length);
@@ -62,6 +63,10 @@ class UiModuleIntegrationTest {
   void uiModulePublishesExpectedBeanDefinitions() {
     String[] uiPortBeans = applicationContext.getBeanNamesForType(SwingUiPort.class, true, false);
     assertEquals("swingUiPort", uiPortBeans[0]);
+
+    String[] uiEventPortBeans =
+        applicationContext.getBeanNamesForType(SwingUiEventAdapter.class, true, false);
+    assertEquals("swingUiEventPort", uiEventPortBeans[0]);
 
     String[] mainFrameBeans = applicationContext.getBeanNamesForType(MainFrame.class, true, false);
     assertTrue(mainFrameBeans.length == 1 && !mainFrameBeans[0].isBlank());

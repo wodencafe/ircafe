@@ -3,9 +3,11 @@ package cafe.woden.ircclient.config.api;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Runtime-config contract for persisted server-tree per-channel state. */
+@SecondaryPort
 @ApplicationLayer
 public interface ServerTreeChannelStateConfigPort {
 

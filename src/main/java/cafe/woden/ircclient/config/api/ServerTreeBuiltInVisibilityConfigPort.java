@@ -1,9 +1,11 @@
 package cafe.woden.ircclient.config.api;
 
 import java.util.Map;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Runtime-config contract for per-server built-in server-tree node visibility. */
+@SecondaryPort
 @ApplicationLayer
 public interface ServerTreeBuiltInVisibilityConfigPort {
 

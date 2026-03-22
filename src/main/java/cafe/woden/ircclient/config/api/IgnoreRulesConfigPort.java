@@ -1,9 +1,11 @@
 package cafe.woden.ircclient.config.api;
 
 import java.util.List;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Runtime-config contract for persisted ignore-list rules and toggles. */
+@SecondaryPort
 @ApplicationLayer
 public interface IgnoreRulesConfigPort {
 

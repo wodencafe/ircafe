@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.AppSchedulers;
 import cafe.woden.ircclient.app.api.InterceptorEventType;
 import cafe.woden.ircclient.app.api.Ircv3CapabilityToggleRequest;
 import cafe.woden.ircclient.app.api.MediatorControlPort;
+import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.commands.ParsedInput;
@@ -44,6 +45,7 @@ public class IrcMediator implements MediatorControlPort {
   @Qualifier("ircMediatorInteractionPort")
   private final IrcMediatorInteractionPort irc;
 
+  private final UiEventPort uiEvents;
   private final UiPort ui;
   private final ServerRegistry serverRegistry;
   private final ConnectionCoordinator connectionCoordinator;
@@ -102,6 +104,7 @@ public class IrcMediator implements MediatorControlPort {
 
   public IrcMediator(
       @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort irc,
+      UiEventPort uiEvents,
       UiPort ui,
       ServerRegistry serverRegistry,
       ConnectionCoordinator connectionCoordinator,
@@ -124,6 +127,7 @@ public class IrcMediator implements MediatorControlPort {
       MediatorInboundEventPreparationService eventPreparationService,
       MediatorInboundTextEventHandler mediatorInboundTextEventHandler) {
     this.irc = irc;
+    this.uiEvents = uiEvents;
     this.ui = ui;
     this.serverRegistry = serverRegistry;
     this.connectionCoordinator = connectionCoordinator;
@@ -505,6 +509,7 @@ public class IrcMediator implements MediatorControlPort {
     }
 
     mediatorUiSubscriptionBinder.bind(
+        uiEvents,
         ui,
         targetCoordinator,
         disposables,
@@ -515,7 +520,7 @@ public class IrcMediator implements MediatorControlPort {
     bindLabeledResponseTimeoutTicker();
     bindIrcv3CapabilityToggleSubscriptions();
     mediatorConnectionSubscriptionBinder.bind(
-        ui, connectionCoordinator, targetCoordinator, serverRegistry, disposables);
+        uiEvents, ui, connectionCoordinator, targetCoordinator, serverRegistry, disposables);
   }
 
   private void bindIrcEventSubscriptions() {
@@ -584,7 +589,8 @@ public class IrcMediator implements MediatorControlPort {
 
   private void bindIrcv3CapabilityToggleSubscriptions() {
     disposables.add(
-        ui.ircv3CapabilityToggleRequests()
+        uiEvents
+            .ircv3CapabilityToggleRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 this::handleIrcv3CapabilityToggleRequest,
