@@ -43,12 +43,12 @@ import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.BackendNamedOutboundCommandHandler;
 import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
-import cafe.woden.ircclient.app.outbound.MessageMutationOutboundCommands;
 import cafe.woden.ircclient.app.outbound.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.OutboundHelpContributor;
 import cafe.woden.ircclient.app.outbound.SemanticUploadCommandHandler;
 import cafe.woden.ircclient.app.outbound.UploadCommandTranslationHandler;
 import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistrar;
+import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
 import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
@@ -457,10 +457,10 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundJoinPartCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundMessageMutationCommandService",
+        "cafe.woden.ircclient.app.outbound.mutation.OutboundMessageMutationCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundMessageMutationSendSupport",
+        "cafe.woden.ircclient.app.outbound.mutation.OutboundMessageMutationSendSupport",
         ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.messaging.OutboundMessagingCommandService",

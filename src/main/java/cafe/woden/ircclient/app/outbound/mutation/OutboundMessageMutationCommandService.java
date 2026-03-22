@@ -1,7 +1,9 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.mutation;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.OutboundCommandAvailabilitySupport;
+import cafe.woden.ircclient.app.outbound.OutboundHelpContributor;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -17,7 +19,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ApplicationLayer
 @RequiredArgsConstructor
-final class OutboundMessageMutationCommandService implements OutboundHelpContributor {
+public final class OutboundMessageMutationCommandService implements OutboundHelpContributor {
 
   @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   @NonNull private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport;
@@ -47,7 +49,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
         this::appendRedactHelp);
   }
 
-  void handleReplyMessage(CompositeDisposable disposables, String messageId, String body) {
+  public void handleReplyMessage(CompositeDisposable disposables, String messageId, String body) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(reply)", "Select a server first.");
@@ -79,7 +81,8 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
     outboundMessageMutationSendSupport.sendReply(disposables, at, msgId, text);
   }
 
-  void handleReactMessage(CompositeDisposable disposables, String messageId, String reaction) {
+  public void handleReactMessage(
+      CompositeDisposable disposables, String messageId, String reaction) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(react)", "Select a server first.");
@@ -112,7 +115,8 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
     outboundMessageMutationSendSupport.sendReaction(disposables, at, msgId, token);
   }
 
-  void handleUnreactMessage(CompositeDisposable disposables, String messageId, String reaction) {
+  public void handleUnreactMessage(
+      CompositeDisposable disposables, String messageId, String reaction) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(unreact)", "Select a server first.");
@@ -145,7 +149,7 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
     outboundMessageMutationSendSupport.sendUnreaction(disposables, at, msgId, token);
   }
 
-  void handleEditMessage(CompositeDisposable disposables, String messageId, String body) {
+  public void handleEditMessage(CompositeDisposable disposables, String messageId, String body) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(edit)", "Select a server first.");
@@ -182,7 +186,8 @@ final class OutboundMessageMutationCommandService implements OutboundHelpContrib
     outboundMessageMutationSendSupport.sendEdit(disposables, at, msgId, text);
   }
 
-  void handleRedactMessage(CompositeDisposable disposables, String messageId, String reason) {
+  public void handleRedactMessage(
+      CompositeDisposable disposables, String messageId, String reason) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(redact)", "Select a server first.");
