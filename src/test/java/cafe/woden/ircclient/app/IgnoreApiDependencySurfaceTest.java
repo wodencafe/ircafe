@@ -3,7 +3,7 @@ package cafe.woden.ircclient.app;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService;
+import cafe.woden.ircclient.app.outbound.ignore.OutboundIgnoreCommandService;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import java.lang.reflect.Constructor;

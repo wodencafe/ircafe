@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.ignore;
 
 import cafe.woden.ircclient.ignore.api.IgnoreLevels;
 import cafe.woden.ircclient.ignore.api.IgnoreTextPatternMode;

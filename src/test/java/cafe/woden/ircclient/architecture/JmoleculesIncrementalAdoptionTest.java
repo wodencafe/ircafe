@@ -424,15 +424,20 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundHelpCommandService", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.IgnoreCommandParsingSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.ignore.IgnoreCommandParsingSupport",
+        ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.IgnoreHardCommandSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.ignore.IgnoreHardCommandSupport",
+        ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.IgnoreListRenderingSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.ignore.IgnoreListRenderingSupport",
+        ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.IgnoreSoftCommandSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.ignore.IgnoreSoftCommandSupport",
+        ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.ignore.OutboundIgnoreCommandService",
+        ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundInviteCommandService", ApplicationLayer.class);
     assertAnnotatedByName(

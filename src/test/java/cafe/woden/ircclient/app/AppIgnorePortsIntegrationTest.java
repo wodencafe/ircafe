@@ -10,7 +10,7 @@ import cafe.woden.ircclient.app.api.ChatHistoryIngestionPort;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
-import cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService;
+import cafe.woden.ircclient.app.outbound.ignore.OutboundIgnoreCommandService;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
