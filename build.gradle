@@ -15,6 +15,7 @@ plugins {
     // Keep deps tidy
     alias(libs.plugins.dependencyAnalysis)
     alias(libs.plugins.benManesVersions)
+    alias(libs.plugins.openRewrite)
 
     alias(libs.plugins.spotbugs)
     alias(libs.plugins.errorprone)
@@ -39,6 +40,11 @@ apply from: rootProject.file('gradle/java-conventions.gradle')
 apply from: rootProject.file('gradle/quality.gradle')
 apply from: rootProject.file('gradle/testing.gradle')
 apply from: rootProject.file('gradle/packaging.gradle')
+
+rewrite {
+    // Keep recipes opt-in and export datatables for review when refactors run.
+    exportDatatables = true
+}
 
 dependencies {
     compileOnly lib('lombok')

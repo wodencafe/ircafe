@@ -7,6 +7,7 @@ dependencyCheckPlugin = "12.2.0"
 cyclonedxPlugin = "3.2.0"
 dependencyAnalysisPlugin = "3.5.1"
 benManesVersionsPlugin = "0.53.0"
+openRewritePlugin = "7.28.2"
 spotbugsPlugin = "6.4.8"
 errorpronePlugin = "5.0.0"
 forbiddenapisPlugin = "3.10"
@@ -96,6 +97,7 @@ dependencyCheck = { id = "org.owasp.dependencycheck", version.ref = "dependencyC
 cyclonedx = { id = "org.cyclonedx.bom", version.ref = "cyclonedxPlugin" }
 dependencyAnalysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependencyAnalysisPlugin" }
 benManesVersions = { id = "com.github.ben-manes.versions", version.ref = "benManesVersionsPlugin" }
+openRewrite = { id = "org.openrewrite.rewrite", version.ref = "openRewritePlugin" }
 spotbugs = { id = "com.github.spotbugs", version.ref = "spotbugsPlugin" }
 errorprone = { id = "net.ltgt.errorprone", version.ref = "errorpronePlugin" }
 forbiddenapis = { id = "de.thetaphi.forbiddenapis", version.ref = "forbiddenapisPlugin" }
