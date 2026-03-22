@@ -9,11 +9,7 @@ import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.Closeable;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -24,7 +20,6 @@ import java.net.SocketTimeoutException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.Enumeration;
 import java.util.Locale;
@@ -66,6 +61,7 @@ public class OutboundDccCommandService {
 
   private final DccCommandSupport dccCommandSupport;
   private final DccChatSessionSupport dccChatSessionSupport;
+  private final DccFileTransferIoSupport dccFileTransferIoSupport;
   private final DccInboundOfferSupport dccInboundOfferSupport;
 
   private final ConcurrentMap<String, PendingChatOffer> pendingChatOffers =
@@ -93,6 +89,9 @@ public class OutboundDccCommandService {
     this.dccCommandSupport = new DccCommandSupport(ui, targetCoordinator, dccTransferStore);
     this.dccChatSessionSupport =
         new DccChatSessionSupport(ui, mediatorIrc, io, dccCommandSupport, chatSessions);
+    this.dccFileTransferIoSupport =
+        new DccFileTransferIoSupport(
+            ui, dccCommandSupport, CONNECT_TIMEOUT_MS, IO_TIMEOUT_MS, BUFFER_SIZE);
     this.dccInboundOfferSupport =
         new DccInboundOfferSupport(dccCommandSupport, pendingChatOffers, pendingSendOffers);
   }
@@ -412,7 +411,7 @@ public class OutboundDccCommandService {
           displayName + " (" + formatBytes(size) + ")",
           0,
           DccTransferStore.ActionHint.NONE);
-      sendFileToSocket(sid, nick, pm, socket, source, displayName, size);
+      dccFileTransferIoSupport.sendFileToSocket(sid, nick, pm, socket, source, displayName, size);
       ui.appendStatus(
           pm, DCC_TAG, "DCC SEND complete: " + displayName + " (" + formatBytes(size) + ")");
       upsertTransfer(
@@ -551,7 +550,8 @@ public class OutboundDccCommandService {
             if (parent != null) {
               Files.createDirectories(parent);
             }
-            receiveFileFromOffer(sid, n, pm, offer, destination, localPath);
+            dccFileTransferIoSupport.receiveFileFromOffer(
+                sid, n, pm, offer, destination, localPath);
             completed = true;
             ui.appendStatus(
                 pm,
@@ -708,118 +708,6 @@ public class OutboundDccCommandService {
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc close <nick>");
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc list");
     ui.appendStatus(out, DCC_TAG, "Usage: /dcc panel");
-  }
-
-  private void sendFileToSocket(
-      String sid,
-      String nick,
-      TargetRef pm,
-      Socket socket,
-      Path source,
-      String displayName,
-      long size)
-      throws IOException {
-    long sent = 0L;
-    int lastReportedPercent = -1;
-    try (BufferedInputStream in = new BufferedInputStream(Files.newInputStream(source));
-        BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream())) {
-      byte[] buf = new byte[BUFFER_SIZE];
-      int n;
-      while ((n = in.read(buf)) >= 0) {
-        out.write(buf, 0, n);
-        sent += n;
-        int pct = percent(sent, size);
-        if (shouldReportProgress(lastReportedPercent, pct)) {
-          lastReportedPercent = pct;
-          ui.appendStatus(pm, DCC_TAG, "Sending " + displayName + " … " + pct + "%");
-          upsertTransfer(
-              sid,
-              nick,
-              transferEntryId(sid, nick, "send-out"),
-              "Send file (outgoing)",
-              "Transferring",
-              displayName + " (" + formatBytes(size) + ")",
-              pct,
-              DccTransferStore.ActionHint.NONE);
-        }
-      }
-      out.flush();
-    }
-  }
-
-  private void receiveFileFromOffer(
-      String sid,
-      String nick,
-      TargetRef pm,
-      PendingSendOffer offer,
-      Path destination,
-      String localPath)
-      throws IOException {
-    long expected = offer.size();
-    long received = 0L;
-    int lastReportedPercent = -1;
-
-    try (Socket socket = new Socket()) {
-      socket.connect(new InetSocketAddress(offer.host(), offer.port()), CONNECT_TIMEOUT_MS);
-      socket.setSoTimeout(IO_TIMEOUT_MS);
-
-      try (BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
-          DataOutputStream ack =
-              new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
-          BufferedOutputStream fileOut =
-              new BufferedOutputStream(
-                  Files.newOutputStream(
-                      destination, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE))) {
-        byte[] buf = new byte[BUFFER_SIZE];
-        while (expected <= 0L || received < expected) {
-          int max =
-              (expected > 0L) ? (int) Math.min((long) buf.length, expected - received) : buf.length;
-          int n = in.read(buf, 0, max);
-          if (n < 0) break;
-          fileOut.write(buf, 0, n);
-          received += n;
-
-          ack.writeInt((int) (received & 0xFFFF_FFFFL));
-          ack.flush();
-
-          int pct = percent(received, expected);
-          if (shouldReportProgress(lastReportedPercent, pct)) {
-            lastReportedPercent = pct;
-            ui.appendStatus(pm, DCC_TAG, "Receiving " + offer.fileName() + " … " + pct + "%");
-            upsertTransfer(
-                sid,
-                nick,
-                transferEntryId(sid, nick, "send-in"),
-                "Receive file (incoming)",
-                "Transferring",
-                offer.fileName() + " -> " + destination.getFileName(),
-                localPath,
-                pct,
-                DccTransferStore.ActionHint.NONE);
-          }
-        }
-        fileOut.flush();
-      }
-    }
-
-    if (expected > 0L && received != expected) {
-      throw new IOException("Transfer ended early (" + received + " / " + expected + " bytes)");
-    }
-  }
-
-  private static boolean shouldReportProgress(int previousPercent, int currentPercent) {
-    if (currentPercent < 0) return false;
-    if (currentPercent == 100 && previousPercent != 100) return true;
-    return currentPercent >= previousPercent + 10;
-  }
-
-  private static int percent(long value, long total) {
-    if (total <= 0L) return -1;
-    if (value <= 0L) return 0;
-    long p = (value * 100L) / total;
-    if (p < 0L) p = 0L;
-    if (p > 100L) p = 100L;
-    return (int) p;
   }
 
   private TargetRef ensurePmTarget(String sid, String nick) {
