@@ -6,8 +6,6 @@ import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -15,23 +13,32 @@ import org.springframework.stereotype.Component;
 /** Handles outbound /topic and /kick command flow. */
 @Component
 @ApplicationLayer
-@RequiredArgsConstructor
 final class OutboundTopicKickCommandService {
 
-  @NonNull
-  @Qualifier("ircTargetMembershipPort")
-  private final IrcTargetMembershipPort targetMembership;
+  private final CommandTargetPolicy commandTargetPolicy;
+  private final OutboundTargetMembershipCommandSupport targetMembershipCommandSupport;
 
-  @NonNull private final UiPort ui;
-  @NonNull private final ConnectionCoordinator connectionCoordinator;
-  @NonNull private final TargetCoordinator targetCoordinator;
-  @NonNull private final CommandTargetPolicy commandTargetPolicy;
-  @NonNull private final OutboundRawCommandSupport rawCommandSupport;
+  OutboundTopicKickCommandService(
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
+      UiPort ui,
+      ConnectionCoordinator connectionCoordinator,
+      TargetCoordinator targetCoordinator,
+      CommandTargetPolicy commandTargetPolicy,
+      OutboundRawCommandSupport rawCommandSupport) {
+    this.commandTargetPolicy = commandTargetPolicy;
+    this.targetMembershipCommandSupport =
+        new OutboundTargetMembershipCommandSupport(
+            targetMembership,
+            ui,
+            connectionCoordinator,
+            targetCoordinator,
+            commandTargetPolicy,
+            rawCommandSupport);
+  }
 
   void handleTopic(CompositeDisposable disposables, String first, String rest) {
-    TargetRef at = targetCoordinator.getActiveTarget();
+    TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(topic)");
     if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(topic)", "Select a server first.");
       return;
     }
 
@@ -51,43 +58,31 @@ final class OutboundTopicKickCommandService {
       topicText = (f + (r.isEmpty() ? "" : " " + r)).trim();
       settingTopic = !topicText.isEmpty();
     } else {
-      ui.appendStatus(at, "(topic)", "Usage: /topic [#channel] [new topic...]");
-      ui.appendStatus(at, "(topic)", "Tip: from a channel tab you can omit #channel.");
+      targetMembershipCommandSupport.appendStatus(
+          at, "(topic)", "Usage: /topic [#channel] [new topic...]");
+      targetMembershipCommandSupport.appendStatus(
+          at, "(topic)", "Tip: from a channel tab you can omit #channel.");
       return;
     }
 
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+    if (!targetMembershipCommandSupport.ensureConnected(at.serverId())) {
       return;
     }
 
-    if (OutboundRawCommandSupport.containsLineBreaks(channel)
-        || OutboundRawCommandSupport.containsLineBreaks(topicText)) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(topic)",
-          "Refusing to send multi-line /topic input.");
+    if (!targetMembershipCommandSupport.validateSingleLine(
+        at.serverId(), "(topic)", "/topic", channel, topicText)) {
       return;
     }
 
     String line = settingTopic ? ("TOPIC " + channel + " :" + topicText) : ("TOPIC " + channel);
     TargetRef out = new TargetRef(at.serverId(), channel);
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    OutboundRawCommandSupport.PreparedRawLine prepared = rawCommandSupport.prepare(out, line);
-    ui.ensureTargetExists(out);
-    ui.appendStatus(out, "(topic)", "→ " + rawCommandSupport.preview(line, prepared));
-
-    disposables.add(
-        targetMembership
-            .sendRaw(at.serverId(), prepared.line())
-            .subscribe(
-                () -> {}, err -> ui.appendError(status, "(topic-error)", String.valueOf(err))));
+    targetMembershipCommandSupport.sendRaw(
+        disposables, at.serverId(), out, "(topic)", line, "(topic-error)");
   }
 
   void handleKick(CompositeDisposable disposables, String channel, String nick, String reason) {
-    TargetRef at = targetCoordinator.getActiveTarget();
+    TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(kick)");
     if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(kick)", "Select a server first.");
       return;
     }
 
@@ -96,37 +91,25 @@ final class OutboundTopicKickCommandService {
     String rsn = reason == null ? "" : reason.trim();
 
     if (ch == null || n.isEmpty()) {
-      ui.appendStatus(at, "(kick)", "Usage: /kick [#channel] <nick> [reason]");
-      ui.appendStatus(at, "(kick)", "Tip: from a channel tab you can omit #channel.");
+      targetMembershipCommandSupport.appendStatus(
+          at, "(kick)", "Usage: /kick [#channel] <nick> [reason]");
+      targetMembershipCommandSupport.appendStatus(
+          at, "(kick)", "Tip: from a channel tab you can omit #channel.");
       return;
     }
 
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+    if (!targetMembershipCommandSupport.ensureConnected(at.serverId())) {
       return;
     }
 
-    if (OutboundRawCommandSupport.containsLineBreaks(ch)
-        || OutboundRawCommandSupport.containsLineBreaks(n)
-        || OutboundRawCommandSupport.containsLineBreaks(rsn)) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(kick)",
-          "Refusing to send multi-line /kick input.");
+    if (!targetMembershipCommandSupport.validateSingleLine(
+        at.serverId(), "(kick)", "/kick", ch, n, rsn)) {
       return;
     }
 
     String line = "KICK " + ch + " " + n + (rsn.isEmpty() ? "" : " :" + rsn);
     TargetRef out = new TargetRef(at.serverId(), ch);
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    OutboundRawCommandSupport.PreparedRawLine prepared = rawCommandSupport.prepare(out, line);
-    ui.ensureTargetExists(out);
-    ui.appendStatus(out, "(kick)", "→ " + rawCommandSupport.preview(line, prepared));
-
-    disposables.add(
-        targetMembership
-            .sendRaw(at.serverId(), prepared.line())
-            .subscribe(
-                () -> {}, err -> ui.appendError(status, "(kick-error)", String.valueOf(err))));
+    targetMembershipCommandSupport.sendRaw(
+        disposables, at.serverId(), out, "(kick)", line, "(kick-error)");
   }
 }

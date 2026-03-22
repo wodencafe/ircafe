@@ -16,9 +16,7 @@ import org.springframework.stereotype.Component;
 @ApplicationLayer
 final class OutboundNamesWhoListCommandService {
 
-  @NonNull
-  @Qualifier("ircTargetMembershipPort")
-  private final OutboundMembershipQuerySupport membershipQuerySupport;
+  private final OutboundTargetMembershipCommandSupport targetMembershipCommandSupport;
 
   @NonNull private final CommandTargetPolicy commandTargetPolicy;
 
@@ -31,8 +29,8 @@ final class OutboundNamesWhoListCommandService {
       OutboundRawCommandSupport rawCommandSupport) {
 
     this.commandTargetPolicy = commandTargetPolicy;
-    this.membershipQuerySupport =
-        new OutboundMembershipQuerySupport(
+    this.targetMembershipCommandSupport =
+        new OutboundTargetMembershipCommandSupport(
             targetMembership,
             ui,
             connectionCoordinator,
@@ -42,33 +40,34 @@ final class OutboundNamesWhoListCommandService {
   }
 
   void handleNames(CompositeDisposable disposables, String channel) {
-    TargetRef at = membershipQuerySupport.requireActiveTarget("(names)");
+    TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(names)");
     if (at == null) {
       return;
     }
 
     String ch = commandTargetPolicy.resolveChannelOrNull(at, channel);
     if (ch == null) {
-      membershipQuerySupport.appendStatus(at, "(names)", "Usage: /names [#channel]");
-      membershipQuerySupport.appendStatus(
+      targetMembershipCommandSupport.appendStatus(at, "(names)", "Usage: /names [#channel]");
+      targetMembershipCommandSupport.appendStatus(
           at, "(names)", "Tip: from a channel tab you can omit #channel.");
       return;
     }
 
-    if (!membershipQuerySupport.ensureConnected(at.serverId())) {
+    if (!targetMembershipCommandSupport.ensureConnected(at.serverId())) {
       return;
     }
 
-    if (!membershipQuerySupport.validateSingleLine(at.serverId(), "(names)", "/names", ch)) {
+    if (!targetMembershipCommandSupport.validateSingleLine(
+        at.serverId(), "(names)", "/names", ch)) {
       return;
     }
 
     TargetRef out = new TargetRef(at.serverId(), ch);
-    membershipQuerySupport.requestNames(disposables, at.serverId(), out, ch);
+    targetMembershipCommandSupport.requestNames(disposables, at.serverId(), out, ch);
   }
 
   void handleWho(CompositeDisposable disposables, String args) {
-    TargetRef at = membershipQuerySupport.requireActiveTarget("(who)");
+    TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(who)");
     if (at == null) {
       return;
     }
@@ -78,38 +77,40 @@ final class OutboundNamesWhoListCommandService {
       if (at.isChannel()) {
         a = at.target();
       } else {
-        membershipQuerySupport.appendStatus(at, "(who)", "Usage: /who [mask|#channel] [flags]");
-        membershipQuerySupport.appendStatus(
+        targetMembershipCommandSupport.appendStatus(
+            at, "(who)", "Usage: /who [mask|#channel] [flags]");
+        targetMembershipCommandSupport.appendStatus(
             at, "(who)", "Tip: from a channel tab, /who defaults to that channel.");
         return;
       }
     }
 
-    if (!membershipQuerySupport.ensureConnected(at.serverId())) {
+    if (!targetMembershipCommandSupport.ensureConnected(at.serverId())) {
       return;
     }
 
-    if (!membershipQuerySupport.validateSingleLine(at.serverId(), "(who)", "/who", a)) {
+    if (!targetMembershipCommandSupport.validateSingleLine(at.serverId(), "(who)", "/who", a)) {
       return;
     }
 
     String line = "WHO " + a;
-    TargetRef out = membershipQuerySupport.resolveWhoOutputTarget(at.serverId(), a);
-    membershipQuerySupport.sendRaw(disposables, at.serverId(), out, "(who)", line, "(who-error)");
+    TargetRef out = targetMembershipCommandSupport.resolveWhoOutputTarget(at.serverId(), a);
+    targetMembershipCommandSupport.sendRaw(
+        disposables, at.serverId(), out, "(who)", line, "(who-error)");
   }
 
   void handleList(CompositeDisposable disposables, String args) {
-    TargetRef at = membershipQuerySupport.requireActiveTarget("(list)");
+    TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(list)");
     if (at == null) {
       return;
     }
 
     String a = args == null ? "" : args.trim();
-    if (!membershipQuerySupport.ensureConnected(at.serverId())) {
+    if (!targetMembershipCommandSupport.ensureConnected(at.serverId())) {
       return;
     }
 
-    if (!membershipQuerySupport.validateSingleLine(at.serverId(), "(list)", "/list", a)) {
+    if (!targetMembershipCommandSupport.validateSingleLine(at.serverId(), "(list)", "/list", a)) {
       return;
     }
 
@@ -117,14 +118,14 @@ final class OutboundNamesWhoListCommandService {
         at.hasNetworkQualifier()
             ? TargetRef.channelList(at.serverId(), at.networkQualifierToken())
             : TargetRef.channelList(at.serverId());
-    membershipQuerySupport.ensureTargetExists(channelList);
-    membershipQuerySupport.beginChannelList(
+    targetMembershipCommandSupport.ensureTargetExists(channelList);
+    targetMembershipCommandSupport.beginChannelList(
         at.serverId(),
         a.isEmpty() ? "Loading channel list..." : ("Loading channel list (" + a + ")..."));
-    membershipQuerySupport.selectTarget(channelList);
+    targetMembershipCommandSupport.selectTarget(channelList);
 
     String line = a.isEmpty() ? "LIST" : ("LIST " + a);
-    membershipQuerySupport.sendRaw(
+    targetMembershipCommandSupport.sendRaw(
         disposables,
         at.serverId(),
         new TargetRef(at.serverId(), "status"),

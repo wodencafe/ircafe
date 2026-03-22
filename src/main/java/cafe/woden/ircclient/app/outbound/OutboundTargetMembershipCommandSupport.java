@@ -11,10 +11,10 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
-/** Shared active-target, raw-send, and target-routing support for membership/list commands. */
+/** Shared active-target, connection, and raw-send support for target-membership commands. */
 @ApplicationLayer
 @RequiredArgsConstructor
-final class OutboundMembershipQuerySupport {
+final class OutboundTargetMembershipCommandSupport {
 
   @NonNull private final IrcTargetMembershipPort targetMembership;
   @NonNull private final UiPort ui;
@@ -23,7 +23,7 @@ final class OutboundMembershipQuerySupport {
   @NonNull private final CommandTargetPolicy commandTargetPolicy;
   @NonNull private final OutboundRawCommandSupport rawCommandSupport;
 
-  OutboundMembershipQuerySupport(
+  OutboundTargetMembershipCommandSupport(
       IrcTargetMembershipPort targetMembership,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
@@ -52,15 +52,19 @@ final class OutboundMembershipQuerySupport {
     return outboundConnectionStatusSupport.ensureConnectedStatusOnly(serverId);
   }
 
-  boolean validateSingleLine(String serverId, String tag, String commandName, String input) {
-    if (!OutboundRawCommandSupport.containsLineBreaks(input)) {
-      return true;
+  boolean validateSingleLine(String serverId, String tag, String commandName, String... inputs) {
+    if (inputs != null) {
+      for (String input : inputs) {
+        if (OutboundRawCommandSupport.containsLineBreaks(input)) {
+          appendStatus(
+              new TargetRef(serverId, "status"),
+              tag,
+              "Refusing to send multi-line " + commandName + " input.");
+          return false;
+        }
+      }
     }
-    appendStatus(
-        new TargetRef(serverId, "status"),
-        tag,
-        "Refusing to send multi-line " + commandName + " input.");
-    return false;
+    return true;
   }
 
   void requestNames(
@@ -93,9 +97,32 @@ final class OutboundMembershipQuerySupport {
       String tag,
       String line,
       String errorTag) {
+    sendRaw(disposables, serverId, out, tag, line, errorTag, true);
+  }
+
+  void sendRawToExistingTarget(
+      CompositeDisposable disposables,
+      String serverId,
+      TargetRef out,
+      String tag,
+      String line,
+      String errorTag) {
+    sendRaw(disposables, serverId, out, tag, line, errorTag, false);
+  }
+
+  private void sendRaw(
+      CompositeDisposable disposables,
+      String serverId,
+      TargetRef out,
+      String tag,
+      String line,
+      String errorTag,
+      boolean ensureTarget) {
     TargetRef status = new TargetRef(serverId, "status");
     OutboundRawCommandSupport.PreparedRawLine prepared = rawCommandSupport.prepare(out, line);
-    ensureTargetExists(out);
+    if (ensureTarget) {
+      ensureTargetExists(out);
+    }
     appendStatus(out, tag, "→ " + rawCommandSupport.preview(line, prepared));
     disposables.add(
         targetMembership

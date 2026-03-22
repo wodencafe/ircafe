@@ -8,7 +8,6 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ModeRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -21,23 +20,35 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
-@RequiredArgsConstructor
 public class OutboundModeCommandService {
 
-  @Qualifier("ircTargetMembershipPort")
-  private final IrcTargetMembershipPort targetMembership;
-
-  private final UiPort ui;
-  private final ConnectionCoordinator connectionCoordinator;
-  private final TargetCoordinator targetCoordinator;
+  private final OutboundTargetMembershipCommandSupport targetMembershipCommandSupport;
   private final CommandTargetPolicy commandTargetPolicy;
   private final ModeRoutingPort modeRoutingState;
-  private final OutboundRawCommandSupport rawCommandSupport;
+
+  public OutboundModeCommandService(
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
+      UiPort ui,
+      ConnectionCoordinator connectionCoordinator,
+      TargetCoordinator targetCoordinator,
+      CommandTargetPolicy commandTargetPolicy,
+      ModeRoutingPort modeRoutingState,
+      OutboundRawCommandSupport rawCommandSupport) {
+    this.commandTargetPolicy = commandTargetPolicy;
+    this.modeRoutingState = modeRoutingState;
+    this.targetMembershipCommandSupport =
+        new OutboundTargetMembershipCommandSupport(
+            targetMembership,
+            ui,
+            connectionCoordinator,
+            targetCoordinator,
+            commandTargetPolicy,
+            rawCommandSupport);
+  }
 
   public void handleMode(CompositeDisposable disposables, String first, String rest) {
-    TargetRef at = targetCoordinator.getActiveTarget();
+    TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(mode)");
     if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(mode)", "Select a server first.");
       return;
     }
 
@@ -55,18 +66,20 @@ public class OutboundModeCommandService {
       channel = at.target();
       modeSpec = (f + (r.isEmpty() ? "" : " " + r)).trim();
     } else {
-      ui.appendStatus(at, "(mode)", "Usage: /mode <#channel> [modes] [args...]");
-      ui.appendStatus(at, "(mode)", "Tip: from a channel tab you can use /mode +o nick");
+      targetMembershipCommandSupport.appendStatus(
+          at, "(mode)", "Usage: /mode <#channel> [modes] [args...]");
+      targetMembershipCommandSupport.appendStatus(
+          at, "(mode)", "Tip: from a channel tab you can use /mode +o nick");
       return;
     }
 
     if (channel == null || channel.isBlank()) {
-      ui.appendStatus(at, "(mode)", "Usage: /mode <#channel> [modes] [args...]");
+      targetMembershipCommandSupport.appendStatus(
+          at, "(mode)", "Usage: /mode <#channel> [modes] [args...]");
       return;
     }
 
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+    if (!targetMembershipCommandSupport.ensureConnected(at.serverId())) {
       return;
     }
 
@@ -81,20 +94,8 @@ public class OutboundModeCommandService {
       modeRoutingState.putPendingModeTarget(at.serverId(), channel, out);
     }
 
-    OutboundRawCommandSupport.PreparedRawLine prepared = rawCommandSupport.prepare(out, line);
-    ui.ensureTargetExists(out);
-    ui.appendStatus(out, "(mode)", "→ " + rawCommandSupport.preview(line, prepared));
-
-    disposables.add(
-        targetMembership
-            .sendRaw(at.serverId(), prepared.line())
-            .subscribe(
-                () -> {},
-                err ->
-                    ui.appendError(
-                        new TargetRef(at.serverId(), "status"),
-                        "(mode-error)",
-                        String.valueOf(err))));
+    targetMembershipCommandSupport.sendRaw(
+        disposables, at.serverId(), out, "(mode)", line, "(mode-error)");
   }
 
   public void handleOp(CompositeDisposable disposables, String channel, List<String> nicks) {
@@ -133,76 +134,62 @@ public class OutboundModeCommandService {
       List<String> nicks,
       String mode,
       String usage) {
-    TargetRef at = targetCoordinator.getActiveTarget();
+    TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(mode)");
     if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(mode)", "Select a server first.");
       return;
     }
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+    if (!targetMembershipCommandSupport.ensureConnected(at.serverId())) {
       return;
     }
 
     String ch = commandTargetPolicy.resolveChannelOrNull(at, channel);
     if (ch == null) {
-      ui.appendStatus(at, "(mode)", usage);
-      ui.appendStatus(at, "(mode)", "Tip: from a channel tab you can omit #channel.");
+      targetMembershipCommandSupport.appendStatus(at, "(mode)", usage);
+      targetMembershipCommandSupport.appendStatus(
+          at, "(mode)", "Tip: from a channel tab you can omit #channel.");
       return;
     }
 
     if (nicks == null || nicks.isEmpty()) {
-      ui.appendStatus(at, "(mode)", usage);
+      targetMembershipCommandSupport.appendStatus(at, "(mode)", usage);
       return;
     }
 
     TargetRef out = new TargetRef(at.serverId(), ch);
-    ui.ensureTargetExists(out);
-
+    targetMembershipCommandSupport.ensureTargetExists(out);
     for (String nick : nicks) {
       String n = nick == null ? "" : nick.trim();
       if (n.isEmpty()) continue;
 
       String line = "MODE " + ch + " " + mode + " " + n;
-      OutboundRawCommandSupport.PreparedRawLine prepared = rawCommandSupport.prepare(out, line);
-      ui.appendStatus(out, "(mode)", "→ " + rawCommandSupport.preview(line, prepared));
-
-      disposables.add(
-          targetMembership
-              .sendRaw(at.serverId(), prepared.line())
-              .subscribe(
-                  () -> {},
-                  err ->
-                      ui.appendError(
-                          new TargetRef(at.serverId(), "status"),
-                          "(mode-error)",
-                          String.valueOf(err))));
+      targetMembershipCommandSupport.sendRawToExistingTarget(
+          disposables, at.serverId(), out, "(mode)", line, "(mode-error)");
     }
   }
 
   private void handleBanMode(
       CompositeDisposable disposables, String channel, List<String> masksOrNicks, boolean add) {
-    TargetRef at = targetCoordinator.getActiveTarget();
+    TargetRef at = targetMembershipCommandSupport.requireActiveTarget("(mode)");
     if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(mode)", "Select a server first.");
       return;
     }
-    if (!connectionCoordinator.isConnected(at.serverId())) {
-      ui.appendStatus(new TargetRef(at.serverId(), "status"), "(conn)", "Not connected");
+    if (!targetMembershipCommandSupport.ensureConnected(at.serverId())) {
       return;
     }
 
     String ch = commandTargetPolicy.resolveChannelOrNull(at, channel);
     if (ch == null) {
-      ui.appendStatus(
+      targetMembershipCommandSupport.appendStatus(
           at,
           "(mode)",
           "Usage: " + (add ? "/ban" : "/unban") + " [#channel] <mask|nick> [mask|nick...]");
-      ui.appendStatus(at, "(mode)", "Tip: from a channel tab you can omit #channel.");
+      targetMembershipCommandSupport.appendStatus(
+          at, "(mode)", "Tip: from a channel tab you can omit #channel.");
       return;
     }
 
     if (masksOrNicks == null || masksOrNicks.isEmpty()) {
-      ui.appendStatus(
+      targetMembershipCommandSupport.appendStatus(
           at,
           "(mode)",
           "Usage: " + (add ? "/ban" : "/unban") + " [#channel] <mask|nick> [mask|nick...]");
@@ -210,8 +197,7 @@ public class OutboundModeCommandService {
     }
 
     TargetRef out = new TargetRef(at.serverId(), ch);
-    ui.ensureTargetExists(out);
-
+    targetMembershipCommandSupport.ensureTargetExists(out);
     String mode = add ? "+b" : "-b";
 
     for (String item : masksOrNicks) {
@@ -221,19 +207,8 @@ public class OutboundModeCommandService {
       String mask = looksLikeMask(raw) ? raw : (raw + "!*@*");
 
       String line = "MODE " + ch + " " + mode + " " + mask;
-      OutboundRawCommandSupport.PreparedRawLine prepared = rawCommandSupport.prepare(out, line);
-      ui.appendStatus(out, "(mode)", "→ " + rawCommandSupport.preview(line, prepared));
-
-      disposables.add(
-          targetMembership
-              .sendRaw(at.serverId(), prepared.line())
-              .subscribe(
-                  () -> {},
-                  err ->
-                      ui.appendError(
-                          new TargetRef(at.serverId(), "status"),
-                          "(mode-error)",
-                          String.valueOf(err))));
+      targetMembershipCommandSupport.sendRawToExistingTarget(
+          disposables, at.serverId(), out, "(mode)", line, "(mode-error)");
     }
   }
 
