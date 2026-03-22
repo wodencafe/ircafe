@@ -401,9 +401,9 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.OutboundChatHistoryRequestSupport",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.AwayCommandSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.identity.AwayCommandSupport", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.NickCommandSupport", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.identity.NickCommandSupport", ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundCommandAvailabilitySupport",
         ApplicationLayer.class);
@@ -478,7 +478,8 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.OutboundNamesWhoListCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundNickAwayCommandService", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.identity.OutboundNickAwayCommandService",
+        ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundRawLineCorrelationService",
         ApplicationLayer.class);

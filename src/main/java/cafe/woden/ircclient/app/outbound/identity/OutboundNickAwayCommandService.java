@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.identity;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
@@ -14,12 +14,12 @@ import org.springframework.stereotype.Component;
 /** Handles outbound /nick and /away command flow. */
 @Component
 @ApplicationLayer
-final class OutboundNickAwayCommandService {
+public final class OutboundNickAwayCommandService {
 
   @NonNull private final NickCommandSupport nickCommandSupport;
   @NonNull private final AwayCommandSupport awayCommandSupport;
 
-  OutboundNickAwayCommandService(
+  public OutboundNickAwayCommandService(
       IrcClientService irc,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
@@ -32,11 +32,11 @@ final class OutboundNickAwayCommandService {
         new AwayCommandSupport(irc, ui, connectionCoordinator, targetCoordinator, awayRoutingState);
   }
 
-  void handleNick(CompositeDisposable disposables, String newNick) {
+  public void handleNick(CompositeDisposable disposables, String newNick) {
     nickCommandSupport.handleNick(disposables, newNick);
   }
 
-  void handleAway(CompositeDisposable disposables, String message) {
+  public void handleAway(CompositeDisposable disposables, String message) {
     awayCommandSupport.handleAway(disposables, message);
   }
 }

@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.identity;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
