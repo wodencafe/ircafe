@@ -43,6 +43,8 @@ class OutboundHelpCommandServiceTest {
           outboundBackendFeatureRegistry,
           IrcNegotiatedFeaturePort.from(irc),
           irc);
+  private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport =
+      new OutboundCommandAvailabilitySupport(outboundBackendCapabilityPolicy);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
@@ -55,6 +57,17 @@ class OutboundHelpCommandServiceTest {
               new IrcMessageMutationOutboundCommands(),
               new MatrixMessageMutationOutboundCommands(),
               new QuasselMessageMutationOutboundCommands()));
+  private final OutboundMessageMutationSendSupport outboundMessageMutationSendSupport =
+      new OutboundMessageMutationSendSupport(
+          IrcTargetMembershipPort.from(irc),
+          IrcEchoCapabilityPort.from(irc),
+          outboundBackendCapabilityPolicy,
+          messageMutationOutboundCommandsRouter,
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          pendingEchoMessageState,
+          rawLineCorrelationService);
   private final OutboundUploadCommandService outboundUploadCommandService =
       mock(OutboundUploadCommandService.class);
   private final OutboundHelpContributor uploadHelpContributor =
@@ -71,19 +84,16 @@ class OutboundHelpCommandServiceTest {
       };
   private final OutboundMessageMutationCommandService messageMutationCommandService =
       new OutboundMessageMutationCommandService(
-          IrcTargetMembershipPort.from(irc),
-          IrcEchoCapabilityPort.from(irc),
           outboundBackendCapabilityPolicy,
-          messageMutationOutboundCommandsRouter,
+          outboundCommandAvailabilitySupport,
           ui,
-          connectionCoordinator,
           targetCoordinator,
-          pendingEchoMessageState,
-          rawLineCorrelationService);
+          outboundMessageMutationSendSupport);
   private final OutboundReadMarkerCommandService readMarkerCommandService =
       new OutboundReadMarkerCommandService(
           IrcReadMarkerPort.from(irc),
           outboundBackendCapabilityPolicy,
+          outboundCommandAvailabilitySupport,
           ui,
           connectionCoordinator,
           targetCoordinator);

@@ -43,10 +43,13 @@ class OutboundReadMarkerCommandServiceTest {
           outboundBackendFeatureRegistry,
           IrcNegotiatedFeaturePort.from(irc),
           irc);
+  private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport =
+      new OutboundCommandAvailabilitySupport(outboundBackendCapabilityPolicy);
   private final OutboundReadMarkerCommandService service =
       new OutboundReadMarkerCommandService(
           IrcReadMarkerPort.from(irc),
           outboundBackendCapabilityPolicy,
+          outboundCommandAvailabilitySupport,
           ui,
           connectionCoordinator,
           targetCoordinator);

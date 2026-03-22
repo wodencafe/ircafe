@@ -24,6 +24,7 @@ final class OutboundReadMarkerCommandService implements OutboundHelpContributor 
 
   @NonNull private final IrcReadMarkerPort readMarkerPort;
   @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  @NonNull private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport;
   @NonNull private final UiPort ui;
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final TargetCoordinator targetCoordinator;
@@ -89,10 +90,8 @@ final class OutboundReadMarkerCommandService implements OutboundHelpContributor 
         target,
         "(help)",
         "/markread"
-            + availabilitySuffix(
-                available,
-                unavailableReasonForHelp(
-                    sid, "requires negotiated read-marker or draft/read-marker")));
+            + outboundCommandAvailabilitySupport.helpAvailabilitySuffix(
+                sid, available, "requires negotiated read-marker or draft/read-marker"));
   }
 
   private boolean isReadMarkerSupportedForServer(String serverId) {
@@ -101,18 +100,7 @@ final class OutboundReadMarkerCommandService implements OutboundHelpContributor 
     return backendCapabilityPolicy.supportsReadMarker(sid);
   }
 
-  private static String availabilitySuffix(boolean available, String unavailableReason) {
-    if (available) return "";
-    String reason = unavailableReason == null ? "" : unavailableReason.trim();
-    if (reason.isEmpty()) return "";
-    return " (unavailable: " + reason + ")";
-  }
-
   private String featureUnavailableMessage(String serverId, String fallback) {
-    return backendCapabilityPolicy.featureUnavailableMessage(serverId, fallback);
-  }
-
-  private String unavailableReasonForHelp(String serverId, String fallback) {
-    return backendCapabilityPolicy.unavailableReasonForHelp(serverId, fallback);
+    return outboundCommandAvailabilitySupport.featureUnavailableMessage(serverId, fallback);
   }
 }

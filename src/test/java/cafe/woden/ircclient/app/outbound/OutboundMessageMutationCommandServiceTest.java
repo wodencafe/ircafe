@@ -46,6 +46,8 @@ class OutboundMessageMutationCommandServiceTest {
           outboundBackendFeatureRegistry,
           IrcNegotiatedFeaturePort.from(irc),
           irc);
+  private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport =
+      new OutboundCommandAvailabilitySupport(outboundBackendCapabilityPolicy);
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final LabeledResponseRoutingPort labeledResponseRoutingState =
       mock(LabeledResponseRoutingPort.class);
@@ -58,8 +60,8 @@ class OutboundMessageMutationCommandServiceTest {
               new IrcMessageMutationOutboundCommands(),
               new MatrixMessageMutationOutboundCommands(),
               new QuasselMessageMutationOutboundCommands()));
-  private final OutboundMessageMutationCommandService service =
-      new OutboundMessageMutationCommandService(
+  private final OutboundMessageMutationSendSupport outboundMessageMutationSendSupport =
+      new OutboundMessageMutationSendSupport(
           IrcTargetMembershipPort.from(irc),
           IrcEchoCapabilityPort.from(irc),
           outboundBackendCapabilityPolicy,
@@ -69,6 +71,13 @@ class OutboundMessageMutationCommandServiceTest {
           targetCoordinator,
           pendingEchoMessageState,
           rawLineCorrelationService);
+  private final OutboundMessageMutationCommandService service =
+      new OutboundMessageMutationCommandService(
+          outboundBackendCapabilityPolicy,
+          outboundCommandAvailabilitySupport,
+          ui,
+          targetCoordinator,
+          outboundMessageMutationSendSupport);
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   @AfterEach
