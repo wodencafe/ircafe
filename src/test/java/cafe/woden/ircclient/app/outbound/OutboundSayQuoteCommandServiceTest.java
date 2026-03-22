@@ -40,6 +40,9 @@ class OutboundSayQuoteCommandServiceTest {
   private final PendingEchoMessagePort pendingEchoMessageState = mock(PendingEchoMessagePort.class);
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy =
       mock(OutboundBackendCapabilityPolicy.class);
+  private final OutboundMultilineMessageSupport outboundMultilineMessageSupport =
+      new OutboundMultilineMessageSupport(
+          backendCapabilityPolicy, IrcNegotiatedFeaturePort.from(irc), ui);
   private final OutboundConnectionStatusSupport outboundConnectionStatusSupport =
       new OutboundConnectionStatusSupport(ui, connectionCoordinator);
   private final OutboundRawLineCorrelationService rawLineCorrelationService =
@@ -50,8 +53,7 @@ class OutboundSayQuoteCommandServiceTest {
       new OutboundMessagingCommandService(
           irc,
           IrcEchoCapabilityPort.from(irc),
-          IrcNegotiatedFeaturePort.from(irc),
-          backendCapabilityPolicy,
+          outboundMultilineMessageSupport,
           outboundConnectionStatusSupport,
           ui,
           targetCoordinator,
