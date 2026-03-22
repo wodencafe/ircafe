@@ -14,6 +14,7 @@ import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.BackendNamedOutboundCommandRouter;
+import cafe.woden.ircclient.app.outbound.channel.OutboundJoinPartCommandService;
 import cafe.woden.ircclient.app.outbound.channel.OutboundModeCommandService;
 import cafe.woden.ircclient.app.outbound.channel.OutboundNamesWhoListCommandService;
 import cafe.woden.ircclient.app.outbound.channel.OutboundTopicKickCommandService;

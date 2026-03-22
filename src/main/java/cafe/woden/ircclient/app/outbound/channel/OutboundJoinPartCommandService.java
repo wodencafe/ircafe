@@ -1,8 +1,10 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.channel;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.CommandTargetPolicy;
+import cafe.woden.ircclient.app.outbound.OutboundRawCommandSupport;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
@@ -17,7 +19,7 @@ import org.springframework.stereotype.Component;
 /** Handles outbound /join and /part command flow. */
 @Component
 @ApplicationLayer
-final class OutboundJoinPartCommandService {
+public final class OutboundJoinPartCommandService {
 
   @NonNull
   @Qualifier("ircTargetMembershipPort")
@@ -31,7 +33,7 @@ final class OutboundJoinPartCommandService {
   @NonNull private final JoinRoutingPort joinRoutingState;
   @NonNull private final PartCommandSupport partCommandSupport;
 
-  OutboundJoinPartCommandService(
+  public OutboundJoinPartCommandService(
       @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
@@ -51,7 +53,7 @@ final class OutboundJoinPartCommandService {
             targetMembership, ui, connectionCoordinator, targetCoordinator, commandTargetPolicy);
   }
 
-  void handleJoin(CompositeDisposable disposables, String channel, String key) {
+  public void handleJoin(CompositeDisposable disposables, String channel, String key) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(join)", "Select a server first.");
@@ -118,7 +120,7 @@ final class OutboundJoinPartCommandService {
                         String.valueOf(err))));
   }
 
-  void handlePart(CompositeDisposable disposables, String channel, String reason) {
+  public void handlePart(CompositeDisposable disposables, String channel, String reason) {
     partCommandSupport.handlePart(disposables, channel, reason);
   }
 
