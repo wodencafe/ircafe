@@ -1,7 +1,8 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.messaging;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.OutboundConnectionStatusSupport;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ApplicationLayer
 @RequiredArgsConstructor
-final class OutboundMessagingCommandService {
+public final class OutboundMessagingCommandService {
 
   @NonNull private final IrcClientService irc;
   @NonNull private final IrcEchoCapabilityPort echoCapabilityPort;
@@ -27,7 +28,7 @@ final class OutboundMessagingCommandService {
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final PendingEchoMessagePort pendingEchoMessageState;
 
-  void handleQuery(String nick) {
+  public void handleQuery(String nick) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(query)", "Select a server first.");
@@ -45,7 +46,7 @@ final class OutboundMessagingCommandService {
     ui.selectTarget(pm);
   }
 
-  void handleMsg(CompositeDisposable disposables, String nick, String body) {
+  public void handleMsg(CompositeDisposable disposables, String nick, String body) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(msg)", "Select a server first.");
@@ -65,7 +66,7 @@ final class OutboundMessagingCommandService {
     sendMessage(disposables, pm, m);
   }
 
-  void handleNotice(CompositeDisposable disposables, String target, String body) {
+  public void handleNotice(CompositeDisposable disposables, String target, String body) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(notice)", "Select a server first.");
@@ -82,7 +83,7 @@ final class OutboundMessagingCommandService {
     sendNotice(disposables, at, t, m);
   }
 
-  void handleMe(CompositeDisposable disposables, String action) {
+  public void handleMe(CompositeDisposable disposables, String action) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(me)", "Select a server first.");

@@ -24,6 +24,8 @@ import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistrar;
 import cafe.woden.ircclient.app.outbound.identity.OutboundNickAwayCommandService;
 import cafe.woden.ircclient.app.outbound.ignore.OutboundIgnoreCommandService;
 import cafe.woden.ircclient.app.outbound.invite.OutboundInviteCommandService;
+import cafe.woden.ircclient.app.outbound.messaging.OutboundMessagingCommandService;
+import cafe.woden.ircclient.app.outbound.messaging.OutboundSayQuoteCommandService;
 import cafe.woden.ircclient.app.outbound.monitor.OutboundMonitorCommandService;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;

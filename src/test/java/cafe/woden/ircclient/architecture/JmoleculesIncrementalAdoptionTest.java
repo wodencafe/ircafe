@@ -462,10 +462,10 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.OutboundMessageMutationSendSupport",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundMessagingCommandService",
+        "cafe.woden.ircclient.app.outbound.messaging.OutboundMessagingCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundMultilineMessageSupport",
+        "cafe.woden.ircclient.app.outbound.messaging.OutboundMultilineMessageSupport",
         ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.channel.OutboundModeCommandService",
@@ -494,7 +494,8 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.OutboundReadMarkerCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundSayQuoteCommandService", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.messaging.OutboundSayQuoteCommandService",
+        ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.channel.OutboundTopicKickCommandService",
         ApplicationLayer.class);

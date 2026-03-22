@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistrar;
 import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistry;
 import cafe.woden.ircclient.app.outbound.identity.OutboundNickAwayCommandService;
+import cafe.woden.ircclient.app.outbound.messaging.OutboundMessagingCommandService;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;

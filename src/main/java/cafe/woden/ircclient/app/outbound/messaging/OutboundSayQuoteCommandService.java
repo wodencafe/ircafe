@@ -1,7 +1,9 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.messaging;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.OutboundConnectionStatusSupport;
+import cafe.woden.ircclient.app.outbound.OutboundRawCommandSupport;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -16,7 +18,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ApplicationLayer
 @RequiredArgsConstructor
-final class OutboundSayQuoteCommandService {
+public final class OutboundSayQuoteCommandService {
 
   @NonNull
   @Qualifier("ircTargetMembershipPort")
@@ -28,7 +30,7 @@ final class OutboundSayQuoteCommandService {
   @NonNull private final OutboundRawCommandSupport rawCommandSupport;
   @NonNull private final OutboundMessagingCommandService outboundMessagingCommandService;
 
-  void handleSay(CompositeDisposable disposables, String msg) {
+  public void handleSay(CompositeDisposable disposables, String msg) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(system)", "Select a server first.");
@@ -46,7 +48,7 @@ final class OutboundSayQuoteCommandService {
     outboundMessagingCommandService.sendMessage(disposables, at, m);
   }
 
-  void handleQuote(CompositeDisposable disposables, String rawLine) {
+  public void handleQuote(CompositeDisposable disposables, String rawLine) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(quote)", "Select a server first.");

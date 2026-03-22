@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.messaging;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
