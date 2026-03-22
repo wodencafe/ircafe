@@ -12,7 +12,6 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.hexagonal.Application;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
@@ -21,35 +20,38 @@ import org.springframework.stereotype.Component;
 @Component
 @Application
 @ApplicationLayer
-@RequiredArgsConstructor
 public class OutboundMonitorCommandService {
   private static final int DEFAULT_MONITOR_CHUNK = 100;
 
-  private final IrcClientService irc;
-  private final UiPort ui;
-  private final TargetCoordinator targetCoordinator;
-  private final ConnectionCoordinator connectionCoordinator;
   private final MonitorRosterPort monitorRosterPort;
-  private final MonitorFallbackPort monitorFallbackPort;
-  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  private final OutboundMonitorCommandSupport monitorCommandSupport;
+
+  public OutboundMonitorCommandService(
+      IrcClientService irc,
+      UiPort ui,
+      TargetCoordinator targetCoordinator,
+      ConnectionCoordinator connectionCoordinator,
+      MonitorRosterPort monitorRosterPort,
+      MonitorFallbackPort monitorFallbackPort,
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy) {
+    this.monitorRosterPort = Objects.requireNonNull(monitorRosterPort, "monitorRosterPort");
+    this.monitorCommandSupport =
+        new OutboundMonitorCommandSupport(
+            Objects.requireNonNull(irc, "irc"),
+            Objects.requireNonNull(ui, "ui"),
+            Objects.requireNonNull(targetCoordinator, "targetCoordinator"),
+            Objects.requireNonNull(connectionCoordinator, "connectionCoordinator"),
+            Objects.requireNonNull(monitorFallbackPort, "monitorFallbackPort"),
+            Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy"));
+  }
 
   public void handleMonitor(CompositeDisposable disposables, String args) {
-    TargetRef active = targetCoordinator.getActiveTarget();
-    TargetRef fallback = (active != null) ? active : targetCoordinator.safeStatusTarget();
-    String sid = Objects.toString(fallback.serverId(), "").trim();
-    if (sid.isEmpty()) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(monitor)", "Select a server first.");
-      return;
-    }
-
-    TargetRef status = new TargetRef(sid, "status");
-    TargetRef monitorTarget = TargetRef.monitorGroup(sid);
-    ui.ensureTargetExists(status);
-    ui.ensureTargetExists(monitorTarget);
+    MonitorCommandContext context = monitorCommandSupport.resolveContextOrNull();
+    if (context == null) return;
 
     String raw = Objects.toString(args, "").trim();
     if (raw.isEmpty()) {
-      appendUsage(monitorTarget);
+      appendUsage(context.monitorTarget());
       return;
     }
 
@@ -63,85 +65,78 @@ public class OutboundMonitorCommandService {
       if (!rest.isEmpty()) {
         nickSpec = nickSpec.isEmpty() ? rest : (nickSpec + " " + rest);
       }
-      handleSigned(disposables, sid, monitorTarget, status, sigil, nickSpec);
+      handleSigned(disposables, context, sigil, nickSpec);
       return;
     }
 
     String op = opRaw.toLowerCase(Locale.ROOT);
     switch (op) {
-      case "list", "l" -> handleList(disposables, sid, monitorTarget, status);
+      case "list", "l" -> handleList(disposables, context);
       case "status", "s" -> {
-        if (monitorFallbackPort.isFallbackActive(sid)) {
-          requestFallbackRefresh(sid, status, true);
+        if (monitorCommandSupport.isFallbackActive(context.serverId())) {
+          monitorCommandSupport.requestFallbackRefresh(
+              context.serverId(), context.statusTarget(), true);
         } else {
-          sendMonitorRaw(disposables, sid, status, monitorTarget, "MONITOR S", true);
+          monitorCommandSupport.sendMonitorRaw(disposables, context, "MONITOR S", true);
         }
       }
-      case "clear", "c" -> handleClear(disposables, sid, monitorTarget, status);
-      case "help" -> appendUsage(monitorTarget);
+      case "clear", "c" -> handleClear(disposables, context);
+      case "help" -> appendUsage(context.monitorTarget());
       default -> {
         // Shorthand: treat "/monitor nick1 nick2" as add/update.
         String nickSpec = raw;
-        handleSigned(disposables, sid, monitorTarget, status, '+', nickSpec);
+        handleSigned(disposables, context, '+', nickSpec);
       }
     }
   }
 
-  private void handleList(
-      CompositeDisposable disposables, String serverId, TargetRef monitorTarget, TargetRef status) {
-    List<String> local = monitorRosterPort.listNicks(serverId);
+  private void handleList(CompositeDisposable disposables, MonitorCommandContext context) {
+    List<String> local = monitorRosterPort.listNicks(context.serverId());
     if (local.isEmpty()) {
-      ui.appendStatus(monitorTarget, "(monitor)", "Monitored nicks: (none)");
+      monitorCommandSupport.appendStatus(context.monitorTarget(), "Monitored nicks: (none)");
     } else {
-      ui.appendStatus(
-          monitorTarget,
-          "(monitor)",
+      monitorCommandSupport.appendStatus(
+          context.monitorTarget(),
           "Monitored nicks (" + local.size() + "): " + String.join(", ", local));
     }
-    if (monitorFallbackPort.isFallbackActive(serverId)) {
-      requestFallbackRefresh(serverId, status, true);
+    if (monitorCommandSupport.isFallbackActive(context.serverId())) {
+      monitorCommandSupport.requestFallbackRefresh(
+          context.serverId(), context.statusTarget(), true);
       return;
     }
-    sendMonitorRaw(disposables, serverId, status, monitorTarget, "MONITOR L", true);
+    monitorCommandSupport.sendMonitorRaw(disposables, context, "MONITOR L", true);
   }
 
-  private void handleClear(
-      CompositeDisposable disposables, String serverId, TargetRef monitorTarget, TargetRef status) {
-    int removed = monitorRosterPort.clearNicks(serverId);
-    ui.appendStatus(
-        monitorTarget,
-        "(monitor)",
+  private void handleClear(CompositeDisposable disposables, MonitorCommandContext context) {
+    int removed = monitorRosterPort.clearNicks(context.serverId());
+    monitorCommandSupport.appendStatus(
+        context.monitorTarget(),
         removed <= 0
             ? "Cleared monitor list (already empty)."
             : ("Cleared monitor list (" + removed + " removed)."));
-    if (monitorFallbackPort.isFallbackActive(serverId)) {
-      requestFallbackRefresh(serverId, status, false);
+    if (monitorCommandSupport.isFallbackActive(context.serverId())) {
+      monitorCommandSupport.requestFallbackRefresh(
+          context.serverId(), context.statusTarget(), false);
       return;
     }
-    sendMonitorRaw(disposables, serverId, status, monitorTarget, "MONITOR C", false);
+    monitorCommandSupport.sendMonitorRaw(disposables, context, "MONITOR C", false);
   }
 
   private void handleSigned(
-      CompositeDisposable disposables,
-      String serverId,
-      TargetRef monitorTarget,
-      TargetRef status,
-      char sigil,
-      String nickSpec) {
+      CompositeDisposable disposables, MonitorCommandContext context, char sigil, String nickSpec) {
     List<String> nicks = monitorRosterPort.parseNickInput(nickSpec);
     if (nicks.isEmpty()) {
-      appendUsage(monitorTarget);
+      appendUsage(context.monitorTarget());
       return;
     }
 
     int changed =
         sigil == '+'
-            ? monitorRosterPort.addNicks(serverId, nicks)
-            : monitorRosterPort.removeNicks(serverId, nicks);
+            ? monitorRosterPort.addNicks(context.serverId(), nicks)
+            : monitorRosterPort.removeNicks(context.serverId(), nicks);
     if (sigil == '+') {
-      ui.appendStatus(
-          monitorTarget,
-          "(monitor)",
+      monitorCommandSupport.appendStatus(
+          context.monitorTarget(),
           changed <= 0
               ? "No monitor nicks added."
               : ("Added "
@@ -151,9 +146,8 @@ public class OutboundMonitorCommandService {
                   + ": "
                   + String.join(", ", nicks)));
     } else {
-      ui.appendStatus(
-          monitorTarget,
-          "(monitor)",
+      monitorCommandSupport.appendStatus(
+          context.monitorTarget(),
           changed <= 0
               ? "No monitor nicks removed."
               : ("Removed "
@@ -164,10 +158,11 @@ public class OutboundMonitorCommandService {
                   + String.join(", ", nicks)));
     }
 
-    int chunkSize = irc.negotiatedMonitorLimit(serverId);
-    if (chunkSize <= 0) chunkSize = DEFAULT_MONITOR_CHUNK;
-    if (monitorFallbackPort.isFallbackActive(serverId)) {
-      requestFallbackRefresh(serverId, status, false);
+    int chunkSize =
+        monitorCommandSupport.negotiatedChunkSize(context.serverId(), DEFAULT_MONITOR_CHUNK);
+    if (monitorCommandSupport.isFallbackActive(context.serverId())) {
+      monitorCommandSupport.requestFallbackRefresh(
+          context.serverId(), context.statusTarget(), false);
       return;
     }
     for (int i = 0; i < nicks.size(); i += chunkSize) {
@@ -175,71 +170,16 @@ public class OutboundMonitorCommandService {
       List<String> chunk = nicks.subList(i, end);
       if (chunk.isEmpty()) continue;
       String line = "MONITOR " + sigil + String.join(",", chunk);
-      sendMonitorRaw(disposables, serverId, status, monitorTarget, line, false);
+      monitorCommandSupport.sendMonitorRaw(disposables, context, line, false);
     }
-  }
-
-  private void sendMonitorRaw(
-      CompositeDisposable disposables,
-      String serverId,
-      TargetRef status,
-      TargetRef monitorTarget,
-      String line,
-      boolean requireConnection) {
-    String sid = Objects.toString(serverId, "").trim();
-    String rawLine = Objects.toString(line, "").trim();
-    if (sid.isEmpty() || rawLine.isEmpty()) return;
-    if (containsCrlf(rawLine)) {
-      ui.appendStatus(status, "(monitor)", "Refusing to send multi-line /monitor input.");
-      return;
-    }
-
-    if (!connectionCoordinator.isConnected(sid)) {
-      if (requireConnection) {
-        ui.appendStatus(status, "(conn)", "Not connected");
-      }
-      return;
-    }
-
-    if (!backendCapabilityPolicy.supportsMonitor(sid)) {
-      if (monitorFallbackPort.isFallbackActive(sid)) {
-        requestFallbackRefresh(sid, status, false);
-      } else {
-        ui.appendStatus(
-            status,
-            "(monitor)",
-            backendCapabilityPolicy.featureUnavailableMessage(
-                sid, "MONITOR capability is unavailable on this server."));
-      }
-      return;
-    }
-
-    ui.appendStatus(monitorTarget, "(monitor)", "→ " + rawLine);
-    disposables.add(
-        irc.sendRaw(sid, rawLine)
-            .subscribe(
-                () -> {}, err -> ui.appendError(status, "(monitor-error)", String.valueOf(err))));
-  }
-
-  private void requestFallbackRefresh(
-      String serverId, TargetRef status, boolean requireConnection) {
-    String sid = Objects.toString(serverId, "").trim();
-    if (sid.isEmpty()) return;
-    if (!connectionCoordinator.isConnected(sid)) {
-      if (requireConnection) {
-        ui.appendStatus(status, "(conn)", "Not connected");
-      }
-      return;
-    }
-    monitorFallbackPort.requestImmediateRefresh(sid);
   }
 
   private void appendUsage(TargetRef out) {
-    ui.appendStatus(out, "(monitor)", "Usage: /monitor <+|-|list|status|clear> [nicks]");
-    ui.appendStatus(
-        out, "(monitor)", "Aliases: /mon, /monitor +nick1 nick2, /monitor -nick1,nick2");
-    ui.appendStatus(
-        out, "(monitor)", "Examples: /monitor +alice,bob  |  /monitor list  |  /monitor clear");
+    monitorCommandSupport.appendStatus(out, "Usage: /monitor <+|-|list|status|clear> [nicks]");
+    monitorCommandSupport.appendStatus(
+        out, "Aliases: /mon, /monitor +nick1 nick2, /monitor -nick1,nick2");
+    monitorCommandSupport.appendStatus(
+        out, "Examples: /monitor +alice,bob  |  /monitor list  |  /monitor clear");
   }
 
   private static char extractSigil(String op) {
@@ -247,10 +187,5 @@ public class OutboundMonitorCommandService {
     if (s.isEmpty()) return 0;
     char c = s.charAt(0);
     return (c == '+' || c == '-') ? c : 0;
-  }
-
-  private static boolean containsCrlf(String s) {
-    if (s == null || s.isEmpty()) return false;
-    return s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0;
   }
 }
