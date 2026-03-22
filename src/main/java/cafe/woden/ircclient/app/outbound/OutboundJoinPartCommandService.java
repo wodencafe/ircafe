@@ -10,7 +10,6 @@ import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.JoinRoutingPort;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -18,7 +17,6 @@ import org.springframework.stereotype.Component;
 /** Handles outbound /join and /part command flow. */
 @Component
 @ApplicationLayer
-@RequiredArgsConstructor
 final class OutboundJoinPartCommandService {
 
   @NonNull
@@ -31,6 +29,27 @@ final class OutboundJoinPartCommandService {
   @NonNull private final CommandTargetPolicy commandTargetPolicy;
   @NonNull private final ChatCommandRuntimeConfigPort runtimeConfig;
   @NonNull private final JoinRoutingPort joinRoutingState;
+  @NonNull private final PartCommandSupport partCommandSupport;
+
+  OutboundJoinPartCommandService(
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
+      UiPort ui,
+      ConnectionCoordinator connectionCoordinator,
+      TargetCoordinator targetCoordinator,
+      CommandTargetPolicy commandTargetPolicy,
+      ChatCommandRuntimeConfigPort runtimeConfig,
+      JoinRoutingPort joinRoutingState) {
+    this.targetMembership = targetMembership;
+    this.ui = ui;
+    this.connectionCoordinator = connectionCoordinator;
+    this.targetCoordinator = targetCoordinator;
+    this.commandTargetPolicy = commandTargetPolicy;
+    this.runtimeConfig = runtimeConfig;
+    this.joinRoutingState = joinRoutingState;
+    this.partCommandSupport =
+        new PartCommandSupport(
+            targetMembership, ui, connectionCoordinator, targetCoordinator, commandTargetPolicy);
+  }
 
   void handleJoin(CompositeDisposable disposables, String channel, String key) {
     TargetRef at = targetCoordinator.getActiveTarget();
@@ -63,7 +82,8 @@ final class OutboundJoinPartCommandService {
       return;
     }
 
-    if (containsCrlf(chan) || containsCrlf(joinKey)) {
+    if (OutboundRawCommandSupport.containsLineBreaks(chan)
+        || OutboundRawCommandSupport.containsLineBreaks(joinKey)) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(join)",
@@ -99,81 +119,11 @@ final class OutboundJoinPartCommandService {
   }
 
   void handlePart(CompositeDisposable disposables, String channel, String reason) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(targetCoordinator.safeStatusTarget(), "(part)", "Select a server first.");
-      return;
-    }
-
-    String chan = channel == null ? "" : channel.trim();
-    String msg = reason == null ? "" : reason.trim();
-
-    TargetRef target;
-    if (chan.isEmpty()) {
-      ParsedPartTarget explicitFromReason = parseExplicitPartTargetFromReason(at.serverId(), msg);
-      if (explicitFromReason != null) {
-        target = explicitFromReason.target();
-        msg = explicitFromReason.reason();
-      } else if (!commandTargetPolicy.isChannelLikeTarget(at)) {
-        ui.appendStatus(
-            at, "(part)", "Usage: /part [#channel] [reason] (or select a channel first)");
-        return;
-      } else {
-        target = at;
-      }
-    } else {
-      target = new TargetRef(at.serverId(), chan);
-      if (!commandTargetPolicy.isChannelLikeTargetForServer(at.serverId(), target.target())) {
-        ui.appendStatus(at, "(part)", "Usage: /part [#channel] [reason]");
-        return;
-      }
-    }
-
-    if (target.isChannel()) {
-      targetCoordinator.closeChannel(target, msg);
-      return;
-    }
-
-    TargetRef status = new TargetRef(target.serverId(), "status");
-    if (!connectionCoordinator.isConnected(target.serverId())) {
-      ui.appendStatus(status, "(conn)", "Not connected");
-      return;
-    }
-    if (containsCrlf(target.target()) || containsCrlf(msg)) {
-      ui.appendStatus(status, "(part)", "Refusing to send multi-line /part input.");
-      return;
-    }
-
-    disposables.add(
-        targetMembership
-            .partChannel(target.serverId(), target.target(), msg.isEmpty() ? null : msg)
-            .subscribe(
-                () -> ui.appendStatus(status, "(part)", "Requested leave for " + target.target()),
-                err -> ui.appendError(status, "(part-error)", String.valueOf(err))));
-  }
-
-  private ParsedPartTarget parseExplicitPartTargetFromReason(String serverId, String reason) {
-    String text = reason == null ? "" : reason.trim();
-    if (text.isEmpty()) return null;
-
-    int split = text.indexOf(' ');
-    String candidate = split < 0 ? text : text.substring(0, split).trim();
-    if (!commandTargetPolicy.isChannelLikeTargetForServer(serverId, candidate)) {
-      return null;
-    }
-
-    String trailingReason = split < 0 ? "" : text.substring(split + 1).trim();
-    return new ParsedPartTarget(new TargetRef(serverId, candidate), trailingReason);
-  }
-
-  private static boolean containsCrlf(String s) {
-    return s != null && (s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0);
+    partCommandSupport.handlePart(disposables, channel, reason);
   }
 
   private boolean shouldPersistJoinedChannel(String serverId) {
     return commandTargetPolicy.backendForServer(serverId)
         != IrcProperties.Server.Backend.QUASSEL_CORE;
   }
-
-  private record ParsedPartTarget(TargetRef target, String reason) {}
 }
