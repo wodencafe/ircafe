@@ -1,8 +1,11 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.upload;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.OutboundHelpContributor;
+import cafe.woden.ircclient.app.outbound.OutboundRawCommandSupport;
+import cafe.woden.ircclient.app.outbound.SemanticUploadCommandHandler;
 import cafe.woden.ircclient.irc.port.IrcTargetMembershipPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -18,7 +21,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ApplicationLayer
 @RequiredArgsConstructor
-final class OutboundUploadCommandService implements OutboundHelpContributor {
+public final class OutboundUploadCommandService implements OutboundHelpContributor {
 
   @NonNull
   @Qualifier("ircTargetMembershipPort")
@@ -30,7 +33,7 @@ final class OutboundUploadCommandService implements OutboundHelpContributor {
   @NonNull private final SemanticUploadCommandHandler semanticUploadCommandHandler;
   @NonNull private final OutboundRawCommandSupport rawCommandSupport;
 
-  void appendUploadHelp(TargetRef out) {
+  public void appendUploadHelp(TargetRef out) {
     semanticUploadCommandHandler.appendUploadHelp(out);
   }
 
@@ -44,7 +47,8 @@ final class OutboundUploadCommandService implements OutboundHelpContributor {
     return Map.of("upload", this::appendUploadHelp);
   }
 
-  void handleUpload(CompositeDisposable disposables, String msgType, String path, String caption) {
+  public void handleUpload(
+      CompositeDisposable disposables, String msgType, String path, String caption) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(upload)", "Select a target first.");

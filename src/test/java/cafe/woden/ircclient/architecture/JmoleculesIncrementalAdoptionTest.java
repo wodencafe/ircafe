@@ -491,7 +491,7 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.OutboundRawCommandSupport", ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundReadMarkerCommandService",
+        "cafe.woden.ircclient.app.outbound.readmarker.OutboundReadMarkerCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.messaging.OutboundSayQuoteCommandService",
@@ -500,7 +500,8 @@ class JmoleculesIncrementalAdoptionTest {
         "cafe.woden.ircclient.app.outbound.channel.OutboundTopicKickCommandService",
         ApplicationLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.app.outbound.OutboundUploadCommandService", ApplicationLayer.class);
+        "cafe.woden.ircclient.app.outbound.upload.OutboundUploadCommandService",
+        ApplicationLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.app.outbound.backend.QuasselBackendNamedOutboundCommandHandler",
         ApplicationLayer.class);

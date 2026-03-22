@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.readmarker;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -11,6 +11,9 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.CommandTargetPolicy;
+import cafe.woden.ircclient.app.outbound.OutboundCommandAvailabilitySupport;
+import cafe.woden.ircclient.app.outbound.OutboundConnectionStatusSupport;
 import cafe.woden.ircclient.app.outbound.backend.*;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;

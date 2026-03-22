@@ -10,15 +10,15 @@ import org.springframework.stereotype.Component;
 @Component
 @ApplicationLayer
 @RequiredArgsConstructor
-final class OutboundCommandAvailabilitySupport {
+public final class OutboundCommandAvailabilitySupport {
 
   @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
 
-  String featureUnavailableMessage(String serverId, String fallbackMessage) {
+  public String featureUnavailableMessage(String serverId, String fallbackMessage) {
     return backendCapabilityPolicy.featureUnavailableMessage(serverId, fallbackMessage);
   }
 
-  String helpAvailabilitySuffix(String serverId, boolean available, String fallbackReason) {
+  public String helpAvailabilitySuffix(String serverId, boolean available, String fallbackReason) {
     if (available) {
       return "";
     }

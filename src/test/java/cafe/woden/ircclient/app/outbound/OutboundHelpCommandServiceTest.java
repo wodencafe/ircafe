@@ -10,6 +10,8 @@ import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.*;
+import cafe.woden.ircclient.app.outbound.readmarker.OutboundReadMarkerCommandService;
+import cafe.woden.ircclient.app.outbound.upload.OutboundUploadCommandService;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.port.IrcEchoCapabilityPort;

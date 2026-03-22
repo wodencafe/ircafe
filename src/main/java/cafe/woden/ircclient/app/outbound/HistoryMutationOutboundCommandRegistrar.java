@@ -5,6 +5,8 @@ import cafe.woden.ircclient.app.outbound.chathistory.OutboundChatHistoryCommandS
 import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistrar;
 import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistry;
 import cafe.woden.ircclient.app.outbound.messaging.OutboundSayQuoteCommandService;
+import cafe.woden.ircclient.app.outbound.readmarker.OutboundReadMarkerCommandService;
+import cafe.woden.ircclient.app.outbound.upload.OutboundUploadCommandService;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;

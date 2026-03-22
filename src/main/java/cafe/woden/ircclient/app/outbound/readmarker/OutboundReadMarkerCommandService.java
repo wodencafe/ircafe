@@ -1,7 +1,10 @@
-package cafe.woden.ircclient.app.outbound;
+package cafe.woden.ircclient.app.outbound.readmarker;
 
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
+import cafe.woden.ircclient.app.outbound.OutboundCommandAvailabilitySupport;
+import cafe.woden.ircclient.app.outbound.OutboundConnectionStatusSupport;
+import cafe.woden.ircclient.app.outbound.OutboundHelpContributor;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
@@ -19,7 +22,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ApplicationLayer
 @RequiredArgsConstructor
-final class OutboundReadMarkerCommandService implements OutboundHelpContributor {
+public final class OutboundReadMarkerCommandService implements OutboundHelpContributor {
 
   @NonNull private final IrcReadMarkerPort readMarkerPort;
   @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
@@ -38,7 +41,7 @@ final class OutboundReadMarkerCommandService implements OutboundHelpContributor 
     return Map.of("markread", this::appendMarkReadHelp);
   }
 
-  void handleMarkRead(CompositeDisposable disposables) {
+  public void handleMarkRead(CompositeDisposable disposables) {
     TargetRef at = targetCoordinator.getActiveTarget();
     if (at == null) {
       ui.appendStatus(targetCoordinator.safeStatusTarget(), "(markread)", "Select a target first.");
