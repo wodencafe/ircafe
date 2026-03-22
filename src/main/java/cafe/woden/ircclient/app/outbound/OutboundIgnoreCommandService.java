@@ -11,7 +11,6 @@ import cafe.woden.ircclient.ignore.api.IgnoreTextPatternMode;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.List;
 import java.util.Objects;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.stereotype.Component;
 
@@ -24,13 +23,27 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ApplicationLayer
-@RequiredArgsConstructor
 public class OutboundIgnoreCommandService {
 
   private final UiPort ui;
   private final TargetCoordinator targetCoordinator;
   private final IgnoreListQueryPort ignoreListQueryPort;
   private final IgnoreListCommandPort ignoreListCommandPort;
+  private final IgnoreSoftCommandSupport ignoreSoftCommandSupport;
+
+  public OutboundIgnoreCommandService(
+      UiPort ui,
+      TargetCoordinator targetCoordinator,
+      IgnoreListQueryPort ignoreListQueryPort,
+      IgnoreListCommandPort ignoreListCommandPort) {
+    this.ui = ui;
+    this.targetCoordinator = targetCoordinator;
+    this.ignoreListQueryPort = ignoreListQueryPort;
+    this.ignoreListCommandPort = ignoreListCommandPort;
+    this.ignoreSoftCommandSupport =
+        new IgnoreSoftCommandSupport(
+            ui, targetCoordinator, ignoreListQueryPort, ignoreListCommandPort);
+  }
 
   public void handleIgnore(String maskOrNick) {
     TargetRef active = targetCoordinator.getActiveTarget();
@@ -203,80 +216,15 @@ public class OutboundIgnoreCommandService {
   }
 
   public void handleSoftIgnore(String maskOrNick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(
-          targetCoordinator.safeStatusTarget(), "(soft-ignore)", "Select a server first.");
-      return;
-    }
-
-    String arg = maskOrNick == null ? "" : maskOrNick.trim();
-    if (arg.isEmpty()) {
-      ui.appendStatus(at, "(soft-ignore)", "Usage: /softignore <maskOrNick>");
-      return;
-    }
-
-    boolean added = ignoreListCommandPort.addSoftMask(at.serverId(), arg);
-    String stored = IgnoreMaskNormalizer.normalizeMaskOrNickToHostmask(arg);
-    if (added) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"), "(soft-ignore)", "Soft-ignoring: " + stored);
-    } else {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(soft-ignore)",
-          "Already soft-ignored: " + stored);
-    }
+    ignoreSoftCommandSupport.handleSoftIgnore(maskOrNick);
   }
 
   public void handleUnsoftIgnore(String maskOrNick) {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(
-          targetCoordinator.safeStatusTarget(), "(unsoftignore)", "Select a server first.");
-      return;
-    }
-
-    String arg = maskOrNick == null ? "" : maskOrNick.trim();
-    if (arg.isEmpty()) {
-      ui.appendStatus(at, "(unsoftignore)", "Usage: /unsoftignore <maskOrNick>");
-      return;
-    }
-
-    boolean removed = ignoreListCommandPort.removeSoftMask(at.serverId(), arg);
-    String stored = IgnoreMaskNormalizer.normalizeMaskOrNickToHostmask(arg);
-    if (removed) {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(unsoftignore)",
-          "Removed soft-ignore: " + stored);
-    } else {
-      ui.appendStatus(
-          new TargetRef(at.serverId(), "status"),
-          "(unsoftignore)",
-          "Not in soft-ignore list: " + stored);
-    }
+    ignoreSoftCommandSupport.handleUnsoftIgnore(maskOrNick);
   }
 
   public void handleSoftIgnoreList() {
-    TargetRef at = targetCoordinator.getActiveTarget();
-    if (at == null) {
-      ui.appendStatus(
-          targetCoordinator.safeStatusTarget(), "(soft-ignore)", "Select a server first.");
-      return;
-    }
-
-    List<String> masks = ignoreListQueryPort.listSoftMasks(at.serverId());
-    TargetRef status = new TargetRef(at.serverId(), "status");
-    if (masks.isEmpty()) {
-      ui.appendStatus(status, "(soft-ignore)", "Soft-ignore list is empty.");
-      return;
-    }
-
-    ui.appendStatus(status, "(soft-ignore)", "Soft-ignore masks (" + masks.size() + "): ");
-    for (String m : masks) {
-      ui.appendStatus(status, "(soft-ignore)", "  - " + m);
-    }
+    ignoreSoftCommandSupport.handleSoftIgnoreList();
   }
 
   private static String resolveServerIdForIgnore(TargetRef active, String network) {
