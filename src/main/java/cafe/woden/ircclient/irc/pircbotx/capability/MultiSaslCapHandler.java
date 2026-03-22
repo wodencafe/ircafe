@@ -8,19 +8,14 @@ import com.google.common.collect.ImmutableList;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
-import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeMap;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.pircbotx.PircBotX;
 import org.pircbotx.cap.CapHandler;
 import org.pircbotx.exception.CAPException;
@@ -67,7 +62,7 @@ public final class MultiSaslCapHandler implements CapHandler {
   private final StringBuilder authInB64 = new StringBuilder();
 
   // SCRAM state
-  private ScramContext scram;
+  private PircbotxScramSaslExchange scram;
 
   public MultiSaslCapHandler(
       String username, String secret, String mechanism, boolean disconnectOnFailure) {
@@ -285,7 +280,7 @@ public final class MultiSaslCapHandler implements CapHandler {
 
   private void handleScram(PircBotX bot, String digest, String serverMsg) throws CAPException {
     if (scram == null) {
-      scram = new ScramContext(digest, username, secret);
+      scram = new PircbotxScramSaslExchange(digest, username, secret);
       // Client first message (no server data required; serverMsg should be empty on '+').
       String clientFirst = scram.clientFirstMessage();
       sendAuthenticateResponse(
@@ -293,7 +288,7 @@ public final class MultiSaslCapHandler implements CapHandler {
       return;
     }
 
-    if (!scram.serverFirstSeen) {
+    if (!scram.hasSeenServerFirst()) {
       scram.onServerFirst(serverMsg);
       String clientFinal = scram.clientFinalMessage();
       sendAuthenticateResponse(
@@ -301,11 +296,10 @@ public final class MultiSaslCapHandler implements CapHandler {
       return;
     }
 
-    if (!scram.serverFinalSeen) {
+    if (!scram.hasSeenServerFinal()) {
       scram.onServerFinal(serverMsg);
       // Per SASL framing, send empty response to finish exchange.
       bot.sendRaw().rawLine("AUTHENTICATE +");
-      scram.serverFinalSeen = true;
     }
   }
 
@@ -474,190 +468,6 @@ public final class MultiSaslCapHandler implements CapHandler {
       }
 
       return new ParsedLine(cmd, trailing);
-    }
-  }
-
-  private static final class ScramContext {
-    private final String digest;
-    private final String user;
-    private final String pass;
-    private final SecureRandom rng = new SecureRandom();
-
-    private final String clientNonce;
-    private final String clientFirstBare;
-    private final String clientFirstMessage;
-    private String serverFirstMessage;
-    private String clientFinalWithoutProof;
-    private String authMessage;
-
-    private boolean serverFirstSeen;
-    private boolean serverFinalSeen;
-
-    private byte[] saltedPassword;
-    private byte[] serverSignature;
-
-    ScramContext(String digest, String user, String pass) {
-      this.digest = digest;
-      this.user = Objects.toString(user, "");
-      this.pass = Objects.toString(pass, "");
-      this.clientNonce = randomNonce();
-      String u = saslEscapeUsername(this.user);
-      this.clientFirstBare = "n=" + u + ",r=" + clientNonce;
-      this.clientFirstMessage = "n,," + clientFirstBare;
-    }
-
-    String clientFirstMessage() {
-      return clientFirstMessage;
-    }
-
-    void onServerFirst(String serverFirst) throws CAPException {
-      this.serverFirstMessage = Objects.toString(serverFirst, "");
-      Map<String, String> kv = parseScramKvs(serverFirstMessage);
-      String r = kv.get("r");
-      String s = kv.get("s");
-      String i = kv.get("i");
-      if (r == null || s == null || i == null) {
-        throw new CAPException(
-            CAPException.Reason.SASL_FAILED, "Invalid SCRAM server-first-message");
-      }
-      if (!r.startsWith(clientNonce)) {
-        throw new CAPException(
-            CAPException.Reason.SASL_FAILED, "SCRAM server nonce does not start with client nonce");
-      }
-
-      byte[] salt;
-      try {
-        salt = Base64.getDecoder().decode(s);
-      } catch (IllegalArgumentException e) {
-        throw new CAPException(CAPException.Reason.SASL_FAILED, "Invalid SCRAM salt (base64)");
-      }
-
-      int it;
-      try {
-        it = Integer.parseInt(i);
-      } catch (NumberFormatException e) {
-        throw new CAPException(CAPException.Reason.SASL_FAILED, "Invalid SCRAM iteration count");
-      }
-      if (it <= 0)
-        throw new CAPException(CAPException.Reason.SASL_FAILED, "Invalid SCRAM iteration count");
-
-      // client-final-message without proof
-      // channel binding is "biws" (no binding)
-      this.clientFinalWithoutProof = "c=biws,r=" + r;
-      this.authMessage = clientFirstBare + "," + serverFirstMessage + "," + clientFinalWithoutProof;
-
-      this.saltedPassword = hi(pass.getBytes(StandardCharsets.UTF_8), salt, it, digest);
-      byte[] clientKey =
-          hmac(saltedPassword, "Client Key".getBytes(StandardCharsets.UTF_8), digest);
-      byte[] storedKey = hash(clientKey, digest);
-      byte[] clientSignature =
-          hmac(storedKey, authMessage.getBytes(StandardCharsets.UTF_8), digest);
-      byte[] clientProof = xor(clientKey, clientSignature);
-      byte[] serverKey =
-          hmac(saltedPassword, "Server Key".getBytes(StandardCharsets.UTF_8), digest);
-      this.serverSignature = hmac(serverKey, authMessage.getBytes(StandardCharsets.UTF_8), digest);
-
-      this._clientProofB64 = Base64.getEncoder().encodeToString(clientProof);
-      this._serverSignatureB64 = Base64.getEncoder().encodeToString(serverSignature);
-
-      serverFirstSeen = true;
-    }
-
-    private String _clientProofB64;
-    private String _serverSignatureB64;
-
-    String clientFinalMessage() {
-      return clientFinalWithoutProof + ",p=" + _clientProofB64;
-    }
-
-    void onServerFinal(String serverFinal) throws CAPException {
-      Map<String, String> kv = parseScramKvs(Objects.toString(serverFinal, ""));
-      String err = kv.get("e");
-      if (err != null && !err.isEmpty()) {
-        throw new CAPException(CAPException.Reason.SASL_FAILED, "SCRAM error from server: " + err);
-      }
-      String v = kv.get("v");
-      if (v == null) {
-        throw new CAPException(CAPException.Reason.SASL_FAILED, "Missing SCRAM server signature");
-      }
-      if (!_serverSignatureB64.equals(v)) {
-        throw new CAPException(
-            CAPException.Reason.SASL_FAILED, "SCRAM server signature verification failed");
-      }
-      serverFinalSeen = true;
-    }
-
-    private String randomNonce() {
-      byte[] b = new byte[18];
-      rng.nextBytes(b);
-      return Base64.getEncoder().encodeToString(b);
-    }
-
-    private static String saslEscapeUsername(String u) {
-      // RFC 5802: ',' -> '=2C' and '=' -> '=3D'
-      return u.replace("=", "=3D").replace(",", "=2C");
-    }
-
-    private static Map<String, String> parseScramKvs(String msg) {
-      Map<String, String> out = new TreeMap<>();
-      if (msg == null) return out;
-      for (String part : msg.split(",")) {
-        int idx = part.indexOf('=');
-        if (idx <= 0) continue;
-        String k = part.substring(0, idx);
-        String v = part.substring(idx + 1);
-        out.put(k, v);
-      }
-      return out;
-    }
-
-    private static byte[] hi(byte[] password, byte[] salt, int iterations, String digest)
-        throws CAPException {
-      // Hi(str, salt, i) = U1 XOR U2 XOR ... XOR Ui
-      // U1 = HMAC(str, salt + INT(1))
-      byte[] salt1 = new byte[salt.length + 4];
-      System.arraycopy(salt, 0, salt1, 0, salt.length);
-      salt1[salt.length] = 0;
-      salt1[salt.length + 1] = 0;
-      salt1[salt.length + 2] = 0;
-      salt1[salt.length + 3] = 1;
-
-      byte[] u = hmac(password, salt1, digest);
-      byte[] out = u.clone();
-      for (int n = 1; n < iterations; n++) {
-        u = hmac(password, u, digest);
-        for (int j = 0; j < out.length; j++) {
-          out[j] ^= u[j];
-        }
-      }
-      return out;
-    }
-
-    private static byte[] hmac(byte[] key, byte[] msg, String digest) throws CAPException {
-      try {
-        String alg = "Hmac" + digest.replace("-", "");
-        Mac mac = Mac.getInstance(alg);
-        mac.init(new SecretKeySpec(key, alg));
-        return mac.doFinal(msg);
-      } catch (Exception e) {
-        throw new CAPException(CAPException.Reason.OTHER, "HMAC failure", e);
-      }
-    }
-
-    private static byte[] hash(byte[] in, String digest) throws CAPException {
-      try {
-        return java.security.MessageDigest.getInstance(digest).digest(in);
-      } catch (Exception e) {
-        throw new CAPException(CAPException.Reason.OTHER, "Digest failure", e);
-      }
-    }
-
-    private static byte[] xor(byte[] a, byte[] b) {
-      byte[] out = new byte[Math.min(a.length, b.length)];
-      for (int i = 0; i < out.length; i++) {
-        out[i] = (byte) (a[i] ^ b[i]);
-      }
-      return out;
     }
   }
 }
