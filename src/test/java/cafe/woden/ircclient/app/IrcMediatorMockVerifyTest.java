@@ -35,6 +35,7 @@ import cafe.woden.ircclient.app.core.MediatorConnectionSubscriptionBinder;
 import cafe.woden.ircclient.app.core.MediatorConnectivityLifecycleOrchestrator;
 import cafe.woden.ircclient.app.core.MediatorHistoryIngestOrchestrator;
 import cafe.woden.ircclient.app.core.MediatorInboundEventPreparationService;
+import cafe.woden.ircclient.app.core.MediatorInboundTextEventHandler;
 import cafe.woden.ircclient.app.core.MediatorInviteEventHandler;
 import cafe.woden.ircclient.app.core.MediatorIrcv3EventHandler;
 import cafe.woden.ircclient.app.core.MediatorIrcv3PresenceEventHandler;
@@ -179,11 +180,24 @@ class IrcMediatorMockVerifyTest {
   private final MediatorInboundEventPreparationService eventPreparationService =
       new MediatorInboundEventPreparationService(
           irc, notificationRuleMatcherPort, inboundIgnorePolicy);
+  private final MediatorInboundTextEventHandler mediatorInboundTextEventHandler =
+      new MediatorInboundTextEventHandler(
+          negotiatedFeaturePort,
+          ui,
+          targetCoordinator,
+          userInfoEnrichmentService,
+          pendingEchoMessageState,
+          outboundDccCommandService,
+          trayNotificationsPort,
+          uiSettingsPort,
+          ircEventNotifierPort,
+          applicationEventPublisher,
+          ctcpRoutingState,
+          eventPreparationService);
 
   private final IrcMediator mediator =
       new IrcMediator(
           irc,
-          negotiatedFeaturePort,
           ui,
           commandParser,
           userCommandAliasEngine,
@@ -201,12 +215,9 @@ class IrcMediatorMockVerifyTest {
           mediatorUiSubscriptionBinder,
           mediatorHistoryIngestOrchestrator,
           outboundCommandDispatcher,
-          outboundDccCommandService,
           targetCoordinator,
-          uiSettingsPort,
-          trayNotificationsPort,
           eventPreparationService,
-          userInfoEnrichmentService,
+          mediatorInboundTextEventHandler,
           userListStore,
           whoisRoutingState,
           ctcpRoutingState,
@@ -216,8 +227,7 @@ class IrcMediatorMockVerifyTest {
           inboundModeEventHandler,
           ircEventNotifierPort,
           interceptorIngestPort,
-          monitorFallbackPort,
-          applicationEventPublisher);
+          monitorFallbackPort);
 
   @Test
   void startBindsUiIrcAndConnectionCollaboratorsInOrderOnce() {
