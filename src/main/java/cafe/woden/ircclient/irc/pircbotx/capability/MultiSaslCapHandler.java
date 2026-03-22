@@ -12,7 +12,6 @@ import java.security.Signature;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -49,6 +48,8 @@ public final class MultiSaslCapHandler implements CapHandler {
   private final String secret;
   private final String configuredMechanism;
   private final boolean disconnectOnFailure;
+  private final PircbotxSaslMechanismSelector mechanismSelector =
+      new PircbotxSaslMechanismSelector();
 
   private final Set<String> offeredMechanismsUpper = new LinkedHashSet<>();
   private boolean saslOffered;
@@ -126,7 +127,8 @@ public final class MultiSaslCapHandler implements CapHandler {
     saslAcked = true;
     state = State.ACKED;
 
-    chosenMechanism = chooseMechanism();
+    chosenMechanism =
+        mechanismSelector.choose(configuredMechanism, username, secret, offeredMechanismsUpper);
     if (chosenMechanism == null || chosenMechanism.isBlank()) {
       return fail(
           bot,
@@ -347,50 +349,6 @@ public final class MultiSaslCapHandler implements CapHandler {
       }
     }
     return false;
-  }
-
-  private String chooseMechanism() {
-    String cfg = configuredMechanism.toUpperCase(Locale.ROOT);
-    if (cfg.isBlank()) cfg = "PLAIN";
-
-    // If user explicitly set a mechanism, honor it.
-    if (!"AUTO".equals(cfg)) {
-      return cfg;
-    }
-
-    boolean hasUser = username != null && !username.isBlank();
-    boolean hasSecret = secret != null && !secret.isBlank();
-
-    // Some servers advertise "sasl" without listing mechanisms (or PircBotX provides a bare
-    // 'sasl').
-    // In that case, make a conservative guess.
-    if (offeredMechanismsUpper.isEmpty()) {
-      if (!hasSecret) {
-        // Only EXTERNAL can work without a shared secret.
-        return "EXTERNAL";
-      }
-      return hasUser ? "PLAIN" : null;
-    }
-
-    // If we don't have a secret, only EXTERNAL is viable.
-    if (!hasSecret) {
-      return offeredMechanismsUpper.contains("EXTERNAL") ? "EXTERNAL" : null;
-    }
-
-    // Password-based mechs require a username.
-    if (!hasUser) {
-      return null;
-    }
-
-    // Prefer password-based mechanisms when a secret is present.
-    // We intentionally do NOT auto-select EXTERNAL (TLS client cert) or ECDSA (private key) here,
-    // because a user-provided "secret" is most commonly a password.
-    for (String p : List.of("SCRAM-SHA-256", "SCRAM-SHA-1", "PLAIN")) {
-      if (offeredMechanismsUpper.contains(p)) return p;
-    }
-
-    // Fallback: try PLAIN.
-    return "PLAIN";
   }
 
   private enum State {
