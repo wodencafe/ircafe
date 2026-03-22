@@ -26,4 +26,28 @@ class IrcMediatorTickerTest {
     subscriber.assertValueCount(1);
     subscriber.assertNoErrors();
   }
+
+  @Test
+  void offloadedInboundPreparationPreservesSourceOrder() {
+    TestScheduler offloadScheduler = new TestScheduler();
+    TestScheduler observeScheduler = new TestScheduler();
+
+    var subscriber =
+        IrcMediator.offloadSelectedEventProcessing(
+                io.reactivex.rxjava3.core.Flowable.just("status", "channel", "action"),
+                value -> !"status".equals(value),
+                String::toUpperCase,
+                offloadScheduler,
+                observeScheduler)
+            .test();
+
+    observeScheduler.triggerActions();
+    subscriber.assertValue("STATUS");
+
+    offloadScheduler.triggerActions();
+    observeScheduler.triggerActions();
+
+    subscriber.assertValues("STATUS", "CHANNEL", "ACTION");
+    subscriber.assertNoErrors();
+  }
 }
