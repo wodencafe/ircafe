@@ -25,7 +25,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.NonNull;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
@@ -66,6 +65,7 @@ public class PircbotxIrcClientService
   private final PircbotxShutdownSupport shutdownSupport;
   private final PircbotxActionCommandSupport actionCommandSupport;
   private final PircbotxAvailabilitySupport availabilitySupport;
+  private final PircbotxLagProbeSupport lagProbeSupport;
   private final PircbotxQueryCommandSupport queryCommandSupport;
   private final PircbotxZncPlaybackRequestSupport zncPlaybackRequestSupport;
   private final PircbotxMultilineMessageSupport multilineMessageSupport =
@@ -122,6 +122,7 @@ public class PircbotxIrcClientService
     this.shutdownSupport = new PircbotxShutdownSupport(this.timers);
     this.actionCommandSupport = new PircbotxActionCommandSupport();
     this.availabilitySupport = new PircbotxAvailabilitySupport();
+    this.lagProbeSupport = new PircbotxLagProbeSupport();
     this.queryCommandSupport = new PircbotxQueryCommandSupport();
     this.zncPlaybackRequestSupport = new PircbotxZncPlaybackRequestSupport(this.bus);
   }
@@ -550,20 +551,7 @@ public class PircbotxIrcClientService
               if (sid.isEmpty()) {
                 throw new IllegalArgumentException("serverId is blank");
               }
-
-              PircbotxConnectionState c = conn(sid);
-              PircBotX bot = c.botRef.get();
-              if (bot == null) {
-                throw new IllegalStateException("Not connected: " + sid);
-              }
-              if (!c.registrationComplete.get()) {
-                throw new IllegalStateException("Registration not complete: " + sid);
-              }
-
-              String token =
-                  "ircafe-lag-" + Long.toUnsignedString(ThreadLocalRandom.current().nextLong(), 36);
-              c.beginLagProbe(token, System.currentTimeMillis());
-              bot.sendRaw().rawLine("PING :" + token);
+              lagProbeSupport.requestLagProbe(sid, conn(sid));
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -578,8 +566,7 @@ public class PircbotxIrcClientService
     try {
       String sid = Objects.toString(serverId, "").trim();
       if (sid.isEmpty()) return false;
-      PircbotxConnectionState c = conn(sid);
-      return c != null && c.botRef.get() != null && c.registrationComplete.get();
+      return lagProbeSupport.isLagProbeReady(conn(sid));
     } catch (Exception ignored) {
       return false;
     }
@@ -590,10 +577,7 @@ public class PircbotxIrcClientService
     try {
       String sid = Objects.toString(serverId, "").trim();
       if (sid.isEmpty()) return OptionalLong.empty();
-      PircbotxConnectionState c = conn(sid);
-      if (c == null) return OptionalLong.empty();
-      long lagMs = c.lagMsIfFresh(System.currentTimeMillis());
-      return lagMs >= 0L ? OptionalLong.of(lagMs) : OptionalLong.empty();
+      return lagProbeSupport.lastMeasuredLagMs(conn(sid), System.currentTimeMillis());
     } catch (Exception ignored) {
       return OptionalLong.empty();
     }
