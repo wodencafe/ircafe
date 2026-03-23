@@ -399,7 +399,8 @@ final class PircbotxIrcv3InputParser extends InputParser {
       if (code != 324) {
         throw ex;
       }
-      PircbotxChannelModeParsers.ParsedRpl324 parsed = parseRpl324Fallback(line, parsedLine);
+      PircbotxChannelModeParsers.ParsedRpl324 parsed =
+          PircbotxChannelModeParsers.parseRpl324Fallback(line, parsedLine);
       if (parsed != null) {
         log.warn(
             "[{}] recovered from PircBotX RPL 324 parse failure ({}): channel={} details={} line={}",
@@ -444,26 +445,6 @@ final class PircbotxIrcv3InputParser extends InputParser {
         };
     if (channelIndex < 0 || parsedLine.size() <= channelIndex) return "";
     return stripLeadingColon(parsedLine.get(channelIndex)).trim();
-  }
-
-  private static PircbotxChannelModeParsers.ParsedRpl324 parseRpl324Fallback(
-      String line, List<String> parsedLine) {
-    PircbotxChannelModeParsers.ParsedRpl324 fromLine = PircbotxChannelModeParsers.parseRpl324(line);
-    if (fromLine != null) return fromLine;
-
-    if (parsedLine == null || parsedLine.size() < 3) return null;
-    String channel = stripLeadingColon(parsedLine.get(1));
-    if (channel.isBlank()) return null;
-
-    StringBuilder details = new StringBuilder();
-    for (int i = 2; i < parsedLine.size(); i++) {
-      String token = stripLeadingColon(parsedLine.get(i));
-      if (token.isBlank()) continue;
-      if (details.length() > 0) details.append(' ');
-      details.append(token);
-    }
-    if (details.length() == 0) return null;
-    return new PircbotxChannelModeParsers.ParsedRpl324(channel, details.toString());
   }
 
   private void observePassiveLagSampleFromServerTime(
