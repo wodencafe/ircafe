@@ -66,6 +66,7 @@ public class PircbotxIrcClientService
   private final PircbotxActionCommandSupport actionCommandSupport;
   private final PircbotxAvailabilitySupport availabilitySupport;
   private final PircbotxLagProbeSupport lagProbeSupport;
+  private final PircbotxBasicCommandSupport basicCommandSupport;
   private final PircbotxQueryCommandSupport queryCommandSupport;
   private final PircbotxZncPlaybackRequestSupport zncPlaybackRequestSupport;
   private final PircbotxMultilineMessageSupport multilineMessageSupport =
@@ -123,6 +124,7 @@ public class PircbotxIrcClientService
     this.actionCommandSupport = new PircbotxActionCommandSupport();
     this.availabilitySupport = new PircbotxAvailabilitySupport();
     this.lagProbeSupport = new PircbotxLagProbeSupport();
+    this.basicCommandSupport = new PircbotxBasicCommandSupport();
     this.queryCommandSupport = new PircbotxQueryCommandSupport();
     this.zncPlaybackRequestSupport = new PircbotxZncPlaybackRequestSupport(this.bus);
   }
@@ -211,48 +213,28 @@ public class PircbotxIrcClientService
   @Override
   public Completable changeNick(String serverId, String newNick) {
     return Completable.fromAction(
-            () -> {
-              String nick = PircbotxUtil.sanitizeNick(newNick);
-              requireBot(serverId).sendIRC().changeNick(nick);
-            })
+            () -> basicCommandSupport.changeNick(requireBot(serverId), newNick))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable setAway(String serverId, String awayMessage) {
     return Completable.fromAction(
-            () -> {
-              String msg = awayMessage == null ? "" : awayMessage.trim();
-              if (msg.contains("\r") || msg.contains("\n")) {
-                throw new IllegalArgumentException("away message contains CR/LF");
-              }
-              if (msg.isEmpty()) {
-                requireBot(serverId).sendRaw().rawLine("AWAY");
-              } else {
-                requireBot(serverId).sendRaw().rawLine("AWAY :" + msg);
-              }
-            })
+            () -> basicCommandSupport.setAway(requireBot(serverId), awayMessage))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable joinChannel(String serverId, String channel) {
-    return Completable.fromAction(() -> requireBot(serverId).sendIRC().joinChannel(channel))
+    return Completable.fromAction(
+            () -> basicCommandSupport.joinChannel(requireBot(serverId), channel))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable partChannel(String serverId, String channel, String reason) {
     return Completable.fromAction(
-            () -> {
-              String chan = PircbotxUtil.sanitizeChannel(channel);
-              String msg = reason == null ? "" : reason.trim();
-              if (msg.isEmpty()) {
-                requireBot(serverId).sendRaw().rawLine("PART " + chan);
-              } else {
-                requireBot(serverId).sendRaw().rawLine("PART " + chan + " :" + msg);
-              }
-            })
+            () -> basicCommandSupport.partChannel(requireBot(serverId), channel, reason))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
@@ -298,12 +280,7 @@ public class PircbotxIrcClientService
 
   @Override
   public Completable sendRaw(String serverId, String rawLine) {
-    return Completable.fromAction(
-            () -> {
-              String line = rawLine == null ? "" : rawLine.trim();
-              if (line.isEmpty()) return;
-              requireBot(serverId).sendRaw().rawLine(line);
-            })
+    return Completable.fromAction(() -> basicCommandSupport.sendRaw(requireBot(serverId), rawLine))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
