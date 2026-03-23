@@ -13,12 +13,12 @@ final class PircbotxShutdownSupport {
   }
 
   void shutdownConnection(PircbotxConnectionState connection, String quitReason) {
-    connection.manualDisconnect.set(true);
+    connection.markManualDisconnect();
     timers.cancelReconnect(connection);
     timers.stopHeartbeat(connection);
     connection.resetLagProbeState();
 
-    PircBotX bot = connection.botRef.getAndSet(null);
+    PircBotX bot = connection.takeBot();
     if (bot == null) {
       return;
     }

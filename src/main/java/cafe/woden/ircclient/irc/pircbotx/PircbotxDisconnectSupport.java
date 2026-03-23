@@ -47,7 +47,7 @@ final class PircbotxDisconnectSupport {
         source == null ? DisconnectRequestSource.UNKNOWN : source;
     boolean clearDiscoveredNetworks = requestSource.clearDiscoveredBouncerNetworks();
     String renderedReason = Objects.toString(reason, "").trim();
-    boolean hasBot = connection.botRef.get() != null;
+    boolean hasBot = connection.hasBot();
 
     log.info(
         "[{}] disconnect requested: source={}, reason={}, hasBot={}, clearDiscoveredBouncerNetworks={}",
@@ -58,7 +58,7 @@ final class PircbotxDisconnectSupport {
         clearDiscoveredNetworks);
 
     serverIsupportState.clearServer(serverId);
-    connection.manualDisconnect.set(true);
+    connection.markManualDisconnect();
     timers.cancelReconnect(connection);
     timers.stopHeartbeat(connection);
     connection.resetLagProbeState();
@@ -72,7 +72,7 @@ final class PircbotxDisconnectSupport {
       }
     }
 
-    PircBotX bot = connection.botRef.getAndSet(null);
+    PircBotX bot = connection.takeBot();
     if (bot == null) {
       emitDisconnected(serverId);
       return;

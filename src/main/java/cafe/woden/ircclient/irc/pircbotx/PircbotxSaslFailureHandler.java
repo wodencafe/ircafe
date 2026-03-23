@@ -74,17 +74,17 @@ final class PircbotxSaslFailureHandler {
     }
 
     String reason = "Login failed — " + detail;
-    String existing = conn.disconnectReasonOverride.get();
+    String existing = conn.disconnectReasonOverride();
     if (existing != null && !existing.isBlank()) {
-      conn.suppressAutoReconnectOnce.set(true);
+      conn.suppressAutoReconnectOnce();
       return;
     }
 
-    conn.disconnectReasonOverride.set(reason);
-    conn.suppressAutoReconnectOnce.set(true);
+    conn.overrideDisconnectReason(reason);
+    conn.suppressAutoReconnectOnce();
     emit.accept(new ServerIrcEvent(serverId, new IrcEvent.Error(Instant.now(), reason, null)));
     if (disconnectOnSaslFailure) {
-      PircBotX bot = conn.botRef.get();
+      PircBotX bot = conn.currentBot();
       if (bot != null) {
         try {
           bot.stopBotReconnect();

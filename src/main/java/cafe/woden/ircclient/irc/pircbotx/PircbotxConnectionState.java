@@ -191,8 +191,108 @@ public final class PircbotxConnectionState {
     this.serverId = serverId;
   }
 
+  public PircBotX currentBot() {
+    return botRef.get();
+  }
+
+  public boolean hasBot() {
+    return currentBot() != null;
+  }
+
+  public void setBot(PircBotX bot) {
+    botRef.set(bot);
+  }
+
+  public boolean clearBotIf(PircBotX bot) {
+    return botRef.compareAndSet(bot, null);
+  }
+
+  public PircBotX takeBot() {
+    return botRef.getAndSet(null);
+  }
+
   public String selfNickHint() {
     return selfNickHint.get();
+  }
+
+  public void recordInboundActivity(long observedAtMs) {
+    lastInboundMs.set(observedAtMs);
+    localTimeoutEmitted.set(false);
+  }
+
+  public void ensureHeartbeatClock(long nowMs, boolean resetIdleClock) {
+    if (resetIdleClock || lastInboundMs.get() <= 0L) {
+      lastInboundMs.set(nowMs);
+    }
+    localTimeoutEmitted.set(false);
+  }
+
+  public long idleMsAt(long nowMs) {
+    return nowMs - lastInboundMs.get();
+  }
+
+  public boolean markLocalTimeout(String reason) {
+    if (!localTimeoutEmitted.compareAndSet(false, true)) {
+      return false;
+    }
+    overrideDisconnectReason(reason);
+    return true;
+  }
+
+  public Disposable replaceHeartbeatDisposable(Disposable next) {
+    return heartbeatDisposable.getAndSet(next);
+  }
+
+  public Disposable clearHeartbeatDisposable() {
+    return heartbeatDisposable.getAndSet(null);
+  }
+
+  public void markManualDisconnect() {
+    manualDisconnect.set(true);
+  }
+
+  public void clearManualDisconnect() {
+    manualDisconnect.set(false);
+  }
+
+  public boolean manualDisconnectRequested() {
+    return manualDisconnect.get();
+  }
+
+  public void resetReconnectAttempts() {
+    reconnectAttempts.set(0L);
+  }
+
+  public long nextReconnectAttempt() {
+    return reconnectAttempts.incrementAndGet();
+  }
+
+  public Disposable replaceReconnectDisposable(Disposable next) {
+    return reconnectDisposable.getAndSet(next);
+  }
+
+  public Disposable clearReconnectDisposable() {
+    return reconnectDisposable.getAndSet(null);
+  }
+
+  public String disconnectReasonOverride() {
+    return disconnectReasonOverride.get();
+  }
+
+  public void overrideDisconnectReason(String reason) {
+    disconnectReasonOverride.set(reason);
+  }
+
+  public String takeDisconnectReasonOverride() {
+    return disconnectReasonOverride.getAndSet(null);
+  }
+
+  public void suppressAutoReconnectOnce() {
+    suppressAutoReconnectOnce.set(true);
+  }
+
+  public boolean consumeSuppressAutoReconnectOnce() {
+    return suppressAutoReconnectOnce.getAndSet(false);
   }
 
   void resetNegotiatedCaps() {

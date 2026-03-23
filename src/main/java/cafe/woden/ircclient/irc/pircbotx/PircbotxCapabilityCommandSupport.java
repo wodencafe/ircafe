@@ -20,7 +20,7 @@ final class PircbotxCapabilityCommandSupport {
 
   void sendTyping(
       String serverId, PircbotxConnectionState connection, String target, String state) {
-    if (connection == null || connection.botRef.get() == null) {
+    if (connection == null || !connection.hasBot()) {
       throw new IllegalStateException("Not connected: " + serverId);
     }
     if (!isTypingAvailable(connection)) {
@@ -113,7 +113,7 @@ final class PircbotxCapabilityCommandSupport {
   }
 
   boolean isTypingAvailable(PircbotxConnectionState connection) {
-    if (connection == null || connection.botRef.get() == null) {
+    if (connection == null || !connection.hasBot()) {
       return false;
     }
 
@@ -128,7 +128,7 @@ final class PircbotxCapabilityCommandSupport {
     if (connection == null) {
       return "no connection state";
     }
-    if (connection.botRef.get() == null) {
+    if (!connection.hasBot()) {
       return "not connected";
     }
 
@@ -149,9 +149,7 @@ final class PircbotxCapabilityCommandSupport {
   }
 
   boolean isReadMarkerAvailable(PircbotxConnectionState connection) {
-    return connection != null
-        && connection.botRef.get() != null
-        && connection.readMarkerCapAcked.get();
+    return connection != null && connection.hasBot() && connection.readMarkerCapAcked.get();
   }
 
   boolean isChatHistoryAvailable(PircbotxConnectionState connection) {
@@ -172,7 +170,7 @@ final class PircbotxCapabilityCommandSupport {
   }
 
   private static PircBotX requireConnectedBot(String serverId, PircbotxConnectionState connection) {
-    PircBotX bot = connection == null ? null : connection.botRef.get();
+    PircBotX bot = connection == null ? null : connection.currentBot();
     if (bot == null) {
       throw new IllegalStateException("Not connected: " + serverId);
     }

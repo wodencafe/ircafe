@@ -62,7 +62,7 @@ final class PircbotxConnectSessionSupport {
     if (bot instanceof PircbotxLagAwareBot lagAwareBot) {
       lagAwareBot.setLagProbeObserver(connection::beginLagProbe);
     }
-    connection.botRef.set(bot);
+    connection.setBot(bot);
     inputParserHookInstaller.installIrcv3Hook(bot, serverId, connection, bus::onNext);
     timers.startHeartbeat(connection);
     return bot;
@@ -80,10 +80,10 @@ final class PircbotxConnectSessionSupport {
       crashed = true;
       bus.onNext(new ServerIrcEvent(serverId, new IrcEvent.Error(Instant.now(), "Bot crashed", e)));
     } finally {
-      if (connection.botRef.compareAndSet(bot, null)) {
+      if (connection.clearBotIf(bot)) {
         timers.stopHeartbeat(connection);
       }
-      if (crashed && !connection.manualDisconnect.get()) {
+      if (crashed && !connection.manualDisconnectRequested()) {
         reconnectScheduler.accept(connection, "Bot crashed");
       }
     }

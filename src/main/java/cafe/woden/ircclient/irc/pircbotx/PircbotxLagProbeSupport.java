@@ -8,7 +8,7 @@ import org.pircbotx.PircBotX;
 final class PircbotxLagProbeSupport {
 
   void requestLagProbe(String serverId, PircbotxConnectionState connection) {
-    PircBotX bot = connection.botRef.get();
+    PircBotX bot = connection.currentBot();
     if (bot == null) {
       throw new IllegalStateException("Not connected: " + serverId);
     }
@@ -23,9 +23,7 @@ final class PircbotxLagProbeSupport {
   }
 
   boolean isLagProbeReady(PircbotxConnectionState connection) {
-    return connection != null
-        && connection.botRef.get() != null
-        && connection.registrationComplete.get();
+    return connection != null && connection.hasBot() && connection.registrationComplete.get();
   }
 
   OptionalLong lastMeasuredLagMs(PircbotxConnectionState connection, long nowMs) {

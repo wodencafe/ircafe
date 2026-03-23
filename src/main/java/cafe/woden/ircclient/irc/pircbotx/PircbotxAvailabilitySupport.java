@@ -76,7 +76,7 @@ final class PircbotxAvailabilitySupport {
   }
 
   private static boolean hasLiveBot(PircbotxConnectionState connection) {
-    return connection != null && connection.botRef.get() != null;
+    return connection != null && connection.hasBot();
   }
 
   private static int toBoundedInt(long value) {

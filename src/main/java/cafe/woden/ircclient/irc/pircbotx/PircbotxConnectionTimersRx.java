@@ -91,10 +91,7 @@ final class PircbotxConnectionTimersRx {
     if (c == null) return;
     if (shuttingDown.get() || heartbeatExec.isShutdown() || heartbeatExec.isTerminated()) return;
 
-    if (resetIdleClock || c.lastInboundMs.get() <= 0) {
-      c.lastInboundMs.set(System.currentTimeMillis());
-    }
-    c.localTimeoutEmitted.set(false);
+    c.ensureHeartbeatClock(System.currentTimeMillis(), resetIdleClock);
 
     IrcProperties.Heartbeat hb = NetHeartbeatContext.settings();
     if (hb == null) hb = heartbeatPolicy;
@@ -110,29 +107,27 @@ final class PircbotxConnectionTimersRx {
                 tick -> checkHeartbeat(c),
                 err -> log.debug("[ircafe] Heartbeat ticker error for {}", c.serverId, err));
 
-    Disposable prev = c.heartbeatDisposable.getAndSet(d);
+    Disposable prev = c.replaceHeartbeatDisposable(d);
     if (prev != null && !prev.isDisposed()) prev.dispose();
   }
 
   void stopHeartbeat(PircbotxConnectionState c) {
     if (c == null) return;
-    Disposable prev = c.heartbeatDisposable.getAndSet(null);
+    Disposable prev = c.clearHeartbeatDisposable();
     if (prev != null && !prev.isDisposed()) prev.dispose();
   }
 
   private void checkHeartbeat(PircbotxConnectionState c) {
-    PircBotX bot = c.botRef.get();
+    PircBotX bot = c.currentBot();
     if (bot == null) return;
 
-    long idleMs = System.currentTimeMillis() - c.lastInboundMs.get();
+    long idleMs = c.idleMsAt(System.currentTimeMillis());
     IrcProperties.Heartbeat hb = NetHeartbeatContext.settings();
     if (hb == null) hb = heartbeatPolicy;
     if (hb == null || !hb.enabled()) return;
 
-    if (idleMs > hb.timeoutMs() && c.localTimeoutEmitted.compareAndSet(false, true)) {
-      // Don't emit Disconnected here (DisconnectEvent will fire). Instead, stash a reason override.
-      c.disconnectReasonOverride.set(
-          "Ping timeout (no inbound traffic for " + (idleMs / 1000) + "s)");
+    if (idleMs > hb.timeoutMs()
+        && c.markLocalTimeout("Ping timeout (no inbound traffic for " + (idleMs / 1000) + "s)")) {
       try {
         bot.close();
       } catch (Exception ignored) {
@@ -142,7 +137,7 @@ final class PircbotxConnectionTimersRx {
 
   void cancelReconnect(PircbotxConnectionState c) {
     if (c == null) return;
-    Disposable prev = c.reconnectDisposable.getAndSet(null);
+    Disposable prev = c.clearReconnectDisposable();
     if (prev != null && !prev.isDisposed()) prev.dispose();
   }
 
@@ -155,9 +150,9 @@ final class PircbotxConnectionTimersRx {
     if (shuttingDown.get() || reconnectExec.isShutdown() || reconnectExec.isTerminated()) return;
     IrcProperties.Reconnect p = reconnectPolicy;
     if (p == null || !p.enabled()) return;
-    if (c.manualDisconnect.get()) return;
+    if (c.manualDisconnectRequested()) return;
 
-    long attempt = c.reconnectAttempts.incrementAndGet();
+    long attempt = c.nextReconnectAttempt();
     if (p.maxAttempts() > 0 && attempt > p.maxAttempts()) {
       emit.accept(
           new ServerIrcEvent(
@@ -187,7 +182,7 @@ final class PircbotxConnectionTimersRx {
       return;
     }
 
-    Disposable prev = c.reconnectDisposable.getAndSet(next);
+    Disposable prev = c.replaceReconnectDisposable(next);
     if (prev != null && !prev.isDisposed()) prev.dispose();
   }
 
@@ -195,7 +190,7 @@ final class PircbotxConnectionTimersRx {
       PircbotxConnectionState c,
       Function<String, Completable> connectFn,
       Consumer<ServerIrcEvent> emit) {
-    if (shuttingDown.get() || c.manualDisconnect.get()) return;
+    if (shuttingDown.get() || c.manualDisconnectRequested()) return;
 
     // If the server was removed while waiting, abort.
     if (!serverCatalog.containsId(c.serverId)) {

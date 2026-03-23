@@ -145,7 +145,7 @@ public class PircbotxIrcClientService
     if (shuttingDown.get()) return;
     for (PircbotxConnectionState c : connections.values()) {
       try {
-        if (c != null && c.botRef.get() != null) {
+        if (c != null && c.hasBot()) {
           timers.rescheduleHeartbeat(c);
         }
       } catch (Exception ignored) {
@@ -160,7 +160,7 @@ public class PircbotxIrcClientService
 
   @Override
   public Optional<String> currentNick(String serverId) {
-    PircBotX bot = conn(serverId).botRef.get();
+    PircBotX bot = conn(serverId).currentBot();
     return bot == null ? Optional.empty() : Optional.ofNullable(bot.getNick());
   }
 
@@ -170,7 +170,7 @@ public class PircbotxIrcClientService
             () -> {
               if (shuttingDown.get()) return;
               PircbotxConnectionState c = conn(serverId);
-              if (c.botRef.get() != null) return;
+              if (c.hasBot()) return;
               PircbotxConnectPreparationSupport.PreparedConnect prepared =
                   connectPreparationSupport.prepare(serverId, c);
               PircBotX bot =
@@ -632,7 +632,7 @@ public class PircbotxIrcClientService
   }
 
   private PircBotX requireBot(String serverId) {
-    PircBotX bot = conn(serverId).botRef.get();
+    PircBotX bot = conn(serverId).currentBot();
     if (bot == null) throw new IllegalStateException("Not connected: " + serverId);
     return bot;
   }
@@ -644,7 +644,7 @@ public class PircbotxIrcClientService
   private void scheduleReconnect(PircbotxConnectionState c, String reason) {
     if (c == null) return;
     if (shuttingDown.get()) return;
-    if (c.manualDisconnect.get()) return;
+    if (c.manualDisconnectRequested()) return;
     timers.scheduleReconnect(c, reason, this::connect, bus::onNext);
   }
 

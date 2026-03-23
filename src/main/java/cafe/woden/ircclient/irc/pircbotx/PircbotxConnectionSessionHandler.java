@@ -37,15 +37,14 @@ final class PircbotxConnectionSessionHandler {
   @NonNull private final Consumer<ServerIrcEvent> emit;
 
   void recordInboundActivity() {
-    conn.lastInboundMs.set(System.currentTimeMillis());
-    conn.localTimeoutEmitted.set(false);
+    conn.recordInboundActivity(System.currentTimeMillis());
   }
 
   void onConnect(ConnectEvent event) {
     recordInboundActivity();
     PircBotX bot = event.getBot();
-    conn.reconnectAttempts.set(0);
-    conn.manualDisconnect.set(false);
+    conn.resetReconnectAttempts();
+    conn.clearManualDisconnect();
     serverResponses.clear();
 
     emit.accept(
@@ -57,10 +56,10 @@ final class PircbotxConnectionSessionHandler {
 
   void onDisconnect(DisconnectEvent event) {
     serverResponses.clear();
-    String override = conn.disconnectReasonOverride.getAndSet(null);
+    String override = conn.takeDisconnectReasonOverride();
     Exception ex = event.getDisconnectException();
     String reason = disconnectReason(override, ex);
-    if (conn.botRef.compareAndSet(event.getBot(), null)) {
+    if (conn.clearBotIf(event.getBot())) {
       heartbeatStopper.accept(conn);
     }
     bouncerDiscovery.onDisconnect();
@@ -68,8 +67,8 @@ final class PircbotxConnectionSessionHandler {
     chatHistoryBatches.clear();
 
     emit.accept(new ServerIrcEvent(serverId, new IrcEvent.Disconnected(Instant.now(), reason)));
-    boolean suppressReconnect = conn.suppressAutoReconnectOnce.getAndSet(false);
-    if (!conn.manualDisconnect.get() && !suppressReconnect) {
+    boolean suppressReconnect = conn.consumeSuppressAutoReconnectOnce();
+    if (!conn.manualDisconnectRequested() && !suppressReconnect) {
       reconnectScheduler.accept(conn, reason);
     }
   }

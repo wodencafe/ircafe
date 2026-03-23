@@ -51,7 +51,7 @@ final class PircbotxZncPlaybackRequestSupport {
   }
 
   private static PircBotX requireConnectedBot(String serverId, PircbotxConnectionState connection) {
-    PircBotX bot = connection.botRef.get();
+    PircBotX bot = connection.currentBot();
     if (bot == null) {
       throw new IllegalStateException("Not connected: " + serverId);
     }
