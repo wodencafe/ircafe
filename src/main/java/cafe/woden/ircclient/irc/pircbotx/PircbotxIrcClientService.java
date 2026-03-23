@@ -18,7 +18,6 @@ import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
-import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -66,6 +65,7 @@ public class PircbotxIrcClientService
   private final PircbotxConnectSessionSupport connectSessionSupport;
   private final PircbotxDisconnectSupport disconnectSupport;
   private final PircbotxShutdownSupport shutdownSupport;
+  private final PircbotxActionCommandSupport actionCommandSupport;
   private final PircbotxZncPlaybackRequestSupport zncPlaybackRequestSupport;
   private final PircbotxMultilineMessageSupport multilineMessageSupport =
       new PircbotxMultilineMessageSupport();
@@ -119,6 +119,7 @@ public class PircbotxIrcClientService
             this.bouncerBackends,
             this.bouncerDiscoveryEvents);
     this.shutdownSupport = new PircbotxShutdownSupport(this.timers);
+    this.actionCommandSupport = new PircbotxActionCommandSupport();
     this.zncPlaybackRequestSupport = new PircbotxZncPlaybackRequestSupport(this.bus);
   }
 
@@ -662,34 +663,7 @@ public class PircbotxIrcClientService
   @Override
   public Completable sendAction(String serverId, String target, String action) {
     return Completable.fromAction(
-            () -> {
-              String t = target == null ? "" : target.trim();
-              String a = action == null ? "" : action;
-              if (t.isEmpty()) throw new IllegalArgumentException("target is blank");
-              Object out = requireBot(serverId).sendIRC();
-
-              String dest;
-              if (t.startsWith("#") || t.startsWith("&")) {
-                dest = PircbotxUtil.sanitizeChannel(t);
-              } else {
-                dest = PircbotxUtil.sanitizeNick(t);
-              }
-
-              boolean sent = false;
-              try {
-                Method m = out.getClass().getMethod("action", String.class, String.class);
-                m.invoke(out, dest, a);
-                sent = true;
-              } catch (NoSuchMethodException ignored) {
-              } catch (Exception e) {
-                log.debug(
-                    "sendAction: native action() invoke failed, falling back to CTCP wrapper", e);
-              }
-
-              if (!sent) {
-                requireBot(serverId).sendIRC().message(dest, "\u0001ACTION " + a + "\u0001");
-              }
-            })
+            () -> actionCommandSupport.sendAction(serverId, requireBot(serverId), target, action))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
