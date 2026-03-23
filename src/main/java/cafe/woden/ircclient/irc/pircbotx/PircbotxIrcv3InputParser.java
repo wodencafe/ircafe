@@ -45,6 +45,8 @@ final class PircbotxIrcv3InputParser extends InputParser {
 
   private final PircbotxConnectionState conn;
   private final Ircv3StsPolicyService stsPolicies;
+  private final PircbotxMultilineCapStateSupport multilineCapStateSupport =
+      new PircbotxMultilineCapStateSupport();
 
   // Deduplicate high-frequency account-tag observations (which can appear on every PRIVMSG).
   private final Map<String, String> lastAccountTagByNickLower =
@@ -115,7 +117,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
               capLine.normalizedCaps());
         }
         if (capLine.isAction("LS", "NEW", "ACK", "DEL")) {
-          observeMultilineCapValuesFromCapLine(capLine);
+          multilineCapStateSupport.observe(capLine, conn);
         }
         if (capLine.isAction("ACK", "DEL")) {
           applyCapStateFromCapLine(capLine);
@@ -477,67 +479,6 @@ final class PircbotxIrcv3InputParser extends InputParser {
     int tailStart = raw.lastIndexOf(' ');
     String tail = tailStart >= 0 ? raw.substring(tailStart + 1) : raw;
     return stripLeadingColon(tail).trim();
-  }
-
-  private void observeMultilineCapValuesFromCapLine(ParsedCapLine capLine) {
-
-    boolean fromLs = capLine.isAction("LS");
-    boolean fromNew = capLine.isAction("NEW");
-    boolean fromAck = capLine.isAction("ACK");
-    boolean fromDel = capLine.isAction("DEL");
-    if (!fromLs && !fromNew && !fromAck && !fromDel) return;
-
-    for (String t : capLine.tokens()) {
-      boolean tokenDisable = t.startsWith("-");
-      String capName = canonicalCapName(t);
-      if (!isMultilineCapability(capName)) continue;
-
-      String capValue = capValueFromToken(t);
-      MultilineCapLimits parsed = parseMultilineCapLimits(capValue);
-
-      if (fromLs || fromNew) {
-        if (tokenDisable) {
-          setMultilineOfferedMaxBytes(capName, 0L);
-          setMultilineOfferedMaxLines(capName, 0L);
-        } else {
-          if (parsed.maxBytes() > 0L) {
-            setMultilineOfferedMaxBytes(capName, parsed.maxBytes());
-          }
-          if (parsed.maxLines() > 0L) {
-            setMultilineOfferedMaxLines(capName, parsed.maxLines());
-          }
-        }
-      }
-
-      if (fromAck) {
-        if (tokenDisable) {
-          setMultilineNegotiatedMaxBytes(capName, 0L);
-          setMultilineNegotiatedMaxLines(capName, 0L);
-          setMultilineOfferedMaxBytes(capName, 0L);
-          setMultilineOfferedMaxLines(capName, 0L);
-        } else {
-          if (parsed.maxBytes() > 0L) {
-            setMultilineOfferedMaxBytes(capName, parsed.maxBytes());
-          }
-          if (parsed.maxLines() > 0L) {
-            setMultilineOfferedMaxLines(capName, parsed.maxLines());
-          }
-          long effectiveMaxBytes =
-              parsed.maxBytes() > 0L ? parsed.maxBytes() : multilineOfferedMaxBytes(capName);
-          long effectiveMaxLines =
-              parsed.maxLines() > 0L ? parsed.maxLines() : multilineOfferedMaxLines(capName);
-          setMultilineNegotiatedMaxBytes(capName, effectiveMaxBytes);
-          setMultilineNegotiatedMaxLines(capName, effectiveMaxLines);
-        }
-      }
-
-      if (fromDel) {
-        setMultilineNegotiatedMaxBytes(capName, 0L);
-        setMultilineNegotiatedMaxLines(capName, 0L);
-        setMultilineOfferedMaxBytes(capName, 0L);
-        setMultilineOfferedMaxLines(capName, 0L);
-      }
-    }
   }
 
   private void applyCapStateFromCapLine(ParsedCapLine capLine) {
@@ -1036,117 +977,6 @@ final class PircbotxIrcv3InputParser extends InputParser {
     if (eq >= 0) s = s.substring(0, eq).trim();
     return s.isEmpty() ? null : s;
   }
-
-  private static String capValueFromToken(String rawToken) {
-    String s = Objects.toString(rawToken, "").trim();
-    if (s.isEmpty()) return "";
-    if (s.startsWith(":")) s = s.substring(1).trim();
-    while (!s.isEmpty()) {
-      char leading = s.charAt(0);
-      if (leading == '-' || leading == '~' || leading == '=') {
-        s = s.substring(1).trim();
-        continue;
-      }
-      break;
-    }
-    int eq = s.indexOf('=');
-    if (eq < 0 || eq + 1 >= s.length()) return "";
-    return s.substring(eq + 1).trim();
-  }
-
-  private static boolean isMultilineCapability(String capName) {
-    if (capName == null || capName.isBlank()) return false;
-    String c = capName.trim().toLowerCase(Locale.ROOT);
-    return "multiline".equals(c) || "draft/multiline".equals(c);
-  }
-
-  private long multilineOfferedMaxBytes(String capName) {
-    String c = Objects.toString(capName, "").trim().toLowerCase(Locale.ROOT);
-    if ("multiline".equals(c)) return Math.max(0L, conn.multilineOfferedMaxBytes.get());
-    if ("draft/multiline".equals(c)) return Math.max(0L, conn.draftMultilineOfferedMaxBytes.get());
-    return 0L;
-  }
-
-  private long multilineOfferedMaxLines(String capName) {
-    String c = Objects.toString(capName, "").trim().toLowerCase(Locale.ROOT);
-    if ("multiline".equals(c)) return Math.max(0L, conn.multilineOfferedMaxLines.get());
-    if ("draft/multiline".equals(c)) return Math.max(0L, conn.draftMultilineOfferedMaxLines.get());
-    return 0L;
-  }
-
-  private void setMultilineOfferedMaxBytes(String capName, long maxBytes) {
-    long normalized = Math.max(0L, maxBytes);
-    String c = Objects.toString(capName, "").trim().toLowerCase(Locale.ROOT);
-    if ("multiline".equals(c)) {
-      conn.multilineOfferedMaxBytes.set(normalized);
-    } else if ("draft/multiline".equals(c)) {
-      conn.draftMultilineOfferedMaxBytes.set(normalized);
-    }
-  }
-
-  private void setMultilineOfferedMaxLines(String capName, long maxLines) {
-    long normalized = Math.max(0L, maxLines);
-    String c = Objects.toString(capName, "").trim().toLowerCase(Locale.ROOT);
-    if ("multiline".equals(c)) {
-      conn.multilineOfferedMaxLines.set(normalized);
-    } else if ("draft/multiline".equals(c)) {
-      conn.draftMultilineOfferedMaxLines.set(normalized);
-    }
-  }
-
-  private void setMultilineNegotiatedMaxBytes(String capName, long maxBytes) {
-    long normalized = Math.max(0L, maxBytes);
-    String c = Objects.toString(capName, "").trim().toLowerCase(Locale.ROOT);
-    if ("multiline".equals(c)) {
-      conn.multilineMaxBytes.set(normalized);
-    } else if ("draft/multiline".equals(c)) {
-      conn.draftMultilineMaxBytes.set(normalized);
-    }
-  }
-
-  private void setMultilineNegotiatedMaxLines(String capName, long maxLines) {
-    long normalized = Math.max(0L, maxLines);
-    String c = Objects.toString(capName, "").trim().toLowerCase(Locale.ROOT);
-    if ("multiline".equals(c)) {
-      conn.multilineMaxLines.set(normalized);
-    } else if ("draft/multiline".equals(c)) {
-      conn.draftMultilineMaxLines.set(normalized);
-    }
-  }
-
-  private static MultilineCapLimits parseMultilineCapLimits(String capValueRaw) {
-    String raw = Objects.toString(capValueRaw, "").trim();
-    if (raw.isEmpty()) return new MultilineCapLimits(0L, 0L);
-
-    long maxBytes = 0L;
-    long maxLines = 0L;
-
-    for (String partRaw : raw.split(",")) {
-      String part = Objects.toString(partRaw, "").trim();
-      if (part.isEmpty()) continue;
-      int eq = part.indexOf('=');
-      if (eq <= 0 || eq + 1 >= part.length()) continue;
-
-      String key = part.substring(0, eq).trim().toLowerCase(Locale.ROOT);
-      String value = part.substring(eq + 1).trim();
-      if (value.isEmpty()) continue;
-      try {
-        long parsed = Long.parseLong(value);
-        if (parsed <= 0L) continue;
-        if ("max-bytes".equals(key)) {
-          maxBytes = parsed;
-        } else if ("max-lines".equals(key)) {
-          maxLines = parsed;
-        }
-      } catch (NumberFormatException ignored) {
-        // Ignore invalid attribute values while keeping any other valid limits.
-      }
-    }
-
-    return new MultilineCapLimits(maxBytes, maxLines);
-  }
-
-  private record MultilineCapLimits(long maxBytes, long maxLines) {}
 
   private static String capListFrom(List<String> parsedLine) {
     if (parsedLine == null || parsedLine.size() < 3) return "";
