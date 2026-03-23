@@ -11,7 +11,6 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.irc.playback.*;
-import cafe.woden.ircclient.irc.znc.ZncLoginParts;
 import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
@@ -66,6 +65,8 @@ public class PircbotxIrcClientService
   @NonNull private final Ircv3StsPolicyService stsPolicies;
   private final String version;
   private final PircbotxCtcpAutoReplyHandler ctcpAutoReplyHandler;
+  private final PircbotxConnectPreparationSupport connectPreparationSupport;
+  private final PircbotxDisconnectSupport disconnectSupport;
   private final PircbotxMultilineMessageSupport multilineMessageSupport =
       new PircbotxMultilineMessageSupport();
 
@@ -98,6 +99,16 @@ public class PircbotxIrcClientService
     this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
     this.version = Objects.requireNonNull(props, "props").client().version();
     this.ctcpAutoReplyHandler = new PircbotxCtcpAutoReplyHandler(this.version, this.runtimeConfig);
+    this.connectPreparationSupport =
+        new PircbotxConnectPreparationSupport(
+            this.serverCatalog, this.stsPolicies, this.serverIsupportState, this.timers);
+    this.disconnectSupport =
+        new PircbotxDisconnectSupport(
+            this.bus,
+            this.serverIsupportState,
+            this.timers,
+            this.bouncerBackends,
+            this.bouncerDiscoveryEvents);
   }
 
   @Override
@@ -142,58 +153,9 @@ public class PircbotxIrcClientService
               if (shuttingDown.get()) return;
               PircbotxConnectionState c = conn(serverId);
               if (c.botRef.get() != null) return;
-              serverIsupportState.clearServer(serverId);
-              c.resetNegotiatedCaps();
-              // soju discovery state is per-session; reset before starting a new connection.
-              try {
-                c.sojuNetworksByNetId.clear();
-                c.genericBouncerNetworksById.clear();
-                c.sojuListNetworksRequestedThisSession.set(false);
-                c.sojuBouncerNetId.set("");
-              } catch (Exception ignored) {
-              }
-              cancelReconnect(c);
-              c.manualDisconnect.set(false);
-              c.reconnectAttempts.set(0);
-
-              IrcProperties.Server configured = serverCatalog.require(serverId);
-              IrcProperties.Server s = stsPolicies.applyPolicy(configured);
-              c.connectedHost.set(Objects.toString(s.host(), "").trim());
-              c.connectedWithTls.set(s.tls());
-              c.selfNickHint.set(Objects.toString(s.nick(), "").trim());
-
-              // ZNC detection uses CAP/004/*status heuristics, but we can still parse the
-              // configured login now (user[@client]/network) so logs and discovery logic have
-              // context once ZNC is detected.
-              try {
-                c.zncDetected.set(false);
-                c.zncDetectedLogged.set(false);
-                c.zncBaseUser.set("");
-                c.zncClientId.set("");
-                c.zncNetwork.set("");
-
-                // Reset per-connection ZNC playback flags (negotiated each connect).
-                c.zncPlaybackRequestedThisSession.set(false);
-                c.zncListNetworksRequestedThisSession.set(false);
-                c.zncPlaybackCapture.cancelActive("reconnect");
-
-                ZncLoginParts loginParts = ZncLoginParts.parse(s.login());
-                ZncLoginParts saslParts =
-                    (s.sasl() != null && s.sasl().enabled())
-                        ? ZncLoginParts.parse(s.sasl().username())
-                        : new ZncLoginParts("", "", "");
-
-                ZncLoginParts merged = loginParts.mergePreferThis(saslParts);
-                c.zncBaseUser.set(merged.baseUser());
-                c.zncClientId.set(merged.clientId());
-                c.zncNetwork.set(merged.network());
-              } catch (Exception ignored) {
-              }
-
-              boolean disconnectOnSaslFailure =
-                  s.sasl() != null
-                      && s.sasl().enabled()
-                      && Boolean.TRUE.equals(s.sasl().disconnectOnFailure());
+              PircbotxConnectPreparationSupport.PreparedConnect prepared =
+                  connectPreparationSupport.prepare(serverId, c);
+              IrcProperties.Server s = prepared.server();
               bus.onNext(
                   new ServerIrcEvent(
                       serverId,
@@ -207,7 +169,7 @@ public class PircbotxIrcClientService
                       timers::stopHeartbeat,
                       this::scheduleReconnect,
                       ctcpAutoReplyHandler::handleIfPresent,
-                      disconnectOnSaslFailure);
+                      prepared.disconnectOnSaslFailure());
 
               PircBotX bot = botFactory.build(s, version, listener);
               if (bot instanceof PircbotxLagAwareBot lagAwareBot) {
@@ -256,65 +218,7 @@ public class PircbotxIrcClientService
     return Completable.fromAction(
             () -> {
               PircbotxConnectionState c = conn(serverId);
-              DisconnectRequestSource requestSource =
-                  source == null ? DisconnectRequestSource.UNKNOWN : source;
-              boolean clearDiscoveredNetworks = requestSource.clearDiscoveredBouncerNetworks();
-              String renderedReason = Objects.toString(reason, "").trim();
-              boolean hasBot = c.botRef.get() != null;
-
-              log.info(
-                  "[{}] disconnect requested: source={}, reason={}, hasBot={}, clearDiscoveredBouncerNetworks={}",
-                  serverId,
-                  requestSource,
-                  renderedReason.isEmpty() ? "(default)" : renderedReason,
-                  hasBot,
-                  clearDiscoveredNetworks);
-              serverIsupportState.clearServer(serverId);
-              c.manualDisconnect.set(true);
-              cancelReconnect(c);
-              timers.stopHeartbeat(c);
-              c.resetLagProbeState();
-
-              if (clearDiscoveredNetworks) {
-                for (String backendId : bouncerBackends.backendIds()) {
-                  try {
-                    bouncerDiscoveryEvents.onOriginDisconnected(backendId, serverId);
-                  } catch (Exception ignored) {
-                  }
-                }
-              }
-
-              PircBotX bot = c.botRef.getAndSet(null);
-              if (bot == null) {
-                bus.onNext(
-                    new ServerIrcEvent(
-                        serverId,
-                        new IrcEvent.Disconnected(Instant.now(), "Client requested disconnect")));
-                return;
-              }
-
-              String quitReason = reason == null ? "" : reason.trim();
-              if (quitReason.contains("\r") || quitReason.contains("\n")) {
-                throw new IllegalArgumentException("quit reason contains CR/LF");
-              }
-              if (quitReason.isEmpty()) quitReason = "Client disconnect";
-
-              try {
-                bot.stopBotReconnect();
-                try {
-                  bot.sendIRC().quitServer(quitReason);
-                } catch (Exception ignored) {
-                }
-                try {
-                  bot.close();
-                } catch (Exception ignored) {
-                }
-              } finally {
-                bus.onNext(
-                    new ServerIrcEvent(
-                        serverId,
-                        new IrcEvent.Disconnected(Instant.now(), "Client requested disconnect")));
-              }
+              disconnectSupport.disconnect(serverId, c, reason, source);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
