@@ -10,7 +10,6 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -26,8 +25,6 @@ import org.pircbotx.PircBotX;
 public final class PircbotxConnectionState {
   private static final long CHANNEL_MODE_324_DEDUPE_TTL_MS = 2_000L;
   private static final int CHANNEL_MODE_324_DEDUPE_MAX = 256;
-  private static final long LAG_SAMPLE_STALE_AFTER_MS = 120_000L;
-  private static final long MAX_PASSIVE_LAG_SAMPLE_MS = TimeUnit.MINUTES.toMillis(5);
 
   final String serverId;
   final AtomicReference<PircBotX> botRef = new AtomicReference<>();
@@ -36,10 +33,7 @@ public final class PircbotxConnectionState {
   final AtomicLong lastInboundMs = new AtomicLong(0);
   final AtomicBoolean localTimeoutEmitted = new AtomicBoolean(false);
   final AtomicReference<Disposable> heartbeatDisposable = new AtomicReference<>();
-  final AtomicReference<String> lagProbeToken = new AtomicReference<>("");
-  final AtomicLong lagProbeSentAtMs = new AtomicLong(0L);
-  final AtomicLong lagLastMeasuredMs = new AtomicLong(-1L);
-  final AtomicLong lagLastMeasuredAtMs = new AtomicLong(0L);
+  private final PircbotxLagProbeState lagProbe = new PircbotxLagProbeState();
 
   final AtomicBoolean manualDisconnect = new AtomicBoolean(false);
 
@@ -279,50 +273,23 @@ public final class PircbotxConnectionState {
   }
 
   void beginLagProbe(String token, long sentAtMs) {
-    String normalizedToken = normalizeLagToken(token);
-    if (normalizedToken.isEmpty()) return;
-    long sent = sentAtMs > 0 ? sentAtMs : System.currentTimeMillis();
-    lagProbeToken.set(normalizedToken);
-    lagProbeSentAtMs.set(sent);
+    lagProbe.beginProbe(token, sentAtMs);
   }
 
   boolean observeLagProbePong(String token, long observedAtMs) {
-    String observedToken = normalizeLagToken(token);
-    if (observedToken.isEmpty()) return false;
-    String expected = lagProbeToken.get();
-    if (expected.isEmpty()) return false;
-    if (!Objects.equals(expected, observedToken)) return false;
-    if (!lagProbeToken.compareAndSet(expected, "")) return false;
-
-    long sentAt = lagProbeSentAtMs.getAndSet(0L);
-    long now = observedAtMs > 0 ? observedAtMs : System.currentTimeMillis();
-    long lagMs = Math.max(0L, now - sentAt);
-    lagLastMeasuredMs.set(lagMs);
-    lagLastMeasuredAtMs.set(now);
-    return true;
+    return lagProbe.observePong(token, observedAtMs);
   }
 
   void observePassiveLagSample(long lagMs, long observedAtMs) {
-    long sample = Math.max(0L, lagMs);
-    if (sample > MAX_PASSIVE_LAG_SAMPLE_MS) return;
-    long now = observedAtMs > 0 ? observedAtMs : System.currentTimeMillis();
-    lagLastMeasuredMs.set(sample);
-    lagLastMeasuredAtMs.set(now);
+    lagProbe.observePassiveSample(lagMs, observedAtMs);
   }
 
   long lagMsIfFresh(long nowMs) {
-    long measuredAt = lagLastMeasuredAtMs.get();
-    if (measuredAt <= 0) return -1L;
-    long now = nowMs > 0 ? nowMs : System.currentTimeMillis();
-    if (now - measuredAt > LAG_SAMPLE_STALE_AFTER_MS) return -1L;
-    return Math.max(-1L, lagLastMeasuredMs.get());
+    return lagProbe.lagMsIfFresh(nowMs);
   }
 
   void resetLagProbeState() {
-    lagProbeToken.set("");
-    lagProbeSentAtMs.set(0L);
-    lagLastMeasuredMs.set(-1L);
-    lagLastMeasuredAtMs.set(0L);
+    lagProbe.reset();
   }
 
   void clearPrivateTargetHints() {
@@ -357,8 +324,20 @@ public final class PircbotxConnectionState {
     return s.isEmpty() ? "" : s.toLowerCase(java.util.Locale.ROOT);
   }
 
-  private static String normalizeLagToken(String raw) {
-    return Objects.toString(raw, "").trim();
+  String currentLagProbeToken() {
+    return lagProbe.currentProbeToken();
+  }
+
+  long currentLagProbeSentAtMs() {
+    return lagProbe.currentProbeSentAtMs();
+  }
+
+  long currentMeasuredLagMs() {
+    return lagProbe.currentMeasuredLagMs();
+  }
+
+  long currentMeasuredLagAtMs() {
+    return lagProbe.currentMeasuredAtMs();
   }
 
   private static String channelMode324Key(String channel, String details) {

@@ -909,7 +909,7 @@ class PircbotxIrcv3InputParserTest {
     long lagMs = conn.lagMsIfFresh(System.currentTimeMillis());
     assertTrue(lagMs >= 400L, "probe RTT sample should win over passive @time sample");
     assertTrue(lagMs <= 5_000L, "probe RTT should be bounded to a sane test range");
-    assertEquals("", conn.lagProbeToken.get());
+    assertEquals("", conn.currentLagProbeToken());
   }
 
   @Test
@@ -932,7 +932,7 @@ class PircbotxIrcv3InputParserTest {
     long lagMs = conn.lagMsIfFresh(System.currentTimeMillis());
     assertTrue(lagMs >= 300L, "transport RTT sample should be recorded from numeric PONG tokens");
     assertTrue(lagMs <= 5_000L, "transport RTT should stay within a sane test range");
-    assertEquals("", conn.lagProbeToken.get());
+    assertEquals("", conn.currentLagProbeToken());
   }
 
   private static UserHostmask source(String nick) {

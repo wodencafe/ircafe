@@ -28,8 +28,8 @@ class PircbotxLagAwareBotTest {
 
     bot.sendLine("PING 1742097600");
 
-    assertEquals("1742097600", conn.lagProbeToken.get());
-    assertTrue(conn.lagProbeSentAtMs.get() > 0L);
+    assertEquals("1742097600", conn.currentLagProbeToken());
+    assertTrue(conn.currentLagProbeSentAtMs() > 0L);
   }
 
   private static Configuration configuration() {
