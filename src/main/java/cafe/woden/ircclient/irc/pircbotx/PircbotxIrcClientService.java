@@ -65,6 +65,7 @@ public class PircbotxIrcClientService
   private final PircbotxDisconnectSupport disconnectSupport;
   private final PircbotxShutdownSupport shutdownSupport;
   private final PircbotxActionCommandSupport actionCommandSupport;
+  private final PircbotxAvailabilitySupport availabilitySupport;
   private final PircbotxQueryCommandSupport queryCommandSupport;
   private final PircbotxZncPlaybackRequestSupport zncPlaybackRequestSupport;
   private final PircbotxMultilineMessageSupport multilineMessageSupport =
@@ -120,6 +121,7 @@ public class PircbotxIrcClientService
             this.bouncerDiscoveryEvents);
     this.shutdownSupport = new PircbotxShutdownSupport(this.timers);
     this.actionCommandSupport = new PircbotxActionCommandSupport();
+    this.availabilitySupport = new PircbotxAvailabilitySupport();
     this.queryCommandSupport = new PircbotxQueryCommandSupport();
     this.zncPlaybackRequestSupport = new PircbotxZncPlaybackRequestSupport(this.bus);
   }
@@ -399,8 +401,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isEchoMessageAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && c.botRef.get() != null && c.echoMessageCapAcked.get();
+      return availabilitySupport.isEchoMessageAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -409,8 +410,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isDraftReplyAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && c.botRef.get() != null && c.draftReplyCapAcked.get();
+      return availabilitySupport.isDraftReplyAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -419,8 +419,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isDraftReactAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && c.botRef.get() != null && c.draftReactCapAcked.get();
+      return availabilitySupport.isDraftReactAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -429,10 +428,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isDraftUnreactAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null
-          && c.botRef.get() != null
-          && (c.draftUnreactCapAcked.get() || c.draftReactCapAcked.get());
+      return availabilitySupport.isDraftUnreactAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -441,10 +437,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isMultilineAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null
-          && c.botRef.get() != null
-          && (c.multilineCapAcked.get() || c.draftMultilineCapAcked.get());
+      return availabilitySupport.isMultilineAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -453,7 +446,7 @@ public class PircbotxIrcClientService
   @Override
   public long negotiatedMultilineMaxBytes(String serverId) {
     try {
-      return PircbotxMultilineMessageSupport.negotiatedMaxBytes(conn(serverId));
+      return availabilitySupport.negotiatedMultilineMaxBytes(conn(serverId));
     } catch (Exception e) {
       return 0L;
     }
@@ -462,10 +455,7 @@ public class PircbotxIrcClientService
   @Override
   public int negotiatedMultilineMaxLines(String serverId) {
     try {
-      long max = PircbotxMultilineMessageSupport.negotiatedMaxLines(conn(serverId));
-      if (max <= 0L) return 0;
-      if (max >= Integer.MAX_VALUE) return Integer.MAX_VALUE;
-      return (int) max;
+      return availabilitySupport.negotiatedMultilineMaxLines(conn(serverId));
     } catch (Exception e) {
       return 0;
     }
@@ -474,8 +464,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isMessageEditAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && c.botRef.get() != null && c.draftMessageEditCapAcked.get();
+      return availabilitySupport.isMessageEditAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -484,8 +473,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isMessageRedactionAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && c.botRef.get() != null && c.draftMessageRedactionCapAcked.get();
+      return availabilitySupport.isMessageRedactionAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -521,8 +509,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isLabeledResponseAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && c.botRef.get() != null && c.labeledResponseCapAcked.get();
+      return availabilitySupport.isLabeledResponseAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -531,8 +518,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isStandardRepliesAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && c.botRef.get() != null && c.standardRepliesCapAcked.get();
+      return availabilitySupport.isStandardRepliesAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -541,10 +527,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isMonitorAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null
-          && c.botRef.get() != null
-          && (c.monitorSupported.get() || c.monitorCapAcked.get());
+      return availabilitySupport.isMonitorAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -553,12 +536,7 @@ public class PircbotxIrcClientService
   @Override
   public int negotiatedMonitorLimit(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      if (c == null) return 0;
-      long limit = Math.max(0L, c.monitorMaxTargets.get());
-      if (limit <= 0L) return 0;
-      if (limit >= Integer.MAX_VALUE) return Integer.MAX_VALUE;
-      return (int) limit;
+      return availabilitySupport.negotiatedMonitorLimit(conn(serverId));
     } catch (Exception e) {
       return 0;
     }
@@ -624,8 +602,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isZncPlaybackAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && c.zncPlaybackCapAcked.get();
+      return availabilitySupport.isZncPlaybackAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -634,8 +611,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isZncBouncerDetected(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && (c.zncDetected.get() || c.zncPlaybackCapAcked.get());
+      return availabilitySupport.isZncBouncerDetected(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -644,8 +620,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isSojuBouncerAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && c.sojuBouncerNetworksCapAcked.get();
+      return availabilitySupport.isSojuBouncerAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
