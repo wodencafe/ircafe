@@ -46,7 +46,6 @@ class PircbotxIrcClientServiceLagProbeTest {
     OutputRaw outputRaw = mock(OutputRaw.class);
     when(bot.sendRaw()).thenReturn(outputRaw);
     c.botRef.set(bot);
-    c.registrationComplete.set(false);
 
     assertThrows(
         IllegalStateException.class, () -> service.requestLagProbe("libera").blockingAwait());
@@ -63,7 +62,7 @@ class PircbotxIrcClientServiceLagProbeTest {
     OutputRaw outputRaw = mock(OutputRaw.class);
     when(bot.sendRaw()).thenReturn(outputRaw);
     c.botRef.set(bot);
-    c.registrationComplete.set(true);
+    c.markRegistrationComplete();
 
     service.requestLagProbe("libera").blockingAwait();
 

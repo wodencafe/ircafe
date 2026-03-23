@@ -68,7 +68,7 @@ final class PircbotxAvailabilitySupport {
 
   boolean isZncBouncerDetected(PircbotxConnectionState connection) {
     return connection != null
-        && (connection.zncDetected.get() || connection.zncPlaybackCapAcked.get());
+        && (connection.isZncDetected() || connection.zncPlaybackCapAcked.get());
   }
 
   boolean isSojuBouncerAvailable(PircbotxConnectionState connection) {

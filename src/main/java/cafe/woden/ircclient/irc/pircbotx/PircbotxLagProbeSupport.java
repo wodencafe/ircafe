@@ -12,7 +12,7 @@ final class PircbotxLagProbeSupport {
     if (bot == null) {
       throw new IllegalStateException("Not connected: " + serverId);
     }
-    if (!connection.registrationComplete.get()) {
+    if (!connection.registrationComplete()) {
       throw new IllegalStateException("Registration not complete: " + serverId);
     }
 
@@ -23,7 +23,7 @@ final class PircbotxLagProbeSupport {
   }
 
   boolean isLagProbeReady(PircbotxConnectionState connection) {
-    return connection != null && connection.hasBot() && connection.registrationComplete.get();
+    return connection != null && connection.hasBot() && connection.registrationComplete();
   }
 
   OptionalLong lastMeasuredLagMs(PircbotxConnectionState connection, long nowMs) {

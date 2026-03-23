@@ -65,22 +65,21 @@ class PircbotxConnectPreparationSupportTest {
     connection.reconnectAttempts.set(5L);
     connection.batchCapAcked.set(true);
     connection.messageTagsCapAcked.set(true);
-    connection.connectedHost.set("old.example.net");
-    connection.connectedWithTls.set(false);
+    connection.setConnectedEndpoint("old.example.net", false);
     connection.selfNickHint.set("staleNick");
-    connection.zncDetected.set(true);
-    connection.zncDetectedLogged.set(true);
+    connection.markZncDetected();
+    connection.markZncDetectionLogged();
     connection.zncBaseUser.set("staleUser");
     connection.zncClientId.set("staleClient");
     connection.zncNetwork.set("staleNetwork");
-    connection.zncPlaybackRequestedThisSession.set(true);
-    connection.zncListNetworksRequestedThisSession.set(true);
+    connection.beginZncPlaybackRequest();
+    connection.beginZncListNetworksRequest();
     connection.sojuNetworksByNetId.put(
         "net", mock(cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork.class));
     connection.genericBouncerNetworksById.put(
         "generic", mock(cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork.class));
-    connection.sojuListNetworksRequestedThisSession.set(true);
-    connection.sojuBouncerNetId.set("bound-net");
+    connection.beginSojuListNetworksRequest();
+    connection.setSojuBouncerNetId("bound-net");
 
     PircbotxConnectPreparationSupport.PreparedConnect prepared =
         support.prepare("libera", connection);
@@ -93,19 +92,19 @@ class PircbotxConnectPreparationSupportTest {
     assertEquals(0L, connection.reconnectAttempts.get());
     assertFalse(connection.batchCapAcked.get());
     assertFalse(connection.messageTagsCapAcked.get());
-    assertEquals("irc.secure.example.net", connection.connectedHost.get());
-    assertTrue(connection.connectedWithTls.get());
+    assertEquals("irc.secure.example.net", connection.connectedHost());
+    assertTrue(connection.connectedWithTls());
     assertEquals("NewNick", connection.selfNickHint.get());
     assertEquals("loginuser", connection.zncBaseUser.get());
     assertEquals("loginclient", connection.zncClientId.get());
     assertEquals("netb", connection.zncNetwork.get());
-    assertFalse(connection.zncDetected.get());
-    assertFalse(connection.zncDetectedLogged.get());
-    assertFalse(connection.zncPlaybackRequestedThisSession.get());
-    assertFalse(connection.zncListNetworksRequestedThisSession.get());
+    assertFalse(connection.isZncDetected());
+    assertFalse(connection.zncDetectionLogged());
+    assertFalse(connection.zncPlaybackRequestedThisSession());
+    assertFalse(connection.zncListNetworksRequestedThisSession());
     assertTrue(connection.sojuNetworksByNetId.isEmpty());
     assertTrue(connection.genericBouncerNetworksById.isEmpty());
-    assertFalse(connection.sojuListNetworksRequestedThisSession.get());
-    assertEquals("", connection.sojuBouncerNetId.get());
+    assertFalse(connection.sojuListNetworksRequestedThisSession());
+    assertEquals("", connection.sojuBouncerNetId());
   }
 }

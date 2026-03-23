@@ -111,10 +111,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       if (capLine.hasTokens()) {
         if (capLine.isAction("LS", "NEW", "ACK")) {
           stsPolicies.observeFromCapList(
-              serverId,
-              conn.connectedHost.get(),
-              conn.connectedWithTls.get(),
-              capLine.normalizedCaps());
+              serverId, conn.connectedHost(), conn.connectedWithTls(), capLine.normalizedCaps());
         }
         if (capLine.isAction("LS", "NEW", "ACK", "DEL")) {
           multilineCapStateSupport.observe(capLine, conn);
@@ -192,7 +189,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
   @Override
   public void processServerResponse(int code, String line, List<String> parsedLine) {
     if (code == 1) {
-      conn.registrationComplete.set(true);
+      conn.markRegistrationComplete();
     }
     try {
       super.processServerResponse(code, line, parsedLine);

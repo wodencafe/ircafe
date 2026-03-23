@@ -27,7 +27,7 @@ class PircbotxRegistrationLifecycleHandlerTest {
   @Test
   void maybeHandleRegistrationCompleteEmitsReadyAndRequestsBootstrap() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.zncDetected.set(true);
+    conn.markZncDetected();
     conn.zncPlaybackCapAcked.set(true);
     conn.sojuBouncerNetworksCapAcked.set(true);
 
@@ -68,7 +68,7 @@ class PircbotxRegistrationLifecycleHandlerTest {
 
     assertTrue(handler.maybeHandle(4, null, ":server 004 me irc.example znc-1.9.1 ao mtov"));
 
-    assertTrue(conn.zncDetected.get());
+    assertTrue(conn.isZncDetected());
     assertEquals(1, events.size());
     assertInstanceOf(IrcEvent.ServerResponseLine.class, events.getFirst().event());
   }

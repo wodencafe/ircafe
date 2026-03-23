@@ -127,12 +127,12 @@ public final class PircbotxBouncerDiscoveryCoordinator {
   public void maybeRequestZncNetworks(PircBotX bot) {
     if (bot == null) return;
     if (!zncDiscoveryEnabled) return;
-    if (!conn.zncDetected.get()) return;
+    if (!conn.isZncDetected()) return;
 
     String net = conn.zncNetwork.get();
     if (net != null && !net.isBlank()) return;
 
-    if (conn.zncListNetworksRequestedThisSession.getAndSet(true)) return;
+    if (!conn.beginZncListNetworksRequest()) return;
 
     try {
       conn.zncListNetworksCaptureActive.set(true);
@@ -143,7 +143,7 @@ public final class PircbotxBouncerDiscoveryCoordinator {
       log.info("[{}] znc: requested network list (*status ListNetworks)", serverId);
     } catch (Exception ex) {
       conn.zncListNetworksCaptureActive.set(false);
-      conn.zncListNetworksRequestedThisSession.set(false);
+      conn.clearZncListNetworksRequest();
       log.warn("[{}] znc: failed to request network list", serverId, ex);
     }
   }
@@ -153,26 +153,26 @@ public final class PircbotxBouncerDiscoveryCoordinator {
     if (!sojuDiscoveryEnabled) return;
     if (!conn.sojuBouncerNetworksCapAcked.get()) return;
 
-    String netId = conn.sojuBouncerNetId.get();
+    String netId = conn.sojuBouncerNetId();
     if (netId != null && !netId.isBlank()) return;
 
-    if (conn.sojuListNetworksRequestedThisSession.getAndSet(true)) return;
+    if (!conn.beginSojuListNetworksRequest()) return;
 
     try {
       bot.sendRaw().rawLine("BOUNCER LISTNETWORKS");
       log.info("[{}] soju: requested bouncer network list (BOUNCER LISTNETWORKS)", serverId);
     } catch (Exception ex) {
-      conn.sojuListNetworksRequestedThisSession.set(false);
+      conn.clearSojuListNetworksRequest();
       log.warn("[{}] soju: failed to request bouncer network list", serverId, ex);
     }
   }
 
   public void maybeMarkZncDetected(String via, String detail) {
-    if (!conn.zncDetected.compareAndSet(false, true)) return;
+    if (!conn.markZncDetected()) return;
     String extra = detail == null ? "" : detail;
     log.info("[{}] znc: detected via {} {}", serverId, via, extra);
 
-    if (conn.zncDetectedLogged.compareAndSet(false, true)) {
+    if (conn.markZncDetectionLogged()) {
       String baseUser = conn.zncBaseUser.get();
       String client = conn.zncClientId.get();
       String net = conn.zncNetwork.get();
@@ -189,15 +189,15 @@ public final class PircbotxBouncerDiscoveryCoordinator {
 
   public void observeSojuBouncerNetId(String maybeSojuNetId) {
     if (maybeSojuNetId == null || maybeSojuNetId.isBlank()) return;
-    String prev = conn.sojuBouncerNetId.get();
+    String prev = conn.sojuBouncerNetId();
     if (prev == null || prev.isBlank()) {
-      conn.sojuBouncerNetId.set(maybeSojuNetId);
+      conn.setSojuBouncerNetId(maybeSojuNetId);
       log.info(
           "[{}] soju: BOUNCER_NETID={} (connection is bound to a bouncer network)",
           serverId,
           maybeSojuNetId);
     } else if (!Objects.equals(prev, maybeSojuNetId)) {
-      conn.sojuBouncerNetId.set(maybeSojuNetId);
+      conn.setSojuBouncerNetId(maybeSojuNetId);
       log.info("[{}] soju: BOUNCER_NETID changed {} -> {}", serverId, prev, maybeSojuNetId);
     }
   }
@@ -205,14 +205,14 @@ public final class PircbotxBouncerDiscoveryCoordinator {
   public void onDisconnect() {
     try {
       conn.sojuNetworksByNetId.clear();
-      conn.sojuListNetworksRequestedThisSession.set(false);
-      conn.sojuBouncerNetId.set("");
+      conn.clearSojuListNetworksRequest();
+      conn.clearSojuBouncerNetId();
       conn.sojuBouncerNetworksCapAcked.set(false);
     } catch (Exception ignored) {
     }
 
     try {
-      conn.zncListNetworksRequestedThisSession.set(false);
+      conn.clearZncListNetworksRequest();
     } catch (Exception ignored) {
     }
     try {

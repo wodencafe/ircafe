@@ -34,8 +34,8 @@ final class PircbotxConnectPreparationSupport {
     try {
       connection.sojuNetworksByNetId.clear();
       connection.genericBouncerNetworksById.clear();
-      connection.sojuListNetworksRequestedThisSession.set(false);
-      connection.sojuBouncerNetId.set("");
+      connection.clearSojuListNetworksRequest();
+      connection.clearSojuBouncerNetId();
     } catch (Exception ignored) {
     }
 
@@ -45,21 +45,19 @@ final class PircbotxConnectPreparationSupport {
 
     IrcProperties.Server configured = serverCatalog.require(serverId);
     IrcProperties.Server server = stsPolicies.applyPolicy(configured);
-    connection.connectedHost.set(Objects.toString(server.host(), "").trim());
-    connection.connectedWithTls.set(server.tls());
+    connection.setConnectedEndpoint(server.host(), server.tls());
     connection.selfNickHint.set(Objects.toString(server.nick(), "").trim());
 
     // ZNC detection uses CAP/004/*status heuristics, but we can still parse the configured login
     // now so logs and discovery logic have context once ZNC is detected.
     try {
-      connection.zncDetected.set(false);
-      connection.zncDetectedLogged.set(false);
+      connection.clearZncDetection();
       connection.zncBaseUser.set("");
       connection.zncClientId.set("");
       connection.zncNetwork.set("");
 
-      connection.zncPlaybackRequestedThisSession.set(false);
-      connection.zncListNetworksRequestedThisSession.set(false);
+      connection.clearZncPlaybackRequest();
+      connection.clearZncListNetworksRequest();
       connection.zncPlaybackCapture.cancelActive("reconnect");
 
       ZncLoginParts loginParts = ZncLoginParts.parse(server.login());

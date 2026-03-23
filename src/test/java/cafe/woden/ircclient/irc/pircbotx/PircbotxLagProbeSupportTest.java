@@ -24,7 +24,7 @@ class PircbotxLagProbeSupportTest {
     OutputRaw outputRaw = mock(OutputRaw.class);
     when(bot.sendRaw()).thenReturn(outputRaw);
     connection.botRef.set(bot);
-    connection.registrationComplete.set(true);
+    connection.markRegistrationComplete();
 
     support.requestLagProbe("libera", connection);
 
@@ -43,7 +43,7 @@ class PircbotxLagProbeSupportTest {
     connection.botRef.set(mock(PircBotX.class));
     assertFalse(support.isLagProbeReady(connection));
 
-    connection.registrationComplete.set(true);
+    connection.markRegistrationComplete();
     assertTrue(support.isLagProbeReady(connection));
   }
 

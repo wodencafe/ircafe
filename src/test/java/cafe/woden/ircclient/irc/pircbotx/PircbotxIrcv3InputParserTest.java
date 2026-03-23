@@ -518,8 +518,7 @@ class PircbotxIrcv3InputParserTest {
   @Test
   void capLsLearnsStsPolicyWhenConnectionIsSecure() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.connectedHost.set("irc.example.net");
-    conn.connectedWithTls.set(true);
+    conn.setConnectedEndpoint("irc.example.net", true);
     List<ServerIrcEvent> out = new ArrayList<>();
     Ircv3StsPolicyService stsPolicies = new Ircv3StsPolicyService();
     PircbotxIrcv3InputParser parser =

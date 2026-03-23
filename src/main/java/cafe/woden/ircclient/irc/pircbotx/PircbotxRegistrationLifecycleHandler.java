@@ -88,7 +88,7 @@ final class PircbotxRegistrationLifecycleHandler {
   private void maybeRequestZncPlayback(PircBotX bot) {
     if (bot == null) return;
     if (!conn.zncPlaybackCapAcked.get()) return;
-    if (conn.zncPlaybackRequestedThisSession.getAndSet(true)) return;
+    if (!conn.beginZncPlaybackRequest()) return;
 
     OptionalLong cursor = playbackCursorProvider.lastSeenEpochSeconds(serverId);
     long request = Math.max(0L, cursor.orElse(0L) - 1L);
@@ -97,7 +97,7 @@ final class PircbotxRegistrationLifecycleHandler {
       bot.sendIRC().message("*playback", "play * " + request);
       log.info("[{}] requested ZNC playback since {} (epoch seconds)", serverId, request);
     } catch (Exception ex) {
-      conn.zncPlaybackRequestedThisSession.set(false);
+      conn.clearZncPlaybackRequest();
       log.warn("[{}] failed to request ZNC playback", serverId, ex);
     }
   }

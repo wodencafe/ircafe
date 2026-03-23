@@ -215,6 +215,27 @@ public final class PircbotxConnectionState {
     return selfNickHint.get();
   }
 
+  public void setConnectedEndpoint(String host, boolean tls) {
+    connectedHost.set(Objects.toString(host, "").trim());
+    connectedWithTls.set(tls);
+  }
+
+  public String connectedHost() {
+    return connectedHost.get();
+  }
+
+  public boolean connectedWithTls() {
+    return connectedWithTls.get();
+  }
+
+  public void markRegistrationComplete() {
+    registrationComplete.set(true);
+  }
+
+  public boolean registrationComplete() {
+    return registrationComplete.get();
+  }
+
   public void recordInboundActivity(long observedAtMs) {
     lastInboundMs.set(observedAtMs);
     localTimeoutEmitted.set(false);
@@ -293,6 +314,75 @@ public final class PircbotxConnectionState {
 
   public boolean consumeSuppressAutoReconnectOnce() {
     return suppressAutoReconnectOnce.getAndSet(false);
+  }
+
+  public boolean isZncDetected() {
+    return zncDetected.get();
+  }
+
+  public boolean markZncDetected() {
+    return zncDetected.compareAndSet(false, true);
+  }
+
+  public boolean markZncDetectionLogged() {
+    return zncDetectedLogged.compareAndSet(false, true);
+  }
+
+  public boolean zncDetectionLogged() {
+    return zncDetectedLogged.get();
+  }
+
+  public void clearZncDetection() {
+    zncDetected.set(false);
+    zncDetectedLogged.set(false);
+  }
+
+  public boolean beginZncPlaybackRequest() {
+    return !zncPlaybackRequestedThisSession.getAndSet(true);
+  }
+
+  public void clearZncPlaybackRequest() {
+    zncPlaybackRequestedThisSession.set(false);
+  }
+
+  public boolean zncPlaybackRequestedThisSession() {
+    return zncPlaybackRequestedThisSession.get();
+  }
+
+  public boolean beginZncListNetworksRequest() {
+    return !zncListNetworksRequestedThisSession.getAndSet(true);
+  }
+
+  public void clearZncListNetworksRequest() {
+    zncListNetworksRequestedThisSession.set(false);
+  }
+
+  public boolean zncListNetworksRequestedThisSession() {
+    return zncListNetworksRequestedThisSession.get();
+  }
+
+  public boolean beginSojuListNetworksRequest() {
+    return !sojuListNetworksRequestedThisSession.getAndSet(true);
+  }
+
+  public void clearSojuListNetworksRequest() {
+    sojuListNetworksRequestedThisSession.set(false);
+  }
+
+  public boolean sojuListNetworksRequestedThisSession() {
+    return sojuListNetworksRequestedThisSession.get();
+  }
+
+  public String sojuBouncerNetId() {
+    return sojuBouncerNetId.get();
+  }
+
+  public void setSojuBouncerNetId(String netId) {
+    sojuBouncerNetId.set(Objects.toString(netId, "").trim());
+  }
+
+  public void clearSojuBouncerNetId() {
+    sojuBouncerNetId.set("");
   }
 
   void resetNegotiatedCaps() {

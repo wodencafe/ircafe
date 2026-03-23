@@ -70,7 +70,7 @@ final class PircbotxCapabilityNegotiationSupport {
       if (fromDel || tokenDisable) enabled = false;
 
       if (enabled && PircbotxZncParsers.seemsZncCap(capName)) {
-        if (conn.zncDetected.compareAndSet(false, true)) {
+        if (conn.markZncDetected()) {
           log.debug("[{}] detected ZNC via CAP {}: {}", serverId, action, capName);
         }
       }
