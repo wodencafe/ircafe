@@ -48,6 +48,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
   private final PircbotxCapabilityNegotiationSupport capabilityNegotiationSupport;
   private final PircbotxMultilineCapStateSupport multilineCapStateSupport =
       new PircbotxMultilineCapStateSupport();
+  private final PircbotxTagSignalSupport tagSignalSupport;
 
   // Deduplicate high-frequency account-tag observations (which can appear on every PRIVMSG).
   private final Map<String, String> lastAccountTagByNickLower =
@@ -75,6 +76,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
     this.capabilityNegotiationSupport =
         new PircbotxCapabilityNegotiationSupport(
             bot, this.serverId, this.conn, this.sink, capabilityStateSupport);
+    this.tagSignalSupport = new PircbotxTagSignalSupport(this.serverId, this.sink);
   }
 
   @Override
@@ -150,7 +152,8 @@ final class PircbotxIrcv3InputParser extends InputParser {
       String redactMsgId = secondParam(parsedLine);
       if (!redactMsgId.isBlank()) {
         String from = sourceNick.isBlank() ? "server" : sourceNick;
-        String convTarget = resolveConversationTarget(redactTarget, sourceNick);
+        String convTarget =
+            PircbotxTagSignalSupport.resolveConversationTarget(redactTarget, sourceNick);
         sink.accept(
             new ServerIrcEvent(
                 serverId,
@@ -197,7 +200,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       }
     }
 
-    emitTagSignals(now, nick, target, command, parsedLine, tags);
+    tagSignalSupport.emitObservedSignals(now, nick, target, command, parsedLine, tags);
 
     if ("SETNAME".equalsIgnoreCase(command)) {
       String realName = firstParam(parsedLine);
@@ -479,93 +482,6 @@ final class PircbotxIrcv3InputParser extends InputParser {
     return stripLeadingColon(tail).trim();
   }
 
-  private void emitTagSignals(
-      Instant at,
-      String nick,
-      String rawTarget,
-      String command,
-      List<String> parsedLine,
-      ImmutableMap<String, String> tags) {
-    if (tags == null || tags.isEmpty()) return;
-
-    String cmd = Objects.toString(command, "").trim().toUpperCase(Locale.ROOT);
-    String firstParam = firstParam(parsedLine);
-    String msgTarget = !firstParam.isBlank() ? firstParam : stripLeadingColon(rawTarget);
-    String channelContext =
-        firstTag(
-            tags,
-            "draft/channel-context",
-            "+draft/channel-context",
-            "channel-context",
-            "+channel-context");
-    String convTarget = resolveSignalTarget(msgTarget, nick, channelContext);
-
-    if (cmd.equals("PRIVMSG") || cmd.equals("NOTICE") || cmd.equals("TAGMSG")) {
-      String replyTo = firstTag(tags, "draft/reply", "+draft/reply");
-      if (!replyTo.isBlank()) {
-        sink.accept(
-            new ServerIrcEvent(
-                serverId, new IrcEvent.MessageReplyObserved(at, nick, convTarget, replyTo)));
-      }
-
-      String react = firstTag(tags, "draft/react", "+draft/react");
-      if (!react.isBlank()) {
-        String msgId = firstTag(tags, "draft/reply", "+draft/reply");
-        if (msgId.isBlank()) {
-          msgId = firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
-        }
-        sink.accept(
-            new ServerIrcEvent(
-                serverId, new IrcEvent.MessageReactObserved(at, nick, convTarget, react, msgId)));
-      }
-
-      String unreact = firstTag(tags, "draft/unreact", "+draft/unreact");
-      if (!unreact.isBlank()) {
-        String msgId = firstTag(tags, "draft/reply", "+draft/reply");
-        if (msgId.isBlank()) {
-          msgId = firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
-        }
-        sink.accept(
-            new ServerIrcEvent(
-                serverId,
-                new IrcEvent.MessageUnreactObserved(at, nick, convTarget, unreact, msgId)));
-      }
-
-      String redactMsgId =
-          firstTag(tags, "draft/delete", "+draft/delete", "draft/redact", "+draft/redact");
-      if (!redactMsgId.isBlank()) {
-        sink.accept(
-            new ServerIrcEvent(
-                serverId,
-                new IrcEvent.MessageRedactionObserved(at, nick, convTarget, redactMsgId)));
-      }
-
-      String typing = firstTag(tags, "typing", "+typing");
-      if (!typing.isBlank()) {
-        if (log.isDebugEnabled()) {
-          log.debug(
-              "[{}] IRCv3 +typing tag: from={} target={} state={} cmd={}",
-              serverId,
-              nick,
-              convTarget,
-              typing,
-              cmd);
-        }
-        sink.accept(
-            new ServerIrcEvent(
-                serverId, new IrcEvent.UserTypingObserved(at, nick, convTarget, typing)));
-      }
-    }
-
-    String readMarker =
-        firstTag(tags, "draft/read-marker", "+draft/read-marker", "read-marker", "+read-marker");
-    if (!readMarker.isBlank()) {
-      sink.accept(
-          new ServerIrcEvent(
-              serverId, new IrcEvent.ReadMarkerObserved(at, nick, convTarget, readMarker)));
-    }
-  }
-
   private static String capListFrom(List<String> parsedLine) {
     if (parsedLine == null || parsedLine.size() < 3) return "";
     int start = 2;
@@ -599,36 +515,6 @@ final class PircbotxIrcv3InputParser extends InputParser {
     return s;
   }
 
-  private static String resolveConversationTarget(String rawTarget, String fromNick) {
-    String t = Objects.toString(rawTarget, "").trim();
-    if (t.startsWith("#") || t.startsWith("&")) return t;
-    String from = Objects.toString(fromNick, "").trim();
-    return from.isBlank() ? t : from;
-  }
-
-  private static String resolveSignalTarget(
-      String rawTarget, String fromNick, String channelContextTag) {
-    String context = Objects.toString(channelContextTag, "").trim();
-    if (isChannelName(context)) return context;
-    return resolveConversationTarget(rawTarget, fromNick);
-  }
-
-  private static String firstTag(ImmutableMap<String, String> tags, String... keys) {
-    if (tags == null || tags.isEmpty() || keys == null) return "";
-    for (String k : keys) {
-      if (k == null || k.isBlank()) continue;
-      String want = normalizeTagKey(k);
-      for (Map.Entry<String, String> e : tags.entrySet()) {
-        String got = normalizeTagKey(e.getKey());
-        if (!want.equals(got)) continue;
-        String v = Objects.toString(e.getValue(), "").trim();
-        if (v.isEmpty()) continue;
-        return unescapeTagValue(v);
-      }
-    }
-    return "";
-  }
-
   private void captureSelfPrivateMessageTargetHint(
       Instant at,
       String fromNick,
@@ -646,7 +532,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       messageTarget = firstParam(parsedLine);
     }
     if (messageTarget.isBlank()
-        || isChannelName(messageTarget)
+        || PircbotxTagSignalSupport.isChannelName(messageTarget)
         || looksLikeSelfTarget(messageTarget)) {
       return;
     }
@@ -663,7 +549,8 @@ final class PircbotxIrcv3InputParser extends InputParser {
     String action = PircbotxUtil.parseCtcpAction(payload);
     String kind = action == null ? "PRIVMSG" : "ACTION";
     String normalizedPayload = action == null ? payload : action;
-    String msgId = firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
+    String msgId =
+        PircbotxTagSignalSupport.firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
     conn.rememberPrivateTargetHint(
         fromNick,
         messageTarget,
@@ -712,13 +599,6 @@ final class PircbotxIrcv3InputParser extends InputParser {
     return line.substring(idx + 2).trim();
   }
 
-  private static boolean isChannelName(String target) {
-    String t = Objects.toString(target, "").trim();
-    if (t.isEmpty()) return false;
-    char c = t.charAt(0);
-    return c == '#' || c == '&' || c == '!' || c == '+';
-  }
-
   private void emitStandardReply(
       Instant at,
       String command,
@@ -729,7 +609,8 @@ final class PircbotxIrcv3InputParser extends InputParser {
     if (kind == null) return;
 
     ParsedStandardReply parsed = parseStandardReply(parsedLine);
-    String msgId = firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
+    String msgId =
+        PircbotxTagSignalSupport.firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
     Map<String, String> ircv3Tags = (tags == null) ? Map.of() : tags;
     String line = Objects.toString(rawLine, "").trim();
     sink.accept(
@@ -813,34 +694,4 @@ final class PircbotxIrcv3InputParser extends InputParser {
 
   private record ParsedStandardReply(
       String command, String code, String context, String description) {}
-
-  private static String normalizeTagKey(String raw) {
-    String k = Objects.toString(raw, "").trim();
-    if (k.startsWith("@")) k = k.substring(1).trim();
-    if (k.startsWith("+")) k = k.substring(1).trim();
-    return k.toLowerCase(Locale.ROOT);
-  }
-
-  private static String unescapeTagValue(String raw) {
-    if (raw == null || raw.isEmpty() || raw.indexOf('\\') < 0) return raw == null ? "" : raw;
-    StringBuilder sb = new StringBuilder(raw.length());
-    for (int i = 0; i < raw.length(); i++) {
-      char c = raw.charAt(i);
-      if (c != '\\') {
-        sb.append(c);
-        continue;
-      }
-      if (i + 1 >= raw.length()) break;
-      char n = raw.charAt(++i);
-      switch (n) {
-        case ':' -> sb.append(';');
-        case 's' -> sb.append(' ');
-        case 'r' -> sb.append('\r');
-        case 'n' -> sb.append('\n');
-        case '\\' -> sb.append('\\');
-        default -> sb.append(n);
-      }
-    }
-    return sb.toString();
-  }
 }
