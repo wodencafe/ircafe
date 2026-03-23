@@ -20,11 +20,9 @@ import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -68,6 +66,8 @@ public class PircbotxIrcClientService
   @NonNull private final Ircv3StsPolicyService stsPolicies;
   private final String version;
   private final PircbotxCtcpAutoReplyHandler ctcpAutoReplyHandler;
+  private final PircbotxMultilineMessageSupport multilineMessageSupport =
+      new PircbotxMultilineMessageSupport();
 
   public PircbotxIrcClientService(
       IrcProperties props,
@@ -420,158 +420,20 @@ public class PircbotxIrcClientService
 
   private void sendMessageWithMultiline(
       String serverId, String target, String message, boolean notice) {
-    String dest = sanitizeTarget(target);
-    String payload = Objects.toString(message, "");
-    if (payload.isEmpty()) return;
-
-    List<String> lines = normalizeMessageLines(payload);
-    if (lines.isEmpty()) return;
-
-    PircbotxConnectionState c = conn(serverId);
-    PircBotX bot = requireBot(serverId);
-    String command = notice ? "NOTICE" : "PRIVMSG";
-
-    if (lines.size() == 1) {
-      sendRawMessageLine(bot, command, dest, lines.get(0));
-      return;
-    }
-
-    String batchType = multilineBatchType(c);
-    String concatTag = multilineConcatTag(c);
-    if (batchType.isEmpty() || concatTag.isEmpty()) {
-      throw new IllegalArgumentException(
-          "Message contains line breaks, but IRCv3 multiline is not negotiated: " + serverId);
-    }
-    long maxLines = multilineMaxLines(c);
-    requireWithinMultilineMaxLines(maxLines, lines, serverId);
-    long maxBytes = multilineMaxBytes(c);
-    requireWithinMultilineMaxBytes(maxBytes, lines, serverId);
-
-    String batchId = "ml" + Long.toUnsignedString(ThreadLocalRandom.current().nextLong(), 36);
-    bot.sendRaw().rawLine("BATCH +" + batchId + " " + batchType + " " + dest);
-    for (int i = 0; i < lines.size(); i++) {
-      String line = Objects.toString(lines.get(i), "");
-      boolean concat = i < lines.size() - 1;
-      String tagPrefix = "@batch=" + batchId;
-      if (concat) {
-        tagPrefix = tagPrefix + ";+" + concatTag + "=1";
-      }
-      bot.sendRaw().rawLine(tagPrefix + " " + command + " " + dest + " :" + line);
-    }
-    bot.sendRaw().rawLine("BATCH -" + batchId);
-  }
-
-  private static void sendRawMessageLine(PircBotX bot, String command, String target, String line) {
-    String cmd = Objects.toString(command, "").trim().toUpperCase(Locale.ROOT);
-    if (!"PRIVMSG".equals(cmd) && !"NOTICE".equals(cmd)) {
-      throw new IllegalArgumentException("Unsupported message command: " + command);
-    }
-    String dest = sanitizeTarget(target);
-    String payload = Objects.toString(line, "");
-    if (payload.indexOf('\r') >= 0 || payload.indexOf('\n') >= 0) {
-      throw new IllegalArgumentException("message line contains CR/LF");
-    }
-    bot.sendRaw().rawLine(cmd + " " + dest + " :" + payload);
-  }
-
-  private static List<String> normalizeMessageLines(String raw) {
-    String input = Objects.toString(raw, "");
-    if (input.isEmpty()) return List.of();
-    String normalized = input.replace("\r\n", "\n").replace('\r', '\n');
-    if (normalized.indexOf('\n') < 0) {
-      return List.of(normalized);
-    }
-    String[] parts = normalized.split("\n", -1);
-    List<String> out = new ArrayList<>(parts.length);
-    for (String part : parts) {
-      out.add(Objects.toString(part, ""));
-    }
-    return out;
-  }
-
-  private static String multilineBatchType(PircbotxConnectionState c) {
-    if (c == null) return "";
-    if (c.multilineCapAcked.get()) return "multiline";
-    if (c.draftMultilineCapAcked.get()) return "draft/multiline";
-    return "";
-  }
-
-  private static String multilineConcatTag(PircbotxConnectionState c) {
-    if (c == null) return "";
-    if (c.multilineCapAcked.get()) return "multiline-concat";
-    if (c.draftMultilineCapAcked.get()) return "draft/multiline-concat";
-    return "";
-  }
-
-  private static long multilineMaxBytes(PircbotxConnectionState c) {
-    if (c == null) return 0L;
-    if (c.multilineCapAcked.get()) {
-      return Math.max(0L, c.multilineMaxBytes.get());
-    }
-    if (c.draftMultilineCapAcked.get()) {
-      return Math.max(0L, c.draftMultilineMaxBytes.get());
-    }
-    return 0L;
-  }
-
-  private static long multilineMaxLines(PircbotxConnectionState c) {
-    if (c == null) return 0L;
-    if (c.multilineCapAcked.get()) {
-      return Math.max(0L, c.multilineMaxLines.get());
-    }
-    if (c.draftMultilineCapAcked.get()) {
-      return Math.max(0L, c.draftMultilineMaxLines.get());
-    }
-    return 0L;
+    multilineMessageSupport.send(
+        requireBot(serverId), conn(serverId), serverId, target, message, notice);
   }
 
   static long multilinePayloadUtf8Bytes(List<String> lines) {
-    if (lines == null || lines.isEmpty()) return 0L;
-    long total = 0L;
-    for (int i = 0; i < lines.size(); i++) {
-      String line = Objects.toString(lines.get(i), "");
-      total = addSaturated(total, utf8Length(line));
-      if (i < lines.size() - 1) {
-        total = addSaturated(total, 1L); // \n separator between logical lines
-      }
-    }
-    return total;
+    return PircbotxMultilineMessageSupport.multilinePayloadUtf8Bytes(lines);
   }
 
   static void requireWithinMultilineMaxBytes(long maxBytes, List<String> lines, String serverId) {
-    if (maxBytes <= 0L) return;
-    long payloadBytes = multilinePayloadUtf8Bytes(lines);
-    if (payloadBytes <= maxBytes) return;
-    throw new IllegalArgumentException(
-        "Message exceeds negotiated IRCv3 multiline max-bytes "
-            + payloadBytes
-            + " > "
-            + maxBytes
-            + " for "
-            + Objects.toString(serverId, "").trim());
+    PircbotxMultilineMessageSupport.requireWithinMaxBytes(maxBytes, lines, serverId);
   }
 
   static void requireWithinMultilineMaxLines(long maxLines, List<String> lines, String serverId) {
-    if (maxLines <= 0L) return;
-    long lineCount = (lines == null) ? 0L : lines.size();
-    if (lineCount <= maxLines) return;
-    throw new IllegalArgumentException(
-        "Message exceeds negotiated IRCv3 multiline max-lines "
-            + lineCount
-            + " > "
-            + maxLines
-            + " for "
-            + Objects.toString(serverId, "").trim());
-  }
-
-  private static long utf8Length(String value) {
-    return Objects.toString(value, "").getBytes(StandardCharsets.UTF_8).length;
-  }
-
-  private static long addSaturated(long left, long right) {
-    if (right <= 0L) return left;
-    if (left >= Long.MAX_VALUE - right) return Long.MAX_VALUE;
-    return left + right;
+    PircbotxMultilineMessageSupport.requireWithinMaxLines(maxLines, lines, serverId);
   }
 
   @Override
@@ -768,7 +630,7 @@ public class PircbotxIrcClientService
   @Override
   public long negotiatedMultilineMaxBytes(String serverId) {
     try {
-      return multilineMaxBytes(conn(serverId));
+      return PircbotxMultilineMessageSupport.negotiatedMaxBytes(conn(serverId));
     } catch (Exception e) {
       return 0L;
     }
@@ -777,7 +639,7 @@ public class PircbotxIrcClientService
   @Override
   public int negotiatedMultilineMaxLines(String serverId) {
     try {
-      long max = multilineMaxLines(conn(serverId));
+      long max = PircbotxMultilineMessageSupport.negotiatedMaxLines(conn(serverId));
       if (max <= 0L) return 0;
       if (max >= Integer.MAX_VALUE) return Integer.MAX_VALUE;
       return (int) max;
