@@ -105,30 +105,27 @@ final class PircbotxIrcv3InputParser extends InputParser {
 
     // Detect CAP state changes for capabilities we care about.
     if ("CAP".equalsIgnoreCase(command) && parsedLine != null && parsedLine.size() >= 2) {
-      String sub = parsedLine.get(1);
-      String capList = capListFrom(parsedLine);
-      if (sub != null && !capList.isBlank()) {
-        if ("LS".equalsIgnoreCase(sub)
-            || "NEW".equalsIgnoreCase(sub)
-            || "ACK".equalsIgnoreCase(sub)) {
+      ParsedCapLine capLine = ParsedCapLine.parse(parsedLine.get(1), capListFrom(parsedLine));
+      if (capLine.hasTokens()) {
+        if (capLine.isAction("LS", "NEW", "ACK")) {
           stsPolicies.observeFromCapList(
-              serverId, conn.connectedHost.get(), conn.connectedWithTls.get(), capList);
+              serverId,
+              conn.connectedHost.get(),
+              conn.connectedWithTls.get(),
+              capLine.normalizedCaps());
         }
-        if ("LS".equalsIgnoreCase(sub)
-            || "NEW".equalsIgnoreCase(sub)
-            || "ACK".equalsIgnoreCase(sub)
-            || "DEL".equalsIgnoreCase(sub)) {
-          observeMultilineCapValuesFromCapLine(sub, capList);
+        if (capLine.isAction("LS", "NEW", "ACK", "DEL")) {
+          observeMultilineCapValuesFromCapLine(capLine);
         }
-        if ("ACK".equalsIgnoreCase(sub) || "DEL".equalsIgnoreCase(sub)) {
-          applyCapStateFromCapLine(sub, capList);
-        } else if ("NEW".equalsIgnoreCase(sub) || "LS".equalsIgnoreCase(sub)) {
-          emitCapAvailabilityFromCapLine(sub, capList);
-        } else if ("NAK".equalsIgnoreCase(sub)) {
-          emitCapNakFromCapLine(sub, capList);
+        if (capLine.isAction("ACK", "DEL")) {
+          applyCapStateFromCapLine(capLine);
+        } else if (capLine.isAction("NEW", "LS")) {
+          emitCapAvailabilityFromCapLine(capLine);
+        } else if (capLine.isAction("NAK")) {
+          emitCapNakFromCapLine(capLine);
         }
-        maybeRequestMessageTagsFallback(sub, capList);
-        maybeRequestHistoryCapabilityFallback(sub, capList);
+        maybeRequestMessageTagsFallback(capLine);
+        maybeRequestHistoryCapabilityFallback(capLine);
       }
       return;
     }
@@ -482,22 +479,15 @@ final class PircbotxIrcv3InputParser extends InputParser {
     return stripLeadingColon(tail).trim();
   }
 
-  private void observeMultilineCapValuesFromCapLine(String sub, String capList) {
-    String action = Objects.toString(sub, "").trim().toUpperCase(Locale.ROOT);
-    boolean fromLs = "LS".equals(action);
-    boolean fromNew = "NEW".equals(action);
-    boolean fromAck = "ACK".equals(action);
-    boolean fromDel = "DEL".equals(action);
+  private void observeMultilineCapValuesFromCapLine(ParsedCapLine capLine) {
+
+    boolean fromLs = capLine.isAction("LS");
+    boolean fromNew = capLine.isAction("NEW");
+    boolean fromAck = capLine.isAction("ACK");
+    boolean fromDel = capLine.isAction("DEL");
     if (!fromLs && !fromNew && !fromAck && !fromDel) return;
 
-    String caps = Objects.toString(capList, "").trim();
-    if (caps.startsWith(":")) caps = caps.substring(1).trim();
-    if (caps.isEmpty()) return;
-
-    for (String token : caps.split("\\s+")) {
-      String t = Objects.toString(token, "").trim();
-      if (t.isEmpty()) continue;
-
+    for (String t : capLine.tokens()) {
       boolean tokenDisable = t.startsWith("-");
       String capName = canonicalCapName(t);
       if (!isMultilineCapability(capName)) continue;
@@ -550,22 +540,14 @@ final class PircbotxIrcv3InputParser extends InputParser {
     }
   }
 
-  private void applyCapStateFromCapLine(String sub, String capList) {
-    if (sub == null) return;
-    String action = sub.trim().toUpperCase(Locale.ROOT);
-    boolean fromAck = "ACK".equals(action);
-    boolean fromDel = "DEL".equals(action);
+  private void applyCapStateFromCapLine(ParsedCapLine capLine) {
+    String action = capLine.action();
+    boolean fromAck = capLine.isAction("ACK");
+    boolean fromDel = capLine.isAction("DEL");
     if (!fromAck && !fromDel) return;
 
-    String caps = Objects.toString(capList, "").trim();
-    if (caps.startsWith(":")) caps = caps.substring(1).trim();
-    if (caps.isEmpty()) return;
-
     boolean emittedAny = false;
-    for (String token : caps.split("\\s+")) {
-      String t = Objects.toString(token, "").trim();
-      if (t.isEmpty()) continue;
-
+    for (String t : capLine.tokens()) {
       boolean tokenDisable = t.startsWith("-");
       String capName = canonicalCapName(t);
       if (capName == null) continue;
@@ -595,14 +577,11 @@ final class PircbotxIrcv3InputParser extends InputParser {
     }
   }
 
-  private void emitCapAvailabilityFromCapLine(String sub, String capList) {
-    String action = Objects.toString(sub, "").trim().toUpperCase(Locale.ROOT);
-    if (!"NEW".equals(action) && !"LS".equals(action)) return;
-    String caps = Objects.toString(capList, "").trim();
-    if (caps.startsWith(":")) caps = caps.substring(1).trim();
-    if (caps.isEmpty()) return;
+  private void emitCapAvailabilityFromCapLine(ParsedCapLine capLine) {
+    String action = capLine.action();
+    if (!capLine.isAction("NEW", "LS")) return;
 
-    for (String token : caps.split("\\s+")) {
+    for (String token : capLine.tokens()) {
       String capName = canonicalCapName(token);
       if (capName == null || capName.isBlank()) continue;
       sink.accept(
@@ -612,21 +591,18 @@ final class PircbotxIrcv3InputParser extends InputParser {
     }
   }
 
-  private void maybeRequestMessageTagsFallback(String sub, String capList) {
-    String action = Objects.toString(sub, "").trim().toUpperCase(Locale.ROOT);
-    if (!"LS".equals(action) && !"NEW".equals(action)) return;
+  private void maybeRequestMessageTagsFallback(ParsedCapLine capLine) {
+    if (!capLine.isAction("LS", "NEW")) return;
     if (conn.messageTagsCapAcked.get()) return;
     if (!conn.messageTagsFallbackReqSent.compareAndSet(false, true)) return;
 
-    String caps = Objects.toString(capList, "").trim();
-    if (caps.startsWith(":")) caps = caps.substring(1).trim();
-    if (caps.isEmpty()) {
+    if (!capLine.hasTokens()) {
       conn.messageTagsFallbackReqSent.set(false);
       return;
     }
 
     boolean offered = false;
-    for (String token : caps.split("\\s+")) {
+    for (String token : capLine.tokens()) {
       String capName = canonicalCapName(token);
       if ("message-tags".equalsIgnoreCase(capName)) {
         offered = true;
@@ -649,18 +625,14 @@ final class PircbotxIrcv3InputParser extends InputParser {
     }
   }
 
-  private void maybeRequestHistoryCapabilityFallback(String sub, String capList) {
-    String action = Objects.toString(sub, "").trim().toUpperCase(Locale.ROOT);
-    if (!"LS".equals(action) && !"NEW".equals(action)) return;
-
-    String caps = Objects.toString(capList, "").trim();
-    if (caps.startsWith(":")) caps = caps.substring(1).trim();
-    if (caps.isEmpty()) return;
+  private void maybeRequestHistoryCapabilityFallback(ParsedCapLine capLine) {
+    if (!capLine.isAction("LS", "NEW")) return;
+    if (!capLine.hasTokens()) return;
 
     boolean offeredBatch = false;
     boolean offeredChatHistory = false;
     boolean offeredDraftChatHistory = false;
-    for (String token : caps.split("\\s+")) {
+    for (String token : capLine.tokens()) {
       String capName = canonicalCapName(token);
       if ("batch".equalsIgnoreCase(capName)) {
         offeredBatch = true;
@@ -712,14 +684,11 @@ final class PircbotxIrcv3InputParser extends InputParser {
     }
   }
 
-  private void emitCapNakFromCapLine(String sub, String capList) {
-    String action = Objects.toString(sub, "").trim().toUpperCase(Locale.ROOT);
-    if (!"NAK".equals(action)) return;
-    String caps = Objects.toString(capList, "").trim();
-    if (caps.startsWith(":")) caps = caps.substring(1).trim();
-    if (caps.isEmpty()) return;
+  private void emitCapNakFromCapLine(ParsedCapLine capLine) {
+    String action = capLine.action();
+    if (!capLine.isAction("NAK")) return;
 
-    for (String token : caps.split("\\s+")) {
+    for (String token : capLine.tokens()) {
       String capName = canonicalCapName(token);
       if (capName == null || capName.isBlank()) continue;
       sink.accept(
