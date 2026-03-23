@@ -41,13 +41,12 @@ public final class MultiSaslCapHandler implements CapHandler {
 
   private static final Logger log = LoggerFactory.getLogger(MultiSaslCapHandler.class);
 
-  // IRCv3 SASL uses 400-byte base64 chunks.
-  private static final int SASL_CHUNK_LEN = 400;
-
   private final String username;
   private final String secret;
   private final String configuredMechanism;
   private final boolean disconnectOnFailure;
+  private final PircbotxSaslAuthenticateFraming authenticateFraming =
+      new PircbotxSaslAuthenticateFraming();
   private final PircbotxSaslMechanismSelector mechanismSelector =
       new PircbotxSaslMechanismSelector();
 
@@ -58,9 +57,6 @@ public final class MultiSaslCapHandler implements CapHandler {
 
   private State state = State.INIT;
   private String chosenMechanism;
-
-  // Server AUTHENTICATE chunks (base64 string)
-  private final StringBuilder authInB64 = new StringBuilder();
 
   // SCRAM state
   private PircbotxScramSaslExchange scram;
@@ -188,40 +184,10 @@ public final class MultiSaslCapHandler implements CapHandler {
   }
 
   private void onAuthenticate(PircBotX bot, String data) throws CAPException {
-    // Server sends: AUTHENTICATE +  (empty/initial challenge)
-    // or base64 chunks. Chunks are 400 bytes; if exactly 400, more will follow.
-    if (data == null) data = "";
-    data = data.trim();
-
-    if ("+".equals(data)) {
-      // '+' can be an empty initial challenge or a terminator after full 400-byte chunks.
-      if (authInB64.length() > 0) {
-        decodeAndHandleAuthBuffer(bot);
-      } else {
-        handleServerAuthMessage(bot, new byte[0]);
-      }
-      return;
+    byte[] decoded = authenticateFraming.acceptServerPayload(data).orElse(null);
+    if (decoded != null) {
+      handleServerAuthMessage(bot, decoded);
     }
-
-    authInB64.append(data);
-    if (data.length() == SASL_CHUNK_LEN) {
-      // More chunks will follow.
-      return;
-    }
-    decodeAndHandleAuthBuffer(bot);
-  }
-
-  private void decodeAndHandleAuthBuffer(PircBotX bot) throws CAPException {
-    String joined = authInB64.toString();
-    authInB64.setLength(0);
-    byte[] decoded;
-    try {
-      decoded = Base64.getDecoder().decode(joined);
-    } catch (IllegalArgumentException e) {
-      throw new CAPException(
-          CAPException.Reason.OTHER, "Invalid base64 from server during SASL", e);
-    }
-    handleServerAuthMessage(bot, decoded);
   }
 
   private void handleServerAuthMessage(PircBotX bot, byte[] decoded) throws CAPException {
@@ -253,7 +219,7 @@ public final class MultiSaslCapHandler implements CapHandler {
     state = State.EXCHANGING;
     if (username == null || username.isBlank()) {
       // Empty response
-      bot.sendRaw().rawLine("AUTHENTICATE +");
+      sendAuthenticateResponse(bot, "");
       return;
     }
     sendAuthenticateResponse(
@@ -301,25 +267,13 @@ public final class MultiSaslCapHandler implements CapHandler {
     if (!scram.hasSeenServerFinal()) {
       scram.onServerFinal(serverMsg);
       // Per SASL framing, send empty response to finish exchange.
-      bot.sendRaw().rawLine("AUTHENTICATE +");
+      sendAuthenticateResponse(bot, "");
     }
   }
 
   private void sendAuthenticateResponse(PircBotX bot, String b64) {
-    if (b64 == null) b64 = "";
-    if (b64.isEmpty()) {
-      bot.sendRaw().rawLine("AUTHENTICATE +");
-      return;
-    }
-    int idx = 0;
-    while (idx < b64.length()) {
-      int end = Math.min(b64.length(), idx + SASL_CHUNK_LEN);
-      bot.sendRaw().rawLine("AUTHENTICATE " + b64.substring(idx, end));
-      idx = end;
-    }
-    // If the last chunk was exactly 400 bytes, we must send an empty terminator.
-    if (b64.length() % SASL_CHUNK_LEN == 0) {
-      bot.sendRaw().rawLine("AUTHENTICATE +");
+    for (String payload : authenticateFraming.encodeClientResponse(b64)) {
+      bot.sendRaw().rawLine("AUTHENTICATE " + payload);
     }
   }
 
