@@ -6,10 +6,6 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.playback.*;
 import com.google.common.collect.ImmutableList;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyFactory;
-import java.security.PrivateKey;
-import java.security.Signature;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 import java.util.LinkedHashSet;
 import java.util.Locale;
@@ -49,6 +45,7 @@ public final class MultiSaslCapHandler implements CapHandler {
       new PircbotxSaslAuthenticateFraming();
   private final PircbotxSaslMechanismSelector mechanismSelector =
       new PircbotxSaslMechanismSelector();
+  private final PircbotxSaslResponseFactory responseFactory = new PircbotxSaslResponseFactory();
 
   private final Set<String> offeredMechanismsUpper = new LinkedHashSet<>();
   private boolean saslOffered;
@@ -209,41 +206,20 @@ public final class MultiSaslCapHandler implements CapHandler {
   private void handlePlain(PircBotX bot) {
     if (state == State.EXCHANGING) return;
     state = State.EXCHANGING;
-    String payload = "\0" + username + "\0" + secret;
-    sendAuthenticateResponse(
-        bot, Base64.getEncoder().encodeToString(payload.getBytes(StandardCharsets.UTF_8)));
+    sendAuthenticateResponse(bot, responseFactory.createPlain(username, secret));
   }
 
   private void handleExternal(PircBotX bot) {
     if (state == State.EXCHANGING) return;
     state = State.EXCHANGING;
-    if (username == null || username.isBlank()) {
-      // Empty response
-      sendAuthenticateResponse(bot, "");
-      return;
-    }
-    sendAuthenticateResponse(
-        bot, Base64.getEncoder().encodeToString(username.getBytes(StandardCharsets.UTF_8)));
+    sendAuthenticateResponse(bot, responseFactory.createExternal(username));
   }
 
   private void handleEcdsa(PircBotX bot, byte[] challenge) throws CAPException {
     // Server sends base64 challenge (bytes). Client responds with base64 signature.
     if (state == State.EXCHANGING) return;
     state = State.EXCHANGING;
-    // In practice, servers tend to send binary challenge.
-    // NOTE: This is best-effort; if your network expects a different signing scheme, we can adjust.
-    try {
-      byte[] keyBytes = Base64.getDecoder().decode(secret.trim());
-      PrivateKey pk =
-          KeyFactory.getInstance("EC").generatePrivate(new PKCS8EncodedKeySpec(keyBytes));
-      Signature sig = Signature.getInstance("SHA256withECDSA");
-      sig.initSign(pk);
-      sig.update(challenge);
-      byte[] signature = sig.sign();
-      sendAuthenticateResponse(bot, Base64.getEncoder().encodeToString(signature));
-    } catch (Exception e) {
-      throw new CAPException(CAPException.Reason.OTHER, "Failed ECDSA SASL signing", e);
-    }
+    sendAuthenticateResponse(bot, responseFactory.createEcdsa(secret, challenge));
   }
 
   private void handleScram(PircBotX bot, String digest, String serverMsg) throws CAPException {
