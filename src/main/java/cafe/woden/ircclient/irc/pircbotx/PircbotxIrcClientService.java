@@ -66,6 +66,7 @@ public class PircbotxIrcClientService
   private final String version;
   private final PircbotxCtcpAutoReplyHandler ctcpAutoReplyHandler;
   private final PircbotxConnectPreparationSupport connectPreparationSupport;
+  private final PircbotxConnectSessionSupport connectSessionSupport;
   private final PircbotxDisconnectSupport disconnectSupport;
   private final PircbotxMultilineMessageSupport multilineMessageSupport =
       new PircbotxMultilineMessageSupport();
@@ -102,6 +103,14 @@ public class PircbotxIrcClientService
     this.connectPreparationSupport =
         new PircbotxConnectPreparationSupport(
             this.serverCatalog, this.stsPolicies, this.serverIsupportState, this.timers);
+    this.connectSessionSupport =
+        new PircbotxConnectSessionSupport(
+            this.bus,
+            this.bridgeListenerFactory,
+            this.botFactory,
+            this.inputParserHookInstaller,
+            this.timers,
+            this.version);
     this.disconnectSupport =
         new PircbotxDisconnectSupport(
             this.bus,
@@ -155,50 +164,19 @@ public class PircbotxIrcClientService
               if (c.botRef.get() != null) return;
               PircbotxConnectPreparationSupport.PreparedConnect prepared =
                   connectPreparationSupport.prepare(serverId, c);
-              IrcProperties.Server s = prepared.server();
-              bus.onNext(
-                  new ServerIrcEvent(
-                      serverId,
-                      new IrcEvent.Connecting(Instant.now(), s.host(), s.port(), s.nick())));
-
-              PircbotxBridgeListener listener =
-                  bridgeListenerFactory.create(
+              PircBotX bot =
+                  connectSessionSupport.openSession(
                       serverId,
                       c,
-                      bus,
-                      timers::stopHeartbeat,
-                      this::scheduleReconnect,
+                      prepared.server(),
                       ctcpAutoReplyHandler::handleIfPresent,
+                      this::scheduleReconnect,
                       prepared.disconnectOnSaslFailure());
-
-              PircBotX bot = botFactory.build(s, version, listener);
-              if (bot instanceof PircbotxLagAwareBot lagAwareBot) {
-                lagAwareBot.setLagProbeObserver(c::beginLagProbe);
-              }
-              c.botRef.set(bot);
-              inputParserHookInstaller.installIrcv3Hook(bot, serverId, c, bus::onNext);
-
-              timers.startHeartbeat(c);
               RxVirtualSchedulers.io()
                   .scheduleDirect(
-                      () -> {
-                        boolean crashed = false;
-                        try {
-                          bot.startBot();
-                        } catch (Exception e) {
-                          crashed = true;
-                          bus.onNext(
-                              new ServerIrcEvent(
-                                  serverId, new IrcEvent.Error(Instant.now(), "Bot crashed", e)));
-                        } finally {
-                          if (c.botRef.compareAndSet(bot, null)) {
-                            timers.stopHeartbeat(c);
-                          }
-                          if (crashed && !c.manualDisconnect.get()) {
-                            scheduleReconnect(c, "Bot crashed");
-                          }
-                        }
-                      });
+                      () ->
+                          connectSessionSupport.runBotLoop(
+                              serverId, c, bot, this::scheduleReconnect));
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
