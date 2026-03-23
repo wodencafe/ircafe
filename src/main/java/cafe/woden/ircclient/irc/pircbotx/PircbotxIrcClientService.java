@@ -65,6 +65,7 @@ public class PircbotxIrcClientService
   private final PircbotxConnectPreparationSupport connectPreparationSupport;
   private final PircbotxConnectSessionSupport connectSessionSupport;
   private final PircbotxDisconnectSupport disconnectSupport;
+  private final PircbotxShutdownSupport shutdownSupport;
   private final PircbotxMultilineMessageSupport multilineMessageSupport =
       new PircbotxMultilineMessageSupport();
 
@@ -116,6 +117,7 @@ public class PircbotxIrcClientService
             this.timers,
             this.bouncerBackends,
             this.bouncerDiscoveryEvents);
+    this.shutdownSupport = new PircbotxShutdownSupport(this.timers);
   }
 
   @Override
@@ -800,32 +802,7 @@ public class PircbotxIrcClientService
     for (PircbotxConnectionState c : connections.values()) {
       if (c == null) continue;
       try {
-        c.manualDisconnect.set(true);
-        cancelReconnect(c);
-        timers.stopHeartbeat(c);
-        c.resetLagProbeState();
-
-        PircBotX bot = c.botRef.getAndSet(null);
-        if (bot != null) {
-          try {
-            if (bot.isConnected()) {
-              try {
-                bot.sendIRC().quitServer(shutdownQuitReason);
-              } catch (Exception ignored) {
-              }
-            }
-          } catch (Exception ignored) {
-          }
-
-          try {
-            bot.stopBotReconnect();
-          } catch (Exception ignored) {
-          }
-          try {
-            bot.close();
-          } catch (Exception ignored) {
-          }
-        }
+        shutdownSupport.shutdownConnection(c, shutdownQuitReason);
       } catch (Exception e) {
         log.debug("[ircafe] Error during shutdown for {}", c.serverId, e);
       }

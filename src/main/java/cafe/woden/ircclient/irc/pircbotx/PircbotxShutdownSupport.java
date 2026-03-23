@@ -1,0 +1,45 @@
+package cafe.woden.ircclient.irc.pircbotx;
+
+import java.util.Objects;
+import org.pircbotx.PircBotX;
+
+/** Performs best-effort local cleanup for client shutdown. */
+final class PircbotxShutdownSupport {
+
+  private final PircbotxConnectionTimersRx timers;
+
+  PircbotxShutdownSupport(PircbotxConnectionTimersRx timers) {
+    this.timers = Objects.requireNonNull(timers, "timers");
+  }
+
+  void shutdownConnection(PircbotxConnectionState connection, String quitReason) {
+    connection.manualDisconnect.set(true);
+    timers.cancelReconnect(connection);
+    timers.stopHeartbeat(connection);
+    connection.resetLagProbeState();
+
+    PircBotX bot = connection.botRef.getAndSet(null);
+    if (bot == null) {
+      return;
+    }
+
+    try {
+      if (bot.isConnected()) {
+        try {
+          bot.sendIRC().quitServer(quitReason);
+        } catch (Exception ignored) {
+        }
+      }
+    } catch (Exception ignored) {
+    }
+
+    try {
+      bot.stopBotReconnect();
+    } catch (Exception ignored) {
+    }
+    try {
+      bot.close();
+    } catch (Exception ignored) {
+    }
+  }
+}
