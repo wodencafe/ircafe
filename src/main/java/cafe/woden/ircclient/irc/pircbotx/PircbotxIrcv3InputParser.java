@@ -45,7 +45,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
 
   private final PircbotxConnectionState conn;
   private final Ircv3StsPolicyService stsPolicies;
-  private final PircbotxCapabilityStateSupport capabilityStateSupport;
+  private final PircbotxCapabilityNegotiationSupport capabilityNegotiationSupport;
   private final PircbotxMultilineCapStateSupport multilineCapStateSupport =
       new PircbotxMultilineCapStateSupport();
 
@@ -70,7 +70,11 @@ final class PircbotxIrcv3InputParser extends InputParser {
     this.sink = Objects.requireNonNull(sink, "sink");
     this.conn = Objects.requireNonNull(conn, "conn");
     this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
-    this.capabilityStateSupport = new PircbotxCapabilityStateSupport(this.serverId, this.conn);
+    PircbotxCapabilityStateSupport capabilityStateSupport =
+        new PircbotxCapabilityStateSupport(this.serverId, this.conn);
+    this.capabilityNegotiationSupport =
+        new PircbotxCapabilityNegotiationSupport(
+            bot, this.serverId, this.conn, this.sink, capabilityStateSupport);
   }
 
   @Override
@@ -121,15 +125,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
         if (capLine.isAction("LS", "NEW", "ACK", "DEL")) {
           multilineCapStateSupport.observe(capLine, conn);
         }
-        if (capLine.isAction("ACK", "DEL")) {
-          applyCapStateFromCapLine(capLine);
-        } else if (capLine.isAction("NEW", "LS")) {
-          emitCapAvailabilityFromCapLine(capLine);
-        } else if (capLine.isAction("NAK")) {
-          emitCapNakFromCapLine(capLine);
-        }
-        maybeRequestMessageTagsFallback(capLine);
-        maybeRequestHistoryCapabilityFallback(capLine);
+        capabilityNegotiationSupport.observe(capLine);
       }
       return;
     }
@@ -483,164 +479,6 @@ final class PircbotxIrcv3InputParser extends InputParser {
     return stripLeadingColon(tail).trim();
   }
 
-  private void applyCapStateFromCapLine(ParsedCapLine capLine) {
-    String action = capLine.action();
-    boolean fromAck = capLine.isAction("ACK");
-    boolean fromDel = capLine.isAction("DEL");
-    if (!fromAck && !fromDel) return;
-
-    boolean emittedAny = false;
-    for (String t : capLine.tokens()) {
-      boolean tokenDisable = t.startsWith("-");
-      String capName = canonicalCapName(t);
-      if (capName == null) continue;
-
-      boolean enabled = fromAck && !tokenDisable;
-      if (fromDel || tokenDisable) enabled = false;
-
-      if (enabled && PircbotxZncParsers.seemsZncCap(capName)) {
-        if (conn.zncDetected.compareAndSet(false, true)) {
-          log.debug("[{}] detected ZNC via CAP {}: {}", serverId, action, capName);
-        }
-      }
-
-      capabilityStateSupport.apply(capName, enabled, action);
-      sink.accept(
-          new ServerIrcEvent(
-              serverId,
-              new IrcEvent.Ircv3CapabilityChanged(Instant.now(), action, capName, enabled)));
-      emittedAny = true;
-    }
-    if (emittedAny) {
-      sink.accept(
-          new ServerIrcEvent(
-              serverId,
-              new IrcEvent.ConnectionFeaturesUpdated(
-                  Instant.now(), "cap-" + action.toLowerCase(Locale.ROOT))));
-    }
-  }
-
-  private void emitCapAvailabilityFromCapLine(ParsedCapLine capLine) {
-    String action = capLine.action();
-    if (!capLine.isAction("NEW", "LS")) return;
-
-    for (String token : capLine.tokens()) {
-      String capName = canonicalCapName(token);
-      if (capName == null || capName.isBlank()) continue;
-      sink.accept(
-          new ServerIrcEvent(
-              serverId,
-              new IrcEvent.Ircv3CapabilityChanged(Instant.now(), action, capName, false)));
-    }
-  }
-
-  private void maybeRequestMessageTagsFallback(ParsedCapLine capLine) {
-    if (!capLine.isAction("LS", "NEW")) return;
-    if (conn.messageTagsCapAcked.get()) return;
-    if (!conn.messageTagsFallbackReqSent.compareAndSet(false, true)) return;
-
-    if (!capLine.hasTokens()) {
-      conn.messageTagsFallbackReqSent.set(false);
-      return;
-    }
-
-    boolean offered = false;
-    for (String token : capLine.tokens()) {
-      String capName = canonicalCapName(token);
-      if ("message-tags".equalsIgnoreCase(capName)) {
-        offered = true;
-        break;
-      }
-    }
-    if (!offered) {
-      conn.messageTagsFallbackReqSent.set(false);
-      return;
-    }
-
-    try {
-      bot.sendCAP().request("message-tags");
-      log.debug(
-          "[{}] fallback CAP REQ sent for message-tags (downstream capability remained unenabled)",
-          serverId);
-    } catch (Exception ex) {
-      conn.messageTagsFallbackReqSent.set(false);
-      log.debug("[{}] fallback CAP REQ for message-tags failed", serverId, ex);
-    }
-  }
-
-  private void maybeRequestHistoryCapabilityFallback(ParsedCapLine capLine) {
-    if (!capLine.isAction("LS", "NEW")) return;
-    if (!capLine.hasTokens()) return;
-
-    boolean offeredBatch = false;
-    boolean offeredChatHistory = false;
-    boolean offeredDraftChatHistory = false;
-    for (String token : capLine.tokens()) {
-      String capName = canonicalCapName(token);
-      if ("batch".equalsIgnoreCase(capName)) {
-        offeredBatch = true;
-      } else if ("chathistory".equalsIgnoreCase(capName)) {
-        offeredChatHistory = true;
-      } else if ("draft/chathistory".equalsIgnoreCase(capName)) {
-        offeredDraftChatHistory = true;
-      }
-    }
-
-    java.util.ArrayList<String> req = new java.util.ArrayList<>(2);
-    boolean requestedBatch = false;
-    boolean requestedHistory = false;
-
-    if (offeredBatch
-        && !conn.batchCapAcked.get()
-        && conn.batchFallbackReqSent.compareAndSet(false, true)) {
-      req.add("batch");
-      requestedBatch = true;
-    }
-
-    String historyCapToRequest = "";
-    if (!conn.chatHistoryCapAcked.get()) {
-      if (offeredChatHistory) {
-        historyCapToRequest = "chathistory";
-      } else if (offeredDraftChatHistory) {
-        historyCapToRequest = "draft/chathistory";
-      }
-    }
-    if (!historyCapToRequest.isEmpty()
-        && conn.chatHistoryFallbackReqSent.compareAndSet(false, true)) {
-      req.add(historyCapToRequest);
-      requestedHistory = true;
-    }
-
-    if (req.isEmpty()) return;
-
-    try {
-      bot.sendCAP().request(req.toArray(new String[0]));
-      log.debug("[{}] fallback CAP REQ sent for {}", serverId, String.join(", ", req));
-    } catch (Exception ex) {
-      if (requestedBatch) {
-        conn.batchFallbackReqSent.set(false);
-      }
-      if (requestedHistory) {
-        conn.chatHistoryFallbackReqSent.set(false);
-      }
-      log.debug("[{}] fallback CAP REQ for history capabilities failed", serverId, ex);
-    }
-  }
-
-  private void emitCapNakFromCapLine(ParsedCapLine capLine) {
-    String action = capLine.action();
-    if (!capLine.isAction("NAK")) return;
-
-    for (String token : capLine.tokens()) {
-      String capName = canonicalCapName(token);
-      if (capName == null || capName.isBlank()) continue;
-      sink.accept(
-          new ServerIrcEvent(
-              serverId,
-              new IrcEvent.Ircv3CapabilityChanged(Instant.now(), action, capName, false)));
-    }
-  }
-
   private void emitTagSignals(
       Instant at,
       String nick,
@@ -726,24 +564,6 @@ final class PircbotxIrcv3InputParser extends InputParser {
           new ServerIrcEvent(
               serverId, new IrcEvent.ReadMarkerObserved(at, nick, convTarget, readMarker)));
     }
-  }
-
-  private static String canonicalCapName(String rawToken) {
-    String s = Objects.toString(rawToken, "").trim();
-    if (s.isEmpty()) return null;
-    if (s.startsWith(":")) s = s.substring(1).trim();
-    while (!s.isEmpty()) {
-      char leading = s.charAt(0);
-      // CAP v3 tokens may be prefixed by '-', '~', or '=' modifiers.
-      if (leading == '-' || leading == '~' || leading == '=') {
-        s = s.substring(1).trim();
-        continue;
-      }
-      break;
-    }
-    int eq = s.indexOf('=');
-    if (eq >= 0) s = s.substring(0, eq).trim();
-    return s.isEmpty() ? null : s;
   }
 
   private static String capListFrom(List<String> parsedLine) {
