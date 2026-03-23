@@ -7,7 +7,6 @@ import cafe.woden.ircclient.irc.playback.*;
 import com.google.common.collect.ImmutableList;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -47,8 +46,8 @@ public final class MultiSaslCapHandler implements CapHandler {
       new PircbotxSaslMechanismSelector();
   private final PircbotxSaslResponseFactory responseFactory = new PircbotxSaslResponseFactory();
 
-  private final Set<String> offeredMechanismsUpper = new LinkedHashSet<>();
-  private boolean saslOffered;
+  private PircbotxSaslCapabilityOffer capabilityOffer =
+      new PircbotxSaslCapabilityOffer(false, false, Set.of());
   private boolean saslRequested;
   private boolean saslAcked;
 
@@ -68,32 +67,11 @@ public final class MultiSaslCapHandler implements CapHandler {
 
   @Override
   public boolean handleLS(PircBotX bot, ImmutableList<String> serverCaps) throws CAPException {
-    if (isLsContinuationMarkerOnly(serverCaps)) return false;
-    saslOffered = false;
-    offeredMechanismsUpper.clear();
-    if (serverCaps != null) {
-      for (String cap : serverCaps) {
-        if (cap == null) continue;
-        String normalized = cap.trim();
-        if (normalized.startsWith(":")) normalized = normalized.substring(1).trim();
-        if (normalized.isEmpty()) continue;
+    PircbotxSaslCapabilityOffer parsedOffer = PircbotxSaslCapabilityOffer.parse(serverCaps);
+    if (parsedOffer.continuationOnly()) return false;
 
-        if (normalized.equalsIgnoreCase("sasl")
-            || normalized.toLowerCase(Locale.ROOT).startsWith("sasl=")) {
-          saslOffered = true;
-          int idx = normalized.indexOf('=');
-          if (idx >= 0 && idx + 1 < normalized.length()) {
-            String mechList = normalized.substring(idx + 1);
-            for (String m : mechList.split(",")) {
-              String mm = m.trim();
-              if (!mm.isEmpty()) offeredMechanismsUpper.add(mm.toUpperCase(Locale.ROOT));
-            }
-          }
-        }
-      }
-    }
-
-    if (!saslOffered) {
+    capabilityOffer = parsedOffer;
+    if (!capabilityOffer.saslOffered()) {
       return true;
     }
     if (!saslRequested) {
@@ -101,34 +79,29 @@ public final class MultiSaslCapHandler implements CapHandler {
       state = State.REQUESTED;
       bot.sendCAP().request("sasl");
       log.debug(
-          "[SASL] Requested capability sasl (offered mechanisms: {})", offeredMechanismsUpper);
+          "[SASL] Requested capability sasl (offered mechanisms: {})",
+          capabilityOffer.offeredMechanismsUpper());
     }
     return false;
   }
 
-  private static boolean isLsContinuationMarkerOnly(ImmutableList<String> serverCaps) {
-    if (serverCaps == null || serverCaps.size() != 1) return false;
-    String token = Objects.toString(serverCaps.get(0), "").trim();
-    if (token.startsWith(":")) token = token.substring(1).trim();
-    return "*".equals(token);
-  }
-
   @Override
   public boolean handleACK(PircBotX bot, ImmutableList<String> caps) throws CAPException {
-    if (!containsCap(caps, "sasl")) return state.isTerminal();
+    if (!PircbotxSaslCapabilityOffer.parse(caps).saslOffered()) return state.isTerminal();
 
     saslAcked = true;
     state = State.ACKED;
 
     chosenMechanism =
-        mechanismSelector.choose(configuredMechanism, username, secret, offeredMechanismsUpper);
+        mechanismSelector.choose(
+            configuredMechanism, username, secret, capabilityOffer.offeredMechanismsUpper());
     if (chosenMechanism == null || chosenMechanism.isBlank()) {
       return fail(
           bot,
           "No usable SASL mechanism available (configured="
               + configuredMechanism
               + ", offered="
-              + offeredMechanismsUpper
+              + capabilityOffer.offeredMechanismsUpper()
               + ")");
     }
 
@@ -140,14 +113,14 @@ public final class MultiSaslCapHandler implements CapHandler {
 
   @Override
   public boolean handleNAK(PircBotX bot, ImmutableList<String> caps) throws CAPException {
-    if (!containsCap(caps, "sasl")) return state.isTerminal();
+    if (!PircbotxSaslCapabilityOffer.parse(caps).saslOffered()) return state.isTerminal();
     return fail(bot, "Server NAK'd sasl capability");
   }
 
   @Override
   public boolean handleUnknown(PircBotX bot, String line) throws CAPException {
     if (state.isTerminal()) return true;
-    if (!saslOffered || !saslRequested || !saslAcked) return false;
+    if (!capabilityOffer.saslOffered() || !saslRequested || !saslAcked) return false;
     if (line == null || line.isBlank()) return false;
 
     PircbotxParsedIrcLine pl = PircbotxParsedIrcLine.parse(line);
@@ -265,20 +238,6 @@ public final class MultiSaslCapHandler implements CapHandler {
     } catch (Exception ignored) {
     }
     return true;
-  }
-
-  private boolean containsCap(ImmutableList<String> caps, String want) {
-    if (caps == null || caps.isEmpty()) return false;
-    for (String c : caps) {
-      if (c == null) continue;
-      String n = c.trim();
-      if (n.startsWith(":")) n = n.substring(1).trim();
-      if (n.equalsIgnoreCase(want)
-          || n.toLowerCase(Locale.ROOT).startsWith(want.toLowerCase(Locale.ROOT) + "=")) {
-        return true;
-      }
-    }
-    return false;
   }
 
   private enum State {
