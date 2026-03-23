@@ -10,11 +10,8 @@ import cafe.woden.ircclient.irc.playback.*;
 import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
 import java.time.Instant;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import org.pircbotx.InputParser;
@@ -38,7 +35,6 @@ import org.slf4j.LoggerFactory;
 final class PircbotxIrcv3InputParser extends InputParser {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxIrcv3InputParser.class);
-  private static final int MAX_ACCOUNT_TAG_KEYS = 8_192;
 
   private final String serverId;
   private final Consumer<ServerIrcEvent> sink;
@@ -48,18 +44,9 @@ final class PircbotxIrcv3InputParser extends InputParser {
   private final PircbotxCapabilityNegotiationSupport capabilityNegotiationSupport;
   private final PircbotxMultilineCapStateSupport multilineCapStateSupport =
       new PircbotxMultilineCapStateSupport();
+  private final PircbotxAccountTagSupport accountTagSupport;
   private final PircbotxStandardReplySupport standardReplySupport;
   private final PircbotxTagSignalSupport tagSignalSupport;
-
-  // Deduplicate high-frequency account-tag observations (which can appear on every PRIVMSG).
-  private final Map<String, String> lastAccountTagByNickLower =
-      Collections.synchronizedMap(
-          new LinkedHashMap<>(256, 0.75f, true) {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
-              return size() > MAX_ACCOUNT_TAG_KEYS;
-            }
-          });
 
   PircbotxIrcv3InputParser(
       PircBotX bot,
@@ -77,6 +64,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
     this.capabilityNegotiationSupport =
         new PircbotxCapabilityNegotiationSupport(
             bot, this.serverId, this.conn, this.sink, capabilityStateSupport);
+    this.accountTagSupport = new PircbotxAccountTagSupport(this.serverId, this.sink);
     this.standardReplySupport = new PircbotxStandardReplySupport(this.serverId, this.sink);
     this.tagSignalSupport = new PircbotxTagSignalSupport(this.serverId, this.sink);
   }
@@ -167,39 +155,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
     String nick = sourceNick;
     if (nick.isEmpty()) return;
 
-    // IRCv3 account-tag: message tags include @account=<name> (or @account=* / @account=0).
-    // This can arrive on many commands (PRIVMSG/NOTICE/etc), so we treat it as a best-effort signal
-    // for account state and deduplicate per-nick to avoid excessive downstream work.
-    if (tags != null) {
-      String tagged = tags.get("account");
-      if (tagged != null) {
-        String account = tagged.trim();
-        String key = nick.toLowerCase(Locale.ROOT);
-        String prev = lastAccountTagByNickLower.put(key, account);
-        if (!java.util.Objects.equals(prev, account)) {
-          IrcEvent.AccountState st;
-          String name = null;
-          if (account.isEmpty() || "*".equals(account) || "0".equals(account)) {
-            st = IrcEvent.AccountState.LOGGED_OUT;
-          } else {
-            st = IrcEvent.AccountState.LOGGED_IN;
-            name = account;
-          }
-          // Keep this at TRACE: account-tag can be very chatty.
-          log.trace(
-              "[{}] account-tag observed via tags: nick={} cmd={} target={} state={} account={}",
-              serverId,
-              nick,
-              command,
-              target,
-              st,
-              name);
-          sink.accept(
-              new ServerIrcEvent(
-                  serverId, new IrcEvent.UserAccountStateObserved(now, nick, st, name)));
-        }
-      }
-    }
+    accountTagSupport.observe(now, nick, command, target, tags);
 
     tagSignalSupport.emitObservedSignals(now, nick, target, command, parsedLine, tags);
 
