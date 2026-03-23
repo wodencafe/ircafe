@@ -385,6 +385,18 @@ public final class PircbotxConnectionState {
     sojuBouncerNetId.set("");
   }
 
+  public boolean beginCapabilitySummaryLog() {
+    return !capSummaryLogged.getAndSet(true);
+  }
+
+  public boolean shouldWarnMissingServerTime() {
+    return serverTimeMissingWarned.compareAndSet(false, true);
+  }
+
+  public boolean shouldWarnUnavailableTyping() {
+    return typingMissingWarned.compareAndSet(false, true);
+  }
+
   void resetNegotiatedCaps() {
     zncPlaybackCapAcked.set(false);
     batchCapAcked.set(false);

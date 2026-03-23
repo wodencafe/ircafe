@@ -103,7 +103,7 @@ final class PircbotxRegistrationLifecycleHandler {
   }
 
   private void logNegotiatedCaps() {
-    if (conn.capSummaryLogged.getAndSet(true)) return;
+    if (!conn.beginCapabilitySummaryLog()) return;
     boolean ch = conn.chatHistoryCapAcked.get();
     boolean batch = conn.batchCapAcked.get();
     boolean znc = conn.zncPlaybackCapAcked.get();
@@ -184,7 +184,7 @@ final class PircbotxRegistrationLifecycleHandler {
         batch,
         znc);
 
-    if (!st && conn.serverTimeMissingWarned.compareAndSet(false, true)) {
+    if (!st && conn.shouldWarnMissingServerTime()) {
       String msg =
           "IRCv3 server-time was not negotiated; message ordering/timestamps may be less accurate (especially on reconnect/backlog).";
       log.warn("[{}] {}", serverId, msg);
@@ -192,7 +192,7 @@ final class PircbotxRegistrationLifecycleHandler {
           new ServerIrcEvent(serverId, new IrcEvent.ServerTimeNotNegotiated(Instant.now(), msg)));
     }
 
-    if (!typing && conn.typingMissingWarned.compareAndSet(false, true)) {
+    if (!typing && conn.shouldWarnUnavailableTyping()) {
       String reason;
       if (!messageTags) {
         reason = "message-tags not negotiated";
