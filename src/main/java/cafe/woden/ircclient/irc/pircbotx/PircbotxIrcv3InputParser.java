@@ -48,6 +48,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
   private final PircbotxCapabilityNegotiationSupport capabilityNegotiationSupport;
   private final PircbotxMultilineCapStateSupport multilineCapStateSupport =
       new PircbotxMultilineCapStateSupport();
+  private final PircbotxStandardReplySupport standardReplySupport;
   private final PircbotxTagSignalSupport tagSignalSupport;
 
   // Deduplicate high-frequency account-tag observations (which can appear on every PRIVMSG).
@@ -76,6 +77,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
     this.capabilityNegotiationSupport =
         new PircbotxCapabilityNegotiationSupport(
             bot, this.serverId, this.conn, this.sink, capabilityStateSupport);
+    this.standardReplySupport = new PircbotxStandardReplySupport(this.serverId, this.sink);
     this.tagSignalSupport = new PircbotxTagSignalSupport(this.serverId, this.sink);
   }
 
@@ -142,8 +144,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
       return;
     }
 
-    if (isStandardReplyCommand(command)) {
-      emitStandardReply(now, command, line, parsedLine, tags);
+    if (standardReplySupport.emitIfSupported(now, command, line, parsedLine, tags)) {
       return;
     }
 
@@ -598,100 +599,4 @@ final class PircbotxIrcv3InputParser extends InputParser {
     if (idx < 0 || idx + 2 >= line.length()) return "";
     return line.substring(idx + 2).trim();
   }
-
-  private void emitStandardReply(
-      Instant at,
-      String command,
-      String rawLine,
-      List<String> parsedLine,
-      ImmutableMap<String, String> tags) {
-    IrcEvent.StandardReplyKind kind = toStandardReplyKind(command);
-    if (kind == null) return;
-
-    ParsedStandardReply parsed = parseStandardReply(parsedLine);
-    String msgId =
-        PircbotxTagSignalSupport.firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
-    Map<String, String> ircv3Tags = (tags == null) ? Map.of() : tags;
-    String line = Objects.toString(rawLine, "").trim();
-    sink.accept(
-        new ServerIrcEvent(
-            serverId,
-            new IrcEvent.StandardReply(
-                at,
-                kind,
-                parsed.command(),
-                parsed.code(),
-                parsed.context(),
-                parsed.description(),
-                line,
-                msgId,
-                ircv3Tags)));
-  }
-
-  private static ParsedStandardReply parseStandardReply(List<String> parsedLine) {
-    String command = paramAt(parsedLine, 0);
-    String code = paramAt(parsedLine, 1);
-    String context = "";
-    String description = "";
-    if (parsedLine == null || parsedLine.size() <= 2) {
-      return new ParsedStandardReply(command, code, context, description);
-    }
-
-    int trailingIdx = -1;
-    for (int i = 2; i < parsedLine.size(); i++) {
-      String token = Objects.toString(parsedLine.get(i), "");
-      if (token.startsWith(":")) {
-        trailingIdx = i;
-        break;
-      }
-    }
-    if (trailingIdx < 0) {
-      trailingIdx = parsedLine.size() - 1;
-    }
-
-    description = stripLeadingColon(parsedLine.get(trailingIdx));
-    if (trailingIdx > 2) {
-      context = joinParams(parsedLine, 2, trailingIdx);
-    }
-    return new ParsedStandardReply(command, code, context, description);
-  }
-
-  private static String paramAt(List<String> parsedLine, int index) {
-    if (parsedLine == null || index < 0 || index >= parsedLine.size()) return "";
-    return stripLeadingColon(parsedLine.get(index));
-  }
-
-  private static String joinParams(List<String> parsedLine, int fromInclusive, int toExclusive) {
-    if (parsedLine == null) return "";
-    int from = Math.max(0, fromInclusive);
-    int to = Math.min(parsedLine.size(), toExclusive);
-    if (from >= to) return "";
-    StringBuilder sb = new StringBuilder();
-    for (int i = from; i < to; i++) {
-      String part = stripLeadingColon(parsedLine.get(i));
-      if (part.isBlank()) continue;
-      if (sb.length() > 0) sb.append(' ');
-      sb.append(part);
-    }
-    return sb.toString().trim();
-  }
-
-  private static boolean isStandardReplyCommand(String command) {
-    if (command == null || command.isBlank()) return false;
-    String c = command.trim().toUpperCase(Locale.ROOT);
-    return "FAIL".equals(c) || "WARN".equals(c) || "NOTE".equals(c);
-  }
-
-  private static IrcEvent.StandardReplyKind toStandardReplyKind(String command) {
-    if (command == null || command.isBlank()) return null;
-    return switch (command.trim().toUpperCase(Locale.ROOT)) {
-      case "FAIL" -> IrcEvent.StandardReplyKind.FAIL;
-      case "WARN" -> IrcEvent.StandardReplyKind.WARN;
-      case "NOTE" -> IrcEvent.StandardReplyKind.NOTE;
-      default -> null;
-    };
-  }
-
-  private record ParsedStandardReply(
-      String command, String code, String context, String description) {}
 }
