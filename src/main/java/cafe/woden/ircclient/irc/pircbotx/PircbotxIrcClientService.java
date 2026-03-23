@@ -20,8 +20,6 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
 import java.lang.reflect.Method;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -44,8 +42,6 @@ public class PircbotxIrcClientService
     implements IrcBackendClientService, IrcDisconnectWithSourcePort {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxIrcClientService.class);
-  private static final DateTimeFormatter MARKREAD_TS_FMT =
-      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
@@ -65,6 +61,7 @@ public class PircbotxIrcClientService
   @NonNull private final Ircv3StsPolicyService stsPolicies;
   private final String version;
   private final PircbotxCtcpAutoReplyHandler ctcpAutoReplyHandler;
+  private final PircbotxCapabilityCommandSupport capabilityCommandSupport;
   private final PircbotxConnectPreparationSupport connectPreparationSupport;
   private final PircbotxConnectSessionSupport connectSessionSupport;
   private final PircbotxDisconnectSupport disconnectSupport;
@@ -100,6 +97,7 @@ public class PircbotxIrcClientService
     this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
     this.version = Objects.requireNonNull(props, "props").client().version();
     this.ctcpAutoReplyHandler = new PircbotxCtcpAutoReplyHandler(this.version, this.runtimeConfig);
+    this.capabilityCommandSupport = new PircbotxCapabilityCommandSupport();
     this.connectPreparationSupport =
         new PircbotxConnectPreparationSupport(
             this.serverCatalog, this.stsPolicies, this.serverIsupportState, this.timers);
@@ -322,29 +320,7 @@ public class PircbotxIrcClientService
   public Completable sendTyping(String serverId, String target, String state) {
     return Completable.fromAction(
             () -> {
-              PircbotxConnectionState c = conn(serverId);
-              if (c == null || c.botRef.get() == null) {
-                throw new IllegalStateException("Not connected: " + serverId);
-              }
-              if (!isTypingAvailable(serverId)) {
-                String reason = typingAvailabilityReason(serverId);
-                String suffix = (reason == null || reason.isBlank()) ? "" : (" (" + reason + ")");
-                throw new IllegalStateException(
-                    "Typing indicators not available (requires message-tags and server allowing +typing)"
-                        + suffix
-                        + ": "
-                        + serverId);
-              }
-
-              String normalizedState = normalizeTypingState(state);
-              if (normalizedState.isEmpty()) return;
-
-              String dest = sanitizeTarget(target);
-              String line = "@+typing=" + normalizedState + " TAGMSG " + dest;
-              if (log.isDebugEnabled()) {
-                log.debug("[{}] -> typing {} TAGMSG {}", serverId, normalizedState, dest);
-              }
-              requireBot(serverId).sendRaw().rawLine(line);
+              capabilityCommandSupport.sendTyping(serverId, conn(serverId), target, state);
             })
         .subscribeOn(RxVirtualSchedulers.io());
   }
@@ -352,22 +328,8 @@ public class PircbotxIrcClientService
   @Override
   public Completable sendReadMarker(String serverId, String target, Instant markerAt) {
     return Completable.fromAction(
-            () -> {
-              PircbotxConnectionState c = conn(serverId);
-              if (c == null || !c.readMarkerCapAcked.get()) {
-                throw new IllegalStateException(
-                    "read-marker capability not negotiated (requires read-marker or draft/read-marker): "
-                        + serverId);
-              }
-              if (c.botRef.get() == null) {
-                throw new IllegalStateException("Not connected: " + serverId);
-              }
-
-              String dest = sanitizeTarget(target);
-              Instant at = (markerAt == null) ? Instant.now() : markerAt;
-              String ts = MARKREAD_TS_FMT.format(at);
-              requireBot(serverId).sendRaw().rawLine("MARKREAD " + dest + " timestamp=" + ts);
-            })
+            () ->
+                capabilityCommandSupport.sendReadMarker(serverId, conn(serverId), target, markerAt))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
@@ -383,12 +345,9 @@ public class PircbotxIrcClientService
   public Completable requestChatHistoryBefore(
       String serverId, String target, String selector, int limit) {
     return io.reactivex.rxjava3.core.Completable.fromAction(
-            () -> {
-              ensureChatHistoryNegotiated(serverId);
-
-              String line = Ircv3ChatHistoryCommandBuilder.buildBefore(target, selector, limit);
-              requireBot(serverId).sendRaw().rawLine(line);
-            })
+            () ->
+                capabilityCommandSupport.requestChatHistoryBefore(
+                    serverId, conn(serverId), target, selector, limit))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
@@ -396,12 +355,9 @@ public class PircbotxIrcClientService
   public Completable requestChatHistoryLatest(
       String serverId, String target, String selector, int limit) {
     return io.reactivex.rxjava3.core.Completable.fromAction(
-            () -> {
-              ensureChatHistoryNegotiated(serverId);
-
-              String line = Ircv3ChatHistoryCommandBuilder.buildLatest(target, selector, limit);
-              requireBot(serverId).sendRaw().rawLine(line);
-            })
+            () ->
+                capabilityCommandSupport.requestChatHistoryLatest(
+                    serverId, conn(serverId), target, selector, limit))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
@@ -409,14 +365,9 @@ public class PircbotxIrcClientService
   public Completable requestChatHistoryBetween(
       String serverId, String target, String startSelector, String endSelector, int limit) {
     return io.reactivex.rxjava3.core.Completable.fromAction(
-            () -> {
-              ensureChatHistoryNegotiated(serverId);
-
-              String line =
-                  Ircv3ChatHistoryCommandBuilder.buildBetween(
-                      target, startSelector, endSelector, limit);
-              requireBot(serverId).sendRaw().rawLine(line);
-            })
+            () ->
+                capabilityCommandSupport.requestChatHistoryBetween(
+                    serverId, conn(serverId), target, startSelector, endSelector, limit))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
@@ -424,32 +375,16 @@ public class PircbotxIrcClientService
   public Completable requestChatHistoryAround(
       String serverId, String target, String selector, int limit) {
     return io.reactivex.rxjava3.core.Completable.fromAction(
-            () -> {
-              ensureChatHistoryNegotiated(serverId);
-
-              String line = Ircv3ChatHistoryCommandBuilder.buildAround(target, selector, limit);
-              requireBot(serverId).sendRaw().rawLine(line);
-            })
+            () ->
+                capabilityCommandSupport.requestChatHistoryAround(
+                    serverId, conn(serverId), target, selector, limit))
         .subscribeOn(RxVirtualSchedulers.io());
-  }
-
-  private void ensureChatHistoryNegotiated(String serverId) {
-    PircbotxConnectionState c = conn(serverId);
-    if (!c.chatHistoryCapAcked.get()) {
-      throw new IllegalStateException(
-          "CHATHISTORY not negotiated (chathistory or draft/chathistory): " + serverId);
-    }
-    if (!c.batchCapAcked.get()) {
-      throw new IllegalStateException(
-          "CHATHISTORY requires IRCv3 batch to be negotiated: " + serverId);
-    }
   }
 
   @Override
   public boolean isChatHistoryAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && c.chatHistoryCapAcked.get() && c.batchCapAcked.get();
+      return capabilityCommandSupport.isChatHistoryAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -553,16 +488,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isTypingAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      if (c == null || c.botRef.get() == null) return false;
-
-      // Typing is a client-only tag (+typing) delivered via message-tags + TAGMSG.
-      // Networks may block specific client-only tags via RPL_ISUPPORT CLIENTTAGDENY.
-      boolean messageTags = c.messageTagsCapAcked.get();
-      boolean typingCap = c.typingCapAcked.get();
-      boolean typingAllowedByPolicy =
-          c.typingClientTagPolicyKnown.get() && c.typingClientTagAllowed.get();
-      return messageTags && (typingCap || typingAllowedByPolicy);
+      return capabilityCommandSupport.isTypingAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -571,27 +497,7 @@ public class PircbotxIrcClientService
   @Override
   public String typingAvailabilityReason(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      if (c == null) return "no connection state";
-      if (c.botRef.get() == null) return "not connected";
-
-      boolean messageTags = c.messageTagsCapAcked.get();
-      if (!messageTags) {
-        return "message-tags not negotiated";
-      }
-
-      boolean typingCap = c.typingCapAcked.get();
-      boolean typingPolicyKnown = c.typingClientTagPolicyKnown.get();
-      boolean typingAllowed = c.typingClientTagAllowed.get();
-      if (!typingCap && !typingPolicyKnown) {
-        return "typing capability not negotiated";
-      }
-      if (!typingCap && !typingAllowed) {
-        return "server denies +typing via CLIENTTAGDENY";
-      }
-
-      // Available.
-      return "";
+      return capabilityCommandSupport.typingAvailabilityReason(conn(serverId));
     } catch (Exception e) {
       return "error determining typing availability: " + e.getClass().getSimpleName();
     }
@@ -600,8 +506,7 @@ public class PircbotxIrcClientService
   @Override
   public boolean isReadMarkerAvailable(String serverId) {
     try {
-      PircbotxConnectionState c = conn(serverId);
-      return c != null && c.botRef.get() != null && c.readMarkerCapAcked.get();
+      return capabilityCommandSupport.isReadMarkerAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }
@@ -925,26 +830,6 @@ public class PircbotxIrcClientService
         log.debug("[ircafe] Error during shutdown for {}", c.serverId, e);
       }
     }
-  }
-
-  private static String sanitizeTarget(String target) {
-    String t = target == null ? "" : target.trim();
-    if (t.isEmpty()) throw new IllegalArgumentException("target is blank");
-    if (t.startsWith("#") || t.startsWith("&")) {
-      return PircbotxUtil.sanitizeChannel(t);
-    }
-    return PircbotxUtil.sanitizeNick(t);
-  }
-
-  private static String normalizeTypingState(String state) {
-    String s = state == null ? "" : state.trim().toLowerCase(Locale.ROOT);
-    if (s.isEmpty()) return "";
-    return switch (s) {
-      case "active", "composing" -> "active";
-      case "paused" -> "paused";
-      case "done", "inactive" -> "done";
-      default -> "";
-    };
   }
 
   @PreDestroy
