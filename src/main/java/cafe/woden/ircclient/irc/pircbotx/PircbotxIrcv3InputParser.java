@@ -45,6 +45,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
 
   private final PircbotxConnectionState conn;
   private final Ircv3StsPolicyService stsPolicies;
+  private final PircbotxCapabilityStateSupport capabilityStateSupport;
   private final PircbotxMultilineCapStateSupport multilineCapStateSupport =
       new PircbotxMultilineCapStateSupport();
 
@@ -69,6 +70,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
     this.sink = Objects.requireNonNull(sink, "sink");
     this.conn = Objects.requireNonNull(conn, "conn");
     this.stsPolicies = Objects.requireNonNull(stsPolicies, "stsPolicies");
+    this.capabilityStateSupport = new PircbotxCapabilityStateSupport(this.serverId, this.conn);
   }
 
   @Override
@@ -502,7 +504,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
         }
       }
 
-      setCapState(capName, enabled, action);
+      capabilityStateSupport.apply(capName, enabled, action);
       sink.accept(
           new ServerIrcEvent(
               serverId,
@@ -723,240 +725,6 @@ final class PircbotxIrcv3InputParser extends InputParser {
       sink.accept(
           new ServerIrcEvent(
               serverId, new IrcEvent.ReadMarkerObserved(at, nick, convTarget, readMarker)));
-    }
-  }
-
-  private void setCapState(String capName, boolean enabled, String sourceAction) {
-    String c = capName.toLowerCase(Locale.ROOT);
-    switch (c) {
-      case "znc.in/playback" -> {
-        boolean prev = conn.zncPlaybackCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: znc.in/playback {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "batch" -> {
-        boolean prev = conn.batchCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: batch {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
-        }
-      }
-      case "draft/chathistory", "chathistory" -> {
-        boolean prev = conn.chatHistoryCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
-        }
-      }
-      case "soju.im/bouncer-networks" -> {
-        boolean prev = conn.sojuBouncerNetworksCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: soju.im/bouncer-networks {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "server-time" -> {
-        boolean prev = conn.serverTimeCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: server-time {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "standard-replies" -> {
-        boolean prev = conn.standardRepliesCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: standard-replies {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "echo-message" -> {
-        boolean prev = conn.echoMessageCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: echo-message {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "cap-notify" -> {
-        boolean prev = conn.capNotifyCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: cap-notify {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "labeled-response" -> {
-        boolean prev = conn.labeledResponseCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: labeled-response {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "setname" -> {
-        boolean prev = conn.setnameCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: setname {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
-        }
-      }
-      case "chghost" -> {
-        boolean prev = conn.chghostCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: chghost {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
-        }
-      }
-      case "sts" -> {
-        boolean prev = conn.stsCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: sts {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
-        }
-      }
-      case "multiline" -> {
-        boolean prev = conn.multilineCapAcked.getAndSet(enabled);
-        if (!enabled) {
-          conn.multilineMaxBytes.set(0L);
-          conn.multilineMaxLines.set(0L);
-        }
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: multiline {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "draft/multiline" -> {
-        boolean prev = conn.draftMultilineCapAcked.getAndSet(enabled);
-        if (!enabled) {
-          conn.draftMultilineMaxBytes.set(0L);
-          conn.draftMultilineMaxLines.set(0L);
-        }
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: draft/multiline {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "draft/reply" -> {
-        boolean prev = conn.draftReplyCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: draft/reply {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "draft/channel-context" -> {
-        boolean prev = conn.draftChannelContextCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: draft/channel-context {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "draft/react" -> {
-        boolean prev = conn.draftReactCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: draft/react {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "draft/unreact" -> {
-        boolean prev = conn.draftUnreactCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: draft/unreact {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "draft/message-edit", "message-edit" -> {
-        boolean prev = conn.draftMessageEditCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
-        }
-      }
-      case "draft/message-redaction", "message-redaction" -> {
-        boolean prev = conn.draftMessageRedactionCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
-        }
-      }
-      case "message-tags" -> {
-        boolean prev = conn.messageTagsCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: message-tags {}",
-              serverId,
-              sourceAction,
-              enabled ? "enabled" : "disabled");
-        }
-      }
-      case "typing", "draft/typing" -> {
-        boolean prev = conn.typingCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
-        }
-      }
-      case "draft/read-marker", "read-marker" -> {
-        boolean prev = conn.readMarkerCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
-        }
-      }
-      case "monitor" -> {
-        boolean prev = conn.monitorCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: monitor {}", serverId, sourceAction, enabled ? "enabled" : "disabled");
-        }
-      }
-      case "extended-monitor", "draft/extended-monitor" -> {
-        boolean prev = conn.extendedMonitorCapAcked.getAndSet(enabled);
-        if (prev != enabled) {
-          log.debug(
-              "[{}] CAP {}: {} {}", serverId, sourceAction, c, enabled ? "enabled" : "disabled");
-        }
-      }
-      default -> {
-        // Ignore capabilities we don't currently track.
-      }
     }
   }
 
