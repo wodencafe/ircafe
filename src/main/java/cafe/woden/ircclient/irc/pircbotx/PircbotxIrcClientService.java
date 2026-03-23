@@ -20,7 +20,6 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
 import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -66,6 +65,7 @@ public class PircbotxIrcClientService
   private final PircbotxDisconnectSupport disconnectSupport;
   private final PircbotxShutdownSupport shutdownSupport;
   private final PircbotxActionCommandSupport actionCommandSupport;
+  private final PircbotxQueryCommandSupport queryCommandSupport;
   private final PircbotxZncPlaybackRequestSupport zncPlaybackRequestSupport;
   private final PircbotxMultilineMessageSupport multilineMessageSupport =
       new PircbotxMultilineMessageSupport();
@@ -120,6 +120,7 @@ public class PircbotxIrcClientService
             this.bouncerDiscoveryEvents);
     this.shutdownSupport = new PircbotxShutdownSupport(this.timers);
     this.actionCommandSupport = new PircbotxActionCommandSupport();
+    this.queryCommandSupport = new PircbotxQueryCommandSupport();
     this.zncPlaybackRequestSupport = new PircbotxZncPlaybackRequestSupport(this.bus);
   }
 
@@ -670,41 +671,21 @@ public class PircbotxIrcClientService
   @Override
   public Completable requestNames(String serverId, String channel) {
     return Completable.fromAction(
-            () -> {
-              String chan = PircbotxUtil.sanitizeChannel(channel);
-              requireBot(serverId).sendRaw().rawLine("NAMES " + chan);
-            })
+            () -> queryCommandSupport.requestNames(requireBot(serverId), channel))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable whois(String serverId, String nick) {
     return Completable.fromAction(
-            () -> {
-              String n = PircbotxUtil.sanitizeNick(nick);
-              conn(serverId)
-                  .whoisSawAwayByNickLower
-                  .putIfAbsent(n.toLowerCase(Locale.ROOT), Boolean.FALSE);
-              conn(serverId)
-                  .whoisSawAccountByNickLower
-                  .putIfAbsent(n.toLowerCase(Locale.ROOT), Boolean.FALSE);
-
-              requireBot(serverId).sendRaw().rawLine("WHOIS " + n);
-            })
+            () -> queryCommandSupport.whois(conn(serverId), requireBot(serverId), nick))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
   @Override
   public Completable whowas(String serverId, String nick, int count) {
     return Completable.fromAction(
-            () -> {
-              String n = PircbotxUtil.sanitizeNick(nick);
-              if (count > 0) {
-                requireBot(serverId).sendRaw().rawLine("WHOWAS " + n + " " + count);
-              } else {
-                requireBot(serverId).sendRaw().rawLine("WHOWAS " + n);
-              }
-            })
+            () -> queryCommandSupport.whowas(requireBot(serverId), nick, count))
         .subscribeOn(RxVirtualSchedulers.io());
   }
 
