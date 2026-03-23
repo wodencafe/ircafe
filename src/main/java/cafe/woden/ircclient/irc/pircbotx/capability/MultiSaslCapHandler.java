@@ -6,7 +6,6 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.playback.*;
 import com.google.common.collect.ImmutableList;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -50,12 +49,10 @@ public final class MultiSaslCapHandler implements CapHandler {
       new PircbotxSaslCapabilityOffer(false, false, Set.of());
   private boolean saslRequested;
   private boolean saslAcked;
+  private final PircbotxScramSaslConversation scramConversation;
 
   private State state = State.INIT;
   private String chosenMechanism;
-
-  // SCRAM state
-  private PircbotxScramSaslExchange scram;
 
   public MultiSaslCapHandler(
       String username, String secret, String mechanism, boolean disconnectOnFailure) {
@@ -63,6 +60,7 @@ public final class MultiSaslCapHandler implements CapHandler {
     this.secret = Objects.toString(secret, "");
     this.configuredMechanism = Objects.toString(mechanism, "PLAIN").trim();
     this.disconnectOnFailure = disconnectOnFailure;
+    this.scramConversation = new PircbotxScramSaslConversation(this.username, this.secret);
   }
 
   @Override
@@ -196,27 +194,9 @@ public final class MultiSaslCapHandler implements CapHandler {
   }
 
   private void handleScram(PircBotX bot, String digest, String serverMsg) throws CAPException {
-    if (scram == null) {
-      scram = new PircbotxScramSaslExchange(digest, username, secret);
-      // Client first message (no server data required; serverMsg should be empty on '+').
-      String clientFirst = scram.clientFirstMessage();
-      sendAuthenticateResponse(
-          bot, Base64.getEncoder().encodeToString(clientFirst.getBytes(StandardCharsets.UTF_8)));
-      return;
-    }
-
-    if (!scram.hasSeenServerFirst()) {
-      scram.onServerFirst(serverMsg);
-      String clientFinal = scram.clientFinalMessage();
-      sendAuthenticateResponse(
-          bot, Base64.getEncoder().encodeToString(clientFinal.getBytes(StandardCharsets.UTF_8)));
-      return;
-    }
-
-    if (!scram.hasSeenServerFinal()) {
-      scram.onServerFinal(serverMsg);
-      // Per SASL framing, send empty response to finish exchange.
-      sendAuthenticateResponse(bot, "");
+    String response = scramConversation.nextResponse(digest, serverMsg);
+    if (response != null) {
+      sendAuthenticateResponse(bot, response);
     }
   }
 
