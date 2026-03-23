@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
@@ -20,15 +20,15 @@ import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.events.UnknownEvent;
 
 /** Emits structured CTCP request events from raw unknown PRIVMSG/NOTICE lines. */
-@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
-final class PircbotxUnknownCtcpEmitter {
+@RequiredArgsConstructor(access = AccessLevel.PUBLIC)
+public final class PircbotxUnknownCtcpEmitter {
   @NonNull private final String serverId;
   @NonNull private final Consumer<ServerIrcEvent> emit;
   @NonNull private final BiPredicate<PircBotX, String> nickMatchesSelf;
   @NonNull private final BiPredicate<PircBotX, String> selfEchoDetector;
   @NonNull private final Function<PircBotX, String> selfNickResolver;
 
-  boolean maybeEmit(
+  public boolean maybeEmit(
       UnknownEvent event,
       String lineWithTags,
       String normalizedRawLine,

@@ -7,7 +7,9 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.playback.*;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -189,6 +191,10 @@ public final class PircbotxConnectionState {
     this.serverId = serverId;
   }
 
+  public String selfNickHint() {
+    return selfNickHint.get();
+  }
+
   void resetNegotiatedCaps() {
     zncPlaybackCapAcked.set(false);
     batchCapAcked.set(false);
@@ -269,6 +275,72 @@ public final class PircbotxConnectionState {
     }
   }
 
+  public boolean rememberHostmaskIfChanged(String nick, String hostmask) {
+    String key = normalizedNickKey(nick);
+    if (key == null || hostmask == null || hostmask.isBlank()) {
+      return false;
+    }
+    String prev = lastHostmaskByNickLower.put(key, hostmask);
+    return !Objects.equals(prev, hostmask);
+  }
+
+  public void beginWhoisProbe(String nick) {
+    String key = normalizedNickKey(nick);
+    if (key == null) {
+      return;
+    }
+    whoisSawAwayByNickLower.putIfAbsent(key, Boolean.FALSE);
+    whoisSawAccountByNickLower.putIfAbsent(key, Boolean.FALSE);
+  }
+
+  public void markWhoisAwayObserved(String nick) {
+    String key = normalizedNickKey(nick);
+    if (key != null) {
+      whoisSawAwayByNickLower.computeIfPresent(key, (ignored, prior) -> Boolean.TRUE);
+    }
+  }
+
+  public void markWhoisAccountObserved(String nick) {
+    String key = normalizedNickKey(nick);
+    if (key != null) {
+      whoisSawAccountByNickLower.computeIfPresent(key, (ignored, prior) -> Boolean.TRUE);
+    }
+  }
+
+  public Boolean completeWhoisAwayProbe(String nick) {
+    String key = normalizedNickKey(nick);
+    return key == null ? null : whoisSawAwayByNickLower.remove(key);
+  }
+
+  public Boolean completeWhoisAccountProbe(String nick) {
+    String key = normalizedNickKey(nick);
+    return key == null ? null : whoisSawAccountByNickLower.remove(key);
+  }
+
+  public void markWhoisAccountNumericSupported() {
+    whoisAccountNumericSupported.set(true);
+  }
+
+  public boolean whoisAccountNumericSupported() {
+    return whoisAccountNumericSupported.get();
+  }
+
+  public boolean markWhoxSchemaCompatibleObserved() {
+    if (whoxSchemaCompatibleEmitted.compareAndSet(false, true)) {
+      whoxSchemaCompatible.set(true);
+      return true;
+    }
+    return false;
+  }
+
+  public boolean markWhoxSchemaIncompatibleObserved() {
+    if (whoxSchemaIncompatibleEmitted.compareAndSet(false, true)) {
+      whoxSchemaCompatible.set(false);
+      return true;
+    }
+    return false;
+  }
+
   void beginLagProbe(String token, long sentAtMs) {
     lagProbe.beginProbe(token, sentAtMs);
   }
@@ -311,5 +383,12 @@ public final class PircbotxConnectionState {
 
   long currentMeasuredLagAtMs() {
     return lagProbe.currentMeasuredAtMs();
+  }
+
+  private static String normalizedNickKey(String nick) {
+    if (nick == null || nick.isBlank()) {
+      return null;
+    }
+    return nick.trim().toLowerCase(Locale.ROOT);
   }
 }

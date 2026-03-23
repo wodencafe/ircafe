@@ -13,6 +13,7 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxWhoEventEmitter;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.state.ServerIsupportState;
 import java.time.Instant;

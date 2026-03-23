@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -73,9 +74,8 @@ class PircbotxWhoEventEmitterTest {
   @Test
   void maybeEmitNumeric318EmitsHereLogoutAndProbeCompleted() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.whoisSawAwayByNickLower.put("alice", Boolean.FALSE);
-    conn.whoisSawAccountByNickLower.put("alice", Boolean.FALSE);
-    conn.whoisAccountNumericSupported.set(true);
+    conn.beginWhoisProbe("alice");
+    conn.markWhoisAccountNumericSupported();
 
     List<ServerIrcEvent> events = new ArrayList<>();
     PircbotxWhoEventEmitter emitter = new PircbotxWhoEventEmitter("libera", conn, events::add);

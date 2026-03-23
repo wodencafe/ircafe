@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -8,12 +8,15 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.state.ServerIsupportState;
 import com.google.common.collect.ImmutableSortedSet;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.Channel;
 import org.pircbotx.PircBotX;
@@ -126,9 +129,9 @@ class PircbotxMembershipEventEmitterTest {
   @Test
   void onNickChangeUpdatesSelfHintAndEmitsPerChannelChange() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.selfNickHint.set("me");
     List<ServerIrcEvent> events = new ArrayList<>();
-    PircbotxMembershipEventEmitter emitter = newEmitter(conn, events);
+    AtomicReference<String> rememberedHint = new AtomicReference<>("");
+    PircbotxMembershipEventEmitter emitter = newEmitter(conn, events, rememberedHint::set);
 
     Channel channel = channel("#ircafe");
     User user = user("newme");
@@ -151,7 +154,7 @@ class PircbotxMembershipEventEmitterTest {
 
     emitter.onNickChange(event);
 
-    assertEquals("newme", conn.selfNickHint.get());
+    assertEquals("newme", rememberedHint.get());
     assertEquals(3, events.size());
     assertInstanceOf(IrcEvent.NickChanged.class, events.get(0).event());
     assertInstanceOf(IrcEvent.UserNickChangedChannel.class, events.get(1).event());
@@ -160,6 +163,13 @@ class PircbotxMembershipEventEmitterTest {
 
   private static PircbotxMembershipEventEmitter newEmitter(
       PircbotxConnectionState conn, List<ServerIrcEvent> events) {
+    return newEmitter(conn, events, ignored -> {});
+  }
+
+  private static PircbotxMembershipEventEmitter newEmitter(
+      PircbotxConnectionState conn,
+      List<ServerIrcEvent> events,
+      Consumer<String> rememberSelfNickHint) {
     PircbotxRosterEmitter rosterEmitter =
         new PircbotxRosterEmitter("libera", conn, new ServerIsupportState(), events::add);
     return new PircbotxMembershipEventEmitter(
@@ -168,7 +178,7 @@ class PircbotxMembershipEventEmitterTest {
         rosterEmitter,
         events::add,
         (bot, nick) -> "me".equalsIgnoreCase(nick) || "newme".equalsIgnoreCase(nick),
-        conn.selfNickHint::set,
+        rememberSelfNickHint,
         bot -> "me");
   }
 

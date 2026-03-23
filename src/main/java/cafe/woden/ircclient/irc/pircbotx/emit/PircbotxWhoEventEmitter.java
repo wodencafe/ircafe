@@ -1,13 +1,13 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.Consumer;
 import lombok.AccessLevel;
 import lombok.NonNull;
@@ -16,8 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Emits structured WHO/WHOX/WHOIS events from numeric IRC lines. */
-@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
-final class PircbotxWhoEventEmitter {
+@RequiredArgsConstructor(access = AccessLevel.PUBLIC)
+public final class PircbotxWhoEventEmitter {
   private static final Logger log = LoggerFactory.getLogger(PircbotxWhoEventEmitter.class);
   private static final String IRCAFE_WHOX_TOKEN = "1";
 
@@ -25,7 +25,7 @@ final class PircbotxWhoEventEmitter {
   @NonNull private final PircbotxConnectionState conn;
   @NonNull private final Consumer<ServerIrcEvent> emit;
 
-  void maybeEmitLine(String rawLine) {
+  public void maybeEmitLine(String rawLine) {
     if (rawLine == null || rawLine.isBlank()) return;
     emitRpl302Userhost(rawLine);
     emitRpl301WhoisAway(rawLine);
@@ -36,7 +36,7 @@ final class PircbotxWhoEventEmitter {
     emitRpl354Whox(rawLine);
   }
 
-  boolean maybeEmitNumeric(int code, String line) {
+  public boolean maybeEmitNumeric(int code, String line) {
     switch (code) {
       case 302:
         emitRpl302Userhost(line);
@@ -87,8 +87,7 @@ final class PircbotxWhoEventEmitter {
         PircbotxWhoisParsers.parseRpl301WhoisAway(line);
     if (whoisAway == null || whoisAway.nick() == null || whoisAway.nick().isBlank()) return;
     String nick = whoisAway.nick().trim();
-    String key = nick.toLowerCase(Locale.ROOT);
-    conn.whoisSawAwayByNickLower.computeIfPresent(key, (ignored, prior) -> Boolean.TRUE);
+    conn.markWhoisAwayObserved(nick);
     emit.accept(
         new ServerIrcEvent(
             serverId,
@@ -101,9 +100,8 @@ final class PircbotxWhoEventEmitter {
         PircbotxWhoisParsers.parseRpl330WhoisAccount(line);
     if (whoisAcct == null || whoisAcct.nick() == null || whoisAcct.nick().isBlank()) return;
     String nick = whoisAcct.nick().trim();
-    String key = nick.toLowerCase(Locale.ROOT);
-    conn.whoisSawAccountByNickLower.computeIfPresent(key, (ignored, prior) -> Boolean.TRUE);
-    conn.whoisAccountNumericSupported.set(true);
+    conn.markWhoisAccountObserved(nick);
+    conn.markWhoisAccountNumericSupported();
     emit.accept(
         new ServerIrcEvent(
             serverId,
@@ -115,9 +113,7 @@ final class PircbotxWhoEventEmitter {
     String nick = PircbotxWhoisParsers.parseRpl318EndOfWhoisNick(line);
     if (nick == null || nick.isBlank()) return;
     nick = nick.trim();
-    String key = nick.toLowerCase(Locale.ROOT);
-
-    Boolean sawAway = conn.whoisSawAwayByNickLower.remove(key);
+    Boolean sawAway = conn.completeWhoisAwayProbe(nick);
     if (sawAway != null && !sawAway.booleanValue()) {
       emit.accept(
           new ServerIrcEvent(
@@ -125,8 +121,8 @@ final class PircbotxWhoEventEmitter {
               new IrcEvent.UserAwayStateObserved(Instant.now(), nick, IrcEvent.AwayState.HERE)));
     }
 
-    Boolean sawAcct = conn.whoisSawAccountByNickLower.remove(key);
-    if (sawAcct != null && !sawAcct.booleanValue() && conn.whoisAccountNumericSupported.get()) {
+    Boolean sawAcct = conn.completeWhoisAccountProbe(nick);
+    if (sawAcct != null && !sawAcct.booleanValue() && conn.whoisAccountNumericSupported()) {
       emit.accept(
           new ServerIrcEvent(
               serverId,
@@ -142,7 +138,7 @@ final class PircbotxWhoEventEmitter {
                   nick,
                   sawAway != null && sawAway.booleanValue(),
                   sawAcct != null && sawAcct.booleanValue(),
-                  conn.whoisAccountNumericSupported.get())));
+                  conn.whoisAccountNumericSupported())));
     }
   }
 
@@ -187,8 +183,7 @@ final class PircbotxWhoEventEmitter {
     PircbotxWhoUserhostParsers.ParsedWhoxTcuhnaf strict =
         PircbotxWhoUserhostParsers.parseRpl354WhoxTcuhnaf(line, IRCAFE_WHOX_TOKEN);
     if (strict != null) {
-      if (conn.whoxSchemaCompatibleEmitted.compareAndSet(false, true)) {
-        conn.whoxSchemaCompatible.set(true);
+      if (conn.markWhoxSchemaCompatibleObserved()) {
         emit.accept(
             new ServerIrcEvent(
                 serverId,
@@ -214,8 +209,7 @@ final class PircbotxWhoEventEmitter {
     }
 
     if (PircbotxWhoUserhostParsers.seemsRpl354WhoxWithToken(line, IRCAFE_WHOX_TOKEN)
-        && conn.whoxSchemaIncompatibleEmitted.compareAndSet(false, true)) {
-      conn.whoxSchemaCompatible.set(false);
+        && conn.markWhoxSchemaIncompatibleObserved()) {
       log.debug(
           "[{}] WHOX schema mismatch: strict parse failed for token {}: {}",
           serverId,

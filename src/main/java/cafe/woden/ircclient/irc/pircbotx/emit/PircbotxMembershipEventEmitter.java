@@ -1,8 +1,9 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
@@ -27,8 +28,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Emits membership and nick-change events for a single IRC connection. */
-@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
-final class PircbotxMembershipEventEmitter {
+@RequiredArgsConstructor(access = AccessLevel.PUBLIC)
+public final class PircbotxMembershipEventEmitter {
   private static final Logger log = LoggerFactory.getLogger(PircbotxMembershipEventEmitter.class);
 
   @NonNull private final String serverId;
@@ -39,7 +40,7 @@ final class PircbotxMembershipEventEmitter {
   @NonNull private final Consumer<String> rememberSelfNickHint;
   @NonNull private final Function<PircBotX, String> resolveBotNick;
 
-  void onJoin(JoinEvent event) {
+  public void onJoin(JoinEvent event) {
     Channel channel = event.getChannel();
     if (channel != null)
       rosterEmitter.maybeEmitHostmaskObserved(channel.getName(), event.getUser());
@@ -47,7 +48,7 @@ final class PircbotxMembershipEventEmitter {
     String nick = event.getUser() == null ? null : event.getUser().getNick();
     boolean selfJoin = isSelfNick.test(event.getBot(), nick);
     if (log.isDebugEnabled()) {
-      String hint = Objects.toString(conn.selfNickHint.get(), "");
+      String hint = Objects.toString(conn.selfNickHint(), "");
       String botNick = resolveBotNick.apply(event.getBot());
       String channelName = (channel == null) ? "" : channel.getName();
       log.debug(
@@ -73,7 +74,7 @@ final class PircbotxMembershipEventEmitter {
     rosterEmitter.emitRoster(channel);
   }
 
-  void onPart(PartEvent event) {
+  public void onPart(PartEvent event) {
     boolean selfPart = false;
     try {
       rosterEmitter.maybeEmitHostmaskObserved(event.getChannelName(), event.getUser());
@@ -102,7 +103,7 @@ final class PircbotxMembershipEventEmitter {
     }
   }
 
-  void onQuit(QuitEvent event) {
+  public void onQuit(QuitEvent event) {
     PircBotX bot = event.getBot();
 
     try {
@@ -166,7 +167,7 @@ final class PircbotxMembershipEventEmitter {
     }
   }
 
-  void onKick(KickEvent event) {
+  public void onKick(KickEvent event) {
     if (event == null) return;
 
     Instant at = Instant.now();
@@ -227,10 +228,10 @@ final class PircbotxMembershipEventEmitter {
     }
   }
 
-  void onNickChange(NickChangeEvent event) {
+  public void onNickChange(NickChangeEvent event) {
     String oldNick = PircbotxUtil.safeStr(event::getOldNick, "");
     String newNick = PircbotxUtil.safeStr(event::getNewNick, "");
-    String hinted = conn.selfNickHint.get();
+    String hinted = conn.selfNickHint();
     if ((!hinted.isBlank() && oldNick.equalsIgnoreCase(hinted))
         || isSelfNick.test(event.getBot(), oldNick)
         || isSelfNick.test(event.getBot(), newNick)) {

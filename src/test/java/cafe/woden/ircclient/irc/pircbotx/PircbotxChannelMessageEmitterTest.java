@@ -10,6 +10,7 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChannelMessageEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.pircbotx.support.Ircv3MultilineAccumulator;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.state.ServerIsupportState;

@@ -5,6 +5,7 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxMonitorEventEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxWhoEventEmitter;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;

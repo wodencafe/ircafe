@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.irc.pircbotx;
 
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
-import java.util.Locale;
 import org.pircbotx.PircBotX;
 
 /** Sends small IRC query commands and updates related local query state. */
@@ -14,9 +13,7 @@ final class PircbotxQueryCommandSupport {
 
   void whois(PircbotxConnectionState connection, PircBotX bot, String nick) {
     String sanitizedNick = PircbotxUtil.sanitizeNick(nick);
-    String nickLower = sanitizedNick.toLowerCase(Locale.ROOT);
-    connection.whoisSawAwayByNickLower.putIfAbsent(nickLower, Boolean.FALSE);
-    connection.whoisSawAccountByNickLower.putIfAbsent(nickLower, Boolean.FALSE);
+    connection.beginWhoisProbe(sanitizedNick);
     bot.sendRaw().rawLine("WHOIS " + sanitizedNick);
   }
 

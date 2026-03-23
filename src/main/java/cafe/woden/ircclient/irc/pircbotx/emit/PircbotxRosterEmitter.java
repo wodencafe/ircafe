@@ -1,8 +1,9 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.state.api.ModeVocabulary;
@@ -10,7 +11,6 @@ import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -37,10 +37,7 @@ public final class PircbotxRosterEmitter {
 
     String hostmask = PircbotxUtil.hostmaskFromUser(user);
     if (!PircbotxUtil.isUsefulHostmask(hostmask)) return;
-
-    String key = nick.trim().toLowerCase(Locale.ROOT);
-    String prev = conn.lastHostmaskByNickLower.put(key, hostmask);
-    if (Objects.equals(prev, hostmask)) return;
+    if (!conn.rememberHostmaskIfChanged(nick, hostmask)) return;
 
     String observedChannel = (channel == null) ? "" : channel;
     emit.accept(

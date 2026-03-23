@@ -8,6 +8,7 @@ import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxPlaybackCaptureRecorder;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxPrivateConversationSupport;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
+import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxWhoEventEmitter;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxEventMetadata;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;

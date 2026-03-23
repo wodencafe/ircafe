@@ -9,7 +9,6 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.playback.*;
 import com.google.common.collect.ImmutableSortedSet;
 import java.util.ArrayList;
