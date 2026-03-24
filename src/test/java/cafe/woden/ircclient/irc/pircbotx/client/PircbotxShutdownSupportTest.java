@@ -8,8 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.pircbotx.listener.*;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
 import org.pircbotx.output.OutputIRC;

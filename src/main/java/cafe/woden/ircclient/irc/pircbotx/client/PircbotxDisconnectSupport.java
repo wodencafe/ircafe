@@ -5,7 +5,7 @@ import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.irc.DisconnectRequestSource;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
-import cafe.woden.ircclient.irc.pircbotx.*;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.time.Instant;

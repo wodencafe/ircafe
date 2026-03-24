@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.irc.pircbotx.parse;
 
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

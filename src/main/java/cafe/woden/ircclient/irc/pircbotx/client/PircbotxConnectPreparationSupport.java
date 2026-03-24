@@ -3,7 +3,7 @@ package cafe.woden.ircclient.irc.pircbotx.client;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.ircv3.Ircv3StsPolicyService;
-import cafe.woden.ircclient.irc.pircbotx.*;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.znc.ZncLoginParts;
 import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import java.util.Objects;

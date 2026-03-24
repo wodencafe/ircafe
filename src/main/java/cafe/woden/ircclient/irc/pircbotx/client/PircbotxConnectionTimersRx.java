@@ -6,7 +6,7 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.pircbotx.*;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.net.NetHeartbeatContext;
 import io.reactivex.rxjava3.core.Completable;

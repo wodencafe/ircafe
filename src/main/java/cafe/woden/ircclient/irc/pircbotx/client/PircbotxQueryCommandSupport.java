@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.irc.pircbotx.client;
 
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import org.pircbotx.PircBotX;
 

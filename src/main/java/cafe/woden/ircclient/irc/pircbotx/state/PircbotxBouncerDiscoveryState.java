@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.state;
 
 import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
 import java.util.Map;

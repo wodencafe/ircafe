@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.state;
 
 import cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork;
 import cafe.woden.ircclient.irc.*;
@@ -816,6 +816,10 @@ public final class PircbotxConnectionState {
 
   public void cancelZncPlaybackCapture(String reason) {
     zncPlaybackCapture.cancelActive(reason);
+  }
+
+  public void completeZncPlaybackCapture(String reason) {
+    zncPlaybackCapture.completeActive(reason);
   }
 
   public boolean shouldWarnMissingServerTime() {

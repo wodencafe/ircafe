@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.irc.pircbotx.client;
 
 import cafe.woden.ircclient.irc.ServerIrcEvent;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.time.Instant;

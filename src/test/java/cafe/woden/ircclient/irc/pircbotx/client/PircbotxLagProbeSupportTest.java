@@ -8,7 +8,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import java.util.OptionalLong;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;

@@ -5,7 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
 import org.pircbotx.output.OutputRaw;

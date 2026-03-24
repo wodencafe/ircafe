@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.irc.pircbotx.client;
 
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;

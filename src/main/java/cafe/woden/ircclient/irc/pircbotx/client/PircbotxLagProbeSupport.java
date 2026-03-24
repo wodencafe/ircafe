@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.irc.pircbotx.client;
 
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import java.util.OptionalLong;
 import java.util.concurrent.ThreadLocalRandom;
 import org.pircbotx.PircBotX;

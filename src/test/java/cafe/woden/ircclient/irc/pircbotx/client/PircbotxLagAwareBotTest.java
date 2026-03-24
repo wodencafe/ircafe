@@ -3,7 +3,7 @@ package cafe.woden.ircclient.irc.pircbotx.client;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;

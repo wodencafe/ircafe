@@ -9,6 +9,7 @@ import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxPlaybackCaptureRecorder;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -41,7 +42,7 @@ class PircbotxPlaybackCaptureRecorderTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     PircbotxPlaybackCaptureRecorder recorder = new PircbotxPlaybackCaptureRecorder(conn);
     List<ServerIrcEvent> events = new ArrayList<>();
-    conn.zncPlaybackCapture.start(
+    conn.startZncPlaybackCapture(
         "libera", "#ircafe", Instant.now().minusSeconds(60), null, events::add);
 
     boolean captured =
@@ -53,7 +54,7 @@ class PircbotxPlaybackCaptureRecorderTest {
             "replayed line",
             "msg-2",
             Map.of());
-    conn.zncPlaybackCapture.completeActive("test");
+    conn.completeZncPlaybackCapture("test");
 
     assertTrue(captured);
     assertEquals(1, events.size());

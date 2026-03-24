@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.state;
 
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;

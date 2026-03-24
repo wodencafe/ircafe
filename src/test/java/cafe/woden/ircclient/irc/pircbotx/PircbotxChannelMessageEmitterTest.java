@@ -11,6 +11,7 @@ import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChannelMessageEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxRosterEmitter;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.pircbotx.support.Ircv3MultilineAccumulator;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.state.ServerIsupportState;
@@ -65,7 +66,7 @@ class PircbotxChannelMessageEmitterTest {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> events = new ArrayList<>();
     PircbotxChannelMessageEmitter emitter = newEmitter(conn, events);
-    conn.zncPlaybackCapture.start(
+    conn.startZncPlaybackCapture(
         "libera", "#ircafe", Instant.now().minusSeconds(60), null, events::add);
 
     MessageEvent event = message("#ircafe", "alice", "captured line");
@@ -73,7 +74,7 @@ class PircbotxChannelMessageEmitterTest {
     emitter.onMessage(event);
 
     assertEquals(0, events.size());
-    conn.zncPlaybackCapture.cancelActive("test");
+    conn.cancelZncPlaybackCapture("test");
   }
 
   private static PircbotxChannelMessageEmitter newEmitter(

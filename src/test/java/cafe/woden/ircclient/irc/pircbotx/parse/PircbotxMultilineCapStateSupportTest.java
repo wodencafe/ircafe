@@ -2,7 +2,7 @@ package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import org.junit.jupiter.api.Test;
 
 class PircbotxMultilineCapStateSupportTest {

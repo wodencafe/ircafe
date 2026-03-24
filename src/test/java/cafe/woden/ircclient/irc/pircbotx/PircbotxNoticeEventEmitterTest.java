@@ -15,6 +15,7 @@ import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxNoticeEventEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
 import cafe.woden.ircclient.irc.pircbotx.listener.*;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.pircbotx.support.Ircv3MultilineAccumulator;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.state.ServerIsupportState;

@@ -7,7 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.irc.ircv3.Ircv3ChatHistoryCommandBuilder;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
+import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
