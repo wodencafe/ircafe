@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.irc.pircbotx.listener.*;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.util.ArrayList;

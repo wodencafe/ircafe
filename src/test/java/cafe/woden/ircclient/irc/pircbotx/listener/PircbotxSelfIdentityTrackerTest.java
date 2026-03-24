@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.playback.*;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
@@ -22,19 +23,19 @@ class PircbotxSelfIdentityTrackerTest {
     PircBotX bot = botWithUserBotNick("me");
 
     assertTrue(tracker.nickMatchesSelf(bot, "Me"));
-    assertEquals("me", conn.selfNickHint.get());
+    assertEquals("me", conn.selfNickHint());
   }
 
   @Test
   void resolveSelfNickIgnoresInvalidHintAndUsesBotNick() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.selfNickHint.set("#ircafe");
+    conn.setSelfNickHint("#ircafe");
     PircbotxSelfIdentityTracker tracker = new PircbotxSelfIdentityTracker(conn);
     PircBotX bot = mock(PircBotX.class);
     when(bot.getNick()).thenReturn("fallbackNick");
 
     assertEquals("fallbackNick", tracker.resolveSelfNick(bot));
-    assertEquals("fallbackNick", conn.selfNickHint.get());
+    assertEquals("fallbackNick", conn.selfNickHint());
   }
 
   @Test

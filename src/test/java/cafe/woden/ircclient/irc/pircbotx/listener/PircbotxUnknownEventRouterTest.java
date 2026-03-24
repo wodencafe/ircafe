@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -9,6 +9,7 @@ import cafe.woden.ircclient.bouncer.BouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxMonitorEventEmitter;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
@@ -87,7 +88,7 @@ class PircbotxUnknownEventRouterTest {
             List.of("me", "PREFIX=(qaohv)!&@%+"),
             ImmutableMap.of()));
 
-    assertEquals("me", conn.selfNickHint.get());
+    assertEquals("me", conn.selfNickHint());
     assertEquals(0, events.size());
   }
 
@@ -134,7 +135,7 @@ class PircbotxUnknownEventRouterTest {
             bot -> "");
     return new PircbotxUnknownEventRouter(
         "libera",
-        conn.selfNickHint::set,
+        conn::setSelfNickHint,
         bot -> "",
         serverResponses,
         monitorEvents,

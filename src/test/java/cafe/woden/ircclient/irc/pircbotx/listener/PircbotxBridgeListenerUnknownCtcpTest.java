@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -12,6 +12,7 @@ import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.state.ServerIsupportState;
 import com.google.common.collect.ImmutableMap;
@@ -34,7 +35,7 @@ class PircbotxBridgeListenerUnknownCtcpTest {
     bus.subscribe(seen::add);
 
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.selfNickHint.set("me");
+    conn.setSelfNickHint("me");
     ListenerAdapter listener = newListener(conn, bus);
     String line = ":alice!ident@host.example PRIVMSG me :\u0001WODEN hello world\u0001";
     UnknownEvent unknown =
@@ -72,7 +73,7 @@ class PircbotxBridgeListenerUnknownCtcpTest {
     bus.subscribe(seen::add);
 
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.selfNickHint.set("me");
+    conn.setSelfNickHint("me");
     ListenerAdapter listener = newListener(conn, bus);
     String line = ":alice!ident@host.example PRIVMSG bob :\u0001WODEN ping\u0001";
     UnknownEvent unknown =

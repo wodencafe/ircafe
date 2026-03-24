@@ -195,15 +195,15 @@ public final class PircbotxConnectionState {
       boolean monitorSupported,
       long monitorMaxTargets) {
 
-    boolean draftUnreactAvailable() {
+    public boolean draftUnreactAvailable() {
       return draftUnreactCapAcked || draftReactCapAcked;
     }
 
-    boolean multilineAvailable() {
+    public boolean multilineAvailable() {
       return multilineCapAcked || draftMultilineCapAcked;
     }
 
-    long negotiatedMultilineMaxBytes() {
+    public long negotiatedMultilineMaxBytes() {
       if (multilineCapAcked) {
         return Math.max(0L, multilineMaxBytes);
       }
@@ -213,7 +213,7 @@ public final class PircbotxConnectionState {
       return 0L;
     }
 
-    long negotiatedMultilineMaxLines() {
+    public long negotiatedMultilineMaxLines() {
       if (multilineCapAcked) {
         return Math.max(0L, multilineMaxLines);
       }
@@ -223,19 +223,19 @@ public final class PircbotxConnectionState {
       return 0L;
     }
 
-    boolean typingAllowedByPolicy() {
+    public boolean typingAllowedByPolicy() {
       return typingClientTagPolicyKnown && typingClientTagAllowed;
     }
 
-    boolean typingAvailable() {
+    public boolean typingAvailable() {
       return messageTagsCapAcked && (typingCapAcked || typingAllowedByPolicy());
     }
 
-    boolean chatHistoryAvailable() {
+    public boolean chatHistoryAvailable() {
       return chatHistoryCapAcked && batchCapAcked;
     }
 
-    boolean monitorAvailable() {
+    public boolean monitorAvailable() {
       return monitorSupported || monitorCapAcked;
     }
   }
@@ -294,6 +294,18 @@ public final class PircbotxConnectionState {
     localTimeoutEmitted.set(false);
   }
 
+  public long lastInboundActivityMs() {
+    return lastInboundMs.get();
+  }
+
+  public boolean localTimeoutEmitted() {
+    return localTimeoutEmitted.get();
+  }
+
+  public void setLocalTimeoutEmitted(boolean emitted) {
+    localTimeoutEmitted.set(emitted);
+  }
+
   public void ensureHeartbeatClock(long nowMs, boolean resetIdleClock) {
     if (resetIdleClock || lastInboundMs.get() <= 0L) {
       lastInboundMs.set(nowMs);
@@ -337,6 +349,14 @@ public final class PircbotxConnectionState {
     reconnectAttempts.set(0L);
   }
 
+  public long reconnectAttempts() {
+    return reconnectAttempts.get();
+  }
+
+  public void setReconnectAttempts(long attempts) {
+    reconnectAttempts.set(Math.max(0L, attempts));
+  }
+
   public long nextReconnectAttempt() {
     return reconnectAttempts.incrementAndGet();
   }
@@ -363,6 +383,10 @@ public final class PircbotxConnectionState {
 
   public void suppressAutoReconnectOnce() {
     suppressAutoReconnectOnce.set(true);
+  }
+
+  public boolean autoReconnectSuppressed() {
+    return suppressAutoReconnectOnce.get();
   }
 
   public boolean consumeSuppressAutoReconnectOnce() {
@@ -574,8 +598,16 @@ public final class PircbotxConnectionState {
     return zncPlaybackCapAcked.get();
   }
 
+  public void setZncPlaybackCapAcked(boolean acked) {
+    zncPlaybackCapAcked.set(acked);
+  }
+
   public boolean isSojuBouncerNetworksCapAcked() {
     return sojuBouncerNetworksCapAcked.get();
+  }
+
+  public void setSojuBouncerNetworksCapAcked(boolean acked) {
+    sojuBouncerNetworksCapAcked.set(acked);
   }
 
   public boolean updateMonitorSupport(boolean supported, long limit) {
@@ -597,6 +629,19 @@ public final class PircbotxConnectionState {
     clearSojuListNetworksRequest();
     clearSojuBouncerNetId();
     sojuBouncerNetworksCapAcked.set(false);
+  }
+
+  public void startZncPlaybackCapture(
+      String serverId,
+      String target,
+      Instant fromInclusive,
+      Instant toInclusive,
+      java.util.function.Consumer<ServerIrcEvent> emit) {
+    zncPlaybackCapture.start(serverId, target, fromInclusive, toInclusive, emit);
+  }
+
+  public void cancelZncPlaybackCapture(String reason) {
+    zncPlaybackCapture.cancelActive(reason);
   }
 
   public boolean shouldWarnMissingServerTime() {
@@ -777,7 +822,7 @@ public final class PircbotxConnectionState {
     privateTargetHints.clear();
   }
 
-  boolean tryClaimChannelMode324(String channel, String details) {
+  public boolean tryClaimChannelMode324(String channel, String details) {
     return channelMode324Deduper.tryClaim(channel, details);
   }
 

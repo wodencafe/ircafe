@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.playback.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,25 +38,25 @@ class PircbotxSaslFailureHandlerTest {
 
     assertEquals(
         "Login failed — SASL authentication failed (payload too long): SASL message too long",
-        conn.disconnectReasonOverride.get());
-    assertTrue(conn.suppressAutoReconnectOnce.get());
+        conn.disconnectReasonOverride());
+    assertTrue(conn.autoReconnectSuppressed());
     assertEquals(1, events.size());
     IrcEvent.Error error = assertInstanceOf(IrcEvent.Error.class, events.getFirst().event());
-    assertEquals(conn.disconnectReasonOverride.get(), error.message());
+    assertEquals(conn.disconnectReasonOverride(), error.message());
   }
 
   @Test
   void handleRespectsExistingDisconnectReason() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.disconnectReasonOverride.set("already failed");
+    conn.overrideDisconnectReason("already failed");
     List<ServerIrcEvent> events = new ArrayList<>();
     PircbotxSaslFailureHandler handler =
         new PircbotxSaslFailureHandler("libera", conn, events::add, false);
 
     handler.handle(904, ":server 904 me :SASL authentication failed");
 
-    assertEquals("already failed", conn.disconnectReasonOverride.get());
-    assertTrue(conn.suppressAutoReconnectOnce.get());
+    assertEquals("already failed", conn.disconnectReasonOverride());
+    assertTrue(conn.autoReconnectSuppressed());
     assertTrue(events.isEmpty());
   }
 }

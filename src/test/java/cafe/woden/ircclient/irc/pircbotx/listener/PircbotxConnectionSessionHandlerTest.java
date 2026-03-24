@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -16,6 +16,7 @@ import cafe.woden.ircclient.bouncer.GenericBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
 import cafe.woden.ircclient.irc.pircbotx.support.Ircv3MultilineAccumulator;
@@ -39,21 +40,21 @@ class PircbotxConnectionSessionHandlerTest {
   @Test
   void recordInboundActivityClearsTimeoutFlagAndUpdatesTimestamp() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.localTimeoutEmitted.set(true);
+    conn.setLocalTimeoutEmitted(true);
     PircbotxConnectionSessionHandler handler = newHandler(conn, new ArrayList<>(), null, null);
 
     handler.recordInboundActivity();
 
-    assertFalse(conn.localTimeoutEmitted.get());
-    assertTrue(conn.lastInboundMs.get() > 0L);
+    assertFalse(conn.localTimeoutEmitted());
+    assertTrue(conn.lastInboundActivityMs() > 0L);
   }
 
   @Test
   void onConnectEmitsConnectedAndResetsReconnectState() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.reconnectAttempts.set(7);
-    conn.manualDisconnect.set(true);
-    conn.localTimeoutEmitted.set(true);
+    conn.setReconnectAttempts(7);
+    conn.markManualDisconnect();
+    conn.setLocalTimeoutEmitted(true);
     List<ServerIrcEvent> events = new ArrayList<>();
     PircbotxConnectionSessionHandler handler = newHandler(conn, events, null, null);
     ConnectEvent event = mock(ConnectEvent.class);
@@ -65,9 +66,9 @@ class PircbotxConnectionSessionHandlerTest {
 
     handler.onConnect(event);
 
-    assertEquals(0L, conn.reconnectAttempts.get());
-    assertFalse(conn.manualDisconnect.get());
-    assertFalse(conn.localTimeoutEmitted.get());
+    assertEquals(0L, conn.reconnectAttempts());
+    assertFalse(conn.manualDisconnectRequested());
+    assertFalse(conn.localTimeoutEmitted());
     assertEquals(1, events.size());
     IrcEvent.Connected connected =
         assertInstanceOf(IrcEvent.Connected.class, events.getFirst().event());
@@ -92,8 +93,8 @@ class PircbotxConnectionSessionHandlerTest {
     DisconnectEvent event = mock(DisconnectEvent.class);
     when(event.getBot()).thenReturn(bot);
     when(event.getDisconnectException()).thenReturn(new IllegalStateException("socket closed"));
-    conn.botRef.set(bot);
-    conn.disconnectReasonOverride.set("Auth failed");
+    conn.setBot(bot);
+    conn.overrideDisconnectReason("Auth failed");
     conn.storeSojuDiscoveredNetwork("123", mock(BouncerDiscoveredNetwork.class));
     conn.storeGenericBouncerDiscoveredNetwork("neta", mock(BouncerDiscoveredNetwork.class));
 
@@ -101,7 +102,7 @@ class PircbotxConnectionSessionHandlerTest {
 
     assertEquals(1, heartbeatStops.get());
     assertEquals("Auth failed", reconnectReason.get());
-    assertEquals(null, conn.botRef.get());
+    assertEquals(null, conn.currentBot());
     assertFalse(conn.hasAnySojuDiscoveredNetworks());
     assertFalse(conn.hasAnyGenericBouncerDiscoveredNetworks());
     assertEquals(1, events.size());
@@ -135,7 +136,7 @@ class PircbotxConnectionSessionHandlerTest {
     DisconnectEvent event = mock(DisconnectEvent.class);
     when(event.getBot()).thenReturn(bot);
     when(event.getDisconnectException()).thenReturn(new IllegalStateException("socket closed"));
-    conn.botRef.set(bot);
+    conn.setBot(bot);
 
     handler.onDisconnect(event);
 
@@ -154,13 +155,13 @@ class PircbotxConnectionSessionHandlerTest {
     DisconnectEvent event = mock(DisconnectEvent.class);
     when(event.getBot()).thenReturn(bot);
     when(event.getDisconnectException()).thenReturn(new IllegalStateException("socket closed"));
-    conn.botRef.set(bot);
-    conn.suppressAutoReconnectOnce.set(true);
+    conn.setBot(bot);
+    conn.suppressAutoReconnectOnce();
 
     handler.onDisconnect(event);
 
     assertEquals(null, reconnectReason.get());
-    assertFalse(conn.suppressAutoReconnectOnce.get());
+    assertFalse(conn.autoReconnectSuppressed());
     assertEquals(1, events.size());
   }
 
@@ -178,7 +179,7 @@ class PircbotxConnectionSessionHandlerTest {
         .thenReturn(
             new RuntimeException(
                 "Disconnected", new SocketException("SOCKS authentication failed")));
-    conn.botRef.set(bot);
+    conn.setBot(bot);
 
     handler.onDisconnect(event);
 
@@ -203,7 +204,7 @@ class PircbotxConnectionSessionHandlerTest {
             new RuntimeException(
                 "Exception encountered during connect",
                 new IOException("Connection refused by SOCKS proxy")));
-    conn.botRef.set(bot);
+    conn.setBot(bot);
 
     handler.onDisconnect(event);
 

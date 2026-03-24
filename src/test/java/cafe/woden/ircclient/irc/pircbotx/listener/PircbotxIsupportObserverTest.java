@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.state.api.ModeVocabulary;
 import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
@@ -40,10 +41,10 @@ class PircbotxIsupportObserverTest {
     assertEquals("*,-typing", state.tokens().get("CLIENTTAGDENY"));
     assertEquals("123", state.tokens().get("BOUNCER_NETID"));
     assertEquals("123", sojuNetId.get());
-    assertTrue(conn.monitorSupported.get());
-    assertEquals(250L, conn.monitorMaxTargets.get());
-    assertTrue(conn.typingClientTagPolicyKnown.get());
-    assertTrue(conn.typingClientTagAllowed.get());
+    assertTrue(conn.capabilitySnapshot().monitorSupported());
+    assertEquals(250L, conn.capabilitySnapshot().monitorMaxTargets());
+    assertTrue(conn.capabilitySnapshot().typingClientTagPolicyKnown());
+    assertTrue(conn.capabilitySnapshot().typingClientTagAllowed());
 
     assertEquals(1, events.size());
     IrcEvent.WhoxSupportObserved whox =
@@ -54,8 +55,7 @@ class PircbotxIsupportObserverTest {
   @Test
   void observeAppliesMonitorRemovalAndTypingDenial() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.monitorSupported.set(true);
-    conn.monitorMaxTargets.set(250L);
+    conn.updateMonitorSupport(true, 250L);
 
     RecordingIsupportState state = new RecordingIsupportState();
     state.tokens().put("MONITOR", "250");
@@ -68,10 +68,10 @@ class PircbotxIsupportObserverTest {
 
     assertNull(state.tokens().get("MONITOR"));
     assertTrue(events.isEmpty());
-    assertEquals(0L, conn.monitorMaxTargets.get());
-    assertEquals(false, conn.monitorSupported.get());
-    assertTrue(conn.typingClientTagPolicyKnown.get());
-    assertEquals(false, conn.typingClientTagAllowed.get());
+    assertEquals(0L, conn.capabilitySnapshot().monitorMaxTargets());
+    assertEquals(false, conn.capabilitySnapshot().monitorSupported());
+    assertTrue(conn.capabilitySnapshot().typingClientTagPolicyKnown());
+    assertEquals(false, conn.capabilitySnapshot().typingClientTagAllowed());
   }
 
   private static final class RecordingIsupportState implements ServerIsupportStatePort {

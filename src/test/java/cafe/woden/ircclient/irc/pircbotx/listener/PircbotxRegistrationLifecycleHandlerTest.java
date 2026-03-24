@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -12,6 +12,7 @@ import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxServerResponseEmitter;
 import cafe.woden.ircclient.irc.playback.*;
 import java.util.ArrayList;
@@ -28,8 +29,8 @@ class PircbotxRegistrationLifecycleHandlerTest {
   void maybeHandleRegistrationCompleteEmitsReadyAndRequestsBootstrap() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     conn.markZncDetected();
-    conn.zncPlaybackCapAcked.set(true);
-    conn.sojuBouncerNetworksCapAcked.set(true);
+    conn.setZncPlaybackCapAcked(true);
+    conn.setSojuBouncerNetworksCapAcked(true);
 
     List<ServerIrcEvent> events = new ArrayList<>();
     PircbotxRegistrationLifecycleHandler handler =
