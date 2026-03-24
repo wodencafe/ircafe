@@ -337,6 +337,28 @@ public final class PircbotxConnectionState {
     zncDetectedLogged.set(false);
   }
 
+  public String zncBaseUser() {
+    return zncBaseUser.get();
+  }
+
+  public String zncClientId() {
+    return zncClientId.get();
+  }
+
+  public String zncNetwork() {
+    return zncNetwork.get();
+  }
+
+  public void setZncLoginContext(String baseUser, String clientId, String network) {
+    zncBaseUser.set(Objects.toString(baseUser, "").trim());
+    zncClientId.set(Objects.toString(clientId, "").trim());
+    zncNetwork.set(Objects.toString(network, "").trim());
+  }
+
+  public void clearZncLoginContext() {
+    setZncLoginContext("", "", "");
+  }
+
   public boolean beginZncPlaybackRequest() {
     return !zncPlaybackRequestedThisSession.getAndSet(true);
   }
@@ -353,12 +375,48 @@ public final class PircbotxConnectionState {
     return !zncListNetworksRequestedThisSession.getAndSet(true);
   }
 
+  public void beginZncListNetworksCapture(long startedAtMs) {
+    zncListNetworksCaptureActive.set(true);
+    zncListNetworksCaptureStartedMs.set(startedAtMs);
+    zncNetworksByNameLower.clear();
+  }
+
+  public boolean isZncListNetworksCaptureActive() {
+    return zncListNetworksCaptureActive.get();
+  }
+
+  public long zncListNetworksCaptureStartedAtMs() {
+    return zncListNetworksCaptureStartedMs.get();
+  }
+
+  public void finishZncListNetworksCapture() {
+    zncListNetworksCaptureActive.set(false);
+  }
+
   public void clearZncListNetworksRequest() {
     zncListNetworksRequestedThisSession.set(false);
   }
 
   public boolean zncListNetworksRequestedThisSession() {
     return zncListNetworksRequestedThisSession.get();
+  }
+
+  public void clearZncDiscoveredNetworks() {
+    zncNetworksByNameLower.clear();
+  }
+
+  public int zncDiscoveredNetworkCount() {
+    return zncNetworksByNameLower.size();
+  }
+
+  public BouncerDiscoveredNetwork zncDiscoveredNetwork(String key) {
+    return zncNetworksByNameLower.get(key);
+  }
+
+  public void storeZncDiscoveredNetwork(String key, BouncerDiscoveredNetwork network) {
+    if (key != null && network != null) {
+      zncNetworksByNameLower.put(key, network);
+    }
   }
 
   public boolean beginSojuListNetworksRequest() {
@@ -373,6 +431,28 @@ public final class PircbotxConnectionState {
     return sojuListNetworksRequestedThisSession.get();
   }
 
+  public void clearSojuDiscoveredNetworks() {
+    sojuNetworksByNetId.clear();
+  }
+
+  public BouncerDiscoveredNetwork sojuDiscoveredNetwork(String netId) {
+    return sojuNetworksByNetId.get(netId);
+  }
+
+  public void storeSojuDiscoveredNetwork(String netId, BouncerDiscoveredNetwork network) {
+    if (netId != null && network != null) {
+      sojuNetworksByNetId.put(netId, network);
+    }
+  }
+
+  public boolean hasSojuDiscoveredNetwork(String netId) {
+    return netId != null && sojuNetworksByNetId.containsKey(netId);
+  }
+
+  public boolean hasAnySojuDiscoveredNetworks() {
+    return !sojuNetworksByNetId.isEmpty();
+  }
+
   public String sojuBouncerNetId() {
     return sojuBouncerNetId.get();
   }
@@ -383,6 +463,28 @@ public final class PircbotxConnectionState {
 
   public void clearSojuBouncerNetId() {
     sojuBouncerNetId.set("");
+  }
+
+  public void clearGenericBouncerDiscoveredNetworks() {
+    genericBouncerNetworksById.clear();
+  }
+
+  public BouncerDiscoveredNetwork genericBouncerDiscoveredNetwork(String key) {
+    return genericBouncerNetworksById.get(key);
+  }
+
+  public void storeGenericBouncerDiscoveredNetwork(String key, BouncerDiscoveredNetwork network) {
+    if (key != null && network != null) {
+      genericBouncerNetworksById.put(key, network);
+    }
+  }
+
+  public boolean hasGenericBouncerDiscoveredNetwork(String key) {
+    return key != null && genericBouncerNetworksById.containsKey(key);
+  }
+
+  public boolean hasAnyGenericBouncerDiscoveredNetworks() {
+    return !genericBouncerNetworksById.isEmpty();
   }
 
   public boolean beginCapabilitySummaryLog() {

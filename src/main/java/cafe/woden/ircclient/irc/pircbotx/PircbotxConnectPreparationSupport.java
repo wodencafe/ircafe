@@ -32,8 +32,8 @@ final class PircbotxConnectPreparationSupport {
 
     // soju discovery state is per-session; reset before starting a new connection.
     try {
-      connection.sojuNetworksByNetId.clear();
-      connection.genericBouncerNetworksById.clear();
+      connection.clearSojuDiscoveredNetworks();
+      connection.clearGenericBouncerDiscoveredNetworks();
       connection.clearSojuListNetworksRequest();
       connection.clearSojuBouncerNetId();
     } catch (Exception ignored) {
@@ -52,9 +52,7 @@ final class PircbotxConnectPreparationSupport {
     // now so logs and discovery logic have context once ZNC is detected.
     try {
       connection.clearZncDetection();
-      connection.zncBaseUser.set("");
-      connection.zncClientId.set("");
-      connection.zncNetwork.set("");
+      connection.clearZncLoginContext();
 
       connection.clearZncPlaybackRequest();
       connection.clearZncListNetworksRequest();
@@ -67,9 +65,7 @@ final class PircbotxConnectPreparationSupport {
               : new ZncLoginParts("", "", "");
 
       ZncLoginParts merged = loginParts.mergePreferThis(saslParts);
-      connection.zncBaseUser.set(merged.baseUser());
-      connection.zncClientId.set(merged.clientId());
-      connection.zncNetwork.set(merged.network());
+      connection.setZncLoginContext(merged.baseUser(), merged.clientId(), merged.network());
     } catch (Exception ignored) {
     }
 

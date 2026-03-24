@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc.pircbotx;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
@@ -42,8 +43,8 @@ class PircbotxBridgeListenerBouncerDiscoveryTest {
                     "soju".equals(network.backendId())
                         && "123".equals(network.networkId())
                         && "Libera".equals(network.displayName())));
-    assertTrue(conn.sojuNetworksByNetId.containsKey("123"));
-    assertTrue(conn.genericBouncerNetworksById.isEmpty());
+    assertTrue(conn.hasSojuDiscoveredNetwork("123"));
+    assertFalse(conn.hasAnyGenericBouncerDiscoveredNetworks());
   }
 
   @Test
@@ -66,8 +67,8 @@ class PircbotxBridgeListenerBouncerDiscoveryTest {
                         && "NetA".equals(network.networkId())
                         && "alice/lib".equals(network.loginUserHint())
                         && network.hasCapability("message-tags")));
-    assertTrue(conn.sojuNetworksByNetId.isEmpty());
-    assertTrue(conn.genericBouncerNetworksById.containsKey("neta"));
+    assertFalse(conn.hasAnySojuDiscoveredNetworks());
+    assertTrue(conn.hasGenericBouncerDiscoveredNetwork("neta"));
   }
 
   @Test
@@ -82,8 +83,8 @@ class PircbotxBridgeListenerBouncerDiscoveryTest {
         unknownEvent(":bouncer.example BOUNCER NETWORK 123 backend=soju;name=Libera"));
 
     verify(bouncerEvents, never()).onNetworkDiscovered(any());
-    assertTrue(conn.sojuNetworksByNetId.isEmpty());
-    assertTrue(conn.genericBouncerNetworksById.isEmpty());
+    assertFalse(conn.hasAnySojuDiscoveredNetworks());
+    assertFalse(conn.hasAnyGenericBouncerDiscoveredNetworks());
   }
 
   private static PircbotxBridgeListener newListener(

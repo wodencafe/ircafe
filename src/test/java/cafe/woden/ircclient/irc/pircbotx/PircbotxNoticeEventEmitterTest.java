@@ -65,8 +65,7 @@ class PircbotxNoticeEventEmitterTest {
   @Test
   void onNoticeSuppressesCapturedStatusDiscoveryRows() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.zncListNetworksCaptureActive.set(true);
-    conn.zncListNetworksCaptureStartedMs.set(System.currentTimeMillis());
+    conn.beginZncListNetworksCapture(System.currentTimeMillis());
     List<ServerIrcEvent> events = new ArrayList<>();
     PircbotxNoticeEventEmitter emitter = newEmitter(conn, events, event -> "*status");
 

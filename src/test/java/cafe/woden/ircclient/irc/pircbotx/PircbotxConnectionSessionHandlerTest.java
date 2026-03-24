@@ -94,16 +94,16 @@ class PircbotxConnectionSessionHandlerTest {
     when(event.getDisconnectException()).thenReturn(new IllegalStateException("socket closed"));
     conn.botRef.set(bot);
     conn.disconnectReasonOverride.set("Auth failed");
-    conn.sojuNetworksByNetId.put("123", mock(BouncerDiscoveredNetwork.class));
-    conn.genericBouncerNetworksById.put("neta", mock(BouncerDiscoveredNetwork.class));
+    conn.storeSojuDiscoveredNetwork("123", mock(BouncerDiscoveredNetwork.class));
+    conn.storeGenericBouncerDiscoveredNetwork("neta", mock(BouncerDiscoveredNetwork.class));
 
     handler.onDisconnect(event);
 
     assertEquals(1, heartbeatStops.get());
     assertEquals("Auth failed", reconnectReason.get());
     assertEquals(null, conn.botRef.get());
-    assertTrue(conn.sojuNetworksByNetId.isEmpty());
-    assertTrue(conn.genericBouncerNetworksById.isEmpty());
+    assertFalse(conn.hasAnySojuDiscoveredNetworks());
+    assertFalse(conn.hasAnyGenericBouncerDiscoveredNetworks());
     assertEquals(1, events.size());
     IrcEvent.Disconnected disconnected =
         assertInstanceOf(IrcEvent.Disconnected.class, events.getFirst().event());

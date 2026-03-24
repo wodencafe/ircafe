@@ -77,8 +77,7 @@ class PircbotxPrivateMessageEmitterTest {
   @Test
   void onPrivateMessageSuppressesCapturedStatusDiscoveryRows() {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
-    conn.zncListNetworksCaptureActive.set(true);
-    conn.zncListNetworksCaptureStartedMs.set(System.currentTimeMillis());
+    conn.beginZncListNetworksCapture(System.currentTimeMillis());
     List<ServerIrcEvent> events = new ArrayList<>();
     PircbotxPrivateMessageEmitter emitter = newEmitter(conn, events, event -> "me", bot -> "me");
 

@@ -74,9 +74,9 @@ class PircbotxConnectPreparationSupportTest {
     connection.zncNetwork.set("staleNetwork");
     connection.beginZncPlaybackRequest();
     connection.beginZncListNetworksRequest();
-    connection.sojuNetworksByNetId.put(
+    connection.storeSojuDiscoveredNetwork(
         "net", mock(cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork.class));
-    connection.genericBouncerNetworksById.put(
+    connection.storeGenericBouncerDiscoveredNetwork(
         "generic", mock(cafe.woden.ircclient.bouncer.BouncerDiscoveredNetwork.class));
     connection.beginSojuListNetworksRequest();
     connection.setSojuBouncerNetId("bound-net");
@@ -95,15 +95,15 @@ class PircbotxConnectPreparationSupportTest {
     assertEquals("irc.secure.example.net", connection.connectedHost());
     assertTrue(connection.connectedWithTls());
     assertEquals("NewNick", connection.selfNickHint.get());
-    assertEquals("loginuser", connection.zncBaseUser.get());
-    assertEquals("loginclient", connection.zncClientId.get());
-    assertEquals("netb", connection.zncNetwork.get());
+    assertEquals("loginuser", connection.zncBaseUser());
+    assertEquals("loginclient", connection.zncClientId());
+    assertEquals("netb", connection.zncNetwork());
     assertFalse(connection.isZncDetected());
     assertFalse(connection.zncDetectionLogged());
     assertFalse(connection.zncPlaybackRequestedThisSession());
     assertFalse(connection.zncListNetworksRequestedThisSession());
-    assertTrue(connection.sojuNetworksByNetId.isEmpty());
-    assertTrue(connection.genericBouncerNetworksById.isEmpty());
+    assertFalse(connection.hasAnySojuDiscoveredNetworks());
+    assertFalse(connection.hasAnyGenericBouncerDiscoveredNetworks());
     assertFalse(connection.sojuListNetworksRequestedThisSession());
     assertEquals("", connection.sojuBouncerNetId());
   }
