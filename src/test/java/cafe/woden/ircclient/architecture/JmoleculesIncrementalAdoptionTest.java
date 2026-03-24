@@ -128,7 +128,8 @@ import cafe.woden.ircclient.irc.ircv3.Ircv3StsPolicyService;
 import cafe.woden.ircclient.irc.matrix.MatrixIrcClientService;
 import cafe.woden.ircclient.irc.pircbotx.PircbotxBotFactory;
 import cafe.woden.ircclient.irc.pircbotx.PircbotxInputParserHookInstaller;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxIrcClientService;
+import cafe.woden.ircclient.irc.pircbotx.client.*;
+import cafe.woden.ircclient.irc.pircbotx.client.PircbotxIrcClientService;
 import cafe.woden.ircclient.irc.playback.NoOpPlaybackCursorProvider;
 import cafe.woden.ircclient.irc.playback.PlaybackCursorProviderConfig;
 import cafe.woden.ircclient.irc.port.IrcConnectionLifecyclePort;
@@ -592,7 +593,8 @@ class JmoleculesIncrementalAdoptionTest {
     assertAnnotated(PircbotxInputParserHookInstaller.class, InfrastructureLayer.class);
     assertAnnotated(PlaybackCursorProviderConfig.class, InfrastructureLayer.class);
     assertAnnotatedByName(
-        "cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionTimersRx", InfrastructureLayer.class);
+        "cafe.woden.ircclient.irc.pircbotx.client.PircbotxConnectionTimersRx",
+        InfrastructureLayer.class);
     assertAnnotatedByName(
         "cafe.woden.ircclient.irc.playback.ZncPlaybackCaptureLifecycle", InfrastructureLayer.class);
     assertAnnotatedByName("cafe.woden.ircclient.config.ExecutorConfig", InfrastructureLayer.class);

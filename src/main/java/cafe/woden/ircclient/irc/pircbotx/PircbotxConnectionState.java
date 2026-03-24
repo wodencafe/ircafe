@@ -159,6 +159,10 @@ public final class PircbotxConnectionState {
     this.serverId = serverId;
   }
 
+  public String serverId() {
+    return serverId;
+  }
+
   /** Immutable read view over negotiated IRCv3 capability state for one connection. */
   public record CapabilitySnapshot(
       boolean zncPlaybackCapAcked,
@@ -602,6 +606,52 @@ public final class PircbotxConnectionState {
     zncPlaybackCapAcked.set(acked);
   }
 
+  public void setBatchCapAcked(boolean acked) {
+    batchCapAcked.set(acked);
+  }
+
+  public void setChatHistoryCapAcked(boolean acked) {
+    chatHistoryCapAcked.set(acked);
+  }
+
+  public void setEchoMessageCapAcked(boolean acked) {
+    echoMessageCapAcked.set(acked);
+  }
+
+  public void setMultilineCapAcked(boolean acked) {
+    multilineCapAcked.set(acked);
+  }
+
+  public void setDraftMultilineCapAcked(boolean acked) {
+    draftMultilineCapAcked.set(acked);
+  }
+
+  public void setMultilineLimits(long maxBytes, long maxLines) {
+    multilineMaxBytes.set(Math.max(0L, maxBytes));
+    multilineMaxLines.set(Math.max(0L, maxLines));
+  }
+
+  public void setDraftMultilineLimits(long maxBytes, long maxLines) {
+    draftMultilineMaxBytes.set(Math.max(0L, maxBytes));
+    draftMultilineMaxLines.set(Math.max(0L, maxLines));
+  }
+
+  public void setDraftReactCapAcked(boolean acked) {
+    draftReactCapAcked.set(acked);
+  }
+
+  public void setMessageTagsCapAcked(boolean acked) {
+    messageTagsCapAcked.set(acked);
+  }
+
+  public void setTypingCapAcked(boolean acked) {
+    typingCapAcked.set(acked);
+  }
+
+  public void setReadMarkerCapAcked(boolean acked) {
+    readMarkerCapAcked.set(acked);
+  }
+
   public boolean isSojuBouncerNetworksCapAcked() {
     return sojuBouncerNetworksCapAcked.get();
   }
@@ -652,7 +702,7 @@ public final class PircbotxConnectionState {
     return typingMissingWarned.compareAndSet(false, true);
   }
 
-  void resetNegotiatedCaps() {
+  public void resetNegotiatedCaps() {
     zncPlaybackCapAcked.set(false);
     batchCapAcked.set(false);
     chatHistoryCapAcked.set(false);
@@ -798,7 +848,7 @@ public final class PircbotxConnectionState {
     return false;
   }
 
-  void beginLagProbe(String token, long sentAtMs) {
+  public void beginLagProbe(String token, long sentAtMs) {
     lagProbe.beginProbe(token, sentAtMs);
   }
 
@@ -806,15 +856,15 @@ public final class PircbotxConnectionState {
     return lagProbe.observePong(token, observedAtMs);
   }
 
-  void observePassiveLagSample(long lagMs, long observedAtMs) {
+  public void observePassiveLagSample(long lagMs, long observedAtMs) {
     lagProbe.observePassiveSample(lagMs, observedAtMs);
   }
 
-  long lagMsIfFresh(long nowMs) {
+  public long lagMsIfFresh(long nowMs) {
     return lagProbe.lagMsIfFresh(nowMs);
   }
 
-  void resetLagProbeState() {
+  public void resetLagProbeState() {
     lagProbe.reset();
   }
 
@@ -826,20 +876,38 @@ public final class PircbotxConnectionState {
     return channelMode324Deduper.tryClaim(channel, details);
   }
 
-  String currentLagProbeToken() {
+  public String currentLagProbeToken() {
     return lagProbe.currentProbeToken();
   }
 
-  long currentLagProbeSentAtMs() {
+  public long currentLagProbeSentAtMs() {
     return lagProbe.currentProbeSentAtMs();
   }
 
-  long currentMeasuredLagMs() {
+  public long currentMeasuredLagMs() {
     return lagProbe.currentMeasuredLagMs();
   }
 
-  long currentMeasuredLagAtMs() {
+  public long currentMeasuredLagAtMs() {
     return lagProbe.currentMeasuredAtMs();
+  }
+
+  public boolean isZncPlaybackCaptureActive() {
+    return zncPlaybackCapture.isActive();
+  }
+
+  public java.util.Optional<String> activeZncPlaybackCaptureTarget() {
+    return zncPlaybackCapture.activeTarget();
+  }
+
+  public boolean hasPendingWhoisAwayProbe(String nick) {
+    String key = normalizedNickKey(nick);
+    return key != null && whoisSawAwayByNickLower.containsKey(key);
+  }
+
+  public boolean hasPendingWhoisAccountProbe(String nick) {
+    String key = normalizedNickKey(nick);
+    return key != null && whoisSawAccountByNickLower.containsKey(key);
   }
 
   private static String normalizedNickKey(String nick) {

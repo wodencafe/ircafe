@@ -8,6 +8,7 @@ import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.capability.*;
+import cafe.woden.ircclient.irc.pircbotx.client.PircbotxLagAwareBot;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.net.DeferredConnectSocksSocketFactory;
 import cafe.woden.ircclient.net.NetTlsContext;
