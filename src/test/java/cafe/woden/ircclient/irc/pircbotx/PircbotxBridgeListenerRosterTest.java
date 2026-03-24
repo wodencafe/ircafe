@@ -25,6 +25,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.Channel;
 import org.pircbotx.User;
+import org.pircbotx.hooks.ListenerAdapter;
 import org.pircbotx.hooks.events.UnknownEvent;
 import org.pircbotx.hooks.events.UserListEvent;
 
@@ -38,7 +39,7 @@ class PircbotxBridgeListenerRosterTest {
     bus.subscribe(seen::add);
 
     ServerIsupportState isupportState = new ServerIsupportState();
-    PircbotxBridgeListener listener =
+    ListenerAdapter listener =
         new PircbotxBridgeListenerFactory(
                 new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
                 null,

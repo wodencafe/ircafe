@@ -39,7 +39,7 @@ final class PircbotxInboundCtcpHandler {
   @NonNull private final Function<Object, String> privateTargetResolver;
   @NonNull private final BiConsumer<String, User> hostmaskObserver;
   @NonNull private final Consumer<ServerIrcEvent> emit;
-  @NonNull private final PircbotxBridgeListener.CtcpRequestHandler autoReplySender;
+  @NonNull private final PircbotxCtcpRequestHandler autoReplySender;
 
   void onGenericCtcp(GenericCTCPEvent event) {
     String command = deriveCommand(event);

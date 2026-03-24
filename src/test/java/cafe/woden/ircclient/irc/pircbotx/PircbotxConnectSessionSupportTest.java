@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.function.BiConsumer;
 import org.junit.jupiter.api.Test;
 import org.pircbotx.PircBotX;
+import org.pircbotx.hooks.ListenerAdapter;
 
 class PircbotxConnectSessionSupportTest {
 
@@ -43,12 +44,11 @@ class PircbotxConnectSessionSupportTest {
 
     PircbotxConnectionState connection = new PircbotxConnectionState("libera");
     IrcProperties.Server server = server("irc.example.net", 6697, "Nick");
-    PircbotxBridgeListener listener = mock(PircbotxBridgeListener.class);
+    ListenerAdapter listener = mock(ListenerAdapter.class);
     PircbotxLagAwareBot bot = mock(PircbotxLagAwareBot.class);
     @SuppressWarnings("unchecked")
     BiConsumer<PircbotxConnectionState, String> reconnectScheduler = mock(BiConsumer.class);
-    PircbotxBridgeListener.CtcpRequestHandler ctcpHandler =
-        mock(PircbotxBridgeListener.CtcpRequestHandler.class);
+    PircbotxCtcpRequestHandler ctcpHandler = mock(PircbotxCtcpRequestHandler.class);
     when(bridgeListenerFactory.create(
             eq("libera"),
             same(connection),

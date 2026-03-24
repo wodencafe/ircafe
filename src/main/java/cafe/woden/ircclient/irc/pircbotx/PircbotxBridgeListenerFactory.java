@@ -15,6 +15,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import lombok.NonNull;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
+import org.pircbotx.hooks.ListenerAdapter;
 import org.springframework.stereotype.Component;
 
 /** Assembles per-connection bridge listeners from Spring-managed and runtime dependencies. */
@@ -46,13 +47,13 @@ public class PircbotxBridgeListenerFactory {
     this.zncDiscoveryEnabled = Objects.requireNonNull(zncProps, "zncProps").discovery().enabled();
   }
 
-  PircbotxBridgeListener create(
+  public ListenerAdapter create(
       String serverId,
       PircbotxConnectionState conn,
       FlowableProcessor<ServerIrcEvent> bus,
       Consumer<PircbotxConnectionState> heartbeatStopper,
       BiConsumer<PircbotxConnectionState, String> reconnectScheduler,
-      PircbotxBridgeListener.CtcpRequestHandler ctcpHandler,
+      PircbotxCtcpRequestHandler ctcpHandler,
       boolean disconnectOnSaslFailure) {
     return new PircbotxBridgeListener(
         serverId,

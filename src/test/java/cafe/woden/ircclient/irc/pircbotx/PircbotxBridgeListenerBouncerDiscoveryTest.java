@@ -21,17 +21,18 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.pircbotx.hooks.ListenerAdapter;
 import org.pircbotx.hooks.events.UnknownEvent;
 
 class PircbotxBridgeListenerBouncerDiscoveryTest {
 
   @Test
-  void sojuAdapterWinsBeforeGenericFallbackWhenEnabled() {
+  void sojuAdapterWinsBeforeGenericFallbackWhenEnabled() throws Exception {
     FlowableProcessor<ServerIrcEvent> bus =
         PublishProcessor.<ServerIrcEvent>create().toSerialized();
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     BouncerDiscoveryEventPort bouncerEvents = mock(BouncerDiscoveryEventPort.class);
-    PircbotxBridgeListener listener = newListener(conn, bus, true, false, bouncerEvents);
+    ListenerAdapter listener = newListener(conn, bus, true, false, bouncerEvents);
 
     listener.onUnknown(
         unknownEvent(":bouncer.example BOUNCER NETWORK 123 name=Libera;caps=message-tags"));
@@ -48,12 +49,12 @@ class PircbotxBridgeListenerBouncerDiscoveryTest {
   }
 
   @Test
-  void genericFallbackCapturesBouncerLineWhenSojuAdapterDisabled() {
+  void genericFallbackCapturesBouncerLineWhenSojuAdapterDisabled() throws Exception {
     FlowableProcessor<ServerIrcEvent> bus =
         PublishProcessor.<ServerIrcEvent>create().toSerialized();
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     BouncerDiscoveryEventPort bouncerEvents = mock(BouncerDiscoveryEventPort.class);
-    PircbotxBridgeListener listener = newListener(conn, bus, false, false, bouncerEvents);
+    ListenerAdapter listener = newListener(conn, bus, false, false, bouncerEvents);
 
     listener.onUnknown(
         unknownEvent(
@@ -72,12 +73,12 @@ class PircbotxBridgeListenerBouncerDiscoveryTest {
   }
 
   @Test
-  void backendTaggedAsSojuIsIgnoredWhenSojuDiscoveryDisabled() {
+  void backendTaggedAsSojuIsIgnoredWhenSojuDiscoveryDisabled() throws Exception {
     FlowableProcessor<ServerIrcEvent> bus =
         PublishProcessor.<ServerIrcEvent>create().toSerialized();
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     BouncerDiscoveryEventPort bouncerEvents = mock(BouncerDiscoveryEventPort.class);
-    PircbotxBridgeListener listener = newListener(conn, bus, false, false, bouncerEvents);
+    ListenerAdapter listener = newListener(conn, bus, false, false, bouncerEvents);
 
     listener.onUnknown(
         unknownEvent(":bouncer.example BOUNCER NETWORK 123 backend=soju;name=Libera"));
@@ -87,7 +88,7 @@ class PircbotxBridgeListenerBouncerDiscoveryTest {
     assertFalse(conn.hasAnyGenericBouncerDiscoveredNetworks());
   }
 
-  private static PircbotxBridgeListener newListener(
+  private static ListenerAdapter newListener(
       PircbotxConnectionState conn,
       FlowableProcessor<ServerIrcEvent> bus,
       boolean sojuDiscoveryEnabled,

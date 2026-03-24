@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import org.pircbotx.PircBotX;
+import org.pircbotx.hooks.ListenerAdapter;
 
 /** Opens and supervises a single bot session for a connection attempt. */
 final class PircbotxConnectSessionSupport {
@@ -40,7 +41,7 @@ final class PircbotxConnectSessionSupport {
       String serverId,
       PircbotxConnectionState connection,
       IrcProperties.Server server,
-      PircbotxBridgeListener.CtcpRequestHandler ctcpHandler,
+      PircbotxCtcpRequestHandler ctcpHandler,
       BiConsumer<PircbotxConnectionState, String> reconnectScheduler,
       boolean disconnectOnSaslFailure) {
     bus.onNext(
@@ -48,7 +49,7 @@ final class PircbotxConnectSessionSupport {
             serverId,
             new IrcEvent.Connecting(Instant.now(), server.host(), server.port(), server.nick())));
 
-    PircbotxBridgeListener listener =
+    ListenerAdapter listener =
         bridgeListenerFactory.create(
             serverId,
             connection,

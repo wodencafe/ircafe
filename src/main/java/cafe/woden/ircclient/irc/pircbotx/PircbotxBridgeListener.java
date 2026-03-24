@@ -28,18 +28,12 @@ import io.reactivex.rxjava3.processors.FlowableProcessor;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import org.pircbotx.PircBotX;
 import org.pircbotx.hooks.ListenerAdapter;
 import org.pircbotx.hooks.events.*;
 import org.pircbotx.hooks.types.GenericCTCPEvent;
 
 /** Translates PircBotX events into ServerIrcEvent. */
 final class PircbotxBridgeListener extends ListenerAdapter {
-  @FunctionalInterface
-  interface CtcpRequestHandler {
-    boolean handle(PircBotX bot, String fromNick, String message);
-  }
-
   private final PircbotxSelfIdentityTracker selfIdentity;
 
   private final PircbotxConnectionSessionHandler session;
@@ -74,7 +68,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
       FlowableProcessor<ServerIrcEvent> bus,
       Consumer<PircbotxConnectionState> heartbeatStopper,
       BiConsumer<PircbotxConnectionState, String> reconnectScheduler,
-      CtcpRequestHandler ctcpHandler,
+      PircbotxCtcpRequestHandler ctcpHandler,
       boolean disconnectOnSaslFailure,
       boolean sojuDiscoveryEnabled,
       boolean zncDiscoveryEnabled,

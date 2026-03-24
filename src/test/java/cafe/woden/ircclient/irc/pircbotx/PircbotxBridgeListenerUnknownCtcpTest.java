@@ -21,12 +21,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.pircbotx.hooks.ListenerAdapter;
 import org.pircbotx.hooks.events.UnknownEvent;
 
 class PircbotxBridgeListenerUnknownCtcpTest {
 
   @Test
-  void onUnknownEmitsCtcpRequestForCustomPrivateCtcp() {
+  void onUnknownEmitsCtcpRequestForCustomPrivateCtcp() throws Exception {
     FlowableProcessor<ServerIrcEvent> bus =
         PublishProcessor.<ServerIrcEvent>create().toSerialized();
     List<ServerIrcEvent> seen = new ArrayList<>();
@@ -34,7 +35,7 @@ class PircbotxBridgeListenerUnknownCtcpTest {
 
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     conn.selfNickHint.set("me");
-    PircbotxBridgeListener listener = newListener(conn, bus);
+    ListenerAdapter listener = newListener(conn, bus);
     String line = ":alice!ident@host.example PRIVMSG me :\u0001WODEN hello world\u0001";
     UnknownEvent unknown =
         new UnknownEvent(
@@ -64,7 +65,7 @@ class PircbotxBridgeListenerUnknownCtcpTest {
   }
 
   @Test
-  void onUnknownDropsPrivateCtcpThatIsNotAddressedToSelf() {
+  void onUnknownDropsPrivateCtcpThatIsNotAddressedToSelf() throws Exception {
     FlowableProcessor<ServerIrcEvent> bus =
         PublishProcessor.<ServerIrcEvent>create().toSerialized();
     List<ServerIrcEvent> seen = new ArrayList<>();
@@ -72,7 +73,7 @@ class PircbotxBridgeListenerUnknownCtcpTest {
 
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     conn.selfNickHint.set("me");
-    PircbotxBridgeListener listener = newListener(conn, bus);
+    ListenerAdapter listener = newListener(conn, bus);
     String line = ":alice!ident@host.example PRIVMSG bob :\u0001WODEN ping\u0001";
     UnknownEvent unknown =
         new UnknownEvent(
@@ -92,7 +93,7 @@ class PircbotxBridgeListenerUnknownCtcpTest {
             .noneMatch(IrcEvent.CtcpRequestReceived.class::isInstance));
   }
 
-  private static PircbotxBridgeListener newListener(
+  private static ListenerAdapter newListener(
       PircbotxConnectionState conn, FlowableProcessor<ServerIrcEvent> bus) {
     return new PircbotxBridgeListenerFactory(
             new BouncerBackendRegistry(List.<BouncerNetworkMappingStrategy>of()),
