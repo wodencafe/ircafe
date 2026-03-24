@@ -69,9 +69,7 @@ class PircbotxConnectPreparationSupportTest {
     connection.selfNickHint.set("staleNick");
     connection.markZncDetected();
     connection.markZncDetectionLogged();
-    connection.zncBaseUser.set("staleUser");
-    connection.zncClientId.set("staleClient");
-    connection.zncNetwork.set("staleNetwork");
+    connection.setZncLoginContext("staleUser", "staleClient", "staleNetwork");
     connection.beginZncPlaybackRequest();
     connection.beginZncListNetworksRequest();
     connection.storeSojuDiscoveredNetwork(

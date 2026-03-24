@@ -76,27 +76,7 @@ public final class PircbotxConnectionState {
   /** Ensures we only emit a single "schema compatible" confirmation per connection. */
   final AtomicBoolean whoxSchemaCompatibleEmitted = new AtomicBoolean(false);
 
-  // ZNC Playback module support
   final AtomicBoolean zncPlaybackCapAcked = new AtomicBoolean(false);
-  final AtomicBoolean zncPlaybackRequestedThisSession = new AtomicBoolean(false);
-
-  // Ensures we only issue *status ListNetworks once per connection (ZNC).
-  final AtomicBoolean zncListNetworksRequestedThisSession = new AtomicBoolean(false);
-
-  // Captures networks discovered via *status ListNetworks (ZNC multi-network).
-  final AtomicBoolean zncListNetworksCaptureActive = new AtomicBoolean(false);
-  final AtomicLong zncListNetworksCaptureStartedMs = new AtomicLong(0);
-  final Map<String, BouncerDiscoveredNetwork> zncNetworksByNameLower = new ConcurrentHashMap<>();
-
-  // ZNC (bouncer) detection / username parsing.
-  final AtomicBoolean zncDetected = new AtomicBoolean(false);
-  final AtomicBoolean zncDetectedLogged = new AtomicBoolean(false);
-
-  // Parsed ZNC-style login fields (user[@client]/network).
-  final AtomicReference<String> zncBaseUser = new AtomicReference<>("");
-  final AtomicReference<String> zncClientId = new AtomicReference<>("");
-  final AtomicReference<String> zncNetwork = new AtomicReference<>("");
-
   final ZncPlaybackCaptureCoordinator zncPlaybackCapture = new ZncPlaybackCaptureCoordinator();
 
   // IRCv3 history support (soju): detect whether the server accepted these capabilities.
@@ -148,20 +128,6 @@ public final class PircbotxConnectionState {
   // soju bouncer network discovery (cap: soju.im/bouncer-networks)
   final AtomicBoolean sojuBouncerNetworksCapAcked = new AtomicBoolean(false);
 
-  // Ensures we only issue BOUNCER LISTNETWORKS once per connection.
-  final AtomicBoolean sojuListNetworksRequestedThisSession = new AtomicBoolean(false);
-
-  // soju bouncer: if present, this connection is bound to a specific network on the bouncer.
-  // If blank, this connection is the "bouncer control" session.
-  final AtomicReference<String> sojuBouncerNetId = new AtomicReference<>("");
-
-  // Networks discovered via `BOUNCER LISTNETWORKS` (de-duped by netId).
-  final Map<String, BouncerDiscoveredNetwork> sojuNetworksByNetId = new ConcurrentHashMap<>();
-
-  // Networks discovered via generic bouncer protocol lines.
-  final Map<String, BouncerDiscoveredNetwork> genericBouncerNetworksById =
-      new ConcurrentHashMap<>();
-
   // IRCv3 server-time support (canonical message timestamps).
   final AtomicBoolean serverTimeCapAcked = new AtomicBoolean(false);
   final AtomicBoolean standardRepliesCapAcked = new AtomicBoolean(false);
@@ -186,6 +152,8 @@ public final class PircbotxConnectionState {
       new PircbotxPrivateTargetHintStore();
   private final PircbotxChannelMode324Deduper channelMode324Deduper =
       new PircbotxChannelMode324Deduper();
+  private final PircbotxBouncerDiscoveryState bouncerDiscovery =
+      new PircbotxBouncerDiscoveryState();
 
   public PircbotxConnectionState(String serverId) {
     this.serverId = serverId;
@@ -317,174 +285,163 @@ public final class PircbotxConnectionState {
   }
 
   public boolean isZncDetected() {
-    return zncDetected.get();
+    return bouncerDiscovery.isZncDetected();
   }
 
   public boolean markZncDetected() {
-    return zncDetected.compareAndSet(false, true);
+    return bouncerDiscovery.markZncDetected();
   }
 
   public boolean markZncDetectionLogged() {
-    return zncDetectedLogged.compareAndSet(false, true);
+    return bouncerDiscovery.markZncDetectionLogged();
   }
 
   public boolean zncDetectionLogged() {
-    return zncDetectedLogged.get();
+    return bouncerDiscovery.zncDetectionLogged();
   }
 
   public void clearZncDetection() {
-    zncDetected.set(false);
-    zncDetectedLogged.set(false);
+    bouncerDiscovery.clearZncDetection();
   }
 
   public String zncBaseUser() {
-    return zncBaseUser.get();
+    return bouncerDiscovery.zncBaseUser();
   }
 
   public String zncClientId() {
-    return zncClientId.get();
+    return bouncerDiscovery.zncClientId();
   }
 
   public String zncNetwork() {
-    return zncNetwork.get();
+    return bouncerDiscovery.zncNetwork();
   }
 
   public void setZncLoginContext(String baseUser, String clientId, String network) {
-    zncBaseUser.set(Objects.toString(baseUser, "").trim());
-    zncClientId.set(Objects.toString(clientId, "").trim());
-    zncNetwork.set(Objects.toString(network, "").trim());
+    bouncerDiscovery.setZncLoginContext(baseUser, clientId, network);
   }
 
   public void clearZncLoginContext() {
-    setZncLoginContext("", "", "");
+    bouncerDiscovery.clearZncLoginContext();
   }
 
   public boolean beginZncPlaybackRequest() {
-    return !zncPlaybackRequestedThisSession.getAndSet(true);
+    return bouncerDiscovery.beginZncPlaybackRequest();
   }
 
   public void clearZncPlaybackRequest() {
-    zncPlaybackRequestedThisSession.set(false);
+    bouncerDiscovery.clearZncPlaybackRequest();
   }
 
   public boolean zncPlaybackRequestedThisSession() {
-    return zncPlaybackRequestedThisSession.get();
+    return bouncerDiscovery.zncPlaybackRequestedThisSession();
   }
 
   public boolean beginZncListNetworksRequest() {
-    return !zncListNetworksRequestedThisSession.getAndSet(true);
+    return bouncerDiscovery.beginZncListNetworksRequest();
   }
 
   public void beginZncListNetworksCapture(long startedAtMs) {
-    zncListNetworksCaptureActive.set(true);
-    zncListNetworksCaptureStartedMs.set(startedAtMs);
-    zncNetworksByNameLower.clear();
+    bouncerDiscovery.beginZncListNetworksCapture(startedAtMs);
   }
 
   public boolean isZncListNetworksCaptureActive() {
-    return zncListNetworksCaptureActive.get();
+    return bouncerDiscovery.isZncListNetworksCaptureActive();
   }
 
   public long zncListNetworksCaptureStartedAtMs() {
-    return zncListNetworksCaptureStartedMs.get();
+    return bouncerDiscovery.zncListNetworksCaptureStartedAtMs();
   }
 
   public void finishZncListNetworksCapture() {
-    zncListNetworksCaptureActive.set(false);
+    bouncerDiscovery.finishZncListNetworksCapture();
   }
 
   public void clearZncListNetworksRequest() {
-    zncListNetworksRequestedThisSession.set(false);
+    bouncerDiscovery.clearZncListNetworksRequest();
   }
 
   public boolean zncListNetworksRequestedThisSession() {
-    return zncListNetworksRequestedThisSession.get();
+    return bouncerDiscovery.zncListNetworksRequestedThisSession();
   }
 
   public void clearZncDiscoveredNetworks() {
-    zncNetworksByNameLower.clear();
+    bouncerDiscovery.clearZncDiscoveredNetworks();
   }
 
   public int zncDiscoveredNetworkCount() {
-    return zncNetworksByNameLower.size();
+    return bouncerDiscovery.zncDiscoveredNetworkCount();
   }
 
   public BouncerDiscoveredNetwork zncDiscoveredNetwork(String key) {
-    return zncNetworksByNameLower.get(key);
+    return bouncerDiscovery.zncDiscoveredNetwork(key);
   }
 
   public void storeZncDiscoveredNetwork(String key, BouncerDiscoveredNetwork network) {
-    if (key != null && network != null) {
-      zncNetworksByNameLower.put(key, network);
-    }
+    bouncerDiscovery.storeZncDiscoveredNetwork(key, network);
   }
 
   public boolean beginSojuListNetworksRequest() {
-    return !sojuListNetworksRequestedThisSession.getAndSet(true);
+    return bouncerDiscovery.beginSojuListNetworksRequest();
   }
 
   public void clearSojuListNetworksRequest() {
-    sojuListNetworksRequestedThisSession.set(false);
+    bouncerDiscovery.clearSojuListNetworksRequest();
   }
 
   public boolean sojuListNetworksRequestedThisSession() {
-    return sojuListNetworksRequestedThisSession.get();
+    return bouncerDiscovery.sojuListNetworksRequestedThisSession();
   }
 
   public void clearSojuDiscoveredNetworks() {
-    sojuNetworksByNetId.clear();
+    bouncerDiscovery.clearSojuDiscoveredNetworks();
   }
 
   public BouncerDiscoveredNetwork sojuDiscoveredNetwork(String netId) {
-    return sojuNetworksByNetId.get(netId);
+    return bouncerDiscovery.sojuDiscoveredNetwork(netId);
   }
 
   public void storeSojuDiscoveredNetwork(String netId, BouncerDiscoveredNetwork network) {
-    if (netId != null && network != null) {
-      sojuNetworksByNetId.put(netId, network);
-    }
+    bouncerDiscovery.storeSojuDiscoveredNetwork(netId, network);
   }
 
   public boolean hasSojuDiscoveredNetwork(String netId) {
-    return netId != null && sojuNetworksByNetId.containsKey(netId);
+    return bouncerDiscovery.hasSojuDiscoveredNetwork(netId);
   }
 
   public boolean hasAnySojuDiscoveredNetworks() {
-    return !sojuNetworksByNetId.isEmpty();
+    return bouncerDiscovery.hasAnySojuDiscoveredNetworks();
   }
 
   public String sojuBouncerNetId() {
-    return sojuBouncerNetId.get();
+    return bouncerDiscovery.sojuBouncerNetId();
   }
 
   public void setSojuBouncerNetId(String netId) {
-    sojuBouncerNetId.set(Objects.toString(netId, "").trim());
+    bouncerDiscovery.setSojuBouncerNetId(netId);
   }
 
   public void clearSojuBouncerNetId() {
-    sojuBouncerNetId.set("");
+    bouncerDiscovery.clearSojuBouncerNetId();
   }
 
   public void clearGenericBouncerDiscoveredNetworks() {
-    genericBouncerNetworksById.clear();
+    bouncerDiscovery.clearGenericBouncerDiscoveredNetworks();
   }
 
   public BouncerDiscoveredNetwork genericBouncerDiscoveredNetwork(String key) {
-    return genericBouncerNetworksById.get(key);
+    return bouncerDiscovery.genericBouncerDiscoveredNetwork(key);
   }
 
   public void storeGenericBouncerDiscoveredNetwork(String key, BouncerDiscoveredNetwork network) {
-    if (key != null && network != null) {
-      genericBouncerNetworksById.put(key, network);
-    }
+    bouncerDiscovery.storeGenericBouncerDiscoveredNetwork(key, network);
   }
 
   public boolean hasGenericBouncerDiscoveredNetwork(String key) {
-    return key != null && genericBouncerNetworksById.containsKey(key);
+    return bouncerDiscovery.hasGenericBouncerDiscoveredNetwork(key);
   }
 
   public boolean hasAnyGenericBouncerDiscoveredNetworks() {
-    return !genericBouncerNetworksById.isEmpty();
+    return bouncerDiscovery.hasAnyGenericBouncerDiscoveredNetworks();
   }
 
   public boolean beginCapabilitySummaryLog() {
