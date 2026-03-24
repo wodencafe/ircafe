@@ -57,25 +57,11 @@ final class PircbotxMultilineMessageSupport {
   }
 
   static long negotiatedMaxBytes(PircbotxConnectionState connection) {
-    if (connection == null) return 0L;
-    if (connection.multilineCapAcked.get()) {
-      return Math.max(0L, connection.multilineMaxBytes.get());
-    }
-    if (connection.draftMultilineCapAcked.get()) {
-      return Math.max(0L, connection.draftMultilineMaxBytes.get());
-    }
-    return 0L;
+    return connection == null ? 0L : connection.capabilitySnapshot().negotiatedMultilineMaxBytes();
   }
 
   static long negotiatedMaxLines(PircbotxConnectionState connection) {
-    if (connection == null) return 0L;
-    if (connection.multilineCapAcked.get()) {
-      return Math.max(0L, connection.multilineMaxLines.get());
-    }
-    if (connection.draftMultilineCapAcked.get()) {
-      return Math.max(0L, connection.draftMultilineMaxLines.get());
-    }
-    return 0L;
+    return connection == null ? 0L : connection.capabilitySnapshot().negotiatedMultilineMaxLines();
   }
 
   static long multilinePayloadUtf8Bytes(List<String> lines) {
@@ -147,15 +133,17 @@ final class PircbotxMultilineMessageSupport {
 
   private static String multilineBatchType(PircbotxConnectionState connection) {
     if (connection == null) return "";
-    if (connection.multilineCapAcked.get()) return "multiline";
-    if (connection.draftMultilineCapAcked.get()) return "draft/multiline";
+    PircbotxConnectionState.CapabilitySnapshot caps = connection.capabilitySnapshot();
+    if (caps.multilineCapAcked()) return "multiline";
+    if (caps.draftMultilineCapAcked()) return "draft/multiline";
     return "";
   }
 
   private static String multilineConcatTag(PircbotxConnectionState connection) {
     if (connection == null) return "";
-    if (connection.multilineCapAcked.get()) return "multiline-concat";
-    if (connection.draftMultilineCapAcked.get()) return "draft/multiline-concat";
+    PircbotxConnectionState.CapabilitySnapshot caps = connection.capabilitySnapshot();
+    if (caps.multilineCapAcked()) return "multiline-concat";
+    if (caps.draftMultilineCapAcked()) return "draft/multiline-concat";
     return "";
   }
 

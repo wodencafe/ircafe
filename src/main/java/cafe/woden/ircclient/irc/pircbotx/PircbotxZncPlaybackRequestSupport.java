@@ -22,7 +22,7 @@ final class PircbotxZncPlaybackRequestSupport {
       String target,
       Instant fromInclusive,
       Instant toInclusive) {
-    if (!connection.zncPlaybackCapAcked.get()) {
+    if (!connection.isZncPlaybackCapAcked()) {
       throw new IllegalStateException("ZNC playback not negotiated (znc.in/playback): " + serverId);
     }
 

@@ -47,9 +47,7 @@ final class PircbotxIsupportObserver {
         PircbotxMonitorParsers.parseRpl005MonitorSupport(rawLine);
     if (monitor == null) return;
 
-    boolean prevSupported = conn.monitorSupported.getAndSet(monitor.supported());
-    long prevLimit = conn.monitorMaxTargets.getAndSet(Math.max(0L, monitor.limit()));
-    if (prevSupported != monitor.supported() || prevLimit != Math.max(0L, monitor.limit())) {
+    if (conn.updateMonitorSupport(monitor.supported(), monitor.limit())) {
       log.debug(
           "[{}] monitor support changed: supported={} max-targets={}",
           serverId,
@@ -63,9 +61,7 @@ final class PircbotxIsupportObserver {
     if (clientTagDeny == null) return;
 
     boolean allowed = PircbotxClientTagParsers.isClientOnlyTagAllowed(clientTagDeny, "typing");
-    conn.typingClientTagPolicyKnown.set(true);
-    boolean prev = conn.typingClientTagAllowed.getAndSet(allowed);
-    if (prev != allowed) {
+    if (conn.updateTypingClientTagPolicy(allowed)) {
       log.debug(
           "[{}] CLIENTTAGDENY -> typing allowed={} (raw={})", serverId, allowed, clientTagDeny);
     }

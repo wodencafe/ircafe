@@ -48,7 +48,7 @@ final class PircbotxCapabilityCommandSupport {
 
   void sendReadMarker(
       String serverId, PircbotxConnectionState connection, String target, Instant markerAt) {
-    if (connection == null || !connection.readMarkerCapAcked.get()) {
+    if (connection == null || !connection.capabilitySnapshot().readMarkerCapAcked()) {
       throw new IllegalStateException(
           "read-marker capability not negotiated (requires read-marker or draft/read-marker): "
               + serverId);
@@ -116,12 +116,7 @@ final class PircbotxCapabilityCommandSupport {
     if (connection == null || !connection.hasBot()) {
       return false;
     }
-
-    boolean messageTags = connection.messageTagsCapAcked.get();
-    boolean typingCap = connection.typingCapAcked.get();
-    boolean typingAllowedByPolicy =
-        connection.typingClientTagPolicyKnown.get() && connection.typingClientTagAllowed.get();
-    return messageTags && (typingCap || typingAllowedByPolicy);
+    return connection.capabilitySnapshot().typingAvailable();
   }
 
   String typingAvailabilityReason(PircbotxConnectionState connection) {
@@ -132,38 +127,38 @@ final class PircbotxCapabilityCommandSupport {
       return "not connected";
     }
 
-    if (!connection.messageTagsCapAcked.get()) {
+    PircbotxConnectionState.CapabilitySnapshot caps = connection.capabilitySnapshot();
+    if (!caps.messageTagsCapAcked()) {
       return "message-tags not negotiated";
     }
 
-    boolean typingCap = connection.typingCapAcked.get();
-    boolean typingPolicyKnown = connection.typingClientTagPolicyKnown.get();
-    boolean typingAllowed = connection.typingClientTagAllowed.get();
-    if (!typingCap && !typingPolicyKnown) {
+    if (!caps.typingCapAcked() && !caps.typingClientTagPolicyKnown()) {
       return "typing capability not negotiated";
     }
-    if (!typingCap && !typingAllowed) {
+    if (!caps.typingCapAcked() && !caps.typingClientTagAllowed()) {
       return "server denies +typing via CLIENTTAGDENY";
     }
     return "";
   }
 
   boolean isReadMarkerAvailable(PircbotxConnectionState connection) {
-    return connection != null && connection.hasBot() && connection.readMarkerCapAcked.get();
+    return connection != null
+        && connection.hasBot()
+        && connection.capabilitySnapshot().readMarkerCapAcked();
   }
 
   boolean isChatHistoryAvailable(PircbotxConnectionState connection) {
-    return connection != null
-        && connection.chatHistoryCapAcked.get()
-        && connection.batchCapAcked.get();
+    return connection != null && connection.capabilitySnapshot().chatHistoryAvailable();
   }
 
   private void ensureChatHistoryNegotiated(String serverId, PircbotxConnectionState connection) {
-    if (connection == null || !connection.chatHistoryCapAcked.get()) {
+    PircbotxConnectionState.CapabilitySnapshot caps =
+        connection == null ? null : connection.capabilitySnapshot();
+    if (caps == null || !caps.chatHistoryCapAcked()) {
       throw new IllegalStateException(
           "CHATHISTORY not negotiated (chathistory or draft/chathistory): " + serverId);
     }
-    if (!connection.batchCapAcked.get()) {
+    if (!caps.batchCapAcked()) {
       throw new IllegalStateException(
           "CHATHISTORY requires IRCv3 batch to be negotiated: " + serverId);
     }

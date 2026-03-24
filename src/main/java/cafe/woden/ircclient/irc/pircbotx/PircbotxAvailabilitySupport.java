@@ -4,25 +4,23 @@ package cafe.woden.ircclient.irc.pircbotx;
 final class PircbotxAvailabilitySupport {
 
   boolean isEchoMessageAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.echoMessageCapAcked.get();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().echoMessageCapAcked();
   }
 
   boolean isDraftReplyAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.draftReplyCapAcked.get();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().draftReplyCapAcked();
   }
 
   boolean isDraftReactAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.draftReactCapAcked.get();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().draftReactCapAcked();
   }
 
   boolean isDraftUnreactAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection)
-        && (connection.draftUnreactCapAcked.get() || connection.draftReactCapAcked.get());
+    return hasLiveBot(connection) && connection.capabilitySnapshot().draftUnreactAvailable();
   }
 
   boolean isMultilineAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection)
-        && (connection.multilineCapAcked.get() || connection.draftMultilineCapAcked.get());
+    return hasLiveBot(connection) && connection.capabilitySnapshot().multilineAvailable();
   }
 
   long negotiatedMultilineMaxBytes(PircbotxConnectionState connection) {
@@ -35,44 +33,44 @@ final class PircbotxAvailabilitySupport {
   }
 
   boolean isMessageEditAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.draftMessageEditCapAcked.get();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().draftMessageEditCapAcked();
   }
 
   boolean isMessageRedactionAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.draftMessageRedactionCapAcked.get();
+    return hasLiveBot(connection)
+        && connection.capabilitySnapshot().draftMessageRedactionCapAcked();
   }
 
   boolean isLabeledResponseAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.labeledResponseCapAcked.get();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().labeledResponseCapAcked();
   }
 
   boolean isStandardRepliesAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.standardRepliesCapAcked.get();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().standardRepliesCapAcked();
   }
 
   boolean isMonitorAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection)
-        && (connection.monitorSupported.get() || connection.monitorCapAcked.get());
+    return hasLiveBot(connection) && connection.capabilitySnapshot().monitorAvailable();
   }
 
   int negotiatedMonitorLimit(PircbotxConnectionState connection) {
     if (connection == null) {
       return 0;
     }
-    return toBoundedInt(Math.max(0L, connection.monitorMaxTargets.get()));
+    return toBoundedInt(Math.max(0L, connection.capabilitySnapshot().monitorMaxTargets()));
   }
 
   boolean isZncPlaybackAvailable(PircbotxConnectionState connection) {
-    return connection != null && connection.zncPlaybackCapAcked.get();
+    return connection != null && connection.capabilitySnapshot().zncPlaybackCapAcked();
   }
 
   boolean isZncBouncerDetected(PircbotxConnectionState connection) {
     return connection != null
-        && (connection.isZncDetected() || connection.zncPlaybackCapAcked.get());
+        && (connection.isZncDetected() || connection.capabilitySnapshot().zncPlaybackCapAcked());
   }
 
   boolean isSojuBouncerAvailable(PircbotxConnectionState connection) {
-    return connection != null && connection.sojuBouncerNetworksCapAcked.get();
+    return connection != null && connection.capabilitySnapshot().sojuBouncerNetworksCapAcked();
   }
 
   private static boolean hasLiveBot(PircbotxConnectionState connection) {

@@ -78,14 +78,14 @@ final class PircbotxSelfIdentityTracker {
 
   void rememberSelfNickHint(String nick) {
     if (!looksLikeSelfNickHint(nick)) return;
-    conn.selfNickHint.set(nick.trim());
+    conn.setSelfNickHint(nick.trim());
   }
 
   boolean nickMatchesSelf(PircBotX bot, String nick) {
     if (nick == null || nick.isBlank()) return false;
     String candidate = nick.trim();
 
-    String hinted = conn.selfNickHint.get();
+    String hinted = conn.selfNickHint();
     if (hinted != null && !hinted.isBlank() && candidate.equalsIgnoreCase(hinted.trim())) {
       return true;
     }
@@ -100,7 +100,7 @@ final class PircbotxSelfIdentityTracker {
   }
 
   String resolveSelfNick(PircBotX bot) {
-    String hinted = conn.selfNickHint.get();
+    String hinted = conn.selfNickHint();
     if (looksLikeSelfNickHint(hinted)) {
       return hinted.trim();
     }

@@ -159,6 +159,87 @@ public final class PircbotxConnectionState {
     this.serverId = serverId;
   }
 
+  /** Immutable read view over negotiated IRCv3 capability state for one connection. */
+  public record CapabilitySnapshot(
+      boolean zncPlaybackCapAcked,
+      boolean batchCapAcked,
+      boolean chatHistoryCapAcked,
+      boolean echoMessageCapAcked,
+      boolean capNotifyCapAcked,
+      boolean labeledResponseCapAcked,
+      boolean setnameCapAcked,
+      boolean chghostCapAcked,
+      boolean stsCapAcked,
+      boolean multilineCapAcked,
+      boolean draftMultilineCapAcked,
+      long multilineMaxBytes,
+      long multilineMaxLines,
+      long draftMultilineMaxBytes,
+      long draftMultilineMaxLines,
+      boolean draftChannelContextCapAcked,
+      boolean draftReplyCapAcked,
+      boolean draftReactCapAcked,
+      boolean draftUnreactCapAcked,
+      boolean draftMessageEditCapAcked,
+      boolean draftMessageRedactionCapAcked,
+      boolean messageTagsCapAcked,
+      boolean typingClientTagAllowed,
+      boolean typingClientTagPolicyKnown,
+      boolean typingCapAcked,
+      boolean readMarkerCapAcked,
+      boolean monitorCapAcked,
+      boolean extendedMonitorCapAcked,
+      boolean sojuBouncerNetworksCapAcked,
+      boolean serverTimeCapAcked,
+      boolean standardRepliesCapAcked,
+      boolean monitorSupported,
+      long monitorMaxTargets) {
+
+    boolean draftUnreactAvailable() {
+      return draftUnreactCapAcked || draftReactCapAcked;
+    }
+
+    boolean multilineAvailable() {
+      return multilineCapAcked || draftMultilineCapAcked;
+    }
+
+    long negotiatedMultilineMaxBytes() {
+      if (multilineCapAcked) {
+        return Math.max(0L, multilineMaxBytes);
+      }
+      if (draftMultilineCapAcked) {
+        return Math.max(0L, draftMultilineMaxBytes);
+      }
+      return 0L;
+    }
+
+    long negotiatedMultilineMaxLines() {
+      if (multilineCapAcked) {
+        return Math.max(0L, multilineMaxLines);
+      }
+      if (draftMultilineCapAcked) {
+        return Math.max(0L, draftMultilineMaxLines);
+      }
+      return 0L;
+    }
+
+    boolean typingAllowedByPolicy() {
+      return typingClientTagPolicyKnown && typingClientTagAllowed;
+    }
+
+    boolean typingAvailable() {
+      return messageTagsCapAcked && (typingCapAcked || typingAllowedByPolicy());
+    }
+
+    boolean chatHistoryAvailable() {
+      return chatHistoryCapAcked && batchCapAcked;
+    }
+
+    boolean monitorAvailable() {
+      return monitorSupported || monitorCapAcked;
+    }
+  }
+
   public PircBotX currentBot() {
     return botRef.get();
   }
@@ -181,6 +262,10 @@ public final class PircbotxConnectionState {
 
   public String selfNickHint() {
     return selfNickHint.get();
+  }
+
+  public void setSelfNickHint(String nick) {
+    selfNickHint.set(Objects.toString(nick, ""));
   }
 
   public void setConnectedEndpoint(String host, boolean tls) {
@@ -446,6 +531,72 @@ public final class PircbotxConnectionState {
 
   public boolean beginCapabilitySummaryLog() {
     return !capSummaryLogged.getAndSet(true);
+  }
+
+  public CapabilitySnapshot capabilitySnapshot() {
+    return new CapabilitySnapshot(
+        zncPlaybackCapAcked.get(),
+        batchCapAcked.get(),
+        chatHistoryCapAcked.get(),
+        echoMessageCapAcked.get(),
+        capNotifyCapAcked.get(),
+        labeledResponseCapAcked.get(),
+        setnameCapAcked.get(),
+        chghostCapAcked.get(),
+        stsCapAcked.get(),
+        multilineCapAcked.get(),
+        draftMultilineCapAcked.get(),
+        multilineMaxBytes.get(),
+        multilineMaxLines.get(),
+        draftMultilineMaxBytes.get(),
+        draftMultilineMaxLines.get(),
+        draftChannelContextCapAcked.get(),
+        draftReplyCapAcked.get(),
+        draftReactCapAcked.get(),
+        draftUnreactCapAcked.get(),
+        draftMessageEditCapAcked.get(),
+        draftMessageRedactionCapAcked.get(),
+        messageTagsCapAcked.get(),
+        typingClientTagAllowed.get(),
+        typingClientTagPolicyKnown.get(),
+        typingCapAcked.get(),
+        readMarkerCapAcked.get(),
+        monitorCapAcked.get(),
+        extendedMonitorCapAcked.get(),
+        sojuBouncerNetworksCapAcked.get(),
+        serverTimeCapAcked.get(),
+        standardRepliesCapAcked.get(),
+        monitorSupported.get(),
+        monitorMaxTargets.get());
+  }
+
+  public boolean isZncPlaybackCapAcked() {
+    return zncPlaybackCapAcked.get();
+  }
+
+  public boolean isSojuBouncerNetworksCapAcked() {
+    return sojuBouncerNetworksCapAcked.get();
+  }
+
+  public boolean updateMonitorSupport(boolean supported, long limit) {
+    boolean normalizedSupported = supported;
+    long normalizedLimit = Math.max(0L, limit);
+    boolean prevSupported = monitorSupported.getAndSet(normalizedSupported);
+    long prevLimit = monitorMaxTargets.getAndSet(normalizedLimit);
+    return prevSupported != normalizedSupported || prevLimit != normalizedLimit;
+  }
+
+  public boolean updateTypingClientTagPolicy(boolean allowed) {
+    typingClientTagPolicyKnown.set(true);
+    boolean prev = typingClientTagAllowed.getAndSet(allowed);
+    return prev != allowed;
+  }
+
+  public void clearSojuDiscoverySession() {
+    clearSojuDiscoveredNetworks();
+    clearSojuListNetworksRequest();
+    clearSojuBouncerNetId();
+    sojuBouncerNetworksCapAcked.set(false);
   }
 
   public boolean shouldWarnMissingServerTime() {

@@ -87,7 +87,7 @@ final class PircbotxRegistrationLifecycleHandler {
 
   private void maybeRequestZncPlayback(PircBotX bot) {
     if (bot == null) return;
-    if (!conn.zncPlaybackCapAcked.get()) return;
+    if (!conn.isZncPlaybackCapAcked()) return;
     if (!conn.beginZncPlaybackRequest()) return;
 
     OptionalLong cursor = playbackCursorProvider.lastSeenEpochSeconds(serverId);
@@ -104,41 +104,9 @@ final class PircbotxRegistrationLifecycleHandler {
 
   private void logNegotiatedCaps() {
     if (!conn.beginCapabilitySummaryLog()) return;
-    boolean ch = conn.chatHistoryCapAcked.get();
-    boolean batch = conn.batchCapAcked.get();
-    boolean znc = conn.zncPlaybackCapAcked.get();
-    boolean st = conn.serverTimeCapAcked.get();
-    boolean standardReplies = conn.standardRepliesCapAcked.get();
-    boolean echo = conn.echoMessageCapAcked.get();
-    boolean capNotify = conn.capNotifyCapAcked.get();
-    boolean labeled = conn.labeledResponseCapAcked.get();
-    boolean setname = conn.setnameCapAcked.get();
-    boolean chghost = conn.chghostCapAcked.get();
-    boolean sts = conn.stsCapAcked.get();
-    boolean multiline = conn.multilineCapAcked.get() || conn.draftMultilineCapAcked.get();
-    boolean multilineFinal = conn.multilineCapAcked.get();
-    boolean multilineDraft = conn.draftMultilineCapAcked.get();
-    long multilineFinalMaxBytes = conn.multilineMaxBytes.get();
-    long multilineFinalMaxLines = conn.multilineMaxLines.get();
-    long multilineDraftMaxBytes = conn.draftMultilineMaxBytes.get();
-    long multilineDraftMaxLines = conn.draftMultilineMaxLines.get();
-    boolean channelContext = conn.draftChannelContextCapAcked.get();
-    boolean reply = conn.draftReplyCapAcked.get();
-    boolean react = conn.draftReactCapAcked.get();
-    boolean unreact = conn.draftUnreactCapAcked.get();
-    boolean edit = conn.draftMessageEditCapAcked.get();
-    boolean redaction = conn.draftMessageRedactionCapAcked.get();
-    boolean messageTags = conn.messageTagsCapAcked.get();
-    boolean typingCap = conn.typingCapAcked.get();
-    boolean typingTagPolicyKnown = conn.typingClientTagPolicyKnown.get();
-    boolean typingTagAllowed = conn.typingClientTagAllowed.get();
-    boolean typingAllowedByPolicy = typingTagPolicyKnown && typingTagAllowed;
-    boolean typing = messageTags && (typingCap || typingAllowedByPolicy);
-    boolean readMarker = conn.readMarkerCapAcked.get();
-    boolean monitorCap = conn.monitorCapAcked.get();
-    boolean extendedMonitorCap = conn.extendedMonitorCapAcked.get();
-    boolean monitorSupported = conn.monitorSupported.get();
-    long monitorMaxTargets = conn.monitorMaxTargets.get();
+    PircbotxConnectionState.CapabilitySnapshot caps = conn.capabilitySnapshot();
+    boolean multiline = caps.multilineAvailable();
+    boolean typing = caps.typingAvailable();
     log.debug(
         "[{}] negotiated caps: server-time={} standard-replies={} echo-message={} cap-notify={} labeled-response={} "
             + "setname={} chghost={} sts={} multiline={} multiline(final)={} multiline(final,max-bytes)={} "
@@ -149,42 +117,42 @@ final class PircbotxRegistrationLifecycleHandler {
             + "monitor(isupport)={} monitor(cap)={} extended-monitor(cap)={} monitor(max-targets)={} "
             + "chathistory={} batch={} znc.in/playback={}",
         serverId,
-        st,
-        standardReplies,
-        echo,
-        capNotify,
-        labeled,
-        setname,
-        chghost,
-        sts,
+        caps.serverTimeCapAcked(),
+        caps.standardRepliesCapAcked(),
+        caps.echoMessageCapAcked(),
+        caps.capNotifyCapAcked(),
+        caps.labeledResponseCapAcked(),
+        caps.setnameCapAcked(),
+        caps.chghostCapAcked(),
+        caps.stsCapAcked(),
         multiline,
-        multilineFinal,
-        multilineFinalMaxBytes,
-        multilineFinalMaxLines,
-        multilineDraft,
-        multilineDraftMaxBytes,
-        multilineDraftMaxLines,
-        channelContext,
-        reply,
-        react,
-        unreact,
-        edit,
-        redaction,
-        messageTags,
-        typingTagPolicyKnown,
-        typingTagAllowed,
+        caps.multilineCapAcked(),
+        caps.multilineMaxBytes(),
+        caps.multilineMaxLines(),
+        caps.draftMultilineCapAcked(),
+        caps.draftMultilineMaxBytes(),
+        caps.draftMultilineMaxLines(),
+        caps.draftChannelContextCapAcked(),
+        caps.draftReplyCapAcked(),
+        caps.draftReactCapAcked(),
+        caps.draftUnreactCapAcked(),
+        caps.draftMessageEditCapAcked(),
+        caps.draftMessageRedactionCapAcked(),
+        caps.messageTagsCapAcked(),
+        caps.typingClientTagPolicyKnown(),
+        caps.typingClientTagAllowed(),
         typing,
-        typingCap,
-        readMarker,
-        monitorSupported,
-        monitorCap,
-        extendedMonitorCap,
-        monitorMaxTargets,
-        ch,
-        batch,
-        znc);
+        caps.typingCapAcked(),
+        caps.readMarkerCapAcked(),
+        caps.monitorSupported(),
+        caps.monitorCapAcked(),
+        caps.extendedMonitorCapAcked(),
+        caps.monitorMaxTargets(),
+        caps.chatHistoryCapAcked(),
+        caps.batchCapAcked(),
+        caps.zncPlaybackCapAcked());
 
-    if (!st && conn.shouldWarnMissingServerTime()) {
+    if (!caps.serverTimeCapAcked() && conn.shouldWarnMissingServerTime()) {
       String msg =
           "IRCv3 server-time was not negotiated; message ordering/timestamps may be less accurate (especially on reconnect/backlog).";
       log.warn("[{}] {}", serverId, msg);
@@ -194,11 +162,11 @@ final class PircbotxRegistrationLifecycleHandler {
 
     if (!typing && conn.shouldWarnUnavailableTyping()) {
       String reason;
-      if (!messageTags) {
+      if (!caps.messageTagsCapAcked()) {
         reason = "message-tags not negotiated";
-      } else if (!typingCap && !typingTagPolicyKnown) {
+      } else if (!caps.typingCapAcked() && !caps.typingClientTagPolicyKnown()) {
         reason = "typing capability not negotiated";
-      } else if (!typingCap && !typingTagAllowed) {
+      } else if (!caps.typingCapAcked() && !caps.typingClientTagAllowed()) {
         reason = "server denies +typing via CLIENTTAGDENY";
       } else {
         reason = "unknown";

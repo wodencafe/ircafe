@@ -183,7 +183,7 @@ final class PircbotxBridgeListener extends ListenerAdapter {
     this.inboundCtcpHandler =
         new PircbotxInboundCtcpHandler(
             serverId,
-            conn.selfNickHint::get,
+            conn::selfNickHint,
             selfIdentity::nickMatchesSelf,
             PircbotxSelfIdentityTracker::isSelfEchoed,
             selfIdentity::resolveSelfNick,

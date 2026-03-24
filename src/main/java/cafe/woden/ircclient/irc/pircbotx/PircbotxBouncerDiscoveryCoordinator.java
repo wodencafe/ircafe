@@ -149,7 +149,7 @@ public final class PircbotxBouncerDiscoveryCoordinator {
   public void maybeRequestSojuNetworks(PircBotX bot) {
     if (bot == null) return;
     if (!sojuDiscoveryEnabled) return;
-    if (!conn.sojuBouncerNetworksCapAcked.get()) return;
+    if (!conn.isSojuBouncerNetworksCapAcked()) return;
 
     String netId = conn.sojuBouncerNetId();
     if (netId != null && !netId.isBlank()) return;
@@ -202,10 +202,7 @@ public final class PircbotxBouncerDiscoveryCoordinator {
 
   public void onDisconnect() {
     try {
-      conn.clearSojuDiscoveredNetworks();
-      conn.clearSojuListNetworksRequest();
-      conn.clearSojuBouncerNetId();
-      conn.sojuBouncerNetworksCapAcked.set(false);
+      conn.clearSojuDiscoverySession();
     } catch (Exception ignored) {
     }
 
