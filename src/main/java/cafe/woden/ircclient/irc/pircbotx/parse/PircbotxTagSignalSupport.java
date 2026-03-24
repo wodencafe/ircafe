@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
@@ -13,19 +13,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Emits IRCv3 tag-derived message signals and exposes shared tag parsing helpers. */
-final class PircbotxTagSignalSupport {
+public final class PircbotxTagSignalSupport {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxTagSignalSupport.class);
 
   private final String serverId;
   private final Consumer<ServerIrcEvent> sink;
 
-  PircbotxTagSignalSupport(String serverId, Consumer<ServerIrcEvent> sink) {
+  public PircbotxTagSignalSupport(String serverId, Consumer<ServerIrcEvent> sink) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.sink = Objects.requireNonNull(sink, "sink");
   }
 
-  void emitObservedSignals(
+  public void emitObservedSignals(
       Instant at,
       String nick,
       String rawTarget,
@@ -107,21 +107,21 @@ final class PircbotxTagSignalSupport {
     }
   }
 
-  static String resolveConversationTarget(String rawTarget, String fromNick) {
+  public static String resolveConversationTarget(String rawTarget, String fromNick) {
     String target = Objects.toString(rawTarget, "").trim();
     if (isChannelName(target)) return target;
     String from = Objects.toString(fromNick, "").trim();
     return from.isBlank() ? target : from;
   }
 
-  static boolean isChannelName(String target) {
+  public static boolean isChannelName(String target) {
     String value = Objects.toString(target, "").trim();
     if (value.isEmpty()) return false;
     char leading = value.charAt(0);
     return leading == '#' || leading == '&' || leading == '!' || leading == '+';
   }
 
-  static String firstTag(ImmutableMap<String, String> tags, String... keys) {
+  public static String firstTag(ImmutableMap<String, String> tags, String... keys) {
     if (tags == null || tags.isEmpty() || keys == null) return "";
     for (String key : keys) {
       if (key == null || key.isBlank()) continue;

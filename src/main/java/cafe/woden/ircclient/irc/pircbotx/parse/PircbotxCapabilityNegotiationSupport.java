@@ -1,9 +1,8 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
-import cafe.woden.ircclient.irc.pircbotx.parse.ParsedCapLine;
-import cafe.woden.ircclient.irc.pircbotx.parse.PircbotxZncParsers;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Locale;
@@ -14,7 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Handles tracked capability state changes and fallback requests from CAP lines. */
-final class PircbotxCapabilityNegotiationSupport {
+public final class PircbotxCapabilityNegotiationSupport {
 
   private static final Logger log =
       LoggerFactory.getLogger(PircbotxCapabilityNegotiationSupport.class);
@@ -25,7 +24,7 @@ final class PircbotxCapabilityNegotiationSupport {
   private final Consumer<ServerIrcEvent> sink;
   private final PircbotxCapabilityStateSupport capabilityStateSupport;
 
-  PircbotxCapabilityNegotiationSupport(
+  public PircbotxCapabilityNegotiationSupport(
       PircBotX bot,
       String serverId,
       PircbotxConnectionState conn,
@@ -39,7 +38,7 @@ final class PircbotxCapabilityNegotiationSupport {
         Objects.requireNonNull(capabilityStateSupport, "capabilityStateSupport");
   }
 
-  void observe(ParsedCapLine capLine) {
+  public void observe(ParsedCapLine capLine) {
     if (!capLine.hasTokens()) return;
 
     if (capLine.isAction("ACK", "DEL")) {
@@ -108,8 +107,8 @@ final class PircbotxCapabilityNegotiationSupport {
 
   private void maybeRequestMessageTagsFallback(ParsedCapLine capLine) {
     if (!capLine.isAction("LS", "NEW")) return;
-    if (conn.messageTagsCapAcked.get()) return;
-    if (!conn.messageTagsFallbackReqSent.compareAndSet(false, true)) return;
+    if (conn.isMessageTagsCapAcked()) return;
+    if (!conn.beginMessageTagsFallbackRequest()) return;
 
     boolean offered = false;
     for (String token : capLine.tokens()) {
@@ -120,7 +119,7 @@ final class PircbotxCapabilityNegotiationSupport {
       }
     }
     if (!offered) {
-      conn.messageTagsFallbackReqSent.set(false);
+      conn.clearMessageTagsFallbackRequest();
       return;
     }
 
@@ -130,7 +129,7 @@ final class PircbotxCapabilityNegotiationSupport {
           "[{}] fallback CAP REQ sent for message-tags (downstream capability remained unenabled)",
           serverId);
     } catch (Exception ex) {
-      conn.messageTagsFallbackReqSent.set(false);
+      conn.clearMessageTagsFallbackRequest();
       log.debug("[{}] fallback CAP REQ for message-tags failed", serverId, ex);
     }
   }
@@ -156,23 +155,20 @@ final class PircbotxCapabilityNegotiationSupport {
     boolean requestedBatch = false;
     boolean requestedHistory = false;
 
-    if (offeredBatch
-        && !conn.batchCapAcked.get()
-        && conn.batchFallbackReqSent.compareAndSet(false, true)) {
+    if (offeredBatch && !conn.isBatchCapAcked() && conn.beginBatchFallbackRequest()) {
       requestedCaps.add("batch");
       requestedBatch = true;
     }
 
     String historyCapToRequest = "";
-    if (!conn.chatHistoryCapAcked.get()) {
+    if (!conn.isChatHistoryCapAcked()) {
       if (offeredChatHistory) {
         historyCapToRequest = "chathistory";
       } else if (offeredDraftChatHistory) {
         historyCapToRequest = "draft/chathistory";
       }
     }
-    if (!historyCapToRequest.isEmpty()
-        && conn.chatHistoryFallbackReqSent.compareAndSet(false, true)) {
+    if (!historyCapToRequest.isEmpty() && conn.beginChatHistoryFallbackRequest()) {
       requestedCaps.add(historyCapToRequest);
       requestedHistory = true;
     }
@@ -184,10 +180,10 @@ final class PircbotxCapabilityNegotiationSupport {
       log.debug("[{}] fallback CAP REQ sent for {}", serverId, String.join(", ", requestedCaps));
     } catch (Exception ex) {
       if (requestedBatch) {
-        conn.batchFallbackReqSent.set(false);
+        conn.clearBatchFallbackRequest();
       }
       if (requestedHistory) {
-        conn.chatHistoryFallbackReqSent.set(false);
+        conn.clearChatHistoryFallbackRequest();
       }
       log.debug("[{}] fallback CAP REQ for history capabilities failed", serverId, ex);
     }

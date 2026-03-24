@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
@@ -14,7 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Observes IRCv3 account-tag state changes while suppressing duplicate per-nick emissions. */
-final class PircbotxAccountTagSupport {
+public final class PircbotxAccountTagSupport {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxAccountTagSupport.class);
   private static final int MAX_ACCOUNT_TAG_KEYS = 8_192;
@@ -32,12 +32,12 @@ final class PircbotxAccountTagSupport {
             }
           });
 
-  PircbotxAccountTagSupport(String serverId, Consumer<ServerIrcEvent> sink) {
+  public PircbotxAccountTagSupport(String serverId, Consumer<ServerIrcEvent> sink) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.sink = Objects.requireNonNull(sink, "sink");
   }
 
-  void observe(
+  public void observe(
       Instant at, String nick, String command, String target, ImmutableMap<String, String> tags) {
     if (tags == null) return;
 

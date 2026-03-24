@@ -602,6 +602,42 @@ public final class PircbotxConnectionState {
     return zncPlaybackCapAcked.get();
   }
 
+  public boolean isBatchCapAcked() {
+    return batchCapAcked.get();
+  }
+
+  public boolean isChatHistoryCapAcked() {
+    return chatHistoryCapAcked.get();
+  }
+
+  public boolean isMessageTagsCapAcked() {
+    return messageTagsCapAcked.get();
+  }
+
+  public boolean beginMessageTagsFallbackRequest() {
+    return messageTagsFallbackReqSent.compareAndSet(false, true);
+  }
+
+  public void clearMessageTagsFallbackRequest() {
+    messageTagsFallbackReqSent.set(false);
+  }
+
+  public boolean beginBatchFallbackRequest() {
+    return batchFallbackReqSent.compareAndSet(false, true);
+  }
+
+  public void clearBatchFallbackRequest() {
+    batchFallbackReqSent.set(false);
+  }
+
+  public boolean beginChatHistoryFallbackRequest() {
+    return chatHistoryFallbackReqSent.compareAndSet(false, true);
+  }
+
+  public void clearChatHistoryFallbackRequest() {
+    chatHistoryFallbackReqSent.set(false);
+  }
+
   public void setZncPlaybackCapAcked(boolean acked) {
     zncPlaybackCapAcked.set(acked);
   }
@@ -650,6 +686,94 @@ public final class PircbotxConnectionState {
 
   public void setReadMarkerCapAcked(boolean acked) {
     readMarkerCapAcked.set(acked);
+  }
+
+  public long multilineOfferedMaxBytes(boolean draft) {
+    return Math.max(
+        0L, draft ? draftMultilineOfferedMaxBytes.get() : multilineOfferedMaxBytes.get());
+  }
+
+  public long multilineOfferedMaxLines(boolean draft) {
+    return Math.max(
+        0L, draft ? draftMultilineOfferedMaxLines.get() : multilineOfferedMaxLines.get());
+  }
+
+  public void setMultilineOfferedMaxBytes(boolean draft, long maxBytes) {
+    long normalized = Math.max(0L, maxBytes);
+    if (draft) {
+      draftMultilineOfferedMaxBytes.set(normalized);
+    } else {
+      multilineOfferedMaxBytes.set(normalized);
+    }
+  }
+
+  public void setMultilineOfferedMaxLines(boolean draft, long maxLines) {
+    long normalized = Math.max(0L, maxLines);
+    if (draft) {
+      draftMultilineOfferedMaxLines.set(normalized);
+    } else {
+      multilineOfferedMaxLines.set(normalized);
+    }
+  }
+
+  public void setNegotiatedMultilineMaxBytes(boolean draft, long maxBytes) {
+    long normalized = Math.max(0L, maxBytes);
+    if (draft) {
+      draftMultilineMaxBytes.set(normalized);
+    } else {
+      multilineMaxBytes.set(normalized);
+    }
+  }
+
+  public void setNegotiatedMultilineMaxLines(boolean draft, long maxLines) {
+    long normalized = Math.max(0L, maxLines);
+    if (draft) {
+      draftMultilineMaxLines.set(normalized);
+    } else {
+      multilineMaxLines.set(normalized);
+    }
+  }
+
+  public boolean updateTrackedCapability(String capabilityName, boolean enabled) {
+    String normalized = Objects.toString(capabilityName, "").trim().toLowerCase(Locale.ROOT);
+    return switch (normalized) {
+      case "znc.in/playback" -> updateTrackedCapability(zncPlaybackCapAcked, enabled);
+      case "batch" -> updateTrackedCapability(batchCapAcked, enabled);
+      case "draft/chathistory", "chathistory" ->
+          updateTrackedCapability(chatHistoryCapAcked, enabled);
+      case "soju.im/bouncer-networks" ->
+          updateTrackedCapability(sojuBouncerNetworksCapAcked, enabled);
+      case "server-time" -> updateTrackedCapability(serverTimeCapAcked, enabled);
+      case "standard-replies" -> updateTrackedCapability(standardRepliesCapAcked, enabled);
+      case "echo-message" -> updateTrackedCapability(echoMessageCapAcked, enabled);
+      case "cap-notify" -> updateTrackedCapability(capNotifyCapAcked, enabled);
+      case "labeled-response" -> updateTrackedCapability(labeledResponseCapAcked, enabled);
+      case "setname" -> updateTrackedCapability(setnameCapAcked, enabled);
+      case "chghost" -> updateTrackedCapability(chghostCapAcked, enabled);
+      case "sts" -> updateTrackedCapability(stsCapAcked, enabled);
+      case "multiline" ->
+          updateTrackedCapabilityWithLimitReset(
+              multilineCapAcked, multilineMaxBytes, multilineMaxLines, enabled);
+      case "draft/multiline" ->
+          updateTrackedCapabilityWithLimitReset(
+              draftMultilineCapAcked, draftMultilineMaxBytes, draftMultilineMaxLines, enabled);
+      case "draft/reply" -> updateTrackedCapability(draftReplyCapAcked, enabled);
+      case "draft/channel-context" -> updateTrackedCapability(draftChannelContextCapAcked, enabled);
+      case "draft/react" -> updateTrackedCapability(draftReactCapAcked, enabled);
+      case "draft/unreact" -> updateTrackedCapability(draftUnreactCapAcked, enabled);
+      case "draft/message-edit", "message-edit" ->
+          updateTrackedCapability(draftMessageEditCapAcked, enabled);
+      case "draft/message-redaction", "message-redaction" ->
+          updateTrackedCapability(draftMessageRedactionCapAcked, enabled);
+      case "message-tags" -> updateTrackedCapability(messageTagsCapAcked, enabled);
+      case "typing", "draft/typing" -> updateTrackedCapability(typingCapAcked, enabled);
+      case "draft/read-marker", "read-marker" ->
+          updateTrackedCapability(readMarkerCapAcked, enabled);
+      case "monitor" -> updateTrackedCapability(monitorCapAcked, enabled);
+      case "extended-monitor", "draft/extended-monitor" ->
+          updateTrackedCapability(extendedMonitorCapAcked, enabled);
+      default -> false;
+    };
   }
 
   public boolean isSojuBouncerNetworksCapAcked() {
@@ -852,7 +976,7 @@ public final class PircbotxConnectionState {
     lagProbe.beginProbe(token, sentAtMs);
   }
 
-  boolean observeLagProbePong(String token, long observedAtMs) {
+  public boolean observeLagProbePong(String token, long observedAtMs) {
     return lagProbe.observePong(token, observedAtMs);
   }
 
@@ -915,5 +1039,20 @@ public final class PircbotxConnectionState {
       return null;
     }
     return nick.trim().toLowerCase(Locale.ROOT);
+  }
+
+  private static boolean updateTrackedCapability(AtomicBoolean state, boolean enabled) {
+    boolean previous = state.getAndSet(enabled);
+    return previous != enabled;
+  }
+
+  private static boolean updateTrackedCapabilityWithLimitReset(
+      AtomicBoolean state, AtomicLong maxBytes, AtomicLong maxLines, boolean enabled) {
+    boolean previous = state.getAndSet(enabled);
+    if (!enabled) {
+      maxBytes.set(0L);
+      maxLines.set(0L);
+    }
+    return previous != enabled;
   }
 }

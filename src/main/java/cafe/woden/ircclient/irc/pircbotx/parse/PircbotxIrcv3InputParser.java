@@ -1,10 +1,10 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.mode.*;
-import cafe.woden.ircclient.irc.pircbotx.parse.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.irc.playback.*;
 import com.google.common.collect.ImmutableMap;
@@ -372,7 +372,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
     String n = Objects.toString(nick, "").trim();
     if (n.isEmpty()) return false;
 
-    String hinted = Objects.toString(conn.selfNickHint.get(), "").trim();
+    String hinted = Objects.toString(conn.selfNickHint(), "").trim();
     if (!hinted.isEmpty() && n.equalsIgnoreCase(hinted)) {
       return true;
     }
@@ -389,7 +389,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
   private boolean looksLikeSelfTarget(String target) {
     String t = Objects.toString(target, "").trim();
     if (t.isEmpty()) return false;
-    String hinted = Objects.toString(conn.selfNickHint.get(), "").trim();
+    String hinted = Objects.toString(conn.selfNickHint(), "").trim();
     if (!hinted.isEmpty() && t.equalsIgnoreCase(hinted)) return true;
     try {
       PircBotX liveBot = this.bot;

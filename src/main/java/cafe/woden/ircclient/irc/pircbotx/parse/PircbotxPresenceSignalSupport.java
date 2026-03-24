@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
@@ -12,25 +12,26 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Parses away/account/join presence signals emitted as IRCv3 command events. */
-final class PircbotxPresenceSignalSupport {
+public final class PircbotxPresenceSignalSupport {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxPresenceSignalSupport.class);
 
   private final String serverId;
   private final Consumer<ServerIrcEvent> sink;
 
-  PircbotxPresenceSignalSupport(String serverId, Consumer<ServerIrcEvent> sink) {
+  public PircbotxPresenceSignalSupport(String serverId, Consumer<ServerIrcEvent> sink) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.sink = Objects.requireNonNull(sink, "sink");
   }
 
-  boolean observes(String command) {
+  public boolean observes(String command) {
     if (command == null || command.isBlank()) return false;
     String normalized = command.trim().toUpperCase(Locale.ROOT);
     return "AWAY".equals(normalized) || "ACCOUNT".equals(normalized) || "JOIN".equals(normalized);
   }
 
-  void observe(Instant at, String nick, String command, String rawLine, List<String> parsedLine) {
+  public void observe(
+      Instant at, String nick, String command, String rawLine, List<String> parsedLine) {
     boolean isAway = "AWAY".equalsIgnoreCase(command);
     boolean isAccount = "ACCOUNT".equalsIgnoreCase(command);
     boolean isJoin = "JOIN".equalsIgnoreCase(command);

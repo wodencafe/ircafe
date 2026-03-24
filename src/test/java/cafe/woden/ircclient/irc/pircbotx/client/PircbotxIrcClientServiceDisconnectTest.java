@@ -23,6 +23,7 @@ import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.pircbotx.listener.*;
+import cafe.woden.ircclient.irc.pircbotx.parse.PircbotxInputParserHookInstaller;
 import cafe.woden.ircclient.irc.playback.*;
 import cafe.woden.ircclient.irc.soju.SojuBouncerNetworkMappingStrategy;
 import cafe.woden.ircclient.irc.znc.ZncBouncerNetworkMappingStrategy;

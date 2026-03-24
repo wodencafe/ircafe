@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
@@ -11,17 +11,17 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 /** Parses and emits structured IRCv3 standard replies. */
-final class PircbotxStandardReplySupport {
+public final class PircbotxStandardReplySupport {
 
   private final String serverId;
   private final Consumer<ServerIrcEvent> sink;
 
-  PircbotxStandardReplySupport(String serverId, Consumer<ServerIrcEvent> sink) {
+  public PircbotxStandardReplySupport(String serverId, Consumer<ServerIrcEvent> sink) {
     this.serverId = Objects.requireNonNull(serverId, "serverId");
     this.sink = Objects.requireNonNull(sink, "sink");
   }
 
-  boolean emitIfSupported(
+  public boolean emitIfSupported(
       Instant at,
       String command,
       String rawLine,

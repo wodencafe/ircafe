@@ -1,13 +1,13 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
-import cafe.woden.ircclient.irc.pircbotx.parse.ParsedCapLine;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 import java.util.Locale;
 import java.util.Objects;
 
 /** Applies multiline capability offers and negotiated limits to connection state. */
-final class PircbotxMultilineCapStateSupport {
+public final class PircbotxMultilineCapStateSupport {
 
-  void observe(ParsedCapLine capLine, PircbotxConnectionState conn) {
+  public void observe(ParsedCapLine capLine, PircbotxConnectionState conn) {
     boolean fromLs = capLine.isAction("LS");
     boolean fromNew = capLine.isAction("NEW");
     boolean fromAck = capLine.isAction("ACK");
@@ -113,53 +113,35 @@ final class PircbotxMultilineCapStateSupport {
   }
 
   private static long offeredMaxBytes(PircbotxConnectionState conn, String capName) {
-    if ("multiline".equals(capName)) return Math.max(0L, conn.multilineOfferedMaxBytes.get());
-    return Math.max(0L, conn.draftMultilineOfferedMaxBytes.get());
+    return conn.multilineOfferedMaxBytes(isDraftMultiline(capName));
   }
 
   private static long offeredMaxLines(PircbotxConnectionState conn, String capName) {
-    if ("multiline".equals(capName)) return Math.max(0L, conn.multilineOfferedMaxLines.get());
-    return Math.max(0L, conn.draftMultilineOfferedMaxLines.get());
+    return conn.multilineOfferedMaxLines(isDraftMultiline(capName));
   }
 
   private static void setOfferedMaxBytes(
       PircbotxConnectionState conn, String capName, long maxBytes) {
-    long normalized = Math.max(0L, maxBytes);
-    if ("multiline".equals(capName)) {
-      conn.multilineOfferedMaxBytes.set(normalized);
-    } else {
-      conn.draftMultilineOfferedMaxBytes.set(normalized);
-    }
+    conn.setMultilineOfferedMaxBytes(isDraftMultiline(capName), maxBytes);
   }
 
   private static void setOfferedMaxLines(
       PircbotxConnectionState conn, String capName, long maxLines) {
-    long normalized = Math.max(0L, maxLines);
-    if ("multiline".equals(capName)) {
-      conn.multilineOfferedMaxLines.set(normalized);
-    } else {
-      conn.draftMultilineOfferedMaxLines.set(normalized);
-    }
+    conn.setMultilineOfferedMaxLines(isDraftMultiline(capName), maxLines);
   }
 
   private static void setNegotiatedMaxBytes(
       PircbotxConnectionState conn, String capName, long maxBytes) {
-    long normalized = Math.max(0L, maxBytes);
-    if ("multiline".equals(capName)) {
-      conn.multilineMaxBytes.set(normalized);
-    } else {
-      conn.draftMultilineMaxBytes.set(normalized);
-    }
+    conn.setNegotiatedMultilineMaxBytes(isDraftMultiline(capName), maxBytes);
   }
 
   private static void setNegotiatedMaxLines(
       PircbotxConnectionState conn, String capName, long maxLines) {
-    long normalized = Math.max(0L, maxLines);
-    if ("multiline".equals(capName)) {
-      conn.multilineMaxLines.set(normalized);
-    } else {
-      conn.draftMultilineMaxLines.set(normalized);
-    }
+    conn.setNegotiatedMultilineMaxLines(isDraftMultiline(capName), maxLines);
+  }
+
+  private static boolean isDraftMultiline(String capName) {
+    return !"multiline".equals(capName);
   }
 
   private static MultilineCapLimits parseMultilineCapLimits(String capValueRaw) {

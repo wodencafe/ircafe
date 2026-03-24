@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.parse;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
+import cafe.woden.ircclient.irc.pircbotx.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
 import com.google.common.collect.ImmutableMap;
 import java.time.Instant;
@@ -43,8 +44,8 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":echo-message typing"),
         ImmutableMap.of());
 
-    assertTrue(conn.echoMessageCapAcked.get());
-    assertTrue(conn.typingCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().echoMessageCapAcked());
+    assertTrue(conn.capabilitySnapshot().typingCapAcked());
     assertTrue(
         out.stream()
             .map(ServerIrcEvent::event)
@@ -168,7 +169,7 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":draft/typing"),
         ImmutableMap.of());
 
-    assertTrue(conn.typingCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().typingCapAcked());
     assertTrue(
         out.stream()
             .map(ServerIrcEvent::event)
@@ -196,7 +197,7 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":standard-replies"),
         ImmutableMap.of());
 
-    assertTrue(conn.standardRepliesCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().standardRepliesCapAcked());
   }
 
   @Test
@@ -215,8 +216,8 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":monitor extended-monitor"),
         ImmutableMap.of());
 
-    assertTrue(conn.monitorCapAcked.get());
-    assertTrue(conn.extendedMonitorCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().monitorCapAcked());
+    assertTrue(conn.capabilitySnapshot().extendedMonitorCapAcked());
   }
 
   @Test
@@ -234,8 +235,8 @@ class PircbotxIrcv3InputParserTest {
         ":server CAP me ACK :monitor extended-monitor",
         List.of("me", "ACK", ":monitor extended-monitor"),
         ImmutableMap.of());
-    assertTrue(conn.monitorCapAcked.get());
-    assertTrue(conn.extendedMonitorCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().monitorCapAcked());
+    assertTrue(conn.capabilitySnapshot().extendedMonitorCapAcked());
 
     parser.processCommand(
         "*",
@@ -245,8 +246,8 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "DEL", ":monitor extended-monitor"),
         ImmutableMap.of());
 
-    assertFalse(conn.monitorCapAcked.get());
-    assertFalse(conn.extendedMonitorCapAcked.get());
+    assertFalse(conn.capabilitySnapshot().monitorCapAcked());
+    assertFalse(conn.capabilitySnapshot().extendedMonitorCapAcked());
   }
 
   @Test
@@ -265,7 +266,7 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":draft/extended-monitor"),
         ImmutableMap.of());
 
-    assertTrue(conn.extendedMonitorCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().extendedMonitorCapAcked());
   }
 
   @Test
@@ -284,8 +285,8 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":draft/message-edit draft/message-redaction"),
         ImmutableMap.of());
 
-    assertTrue(conn.draftMessageEditCapAcked.get());
-    assertTrue(conn.draftMessageRedactionCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().draftMessageEditCapAcked());
+    assertTrue(conn.capabilitySnapshot().draftMessageRedactionCapAcked());
   }
 
   @Test
@@ -304,9 +305,9 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":sts multiline draft/multiline"),
         ImmutableMap.of());
 
-    assertTrue(conn.stsCapAcked.get());
-    assertTrue(conn.multilineCapAcked.get());
-    assertTrue(conn.draftMultilineCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().stsCapAcked());
+    assertTrue(conn.capabilitySnapshot().multilineCapAcked());
+    assertTrue(conn.capabilitySnapshot().draftMultilineCapAcked());
   }
 
   @Test
@@ -328,12 +329,12 @@ class PircbotxIrcv3InputParserTest {
             ":multiline=max-bytes=4096,max-lines=5,foo=bar draft/multiline=max-bytes=2048,max-lines=3"),
         ImmutableMap.of());
 
-    assertTrue(conn.multilineCapAcked.get());
-    assertTrue(conn.draftMultilineCapAcked.get());
-    assertEquals(4096L, conn.multilineMaxBytes.get());
-    assertEquals(5L, conn.multilineMaxLines.get());
-    assertEquals(2048L, conn.draftMultilineMaxBytes.get());
-    assertEquals(3L, conn.draftMultilineMaxLines.get());
+    assertTrue(conn.capabilitySnapshot().multilineCapAcked());
+    assertTrue(conn.capabilitySnapshot().draftMultilineCapAcked());
+    assertEquals(4096L, conn.capabilitySnapshot().multilineMaxBytes());
+    assertEquals(5L, conn.capabilitySnapshot().multilineMaxLines());
+    assertEquals(2048L, conn.capabilitySnapshot().draftMultilineMaxBytes());
+    assertEquals(3L, conn.capabilitySnapshot().draftMultilineMaxLines());
   }
 
   @Test
@@ -359,9 +360,9 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":multiline"),
         ImmutableMap.of());
 
-    assertTrue(conn.multilineCapAcked.get());
-    assertEquals(3072L, conn.multilineMaxBytes.get());
-    assertEquals(4L, conn.multilineMaxLines.get());
+    assertTrue(conn.capabilitySnapshot().multilineCapAcked());
+    assertEquals(3072L, conn.capabilitySnapshot().multilineMaxBytes());
+    assertEquals(4L, conn.capabilitySnapshot().multilineMaxLines());
   }
 
   @Test
@@ -379,8 +380,8 @@ class PircbotxIrcv3InputParserTest {
         ":server CAP me ACK :multiline=max-bytes=3072,max-lines=4",
         List.of("me", "ACK", ":multiline=max-bytes=3072,max-lines=4"),
         ImmutableMap.of());
-    assertEquals(3072L, conn.multilineMaxBytes.get());
-    assertEquals(4L, conn.multilineMaxLines.get());
+    assertEquals(3072L, conn.capabilitySnapshot().multilineMaxBytes());
+    assertEquals(4L, conn.capabilitySnapshot().multilineMaxLines());
 
     parser.processCommand(
         "*",
@@ -389,8 +390,8 @@ class PircbotxIrcv3InputParserTest {
         ":server CAP me DEL :multiline",
         List.of("me", "DEL", ":multiline"),
         ImmutableMap.of());
-    assertEquals(0L, conn.multilineMaxBytes.get());
-    assertEquals(0L, conn.multilineMaxLines.get());
+    assertEquals(0L, conn.capabilitySnapshot().multilineMaxBytes());
+    assertEquals(0L, conn.capabilitySnapshot().multilineMaxLines());
   }
 
   @Test
@@ -409,7 +410,7 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":chathistory"),
         ImmutableMap.of());
 
-    assertTrue(conn.chatHistoryCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().chatHistoryCapAcked());
     assertTrue(
         out.stream()
             .map(ServerIrcEvent::event)
@@ -437,8 +438,8 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":~batch =chathistory"),
         ImmutableMap.of());
 
-    assertTrue(conn.batchCapAcked.get());
-    assertTrue(conn.chatHistoryCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().batchCapAcked());
+    assertTrue(conn.capabilitySnapshot().chatHistoryCapAcked());
   }
 
   @Test
@@ -457,7 +458,7 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":draft/read-marker"),
         ImmutableMap.of());
 
-    assertTrue(conn.readMarkerCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().readMarkerCapAcked());
     assertTrue(
         out.stream()
             .map(ServerIrcEvent::event)
@@ -511,8 +512,8 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":draft/unreact draft/channel-context"),
         ImmutableMap.of());
 
-    assertTrue(conn.draftUnreactCapAcked.get());
-    assertTrue(conn.draftChannelContextCapAcked.get());
+    assertTrue(conn.capabilitySnapshot().draftUnreactCapAcked());
+    assertTrue(conn.capabilitySnapshot().draftChannelContextCapAcked());
   }
 
   @Test

@@ -13,6 +13,7 @@ import cafe.woden.ircclient.config.ZncProperties;
 import cafe.woden.ircclient.irc.ircv3.Ircv3StsPolicyService;
 import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.pircbotx.listener.*;
+import cafe.woden.ircclient.irc.pircbotx.parse.PircbotxInputParserHookInstaller;
 import cafe.woden.ircclient.irc.playback.PlaybackCursorProvider;
 import cafe.woden.ircclient.state.api.ServerIsupportStatePort;
 import java.util.List;
