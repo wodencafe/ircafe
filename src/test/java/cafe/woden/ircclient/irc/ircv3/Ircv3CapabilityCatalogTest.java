@@ -1,15 +1,11 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.ircv3;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.irc.*;
-import cafe.woden.ircclient.irc.backend.*;
-import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.playback.*;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-class PircbotxBotFactoryCapabilitiesTest {
+class Ircv3CapabilityCatalogTest {
 
   @Test
   void requestableCapabilitiesIncludeModernIrcv3NegotiationSet() {

@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxPlaybackCaptureRecorder;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;

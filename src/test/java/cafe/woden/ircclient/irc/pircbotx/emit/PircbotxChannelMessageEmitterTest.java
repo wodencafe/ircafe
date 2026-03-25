@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.irc.pircbotx;
+package cafe.woden.ircclient.irc.pircbotx.emit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -8,9 +8,6 @@ import static org.mockito.Mockito.when;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChannelMessageEmitter;
-import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxChatHistoryBatchCollector;
-import cafe.woden.ircclient.irc.pircbotx.emit.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import cafe.woden.ircclient.irc.pircbotx.support.Ircv3MultilineAccumulator;
 import cafe.woden.ircclient.irc.playback.*;
