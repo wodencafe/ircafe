@@ -7242,72 +7242,8 @@ public class PreferencesDialog {
 
   private NotificationRulesControls buildNotificationRulesControls(
       UiSettings current, List<AutoCloseable> closeables) {
-    int cooldown = current != null ? current.notificationRuleCooldownSeconds() : 15;
-    JSpinner cooldownSeconds = numberSpinner(cooldown, 0, 3600, 1, closeables);
-
-    NotificationRulesTableModel model =
-        new NotificationRulesTableModel(current != null ? current.notificationRules() : List.of());
-    JTable table = new JTable(model);
-    table.setFillsViewportHeight(true);
-    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-    table.setRowHeight(Math.max(22, table.getRowHeight()));
-    table.setShowHorizontalLines(false);
-    table.setShowVerticalLines(false);
-    table.getTableHeader().setReorderingAllowed(false);
-    // Force dialog-only editing flow (no inline cell editor).
-    table.setDefaultEditor(Object.class, null);
-    table.setDefaultEditor(Boolean.class, null);
-    table.putClientProperty("JTable.autoStartsEdit", Boolean.FALSE);
-
-    // Column sizing
-    TableColumn enabledCol =
-        table.getColumnModel().getColumn(NotificationRulesTableModel.COL_ENABLED);
-    enabledCol.setMaxWidth(80);
-    enabledCol.setPreferredWidth(70);
-
-    TableColumn labelCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_LABEL);
-    labelCol.setPreferredWidth(190);
-
-    TableColumn matchCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_MATCH);
-    matchCol.setPreferredWidth(380);
-
-    TableColumn optionsCol =
-        table.getColumnModel().getColumn(NotificationRulesTableModel.COL_OPTIONS);
-    optionsCol.setMaxWidth(220);
-    optionsCol.setPreferredWidth(190);
-
-    TableColumn colorCol = table.getColumnModel().getColumn(NotificationRulesTableModel.COL_COLOR);
-    colorCol.setMaxWidth(130);
-    colorCol.setPreferredWidth(110);
-    colorCol.setCellRenderer(new RuleColorCellRenderer());
-
-    JLabel validationLabel = new JLabel();
-    validationLabel.setVisible(false);
-    Color err = errorForeground();
-    if (err != null) validationLabel.setForeground(err);
-
-    JTextArea testInput = new JTextArea(4, 40);
-    testInput.setLineWrap(true);
-    testInput.setWrapStyleWord(true);
-
-    JTextArea testOutput = new JTextArea(6, 40);
-    testOutput.setEditable(false);
-    testOutput.setLineWrap(true);
-    testOutput.setWrapStyleWord(true);
-
-    JLabel testStatus = new JLabel(" ");
-    RuleTestRunner testRunner = new RuleTestRunner(notificationRuleTestExecutor);
-    closeables.add(testRunner);
-
-    return new NotificationRulesControls(
-        cooldownSeconds,
-        table,
-        model,
-        validationLabel,
-        testInput,
-        testOutput,
-        testStatus,
-        testRunner);
+    return NotificationRulesControlsSupport.buildControls(
+        current, closeables, notificationRuleTestExecutor);
   }
 
   private IrcEventNotificationControls buildIrcEventNotificationControls(
@@ -7902,53 +7838,6 @@ public class PreferencesDialog {
     return new Color(180, 0, 0);
   }
 
-  private static final class RuleTestRunner implements AutoCloseable {
-
-    private static final int MAX_TEST_CHARS = 800;
-
-    private final ExecutorService exec;
-    private final AtomicLong seq = new AtomicLong();
-
-    RuleTestRunner(ExecutorService exec) {
-      this.exec = Objects.requireNonNull(exec, "exec");
-    }
-
-    void runTest(NotificationRulesControls controls) {
-      if (controls == null) return;
-
-      String sample = controls.testInput.getText();
-      if (sample == null) sample = "";
-      if (sample.length() > MAX_TEST_CHARS) {
-        sample = sample.substring(0, MAX_TEST_CHARS);
-      }
-
-      List<NotificationRule> rules = controls.model.snapshot();
-      List<ValidationError> errors = controls.model.validationErrors();
-
-      long token = seq.incrementAndGet();
-      controls.testStatus.setText("Testing…");
-
-      final String sampleFinal = sample;
-      exec.submit(
-          () -> {
-            String report =
-                NotificationRuleTestReportSupport.buildRuleTestReport(rules, errors, sampleFinal);
-            SwingUtilities.invokeLater(
-                () -> {
-                  if (seq.get() != token) return;
-                  controls.testOutput.setText(report);
-                  controls.testOutput.setCaretPosition(0);
-                  controls.testStatus.setText(" ");
-                });
-          });
-    }
-
-    @Override
-    public void close() {
-      seq.incrementAndGet();
-    }
-  }
-
   static AppearanceRollbackPlan planAppearanceRollback(
       String committedThemeId,
       String liveThemeId,
@@ -8030,7 +7919,7 @@ public class PreferencesDialog {
     return d;
   }
 
-  private static JSpinner numberSpinner(
+  static JSpinner numberSpinner(
       int value, int min, int max, int step, List<AutoCloseable> closeables) {
     JSpinner s = new JSpinner(new SpinnerNumberModel(value, min, max, step));
     AutoCloseable ac = MouseWheelDecorator.decorateNumberSpinner(s);
@@ -8155,16 +8044,6 @@ public class PreferencesDialog {
       default -> false;
     };
   }
-
-  private record NotificationRulesControls(
-      JSpinner cooldownSeconds,
-      JTable table,
-      NotificationRulesTableModel model,
-      JLabel validationLabel,
-      JTextArea testInput,
-      JTextArea testOutput,
-      JLabel testStatus,
-      RuleTestRunner testRunner) {}
 
   private record DiagnosticsControls(
       JCheckBox assertjSwingEnabled,
