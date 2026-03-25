@@ -12,7 +12,6 @@ import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import cafe.woden.ircclient.irc.backend.IrcHeartbeatMaintenanceService;
 import cafe.woden.ircclient.model.BuiltInSound;
-import cafe.woden.ircclient.model.FilterRule;
 import cafe.woden.ircclient.model.FilterScopeOverride;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
@@ -32,7 +31,6 @@ import cafe.woden.ircclient.ui.chat.NickColorSettings;
 import cafe.woden.ircclient.ui.chat.NickColorSettingsBus;
 import cafe.woden.ircclient.ui.chat.TranscriptRebuildService;
 import cafe.woden.ircclient.ui.chat.embed.EmbedLoadPolicyBus;
-import cafe.woden.ircclient.ui.filter.FilterRuleEntryDialog;
 import cafe.woden.ircclient.ui.filter.FilterSettings;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.icons.SvgIcons;
@@ -70,9 +68,6 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.Window;
-import java.awt.datatransfer.DataFlavor;
-import java.awt.datatransfer.Transferable;
-import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.net.URI;
 import java.nio.file.Files;
@@ -80,14 +75,12 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -95,7 +88,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultCellEditor;
 import javax.swing.DefaultListCellRenderer;
-import javax.swing.DropMode;
 import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -120,7 +112,6 @@ import javax.swing.Scrollable;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
-import javax.swing.TransferHandler;
 import javax.swing.UIManager;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
@@ -4632,671 +4623,15 @@ public class PreferencesDialog {
           model.removeAt(row);
         });
 
-    // Rules
-    FilterRulesTableModel rulesModel = new FilterRulesTableModel();
-    rulesModel.setRules(current.rules());
-
-    JTable rulesTable = new JTable(rulesModel);
-    rulesTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-    // Allow drag-and-drop reordering of filter rules (WeeChat-style).
-    // This persists immediately (same behavior as the Move up/down buttons).
-    try {
-      rulesTable.setDragEnabled(true);
-      rulesTable.setDropMode(DropMode.INSERT_ROWS);
-    } catch (Exception ignored) {
-      // best-effort; table still works without DnD
-    }
-    // Enabled checkbox column (toggleable)
-    try {
-      TableColumn onCol = rulesTable.getColumnModel().getColumn(0);
-      onCol.setMinWidth(42);
-      onCol.setMaxWidth(50);
-      onCol.setPreferredWidth(45);
-      onCol.setCellRenderer(new CenteredBooleanRenderer());
-      JCheckBox cb = new JCheckBox();
-      cb.setHorizontalAlignment(SwingConstants.CENTER);
-      cb.setBorderPainted(false);
-      onCol.setCellEditor(new DefaultCellEditor(cb));
-    } catch (Exception ignored) {
-      // best-effort
-    }
-
-    // Keep in sync if filter settings change while the dialog is open (e.g. /filter add ...).
-    PropertyChangeListener rulesListener =
-        evt -> {
-          if (!FilterSettingsBus.PROP_FILTER_SETTINGS.equals(evt.getPropertyName())) return;
-          Object nv = evt.getNewValue();
-          if (!(nv instanceof FilterSettings fs)) return;
-
-          SwingUtilities.invokeLater(
-              () -> {
-                try {
-                  java.util.UUID selectedId = null;
-                  int selectedRow = rulesTable.getSelectedRow();
-                  if (selectedRow >= 0) {
-                    FilterRule selected = rulesModel.ruleAt(selectedRow);
-                    if (selected != null) selectedId = selected.id();
-                  }
-
-                  rulesModel.setRules(fs.rules());
-
-                  if (selectedId != null) {
-                    for (int i = 0; i < rulesModel.getRowCount(); i++) {
-                      FilterRule r = rulesModel.ruleAt(i);
-                      if (r != null && selectedId.equals(r.id())) {
-                        rulesTable.getSelectionModel().setSelectionInterval(i, i);
-                        rulesTable.scrollRectToVisible(rulesTable.getCellRect(i, 0, true));
-                        break;
-                      }
-                    }
-                  }
-                } catch (Exception ignored) {
-                }
-              });
-        };
-    filterSettingsBus.addListener(rulesListener);
-    if (closeables != null) {
-      closeables.add(() -> filterSettingsBus.removeListener(rulesListener));
-    }
-
-    // Persist enabled/disabled toggles from the table immediately.
-    rulesModel.addTableModelListener(
-        ev -> {
-          try {
-            if (ev.getColumn() != 0) return;
-            int row = ev.getFirstRow();
-            if (row < 0) return;
-            FilterRule edited = rulesModel.ruleAt(row);
-            if (edited == null) return;
-
-            FilterSettings snap = filterSettingsBus.get();
-            if (snap == null) return;
-
-            java.util.List<FilterRule> nextRules = new java.util.ArrayList<>();
-            boolean replaced = false;
-            if (snap.rules() != null) {
-              for (FilterRule r : snap.rules()) {
-                if (!replaced && r != null && edited.id() != null && edited.id().equals(r.id())) {
-                  nextRules.add(edited);
-                  replaced = true;
-                } else {
-                  nextRules.add(r);
-                }
-              }
-            }
-
-            if (!replaced) {
-              // Fallback: replace by index if possible.
-              if (row >= 0 && row < nextRules.size()) {
-                nextRules.set(row, edited);
-                replaced = true;
-              }
-            }
-
-            if (!replaced) {
-              // Better than losing the toggle.
-              nextRules.add(edited);
-            }
-
-            FilterSettings next =
-                new FilterSettings(
-                    snap.filtersEnabledByDefault(),
-                    snap.placeholdersEnabledByDefault(),
-                    snap.placeholdersCollapsedByDefault(),
-                    snap.placeholderMaxPreviewLines(),
-                    snap.placeholderMaxLinesPerRun(),
-                    snap.placeholderTooltipMaxTags(),
-                    snap.historyPlaceholderMaxRunsPerBatch(),
-                    snap.historyPlaceholdersEnabledByDefault(),
-                    nextRules,
-                    snap.overrides());
-
-            filterSettingsBus.set(next);
-            runtimeConfig.rememberFilterRules(next.rules());
-
-            // Best-effort: rebuild active target so changes take effect immediately.
-            try {
-              TargetRef active = targetCoordinator.getActiveTarget();
-              if (active != null) transcriptRebuildService.rebuild(active);
-            } catch (Exception ignored) {
-            }
-          } catch (Exception ignored) {
-          }
-        });
-
-    JButton addRule = new JButton("Add rule...");
-    JButton editRule = new JButton("Edit...");
-    JButton deleteRule = new JButton("Delete");
-    JButton moveRuleUp = new JButton("Move up");
-    JButton moveRuleDown = new JButton("Move down");
-    configureIconOnlyButton(addRule, "plus", "Add filter rule");
-    configureIconOnlyButton(editRule, "edit", "Edit selected filter rule");
-    configureIconOnlyButton(deleteRule, "trash", "Delete selected filter rule");
-    configureIconOnlyButton(moveRuleUp, "arrow-up", "Move selected filter rule up");
-    configureIconOnlyButton(moveRuleDown, "arrow-down", "Move selected filter rule down");
-    editRule.setEnabled(false);
-    deleteRule.setEnabled(false);
-    moveRuleUp.setEnabled(false);
-    moveRuleDown.setEnabled(false);
-
-    Runnable refreshRuleButtons =
-        () -> {
-          int row = rulesTable.getSelectedRow();
-          boolean has = row >= 0 && rulesModel.ruleAt(row) != null;
-          editRule.setEnabled(has);
-          deleteRule.setEnabled(has);
-
-          if (!has) {
-            moveRuleUp.setEnabled(false);
-            moveRuleDown.setEnabled(false);
-            return;
-          }
-          moveRuleUp.setEnabled(row > 0);
-          moveRuleDown.setEnabled(row < (rulesModel.getRowCount() - 1));
-        };
-
-    rulesTable.getSelectionModel().addListSelectionListener(e -> refreshRuleButtons.run());
-
-    // Drag-and-drop row reordering
-    try {
-      class RuleRowTransferHandler extends TransferHandler {
-        private final DataFlavor rowFlavor;
-
-        RuleRowTransferHandler() {
-          try {
-            rowFlavor =
-                new DataFlavor(DataFlavor.javaJVMLocalObjectMimeType + ";class=java.lang.Integer");
-          } catch (ClassNotFoundException e) {
-            throw new RuntimeException(e);
-          }
-        }
-
-        @Override
-        protected Transferable createTransferable(JComponent c) {
-          if (!(c instanceof JTable t)) return null;
-          int row = t.getSelectedRow();
-          if (row < 0) return null;
-
-          final Integer payload = row;
-          return new Transferable() {
-            @Override
-            public DataFlavor[] getTransferDataFlavors() {
-              return new DataFlavor[] {rowFlavor};
-            }
-
-            @Override
-            public boolean isDataFlavorSupported(DataFlavor flavor) {
-              return rowFlavor.equals(flavor);
-            }
-
-            @Override
-            public Object getTransferData(DataFlavor flavor) {
-              if (!isDataFlavorSupported(flavor)) return null;
-              return payload;
-            }
-          };
-        }
-
-        @Override
-        public int getSourceActions(JComponent c) {
-          return MOVE;
-        }
-
-        @Override
-        public boolean canImport(TransferSupport support) {
-          if (!support.isDrop()) return false;
-          if (!(support.getComponent() instanceof JTable)) return false;
-          support.setShowDropLocation(true);
-          return support.isDataFlavorSupported(rowFlavor);
-        }
-
-        @Override
-        public boolean importData(TransferSupport support) {
-          if (!canImport(support)) return false;
-          if (!(support.getComponent() instanceof JTable target)) return false;
-          if (!(support.getDropLocation() instanceof JTable.DropLocation dl)) return false;
-
-          int dropViewRow = dl.getRow();
-          if (dropViewRow < 0) dropViewRow = target.getRowCount();
-
-          Integer fromViewRow;
-          try {
-            Object o = support.getTransferable().getTransferData(rowFlavor);
-            if (!(o instanceof Integer i)) return false;
-            fromViewRow = i;
-          } catch (Exception ex) {
-            return false;
-          }
-
-          // No-op drops (dragging onto itself)
-          if (fromViewRow == dropViewRow || fromViewRow + 1 == dropViewRow) return false;
-
-          // Convert to model rows (in case a row sorter is enabled later)
-          int fromModelRow = target.convertRowIndexToModel(fromViewRow);
-
-          // dropViewRow is an insertion point; when dropping at end, it equals rowCount.
-          int dropModelRow;
-          if (dropViewRow >= target.getRowCount()) {
-            dropModelRow = target.getRowCount();
-          } else {
-            dropModelRow = target.convertRowIndexToModel(dropViewRow);
-          }
-
-          FilterSettings snap = filterSettingsBus.get();
-          if (snap == null || snap.rules() == null) return false;
-
-          List<FilterRule> nextRules = new ArrayList<>(snap.rules());
-          if (fromModelRow < 0 || fromModelRow >= nextRules.size()) return false;
-
-          FilterRule moving = nextRules.remove(fromModelRow);
-
-          // If moving down, the removal shifts the insertion index.
-          if (dropModelRow > fromModelRow) dropModelRow--;
-
-          dropModelRow = Math.max(0, Math.min(dropModelRow, nextRules.size()));
-          nextRules.add(dropModelRow, moving);
-
-          FilterSettings next =
-              new FilterSettings(
-                  snap.filtersEnabledByDefault(),
-                  snap.placeholdersEnabledByDefault(),
-                  snap.placeholdersCollapsedByDefault(),
-                  snap.placeholderMaxPreviewLines(),
-                  snap.placeholderMaxLinesPerRun(),
-                  snap.placeholderTooltipMaxTags(),
-                  snap.historyPlaceholderMaxRunsPerBatch(),
-                  snap.historyPlaceholdersEnabledByDefault(),
-                  nextRules,
-                  snap.overrides());
-
-          filterSettingsBus.set(next);
-          runtimeConfig.rememberFilterRules(next.rules());
-
-          try {
-            TargetRef active = targetCoordinator.getActiveTarget();
-            if (active != null) transcriptRebuildService.rebuild(active);
-          } catch (Exception ignored) {
-          }
-
-          final int newRow = dropModelRow;
-          SwingUtilities.invokeLater(
-              () -> {
-                try {
-                  rulesModel.setRules(next.rules());
-                  if (newRow >= 0 && newRow < rulesModel.getRowCount()) {
-                    rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
-                    rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
-                  }
-                  refreshRuleButtons.run();
-                } catch (Exception ignored) {
-                }
-              });
-
-          return true;
-        }
-      }
-
-      rulesTable.setTransferHandler(new RuleRowTransferHandler());
-    } catch (Exception ignored) {
-      // best-effort; keep Move up/down buttons as fallback
-    }
-
-    Runnable moveSelectedRuleUp =
-        () -> {
-          int row = rulesTable.getSelectedRow();
-          if (row <= 0) return;
-
-          int newRow = row - 1;
-          FilterSettings snap = filterSettingsBus.get();
-          if (snap == null || snap.rules() == null) return;
-
-          List<FilterRule> nextRules = new ArrayList<>(snap.rules());
-          if (row >= nextRules.size() || newRow < 0) return;
-          java.util.Collections.swap(nextRules, row, newRow);
-
-          FilterSettings next =
-              new FilterSettings(
-                  snap.filtersEnabledByDefault(),
-                  snap.placeholdersEnabledByDefault(),
-                  snap.placeholdersCollapsedByDefault(),
-                  snap.placeholderMaxPreviewLines(),
-                  snap.placeholderMaxLinesPerRun(),
-                  snap.placeholderTooltipMaxTags(),
-                  snap.historyPlaceholderMaxRunsPerBatch(),
-                  snap.historyPlaceholdersEnabledByDefault(),
-                  nextRules,
-                  snap.overrides());
-
-          filterSettingsBus.set(next);
-          runtimeConfig.rememberFilterRules(next.rules());
-
-          try {
-            TargetRef active = targetCoordinator.getActiveTarget();
-            if (active != null) transcriptRebuildService.rebuild(active);
-          } catch (Exception ignored) {
-          }
-
-          SwingUtilities.invokeLater(
-              () -> {
-                try {
-                  rulesModel.setRules(next.rules());
-                  rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
-                  rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
-                  refreshRuleButtons.run();
-                } catch (Exception ignored) {
-                }
-              });
-        };
-
-    Runnable moveSelectedRuleDown =
-        () -> {
-          int row = rulesTable.getSelectedRow();
-          if (row < 0) return;
-          if (row >= rulesModel.getRowCount() - 1) return;
-
-          int newRow = row + 1;
-          FilterSettings snap = filterSettingsBus.get();
-          if (snap == null || snap.rules() == null) return;
-
-          List<FilterRule> nextRules = new ArrayList<>(snap.rules());
-          if (newRow >= nextRules.size()) return;
-          java.util.Collections.swap(nextRules, row, newRow);
-
-          FilterSettings next =
-              new FilterSettings(
-                  snap.filtersEnabledByDefault(),
-                  snap.placeholdersEnabledByDefault(),
-                  snap.placeholdersCollapsedByDefault(),
-                  snap.placeholderMaxPreviewLines(),
-                  snap.placeholderMaxLinesPerRun(),
-                  snap.placeholderTooltipMaxTags(),
-                  snap.historyPlaceholderMaxRunsPerBatch(),
-                  snap.historyPlaceholdersEnabledByDefault(),
-                  nextRules,
-                  snap.overrides());
-
-          filterSettingsBus.set(next);
-          runtimeConfig.rememberFilterRules(next.rules());
-
-          try {
-            TargetRef active = targetCoordinator.getActiveTarget();
-            if (active != null) transcriptRebuildService.rebuild(active);
-          } catch (Exception ignored) {
-          }
-
-          SwingUtilities.invokeLater(
-              () -> {
-                try {
-                  rulesModel.setRules(next.rules());
-                  rulesTable.getSelectionModel().setSelectionInterval(newRow, newRow);
-                  rulesTable.scrollRectToVisible(rulesTable.getCellRect(newRow, 0, true));
-                  refreshRuleButtons.run();
-                } catch (Exception ignored) {
-                }
-              });
-        };
-
-    moveRuleUp.addActionListener(e -> moveSelectedRuleUp.run());
-    moveRuleDown.addActionListener(e -> moveSelectedRuleDown.run());
-
-    Runnable openEditRule =
-        () -> {
-          int row = rulesTable.getSelectedRow();
-          if (row < 0) return;
-          FilterRule seed = rulesModel.ruleAt(row);
-          if (seed == null) return;
-
-          FilterSettings snap = filterSettingsBus.get();
-
-          Set<String> reserved = new HashSet<>();
-          if (snap != null && snap.rules() != null) {
-            for (FilterRule r : snap.rules()) {
-              if (r == null) continue;
-              if (seed.id() != null && seed.id().equals(r.id())) continue;
-              reserved.add(r.nameKey());
-            }
-          }
-
-          var edited =
-              FilterRuleEntryDialog.open(
-                  dialog, "Edit Filter Rule", seed, reserved, seed.scopePattern());
-          if (edited.isEmpty()) return;
-
-          List<FilterRule> nextRules = new ArrayList<>();
-          boolean replaced = false;
-          if (snap != null && snap.rules() != null) {
-            for (FilterRule r : snap.rules()) {
-              if (!replaced && r != null && seed.id() != null && seed.id().equals(r.id())) {
-                nextRules.add(edited.get());
-                replaced = true;
-              } else {
-                nextRules.add(r);
-              }
-            }
-          }
-
-          if (!replaced) {
-            // Fallback (should be rare): replace by index if possible.
-            if (row >= 0 && row < nextRules.size()) {
-              nextRules.set(row, edited.get());
-              replaced = true;
-            }
-          }
-
-          // If we still didn't replace, append (better than losing the edit).
-          if (!replaced) nextRules.add(edited.get());
-
-          FilterSettings next =
-              new FilterSettings(
-                  snap != null ? snap.filtersEnabledByDefault() : true,
-                  snap != null ? snap.placeholdersEnabledByDefault() : true,
-                  snap != null ? snap.placeholdersCollapsedByDefault() : true,
-                  snap != null ? snap.placeholderMaxPreviewLines() : 3,
-                  snap != null ? snap.placeholderMaxLinesPerRun() : 250,
-                  snap != null ? snap.placeholderTooltipMaxTags() : 12,
-                  snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
-                  snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
-                  nextRules,
-                  snap != null ? snap.overrides() : List.of());
-
-          filterSettingsBus.set(next);
-          runtimeConfig.rememberFilterRules(next.rules());
-
-          // Rebuild active target so changes take effect immediately.
-          try {
-            TargetRef active = targetCoordinator.getActiveTarget();
-            if (active != null) transcriptRebuildService.rebuild(active);
-          } catch (Exception ignored) {
-          }
-
-          SwingUtilities.invokeLater(
-              () -> {
-                try {
-                  rulesModel.setRules(next.rules());
-                  // Re-select the edited rule.
-                  int idx = -1;
-                  for (int i = 0; i < next.rules().size(); i++) {
-                    FilterRule r = next.rules().get(i);
-                    if (r != null
-                        && edited.get().id() != null
-                        && edited.get().id().equals(r.id())) {
-                      idx = i;
-                      break;
-                    }
-                  }
-                  if (idx < 0) idx = Math.max(0, Math.min(row, rulesModel.getRowCount() - 1));
-                  if (idx >= 0 && idx < rulesModel.getRowCount()) {
-                    rulesTable.getSelectionModel().setSelectionInterval(idx, idx);
-                    rulesTable.scrollRectToVisible(rulesTable.getCellRect(idx, 0, true));
-                  }
-                  refreshRuleButtons.run();
-                } catch (Exception ignored) {
-                }
-              });
-        };
-
-    editRule.addActionListener(e -> openEditRule.run());
-
-    deleteRule.addActionListener(
-        e -> {
-          int row = rulesTable.getSelectedRow();
-          if (row < 0) return;
-          FilterRule seed = rulesModel.ruleAt(row);
-          if (seed == null) return;
-
-          int confirm =
-              JOptionPane.showConfirmDialog(
-                  dialog,
-                  "Delete filter rule '" + seed.name() + "'?",
-                  "Delete Filter Rule",
-                  JOptionPane.OK_CANCEL_OPTION);
-          if (confirm != JOptionPane.OK_OPTION) return;
-
-          FilterSettings snap = filterSettingsBus.get();
-          List<FilterRule> nextRules = new ArrayList<>();
-          boolean removed = false;
-          if (snap != null && snap.rules() != null) {
-            for (FilterRule r : snap.rules()) {
-              if (!removed && r != null) {
-                if (seed.id() != null && seed.id().equals(r.id())) {
-                  removed = true;
-                  continue;
-                }
-              }
-              nextRules.add(r);
-            }
-          }
-
-          if (!removed) {
-            // Fallback: remove by index if possible.
-            if (row >= 0 && row < nextRules.size()) {
-              nextRules.remove(row);
-              removed = true;
-            }
-          }
-
-          if (!removed) return;
-
-          FilterSettings next =
-              new FilterSettings(
-                  snap != null ? snap.filtersEnabledByDefault() : true,
-                  snap != null ? snap.placeholdersEnabledByDefault() : true,
-                  snap != null ? snap.placeholdersCollapsedByDefault() : true,
-                  snap != null ? snap.placeholderMaxPreviewLines() : 3,
-                  snap != null ? snap.placeholderMaxLinesPerRun() : 250,
-                  snap != null ? snap.placeholderTooltipMaxTags() : 12,
-                  snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
-                  snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
-                  nextRules,
-                  snap != null ? snap.overrides() : List.of());
-
-          filterSettingsBus.set(next);
-          runtimeConfig.rememberFilterRules(next.rules());
-
-          // Rebuild active target so changes take effect immediately.
-          try {
-            TargetRef active = targetCoordinator.getActiveTarget();
-            if (active != null) transcriptRebuildService.rebuild(active);
-          } catch (Exception ignored) {
-          }
-
-          SwingUtilities.invokeLater(
-              () -> {
-                try {
-                  rulesModel.setRules(next.rules());
-                  int nextRow = Math.min(row, Math.max(0, rulesModel.getRowCount() - 1));
-                  if (rulesModel.getRowCount() > 0) {
-                    rulesTable.getSelectionModel().setSelectionInterval(nextRow, nextRow);
-                    rulesTable.scrollRectToVisible(rulesTable.getCellRect(nextRow, 0, true));
-                  }
-                  refreshRuleButtons.run();
-                } catch (Exception ignored) {
-                }
-              });
-        });
-    rulesTable.addMouseListener(
-        new java.awt.event.MouseAdapter() {
-          @Override
-          public void mouseClicked(java.awt.event.MouseEvent e) {
-            if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
-              openEditRule.run();
-            }
-          }
-        });
-
-    addRule.addActionListener(
-        e -> {
-          FilterSettings snap = filterSettingsBus.get();
-
-          // Suggest a scope based on the currently active target.
-          String suggestedScope = "*";
-          try {
-            TargetRef active = targetCoordinator.getActiveTarget();
-            if (active != null && !active.isUiOnly()) {
-              if (active.isStatus()) {
-                suggestedScope = "*/status";
-              } else {
-                suggestedScope = active.serverId() + "/" + active.target();
-              }
-            }
-          } catch (Exception ignored) {
-          }
-
-          Set<String> reserved = new HashSet<>();
-          if (snap != null && snap.rules() != null) {
-            for (FilterRule r : snap.rules()) {
-              if (r == null) continue;
-              reserved.add(r.nameKey());
-            }
-          }
-
-          var created =
-              FilterRuleEntryDialog.open(dialog, "Add Filter Rule", null, reserved, suggestedScope);
-          if (created.isEmpty()) return;
-
-          List<FilterRule> nextRules = new ArrayList<>();
-          if (snap != null && snap.rules() != null) {
-            nextRules.addAll(snap.rules());
-          }
-          nextRules.add(created.get());
-
-          FilterSettings next =
-              new FilterSettings(
-                  snap != null ? snap.filtersEnabledByDefault() : true,
-                  snap != null ? snap.placeholdersEnabledByDefault() : true,
-                  snap != null ? snap.placeholdersCollapsedByDefault() : true,
-                  snap != null ? snap.placeholderMaxPreviewLines() : 3,
-                  snap != null ? snap.placeholderMaxLinesPerRun() : 250,
-                  snap != null ? snap.placeholderTooltipMaxTags() : 12,
-                  snap != null ? snap.historyPlaceholderMaxRunsPerBatch() : 10,
-                  snap != null ? snap.historyPlaceholdersEnabledByDefault() : true,
-                  nextRules,
-                  snap != null ? snap.overrides() : List.of());
-
-          filterSettingsBus.set(next);
-          runtimeConfig.rememberFilterRules(next.rules());
-
-          // Rebuild active target so changes take effect immediately.
-          try {
-            TargetRef active = targetCoordinator.getActiveTarget();
-            if (active != null) transcriptRebuildService.rebuild(active);
-          } catch (Exception ignored) {
-          }
-
-          // Select the newly-added rule.
-          SwingUtilities.invokeLater(
-              () -> {
-                try {
-                  rulesModel.setRules(next.rules());
-                  int row = rulesModel.getRowCount() - 1;
-                  if (row >= 0) {
-                    rulesTable.getSelectionModel().setSelectionInterval(row, row);
-                    rulesTable.scrollRectToVisible(rulesTable.getCellRect(row, 0, true));
-                  }
-                } catch (Exception ignored) {
-                }
-              });
-        });
+    FilterRuleControls ruleControls =
+        FilterRuleControlsSupport.buildControls(
+            current,
+            dialog,
+            filterSettingsBus,
+            runtimeConfig,
+            targetCoordinator,
+            transcriptRebuildService,
+            closeables);
 
     return new FilterControls(
         enabledByDefault,
@@ -5311,12 +4646,12 @@ public class PreferencesDialog {
         table,
         add,
         remove,
-        rulesTable,
-        addRule,
-        editRule,
-        deleteRule,
-        moveRuleUp,
-        moveRuleDown);
+        ruleControls.table,
+        ruleControls.addRule,
+        ruleControls.editRule,
+        ruleControls.deleteRule,
+        ruleControls.moveRuleUp,
+        ruleControls.moveRuleDown);
   }
 
   private JPanel buildFiltersPanel(FilterControls c) {
