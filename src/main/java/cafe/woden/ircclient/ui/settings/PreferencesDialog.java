@@ -1572,23 +1572,23 @@ public class PreferencesDialog {
               ircEventNotifications.model().snapshot();
           List<UserCommandAlias> userCommandAliasesV = userCommands.model().snapshot();
           boolean unknownCommandAsRawEnabledV = userCommands.unknownCommandAsRaw().isSelected();
-          boolean diagnosticsAssertjSwingEnabledV = diagnostics.assertjSwingEnabled.isSelected();
+          boolean diagnosticsAssertjSwingEnabledV = diagnostics.assertjSwingEnabled().isSelected();
           boolean diagnosticsAssertjSwingFreezeWatchdogEnabledV =
-              diagnostics.assertjSwingFreezeWatchdogEnabled.isSelected();
+              diagnostics.assertjSwingFreezeWatchdogEnabled().isSelected();
           int diagnosticsAssertjSwingFreezeThresholdMsV =
-              ((Number) diagnostics.assertjSwingFreezeThresholdMs.getValue()).intValue();
+              ((Number) diagnostics.assertjSwingFreezeThresholdMs().getValue()).intValue();
           if (diagnosticsAssertjSwingFreezeThresholdMsV < 500)
             diagnosticsAssertjSwingFreezeThresholdMsV = 500;
           if (diagnosticsAssertjSwingFreezeThresholdMsV > 120_000)
             diagnosticsAssertjSwingFreezeThresholdMsV = 120_000;
           int diagnosticsAssertjSwingWatchdogPollMsV =
-              ((Number) diagnostics.assertjSwingWatchdogPollMs.getValue()).intValue();
+              ((Number) diagnostics.assertjSwingWatchdogPollMs().getValue()).intValue();
           if (diagnosticsAssertjSwingWatchdogPollMsV < 100)
             diagnosticsAssertjSwingWatchdogPollMsV = 100;
           if (diagnosticsAssertjSwingWatchdogPollMsV > 10_000)
             diagnosticsAssertjSwingWatchdogPollMsV = 10_000;
           int diagnosticsAssertjSwingFallbackViolationReportMsV =
-              ((Number) diagnostics.assertjSwingFallbackViolationReportMs.getValue()).intValue();
+              ((Number) diagnostics.assertjSwingFallbackViolationReportMs().getValue()).intValue();
           if (diagnosticsAssertjSwingFallbackViolationReportMsV < 250) {
             diagnosticsAssertjSwingFallbackViolationReportMsV = 250;
           }
@@ -1596,20 +1596,20 @@ public class PreferencesDialog {
             diagnosticsAssertjSwingFallbackViolationReportMsV = 120_000;
           }
           boolean diagnosticsAssertjSwingOnIssuePlaySoundV =
-              diagnostics.assertjSwingOnIssuePlaySound.isSelected();
+              diagnostics.assertjSwingOnIssuePlaySound().isSelected();
           boolean diagnosticsAssertjSwingOnIssueShowNotificationV =
-              diagnostics.assertjSwingOnIssueShowNotification.isSelected();
-          boolean diagnosticsJhiccupEnabledV = diagnostics.jhiccupEnabled.isSelected();
+              diagnostics.assertjSwingOnIssueShowNotification().isSelected();
+          boolean diagnosticsJhiccupEnabledV = diagnostics.jhiccupEnabled().isSelected();
           String diagnosticsJhiccupJarPathV =
-              Objects.toString(diagnostics.jhiccupJarPath.getText(), "").trim();
+              Objects.toString(diagnostics.jhiccupJarPath().getText(), "").trim();
           String diagnosticsJhiccupJavaCommandRawV =
-              Objects.toString(diagnostics.jhiccupJavaCommand.getText(), "").trim();
+              Objects.toString(diagnostics.jhiccupJavaCommand().getText(), "").trim();
           String diagnosticsJhiccupJavaCommandEffectiveV =
               diagnosticsJhiccupJavaCommandRawV.isEmpty()
                   ? "java"
                   : diagnosticsJhiccupJavaCommandRawV;
           List<String> diagnosticsJhiccupArgsV =
-              parseMultiLineArgs(diagnostics.jhiccupArgs.getText());
+              parseMultiLineArgs(diagnostics.jhiccupArgs().getText());
 
           boolean diagnosticsChangedV =
               runtimeConfig.readAppDiagnosticsAssertjSwingEnabled(true)
@@ -7368,153 +7368,11 @@ public class PreferencesDialog {
   }
 
   private DiagnosticsControls buildDiagnosticsControls() {
-    JCheckBox assertjSwingEnabled = new JCheckBox("Enable AssertJ Swing diagnostics");
-    assertjSwingEnabled.setSelected(runtimeConfig.readAppDiagnosticsAssertjSwingEnabled(true));
-    assertjSwingEnabled.setToolTipText(
-        "Installs AssertJ Swing (or a fallback detector) for EDT thread violation checks.");
-
-    JCheckBox assertjSwingFreezeWatchdogEnabled = new JCheckBox("Enable EDT freeze watchdog");
-    assertjSwingFreezeWatchdogEnabled.setSelected(
-        runtimeConfig.readAppDiagnosticsAssertjSwingFreezeWatchdogEnabled(true));
-    assertjSwingFreezeWatchdogEnabled.setToolTipText(
-        "Reports prolonged Event Dispatch Thread stalls into Application -> AssertJ Swing.");
-
-    int freezeThresholdMs = runtimeConfig.readAppDiagnosticsAssertjSwingFreezeThresholdMs(2500);
-    JSpinner assertjSwingFreezeThresholdMs =
-        new JSpinner(new SpinnerNumberModel(freezeThresholdMs, 500, 120_000, 100));
-
-    int watchdogPollMs = runtimeConfig.readAppDiagnosticsAssertjSwingWatchdogPollMs(500);
-    JSpinner assertjSwingWatchdogPollMs =
-        new JSpinner(new SpinnerNumberModel(watchdogPollMs, 100, 10_000, 100));
-
-    int fallbackViolationReportMs =
-        runtimeConfig.readAppDiagnosticsAssertjSwingFallbackViolationReportMs(5000);
-    JSpinner assertjSwingFallbackViolationReportMs =
-        new JSpinner(new SpinnerNumberModel(fallbackViolationReportMs, 250, 120_000, 250));
-
-    JCheckBox assertjSwingOnIssuePlaySound = new JCheckBox("Play sound when an issue is detected");
-    assertjSwingOnIssuePlaySound.setSelected(
-        runtimeConfig.readAppDiagnosticsAssertjSwingIssuePlaySound(false));
-    assertjSwingOnIssuePlaySound.setToolTipText(
-        "Uses the configured tray notification sound when EDT freeze/violation issues are detected.");
-
-    JCheckBox assertjSwingOnIssueShowNotification =
-        new JCheckBox("Show desktop notification when an issue is detected");
-    assertjSwingOnIssueShowNotification.setSelected(
-        runtimeConfig.readAppDiagnosticsAssertjSwingIssueShowNotification(false));
-    assertjSwingOnIssueShowNotification.setToolTipText(
-        "Uses the tray notification pipeline; desktop-notification delivery still follows tray settings.");
-
-    JCheckBox jhiccupEnabled = new JCheckBox("Enable jHiccup process integration");
-    jhiccupEnabled.setSelected(runtimeConfig.readAppDiagnosticsJhiccupEnabled(false));
-    jhiccupEnabled.setToolTipText(
-        "Runs an external jHiccup process and mirrors output into Application -> jHiccup.");
-
-    JTextField jhiccupJarPath = new JTextField(runtimeConfig.readAppDiagnosticsJhiccupJarPath(""));
-    jhiccupJarPath.setToolTipText(
-        "Path to jHiccup jar file. Relative paths are resolved from the runtime-config directory.");
-
-    JTextField jhiccupJavaCommand =
-        new JTextField(runtimeConfig.readAppDiagnosticsJhiccupJavaCommand("java"));
-    jhiccupJavaCommand.setToolTipText("Java launcher command used to start jHiccup.");
-
-    JTextArea jhiccupArgs = new JTextArea(5, 40);
-    jhiccupArgs.setLineWrap(false);
-    jhiccupArgs.setWrapStyleWord(false);
-    jhiccupArgs.setText(String.join("\n", runtimeConfig.readAppDiagnosticsJhiccupArgs(List.of())));
-    jhiccupArgs.setToolTipText("One argument per line.");
-
-    Runnable syncEnabledState =
-        () -> {
-          boolean assertjEnabled = assertjSwingEnabled.isSelected();
-          assertjSwingFreezeWatchdogEnabled.setEnabled(assertjEnabled);
-          boolean watchdogEnabled =
-              assertjEnabled && assertjSwingFreezeWatchdogEnabled.isSelected();
-          assertjSwingFreezeThresholdMs.setEnabled(watchdogEnabled);
-          assertjSwingWatchdogPollMs.setEnabled(watchdogEnabled);
-          assertjSwingFallbackViolationReportMs.setEnabled(assertjEnabled);
-          assertjSwingOnIssuePlaySound.setEnabled(assertjEnabled);
-          assertjSwingOnIssueShowNotification.setEnabled(assertjEnabled);
-        };
-    assertjSwingEnabled.addActionListener(e -> syncEnabledState.run());
-    assertjSwingFreezeWatchdogEnabled.addActionListener(e -> syncEnabledState.run());
-    syncEnabledState.run();
-
-    return new DiagnosticsControls(
-        assertjSwingEnabled,
-        assertjSwingFreezeWatchdogEnabled,
-        assertjSwingFreezeThresholdMs,
-        assertjSwingWatchdogPollMs,
-        assertjSwingFallbackViolationReportMs,
-        assertjSwingOnIssuePlaySound,
-        assertjSwingOnIssueShowNotification,
-        jhiccupEnabled,
-        jhiccupJarPath,
-        jhiccupJavaCommand,
-        jhiccupArgs);
+    return DiagnosticsControlsSupport.buildControls(runtimeConfig);
   }
 
   private JPanel buildDiagnosticsPanel(DiagnosticsControls controls) {
-    JPanel panel = new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[]8[]"));
-
-    panel.add(tabTitle("Diagnostics"), "growx, wmin 0, wrap");
-    panel.add(
-        helpText(
-            "Configure optional application diagnostics integrations exposed under the Application tree node.\n"
-                + "Startup-related changes apply after restarting IRCafe."),
-        "growx, wmin 0, wrap");
-
-    JPanel assertjPanel =
-        captionPanel(
-            "AssertJ Swing / EDT watchdog",
-            "insets 0, fillx, wrap 2",
-            "[right]10[grow,fill]",
-            "[]4[]4[]4[]4[]4[]");
-    assertjPanel.add(controls.assertjSwingEnabled, "span 2, growx, wmin 0, wrap");
-    assertjPanel.add(
-        controls.assertjSwingFreezeWatchdogEnabled, "span 2, growx, wmin 0, gapleft 14, wrap");
-    assertjPanel.add(new JLabel("Freeze threshold (ms)"), "gapleft 24");
-    assertjPanel.add(controls.assertjSwingFreezeThresholdMs, "w 140!");
-    assertjPanel.add(new JLabel("Watchdog poll (ms)"), "gapleft 24");
-    assertjPanel.add(controls.assertjSwingWatchdogPollMs, "w 140!");
-    assertjPanel.add(new JLabel("Fallback violation report interval (ms)"), "gapleft 24");
-    assertjPanel.add(controls.assertjSwingFallbackViolationReportMs, "w 140!");
-    assertjPanel.add(
-        controls.assertjSwingOnIssuePlaySound, "span 2, growx, wmin 0, gapleft 24, wrap");
-    assertjPanel.add(
-        controls.assertjSwingOnIssueShowNotification, "span 2, growx, wmin 0, gapleft 24, wrap");
-    assertjPanel.add(
-        helpText(
-            "Watchdog logs stalls when EDT lag exceeds the threshold. Fallback interval controls how often "
-                + "off-EDT Swing violations are re-reported."),
-        "span 2, gapleft 24, growx, wrap");
-    panel.add(assertjPanel, "growx, wmin 0, wrap");
-
-    JScrollPane argsScroll = new JScrollPane(controls.jhiccupArgs);
-    argsScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-    argsScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-
-    JPanel jhiccupPanel =
-        captionPanel(
-            "jHiccup integration",
-            "insets 0, fillx, wrap 2",
-            "[right]10[grow,fill]",
-            "[]4[]4[]4[]");
-    jhiccupPanel.add(controls.jhiccupEnabled, "span 2, growx, wmin 0, wrap");
-    jhiccupPanel.add(new JLabel("jHiccup jar"), "aligny top");
-    jhiccupPanel.add(controls.jhiccupJarPath, "growx, wmin 0, wrap");
-    jhiccupPanel.add(new JLabel("Java command"), "aligny top");
-    jhiccupPanel.add(controls.jhiccupJavaCommand, "growx, wmin 0, wrap");
-    jhiccupPanel.add(new JLabel("Arguments"), "aligny top");
-    jhiccupPanel.add(argsScroll, "growx, wmin 0, h 110!, wrap");
-    jhiccupPanel.add(
-        helpText(
-            "One argument per line. Example flags: -i 1000, -l 2000000.\n"
-                + "Relative jar paths are resolved from the runtime-config directory."),
-        "span 2, growx, wmin 0, wrap");
-    panel.add(jhiccupPanel, "growx, wmin 0, wrap");
-
-    return panel;
+    return DiagnosticsPanelSupport.buildPanel(controls);
   }
 
   private static List<String> parseMultiLineArgs(String text) {
@@ -7774,19 +7632,6 @@ public class PreferencesDialog {
       default -> false;
     };
   }
-
-  private record DiagnosticsControls(
-      JCheckBox assertjSwingEnabled,
-      JCheckBox assertjSwingFreezeWatchdogEnabled,
-      JSpinner assertjSwingFreezeThresholdMs,
-      JSpinner assertjSwingWatchdogPollMs,
-      JSpinner assertjSwingFallbackViolationReportMs,
-      JCheckBox assertjSwingOnIssuePlaySound,
-      JCheckBox assertjSwingOnIssueShowNotification,
-      JCheckBox jhiccupEnabled,
-      JTextField jhiccupJarPath,
-      JTextField jhiccupJavaCommand,
-      JTextArea jhiccupArgs) {}
 
   private record TypingTreeIndicatorStyleOption(String id, String label) {}
 
