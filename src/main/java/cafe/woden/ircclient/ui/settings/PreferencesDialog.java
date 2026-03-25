@@ -1383,10 +1383,11 @@ public class PreferencesDialog {
           boolean memoryWarningToastEnabledV = memoryWarnings.toastEnabled.isSelected();
           boolean memoryWarningPushyEnabledV = memoryWarnings.pushyEnabled.isSelected();
           boolean memoryWarningSoundEnabledV = memoryWarnings.soundEnabled.isSelected();
-          String launchJavaCommandV = Objects.toString(launchJvm.javaCommand.getText(), "").trim();
+          String launchJavaCommandV =
+              Objects.toString(launchJvm.javaCommand().getText(), "").trim();
           if (launchJavaCommandV.isBlank()) launchJavaCommandV = "java";
-          int launchXmsMiBV = ((Number) launchJvm.xmsMiB.getValue()).intValue();
-          int launchXmxMiBV = ((Number) launchJvm.xmxMiB.getValue()).intValue();
+          int launchXmsMiBV = ((Number) launchJvm.xmsMiB().getValue()).intValue();
+          int launchXmxMiBV = ((Number) launchJvm.xmxMiB().getValue()).intValue();
           if (launchXmsMiBV < 0) launchXmsMiBV = 0;
           if (launchXmxMiBV < 0) launchXmxMiBV = 0;
           if (launchXmsMiBV > 262_144) launchXmsMiBV = 262_144;
@@ -1394,8 +1395,9 @@ public class PreferencesDialog {
           if (launchXmxMiBV > 0 && launchXmsMiBV > 0 && launchXmxMiBV < launchXmsMiBV) {
             launchXmxMiBV = launchXmsMiBV;
           }
-          String launchGcV = launchGcIdValue((LaunchGcOption) launchJvm.gc.getSelectedItem());
-          List<String> launchArgsV = parseMultiLineArgs(launchJvm.extraArgs.getText());
+          String launchGcV =
+              LaunchJvmControlsSupport.gcIdValue((LaunchGcOption) launchJvm.gc().getSelectedItem());
+          List<String> launchArgsV = parseMultiLineArgs(launchJvm.extraArgs().getText());
           IrcProperties.Proxy proxyCfg;
           try {
             boolean proxyEnabledV = proxy.enabled.isSelected();
@@ -6411,92 +6413,11 @@ public class PreferencesDialog {
   }
 
   private LaunchJvmControls buildLaunchJvmControls() {
-    JTextField javaCommand = new JTextField(runtimeConfig.readLaunchJvmJavaCommand("java"));
-    javaCommand.setToolTipText("Java launcher command used for the next app start.");
-
-    int xms = runtimeConfig.readLaunchJvmXmsMiB(0);
-    int xmx = runtimeConfig.readLaunchJvmXmxMiB(0);
-    JSpinner xmsMiB = new JSpinner(new SpinnerNumberModel(Math.max(0, xms), 0, 262_144, 128));
-    JSpinner xmxMiB = new JSpinner(new SpinnerNumberModel(Math.max(0, xmx), 0, 262_144, 128));
-
-    JComboBox<LaunchGcOption> gc = new JComboBox<>(launchGcOptions());
-    gc.setSelectedItem(launchGcOptionForId(runtimeConfig.readLaunchJvmGc("")));
-    gc.setToolTipText("Garbage collector preference for the next app start.");
-
-    JTextArea extraArgs = new JTextArea(5, 40);
-    extraArgs.setLineWrap(false);
-    extraArgs.setWrapStyleWord(false);
-    extraArgs.setText(String.join("\n", runtimeConfig.readLaunchJvmArgs(List.of())));
-    extraArgs.setToolTipText("Additional JVM arguments. One argument per line.");
-
-    return new LaunchJvmControls(javaCommand, xmsMiB, xmxMiB, gc, extraArgs);
-  }
-
-  private static LaunchGcOption[] launchGcOptions() {
-    return new LaunchGcOption[] {
-      new LaunchGcOption("", "Default (JVM chooses)"),
-      new LaunchGcOption("g1", "G1GC"),
-      new LaunchGcOption("zgc", "ZGC"),
-      new LaunchGcOption("shenandoah", "Shenandoah"),
-      new LaunchGcOption("parallel", "ParallelGC"),
-      new LaunchGcOption("serial", "SerialGC"),
-      new LaunchGcOption("epsilon", "EpsilonGC")
-    };
-  }
-
-  private static LaunchGcOption launchGcOptionForId(String id) {
-    String want = Objects.toString(id, "").trim().toLowerCase(Locale.ROOT);
-    for (LaunchGcOption option : launchGcOptions()) {
-      if (option.id().equalsIgnoreCase(want)) return option;
-    }
-    return launchGcOptions()[0];
-  }
-
-  private static String launchGcIdValue(LaunchGcOption option) {
-    return option != null ? option.id() : "";
+    return LaunchJvmControlsSupport.buildControls(runtimeConfig);
   }
 
   private JPanel buildStartupPanel(JCheckBox autoConnectOnStart, LaunchJvmControls launchJvm) {
-    JPanel form =
-        new JPanel(new MigLayout("insets 12, fillx, wrap 1", "[grow,fill]", "[]10[]10[]"));
-    form.add(tabTitle("Startup"), "growx, wrap");
-
-    form.add(sectionTitle("On launch"), "growx, wrap");
-    form.add(autoConnectOnStart, "growx, wrap");
-    form.add(
-        helpText(
-            "If enabled, IRCafe will connect to all configured servers automatically after the UI loads."),
-        "growx, wrap");
-
-    JScrollPane extraArgsScroll = new JScrollPane(launchJvm.extraArgs);
-    extraArgsScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-    extraArgsScroll.setHorizontalScrollBarPolicy(
-        ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-
-    JPanel jvm =
-        captionPanel(
-            "JVM on next launch",
-            "insets 0, fillx, wrap 2",
-            "[right]10[grow,fill]",
-            "[]4[]4[]4[]4[]");
-    jvm.add(new JLabel("Java command"));
-    jvm.add(launchJvm.javaCommand, "growx, wmin 0, wrap");
-    jvm.add(new JLabel("Initial heap (MiB)"));
-    jvm.add(launchJvm.xmsMiB, "w 140!, wrap");
-    jvm.add(new JLabel("Max heap (MiB)"));
-    jvm.add(launchJvm.xmxMiB, "w 140!, wrap");
-    jvm.add(new JLabel("GC"));
-    jvm.add(launchJvm.gc, "growx, wmin 0, wrap");
-    jvm.add(new JLabel("Extra JVM args"), "aligny top");
-    jvm.add(extraArgsScroll, "growx, h 100!, wmin 0, wrap");
-    jvm.add(
-        helpText(
-            "These settings are stored in runtime config and applied on a future restart by launcher scripts.\n"
-                + "Use 0 for heap values to leave them unset."),
-        "span 2, growx, wmin 0, wrap");
-    form.add(jvm, "growx, wmin 0, wrap");
-
-    return form;
+    return StartupPanelSupport.buildPanel(autoConnectOnStart, launchJvm);
   }
 
   private JPanel buildTrayNotificationsPanel(TrayControls trayControls) {
@@ -7784,20 +7705,6 @@ public class PreferencesDialog {
 
   private record LinkPreviewControls(
       JCheckBox enabled, JCheckBox collapsed, JComboBox<EmbedCardStyle> cardStyle, JPanel panel) {}
-
-  private record LaunchGcOption(String id, String label) {
-    @Override
-    public String toString() {
-      return label;
-    }
-  }
-
-  private record LaunchJvmControls(
-      JTextField javaCommand,
-      JSpinner xmsMiB,
-      JSpinner xmxMiB,
-      JComboBox<LaunchGcOption> gc,
-      JTextArea extraArgs) {}
 
   private record MemoryWarningControls(
       JSpinner nearMaxPercent,
