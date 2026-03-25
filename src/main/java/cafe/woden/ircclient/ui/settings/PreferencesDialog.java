@@ -65,7 +65,6 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.Graphics;
 import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
 import java.awt.LayoutManager;
@@ -139,7 +138,6 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.AbstractTableModel;
-import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import net.miginfocom.swing.MigLayout;
@@ -9479,76 +9477,34 @@ public class PreferencesDialog {
   }
 
   private static String toHex(Color c) {
-    if (c == null) return "";
-    return String.format("#%02X%02X%02X", c.getRed(), c.getGreen(), c.getBlue());
+    return SettingsColorSupport.toHex(c);
   }
 
   private static Color parseHexColor(String raw) {
-    if (raw == null) return null;
-    String s = raw.trim();
-    if (s.isEmpty()) return null;
-    if (s.startsWith("#")) s = s.substring(1);
-    if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2);
-    if (s.length() != 6) return null;
-    try {
-      int rgb = Integer.parseInt(s, 16);
-      return new Color(rgb);
-    } catch (Exception ignored) {
-      return null;
-    }
+    return SettingsColorSupport.parseHexColor(raw);
   }
 
   private static final int MAX_RECENT_COLORS = 12;
   private static final Deque<String> RECENT_COLOR_HEX = new ArrayDeque<>();
 
   private static Color parseHexColorLenient(String raw) {
-    Color c = parseHexColor(raw);
-    if (c != null) return c;
-    if (raw == null) return null;
-
-    String s = raw.trim();
-    if (s.startsWith("#")) s = s.substring(1).trim();
-    if (s.length() != 3) return null;
-
-    char r = s.charAt(0);
-    char g = s.charAt(1);
-    char b = s.charAt(2);
-    return parseHexColor("#" + r + r + g + g + b + b);
+    return SettingsColorSupport.parseHexColorLenient(raw);
   }
 
   static String normalizeOptionalHexForApply(String raw, String fieldLabel) {
-    String hex = raw != null ? raw.trim() : "";
-    if (hex.isBlank()) return null;
-    Color c = parseHexColorLenient(hex);
-    if (c == null) {
-      String label = Objects.toString(fieldLabel, "Color");
-      throw new IllegalArgumentException(
-          label + " must be a hex value like #RRGGBB (or blank for default).");
-    }
-    return toHex(c);
+    return SettingsColorSupport.normalizeOptionalHexForApply(raw, fieldLabel);
   }
 
   private static Color contrastTextColor(Color bg) {
-    if (bg == null) return UIManager.getColor("Label.foreground");
-    // Relative luminance (sRGB-ish) for a quick black/white choice.
-    double r = bg.getRed() / 255.0;
-    double g = bg.getGreen() / 255.0;
-    double b = bg.getBlue() / 255.0;
-    double y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    return y < 0.55 ? Color.WHITE : Color.BLACK;
+    return SettingsColorSupport.contrastTextColor(bg);
   }
 
   private static Color preferredPreviewBackground() {
-    Color bg = UIManager.getColor("TextPane.background");
-    if (bg == null) bg = UIManager.getColor("TextArea.background");
-    if (bg == null) bg = UIManager.getColor("Table.background");
-    if (bg == null) bg = UIManager.getColor("Panel.background");
-    return bg != null ? bg : new Color(30, 30, 30);
+    return SettingsColorSupport.preferredPreviewBackground();
   }
 
   private static Icon createColorSwatchIcon(Color color, int w, int h) {
-    // Simple swatch icon used in compact pickers/buttons.
-    return new ColorSwatch(color, w, h);
+    return SettingsColorSupport.createColorSwatchIcon(color, w, h);
   }
 
   private NotificationRule promptNotificationRuleDialog(String title, NotificationRule seed) {
@@ -9748,28 +9704,7 @@ public class PreferencesDialog {
   }
 
   private static double contrastRatio(Color fg, Color bg) {
-    if (fg == null || bg == null) return 0.0;
-
-    double l1 = relativeLuminance(fg);
-    double l2 = relativeLuminance(bg);
-    if (l1 < l2) {
-      double t = l1;
-      l1 = l2;
-      l2 = t;
-    }
-    return (l1 + 0.05) / (l2 + 0.05);
-  }
-
-  private static double relativeLuminance(Color c) {
-    double r = srgbToLinear(c.getRed());
-    double g = srgbToLinear(c.getGreen());
-    double b = srgbToLinear(c.getBlue());
-    return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
-  }
-
-  private static double srgbToLinear(int channel) {
-    double v = channel / 255.0;
-    return (v <= 0.04045) ? (v / 12.92) : Math.pow((v + 0.055) / 1.055, 2.4);
+    return SettingsColorSupport.contrastRatio(fg, bg);
   }
 
   private static Color showColorPickerDialog(
@@ -10105,74 +10040,6 @@ public class PreferencesDialog {
   private record SpellcheckLanguageOption(String id, String label) {}
 
   private record SpellcheckPresetOption(String id, String label) {}
-
-  private static final class RuleColorCellRenderer extends DefaultTableCellRenderer {
-    @Override
-    public java.awt.Component getTableCellRendererComponent(
-        JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-      JLabel c =
-          (JLabel)
-              super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-
-      String raw = value != null ? value.toString().trim() : "";
-      Color col = parseHexColor(raw);
-      if (col == null && raw != null && raw.startsWith("#") && raw.length() == 4) {
-        // Try #RGB
-        String s = raw.substring(1);
-        char r = s.charAt(0), g = s.charAt(1), b = s.charAt(2);
-        col = parseHexColor("#" + r + r + g + g + b + b);
-      }
-
-      if (col != null) {
-        c.setIcon(new ColorSwatch(col, 12, 12));
-        c.setText(toHex(col));
-      } else {
-        c.setIcon(null);
-        c.setText(raw.isEmpty() ? "" : raw);
-      }
-      return c;
-    }
-  }
-
-  private static final class ColorSwatch implements Icon {
-    private final Color color;
-    private final int w;
-    private final int h;
-
-    ColorSwatch(Color color, int w, int h) {
-      this.color = color != null ? color : Color.GRAY;
-      this.w = Math.max(6, w);
-      this.h = Math.max(6, h);
-    }
-
-    @Override
-    public int getIconWidth() {
-      return w;
-    }
-
-    @Override
-    public int getIconHeight() {
-      return h;
-    }
-
-    @Override
-    public void paintIcon(java.awt.Component c, Graphics g, int x, int y) {
-      Color old = g.getColor();
-      try {
-        g.setColor(color);
-        g.fillRect(x, y, w, h);
-        Color border = c != null ? c.getForeground() : null;
-        if (border == null) border = UIManager.getColor("Component.borderColor");
-        if (border == null) border = UIManager.getColor("Separator.foreground");
-        if (border == null) border = Color.BLACK;
-        border = new Color(border.getRed(), border.getGreen(), border.getBlue(), 120);
-        g.setColor(border);
-        g.drawRect(x, y, w - 1, h - 1);
-      } finally {
-        g.setColor(old);
-      }
-    }
-  }
 
   private enum AccentPreset {
     THEME_DEFAULT("Theme default", null),
