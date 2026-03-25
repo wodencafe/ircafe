@@ -109,7 +109,6 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
-import javax.swing.JSeparator;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
@@ -3046,196 +3045,45 @@ public class PreferencesDialog {
     notificationSoundUseCustom.addActionListener(e -> refreshEnabled.run());
     refreshEnabled.run();
 
-    JPanel trayTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-    trayTab.setOpaque(false);
-    JPanel trayBehavior =
-        captionPanel("Tray behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
-    trayBehavior.add(enabled, "growx");
-    trayBehavior.add(closeToTray, "growx");
-    trayBehavior.add(minimizeToTray, "growx");
-    trayBehavior.add(startMinimized, "growx, wrap");
-    trayTab.add(trayBehavior, "growx, wmin 0, wrap");
-    trayTab.add(
-        helpText(
-            "Tray availability depends on your desktop environment. If tray support is unavailable, these options will have no effect."),
-        "growx");
-
-    JPanel notificationsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-    notificationsTab.setOpaque(false);
-    JPanel notificationEvents =
-        captionPanel("Notification events", "insets 0, fillx, wrap 1", "[grow,fill]", "");
-    notificationEvents.add(notifyHighlights, "growx");
-    notificationEvents.add(notifyPrivateMessages, "growx");
-    notificationEvents.add(notifyConnectionState, "growx");
-    notificationsTab.add(notificationEvents, "growx, wmin 0, wrap");
-    JPanel notificationBackendGroup =
-        captionPanel("Delivery backend", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "[]");
-    notificationBackendGroup.add(new JLabel("Mode:"));
-    notificationBackendGroup.add(notificationBackend, "w 260!, wrap");
-    notificationBackendGroup.add(
-        helpText(
-            "Auto tries native OS notifications first and falls back to two-slices.\n"
-                + "Native only disables fallback. Two-slices only bypasses OS-native backends."),
-        "span 2, growx");
-    notificationsTab.add(notificationBackendGroup, "growx, wmin 0, wrap");
-    JPanel notificationVisibility =
-        captionPanel("Suppression and focus rules", "insets 0, fillx, wrap 1", "[grow,fill]", "");
-    notificationVisibility.add(updateNotifierEnabled, "growx");
-    notificationVisibility.add(lagIndicatorEnabled, "growx");
-    notificationVisibility.add(notifyOnlyWhenUnfocused, "growx");
-    notificationVisibility.add(notifyOnlyWhenMinimizedOrHidden, "growx");
-    notificationVisibility.add(notifySuppressWhenTargetActive, "growx, wrap");
-    notificationVisibility.add(new JSeparator(), "growx, gaptop 4");
-    notificationVisibility.add(testNotification, "w 180!");
-    notificationsTab.add(notificationVisibility, "growx, wmin 0, wrap");
-    notificationsTab.add(
-        helpText(
-            "Desktop notifications are shown when your notification rules trigger (or for connection events, if enabled)."),
-        "growx");
-
-    JPanel soundsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-    soundsTab.setOpaque(false);
-    JPanel soundsBehavior =
-        captionPanel("Sound behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
-    soundsBehavior.add(notificationSoundsEnabled, "growx");
-    soundsBehavior.add(notificationSoundUseCustom, "growx, wrap");
-    soundsTab.add(soundsBehavior, "growx, wmin 0, wrap");
-    JPanel customSound =
-        captionPanel(
-            "Custom sound file", "insets 0, fillx, wrap 4", "[right]8[grow,fill]8[]8[]", "[]");
-    customSound.add(new JLabel("File:"));
-    customSound.add(notificationSoundCustomPath, "growx, pushx, wmin 0");
-    customSound.add(browseCustomSound, "w 110!");
-    customSound.add(clearCustomSound, "w 80!, wrap");
-    soundsTab.add(customSound, "growx, wmin 0, wrap");
-    JPanel builtInSound =
-        captionPanel("Built-in sound", "insets 0, fillx, wrap 3", "[right]8[grow,fill]8[]", "[]");
-    builtInSound.add(new JLabel("Preset:"));
-    builtInSound.add(notificationSound, "w 240!");
-    builtInSound.add(testSound, "w 120!, wrap");
-    soundsTab.add(builtInSound, "growx, wmin 0, wrap");
-
-    Path cfg = runtimeConfig != null ? runtimeConfig.runtimeConfigPath() : null;
-    Path base = cfg != null ? cfg.getParent() : null;
-    if (base != null) {
-      soundsTab.add(
-          helpText(
-              "Custom sounds are copied to: "
-                  + base.resolve("sounds")
-                  + "\nTip: Use small files (short MP3/WAV) for snappy notifications."),
-          "growx");
-    }
-
-    JPanel pushyTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-    pushyTab.setOpaque(false);
-
-    JPanel pushyBasics =
-        captionPanel("Pushy integration", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "[]");
-    pushyBasics.add(pushyEnabled, "span 2, growx, wrap");
-    pushyBasics.add(new JLabel("Endpoint:"));
-    pushyBasics.add(pushyEndpoint, "growx, pushx, wmin 0, wrap");
-    pushyBasics.add(new JLabel("API key:"));
-    pushyBasics.add(pushyApiKey, "growx, pushx, wmin 0, wrap");
-    pushyBasics.add(new JLabel("Title prefix:"));
-    pushyBasics.add(pushyTitlePrefix, "growx, pushx, wmin 0, wrap");
-    pushyTab.add(pushyBasics, "growx, wmin 0, wrap");
-
-    JPanel pushyDestination =
-        captionPanel("Destination", "insets 0, fillx, wrap 2", "[right]8[grow,fill]", "[]");
-    pushyDestination.add(new JLabel("Target mode:"));
-    pushyDestination.add(pushyTargetMode, "w 180!, wrap");
-    pushyDestination.add(new JLabel("Target value:"));
-    pushyDestination.add(pushyTargetValue, "growx, pushx, wmin 0, wrap");
-    pushyDestination.add(
-        helpText("Choose a destination type and enter the corresponding value."), "span 2, growx");
-    pushyTab.add(pushyDestination, "growx, wmin 0, wrap");
-
-    JPanel pushyTimeouts =
-        captionPanel("Network timeouts", "insets 0, fillx, wrap 4", "[right]8[]20[right]8[]", "[]");
-    pushyTimeouts.add(new JLabel("Connect (s):"));
-    pushyTimeouts.add(pushyConnectTimeoutSeconds, "w 90!");
-    pushyTimeouts.add(new JLabel("Read (s):"));
-    pushyTimeouts.add(pushyReadTimeoutSeconds, "w 90!, wrap");
-    pushyTab.add(pushyTimeouts, "growx, wmin 0, wrap");
-    JPanel pushyActions =
-        captionPanel("Validation & testing", "insets 0, fillx, wrap 2", "[]12[grow,fill]", "[]");
-    pushyActions.add(pushyTest, "w 150!");
-    pushyActions.add(pushyTestStatus, "growx, wmin 0, wrap");
-    pushyActions.add(new JLabel(""));
-    pushyActions.add(pushyValidationLabel, "growx, wmin 0");
-    pushyTab.add(pushyActions, "growx, wmin 0, wrap");
-    pushyTab.add(
-        helpText(
-            "Pushy notifications are triggered by matching IRC event rules in Notifications -> IRC Event Rules."),
-        "growx");
-
-    JPanel linuxTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-    linuxTab.setOpaque(false);
-    JPanel linuxGroup =
-        captionPanel("Linux integration", "insets 0, fillx, wrap 1", "[grow,fill]", "");
-    linuxGroup.add(linuxDbusActions, "growx, wrap");
-    if (!linux) {
-      linuxGroup.add(helpText("Linux only."), "growx");
-    } else if (!linuxActionsSupported) {
-      linuxGroup.add(
-          helpText(
-              "Linux notification actions were not detected for this session.\n"
-                  + "IRCafe will fall back to notify-send."),
-          "growx");
-    } else {
-      linuxGroup.add(
-          helpText(
-              "Uses org.freedesktop.Notifications over D-Bus so clicking a notification can open IRCafe."),
-          "growx");
-    }
-    linuxTab.add(linuxGroup, "growx, wmin 0");
-
-    JTabbedPane subTabs = new DynamicTabbedPane();
-    subTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
-    subTabs.addTab("Tray", padSubTab(trayTab));
-    subTabs.addTab("Desktop notifications", padSubTab(notificationsTab));
-    subTabs.addTab("Sounds", padSubTab(soundsTab));
-    subTabs.addTab("Pushy", padSubTab(pushyTab));
-    subTabs.addTab("Linux / Advanced", padSubTab(linuxTab));
-
-    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]"));
-    panel.setOpaque(false);
-    panel.add(subTabs, "growx, wmin 0");
-    return new TrayControls(
-        enabled,
-        closeToTray,
-        minimizeToTray,
-        startMinimized,
-        notifyHighlights,
-        notifyPrivateMessages,
-        notifyConnectionState,
-        notifyOnlyWhenUnfocused,
-        notifyOnlyWhenMinimizedOrHidden,
-        notifySuppressWhenTargetActive,
-        updateNotifierEnabled,
-        lagIndicatorEnabled,
-        linuxDbusActions,
-        notificationBackend,
-        testNotification,
-        notificationSoundsEnabled,
-        notificationSoundUseCustom,
-        notificationSoundCustomPath,
-        browseCustomSound,
-        clearCustomSound,
-        notificationSound,
-        testSound,
-        pushyEnabled,
-        pushyEndpoint,
-        pushyApiKey,
-        pushyTargetMode,
-        pushyTargetValue,
-        pushyTitlePrefix,
-        pushyConnectTimeoutSeconds,
-        pushyReadTimeoutSeconds,
-        pushyValidationLabel,
-        pushyTest,
-        pushyTestStatus,
-        panel);
+    TrayControls controls =
+        new TrayControls(
+            enabled,
+            closeToTray,
+            minimizeToTray,
+            startMinimized,
+            notifyHighlights,
+            notifyPrivateMessages,
+            notifyConnectionState,
+            notifyOnlyWhenUnfocused,
+            notifyOnlyWhenMinimizedOrHidden,
+            notifySuppressWhenTargetActive,
+            updateNotifierEnabled,
+            lagIndicatorEnabled,
+            linuxDbusActions,
+            notificationBackend,
+            testNotification,
+            notificationSoundsEnabled,
+            notificationSoundUseCustom,
+            notificationSoundCustomPath,
+            browseCustomSound,
+            clearCustomSound,
+            notificationSound,
+            testSound,
+            pushyEnabled,
+            pushyEndpoint,
+            pushyApiKey,
+            pushyTargetMode,
+            pushyTargetValue,
+            pushyTitlePrefix,
+            pushyConnectTimeoutSeconds,
+            pushyReadTimeoutSeconds,
+            pushyValidationLabel,
+            pushyTest,
+            pushyTestStatus);
+    controls.panel =
+        TrayNotificationsPanelSupport.buildTabsPanel(
+            controls, runtimeConfig, linux, linuxActionsSupported);
+    return controls;
   }
 
   private static String validatePushyInputs(
@@ -4701,58 +4549,6 @@ public class PreferencesDialog {
   private record SpellcheckLanguageOption(String id, String label) {}
 
   private record SpellcheckPresetOption(String id, String label) {}
-
-  private enum PushyTargetMode {
-    DEVICE_TOKEN("Device token"),
-    TOPIC("Topic");
-
-    private final String label;
-
-    PushyTargetMode(String label) {
-      this.label = label;
-    }
-
-    @Override
-    public String toString() {
-      return label;
-    }
-  }
-
-  private record TrayControls(
-      JCheckBox enabled,
-      JCheckBox closeToTray,
-      JCheckBox minimizeToTray,
-      JCheckBox startMinimized,
-      JCheckBox notifyHighlights,
-      JCheckBox notifyPrivateMessages,
-      JCheckBox notifyConnectionState,
-      JCheckBox notifyOnlyWhenUnfocused,
-      JCheckBox notifyOnlyWhenMinimizedOrHidden,
-      JCheckBox notifySuppressWhenTargetActive,
-      JCheckBox updateNotifierEnabled,
-      JCheckBox lagIndicatorEnabled,
-      JCheckBox linuxDbusActions,
-      JComboBox<NotificationBackendMode> notificationBackend,
-      JButton testNotification,
-      JCheckBox notificationSoundsEnabled,
-      JCheckBox notificationSoundUseCustom,
-      JTextField notificationSoundCustomPath,
-      JButton browseCustomSound,
-      JButton clearCustomSound,
-      JComboBox<BuiltInSound> notificationSound,
-      JButton testSound,
-      JCheckBox pushyEnabled,
-      JTextField pushyEndpoint,
-      JPasswordField pushyApiKey,
-      JComboBox<PushyTargetMode> pushyTargetMode,
-      JTextField pushyTargetValue,
-      JTextField pushyTitlePrefix,
-      JSpinner pushyConnectTimeoutSeconds,
-      JSpinner pushyReadTimeoutSeconds,
-      JLabel pushyValidationLabel,
-      JButton pushyTest,
-      JLabel pushyTestStatus,
-      JPanel panel) {}
 
   private record ImageEmbedControls(
       JCheckBox enabled,
