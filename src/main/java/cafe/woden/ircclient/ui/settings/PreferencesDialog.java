@@ -3676,7 +3676,7 @@ public class PreferencesDialog {
     panel.add(preview, "span 2, growx");
     updatePreview.run();
 
-    return new NickColorControls(enabled, minContrast, overrides, preview, panel);
+    return new NickColorControls(enabled, minContrast, overrides, panel);
   }
 
   private ImageEmbedControls buildImageEmbedControls(
@@ -4082,74 +4082,15 @@ public class PreferencesDialog {
       TimestampControls timestamps,
       OutgoingColorControls outgoing,
       JCheckBox outgoingDeliveryIndicators) {
-    JPanel form =
-        new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]10[grow,fill]"));
-    form.add(tabTitle("Chat"), "growx, wmin 0, wrap");
-
-    JTabbedPane chatTabs = new JTabbedPane();
-    chatTabs.addTab(
-        "General",
-        padSubTab(
-            buildChatGeneralSubTab(
-                presenceFolds,
-                ctcpRequestsInActiveTarget,
-                defaultQuitMessage,
-                nickColors,
-                timestamps,
-                outgoing,
-                outgoingDeliveryIndicators)));
-    chatTabs.addTab("Spellcheck", padSubTab(buildChatSpellcheckSubTab(spellcheck)));
-    form.add(chatTabs, "grow, push, wmin 0");
-    return form;
-  }
-
-  private JPanel buildChatGeneralSubTab(
-      JCheckBox presenceFolds,
-      JCheckBox ctcpRequestsInActiveTarget,
-      JTextField defaultQuitMessage,
-      NickColorControls nickColors,
-      TimestampControls timestamps,
-      OutgoingColorControls outgoing,
-      JCheckBox outgoingDeliveryIndicators) {
-    JPanel panel =
-        new JPanel(
-            new MigLayout(
-                "insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]6[]6[]10[]6[]"));
-    panel.setOpaque(false);
-
-    panel.add(sectionTitle("Display"), "span 2, growx, wmin 0, wrap");
-    panel.add(new JLabel("Presence events"), "aligny top");
-    panel.add(presenceFolds, "alignx left");
-
-    panel.add(new JLabel("CTCP requests"), "aligny top");
-    panel.add(ctcpRequestsInActiveTarget, "alignx left");
-
-    panel.add(new JLabel("Nick colors"), "aligny top");
-    panel.add(nickColors.panel, "growx, wmin 0");
-
-    panel.add(new JLabel("Timestamps"), "aligny top");
-    panel.add(timestamps.panel, "growx, wmin 0");
-
-    panel.add(sectionTitle("Your messages"), "span 2, growx, wmin 0, wrap");
-    panel.add(new JLabel("Outgoing messages"), "aligny top");
-    panel.add(outgoing.panel, "growx, wmin 0");
-    panel.add(new JLabel("Delivery indicators"), "aligny top");
-    panel.add(outgoingDeliveryIndicators, "alignx left");
-    panel.add(new JLabel("Default /quit message"), "aligny top");
-    panel.add(defaultQuitMessage, "growx, wmin 0");
-
-    return panel;
-  }
-
-  private JPanel buildChatSpellcheckSubTab(SpellcheckControls spellcheck) {
-    JPanel panel = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]8[]"));
-    panel.setOpaque(false);
-    panel.add(sectionTitle("Input"), "growx, wmin 0, wrap");
-    panel.add(spellcheck.panel, "growx, wmin 0, wrap");
-    panel.add(
-        helpText("Spellcheck settings are scoped to the message input bar."),
-        "growx, wmin 0, wrap");
-    return panel;
+    return ChatPanelSupport.buildPanel(
+        presenceFolds,
+        ctcpRequestsInActiveTarget,
+        defaultQuitMessage,
+        spellcheck,
+        nickColors,
+        timestamps,
+        outgoing,
+        outgoingDeliveryIndicators);
   }
 
   private CtcpAutoReplyControls buildCtcpAutoReplyControls() {
@@ -4546,10 +4487,6 @@ public class PreferencesDialog {
 
   private record MatrixUserListNameDisplayModeOption(String id, String label) {}
 
-  private record SpellcheckLanguageOption(String id, String label) {}
-
-  private record SpellcheckPresetOption(String id, String label) {}
-
   private record ImageEmbedControls(
       JCheckBox enabled,
       JCheckBox collapsed,
@@ -4567,38 +4504,6 @@ public class PreferencesDialog {
       JCheckBox toastEnabled,
       JCheckBox pushyEnabled,
       JCheckBox soundEnabled) {}
-
-  private record SpellcheckControls(
-      JCheckBox enabled,
-      JCheckBox underlineEnabled,
-      JCheckBox suggestOnTabEnabled,
-      JCheckBox hoverSuggestionsEnabled,
-      JComboBox<SpellcheckLanguageOption> languageTag,
-      JTextArea customDictionary,
-      JComboBox<SpellcheckPresetOption> completionPreset,
-      JSpinner customMinPrefixCompletionTokenLength,
-      JSpinner customMaxPrefixCompletionExtraChars,
-      JSpinner customMaxPrefixLexiconCandidates,
-      JSpinner customPrefixCompletionBonusScore,
-      JSpinner customSourceOrderWeight,
-      JPanel panel) {}
-
-  private record NickColorControls(
-      JCheckBox enabled,
-      JSpinner minContrast,
-      JButton overrides,
-      NickColorPreviewPanel preview,
-      JPanel panel) {}
-
-  private record TimestampControls(
-      JCheckBox enabled,
-      JTextField format,
-      JCheckBox includeChatMessages,
-      JCheckBox includePresenceMessages,
-      JPanel panel) {}
-
-  private record OutgoingColorControls(
-      JCheckBox enabled, JTextField hex, JLabel preview, JPanel panel) {}
 
   private record NetworkAdvancedControls(
       ProxyControls proxy,
