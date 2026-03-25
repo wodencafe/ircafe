@@ -2375,7 +2375,7 @@ public class PreferencesDialog {
     return scroll;
   }
 
-  private static JPanel padSubTab(JComponent panel) {
+  static JPanel padSubTab(JComponent panel) {
     JPanel wrapper = new JPanel(new BorderLayout());
     wrapper.setOpaque(false);
     wrapper.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
@@ -2427,7 +2427,7 @@ public class PreferencesDialog {
     }
   }
 
-  private static JLabel tabTitle(String text) {
+  static JLabel tabTitle(String text) {
     JLabel l = new JLabel(text);
     l.putClientProperty(FlatClientProperties.STYLE, "font:+4");
     Font f = l.getFont();
@@ -2438,7 +2438,7 @@ public class PreferencesDialog {
     return l;
   }
 
-  private static JLabel sectionTitle(String text) {
+  static JLabel sectionTitle(String text) {
     JLabel l = new JLabel(text);
     l.putClientProperty(FlatClientProperties.STYLE, "font:+2");
     Font f = l.getFont();
@@ -2449,7 +2449,7 @@ public class PreferencesDialog {
     return l;
   }
 
-  private static JPanel captionPanel(String title, String layout, String columns, String rows) {
+  static JPanel captionPanel(String title, String layout, String columns, String rows) {
     return captionPanelWithPadding(title, layout, columns, rows, 6, 8, 8, 8);
   }
 
@@ -7303,282 +7303,12 @@ public class PreferencesDialog {
 
   private JPanel buildNotificationsPanel(
       NotificationRulesControls notifications, IrcEventNotificationControls ircEventNotifications) {
-    JPanel panel =
-        new JPanel(new MigLayout("insets 10, fill, wrap 1", "[grow,fill]", "[]8[]4[grow,fill]"));
-
-    panel.add(tabTitle("Notifications"), "growx, wmin 0, wrap");
-    panel.add(sectionTitle("Rule matches"), "growx, wmin 0, wrap");
-    panel.add(
-        helpText(
-            "Add custom word/regex rules to create notifications when messages match.\n"
-                + "Rules only trigger for channels (not PMs), including the active channel."),
-        "growx, wmin 0, wrap");
-
-    JButton add = new JButton("Add");
-    JButton edit = new JButton("Edit");
-    JButton duplicate = new JButton("Duplicate");
-    JButton remove = new JButton("Remove");
-    JButton up = new JButton("Up");
-    JButton down = new JButton("Down");
-    configureIconOnlyButton(add, "plus", "Add notification rule");
-    configureIconOnlyButton(edit, "edit", "Edit selected notification rule");
-    configureIconOnlyButton(duplicate, "copy", "Duplicate selected notification rule");
-    configureIconOnlyButton(remove, "trash", "Remove selected notification rule");
-    configureIconOnlyButton(up, "arrow-up", "Move selected notification rule up");
-    configureIconOnlyButton(down, "arrow-down", "Move selected notification rule down");
-
-    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-    buttons.add(add);
-    buttons.add(edit);
-    buttons.add(duplicate);
-    buttons.add(remove);
-    buttons.add(up);
-    buttons.add(down);
-    Runnable refreshRuleButtons =
-        () -> {
-          int viewRow = notifications.table.getSelectedRow();
-          boolean hasSelection = viewRow >= 0;
-          int modelRow = hasSelection ? notifications.table.convertRowIndexToModel(viewRow) : -1;
-          edit.setEnabled(hasSelection);
-          duplicate.setEnabled(hasSelection);
-          remove.setEnabled(hasSelection);
-          up.setEnabled(hasSelection && modelRow > 0);
-          down.setEnabled(
-              hasSelection && modelRow >= 0 && modelRow < (notifications.model.getRowCount() - 1));
-        };
-
-    Runnable openEditRuleDialog =
-        () -> {
-          int viewRow = notifications.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
-          NotificationRule seed = notifications.model.ruleAt(modelRow);
-          if (seed == null) return;
-          NotificationRule edited = promptNotificationRuleDialog("Edit Notification Rule", seed);
-          if (edited == null) return;
-          notifications.model.setRule(modelRow, edited);
-          int nextView = notifications.table.convertRowIndexToView(modelRow);
-          if (nextView >= 0) {
-            notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
-            notifications.table.scrollRectToVisible(
-                notifications.table.getCellRect(nextView, 0, true));
-          }
-          refreshRuleButtons.run();
-        };
-
-    add.addActionListener(
-        e -> {
-          NotificationRule created = promptNotificationRuleDialog("Add Notification Rule", null);
-          if (created == null) return;
-          int row = notifications.model.addRule(created);
-          if (row >= 0) {
-            int viewRow = notifications.table.convertRowIndexToView(row);
-            if (viewRow >= 0) {
-              notifications.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
-              notifications.table.scrollRectToVisible(
-                  notifications.table.getCellRect(viewRow, 0, true));
-            }
-          }
-          refreshRuleButtons.run();
-        });
-
-    edit.addActionListener(e -> openEditRuleDialog.run());
-
-    duplicate.addActionListener(
-        e -> {
-          int viewRow = notifications.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
-          int dup = notifications.model.duplicateRow(modelRow);
-          if (dup >= 0) {
-            int dupView = notifications.table.convertRowIndexToView(dup);
-            if (dupView >= 0) {
-              notifications.table.getSelectionModel().setSelectionInterval(dupView, dupView);
-              notifications.table.scrollRectToVisible(
-                  notifications.table.getCellRect(dupView, 0, true));
-            }
-          }
-          refreshRuleButtons.run();
-        });
-
-    remove.addActionListener(
-        e -> {
-          int viewRow = notifications.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
-          NotificationRule rule = notifications.model.ruleAt(modelRow);
-          String label = NotificationRulesTableModel.effectiveRuleLabel(rule);
-          int res =
-              JOptionPane.showConfirmDialog(
-                  dialog,
-                  "Remove notification rule \"" + label + "\"?",
-                  "Remove Notification Rule",
-                  JOptionPane.OK_CANCEL_OPTION);
-          if (res != JOptionPane.OK_OPTION) return;
-          notifications.model.removeRow(modelRow);
-          int nextModelRow = Math.min(modelRow, notifications.model.getRowCount() - 1);
-          if (nextModelRow >= 0) {
-            int nextView = notifications.table.convertRowIndexToView(nextModelRow);
-            if (nextView >= 0) {
-              notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
-              notifications.table.scrollRectToVisible(
-                  notifications.table.getCellRect(nextView, 0, true));
-            }
-          } else {
-            notifications.table.clearSelection();
-          }
-          refreshRuleButtons.run();
-        });
-
-    up.addActionListener(
-        e -> {
-          int viewRow = notifications.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
-          int next = notifications.model.moveRow(modelRow, modelRow - 1);
-          if (next >= 0) {
-            int nextView = notifications.table.convertRowIndexToView(next);
-            if (nextView >= 0) {
-              notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
-              notifications.table.scrollRectToVisible(
-                  notifications.table.getCellRect(nextView, 0, true));
-            }
-          }
-          refreshRuleButtons.run();
-        });
-
-    down.addActionListener(
-        e -> {
-          int viewRow = notifications.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = notifications.table.convertRowIndexToModel(viewRow);
-          int next = notifications.model.moveRow(modelRow, modelRow + 1);
-          if (next >= 0) {
-            int nextView = notifications.table.convertRowIndexToView(next);
-            if (nextView >= 0) {
-              notifications.table.getSelectionModel().setSelectionInterval(nextView, nextView);
-              notifications.table.scrollRectToVisible(
-                  notifications.table.getCellRect(nextView, 0, true));
-            }
-          }
-          refreshRuleButtons.run();
-        });
-
-    notifications
-        .table
-        .getSelectionModel()
-        .addListSelectionListener(
-            e -> {
-              if (e != null && e.getValueIsAdjusting()) return;
-              refreshRuleButtons.run();
-            });
-
-    notifications.table.addMouseListener(
-        new java.awt.event.MouseAdapter() {
-          @Override
-          public void mouseClicked(java.awt.event.MouseEvent e) {
-            if (e == null) return;
-            if (!javax.swing.SwingUtilities.isLeftMouseButton(e)) return;
-            if (e.getClickCount() != 2) return;
-            int viewRow = notifications.table.rowAtPoint(e.getPoint());
-            if (viewRow < 0) return;
-            notifications.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
-            openEditRuleDialog.run();
-          }
-        });
-    refreshRuleButtons.run();
-
-    JScrollPane scroll = new JScrollPane(notifications.table);
-    scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-    scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-
-    JScrollPane testInScroll = new JScrollPane(notifications.testInput);
-    testInScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-    testInScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-
-    JScrollPane testOutScroll = new JScrollPane(notifications.testOutput);
-    testOutScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-    testOutScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-
-    JButton runTest = new JButton("Test");
-    JButton clearTest = new JButton("Clear");
-    configureIconOnlyButton(runTest, "check", "Test sample message against notification rules");
-    configureIconOnlyButton(clearTest, "close", "Clear rule test input/output");
-
-    JPanel testButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-    testButtons.add(runTest);
-    testButtons.add(clearTest);
-    testButtons.add(notifications.testStatus);
-
-    runTest.addActionListener(
-        e -> {
-          if (notifications.table.isEditing()) {
-            try {
-              notifications.table.getCellEditor().stopCellEditing();
-            } catch (Exception ignored) {
-            }
-          }
-          refreshNotificationRuleValidation(notifications);
-          notifications.testRunner.runTest(notifications);
-        });
-
-    clearTest.addActionListener(
-        e -> {
-          notifications.testInput.setText("");
-          notifications.testOutput.setText("");
-          notifications.testStatus.setText(" ");
-        });
-
-    JPanel rulesTab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]8[]"));
-    rulesTab.setOpaque(false);
-    JPanel rulesBehaviorPanel =
-        captionPanel("Rule behavior", "insets 0, fillx, wrap 2", "[right]10[grow,fill]", "[]");
-    rulesBehaviorPanel.add(new JLabel("Cooldown (sec)"));
-    rulesBehaviorPanel.add(notifications.cooldownSeconds, "w 110!, wrap");
-    rulesTab.add(rulesBehaviorPanel, "growx, wmin 0, wrap");
-    JPanel rulesTablePanel =
-        captionPanel("Rule list", "insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]4[]4[]");
-    rulesTablePanel.add(buttons, "growx, wmin 0, wrap");
-    rulesTablePanel.add(scroll, "grow, push, h 260!, wmin 0, wrap");
-    rulesTablePanel.add(notifications.validationLabel, "growx, wmin 0, wrap");
-    rulesTablePanel.add(helpText("Tip: Double-click a rule to edit it."), "growx, wmin 0, wrap");
-    rulesTab.add(rulesTablePanel, "grow, push, wmin 0");
-
-    JPanel testTab = new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]"));
-    testTab.setOpaque(false);
-    JPanel testRunnerPanel =
-        captionPanel(
-            "Message test", "insets 0, fill, wrap 2", "[right]10[grow,fill]", "[]6[]4[]4[]");
-    testRunnerPanel.add(
-        helpText(
-            "Paste a sample message to see which rules match. This is just a preview; it won't create real notifications."),
-        "span 2, growx, wmin 0, wrap");
-    testRunnerPanel.add(new JLabel("Sample"), "aligny top");
-    testRunnerPanel.add(testInScroll, "growx, h 100!, wrap");
-    testRunnerPanel.add(new JLabel("Matches"), "aligny top");
-    testRunnerPanel.add(testOutScroll, "growx, h 160!, wrap");
-    testRunnerPanel.add(new JLabel(""));
-    testRunnerPanel.add(testButtons, "growx, wrap");
-    testTab.add(testRunnerPanel, "grow, push, wmin 0");
-
-    JTabbedPane subTabs = new JTabbedPane();
-    Icon rulesTabIcon = SvgIcons.action("edit", 14);
-    Icon testTabIcon = SvgIcons.action("check", 14);
-    subTabs.addTab(
-        "Rules", rulesTabIcon, padSubTab(rulesTab), "Manage notification matching rules");
-    subTabs.addTab(
-        "Test", testTabIcon, padSubTab(testTab), "Try a sample message against your rules");
-    subTabs.addTab(
-        "IRC Events",
-        null,
-        padSubTab(buildIrcEventNotificationsTab(ircEventNotifications)),
-        "Configure notifications for IRC events like kick/ban/invite/mode updates");
-
-    panel.add(subTabs, "grow, push, wmin 0");
-
-    refreshNotificationRuleValidation(notifications);
-
-    return panel;
+    return NotificationsPanelSupport.buildPanel(
+        notifications,
+        buildIrcEventNotificationsTab(ircEventNotifications),
+        dialog,
+        this::promptNotificationRuleDialog,
+        this::refreshNotificationRuleValidation);
   }
 
   private UserCommandAliasesControls buildUserCommandAliasesControls(
