@@ -81,10 +81,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -106,7 +104,6 @@ import javax.swing.DropMode;
 import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
-import javax.swing.JColorChooser;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
@@ -9484,9 +9481,6 @@ public class PreferencesDialog {
     return SettingsColorSupport.parseHexColor(raw);
   }
 
-  private static final int MAX_RECENT_COLORS = 12;
-  private static final Deque<String> RECENT_COLOR_HEX = new ArrayDeque<>();
-
   private static Color parseHexColorLenient(String raw) {
     return SettingsColorSupport.parseHexColorLenient(raw);
   }
@@ -9658,226 +9652,10 @@ public class PreferencesDialog {
     }
   }
 
-  private static void rememberRecentColorHex(String hex) {
-    if (hex == null) return;
-    String s = hex.trim().toUpperCase(Locale.ROOT);
-    if (s.isEmpty()) return;
-    if (!s.startsWith("#")) s = "#" + s;
-    if (s.length() == 4) {
-      // Expand #RGB -> #RRGGBB
-      char r = s.charAt(1);
-      char g = s.charAt(2);
-      char b = s.charAt(3);
-      s = "#" + r + r + g + g + b + b;
-    }
-    if (s.length() != 7) return;
-
-    final String needle = s;
-
-    synchronized (RECENT_COLOR_HEX) {
-      RECENT_COLOR_HEX.removeIf(v -> v != null && v.equalsIgnoreCase(needle));
-      RECENT_COLOR_HEX.addFirst(needle);
-      while (RECENT_COLOR_HEX.size() > MAX_RECENT_COLORS) {
-        RECENT_COLOR_HEX.removeLast();
-      }
-    }
-  }
-
-  private static List<String> snapshotRecentColorHex() {
-    synchronized (RECENT_COLOR_HEX) {
-      return new ArrayList<>(RECENT_COLOR_HEX);
-    }
-  }
-
-  private static JButton colorSwatchButton(Color c, Consumer<Color> onPick) {
-    JButton b = new JButton();
-    b.setFocusable(false);
-    b.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
-    b.setContentAreaFilled(false);
-    b.setIcon(new ColorSwatch(c, 18, 18));
-    b.setToolTipText(toHex(c));
-    b.addActionListener(
-        e -> {
-          if (onPick != null) onPick.accept(c);
-        });
-    return b;
-  }
-
-  private static double contrastRatio(Color fg, Color bg) {
-    return SettingsColorSupport.contrastRatio(fg, bg);
-  }
-
   private static Color showColorPickerDialog(
       Window owner, String title, Color initial, Color previewBackground) {
-    Color bg = previewBackground != null ? previewBackground : preferredPreviewBackground();
-    Color init = initial != null ? initial : Color.WHITE;
-
-    // A compact "hex + palette + preview" picker; way less chaotic than the stock Swing chooser.
-    final JDialog d = new JDialog(owner, title, JDialog.ModalityType.APPLICATION_MODAL);
-    d.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-
-    final Color[] current = new Color[] {init};
-    final Color[] result = new Color[1];
-
-    JLabel preview = new JLabel(" IRCafe preview ");
-    preview.setOpaque(true);
-    preview.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
-    preview.setBackground(bg);
-
-    JLabel contrast = new JLabel();
-    contrast.setFont(UIManager.getFont("Label.smallFont"));
-
-    JTextField hex = new JTextField(toHex(init), 10);
-    hex.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "#RRGGBB");
-
-    JLabel hexStatus = new JLabel(" ");
-    hexStatus.setFont(UIManager.getFont("Label.smallFont"));
-
-    JButton more = new JButton("More…");
-    JButton ok = new JButton("OK");
-    JButton cancel = new JButton("Cancel");
-
-    final boolean[] internalUpdate = new boolean[] {false};
-
-    Runnable updatePreview =
-        () -> {
-          Color fg = current[0];
-          preview.setForeground(fg);
-          preview.setText(" IRCafe preview  " + toHex(fg));
-          double cr = contrastRatio(fg, bg);
-          String verdict = cr >= 4.5 ? "OK" : (cr >= 3.0 ? "Low" : "Bad");
-          contrast.setText(String.format(Locale.ROOT, "Contrast: %.1f (%s)", cr, verdict));
-          ok.setEnabled(fg != null);
-        };
-
-    Consumer<Color> setColor =
-        c -> {
-          if (c == null) return;
-          current[0] = c;
-          internalUpdate[0] = true;
-          hex.setText(toHex(c));
-          internalUpdate[0] = false;
-          hexStatus.setText(" ");
-          updatePreview.run();
-        };
-
-    hex.getDocument()
-        .addDocumentListener(
-            new SimpleDocListener(
-                () -> {
-                  if (internalUpdate[0]) return;
-
-                  Color parsed = parseHexColorLenient(hex.getText());
-                  if (parsed == null) {
-                    hexStatus.setText("Invalid hex (use #RRGGBB or #RGB)");
-                    ok.setEnabled(false);
-                    return;
-                  }
-                  current[0] = parsed;
-                  hexStatus.setText(" ");
-                  updatePreview.run();
-                }));
-
-    JPanel palette = new JPanel(new MigLayout("insets 0, wrap 8, gap 6", "[]", "[]"));
-    Color[] colors =
-        new Color[] {
-          new Color(0xFFFFFF), new Color(0xD9D9D9), new Color(0xA6A6A6), new Color(0x4D4D4D),
-              new Color(0x000000), new Color(0xFF6B6B), new Color(0xFFA94D), new Color(0xFFD43B),
-          new Color(0x69DB7C), new Color(0x38D9A9), new Color(0x22B8CF), new Color(0x4DABF7),
-              new Color(0x748FFC), new Color(0x9775FA), new Color(0xDA77F2), new Color(0xF783AC),
-          new Color(0xC92A2A), new Color(0xE8590C), new Color(0xF08C00), new Color(0x2F9E44),
-              new Color(0x0CA678), new Color(0x1098AD), new Color(0x1971C2), new Color(0x5F3DC4)
-        };
-    for (Color c : colors) {
-      palette.add(colorSwatchButton(c, setColor));
-    }
-
-    JPanel recent = new JPanel(new MigLayout("insets 0, wrap 8, gap 6", "[]", "[]"));
-    Runnable refreshRecent =
-        () -> {
-          recent.removeAll();
-          List<String> rec = snapshotRecentColorHex();
-          if (rec.isEmpty()) {
-            recent.add(helpText("No recent colors yet."), "span 8");
-          } else {
-            for (String hx : rec) {
-              Color c = parseHexColorLenient(hx);
-              if (c == null) continue;
-              recent.add(colorSwatchButton(c, setColor));
-            }
-          }
-          recent.revalidate();
-          recent.repaint();
-        };
-    refreshRecent.run();
-
-    more.addActionListener(
-        e -> {
-          Color picked =
-              JColorChooser.showDialog(d, "More Colors", current[0] != null ? current[0] : init);
-          if (picked != null) setColor.accept(picked);
-        });
-
-    ok.addActionListener(
-        e -> {
-          if (current[0] == null) return;
-          result[0] = current[0];
-          rememberRecentColorHex(toHex(current[0]));
-          d.dispose();
-        });
-
-    cancel.addActionListener(
-        e -> {
-          result[0] = null;
-          d.dispose();
-        });
-
-    JPanel content =
-        new JPanel(
-            new MigLayout(
-                "insets 12, fillx, wrap 2", "[grow,fill]12[grow,fill]", "[]10[]6[]10[]6[]10[]"));
-    content.add(preview, "span 2, growx, wrap");
-    content.add(contrast, "span 2, growx, wrap");
-
-    content.add(new JLabel("Hex"));
-    JPanel hexRow =
-        new JPanel(
-            new MigLayout("insets 0, fillx, wrap 3", "[grow,fill]6[nogrid]6[nogrid]", "[]2[]"));
-    hexRow.setOpaque(false);
-    hexRow.add(hex, "w 110!");
-    hexRow.add(more);
-    hexRow.add(new JLabel(), "push");
-    hexRow.add(hexStatus, "span 3, growx");
-    content.add(hexRow, "growx, wrap");
-
-    content.add(new JLabel("Palette"), "aligny top");
-    content.add(palette, "growx, wrap");
-
-    content.add(new JLabel("Recent"), "aligny top");
-    content.add(recent, "growx, wrap");
-
-    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-    buttons.add(cancel);
-    buttons.add(ok);
-
-    JPanel outer = new JPanel(new BorderLayout());
-    outer.add(content, BorderLayout.CENTER);
-    outer.add(buttons, BorderLayout.SOUTH);
-
-    d.setContentPane(outer);
-    d.getRootPane().setDefaultButton(ok);
-    d.getRootPane()
-        .registerKeyboardAction(
-            ev -> cancel.doClick(),
-            javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
-            JComponent.WHEN_IN_FOCUSED_WINDOW);
-
-    updatePreview.run();
-    d.pack();
-    d.setLocationRelativeTo(owner);
-    d.setVisible(true);
-
-    return result[0];
+    return SettingsColorPickerDialogSupport.showColorPickerDialog(
+        owner, title, initial, previewBackground);
   }
 
   private enum LookupRatePreset {
