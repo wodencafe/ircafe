@@ -4458,140 +4458,14 @@ public class PreferencesDialog {
 
   private FilterControls buildFilterControls(
       FilterSettings current, List<AutoCloseable> closeables) {
-    Objects.requireNonNull(current);
-
-    JCheckBox enabledByDefault = new JCheckBox("Enable filters by default");
-    enabledByDefault.setSelected(current.filtersEnabledByDefault());
-
-    JCheckBox placeholdersEnabledByDefault =
-        new JCheckBox("Enable \"Filtered (N)\" placeholders by default");
-    placeholdersEnabledByDefault.setSelected(current.placeholdersEnabledByDefault());
-
-    JCheckBox placeholdersCollapsedByDefault = new JCheckBox("Collapse placeholders by default");
-    placeholdersCollapsedByDefault.setSelected(current.placeholdersCollapsedByDefault());
-
-    JSpinner previewLines =
-        new JSpinner(
-            new SpinnerNumberModel(
-                Math.max(0, Math.min(25, current.placeholderMaxPreviewLines())), 0, 25, 1));
-    // Keep consistent with other numeric spinners in the dialog.
-    if (closeables != null) {
-      try {
-        closeables.add(MouseWheelDecorator.decorateNumberSpinner(previewLines));
-      } catch (Exception ignored) {
-        // best-effort; spinner still works without wheel support
-      }
-    } else {
-      try {
-        MouseWheelDecorator.decorateNumberSpinner(previewLines);
-      } catch (Exception ignored) {
-        // best-effort
-      }
-    }
-
-    JSpinner maxLinesPerRun =
-        new JSpinner(
-            new SpinnerNumberModel(
-                Math.max(0, Math.min(50_000, current.placeholderMaxLinesPerRun())), 0, 50_000, 50));
-    maxLinesPerRun.setToolTipText(
-        "Max hidden lines represented in a single placeholder run. 0 = unlimited.");
-    if (closeables != null) {
-      try {
-        closeables.add(MouseWheelDecorator.decorateNumberSpinner(maxLinesPerRun));
-      } catch (Exception ignored) {
-      }
-    } else {
-      try {
-        MouseWheelDecorator.decorateNumberSpinner(maxLinesPerRun);
-      } catch (Exception ignored) {
-      }
-    }
-
-    JSpinner tooltipMaxTags =
-        new JSpinner(
-            new SpinnerNumberModel(
-                Math.max(0, Math.min(500, current.placeholderTooltipMaxTags())), 0, 500, 1));
-    tooltipMaxTags.setToolTipText("Max tags shown in placeholder/hint tooltips. 0 = hide tags.");
-    if (closeables != null) {
-      try {
-        closeables.add(MouseWheelDecorator.decorateNumberSpinner(tooltipMaxTags));
-      } catch (Exception ignored) {
-      }
-    } else {
-      try {
-        MouseWheelDecorator.decorateNumberSpinner(tooltipMaxTags);
-      } catch (Exception ignored) {
-      }
-    }
-
-    JCheckBox historyPlaceholdersEnabledByDefault =
-        new JCheckBox("Show placeholders for filtered history loads");
-    historyPlaceholdersEnabledByDefault.setSelected(current.historyPlaceholdersEnabledByDefault());
-    historyPlaceholdersEnabledByDefault.setToolTipText(
-        "If off, filtered lines loaded from history are silently hidden (no placeholder/hint rows).");
-
-    JSpinner historyMaxRuns =
-        new JSpinner(
-            new SpinnerNumberModel(
-                Math.max(0, Math.min(5_000, current.historyPlaceholderMaxRunsPerBatch())),
-                0,
-                5_000,
-                1));
-    historyMaxRuns.setToolTipText("Max placeholder runs per history load batch. 0 = unlimited.");
-    if (closeables != null) {
-      try {
-        closeables.add(MouseWheelDecorator.decorateNumberSpinner(historyMaxRuns));
-      } catch (Exception ignored) {
-      }
-    } else {
-      try {
-        MouseWheelDecorator.decorateNumberSpinner(historyMaxRuns);
-      } catch (Exception ignored) {
-      }
-    }
-
-    // If history placeholders are disabled, the batch cap is irrelevant (keep the value but disable
-    // the control).
-    try {
-      historyMaxRuns.setEnabled(historyPlaceholdersEnabledByDefault.isSelected());
-      historyPlaceholdersEnabledByDefault.addActionListener(
-          e -> historyMaxRuns.setEnabled(historyPlaceholdersEnabledByDefault.isSelected()));
-    } catch (Exception ignored) {
-      // best-effort
-    }
-
-    FilterOverrideControls overrideControls =
-        FilterOverrideControlsSupport.buildControls(current, dialog);
-
-    FilterRuleControls ruleControls =
-        FilterRuleControlsSupport.buildControls(
-            current,
-            dialog,
-            filterSettingsBus,
-            runtimeConfig,
-            targetCoordinator,
-            transcriptRebuildService,
-            closeables);
-
-    return new FilterControls(
-        enabledByDefault,
-        placeholdersEnabledByDefault,
-        placeholdersCollapsedByDefault,
-        previewLines,
-        maxLinesPerRun,
-        tooltipMaxTags,
-        historyPlaceholdersEnabledByDefault,
-        historyMaxRuns,
-        overrideControls.model,
-        overrideControls.table,
-        overrideControls.add,
-        overrideControls.remove,
-        ruleControls.table,
-        ruleControls.addRule,
-        ruleControls.editRule,
-        ruleControls.deleteRule,
-        ruleControls.moveRuleUp,
-        ruleControls.moveRuleDown);
+    return FilterControlsSupport.buildControls(
+        current,
+        dialog,
+        closeables,
+        filterSettingsBus,
+        runtimeConfig,
+        targetCoordinator,
+        transcriptRebuildService);
   }
 
   private JPanel buildFiltersPanel(FilterControls c) {
