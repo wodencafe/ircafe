@@ -427,7 +427,7 @@ public class PreferencesDialog {
 
           if (tweakSettingsBus != null) {
             DensityOption opt = (DensityOption) tweaks.density.getSelectedItem();
-            String densityId = opt != null ? opt.id() : "auto";
+            String densityId = opt != null ? opt.id : "auto";
             String uiFontFamily =
                 Objects.toString(tweaks.uiFontFamily.getSelectedItem(), "").trim();
             if (uiFontFamily.isBlank()) uiFontFamily = ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY;
@@ -986,7 +986,8 @@ public class PreferencesDialog {
 
     AppearanceServerTreeControls appearanceServerTree = buildAppearanceServerTreeControls(current);
     JPanel appearancePanel =
-        buildAppearancePanel(theme, accent, chatTheme, fonts, tweaks, appearanceServerTree);
+        AppearancePanelSupport.buildPanel(
+            theme, accent, chatTheme, fonts, tweaks, appearanceServerTree);
     JPanel memoryPanel =
         buildMemoryPanel(memoryUsageDisplayMode, memoryUsageRefreshIntervalMs, memoryWarnings);
     JPanel startupPanel = buildStartupPanel(autoConnectOnStart, launchJvm);
@@ -1047,7 +1048,7 @@ public class PreferencesDialog {
                   ? tweakSettingsBus.get()
                   : new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10);
           DensityOption densityOpt = (DensityOption) tweaks.density.getSelectedItem();
-          String densityIdV = densityOpt != null ? densityOpt.id() : "auto";
+          String densityIdV = densityOpt != null ? densityOpt.id : "auto";
           int cornerRadiusV = tweaks.cornerRadius.getValue();
           String uiFontFamilyV = Objects.toString(tweaks.uiFontFamily.getSelectedItem(), "").trim();
           if (uiFontFamilyV.isBlank()) uiFontFamilyV = ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY;
@@ -1510,11 +1511,11 @@ public class PreferencesDialog {
           try {
             serverTreeUnreadChannelColorV =
                 normalizeOptionalHexForApply(
-                    appearanceServerTree.unreadChannelColor.hex().getText(),
+                    appearanceServerTree.unreadChannelColor.hex.getText(),
                     "Unread channel color must be blank or a hex value like #RRGGBB.");
             serverTreeHighlightChannelColorV =
                 normalizeOptionalHexForApply(
-                    appearanceServerTree.highlightChannelColor.hex().getText(),
+                    appearanceServerTree.highlightChannelColor.hex.getText(),
                     "Highlight channel color must be blank or a hex value like #RRGGBB.");
           } catch (IllegalArgumentException ex) {
             JOptionPane.showMessageDialog(
@@ -3104,7 +3105,7 @@ public class PreferencesDialog {
     density.setToolTipText(DENSITY_TOOLTIP);
     String curId = cur.densityId();
     for (DensityOption o : opts) {
-      if (o != null && o.id().equalsIgnoreCase(curId)) {
+      if (o != null && o.id.equalsIgnoreCase(curId)) {
         density.setSelectedItem(o);
         break;
       }
@@ -4895,174 +4896,6 @@ public class PreferencesDialog {
         userLookups.panel);
   }
 
-  private JPanel buildAppearancePanel(
-      ThemeControls theme,
-      AccentControls accent,
-      ChatThemeControls chatTheme,
-      FontControls fonts,
-      TweakControls tweaks,
-      AppearanceServerTreeControls serverTree) {
-    JPanel form =
-        new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]8[grow,push]8[]"));
-
-    form.add(tabTitle("Appearance"), "growx, wmin 0, wrap");
-
-    JTabbedPane appearanceTabs = new JTabbedPane();
-    appearanceTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
-    appearanceTabs.addTab("Theme", padSubTab(buildAppearanceThemeSubTab(theme, accent, tweaks)));
-    appearanceTabs.addTab("UI font", padSubTab(buildAppearanceUiFontSubTab(tweaks)));
-    appearanceTabs.addTab("Chat colors", padSubTab(buildAppearanceChatColorsSubTab(chatTheme)));
-    appearanceTabs.addTab("Chat text", padSubTab(buildAppearanceChatTextSubTab(fonts)));
-    appearanceTabs.addTab("Server tree", padSubTab(buildAppearanceServerTreeSubTab(serverTree)));
-    form.add(appearanceTabs, "grow, push, wmin 0");
-
-    JButton reset = new JButton("Reset to defaults");
-    reset.setToolTipText(
-        "Revert the appearance controls to default values. Changes preview live; Apply/OK saves.");
-    reset.addActionListener(
-        e -> {
-          theme.combo.setSelectedItem("darcula");
-          fonts.fontFamily.setSelectedItem("Monospaced");
-          fonts.fontSize.setValue(12);
-          accent.preset.setSelectedItem(AccentPreset.IRCAFE_COBALT);
-          accent.enabled.setSelected(true);
-          accent.hex.setText(UiProperties.DEFAULT_ACCENT_COLOR);
-          accent.strength.setValue(UiProperties.DEFAULT_ACCENT_STRENGTH);
-          // LAF tweak defaults
-          for (int i = 0; i < tweaks.density.getItemCount(); i++) {
-            DensityOption o = tweaks.density.getItemAt(i);
-            if (o != null && "auto".equalsIgnoreCase(o.id())) {
-              tweaks.density.setSelectedIndex(i);
-              break;
-            }
-          }
-          tweaks.cornerRadius.setValue(10);
-          tweaks.uiFontOverrideEnabled.setSelected(false);
-          tweaks.uiFontFamily.setSelectedItem(ThemeTweakSettings.DEFAULT_UI_FONT_FAMILY);
-          tweaks.uiFontSize.setValue(ThemeTweakSettings.DEFAULT_UI_FONT_SIZE);
-
-          // Chat theme
-          chatTheme.preset.setSelectedItem(ChatThemeSettings.Preset.DEFAULT);
-          chatTheme.timestamp.hex.setText("");
-          chatTheme.system.hex.setText("");
-          chatTheme.mention.hex.setText("");
-          chatTheme.message.hex.setText("");
-          chatTheme.notice.hex.setText("");
-          chatTheme.action.hex.setText("");
-          chatTheme.error.hex.setText("");
-          chatTheme.presence.hex.setText("");
-          chatTheme.mentionStrength.setValue(35);
-          chatTheme.timestamp.updateIcon.run();
-          chatTheme.system.updateIcon.run();
-          chatTheme.mention.updateIcon.run();
-          chatTheme.message.updateIcon.run();
-          chatTheme.notice.updateIcon.run();
-          chatTheme.action.updateIcon.run();
-          chatTheme.error.updateIcon.run();
-          chatTheme.presence.updateIcon.run();
-          serverTree.unreadChannelColor.hex().setText("");
-          serverTree.highlightChannelColor.hex().setText("");
-          serverTree.unreadChannelColor.updateIcon().run();
-          serverTree.highlightChannelColor.updateIcon().run();
-          serverTree.preserveDockLayoutBetweenSessions.setSelected(false);
-
-          accent.applyEnabledState.run();
-          accent.syncPresetFromHex.run();
-          tweaks.applyUiFontEnabledState.run();
-        });
-    form.add(reset, "split 2, alignx left");
-    form.add(
-        helpText("Changes preview live. Use Apply or OK to save."),
-        "alignx left, gapleft 12, growx, wmin 0");
-
-    return form;
-  }
-
-  private JPanel buildAppearanceThemeSubTab(
-      ThemeControls theme, AccentControls accent, TweakControls tweaks) {
-    JPanel panel =
-        new JPanel(
-            new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]6[]6[]6[]"));
-    panel.setOpaque(false);
-
-    panel.add(sectionTitle("Look & feel"), "span 2, growx, wmin 0, wrap");
-    panel.add(new JLabel("Theme"));
-    panel.add(theme.combo, "growx");
-
-    JPanel accentLabel = new JPanel(new MigLayout("insets 0", "[]6[]", "[]"));
-    accentLabel.setOpaque(false);
-    accentLabel.add(new JLabel("Accent"));
-    accentLabel.add(accent.chip);
-    panel.add(accentLabel);
-    panel.add(accent.panel, "growx");
-
-    panel.add(new JLabel("Accent strength"));
-    panel.add(accent.strength, "growx");
-
-    panel.add(new JLabel("Density"));
-    panel.add(tweaks.density, "growx");
-
-    panel.add(new JLabel("Corner radius"));
-    panel.add(tweaks.cornerRadius, "growx");
-
-    JTextArea tweakHint = subtleInfoText();
-    tweakHint.setText("Density and corner radius are available for FlatLaf-based themes.");
-    panel.add(new JLabel(""));
-    panel.add(tweakHint, "growx, wmin 0");
-
-    return panel;
-  }
-
-  private JPanel buildAppearanceUiFontSubTab(TweakControls tweaks) {
-    JPanel panel =
-        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]6[]"));
-    panel.setOpaque(false);
-
-    panel.add(sectionTitle("UI text"), "span 2, growx, wmin 0, wrap");
-    panel.add(new JLabel("Font override"));
-    panel.add(tweaks.uiFontOverrideEnabled, "growx");
-    panel.add(new JLabel("Font family"));
-    panel.add(tweaks.uiFontFamily, "growx");
-    panel.add(new JLabel("Font size"));
-    panel.add(tweaks.uiFontSize, "w 110!");
-
-    JTextArea uiFontHint = subtleInfoText();
-    uiFontHint.setText(
-        "Applies globally to menus, dialogs, tabs, forms, and controls for all themes.");
-    panel.add(new JLabel(""));
-    panel.add(uiFontHint, "growx, wmin 0");
-
-    return panel;
-  }
-
-  private JPanel buildAppearanceChatColorsSubTab(ChatThemeControls chatTheme) {
-    JPanel panel =
-        new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]8[]12[]8[]"));
-    panel.setOpaque(false);
-
-    panel.add(sectionTitle("Palette"), "growx, wmin 0, wrap");
-    panel.add(buildChatThemePaletteSubTab(chatTheme), "growx, wmin 0, wrap");
-
-    panel.add(sectionTitle("Message colors"), "growx, wmin 0, wrap");
-    panel.add(buildChatMessageColorsSubTab(chatTheme), "growx, wmin 0");
-
-    return panel;
-  }
-
-  private JPanel buildAppearanceChatTextSubTab(FontControls fonts) {
-    JPanel panel =
-        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]"));
-    panel.setOpaque(false);
-
-    panel.add(sectionTitle("Chat text"), "span 2, growx, wmin 0, wrap");
-    panel.add(new JLabel("Font family"));
-    panel.add(fonts.fontFamily, "growx");
-    panel.add(new JLabel("Font size"));
-    panel.add(fonts.fontSize, "w 110!");
-
-    return panel;
-  }
-
   private AppearanceServerTreeControls buildAppearanceServerTreeControls(UiSettings current) {
     ColorField unreadChannelColor =
         buildOptionalColorField(
@@ -5080,83 +4913,6 @@ public class PreferencesDialog {
         current != null && current.preserveDockLayoutBetweenSessions());
     return new AppearanceServerTreeControls(
         unreadChannelColor, highlightChannelColor, preserveDockLayoutBetweenSessions);
-  }
-
-  private JPanel buildAppearanceServerTreeSubTab(AppearanceServerTreeControls serverTree) {
-    JPanel panel =
-        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]8[]6[]"));
-    panel.setOpaque(false);
-
-    panel.add(sectionTitle("Server tree"), "span 2, growx, wmin 0, wrap");
-    panel.add(new JLabel("Unread channel color"));
-    panel.add(serverTree.unreadChannelColor.panel(), "growx");
-    panel.add(new JLabel("Highlight channel color"));
-    panel.add(serverTree.highlightChannelColor.panel(), "growx");
-    panel.add(new JLabel("Dock layout"));
-    panel.add(serverTree.preserveDockLayoutBetweenSessions, "growx");
-
-    JTextArea hint = subtleInfoText();
-    hint.setText(
-        "Leave colors blank to use theme defaults. Dock layout restore applies on next launch.");
-    panel.add(new JLabel(""));
-    panel.add(hint, "growx, wmin 0");
-
-    return panel;
-  }
-
-  private JPanel buildChatThemePaletteSubTab(ChatThemeControls chatTheme) {
-    JPanel panel =
-        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]"));
-    panel.setOpaque(false);
-
-    panel.add(new JLabel("Chat theme preset"));
-    panel.add(chatTheme.preset, "growx");
-
-    panel.add(new JLabel("Timestamp color"));
-    panel.add(chatTheme.timestamp.panel, "growx");
-
-    panel.add(new JLabel("Mention highlight"));
-    panel.add(chatTheme.mention.panel, "growx");
-
-    panel.add(new JLabel("Mention strength"));
-    panel.add(chatTheme.mentionStrength, "growx");
-
-    panel.add(new JLabel(""));
-    panel.add(
-        helpText("Use Message colors when you want to override specific line types."),
-        "growx, wmin 0");
-    return panel;
-  }
-
-  private JPanel buildChatMessageColorsSubTab(ChatThemeControls chatTheme) {
-    JPanel panel =
-        new JPanel(
-            new MigLayout(
-                "insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]6[]6[]6[]6[]6[]"));
-    panel.setOpaque(false);
-
-    panel.add(new JLabel("Server/system"));
-    panel.add(chatTheme.system.panel, "growx");
-
-    panel.add(new JLabel("User messages"));
-    panel.add(chatTheme.message.panel, "growx");
-
-    panel.add(new JLabel("Notice messages"));
-    panel.add(chatTheme.notice.panel, "growx");
-
-    panel.add(new JLabel("Action messages"));
-    panel.add(chatTheme.action.panel, "growx");
-
-    panel.add(new JLabel("Presence messages"));
-    panel.add(chatTheme.presence.panel, "growx");
-
-    panel.add(new JLabel("Error messages"));
-    panel.add(chatTheme.error.panel, "growx");
-
-    panel.add(new JLabel(""));
-    panel.add(helpText("Leave any field blank to use the theme default."), "growx, wmin 0");
-
-    return panel;
   }
 
   private JPanel buildMemoryPanel(
@@ -5708,87 +5464,6 @@ public class PreferencesDialog {
   private record SpellcheckLanguageOption(String id, String label) {}
 
   private record SpellcheckPresetOption(String id, String label) {}
-
-  private enum AccentPreset {
-    THEME_DEFAULT("Theme default", null),
-    IRCAFE_COBALT("IRCafe cobalt", UiProperties.DEFAULT_ACCENT_COLOR),
-    INDIGO("Indigo", "#4F46E5"),
-    VIOLET("Violet", "#7C3AED"),
-    CUSTOM("Custom…", null);
-
-    final String label;
-    final String hex;
-
-    AccentPreset(String label, String hex) {
-      this.label = label;
-      this.hex = hex;
-    }
-
-    Color colorOrNull() {
-      if (hex == null) return null;
-      return parseHexColorLenient(hex);
-    }
-
-    static AccentPreset fromHexOrCustom(String normalizedHex) {
-      if (normalizedHex == null || normalizedHex.isBlank()) return CUSTOM;
-      for (AccentPreset p : values()) {
-        if (p.hex != null && p.hex.equalsIgnoreCase(normalizedHex)) return p;
-      }
-      return CUSTOM;
-    }
-  }
-
-  private record AccentControls(
-      JCheckBox enabled,
-      JComboBox<AccentPreset> preset,
-      JTextField hex,
-      JButton pick,
-      JButton clear,
-      JSlider strength,
-      JComponent chip,
-      JPanel panel,
-      Runnable applyEnabledState,
-      Runnable syncPresetFromHex,
-      Runnable updateChip) {}
-
-  private record ColorField(
-      JTextField hex, JButton pick, JButton clear, JPanel panel, Runnable updateIcon) {}
-
-  private record ChatThemeControls(
-      JComboBox<ChatThemeSettings.Preset> preset,
-      ColorField timestamp,
-      ColorField system,
-      ColorField mention,
-      ColorField message,
-      ColorField notice,
-      ColorField action,
-      ColorField error,
-      ColorField presence,
-      JSlider mentionStrength) {}
-
-  private record ThemeControls(JComboBox<String> combo) {}
-
-  private record FontControls(JComboBox<String> fontFamily, JSpinner fontSize) {}
-
-  private record AppearanceServerTreeControls(
-      ColorField unreadChannelColor,
-      ColorField highlightChannelColor,
-      JCheckBox preserveDockLayoutBetweenSessions) {}
-
-  private record DensityOption(String id, String label) {
-    @Override
-    public String toString() {
-      return label;
-    }
-  }
-
-  private record TweakControls(
-      JComboBox<DensityOption> density,
-      JSlider cornerRadius,
-      JCheckBox uiFontOverrideEnabled,
-      JComboBox<String> uiFontFamily,
-      JSpinner uiFontSize,
-      Runnable applyUiFontEnabledState) {}
 
   private enum PushyTargetMode {
     DEVICE_TOKEN("Device token"),
