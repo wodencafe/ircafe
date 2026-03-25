@@ -7354,8 +7354,8 @@ public class PreferencesDialog {
         new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]"));
     tab.setOpaque(false);
 
-    JComboBox<IrcEventNotificationPreset> defaultsPreset =
-        new JComboBox<>(IrcEventNotificationPreset.values());
+    JComboBox<IrcEventNotificationPresetSupport.Preset> defaultsPreset =
+        new JComboBox<>(IrcEventNotificationPresetSupport.Preset.values());
     JButton applyDefaults = new JButton("Apply defaults");
     JButton resetToIrcafeDefaults = new JButton("Reset to IRCafe defaults");
     configureIconOnlyButton(
@@ -7548,10 +7548,11 @@ public class PreferencesDialog {
 
     applyDefaults.addActionListener(
         e -> {
-          IrcEventNotificationPreset preset =
-              (IrcEventNotificationPreset) defaultsPreset.getSelectedItem();
+          IrcEventNotificationPresetSupport.Preset preset =
+              (IrcEventNotificationPresetSupport.Preset) defaultsPreset.getSelectedItem();
           if (preset == null) return;
-          List<IrcEventNotificationRule> rules = buildIrcEventDefaultPreset(preset);
+          List<IrcEventNotificationRule> rules =
+              IrcEventNotificationPresetSupport.buildPreset(preset);
           if (rules.isEmpty()) return;
           controls.model.applyPreset(rules);
           int row = controls.model.firstRowForEvent(rules.get(0).eventType());
@@ -7648,107 +7649,6 @@ public class PreferencesDialog {
         seed,
         notificationSoundService,
         this::importNotificationSoundFileToRuntimeDir);
-  }
-
-  private List<IrcEventNotificationRule> buildIrcEventDefaultPreset(
-      IrcEventNotificationPreset preset) {
-    if (preset == null) return List.of();
-    return switch (preset) {
-      case ESSENTIAL ->
-          List.of(
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.PRIVATE_MESSAGE_RECEIVED,
-                  IrcEventNotificationRule.SourceMode.OTHERS,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.INVITE_RECEIVED,
-                  IrcEventNotificationRule.SourceMode.OTHERS,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.YOU_KICKED,
-                  IrcEventNotificationRule.SourceMode.ANY,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.YOU_BANNED,
-                  IrcEventNotificationRule.SourceMode.ANY,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.YOU_KLINED,
-                  IrcEventNotificationRule.SourceMode.ANY,
-                  false));
-      case MODERATION ->
-          List.of(
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.KICKED,
-                  IrcEventNotificationRule.SourceMode.OTHERS,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.BANNED,
-                  IrcEventNotificationRule.SourceMode.OTHERS,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.OPPED,
-                  IrcEventNotificationRule.SourceMode.OTHERS,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.DEOPPED,
-                  IrcEventNotificationRule.SourceMode.OTHERS,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.VOICED,
-                  IrcEventNotificationRule.SourceMode.OTHERS,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.DEVOICED,
-                  IrcEventNotificationRule.SourceMode.OTHERS,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.HALF_OPPED,
-                  IrcEventNotificationRule.SourceMode.OTHERS,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.DEHALF_OPPED,
-                  IrcEventNotificationRule.SourceMode.OTHERS,
-                  false),
-              eventDefaultRule(
-                  IrcEventNotificationRule.EventType.INVITE_RECEIVED,
-                  IrcEventNotificationRule.SourceMode.ANY,
-                  false));
-      case ALL_EVENTS ->
-          Arrays.stream(IrcEventNotificationRule.EventType.values())
-              .map(t -> eventDefaultRule(t, IrcEventNotificationRule.SourceMode.ANY, false))
-              .toList();
-    };
-  }
-
-  private static IrcEventNotificationRule eventDefaultRule(
-      IrcEventNotificationRule.EventType eventType,
-      IrcEventNotificationRule.SourceMode sourceMode,
-      boolean soundEnabled) {
-    return new IrcEventNotificationRule(
-        true,
-        eventType,
-        sourceMode,
-        null,
-        IrcEventNotificationRule.ChannelScope.ALL,
-        null,
-        true,
-        IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY,
-        true,
-        true,
-        soundEnabled,
-        defaultBuiltInSoundForIrcEventRule(eventType).name(),
-        false,
-        null,
-        false,
-        null,
-        null,
-        null);
-  }
-
-  static BuiltInSound defaultBuiltInSoundForIrcEventRule(
-      IrcEventNotificationRule.EventType eventType) {
-    return IrcEventNotificationRule.defaultBuiltInSoundForEvent(eventType);
   }
 
   private JPanel buildNotificationsPanel(
@@ -8678,23 +8578,6 @@ public class PreferencesDialog {
     private final String label;
 
     LookupRatePreset(String label) {
-      this.label = label;
-    }
-
-    @Override
-    public String toString() {
-      return label;
-    }
-  }
-
-  private enum IrcEventNotificationPreset {
-    ESSENTIAL("Essential alerts (Recommended)"),
-    MODERATION("Moderation focused"),
-    ALL_EVENTS("All events");
-
-    private final String label;
-
-    IrcEventNotificationPreset(String label) {
       this.label = label;
     }
 

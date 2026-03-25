@@ -369,7 +369,8 @@ final class IrcEventNotificationTableModel extends AbstractTableModel {
         m.focusScope = IrcEventNotificationRule.FocusScope.BACKGROUND_ONLY;
         m.notificationsNodeEnabled = true;
         m.soundEnabled = false;
-        m.soundId = PreferencesDialog.defaultBuiltInSoundForIrcEventRule(m.eventType).name();
+        m.soundId =
+            IrcEventNotificationPresetSupport.defaultBuiltInSoundForEvent(m.eventType).name();
         m.soundUseCustom = false;
         m.soundCustomPath = null;
         m.scriptEnabled = false;

@@ -49,7 +49,7 @@ final class IrcEventNotificationRuleDialogSupport {
                 true,
                 true,
                 false,
-                PreferencesDialog.defaultBuiltInSoundForIrcEventRule(
+                IrcEventNotificationPresetSupport.defaultBuiltInSoundForEvent(
                         IrcEventNotificationRule.EventType.INVITE_RECEIVED)
                     .name(),
                 false,
@@ -284,10 +284,10 @@ final class IrcEventNotificationRuleDialogSupport {
             Object selectedSound = builtInSound.getSelectedItem();
             if (selectedSound instanceof BuiltInSound currentSound) {
               BuiltInSound previousDefault =
-                  PreferencesDialog.defaultBuiltInSoundForIrcEventRule(previous);
+                  IrcEventNotificationPresetSupport.defaultBuiltInSoundForEvent(previous);
               if (currentSound == previousDefault) {
                 builtInSound.setSelectedItem(
-                    PreferencesDialog.defaultBuiltInSoundForIrcEventRule(selectedEvent));
+                    IrcEventNotificationPresetSupport.defaultBuiltInSoundForEvent(selectedEvent));
               }
             }
           }
@@ -684,7 +684,7 @@ final class IrcEventNotificationRuleDialogSupport {
       BuiltInSound selectedSound =
           builtInSound.getSelectedItem() instanceof BuiltInSound sound
               ? sound
-              : PreferencesDialog.defaultBuiltInSoundForIrcEventRule(selectedEvent);
+              : IrcEventNotificationPresetSupport.defaultBuiltInSoundForEvent(selectedEvent);
       String soundCustomPathValue = Objects.toString(soundCustomPath.getText(), "").trim();
       if (soundCustomPathValue.isEmpty()) soundCustomPathValue = null;
       boolean useCustomSound = soundUseCustom.isSelected() && soundCustomPathValue != null;
