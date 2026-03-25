@@ -1535,9 +1535,9 @@ public class PreferencesDialog {
             } catch (Exception ignored) {
             }
           }
-          if (userCommands.table.isEditing()) {
+          if (userCommands.table().isEditing()) {
             try {
-              userCommands.table.getCellEditor().stopCellEditing();
+              userCommands.table().getCellEditor().stopCellEditing();
             } catch (Exception ignored) {
             }
           }
@@ -1553,7 +1553,7 @@ public class PreferencesDialog {
             return;
           }
 
-          UserCommandAliasValidationError aliasErr = userCommands.model.firstValidationError();
+          UserCommandAliasValidationError aliasErr = userCommands.model().firstValidationError();
           if (aliasErr != null) {
             JOptionPane.showMessageDialog(
                 dialog,
@@ -1570,8 +1570,8 @@ public class PreferencesDialog {
           List<NotificationRule> notificationRulesV = notifications.model.snapshot();
           List<IrcEventNotificationRule> ircEventNotificationRulesV =
               ircEventNotifications.model().snapshot();
-          List<UserCommandAlias> userCommandAliasesV = userCommands.model.snapshot();
-          boolean unknownCommandAsRawEnabledV = userCommands.unknownCommandAsRaw.isSelected();
+          List<UserCommandAlias> userCommandAliasesV = userCommands.model().snapshot();
+          boolean unknownCommandAsRawEnabledV = userCommands.unknownCommandAsRaw().isSelected();
           boolean diagnosticsAssertjSwingEnabledV = diagnostics.assertjSwingEnabled.isSelected();
           boolean diagnosticsAssertjSwingFreezeWatchdogEnabledV =
               diagnostics.assertjSwingFreezeWatchdogEnabled.isSelected();
@@ -7647,206 +7647,8 @@ public class PreferencesDialog {
 
   private UserCommandAliasesControls buildUserCommandAliasesControls(
       List<UserCommandAlias> initial, boolean unknownCommandAsRawEnabled) {
-    UserCommandAliasesTableModel model = new UserCommandAliasesTableModel(initial);
-    JTable table = new JTable(model);
-    table.setFillsViewportHeight(true);
-    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-    table.setRowHeight(Math.max(22, table.getRowHeight()));
-
-    TableColumn enabledCol =
-        table.getColumnModel().getColumn(UserCommandAliasesTableModel.COL_ENABLED);
-    enabledCol.setMaxWidth(80);
-    enabledCol.setPreferredWidth(70);
-
-    TableColumn commandCol =
-        table.getColumnModel().getColumn(UserCommandAliasesTableModel.COL_COMMAND);
-    commandCol.setPreferredWidth(220);
-
-    JTextArea template = new JTextArea(7, 40);
-    template.setLineWrap(true);
-    template.setWrapStyleWord(true);
-    template.setToolTipText(
-        "Use %1..%9, %1-, %*, %c, %t, %s, %e, %n, &1..&9. "
-            + "Separate commands with ';' or new lines.");
-    template.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "/msg %1 Hello %2-");
-
-    JButton add = new JButton("Add");
-    JButton importHexChat = new JButton("Import HexChat...");
-    JButton duplicate = new JButton("Duplicate");
-    JButton remove = new JButton("Remove");
-    JButton up = new JButton("Up");
-    JButton down = new JButton("Down");
-    configureIconOnlyButton(add, "plus", "Add command alias");
-    configureIconOnlyButton(importHexChat, "copy", "Import aliases from HexChat commands.conf");
-    configureIconOnlyButton(duplicate, "copy", "Duplicate selected alias");
-    configureIconOnlyButton(remove, "trash", "Remove selected alias");
-    configureIconOnlyButton(up, "arrow-up", "Move selected alias up");
-    configureIconOnlyButton(down, "arrow-down", "Move selected alias down");
-    JCheckBox unknownCommandAsRaw =
-        new JCheckBox("Fallback unknown /commands to raw IRC (HexChat-compatible)");
-    unknownCommandAsRaw.setSelected(unknownCommandAsRawEnabled);
-    unknownCommandAsRaw.setToolTipText(
-        "When enabled, typing an unknown slash command sends it to the server "
-            + "as raw IRC (same as /quote), instead of showing a local Unknown command message.");
-
-    JLabel hint = new JLabel("Select an alias row to edit its expansion.");
-    hint.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-
-    final boolean[] syncing = new boolean[] {false};
-
-    Runnable loadSelectedTemplate =
-        () -> {
-          int row = table.getSelectedRow();
-          syncing[0] = true;
-          if (row < 0) {
-            template.setText("");
-          } else {
-            int modelRow = table.convertRowIndexToModel(row);
-            template.setText(model.templateAt(modelRow));
-          }
-          syncing[0] = false;
-
-          boolean selected = row >= 0;
-          duplicate.setEnabled(selected);
-          remove.setEnabled(selected);
-          up.setEnabled(selected && row > 0);
-          down.setEnabled(selected && row < table.getRowCount() - 1);
-          template.setEnabled(selected);
-          hint.setText(
-              selected
-                  ? "Expansion supports multi-command ';' / newline and placeholders (%1, %2-, %*)."
-                  : "Select an alias row to edit its expansion.");
-        };
-
-    Runnable persistSelectedTemplate =
-        () -> {
-          if (syncing[0]) return;
-          int row = table.getSelectedRow();
-          if (row < 0) return;
-          int modelRow = table.convertRowIndexToModel(row);
-          model.setTemplateAt(modelRow, template.getText());
-        };
-
-    table
-        .getSelectionModel()
-        .addListSelectionListener(
-            e -> {
-              if (e != null && e.getValueIsAdjusting()) return;
-              loadSelectedTemplate.run();
-            });
-    template.getDocument().addDocumentListener(new SimpleDocListener(persistSelectedTemplate));
-
-    add.addActionListener(
-        e -> {
-          if (table.isEditing()) {
-            try {
-              table.getCellEditor().stopCellEditing();
-            } catch (Exception ignored) {
-            }
-          }
-          int idx = model.addAlias(new UserCommandAlias(true, "", ""));
-          if (idx >= 0) {
-            int view = table.convertRowIndexToView(idx);
-            table.getSelectionModel().setSelectionInterval(view, view);
-            table.scrollRectToVisible(table.getCellRect(view, 0, true));
-            table.editCellAt(view, UserCommandAliasesTableModel.COL_COMMAND);
-            table.requestFocusInWindow();
-          }
-        });
-
-    importHexChat.addActionListener(
-        e -> HexChatAliasImportDialogSupport.importAliases(importHexChat, model, table));
-
-    duplicate.addActionListener(
-        e -> {
-          if (table.isEditing()) {
-            try {
-              table.getCellEditor().stopCellEditing();
-            } catch (Exception ignored) {
-            }
-          }
-          int row = table.getSelectedRow();
-          if (row < 0) return;
-          int modelRow = table.convertRowIndexToModel(row);
-          int dup = model.duplicateRow(modelRow);
-          if (dup >= 0) {
-            int view = table.convertRowIndexToView(dup);
-            table.getSelectionModel().setSelectionInterval(view, view);
-            table.scrollRectToVisible(table.getCellRect(view, 0, true));
-          }
-        });
-
-    remove.addActionListener(
-        e -> {
-          if (table.isEditing()) {
-            try {
-              table.getCellEditor().stopCellEditing();
-            } catch (Exception ignored) {
-            }
-          }
-          int row = table.getSelectedRow();
-          if (row < 0) return;
-          int res =
-              JOptionPane.showConfirmDialog(
-                  dialog, "Remove selected alias?", "Remove alias", JOptionPane.OK_CANCEL_OPTION);
-          if (res != JOptionPane.OK_OPTION) return;
-          int modelRow = table.convertRowIndexToModel(row);
-          model.removeRow(modelRow);
-        });
-
-    up.addActionListener(
-        e -> {
-          if (table.isEditing()) {
-            try {
-              table.getCellEditor().stopCellEditing();
-            } catch (Exception ignored) {
-            }
-          }
-          int row = table.getSelectedRow();
-          if (row <= 0) return;
-          int modelRow = table.convertRowIndexToModel(row);
-          int modelPrevRow = table.convertRowIndexToModel(row - 1);
-          int next = model.moveRow(modelRow, modelPrevRow);
-          if (next >= 0) {
-            int view = table.convertRowIndexToView(next);
-            table.getSelectionModel().setSelectionInterval(view, view);
-            table.scrollRectToVisible(table.getCellRect(view, 0, true));
-          }
-        });
-
-    down.addActionListener(
-        e -> {
-          if (table.isEditing()) {
-            try {
-              table.getCellEditor().stopCellEditing();
-            } catch (Exception ignored) {
-            }
-          }
-          int row = table.getSelectedRow();
-          if (row < 0 || row >= table.getRowCount() - 1) return;
-          int modelRow = table.convertRowIndexToModel(row);
-          int modelNextRow = table.convertRowIndexToModel(row + 1);
-          int next = model.moveRow(modelRow, modelNextRow);
-          if (next >= 0) {
-            int view = table.convertRowIndexToView(next);
-            table.getSelectionModel().setSelectionInterval(view, view);
-            table.scrollRectToVisible(table.getCellRect(view, 0, true));
-          }
-        });
-
-    loadSelectedTemplate.run();
-    return new UserCommandAliasesControls(
-        table,
-        model,
-        template,
-        unknownCommandAsRaw,
-        add,
-        importHexChat,
-        duplicate,
-        remove,
-        up,
-        down,
-        hint);
+    return UserCommandAliasesControlsSupport.buildControls(
+        initial, unknownCommandAsRawEnabled, dialog);
   }
 
   private JPanel buildUserCommandsPanel(UserCommandAliasesControls controls) {
@@ -7865,22 +7667,22 @@ public class PreferencesDialog {
         "growx, wmin 0, wrap");
 
     JPanel behavior = captionPanel("Behavior", "insets 0, fillx, wrap 1", "[grow,fill]", "");
-    behavior.add(controls.unknownCommandAsRaw, "growx, wmin 0, wrap");
+    behavior.add(controls.unknownCommandAsRaw(), "growx, wmin 0, wrap");
     panel.add(behavior, "growx, wmin 0, wrap");
 
     JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-    buttons.add(controls.add);
-    buttons.add(controls.importHexChat);
-    buttons.add(controls.duplicate);
-    buttons.add(controls.remove);
-    buttons.add(controls.up);
-    buttons.add(controls.down);
+    buttons.add(controls.add());
+    buttons.add(controls.importHexChat());
+    buttons.add(controls.duplicate());
+    buttons.add(controls.remove());
+    buttons.add(controls.up());
+    buttons.add(controls.down());
 
-    JScrollPane tableScroll = new JScrollPane(controls.table);
+    JScrollPane tableScroll = new JScrollPane(controls.table());
     tableScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
     tableScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
-    JScrollPane templateScroll = new JScrollPane(controls.template);
+    JScrollPane templateScroll = new JScrollPane(controls.template());
     templateScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
     templateScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 
@@ -7892,7 +7694,7 @@ public class PreferencesDialog {
 
     JPanel editor =
         captionPanel("Expansion editor", "insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]");
-    editor.add(controls.hint, "growx, wmin 0, wrap");
+    editor.add(controls.hint(), "growx, wmin 0, wrap");
     editor.add(templateScroll, "growx, h 140!, wmin 0, wrap");
     panel.add(editor, "growx, wmin 0, wrap");
 
@@ -8363,19 +8165,6 @@ public class PreferencesDialog {
       JTextArea testOutput,
       JLabel testStatus,
       RuleTestRunner testRunner) {}
-
-  private record UserCommandAliasesControls(
-      JTable table,
-      UserCommandAliasesTableModel model,
-      JTextArea template,
-      JCheckBox unknownCommandAsRaw,
-      JButton add,
-      JButton importHexChat,
-      JButton duplicate,
-      JButton remove,
-      JButton up,
-      JButton down,
-      JLabel hint) {}
 
   private record DiagnosticsControls(
       JCheckBox assertjSwingEnabled,
