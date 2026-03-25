@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.ui.settings;
+package cafe.woden.ircclient.ui.settings.theme;
 
 import cafe.woden.ircclient.config.UiProperties;
 import java.beans.PropertyChangeListener;

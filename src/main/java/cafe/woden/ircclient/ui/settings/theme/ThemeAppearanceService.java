@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.ui.settings;
+package cafe.woden.ircclient.ui.settings.theme;
 
 import com.formdev.flatlaf.FlatLaf;
 import java.awt.Color;

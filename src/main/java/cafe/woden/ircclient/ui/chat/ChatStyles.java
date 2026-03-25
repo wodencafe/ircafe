@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.chat;
 
-import cafe.woden.ircclient.ui.settings.ChatThemeSettings;
-import cafe.woden.ircclient.ui.settings.ChatThemeSettingsBus;
+import cafe.woden.ircclient.ui.settings.theme.ChatThemeSettings;
+import cafe.woden.ircclient.ui.settings.theme.ChatThemeSettingsBus;
 import java.awt.Color;
 import javax.swing.UIManager;
 import javax.swing.text.AttributeSet;

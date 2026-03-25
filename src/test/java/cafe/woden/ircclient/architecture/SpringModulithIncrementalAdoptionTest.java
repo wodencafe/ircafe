@@ -148,7 +148,9 @@ import cafe.woden.ircclient.ui.application.RuntimeEventsPanel;
 import cafe.woden.ircclient.ui.chat.ChatDockManager;
 import cafe.woden.ircclient.ui.chat.fold.LoadOlderMessagesComponent;
 import cafe.woden.ircclient.ui.filter.FilterEngine;
-import cafe.woden.ircclient.ui.settings.ThemeManager;
+import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.settings.theme.ThemeIdUtils;
+import cafe.woden.ircclient.ui.settings.theme.ThemeManager;
 import cafe.woden.ircclient.ui.shell.MainFrame;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
@@ -352,7 +354,9 @@ class SpringModulithIncrementalAdoptionTest {
     assertNamedInterfaceContains(uiModule, "chat", ChatDockManager.class);
     assertNamedInterfaceContains(uiModule, "chat-fold", LoadOlderMessagesComponent.class);
     assertNamedInterfaceContains(uiModule, "filter", FilterEngine.class);
-    assertNamedInterfaceContains(uiModule, "settings", ThemeManager.class);
+    assertNamedInterfaceContains(uiModule, "settings", UiSettingsBus.class);
+    assertNamedInterfaceContains(
+        uiModule, "settings-theme", ThemeManager.class, ThemeIdUtils.class);
     assertNamedInterfaceContains(uiModule, "shell", MainFrame.class);
     assertNamedInterfaceContains(uiModule, "terminal", TerminalDockable.class);
     assertNamedInterfaceContains(uiModule, "tray", TrayService.class);

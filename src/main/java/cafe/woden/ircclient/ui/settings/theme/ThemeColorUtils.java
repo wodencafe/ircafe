@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.ui.settings;
+package cafe.woden.ircclient.ui.settings.theme;
 
 import java.awt.Color;
 import javax.swing.plaf.ColorUIResource;

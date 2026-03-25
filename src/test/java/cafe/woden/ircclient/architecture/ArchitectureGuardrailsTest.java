@@ -646,7 +646,7 @@ class ArchitectureGuardrailsTest {
   static final ArchRule theme_selection_dialog_should_not_depend_on_runtime_config_store_directly =
       noClasses()
           .that()
-          .haveFullyQualifiedName("cafe.woden.ircclient.ui.settings.ThemeSelectionDialog")
+          .haveFullyQualifiedName("cafe.woden.ircclient.ui.settings.theme.ThemeSelectionDialog")
           .should()
           .dependOnClassesThat(RUNTIME_CONFIG_STORE_TYPES)
           .because(

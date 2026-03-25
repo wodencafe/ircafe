@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.ui.settings;
+package cafe.woden.ircclient.ui.settings.theme;
 
 import java.util.Locale;
 
@@ -22,7 +22,7 @@ public record ThemeAccentSettings(String accentColor, int strength) {
     return accentColor != null;
   }
 
-  static String normalizeHexOrNull(String raw) {
+  public static String normalizeHexOrNull(String raw) {
     if (raw == null) return null;
     String s = raw.trim();
     if (s.isEmpty()) return null;
