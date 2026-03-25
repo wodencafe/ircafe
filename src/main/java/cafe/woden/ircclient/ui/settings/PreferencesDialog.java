@@ -12,7 +12,6 @@ import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import cafe.woden.ircclient.irc.backend.IrcHeartbeatMaintenanceService;
 import cafe.woden.ircclient.model.BuiltInSound;
-import cafe.woden.ircclient.model.FilterScopeOverride;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.model.UserCommandAlias;
@@ -86,7 +85,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.BorderFactory;
-import javax.swing.DefaultCellEditor;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
 import javax.swing.JButton;
@@ -4562,66 +4560,8 @@ public class PreferencesDialog {
       // best-effort
     }
 
-    FilterOverridesTableModel model = new FilterOverridesTableModel();
-    model.setOverrides(current.overrides());
-
-    JTable table = new JTable(model);
-    table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-
-    // Tri-state editor
-    JComboBox<Tri> triCombo = new JComboBox<>(Tri.values());
-    TableColumn c1 = table.getColumnModel().getColumn(1);
-    TableColumn c2 = table.getColumnModel().getColumn(2);
-    TableColumn c3 = table.getColumnModel().getColumn(3);
-    c1.setCellEditor(new DefaultCellEditor(triCombo));
-    c2.setCellEditor(new DefaultCellEditor(new JComboBox<>(Tri.values())));
-    c3.setCellEditor(new DefaultCellEditor(new JComboBox<>(Tri.values())));
-
-    JButton add = new JButton("Add override...");
-    JButton remove = new JButton("Remove");
-    configureIconOnlyButton(add, "plus", "Add scope override");
-    configureIconOnlyButton(remove, "trash", "Remove selected scope override");
-    remove.setEnabled(false);
-
-    table
-        .getSelectionModel()
-        .addListSelectionListener(
-            e -> {
-              remove.setEnabled(table.getSelectedRow() >= 0);
-            });
-
-    add.addActionListener(
-        e -> {
-          String scope =
-              JOptionPane.showInputDialog(
-                  dialog,
-                  "Scope pattern (e.g. libera/#llamas, libera/*, */status)",
-                  "Add Override",
-                  JOptionPane.PLAIN_MESSAGE);
-          if (scope == null) return;
-          scope = scope.trim();
-          if (scope.isEmpty()) return;
-          model.addEmpty(scope);
-          int idx = model.getRowCount() - 1;
-          if (idx >= 0) {
-            table.getSelectionModel().setSelectionInterval(idx, idx);
-            table.scrollRectToVisible(table.getCellRect(idx, 0, true));
-          }
-        });
-
-    remove.addActionListener(
-        e -> {
-          int row = table.getSelectedRow();
-          if (row < 0) return;
-          int confirm =
-              JOptionPane.showConfirmDialog(
-                  dialog,
-                  "Remove selected override?",
-                  "Remove Override",
-                  JOptionPane.OK_CANCEL_OPTION);
-          if (confirm != JOptionPane.OK_OPTION) return;
-          model.removeAt(row);
-        });
+    FilterOverrideControls overrideControls =
+        FilterOverrideControlsSupport.buildControls(current, dialog);
 
     FilterRuleControls ruleControls =
         FilterRuleControlsSupport.buildControls(
@@ -4642,10 +4582,10 @@ public class PreferencesDialog {
         tooltipMaxTags,
         historyPlaceholdersEnabledByDefault,
         historyMaxRuns,
-        model,
-        table,
-        add,
-        remove,
+        overrideControls.model,
+        overrideControls.table,
+        overrideControls.add,
+        overrideControls.remove,
         ruleControls.table,
         ruleControls.addRule,
         ruleControls.editRule,
@@ -4707,72 +4647,7 @@ public class PreferencesDialog {
   }
 
   private void applyFilterSettingsFromUi(FilterControls c) {
-    if (c == null) return;
-
-    FilterSettings prev = filterSettingsBus.get();
-    boolean enabledByDefault = c.filtersEnabledByDefault.isSelected();
-    boolean placeholdersEnabledByDefault = c.placeholdersEnabledByDefault.isSelected();
-    boolean placeholdersCollapsedByDefault = c.placeholdersCollapsedByDefault.isSelected();
-    int previewLines = ((Number) c.placeholderPreviewLines.getValue()).intValue();
-    if (previewLines < 0) previewLines = 0;
-    if (previewLines > 25) previewLines = 25;
-
-    int maxLinesPerRun = ((Number) c.placeholderMaxLinesPerRun.getValue()).intValue();
-    if (maxLinesPerRun < 0) maxLinesPerRun = 0;
-    if (maxLinesPerRun > 50_000) maxLinesPerRun = 50_000;
-
-    int tooltipMaxTags = ((Number) c.placeholderTooltipMaxTags.getValue()).intValue();
-    if (tooltipMaxTags < 0) tooltipMaxTags = 0;
-    if (tooltipMaxTags > 500) tooltipMaxTags = 500;
-
-    boolean historyPlaceholdersEnabledByDefault =
-        c.historyPlaceholdersEnabledByDefault.isSelected();
-
-    int maxRunsPerBatch = ((Number) c.historyPlaceholderMaxRunsPerBatch.getValue()).intValue();
-    if (maxRunsPerBatch < 0) maxRunsPerBatch = 0;
-    if (maxRunsPerBatch > 5_000) maxRunsPerBatch = 5_000;
-
-    List<FilterScopeOverride> overrides = c.overridesModel.toOverrides();
-
-    FilterSettings next =
-        new FilterSettings(
-            enabledByDefault,
-            placeholdersEnabledByDefault,
-            placeholdersCollapsedByDefault,
-            previewLines,
-            maxLinesPerRun,
-            tooltipMaxTags,
-            maxRunsPerBatch,
-            historyPlaceholdersEnabledByDefault,
-            prev != null ? prev.rules() : List.of(),
-            overrides);
-
-    // If nothing changed, don't trigger a transcript rebuild. Pressing OK/Apply on the preferences
-    // dialog should be a no-op for the active transcript unless a setting meaningfully changed.
-    if (java.util.Objects.equals(prev, next)) {
-      return;
-    }
-
-    filterSettingsBus.set(next);
-    runtimeConfig.rememberFiltersEnabledByDefault(enabledByDefault);
-    runtimeConfig.rememberFilterPlaceholdersEnabledByDefault(placeholdersEnabledByDefault);
-    runtimeConfig.rememberFilterPlaceholdersCollapsedByDefault(placeholdersCollapsedByDefault);
-    runtimeConfig.rememberFilterPlaceholderMaxPreviewLines(previewLines);
-    runtimeConfig.rememberFilterPlaceholderMaxLinesPerRun(maxLinesPerRun);
-    runtimeConfig.rememberFilterPlaceholderTooltipMaxTags(tooltipMaxTags);
-    runtimeConfig.rememberFilterHistoryPlaceholdersEnabledByDefault(
-        historyPlaceholdersEnabledByDefault);
-    runtimeConfig.rememberFilterHistoryPlaceholderMaxRunsPerBatch(maxRunsPerBatch);
-    runtimeConfig.rememberFilterOverrides(overrides);
-
-    // Best-effort: rebuild active target so changes take effect immediately.
-    try {
-      TargetRef active = targetCoordinator.getActiveTarget();
-      if (active != null) {
-        transcriptRebuildService.rebuild(active);
-      }
-    } catch (Exception ignored) {
-      // rebuild is best-effort; never block saving preferences
-    }
+    FilterSettingsApplySupport.applyFromUi(
+        c, filterSettingsBus, runtimeConfig, targetCoordinator, transcriptRebuildService);
   }
 }
