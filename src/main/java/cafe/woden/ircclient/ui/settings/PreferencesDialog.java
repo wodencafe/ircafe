@@ -2487,7 +2487,7 @@ public class PreferencesDialog {
     return t;
   }
 
-  private static JComponent wrapCheckBox(JCheckBox box, String labelText) {
+  static JComponent wrapCheckBox(JCheckBox box, String labelText) {
     box.setText("");
     JPanel row = new JPanel(new MigLayout("insets 0, fillx", "[]6[grow,fill]", "[]"));
     row.setOpaque(false);
@@ -4923,233 +4923,8 @@ public class PreferencesDialog {
       UiSettings current, List<AutoCloseable> closeables) {
     IrcProperties.Proxy p = NetProxyContext.settings();
     if (p == null) p = new IrcProperties.Proxy(false, "", 1080, "", "", true, 10_000, 30_000);
-    // Network grew vertically as we added options. Keep it compact by splitting into sub-tabs.
-    // Let the inner sub-tabs consume vertical space so this tab doesn't feel "short".
-    JPanel networkPanel =
-        new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]0[grow,fill]"));
-
-    // ---- Proxy tab ----
-    JPanel proxyTab =
-        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
-    proxyTab.setOpaque(false);
-
-    JPanel proxyHeader = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
-    proxyHeader.setOpaque(false);
-    proxyHeader.add(sectionTitle("SOCKS5 proxy"), "growx, wmin 0");
-    proxyHeader.add(
-        whyHelpButton(
-            "SOCKS5 proxy",
-            "When enabled, IRCafe routes IRC connections, link previews, embedded images, and file downloads through a SOCKS5 proxy.\n\n"
-                + "Heads up: proxy credentials are stored in your runtime config file in plain text."),
-        "align right");
-    proxyTab.add(proxyHeader, "span 2, growx, wmin 0, wrap");
-
-    JTextArea proxyBlurb = subtleInfoText();
-    proxyBlurb.setText(
-        "Routes IRC + embeds through SOCKS5. Use remote DNS if local DNS is blocked.");
-    proxyTab.add(proxyBlurb, "span 2, growx, wmin 0, wrap");
-
-    JCheckBox proxyEnabled = new JCheckBox("Use SOCKS5 proxy");
-    proxyEnabled.setSelected(p.enabled());
-
-    JTextField proxyHost = new JTextField(Objects.toString(p.host(), ""));
-    proxyHost.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "127.0.0.1");
-
-    int portDefault = (p.port() > 0 && p.port() <= 65535) ? p.port() : 1080;
-    JSpinner proxyPort = numberSpinner(portDefault, 1, 65535, 1, closeables);
-
-    JCheckBox proxyRemoteDns = new JCheckBox();
-    proxyRemoteDns.setSelected(p.remoteDns());
-    proxyRemoteDns.setToolTipText(
-        "When enabled, IRCafe asks the proxy to resolve hostnames. Useful if local DNS is blocked.");
-    JComponent proxyRemoteDnsRow = wrapCheckBox(proxyRemoteDns, "Proxy resolves DNS (remote DNS)");
-
-    JTextField proxyUsername = new JTextField(Objects.toString(p.username(), ""));
-    proxyUsername.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "(optional)");
-
-    JPasswordField proxyPassword = new JPasswordField(Objects.toString(p.password(), ""));
-    proxyPassword.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "(optional)");
-    // FlatLaf: show the standard "reveal" (eye) button inside password fields.
-    // Some FlatLaf versions prefer the STYLE flag; keep both for compatibility.
-    proxyPassword.putClientProperty("JPasswordField.showRevealButton", true);
-    proxyPassword.putClientProperty(FlatClientProperties.STYLE, "showRevealButton:true;");
-    JButton clearPassword = new JButton("Clear");
-    clearPassword.addActionListener(e -> proxyPassword.setText(""));
-
-    int connectTimeoutSec = (int) Math.max(1, p.connectTimeoutMs() / 1000L);
-    int readTimeoutSec = (int) Math.max(1, p.readTimeoutMs() / 1000L);
-    JSpinner connectTimeoutSeconds = numberSpinner(connectTimeoutSec, 1, 300, 1, closeables);
-    JSpinner readTimeoutSeconds = numberSpinner(readTimeoutSec, 1, 600, 1, closeables);
-
-    JPanel passwordRow = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
-    passwordRow.setOpaque(false);
-    passwordRow.add(proxyPassword, "growx, pushx, wmin 0");
-    passwordRow.add(clearPassword);
-
-    Runnable updateProxyEnabledState =
-        () -> {
-          boolean enabled = proxyEnabled.isSelected();
-          proxyHost.setEnabled(enabled);
-          proxyPort.setEnabled(enabled);
-          proxyRemoteDns.setEnabled(enabled);
-          proxyUsername.setEnabled(enabled);
-          proxyPassword.setEnabled(enabled);
-          clearPassword.setEnabled(enabled);
-          connectTimeoutSeconds.setEnabled(enabled);
-          readTimeoutSeconds.setEnabled(enabled);
-        };
-
-    Runnable validateProxyInputs =
-        () -> {
-          // FlatLaf outlines: highlight invalid fields without adding noisy labels.
-          if (!proxyEnabled.isSelected()) {
-            proxyHost.putClientProperty("JComponent.outline", null);
-            proxyUsername.putClientProperty("JComponent.outline", null);
-            proxyPassword.putClientProperty("JComponent.outline", null);
-            return;
-          }
-
-          String host = Objects.toString(proxyHost.getText(), "").trim();
-          proxyHost.putClientProperty("JComponent.outline", host.isBlank() ? "error" : null);
-
-          String user = Objects.toString(proxyUsername.getText(), "").trim();
-          String pass = new String(proxyPassword.getPassword()).trim();
-
-          // SOCKS5 auth is username+password. If only one is provided, warn.
-          boolean hasUser = !user.isBlank();
-          boolean hasPass = !pass.isBlank();
-          boolean mismatch = hasUser ^ hasPass;
-
-          Object outline = mismatch ? "warning" : null;
-          proxyUsername.putClientProperty("JComponent.outline", outline);
-          proxyPassword.putClientProperty("JComponent.outline", outline);
-        };
-
-    proxyEnabled.addActionListener(
-        e -> {
-          updateProxyEnabledState.run();
-          validateProxyInputs.run();
-        });
-    updateProxyEnabledState.run();
-
-    proxyHost.getDocument().addDocumentListener(new SimpleDocListener(validateProxyInputs));
-    proxyUsername.getDocument().addDocumentListener(new SimpleDocListener(validateProxyInputs));
-    proxyPassword.getDocument().addDocumentListener(new SimpleDocListener(validateProxyInputs));
-    validateProxyInputs.run();
-
-    proxyTab.add(proxyEnabled, "span 2, wrap");
-    proxyTab.add(new JLabel("Host:"));
-    proxyTab.add(proxyHost, "growx, wmin 0");
-    proxyTab.add(new JLabel("Port:"));
-    proxyTab.add(proxyPort, "w 110!");
-    proxyTab.add(new JLabel(""));
-    proxyTab.add(proxyRemoteDnsRow, "growx, wmin 0");
-    proxyTab.add(new JLabel("Username:"));
-    proxyTab.add(proxyUsername, "growx, wmin 0");
-    proxyTab.add(new JLabel("Password:"));
-    proxyTab.add(passwordRow, "growx, wmin 0");
-    proxyTab.add(new JLabel("Connect timeout (sec):"));
-    proxyTab.add(connectTimeoutSeconds, "w 110!");
-    proxyTab.add(new JLabel("Read timeout (sec):"));
-    proxyTab.add(readTimeoutSeconds, "w 110!");
-
-    // ---- TLS tab ----
-    JPanel tlsTab = new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]6[]"));
-    tlsTab.setOpaque(false);
-    JPanel tlsHeader = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
-    tlsHeader.setOpaque(false);
-    tlsHeader.add(sectionTitle("TLS / SSL"), "growx, wmin 0");
-    tlsHeader.add(
-        whyHelpButton(
-            "TLS / SSL (Trust all certificates)",
-            "This setting is intentionally dangerous. If enabled, IRCafe will accept any TLS certificate (expired, mismatched, self-signed, etc)\n"
-                + "for IRC-over-TLS connections and for HTTPS fetching (link previews, embedded images, etc).\n\n"
-                + "Only enable this if you understand the risk (MITM becomes trivial)."),
-        "align right");
-    tlsTab.add(tlsHeader, "growx, wmin 0, wrap");
-
-    JTextArea tlsBlurb = subtleInfoText();
-    tlsBlurb.setText(
-        "If enabled, certificate validation is skipped (insecure). Only use for debugging.");
-    tlsTab.add(tlsBlurb, "growx, wmin 0, wrap");
-
-    JCheckBox trustAllTlsCertificates = new JCheckBox();
-    trustAllTlsCertificates.setSelected(NetTlsContext.trustAllCertificates());
-    JComponent trustAllTlsRow =
-        wrapCheckBox(trustAllTlsCertificates, "Trust all TLS/SSL certificates (insecure)");
-    tlsTab.add(trustAllTlsRow, "growx, wmin 0, wrap");
-
-    // ---- Heartbeat tab ----
-    JPanel heartbeatTab =
-        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
-    heartbeatTab.setOpaque(false);
-    JPanel heartbeatHeader = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
-    heartbeatHeader.setOpaque(false);
-    heartbeatHeader.add(sectionTitle("Connection heartbeat"), "growx, wmin 0");
-    heartbeatHeader.add(
-        whyHelpButton(
-            "Connection heartbeat",
-            "IRCafe can detect 'silent' disconnects by monitoring inbound traffic.\n"
-                + "If no IRC messages are received for the configured timeout, IRCafe will close the socket\n"
-                + "and let the reconnect logic take over (if enabled).\n\n"
-                + "Tip: If your network is very quiet, increase the timeout."),
-        "align right");
-    heartbeatTab.add(heartbeatHeader, "span 2, growx, wmin 0, wrap");
-
-    JTextArea heartbeatBlurb = subtleInfoText();
-    heartbeatBlurb.setText(
-        "Detects silent disconnects by closing idle sockets so reconnect can kick in.");
-    heartbeatTab.add(heartbeatBlurb, "span 2, growx, wmin 0, wrap");
-
     IrcProperties.Heartbeat hb = NetHeartbeatContext.settings();
     if (hb == null) hb = new IrcProperties.Heartbeat(true, 15_000, 360_000);
-
-    JCheckBox heartbeatEnabled = new JCheckBox();
-    heartbeatEnabled.setSelected(hb.enabled());
-    JComponent heartbeatEnabledRow =
-        wrapCheckBox(heartbeatEnabled, "Enable heartbeat / idle timeout detection");
-
-    int hbCheckSec = (int) Math.max(1, hb.checkPeriodMs() / 1000L);
-    int hbTimeoutSec = (int) Math.max(1, hb.timeoutMs() / 1000L);
-    JSpinner heartbeatCheckPeriodSeconds = numberSpinner(hbCheckSec, 1, 600, 1, closeables);
-    JSpinner heartbeatTimeoutSeconds = numberSpinner(hbTimeoutSec, 5, 7200, 5, closeables);
-
-    Runnable updateHeartbeatEnabledState =
-        () -> {
-          boolean enabled = heartbeatEnabled.isSelected();
-          heartbeatCheckPeriodSeconds.setEnabled(enabled);
-          heartbeatTimeoutSeconds.setEnabled(enabled);
-        };
-    heartbeatEnabled.addActionListener(e -> updateHeartbeatEnabledState.run());
-    updateHeartbeatEnabledState.run();
-
-    heartbeatTab.add(heartbeatEnabledRow, "span 2, growx, wmin 0, wrap");
-    heartbeatTab.add(new JLabel("Check period (sec):"));
-    heartbeatTab.add(heartbeatCheckPeriodSeconds, "w 110!");
-    heartbeatTab.add(new JLabel("Timeout (sec):"));
-    heartbeatTab.add(heartbeatTimeoutSeconds, "w 110!");
-
-    // ---- Bouncer tab ----
-    JPanel bouncerTab =
-        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[right]12[grow,fill]", "[]6[]"));
-    bouncerTab.setOpaque(false);
-    JPanel bouncerHeader = new JPanel(new MigLayout("insets 0, fillx", "[grow,fill]6[]", "[]"));
-    bouncerHeader.setOpaque(false);
-    bouncerHeader.add(sectionTitle("Bouncer discovery defaults"), "growx, wmin 0");
-    bouncerHeader.add(
-        whyHelpButton(
-            "Bouncer discovery defaults",
-            "These defaults are used by the generic bouncer mapping strategy for discovered networks.\n\n"
-                + "Use a login template to shape derived usernames.\n"
-                + "Use hint preference to accept or ignore login user hints sent by the bouncer."),
-        "align right");
-    bouncerTab.add(bouncerHeader, "span 2, growx, wmin 0, wrap");
-
-    JTextArea bouncerBlurb = subtleInfoText();
-    bouncerBlurb.setText(
-        "Controls how generic bouncer-discovered networks map to ephemeral server login users.");
-    bouncerTab.add(bouncerBlurb, "span 2, growx, wmin 0, wrap");
-
     boolean preferLoginHintDefault =
         runtimeConfig == null
             ? DEFAULT_GENERIC_BOUNCER_PREFER_LOGIN_HINT
@@ -5159,73 +4934,26 @@ public class PreferencesDialog {
         runtimeConfig == null
             ? DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE
             : runtimeConfig.readGenericBouncerLoginTemplate(DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE);
-
-    JCheckBox genericBouncerPreferLoginHint = new JCheckBox();
-    genericBouncerPreferLoginHint.setSelected(preferLoginHintDefault);
-    JComponent genericBouncerPreferLoginHintRow =
-        wrapCheckBox(
-            genericBouncerPreferLoginHint, "Prefer login user hint from discovery payloads");
-    bouncerTab.add(genericBouncerPreferLoginHintRow, "span 2, growx, wmin 0, wrap");
-
-    JTextField genericBouncerLoginTemplate = new JTextField(loginTemplateDefault);
-    genericBouncerLoginTemplate.putClientProperty(
-        FlatClientProperties.PLACEHOLDER_TEXT, DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE);
-    JTextArea genericBouncerTemplateHelp = subtleInfoText();
-    genericBouncerTemplateHelp.setText(
-        "Template tokens: {base} and {network}. Example: {base}/{network}");
-    bouncerTab.add(new JLabel("Login template:"));
-    bouncerTab.add(genericBouncerLoginTemplate, "growx, wmin 0");
-    bouncerTab.add(genericBouncerTemplateHelp, "span 2, growx, wmin 0, wrap");
-
-    JTabbedPane networkTabs = new JTabbedPane();
-    networkTabs.addTab("Proxy", padSubTab(proxyTab));
-    networkTabs.addTab("TLS", padSubTab(tlsTab));
-    networkTabs.addTab("Heartbeat", padSubTab(heartbeatTab));
-    networkTabs.addTab("Bouncer", padSubTab(bouncerTab));
-
-    JPanel networkIntro =
-        new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[grow,fill]6[]", "[]"));
-    networkIntro.setOpaque(false);
-    networkIntro.add(tabTitle("Network"), "growx, wmin 0");
-    networkIntro.add(
-        whyHelpButton(
-            "Network settings",
-            "These settings affect how IRCafe connects to networks and fetches external content (link previews, embedded images, etc).\n\n"
-                + "Tip: Most users only touch Proxy. Leave TLS trust-all off unless you're debugging."),
-        "align right");
-
-    networkPanel.add(networkIntro, "growx, wmin 0, wrap");
-    networkPanel.add(networkTabs, "grow, push, wmin 0");
-
-    ProxyControls proxyControls =
-        new ProxyControls(
-            proxyEnabled,
-            proxyHost,
-            proxyPort,
-            proxyRemoteDns,
-            proxyUsername,
-            proxyPassword,
-            clearPassword,
-            connectTimeoutSeconds,
-            readTimeoutSeconds);
-
-    HeartbeatControls heartbeatControls =
-        new HeartbeatControls(
-            heartbeatEnabled, heartbeatCheckPeriodSeconds, heartbeatTimeoutSeconds);
-    BouncerControls bouncerControls =
-        new BouncerControls(genericBouncerPreferLoginHint, genericBouncerLoginTemplate);
+    NetworkConnectionPanelControls connection =
+        NetworkConnectionPanelSupport.buildControls(
+            p,
+            hb,
+            closeables,
+            NetTlsContext.trustAllCertificates(),
+            preferLoginHintDefault,
+            loginTemplateDefault);
     UserLookupsPanelControls userLookups =
         UserLookupsPanelSupport.buildControls(current, closeables);
 
     return new NetworkAdvancedControls(
-        proxyControls,
+        connection.proxy,
         userLookups.userhost,
         userLookups.enrichment,
-        heartbeatControls,
-        bouncerControls,
+        connection.heartbeat,
+        connection.bouncer,
         userLookups.monitorIsonPollIntervalSeconds,
-        trustAllTlsCertificates,
-        networkPanel,
+        connection.trustAllTlsCertificates,
+        connection.panel,
         userLookups.panel);
   }
 
@@ -6619,22 +6347,6 @@ public class PreferencesDialog {
   private record OutgoingColorControls(
       JCheckBox enabled, JTextField hex, JLabel preview, JPanel panel) {}
 
-  private record ProxyControls(
-      JCheckBox enabled,
-      JTextField host,
-      JSpinner port,
-      JCheckBox remoteDns,
-      JTextField username,
-      JPasswordField password,
-      JButton clearPassword,
-      JSpinner connectTimeoutSeconds,
-      JSpinner readTimeoutSeconds) {}
-
-  private record HeartbeatControls(
-      JCheckBox enabled, JSpinner checkPeriodSeconds, JSpinner timeoutSeconds) {}
-
-  private record BouncerControls(JCheckBox preferLoginHint, JTextField loginTemplate) {}
-
   private record NetworkAdvancedControls(
       ProxyControls proxy,
       UserhostControls userhost,
@@ -6703,10 +6415,10 @@ public class PreferencesDialog {
     }
   }
 
-  private static final class SimpleDocListener implements DocumentListener {
+  static final class SimpleDocListener implements DocumentListener {
     private final Runnable onChange;
 
-    private SimpleDocListener(Runnable onChange) {
+    SimpleDocListener(Runnable onChange) {
       this.onChange = onChange;
     }
 
