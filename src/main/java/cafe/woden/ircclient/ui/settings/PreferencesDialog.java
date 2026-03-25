@@ -4004,52 +4004,8 @@ public class PreferencesDialog {
       JComboBox<MemoryUsageDisplayMode> memoryUsageDisplayMode,
       JSpinner memoryUsageRefreshIntervalMs,
       MemoryWarningControls memoryWarnings) {
-    JPanel form =
-        new JPanel(new MigLayout("insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]"));
-    form.add(tabTitle("Memory"), "span 2, growx, wmin 0, wrap");
-
-    form.add(sectionTitle("Widget"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Memory usage widget"));
-    form.add(memoryUsageDisplayMode, "growx");
-    form.add(new JLabel("Refresh interval (ms)"));
-    form.add(memoryUsageRefreshIntervalMs, "w 140!");
-
-    form.add(sectionTitle("Warnings"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Warn near max (%)"));
-    form.add(memoryWarnings.nearMaxPercent, "w 110!");
-
-    form.add(new JLabel("Warning actions"), "aligny top");
-    JPanel warningActions =
-        new JPanel(new MigLayout("insets 0, fillx, wrap 1", "[grow,fill]", "[]2[]2[]2[]"));
-    warningActions.setOpaque(false);
-    warningActions.add(memoryWarnings.tooltipEnabled, "growx");
-    warningActions.add(memoryWarnings.toastEnabled, "growx");
-    warningActions.add(memoryWarnings.pushyEnabled, "growx");
-    warningActions.add(memoryWarnings.soundEnabled, "growx");
-    form.add(warningActions, "growx");
-
-    JTextArea hint = subtleInfoText();
-    hint.setText(
-        "Controls the memory widget in the top menu bar and threshold-triggered warning behavior.");
-    form.add(new JLabel(""));
-    form.add(hint, "growx, wmin 0");
-
-    JButton reset = new JButton("Reset memory defaults");
-    reset.setToolTipText("Reset memory mode and warning actions to defaults.");
-    reset.addActionListener(
-        e -> {
-          memoryUsageDisplayMode.setSelectedItem(MemoryUsageDisplayMode.LONG);
-          memoryUsageRefreshIntervalMs.setValue(1000);
-          memoryWarnings.nearMaxPercent.setValue(5);
-          memoryWarnings.tooltipEnabled.setSelected(true);
-          memoryWarnings.toastEnabled.setSelected(false);
-          memoryWarnings.pushyEnabled.setSelected(false);
-          memoryWarnings.soundEnabled.setSelected(false);
-        });
-    form.add(new JLabel(""));
-    form.add(reset, "alignx left");
-
-    return form;
+    return MemoryPanelSupport.buildPanel(
+        memoryUsageDisplayMode, memoryUsageRefreshIntervalMs, memoryWarnings);
   }
 
   private LaunchJvmControls buildLaunchJvmControls() {
@@ -4131,30 +4087,7 @@ public class PreferencesDialog {
 
   private JPanel buildEmbedsAndPreviewsPanel(
       ImageEmbedControls image, LinkPreviewControls links, JButton advancedPolicyButton) {
-    JPanel form =
-        new JPanel(
-            new MigLayout(
-                "insets 12, fillx, wrap 2", "[right]12[grow,fill]", "[]10[]6[]10[]6[]10[]"));
-
-    form.add(tabTitle("Embeds & Previews"), "span 2, growx, wmin 0, wrap");
-    form.add(sectionTitle("Inline images"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Direct image links"), "aligny top");
-    form.add(image.panel, "growx");
-
-    form.add(sectionTitle("Link previews"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("OpenGraph cards"), "aligny top");
-    form.add(links.panel, "growx");
-
-    form.add(sectionTitle("Access policy"), "span 2, growx, wmin 0, wrap");
-    form.add(new JLabel("Advanced matching rules"), "aligny top");
-    JPanel buttonRow = new JPanel(new MigLayout("insets 0", "[]", "[]"));
-    buttonRow.setOpaque(false);
-    if (advancedPolicyButton != null) {
-      buttonRow.add(advancedPolicyButton);
-    }
-    form.add(buttonRow, "growx");
-
-    return form;
+    return EmbedsAndPreviewsPanelSupport.buildPanel(image, links, advancedPolicyButton);
   }
 
   private JPanel buildHistoryAndStoragePanel(LoggingControls logging, HistoryControls history) {
@@ -4486,24 +4419,6 @@ public class PreferencesDialog {
   private record TypingTreeIndicatorStyleOption(String id, String label) {}
 
   private record MatrixUserListNameDisplayModeOption(String id, String label) {}
-
-  private record ImageEmbedControls(
-      JCheckBox enabled,
-      JCheckBox collapsed,
-      JSpinner maxWidth,
-      JSpinner maxHeight,
-      JCheckBox animateGifs,
-      JPanel panel) {}
-
-  private record LinkPreviewControls(
-      JCheckBox enabled, JCheckBox collapsed, JComboBox<EmbedCardStyle> cardStyle, JPanel panel) {}
-
-  private record MemoryWarningControls(
-      JSpinner nearMaxPercent,
-      JCheckBox tooltipEnabled,
-      JCheckBox toastEnabled,
-      JCheckBox pushyEnabled,
-      JCheckBox soundEnabled) {}
 
   private record NetworkAdvancedControls(
       ProxyControls proxy,
