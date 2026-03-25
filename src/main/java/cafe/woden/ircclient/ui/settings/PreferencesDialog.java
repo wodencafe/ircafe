@@ -1529,9 +1529,9 @@ public class PreferencesDialog {
             } catch (Exception ignored) {
             }
           }
-          if (ircEventNotifications.table.isEditing()) {
+          if (ircEventNotifications.table().isEditing()) {
             try {
-              ircEventNotifications.table.getCellEditor().stopCellEditing();
+              ircEventNotifications.table().getCellEditor().stopCellEditing();
             } catch (Exception ignored) {
             }
           }
@@ -1569,7 +1569,7 @@ public class PreferencesDialog {
           if (notificationRuleCooldownSecondsV > 3600) notificationRuleCooldownSecondsV = 3600;
           List<NotificationRule> notificationRulesV = notifications.model.snapshot();
           List<IrcEventNotificationRule> ircEventNotificationRulesV =
-              ircEventNotifications.model.snapshot();
+              ircEventNotifications.model().snapshot();
           List<UserCommandAlias> userCommandAliasesV = userCommands.model.snapshot();
           boolean unknownCommandAsRawEnabledV = userCommands.unknownCommandAsRaw.isSelected();
           boolean diagnosticsAssertjSwingEnabledV = diagnostics.assertjSwingEnabled.isSelected();
@@ -2453,7 +2453,7 @@ public class PreferencesDialog {
     return captionPanelWithPadding(title, layout, columns, rows, 6, 8, 8, 8);
   }
 
-  private static JPanel captionPanelWithPadding(
+  static JPanel captionPanelWithPadding(
       String title,
       String layout,
       String columns,
@@ -2471,7 +2471,7 @@ public class PreferencesDialog {
     return panel;
   }
 
-  private static JTextArea helpText(String text) {
+  static JTextArea helpText(String text) {
     JTextArea t = new JTextArea(text);
     t.setEditable(false);
     t.setLineWrap(true);
@@ -7350,294 +7350,8 @@ public class PreferencesDialog {
   }
 
   private JPanel buildIrcEventNotificationsTab(IrcEventNotificationControls controls) {
-    JPanel tab =
-        new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]"));
-    tab.setOpaque(false);
-
-    JComboBox<IrcEventNotificationPresetSupport.Preset> defaultsPreset =
-        new JComboBox<>(IrcEventNotificationPresetSupport.Preset.values());
-    JButton applyDefaults = new JButton("Apply defaults");
-    JButton resetToIrcafeDefaults = new JButton("Reset to IRCafe defaults");
-    configureIconOnlyButton(
-        applyDefaults, "check", "Apply preset defaults to matching IRC event types");
-    configureIconOnlyButton(
-        resetToIrcafeDefaults, "refresh", "Replace all IRC event rules with IRCafe defaults");
-
-    JPanel defaultsRow = new JPanel(new MigLayout("insets 0, fillx", "[]8[grow,fill]8[]8[]", "[]"));
-    defaultsRow.setOpaque(false);
-    defaultsRow.add(new JLabel("Defaults"));
-    defaultsRow.add(defaultsPreset, "w 240!");
-    defaultsRow.add(applyDefaults, "w 36!, h 28!");
-    defaultsRow.add(resetToIrcafeDefaults, "w 36!, h 28!");
-
-    JButton add = new JButton("Add");
-    JButton edit = new JButton("Edit");
-    JButton enableRule = new JButton("Enable");
-    JButton disableRule = new JButton("Disable");
-    JButton duplicate = new JButton("Duplicate");
-    JButton remove = new JButton("Remove");
-    JButton up = new JButton("Up");
-    JButton down = new JButton("Down");
-    configureIconOnlyButton(add, "plus", "Add IRC event rule");
-    configureIconOnlyButton(edit, "edit", "Edit selected IRC event rule");
-    configureIconOnlyButton(enableRule, "check", "Enable selected IRC event rule");
-    configureIconOnlyButton(disableRule, "pause", "Disable selected IRC event rule");
-    configureIconOnlyButton(duplicate, "copy", "Duplicate selected IRC event rule");
-    configureIconOnlyButton(remove, "trash", "Remove selected IRC event rule");
-    configureIconOnlyButton(up, "arrow-up", "Move selected IRC event rule up");
-    configureIconOnlyButton(down, "arrow-down", "Move selected IRC event rule down");
-
-    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-    buttons.add(add);
-    buttons.add(edit);
-    buttons.add(enableRule);
-    buttons.add(disableRule);
-    buttons.add(duplicate);
-    buttons.add(remove);
-    buttons.add(up);
-    buttons.add(down);
-
-    Runnable refreshRuleButtons =
-        () -> {
-          int viewRow = controls.table.getSelectedRow();
-          boolean hasSelection = viewRow >= 0;
-          int modelRow = hasSelection ? controls.table.convertRowIndexToModel(viewRow) : -1;
-          IrcEventNotificationRule selectedRule =
-              modelRow >= 0 ? controls.model.ruleAt(modelRow) : null;
-          boolean selectedEnabled = selectedRule != null && selectedRule.enabled();
-          edit.setEnabled(hasSelection);
-          enableRule.setEnabled(hasSelection && !selectedEnabled);
-          disableRule.setEnabled(hasSelection && selectedEnabled);
-          duplicate.setEnabled(hasSelection);
-          remove.setEnabled(hasSelection);
-          up.setEnabled(hasSelection && modelRow > 0);
-          down.setEnabled(
-              hasSelection && modelRow >= 0 && modelRow < (controls.model.getRowCount() - 1));
-        };
-
-    Runnable openEditRuleDialog =
-        () -> {
-          int viewRow = controls.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = controls.table.convertRowIndexToModel(viewRow);
-          IrcEventNotificationRule seed = controls.model.ruleAt(modelRow);
-          if (seed == null) return;
-          IrcEventNotificationRule edited =
-              promptIrcEventNotificationRuleDialog("Edit IRC Event Rule", seed);
-          if (edited == null) return;
-          controls.model.setRule(modelRow, edited);
-          int nextView = controls.table.convertRowIndexToView(modelRow);
-          if (nextView >= 0) {
-            controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
-            controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
-          }
-          refreshRuleButtons.run();
-        };
-
-    add.addActionListener(
-        e -> {
-          IrcEventNotificationRule created =
-              promptIrcEventNotificationRuleDialog("Add IRC Event Rule", null);
-          if (created == null) return;
-          int row = controls.model.addRule(created);
-          if (row >= 0) {
-            int viewRow = controls.table.convertRowIndexToView(row);
-            if (viewRow >= 0) {
-              controls.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
-              controls.table.scrollRectToVisible(controls.table.getCellRect(viewRow, 0, true));
-            }
-          }
-          refreshRuleButtons.run();
-        });
-
-    edit.addActionListener(e -> openEditRuleDialog.run());
-
-    enableRule.addActionListener(
-        e -> {
-          int viewRow = controls.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = controls.table.convertRowIndexToModel(viewRow);
-          controls.model.setEnabledAt(modelRow, true);
-          refreshRuleButtons.run();
-        });
-
-    disableRule.addActionListener(
-        e -> {
-          int viewRow = controls.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = controls.table.convertRowIndexToModel(viewRow);
-          controls.model.setEnabledAt(modelRow, false);
-          refreshRuleButtons.run();
-        });
-
-    duplicate.addActionListener(
-        e -> {
-          int viewRow = controls.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = controls.table.convertRowIndexToModel(viewRow);
-          int dup = controls.model.duplicateRow(modelRow);
-          if (dup >= 0) {
-            int dupView = controls.table.convertRowIndexToView(dup);
-            if (dupView >= 0) {
-              controls.table.getSelectionModel().setSelectionInterval(dupView, dupView);
-              controls.table.scrollRectToVisible(controls.table.getCellRect(dupView, 0, true));
-            }
-          }
-          refreshRuleButtons.run();
-        });
-
-    remove.addActionListener(
-        e -> {
-          int viewRow = controls.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = controls.table.convertRowIndexToModel(viewRow);
-          IrcEventNotificationRule rule = controls.model.ruleAt(modelRow);
-          String label = IrcEventNotificationTableModel.effectiveRuleLabel(rule);
-          int res =
-              JOptionPane.showConfirmDialog(
-                  dialog,
-                  "Remove IRC event rule \"" + label + "\"?",
-                  "Remove IRC Event Rule",
-                  JOptionPane.OK_CANCEL_OPTION);
-          if (res != JOptionPane.OK_OPTION) return;
-          controls.model.removeRow(modelRow);
-          int nextModelRow = Math.min(modelRow, controls.model.getRowCount() - 1);
-          if (nextModelRow >= 0) {
-            int nextView = controls.table.convertRowIndexToView(nextModelRow);
-            if (nextView >= 0) {
-              controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
-              controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
-            }
-          } else {
-            controls.table.clearSelection();
-          }
-          refreshRuleButtons.run();
-        });
-
-    up.addActionListener(
-        e -> {
-          int viewRow = controls.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = controls.table.convertRowIndexToModel(viewRow);
-          int next = controls.model.moveRow(modelRow, modelRow - 1);
-          if (next >= 0) {
-            int nextView = controls.table.convertRowIndexToView(next);
-            if (nextView >= 0) {
-              controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
-              controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
-            }
-          }
-          refreshRuleButtons.run();
-        });
-
-    down.addActionListener(
-        e -> {
-          int viewRow = controls.table.getSelectedRow();
-          if (viewRow < 0) return;
-          int modelRow = controls.table.convertRowIndexToModel(viewRow);
-          int next = controls.model.moveRow(modelRow, modelRow + 1);
-          if (next >= 0) {
-            int nextView = controls.table.convertRowIndexToView(next);
-            if (nextView >= 0) {
-              controls.table.getSelectionModel().setSelectionInterval(nextView, nextView);
-              controls.table.scrollRectToVisible(controls.table.getCellRect(nextView, 0, true));
-            }
-          }
-          refreshRuleButtons.run();
-        });
-
-    applyDefaults.addActionListener(
-        e -> {
-          IrcEventNotificationPresetSupport.Preset preset =
-              (IrcEventNotificationPresetSupport.Preset) defaultsPreset.getSelectedItem();
-          if (preset == null) return;
-          List<IrcEventNotificationRule> rules =
-              IrcEventNotificationPresetSupport.buildPreset(preset);
-          if (rules.isEmpty()) return;
-          controls.model.applyPreset(rules);
-          int row = controls.model.firstRowForEvent(rules.get(0).eventType());
-          if (row < 0) row = 0;
-          int viewRow = controls.table.convertRowIndexToView(row);
-          if (viewRow >= 0) {
-            controls.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
-            controls.table.scrollRectToVisible(controls.table.getCellRect(viewRow, 0, true));
-          }
-          refreshRuleButtons.run();
-        });
-
-    resetToIrcafeDefaults.addActionListener(
-        e -> {
-          int confirm =
-              JOptionPane.showConfirmDialog(
-                  dialog,
-                  "Replace all IRC event rules with IRCafe defaults?",
-                  "Reset IRC event rules",
-                  JOptionPane.OK_CANCEL_OPTION);
-          if (confirm != JOptionPane.OK_OPTION) return;
-
-          List<IrcEventNotificationRule> defaults = IrcEventNotificationRule.defaults();
-          if (defaults.isEmpty()) return;
-          controls.model.replaceAll(defaults);
-          if (controls.table.getRowCount() > 0) {
-            controls.table.getSelectionModel().setSelectionInterval(0, 0);
-            controls.table.scrollRectToVisible(controls.table.getCellRect(0, 0, true));
-          } else {
-            controls.table.clearSelection();
-          }
-          refreshRuleButtons.run();
-        });
-
-    controls
-        .table
-        .getSelectionModel()
-        .addListSelectionListener(
-            e -> {
-              if (e != null && e.getValueIsAdjusting()) return;
-              refreshRuleButtons.run();
-            });
-
-    controls.table.addMouseListener(
-        new java.awt.event.MouseAdapter() {
-          @Override
-          public void mouseClicked(java.awt.event.MouseEvent e) {
-            if (e == null) return;
-            if (!javax.swing.SwingUtilities.isLeftMouseButton(e)) return;
-            if (e.getClickCount() != 2) return;
-            int viewRow = controls.table.rowAtPoint(e.getPoint());
-            if (viewRow < 0) return;
-            controls.table.getSelectionModel().setSelectionInterval(viewRow, viewRow);
-            openEditRuleDialog.run();
-          }
-        });
-    refreshRuleButtons.run();
-
-    JScrollPane scroll = new JScrollPane(controls.table);
-    scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-    scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-
-    JPanel presetsPanel =
-        captionPanelWithPadding(
-            "Presets", "insets 0, fillx, wrap 1", "[grow,fill]", "[]4[]", 10, 10, 10, 10);
-    presetsPanel.add(defaultsRow, "growx, wmin 0, wrap");
-    presetsPanel.add(
-        helpText(
-            "Configure event actions for kicks, bans, invites, joins, and mode changes.\n"
-                + "Source supports self/others/specific nicks/glob/regex. Channel scope supports Active channel only.\n"
-                + "CTCP rules can filter command/value and include quick templates in the Filters tab.\n"
-                + "Apply defaults merges by event type. Reset to IRCafe defaults replaces the full rule list."),
-        "growx, wmin 0, wrap");
-    tab.add(presetsPanel, "growx, wmin 0, wrap");
-
-    JPanel rulesPanel =
-        captionPanelWithPadding(
-            "Rules", "insets 0, fill, wrap 1", "[grow,fill]", "[]6[grow,fill]4[]", 10, 10, 10, 10);
-    rulesPanel.add(buttons, "growx, wmin 0, wrap");
-    scroll.setPreferredSize(new Dimension(400, 260));
-    rulesPanel.add(scroll, "grow, push, wmin 0, wrap");
-    rulesPanel.add(helpText("Tip: Double-click a rule to edit it."), "growx, wmin 0, wrap");
-    tab.add(rulesPanel, "grow, push, wmin 0, wrap");
-
-    return tab;
+    return IrcEventNotificationsTabSupport.buildTab(
+        controls, dialog, this::promptIrcEventNotificationRuleDialog);
   }
 
   private IrcEventNotificationRule promptIrcEventNotificationRuleDialog(
@@ -8649,8 +8363,6 @@ public class PreferencesDialog {
       JTextArea testOutput,
       JLabel testStatus,
       RuleTestRunner testRunner) {}
-
-  private record IrcEventNotificationControls(JTable table, IrcEventNotificationTableModel model) {}
 
   private record UserCommandAliasesControls(
       JTable table,
