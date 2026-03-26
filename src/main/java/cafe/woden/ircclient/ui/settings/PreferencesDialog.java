@@ -934,18 +934,18 @@ public class PreferencesDialog {
     OutgoingColorControls outgoing = buildOutgoingColorControls(current);
     JCheckBox outgoingDeliveryIndicators = buildOutgoingDeliveryIndicatorsCheckbox(current);
     NetworkAdvancedControls network = buildNetworkAdvancedControls(current, closeables);
-    ProxyControls proxy = network.proxy;
-    UserhostControls userhost = network.userhost;
-    UserInfoEnrichmentControls enrichment = network.enrichment;
-    HeartbeatControls heartbeat = network.heartbeat;
-    BouncerControls bouncer = network.bouncer;
-    JSpinner monitorIsonPollIntervalSeconds = network.monitorIsonPollIntervalSeconds;
-    JCheckBox trustAllTlsCertificates = network.trustAllTlsCertificates;
+    ProxyControls proxy = network.proxy();
+    UserhostControls userhost = network.userhost();
+    UserInfoEnrichmentControls enrichment = network.enrichment();
+    HeartbeatControls heartbeat = network.heartbeat();
+    BouncerControls bouncer = network.bouncer();
+    JSpinner monitorIsonPollIntervalSeconds = network.monitorIsonPollIntervalSeconds();
+    JCheckBox trustAllTlsCertificates = network.trustAllTlsCertificates();
     JCheckBox genericBouncerPreferLoginHint = bouncer.preferLoginHint;
     JTextField genericBouncerLoginTemplate = bouncer.loginTemplate;
 
-    JPanel networkPanel = network.networkPanel;
-    JPanel userLookupsPanel = network.userLookupsPanel;
+    JPanel networkPanel = network.networkPanel();
+    JPanel userLookupsPanel = network.userLookupsPanel();
 
     NotificationRulesControls notifications = buildNotificationRulesControls(current, closeables);
     IrcEventNotificationControls ircEventNotifications =
@@ -2765,40 +2765,13 @@ public class PreferencesDialog {
 
   private NetworkAdvancedControls buildNetworkAdvancedControls(
       UiSettings current, List<AutoCloseable> closeables) {
-    IrcProperties.Proxy p = NetProxyContext.settings();
-    if (p == null) p = new IrcProperties.Proxy(false, "", 1080, "", "", true, 10_000, 30_000);
-    IrcProperties.Heartbeat hb = NetHeartbeatContext.settings();
-    if (hb == null) hb = new IrcProperties.Heartbeat(true, 15_000, 360_000);
-    boolean preferLoginHintDefault =
-        runtimeConfig == null
-            ? DEFAULT_GENERIC_BOUNCER_PREFER_LOGIN_HINT
-            : runtimeConfig.readGenericBouncerPreferLoginHint(
-                DEFAULT_GENERIC_BOUNCER_PREFER_LOGIN_HINT);
-    String loginTemplateDefault =
-        runtimeConfig == null
-            ? DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE
-            : runtimeConfig.readGenericBouncerLoginTemplate(DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE);
-    NetworkConnectionPanelControls connection =
-        NetworkConnectionPanelSupport.buildControls(
-            p,
-            hb,
-            closeables,
-            NetTlsContext.trustAllCertificates(),
-            preferLoginHintDefault,
-            loginTemplateDefault);
-    UserLookupsPanelControls userLookups =
-        UserLookupsPanelSupport.buildControls(current, closeables);
-
-    return new NetworkAdvancedControls(
-        connection.proxy,
-        userLookups.userhost,
-        userLookups.enrichment,
-        connection.heartbeat,
-        connection.bouncer,
-        userLookups.monitorIsonPollIntervalSeconds,
-        connection.trustAllTlsCertificates,
-        connection.panel,
-        userLookups.panel);
+    return NetworkAdvancedControlsSupport.buildControls(
+        current,
+        closeables,
+        runtimeConfig,
+        NetTlsContext.trustAllCertificates(),
+        DEFAULT_GENERIC_BOUNCER_PREFER_LOGIN_HINT,
+        DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE);
   }
 
   private JPanel buildMemoryPanel(
@@ -3156,17 +3129,6 @@ public class PreferencesDialog {
     return SettingsColorPickerDialogSupport.showColorPickerDialog(
         owner, title, initial, previewBackground);
   }
-
-  private record NetworkAdvancedControls(
-      ProxyControls proxy,
-      UserhostControls userhost,
-      UserInfoEnrichmentControls enrichment,
-      HeartbeatControls heartbeat,
-      BouncerControls bouncer,
-      JSpinner monitorIsonPollIntervalSeconds,
-      JCheckBox trustAllTlsCertificates,
-      JPanel networkPanel,
-      JPanel userLookupsPanel) {}
 
   static final class SimpleDocListener implements DocumentListener {
     private final Runnable onChange;
