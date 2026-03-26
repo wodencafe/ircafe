@@ -871,7 +871,7 @@ public class PreferencesDialog {
     }
     fonts.fontSize.addChangeListener(e -> scheduleFontPreview.run());
     JCheckBox autoConnectOnStart = buildAutoConnectCheckbox(current);
-    LaunchJvmControls launchJvm = buildLaunchJvmControls();
+    LaunchJvmControls launchJvm = LaunchJvmControlsSupport.buildControls(runtimeConfig);
     NotificationSoundSettings soundSettings =
         notificationSoundSettingsBus != null
             ? notificationSoundSettingsBus.get()
@@ -880,60 +880,105 @@ public class PreferencesDialog {
         pushySettingsBus != null
             ? pushySettingsBus.get()
             : new PushyProperties(false, null, null, null, null, null, null, null);
-    TrayControls trayControls = buildTrayControls(current, soundSettings, pushySettings);
+    TrayControls trayControls =
+        TrayControlsSupport.buildControls(
+            current,
+            soundSettings,
+            pushySettings,
+            runtimeConfig,
+            gnomeDbusBackend,
+            trayNotificationService,
+            notificationSoundService,
+            pushyNotificationService,
+            pushyTestExecutor,
+            this::importNotificationSoundFileToRuntimeDir);
 
     EmbedCardStyle currentEmbedCardStyle =
         embedCardStyleBus != null ? embedCardStyleBus.get() : EmbedCardStyle.DEFAULT;
-    ImageEmbedControls imageEmbeds = buildImageEmbedControls(current, closeables);
-    LinkPreviewControls linkPreviews = buildLinkPreviewControls(current, currentEmbedCardStyle);
+    ImageEmbedControls imageEmbeds =
+        ChatDisplayControlsSupport.buildImageEmbedControls(current, closeables);
+    LinkPreviewControls linkPreviews =
+        ChatDisplayControlsSupport.buildLinkPreviewControls(current, currentEmbedCardStyle);
     JButton advancedEmbedPolicyButton =
         buildAdvancedEmbedPolicyButton(owner, pendingEmbedLoadPolicy);
-    TimestampControls timestamps = buildTimestampControls(current);
+    TimestampControls timestamps = ChatDisplayControlsSupport.buildTimestampControls(current);
     JComboBox<MemoryUsageDisplayMode> memoryUsageDisplayMode =
-        buildMemoryUsageDisplayModeCombo(current);
+        MemoryControlsSupport.buildMemoryUsageDisplayModeCombo(current);
     JSpinner memoryUsageRefreshIntervalMs =
-        buildMemoryUsageRefreshIntervalSpinner(current, closeables);
-    MemoryWarningControls memoryWarnings = buildMemoryWarningControls(current, closeables);
+        MemoryControlsSupport.buildMemoryUsageRefreshIntervalSpinner(current, closeables);
+    MemoryWarningControls memoryWarnings =
+        MemoryControlsSupport.buildMemoryWarningControls(current, closeables);
 
-    JCheckBox presenceFolds = buildPresenceFoldsCheckbox(current);
-    JCheckBox ctcpRequestsInActiveTarget = buildCtcpRequestsInActiveTargetCheckbox(current);
-    JTextField defaultQuitMessage = buildDefaultQuitMessageField();
+    JCheckBox presenceFolds = ChatBehaviorControlsSupport.buildPresenceFoldsCheckbox(current);
+    JCheckBox ctcpRequestsInActiveTarget =
+        ChatBehaviorControlsSupport.buildCtcpRequestsInActiveTargetCheckbox(current);
+    JTextField defaultQuitMessage =
+        ChatBehaviorControlsSupport.buildDefaultQuitMessageField(runtimeConfig);
     SpellcheckSettings initialSpellcheck =
         spellcheckSettingsBus != null ? spellcheckSettingsBus.get() : SpellcheckSettings.defaults();
-    SpellcheckControls spellcheck = buildSpellcheckControls(initialSpellcheck);
-    CtcpAutoReplyControls ctcpAutoReplies = buildCtcpAutoReplyControls();
-    JCheckBox typingIndicatorsSendEnabled = buildTypingIndicatorsSendCheckbox(current);
-    JCheckBox typingIndicatorsReceiveEnabled = buildTypingIndicatorsReceiveCheckbox(current);
+    SpellcheckControls spellcheck = SpellcheckControlsSupport.buildControls(initialSpellcheck);
+    CtcpAutoReplyControls ctcpAutoReplies =
+        CtcpAutoReplySupport.buildControls(
+            runtimeConfig.readCtcpAutoRepliesEnabled(true),
+            runtimeConfig.readCtcpAutoReplyVersionEnabled(true),
+            runtimeConfig.readCtcpAutoReplyPingEnabled(true),
+            runtimeConfig.readCtcpAutoReplyTimeEnabled(true));
+    JCheckBox typingIndicatorsSendEnabled =
+        ChatBehaviorControlsSupport.buildTypingIndicatorsSendCheckbox(current);
+    JCheckBox typingIndicatorsReceiveEnabled =
+        ChatBehaviorControlsSupport.buildTypingIndicatorsReceiveCheckbox(current);
     JCheckBox typingIndicatorsTreeDisplayEnabled =
-        buildTypingIndicatorsTreeDisplayCheckbox(current);
+        ChatBehaviorControlsSupport.buildTypingIndicatorsTreeDisplayCheckbox(current);
     JCheckBox typingIndicatorsUsersListDisplayEnabled =
-        buildTypingIndicatorsUsersListDisplayCheckbox(current);
+        ChatBehaviorControlsSupport.buildTypingIndicatorsUsersListDisplayCheckbox(current);
     JCheckBox typingIndicatorsTranscriptDisplayEnabled =
-        buildTypingIndicatorsTranscriptDisplayCheckbox(current);
+        ChatBehaviorControlsSupport.buildTypingIndicatorsTranscriptDisplayCheckbox(current);
     JCheckBox typingIndicatorsSendSignalDisplayEnabled =
-        buildTypingIndicatorsSendSignalDisplayCheckbox(current);
+        ChatBehaviorControlsSupport.buildTypingIndicatorsSendSignalDisplayCheckbox(current);
     JComboBox<TypingTreeIndicatorStyleOption> typingTreeIndicatorStyle =
-        buildTypingTreeIndicatorStyleCombo(current);
+        ChatBehaviorControlsSupport.buildTypingTreeIndicatorStyleCombo(current);
     JComboBox<MatrixUserListNameDisplayModeOption> matrixUserListNameDisplayMode =
-        buildMatrixUserListNameDisplayModeCombo(current);
+        ChatBehaviorControlsSupport.buildMatrixUserListNameDisplayModeCombo(current);
     JCheckBox serverTreeNotificationBadgesEnabled =
-        buildServerTreeNotificationBadgesCheckbox(current);
-    JSpinner serverTreeUnreadBadgeScalePercent = buildServerTreeUnreadBadgeScalePercentSpinner();
+        ChatBehaviorControlsSupport.buildServerTreeNotificationBadgesCheckbox(current);
+    JSpinner serverTreeUnreadBadgeScalePercent =
+        ChatBehaviorControlsSupport.buildServerTreeUnreadBadgeScalePercentSpinner(runtimeConfig);
     Ircv3CapabilitiesControls ircv3Capabilities =
         Ircv3PanelSupport.buildCapabilitiesControls(runtimeConfig);
-    NickColorControls nickColors = buildNickColorControls(owner, closeables);
+    NickColorControls nickColors =
+        NickColorControlsSupport.buildControls(
+            owner,
+            closeables,
+            nickColorService,
+            nickColorOverridesDialog,
+            nickColorSettingsBus != null ? nickColorSettingsBus.get() : null);
 
     try {
       closeables.add(MouseWheelDecorator.decorateComboBoxSelection(memoryUsageDisplayMode));
     } catch (Exception ignored) {
     }
 
-    HistoryControls history = buildHistoryControls(current, closeables);
-    LoggingControls logging = buildLoggingControls(logProps, closeables);
+    HistoryControls history =
+        HistoryControlsSupport.buildControls(
+            current,
+            closeables,
+            settingsBus == null || settingsBus.chatSmoothWheelScrollingEnabled(),
+            runtimeConfig == null
+                || runtimeConfig.readChatHistoryLockViewportDuringLoadOlder(true));
+    LoggingControls logging =
+        LoggingControlsSupport.buildControls(logProps, closeables, serverDialogs, dialog);
 
-    OutgoingColorControls outgoing = buildOutgoingColorControls(current);
-    JCheckBox outgoingDeliveryIndicators = buildOutgoingDeliveryIndicatorsCheckbox(current);
-    NetworkAdvancedControls network = buildNetworkAdvancedControls(current, closeables);
+    OutgoingColorControls outgoing = OutgoingColorControlsSupport.buildControls(dialog, current);
+    JCheckBox outgoingDeliveryIndicators =
+        ChatBehaviorControlsSupport.buildOutgoingDeliveryIndicatorsCheckbox(current);
+    NetworkAdvancedControls network =
+        NetworkAdvancedControlsSupport.buildControls(
+            current,
+            closeables,
+            runtimeConfig,
+            NetTlsContext.trustAllCertificates(),
+            DEFAULT_GENERIC_BOUNCER_PREFER_LOGIN_HINT,
+            DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE);
     ProxyControls proxy = network.proxy();
     UserhostControls userhost = network.userhost();
     UserInfoEnrichmentControls enrichment = network.enrichment();
@@ -947,7 +992,9 @@ public class PreferencesDialog {
     JPanel networkPanel = network.networkPanel();
     JPanel userLookupsPanel = network.userLookupsPanel();
 
-    NotificationRulesControls notifications = buildNotificationRulesControls(current, closeables);
+    NotificationRulesControls notifications =
+        NotificationRulesControlsSupport.buildControls(
+            current, closeables, notificationRuleTestExecutor);
     IrcEventNotificationControls ircEventNotifications =
         buildIrcEventNotificationControls(
             ircEventNotificationRulesBus != null
@@ -969,11 +1016,12 @@ public class PreferencesDialog {
         AppearancePanelSupport.buildPanel(
             theme, accent, chatTheme, fonts, tweaks, appearanceServerTree);
     JPanel memoryPanel =
-        buildMemoryPanel(memoryUsageDisplayMode, memoryUsageRefreshIntervalMs, memoryWarnings);
-    JPanel startupPanel = buildStartupPanel(autoConnectOnStart, launchJvm);
+        MemoryPanelSupport.buildPanel(
+            memoryUsageDisplayMode, memoryUsageRefreshIntervalMs, memoryWarnings);
+    JPanel startupPanel = StartupPanelSupport.buildPanel(autoConnectOnStart, launchJvm);
     JPanel trayPanel = buildTrayNotificationsPanel(trayControls);
     JPanel chatPanel =
-        buildChatPanel(
+        ChatPanelSupport.buildPanel(
             presenceFolds,
             ctcpRequestsInActiveTarget,
             defaultQuitMessage,
@@ -982,7 +1030,7 @@ public class PreferencesDialog {
             timestamps,
             outgoing,
             outgoingDeliveryIndicators);
-    JPanel ctcpRepliesPanel = buildCtcpRepliesPanel(ctcpAutoReplies);
+    JPanel ctcpRepliesPanel = CtcpAutoReplySupport.buildPanel(ctcpAutoReplies);
     JPanel ircv3Panel =
         Ircv3PanelSupport.buildPanel(
             typingIndicatorsSendEnabled,
@@ -997,8 +1045,9 @@ public class PreferencesDialog {
             serverTreeUnreadBadgeScalePercent,
             ircv3Capabilities);
     JPanel embedsPanel =
-        buildEmbedsAndPreviewsPanel(imageEmbeds, linkPreviews, advancedEmbedPolicyButton);
-    JPanel historyStoragePanel = buildHistoryAndStoragePanel(logging, history);
+        EmbedsAndPreviewsPanelSupport.buildPanel(
+            imageEmbeds, linkPreviews, advancedEmbedPolicyButton);
+    JPanel historyStoragePanel = HistoryStoragePanelSupport.buildPanel(logging, history);
     JPanel notificationsPanel = buildNotificationsPanel(notifications, ircEventNotifications);
     JPanel commandsPanel = buildUserCommandsPanel(userCommands);
     JPanel diagnosticsPanel = buildDiagnosticsPanel(diagnostics);
@@ -1300,9 +1349,10 @@ public class PreferencesDialog {
           boolean typingIndicatorsSendSignalDisplayEnabledV =
               typingIndicatorsSendSignalDisplayEnabled.isSelected();
           String typingIndicatorsTreeStyleV =
-              typingTreeIndicatorStyleValue(typingTreeIndicatorStyle);
+              ChatBehaviorControlsSupport.typingTreeIndicatorStyleValue(typingTreeIndicatorStyle);
           String matrixUserListNameDisplayModeV =
-              matrixUserListNameDisplayModeValue(matrixUserListNameDisplayMode);
+              ChatBehaviorControlsSupport.matrixUserListNameDisplayModeValue(
+                  matrixUserListNameDisplayMode);
           boolean serverTreeNotificationBadgesEnabledV =
               serverTreeNotificationBadgesEnabled.isSelected();
           int serverTreeUnreadBadgeScalePercentV =
@@ -2606,83 +2656,6 @@ public class PreferencesDialog {
     return "sounds/" + dest.getFileName();
   }
 
-  private TrayControls buildTrayControls(
-      UiSettings current, NotificationSoundSettings soundSettings, PushyProperties pushySettings) {
-    return TrayControlsSupport.buildControls(
-        current,
-        soundSettings,
-        pushySettings,
-        runtimeConfig,
-        gnomeDbusBackend,
-        trayNotificationService,
-        notificationSoundService,
-        pushyNotificationService,
-        pushyTestExecutor,
-        this::importNotificationSoundFileToRuntimeDir);
-  }
-
-  private JCheckBox buildPresenceFoldsCheckbox(UiSettings current) {
-    return ChatBehaviorControlsSupport.buildPresenceFoldsCheckbox(current);
-  }
-
-  private JCheckBox buildCtcpRequestsInActiveTargetCheckbox(UiSettings current) {
-    return ChatBehaviorControlsSupport.buildCtcpRequestsInActiveTargetCheckbox(current);
-  }
-
-  private JTextField buildDefaultQuitMessageField() {
-    return ChatBehaviorControlsSupport.buildDefaultQuitMessageField(runtimeConfig);
-  }
-
-  private JCheckBox buildOutgoingDeliveryIndicatorsCheckbox(UiSettings current) {
-    return ChatBehaviorControlsSupport.buildOutgoingDeliveryIndicatorsCheckbox(current);
-  }
-
-  private JCheckBox buildTypingIndicatorsSendCheckbox(UiSettings current) {
-    return ChatBehaviorControlsSupport.buildTypingIndicatorsSendCheckbox(current);
-  }
-
-  private JCheckBox buildTypingIndicatorsReceiveCheckbox(UiSettings current) {
-    return ChatBehaviorControlsSupport.buildTypingIndicatorsReceiveCheckbox(current);
-  }
-
-  private JCheckBox buildTypingIndicatorsTreeDisplayCheckbox(UiSettings current) {
-    return ChatBehaviorControlsSupport.buildTypingIndicatorsTreeDisplayCheckbox(current);
-  }
-
-  private JCheckBox buildTypingIndicatorsUsersListDisplayCheckbox(UiSettings current) {
-    return ChatBehaviorControlsSupport.buildTypingIndicatorsUsersListDisplayCheckbox(current);
-  }
-
-  private JCheckBox buildTypingIndicatorsTranscriptDisplayCheckbox(UiSettings current) {
-    return ChatBehaviorControlsSupport.buildTypingIndicatorsTranscriptDisplayCheckbox(current);
-  }
-
-  private JCheckBox buildTypingIndicatorsSendSignalDisplayCheckbox(UiSettings current) {
-    return ChatBehaviorControlsSupport.buildTypingIndicatorsSendSignalDisplayCheckbox(current);
-  }
-
-  private JComboBox<TypingTreeIndicatorStyleOption> buildTypingTreeIndicatorStyleCombo(
-      UiSettings current) {
-    return ChatBehaviorControlsSupport.buildTypingTreeIndicatorStyleCombo(current);
-  }
-
-  private JComboBox<MatrixUserListNameDisplayModeOption> buildMatrixUserListNameDisplayModeCombo(
-      UiSettings current) {
-    return ChatBehaviorControlsSupport.buildMatrixUserListNameDisplayModeCombo(current);
-  }
-
-  private JCheckBox buildServerTreeNotificationBadgesCheckbox(UiSettings current) {
-    return ChatBehaviorControlsSupport.buildServerTreeNotificationBadgesCheckbox(current);
-  }
-
-  private JSpinner buildServerTreeUnreadBadgeScalePercentSpinner() {
-    return ChatBehaviorControlsSupport.buildServerTreeUnreadBadgeScalePercentSpinner(runtimeConfig);
-  }
-
-  private SpellcheckControls buildSpellcheckControls(SpellcheckSettings settings) {
-    return SpellcheckControlsSupport.buildControls(settings);
-  }
-
   static void configureBuiltInSoundCombo(JComboBox<BuiltInSound> combo) {
     if (combo == null) return;
     combo.setRenderer(
@@ -2699,97 +2672,6 @@ public class PreferencesDialog {
         });
   }
 
-  private static String typingTreeIndicatorStyleValue(
-      JComboBox<TypingTreeIndicatorStyleOption> combo) {
-    return ChatBehaviorControlsSupport.typingTreeIndicatorStyleValue(combo);
-  }
-
-  private static String matrixUserListNameDisplayModeValue(
-      JComboBox<MatrixUserListNameDisplayModeOption> combo) {
-    return ChatBehaviorControlsSupport.matrixUserListNameDisplayModeValue(combo);
-  }
-
-  private NickColorControls buildNickColorControls(Window owner, List<AutoCloseable> closeables) {
-    return NickColorControlsSupport.buildControls(
-        owner,
-        closeables,
-        nickColorService,
-        nickColorOverridesDialog,
-        nickColorSettingsBus != null ? nickColorSettingsBus.get() : null);
-  }
-
-  private ImageEmbedControls buildImageEmbedControls(
-      UiSettings current, List<AutoCloseable> closeables) {
-    return ChatDisplayControlsSupport.buildImageEmbedControls(current, closeables);
-  }
-
-  private LinkPreviewControls buildLinkPreviewControls(
-      UiSettings current, EmbedCardStyle currentEmbedCardStyle) {
-    return ChatDisplayControlsSupport.buildLinkPreviewControls(current, currentEmbedCardStyle);
-  }
-
-  private TimestampControls buildTimestampControls(UiSettings current) {
-    return ChatDisplayControlsSupport.buildTimestampControls(current);
-  }
-
-  private JComboBox<MemoryUsageDisplayMode> buildMemoryUsageDisplayModeCombo(UiSettings current) {
-    return MemoryControlsSupport.buildMemoryUsageDisplayModeCombo(current);
-  }
-
-  private JSpinner buildMemoryUsageRefreshIntervalSpinner(
-      UiSettings current, List<AutoCloseable> closeables) {
-    return MemoryControlsSupport.buildMemoryUsageRefreshIntervalSpinner(current, closeables);
-  }
-
-  private MemoryWarningControls buildMemoryWarningControls(
-      UiSettings current, List<AutoCloseable> closeables) {
-    return MemoryControlsSupport.buildMemoryWarningControls(current, closeables);
-  }
-
-  private HistoryControls buildHistoryControls(UiSettings current, List<AutoCloseable> closeables) {
-    return HistoryControlsSupport.buildControls(
-        current,
-        closeables,
-        settingsBus == null || settingsBus.chatSmoothWheelScrollingEnabled(),
-        runtimeConfig == null || runtimeConfig.readChatHistoryLockViewportDuringLoadOlder(true));
-  }
-
-  private LoggingControls buildLoggingControls(
-      LogProperties logProps, List<AutoCloseable> closeables) {
-    return LoggingControlsSupport.buildControls(logProps, closeables, serverDialogs, dialog);
-  }
-
-  private OutgoingColorControls buildOutgoingColorControls(UiSettings current) {
-    return OutgoingColorControlsSupport.buildControls(dialog, current);
-  }
-
-  private NetworkAdvancedControls buildNetworkAdvancedControls(
-      UiSettings current, List<AutoCloseable> closeables) {
-    return NetworkAdvancedControlsSupport.buildControls(
-        current,
-        closeables,
-        runtimeConfig,
-        NetTlsContext.trustAllCertificates(),
-        DEFAULT_GENERIC_BOUNCER_PREFER_LOGIN_HINT,
-        DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE);
-  }
-
-  private JPanel buildMemoryPanel(
-      JComboBox<MemoryUsageDisplayMode> memoryUsageDisplayMode,
-      JSpinner memoryUsageRefreshIntervalMs,
-      MemoryWarningControls memoryWarnings) {
-    return MemoryPanelSupport.buildPanel(
-        memoryUsageDisplayMode, memoryUsageRefreshIntervalMs, memoryWarnings);
-  }
-
-  private LaunchJvmControls buildLaunchJvmControls() {
-    return LaunchJvmControlsSupport.buildControls(runtimeConfig);
-  }
-
-  private JPanel buildStartupPanel(JCheckBox autoConnectOnStart, LaunchJvmControls launchJvm) {
-    return StartupPanelSupport.buildPanel(autoConnectOnStart, launchJvm);
-  }
-
   private JPanel buildTrayNotificationsPanel(TrayControls trayControls) {
     JPanel form =
         new JPanel(new MigLayout("insets 12, fill, wrap 1", "[grow,fill]", "[]10[]6[grow,fill]"));
@@ -2801,38 +2683,6 @@ public class PreferencesDialog {
         "growx, wmin 0, wrap");
     form.add(trayControls.panel, "grow, push, wmin 0");
     return form;
-  }
-
-  private JPanel buildChatPanel(
-      JCheckBox presenceFolds,
-      JCheckBox ctcpRequestsInActiveTarget,
-      JTextField defaultQuitMessage,
-      SpellcheckControls spellcheck,
-      NickColorControls nickColors,
-      TimestampControls timestamps,
-      OutgoingColorControls outgoing,
-      JCheckBox outgoingDeliveryIndicators) {
-    return ChatPanelSupport.buildPanel(
-        presenceFolds,
-        ctcpRequestsInActiveTarget,
-        defaultQuitMessage,
-        spellcheck,
-        nickColors,
-        timestamps,
-        outgoing,
-        outgoingDeliveryIndicators);
-  }
-
-  private CtcpAutoReplyControls buildCtcpAutoReplyControls() {
-    return CtcpAutoReplySupport.buildControls(
-        runtimeConfig.readCtcpAutoRepliesEnabled(true),
-        runtimeConfig.readCtcpAutoReplyVersionEnabled(true),
-        runtimeConfig.readCtcpAutoReplyPingEnabled(true),
-        runtimeConfig.readCtcpAutoReplyTimeEnabled(true));
-  }
-
-  private JPanel buildCtcpRepliesPanel(CtcpAutoReplyControls controls) {
-    return CtcpAutoReplySupport.buildPanel(controls);
   }
 
   static JTextArea subtleInfoTextWith(String text) {
@@ -2857,21 +2707,6 @@ public class PreferencesDialog {
           embedLoadPolicyDialog.open(owner, current).ifPresent(pendingEmbedLoadPolicy::set);
         });
     return advanced;
-  }
-
-  private JPanel buildEmbedsAndPreviewsPanel(
-      ImageEmbedControls image, LinkPreviewControls links, JButton advancedPolicyButton) {
-    return EmbedsAndPreviewsPanelSupport.buildPanel(image, links, advancedPolicyButton);
-  }
-
-  private JPanel buildHistoryAndStoragePanel(LoggingControls logging, HistoryControls history) {
-    return HistoryStoragePanelSupport.buildPanel(logging, history);
-  }
-
-  private NotificationRulesControls buildNotificationRulesControls(
-      UiSettings current, List<AutoCloseable> closeables) {
-    return NotificationRulesControlsSupport.buildControls(
-        current, closeables, notificationRuleTestExecutor);
   }
 
   private IrcEventNotificationControls buildIrcEventNotificationControls(
