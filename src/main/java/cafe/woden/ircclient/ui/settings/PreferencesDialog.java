@@ -3331,65 +3331,12 @@ public class PreferencesDialog {
   }
 
   private NickColorControls buildNickColorControls(Window owner, List<AutoCloseable> closeables) {
-    NickColorSettings cur = (nickColorSettingsBus != null) ? nickColorSettingsBus.get() : null;
-    boolean enabledSeed = cur == null || cur.enabled();
-    double minContrastSeed = cur != null ? cur.minContrast() : 3.0;
-    if (minContrastSeed <= 0) minContrastSeed = 3.0;
-
-    JCheckBox enabled = new JCheckBox("Color nicknames (channels and PMs)");
-    enabled.setSelected(enabledSeed);
-    enabled.setToolTipText(
-        "When enabled, IRCafe renders nicknames in deterministic colors (per nick),\n"
-            + "adjusted to meet a minimum contrast ratio against the chat background.");
-
-    JSpinner minContrast = doubleSpinner(minContrastSeed, 1.0, 21.0, 0.5, closeables);
-    minContrast.setToolTipText(
-        "Minimum contrast ratio against the chat background (WCAG-style).\n"
-            + "Higher values are safer for readability but may push colors toward lighter/darker extremes.");
-
-    JButton overrides = new JButton("Edit overrides...");
-    overrides.setToolTipText(
-        "Open the per-nick override editor. Overrides take precedence over the palette.");
-
-    NickColorPreviewPanel preview = new NickColorPreviewPanel(nickColorService);
-
-    Runnable updatePreview =
-        () -> {
-          boolean en = enabled.isSelected();
-          double mc = ((Number) minContrast.getValue()).doubleValue();
-          if (mc <= 0) mc = 3.0;
-          minContrast.setEnabled(en);
-          preview.updatePreview(en, mc);
-        };
-
-    enabled.addActionListener(e -> updatePreview.run());
-    minContrast.addChangeListener(e -> updatePreview.run());
-
-    overrides.addActionListener(
-        e -> {
-          if (nickColorOverridesDialog != null) {
-            nickColorOverridesDialog.open(owner);
-          }
-          updatePreview.run();
-        });
-
-    JPanel panel =
-        new JPanel(new MigLayout("insets 0, fillx, wrap 2", "[grow,fill]8[nogrid]", "[]6[]6[]6[]"));
-    panel.setOpaque(false);
-    panel.add(enabled, "span 2, wrap");
-    panel.add(new JLabel("Minimum contrast ratio:"));
-    panel.add(minContrast, "w 110!, wrap");
-    panel.add(overrides, "span 2, alignx left, wrap");
-    panel.add(
-        helpText(
-            "Tip: If nick colors look too similar to the background, increase the contrast ratio.\n"
-                + "Overrides always win over the palette."),
-        "span 2, growx, wmin 0, wrap");
-    panel.add(new JLabel("Preview:"), "span 2, wrap");
-    panel.add(preview, "span 2, growx");
-    updatePreview.run();
-
-    return new NickColorControls(enabled, minContrast, overrides, panel);
+    return NickColorControlsSupport.buildControls(
+        owner,
+        closeables,
+        nickColorService,
+        nickColorOverridesDialog,
+        nickColorSettingsBus != null ? nickColorSettingsBus.get() : null);
   }
 
   private ImageEmbedControls buildImageEmbedControls(
@@ -4023,63 +3970,6 @@ public class PreferencesDialog {
       JCheckBox trustAllTlsCertificates,
       JPanel networkPanel,
       JPanel userLookupsPanel) {}
-
-  private static final class NickColorPreviewPanel extends JPanel {
-    private static final String[] SAMPLE_NICKS =
-        new String[] {"Alice", "Bob", "Carol", "Dave", "Eve", "Mallory"};
-
-    private final NickColorService nickColorService;
-    private final java.util.List<JLabel> labels = new java.util.ArrayList<>();
-
-    private NickColorPreviewPanel(NickColorService nickColorService) {
-      super(new FlowLayout(FlowLayout.LEFT, 10, 6));
-      this.nickColorService = nickColorService;
-
-      setOpaque(true);
-      Color border = UIManager.getColor("Component.borderColor");
-      if (border == null) border = UIManager.getColor("Separator.foreground");
-      if (border == null) border = UIManager.getColor("Label.foreground");
-      if (border == null) border = Color.GRAY;
-
-      setBorder(
-          BorderFactory.createCompoundBorder(
-              BorderFactory.createLineBorder(border, 1),
-              BorderFactory.createEmptyBorder(6, 8, 6, 8)));
-
-      for (String n : SAMPLE_NICKS) {
-        JLabel l = new JLabel(n);
-        l.setFont(l.getFont().deriveFont(Font.BOLD));
-        labels.add(l);
-        add(l);
-      }
-    }
-
-    private void updatePreview(boolean enabled, double minContrast) {
-      Color bg = UIManager.getColor("TextPane.background");
-      if (bg == null) bg = UIManager.getColor("Panel.background");
-      if (bg == null) bg = Color.WHITE;
-
-      Color fg = UIManager.getColor("TextPane.foreground");
-      if (fg == null) fg = UIManager.getColor("Label.foreground");
-      if (fg == null) fg = Color.BLACK;
-
-      setBackground(bg);
-
-      for (int i = 0; i < labels.size(); i++) {
-        JLabel l = labels.get(i);
-        String nick = SAMPLE_NICKS[i];
-
-        Color c =
-            (nickColorService != null)
-                ? nickColorService.previewColorForNick(nick, bg, fg, enabled, minContrast)
-                : fg;
-
-        l.setForeground(c);
-      }
-
-      repaint();
-    }
-  }
 
   static final class SimpleDocListener implements DocumentListener {
     private final Runnable onChange;
