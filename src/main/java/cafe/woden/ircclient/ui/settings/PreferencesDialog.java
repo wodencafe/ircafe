@@ -2622,183 +2622,61 @@ public class PreferencesDialog {
   }
 
   private JCheckBox buildPresenceFoldsCheckbox(UiSettings current) {
-    JCheckBox presenceFolds = new JCheckBox("Fold join/part/quit spam into a compact block");
-    presenceFolds.setSelected(current.presenceFoldsEnabled());
-    presenceFolds.setToolTipText(
-        "When enabled, runs of join/part/quit/nick-change events are folded into a single expandable block.\n"
-            + "When disabled, each event is shown as its own status line.");
-    return presenceFolds;
+    return ChatBehaviorControlsSupport.buildPresenceFoldsCheckbox(current);
   }
 
   private JCheckBox buildCtcpRequestsInActiveTargetCheckbox(UiSettings current) {
-    JCheckBox ctcp = new JCheckBox("Show inbound CTCP requests in the currently active chat tab");
-    ctcp.setSelected(current.ctcpRequestsInActiveTargetEnabled());
-    ctcp.setToolTipText(
-        "When enabled, inbound CTCP requests (e.g. VERSION, PING) are announced in the currently active chat tab.\n"
-            + "When disabled, CTCP requests are routed to the target they came from (channel or PM).");
-    return ctcp;
+    return ChatBehaviorControlsSupport.buildCtcpRequestsInActiveTargetCheckbox(current);
   }
 
   private JTextField buildDefaultQuitMessageField() {
-    JTextField field = new JTextField(runtimeConfig.readDefaultQuitMessage());
-    field.setToolTipText(
-        "Used when /quit has no explicit reason, and when IRCafe closes IRC connections during shutdown.");
-    return field;
+    return ChatBehaviorControlsSupport.buildDefaultQuitMessageField(runtimeConfig);
   }
 
   private JCheckBox buildOutgoingDeliveryIndicatorsCheckbox(UiSettings current) {
-    JCheckBox cb =
-        new JCheckBox("Show send-status indicators for my outgoing messages (spinner + green dot)");
-    cb.setSelected(current.outgoingDeliveryIndicatorsEnabled());
-    cb.setToolTipText(
-        "When enabled, outgoing messages show a pending spinner and a brief green confirmation dot when server echo reconciliation completes.\n"
-            + "When disabled, these visual indicators are hidden; message send/reconcile behavior is unchanged.");
-    return cb;
+    return ChatBehaviorControlsSupport.buildOutgoingDeliveryIndicatorsCheckbox(current);
   }
 
   private JCheckBox buildTypingIndicatorsSendCheckbox(UiSettings current) {
-    JCheckBox cb = new JCheckBox("Send typing indicators (IRCv3)");
-    cb.setSelected(current.typingIndicatorsEnabled());
-    cb.setToolTipText(
-        "When enabled, IRCafe will send your IRCv3 typing state (active/paused/done) when the server supports it.");
-    return cb;
+    return ChatBehaviorControlsSupport.buildTypingIndicatorsSendCheckbox(current);
   }
 
   private JCheckBox buildTypingIndicatorsReceiveCheckbox(UiSettings current) {
-    JCheckBox cb = new JCheckBox("Display incoming typing indicators (IRCv3)");
-    cb.setSelected(current.typingIndicatorsReceiveEnabled());
-    cb.setToolTipText(
-        "When enabled, IRCafe will display incoming IRCv3 typing indicators from other users.");
-    return cb;
+    return ChatBehaviorControlsSupport.buildTypingIndicatorsReceiveCheckbox(current);
   }
 
   private JCheckBox buildTypingIndicatorsTreeDisplayCheckbox(UiSettings current) {
-    JCheckBox cb = new JCheckBox("Show typing marker next to channels");
-    cb.setSelected(current.typingIndicatorsTreeEnabled());
-    cb.setToolTipText(
-        "Controls typing markers in the server tree channel list.\n"
-            + "Typing transport behavior is unchanged.");
-    return cb;
+    return ChatBehaviorControlsSupport.buildTypingIndicatorsTreeDisplayCheckbox(current);
   }
 
   private JCheckBox buildTypingIndicatorsUsersListDisplayCheckbox(UiSettings current) {
-    JCheckBox cb = new JCheckBox("Show typing marker next to users");
-    cb.setSelected(current.typingIndicatorsUsersListEnabled());
-    cb.setToolTipText(
-        "Controls typing markers beside nicknames in the channel user list.\n"
-            + "Typing transport behavior is unchanged.");
-    return cb;
+    return ChatBehaviorControlsSupport.buildTypingIndicatorsUsersListDisplayCheckbox(current);
   }
 
   private JCheckBox buildTypingIndicatorsTranscriptDisplayCheckbox(UiSettings current) {
-    JCheckBox cb = new JCheckBox("Show typing status in the transcript input area");
-    cb.setSelected(current.typingIndicatorsTranscriptEnabled());
-    cb.setToolTipText(
-        "Controls the incoming typing banner above the input field (\"X is typing\").\n"
-            + "Typing transport behavior is unchanged.");
-    return cb;
+    return ChatBehaviorControlsSupport.buildTypingIndicatorsTranscriptDisplayCheckbox(current);
   }
 
   private JCheckBox buildTypingIndicatorsSendSignalDisplayCheckbox(UiSettings current) {
-    JCheckBox cb = new JCheckBox("Show local typing-send arrows near Send");
-    cb.setSelected(current.typingIndicatorsSendSignalEnabled());
-    cb.setToolTipText(
-        "Controls the local send telemetry arrows near the Send button.\n"
-            + "Typing transport behavior is unchanged.");
-    return cb;
+    return ChatBehaviorControlsSupport.buildTypingIndicatorsSendSignalDisplayCheckbox(current);
   }
 
   private JComboBox<TypingTreeIndicatorStyleOption> buildTypingTreeIndicatorStyleCombo(
       UiSettings current) {
-    TypingTreeIndicatorStyleOption[] options =
-        new TypingTreeIndicatorStyleOption[] {
-          new TypingTreeIndicatorStyleOption("dots", "3 dots (ellipsis)"),
-          new TypingTreeIndicatorStyleOption("keyboard", "Keyboard glyph"),
-          new TypingTreeIndicatorStyleOption("glow-dot", "Glowing green dot")
-        };
-    JComboBox<TypingTreeIndicatorStyleOption> combo = new JComboBox<>(options);
-    combo.setToolTipText("Choose how typing activity appears in the server tree for channels.");
-    combo.setRenderer(
-        new DefaultListCellRenderer() {
-          @Override
-          public java.awt.Component getListCellRendererComponent(
-              JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-            JLabel c =
-                (JLabel)
-                    super.getListCellRendererComponent(
-                        list, value, index, isSelected, cellHasFocus);
-            if (value instanceof TypingTreeIndicatorStyleOption o) {
-              c.setText(o.label());
-            }
-            return c;
-          }
-        });
-
-    String configured = current != null ? current.typingIndicatorsTreeStyle() : null;
-    String normalized = UiSettings.normalizeTypingTreeIndicatorStyle(configured);
-    for (TypingTreeIndicatorStyleOption option : options) {
-      if (option.id().equalsIgnoreCase(normalized)) {
-        combo.setSelectedItem(option);
-        break;
-      }
-    }
-    return combo;
+    return ChatBehaviorControlsSupport.buildTypingTreeIndicatorStyleCombo(current);
   }
 
   private JComboBox<MatrixUserListNameDisplayModeOption> buildMatrixUserListNameDisplayModeCombo(
       UiSettings current) {
-    MatrixUserListNameDisplayModeOption[] options =
-        new MatrixUserListNameDisplayModeOption[] {
-          new MatrixUserListNameDisplayModeOption("compact", "Display name only (compact)"),
-          new MatrixUserListNameDisplayModeOption(
-              "verbose", "Display name + Matrix user ID (verbose)")
-        };
-    JComboBox<MatrixUserListNameDisplayModeOption> combo = new JComboBox<>(options);
-    combo.setToolTipText(
-        "Controls how Matrix users are shown in the channel user list (display name only or display name with Matrix user ID).");
-    combo.setRenderer(
-        new DefaultListCellRenderer() {
-          @Override
-          public java.awt.Component getListCellRendererComponent(
-              JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-            JLabel c =
-                (JLabel)
-                    super.getListCellRendererComponent(
-                        list, value, index, isSelected, cellHasFocus);
-            if (value instanceof MatrixUserListNameDisplayModeOption o) {
-              c.setText(o.label());
-            }
-            return c;
-          }
-        });
-
-    String configured = current != null ? current.matrixUserListNameDisplayMode() : null;
-    String normalized = UiSettings.normalizeMatrixUserListNameDisplayMode(configured);
-    for (MatrixUserListNameDisplayModeOption option : options) {
-      if (option.id().equalsIgnoreCase(normalized)) {
-        combo.setSelectedItem(option);
-        break;
-      }
-    }
-    return combo;
+    return ChatBehaviorControlsSupport.buildMatrixUserListNameDisplayModeCombo(current);
   }
 
   private JCheckBox buildServerTreeNotificationBadgesCheckbox(UiSettings current) {
-    JCheckBox cb = new JCheckBox("Show unread/highlight badges in the server tree");
-    cb.setSelected(current.serverTreeNotificationBadgesEnabled());
-    cb.setToolTipText(
-        "When enabled, the server tree shows numeric unread/highlight badges next to targets.\n"
-            + "When disabled, badge counts are hidden but unread/highlight tracking still runs.");
-    return cb;
+    return ChatBehaviorControlsSupport.buildServerTreeNotificationBadgesCheckbox(current);
   }
 
   private JSpinner buildServerTreeUnreadBadgeScalePercentSpinner() {
-    int current = runtimeConfig.readServerTreeUnreadBadgeScalePercent(100);
-    SpinnerNumberModel model = new SpinnerNumberModel(current, 50, 150, 5);
-    JSpinner spinner = new JSpinner(model);
-    spinner.setToolTipText(
-        "Scale for unread/highlight count badges in the server tree. Lower values make badges and numbers smaller.");
-    return spinner;
+    return ChatBehaviorControlsSupport.buildServerTreeUnreadBadgeScalePercentSpinner(runtimeConfig);
   }
 
   private SpellcheckControls buildSpellcheckControls(SpellcheckSettings settings) {
@@ -2823,20 +2701,12 @@ public class PreferencesDialog {
 
   private static String typingTreeIndicatorStyleValue(
       JComboBox<TypingTreeIndicatorStyleOption> combo) {
-    Object selected = combo != null ? combo.getSelectedItem() : null;
-    if (selected instanceof TypingTreeIndicatorStyleOption o) {
-      return UiSettings.normalizeTypingTreeIndicatorStyle(o.id());
-    }
-    return "dots";
+    return ChatBehaviorControlsSupport.typingTreeIndicatorStyleValue(combo);
   }
 
   private static String matrixUserListNameDisplayModeValue(
       JComboBox<MatrixUserListNameDisplayModeOption> combo) {
-    Object selected = combo != null ? combo.getSelectedItem() : null;
-    if (selected instanceof MatrixUserListNameDisplayModeOption o) {
-      return UiSettings.normalizeMatrixUserListNameDisplayMode(o.id());
-    }
-    return "compact";
+    return ChatBehaviorControlsSupport.matrixUserListNameDisplayModeValue(combo);
   }
 
   private NickColorControls buildNickColorControls(Window owner, List<AutoCloseable> closeables) {
@@ -3329,10 +3199,6 @@ public class PreferencesDialog {
     return SettingsColorPickerDialogSupport.showColorPickerDialog(
         owner, title, initial, previewBackground);
   }
-
-  private record TypingTreeIndicatorStyleOption(String id, String label) {}
-
-  private record MatrixUserListNameDisplayModeOption(String id, String label) {}
 
   private record NetworkAdvancedControls(
       ProxyControls proxy,
