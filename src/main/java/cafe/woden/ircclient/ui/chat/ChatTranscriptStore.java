@@ -1,5 +1,14 @@
 package cafe.woden.ircclient.ui.chat;
 
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.firstIrcv3TagValue;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.formatIrcv3Tags;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.mergeIrcv3Tags;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.normalizeIrcv3Tags;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.normalizeMessageId;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.normalizePendingId;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.parseIrcv3TagsDisplay;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.sanitizeTagForMeta;
+
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
 import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.app.api.PresenceKind;
@@ -343,82 +352,6 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       }
     } catch (Exception ignored) {
     }
-  }
-
-  private static String normalizeMessageId(String raw) {
-    String s = (raw == null) ? "" : raw.trim();
-    return s;
-  }
-
-  private static String normalizePendingId(String raw) {
-    String s = (raw == null) ? "" : raw.trim();
-    return s;
-  }
-
-  private static Map<String, String> normalizeIrcv3Tags(Map<String, String> raw) {
-    if (raw == null || raw.isEmpty()) return Map.of();
-    java.util.LinkedHashMap<String, String> out = new java.util.LinkedHashMap<>();
-    for (Map.Entry<String, String> e : raw.entrySet()) {
-      String key = normalizeIrcv3TagKey(e.getKey());
-      if (key.isEmpty()) continue;
-      String val = (e.getValue() == null) ? "" : e.getValue();
-      out.put(key, val);
-    }
-    if (out.isEmpty()) return Map.of();
-    return java.util.Collections.unmodifiableMap(out);
-  }
-
-  private static String normalizeIrcv3TagKey(String rawKey) {
-    String k = (rawKey == null) ? "" : rawKey.trim();
-    if (k.startsWith("@")) k = k.substring(1).trim();
-    if (k.startsWith("+")) k = k.substring(1).trim();
-    if (k.isEmpty()) return "";
-    return k.toLowerCase(Locale.ROOT);
-  }
-
-  private static String firstIrcv3TagValue(Map<String, String> tags, String... keys) {
-    if (tags == null || tags.isEmpty() || keys == null) return "";
-    for (String key : keys) {
-      String want = normalizeIrcv3TagKey(key);
-      if (want.isEmpty()) continue;
-      for (Map.Entry<String, String> e : tags.entrySet()) {
-        String got = normalizeIrcv3TagKey(e.getKey());
-        if (!want.equals(got)) continue;
-        String raw = (e.getValue() == null) ? "" : e.getValue().trim();
-        if (raw.isEmpty()) continue;
-        return raw;
-      }
-    }
-    return "";
-  }
-
-  private static String sanitizeTagForMeta(String rawKey) {
-    String key = normalizeIrcv3TagKey(rawKey);
-    if (key.isEmpty()) return "";
-    StringBuilder sb = new StringBuilder(key.length());
-    for (int i = 0; i < key.length(); i++) {
-      char c = key.charAt(i);
-      if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
-        sb.append(c);
-      } else {
-        sb.append('_');
-      }
-    }
-    return sb.toString();
-  }
-
-  private static String formatIrcv3Tags(Map<String, String> tags) {
-    if (tags == null || tags.isEmpty()) return "";
-    StringBuilder sb = new StringBuilder();
-    for (Map.Entry<String, String> e : tags.entrySet()) {
-      String key = normalizeIrcv3TagKey(e.getKey());
-      if (key.isEmpty()) continue;
-      if (sb.length() > 0) sb.append(';');
-      sb.append(key);
-      String val = (e.getValue() == null) ? "" : e.getValue();
-      if (!val.isEmpty()) sb.append('=').append(val);
-    }
-    return sb.toString();
   }
 
   private boolean shouldHideLine(
@@ -3582,38 +3515,6 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     } catch (Exception ignored) {
       return LogDirection.IN;
     }
-  }
-
-  private static Map<String, String> parseIrcv3TagsDisplay(String raw) {
-    String s = Objects.toString(raw, "").trim();
-    if (s.isEmpty()) return Map.of();
-    LinkedHashMap<String, String> out = new LinkedHashMap<>();
-    String[] parts = s.split(";");
-    for (String part : parts) {
-      String p = Objects.toString(part, "").trim();
-      if (p.isEmpty()) continue;
-      int eq = p.indexOf('=');
-      if (eq < 0) {
-        out.put(p, "");
-      } else {
-        String k = p.substring(0, eq).trim();
-        String v = p.substring(eq + 1).trim();
-        if (!k.isEmpty()) out.put(k, v);
-      }
-    }
-    if (out.isEmpty()) return Map.of();
-    return out;
-  }
-
-  private static Map<String, String> mergeIrcv3Tags(
-      Map<String, String> base, Map<String, String> overlay) {
-    Map<String, String> left = normalizeIrcv3Tags(base);
-    Map<String, String> right = normalizeIrcv3Tags(overlay);
-    if (left.isEmpty()) return right;
-    if (right.isEmpty()) return left;
-    LinkedHashMap<String, String> out = new LinkedHashMap<>(left);
-    out.putAll(right);
-    return out;
   }
 
   private static String renderEditedText(String text) {
