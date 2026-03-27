@@ -1280,65 +1280,16 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       return;
     }
 
-    String preview = formatReplyPreviewSnippet(kind, from, text);
+    String preview =
+        ChatTranscriptReplyPreviewSupport.formatReplyPreviewSnippet(
+            kind, from, text, REPLY_PREVIEW_TEXT_MAX_CHARS);
     if (preview.isBlank()) return;
     st.messagePreviewByMsgId.put(msgId, preview);
   }
 
-  private String formatReplyPreviewSnippet(LogKind kind, String from, String text) {
-    String body = normalizeReplyPreviewText(text);
-    if (body.isEmpty()) return "";
-    String nick = Objects.toString(from, "").trim();
-    return switch (kind) {
-      case ACTION -> nick.isEmpty() ? ("* " + body) : ("* " + nick + " " + body);
-      case NOTICE -> nick.isEmpty() ? ("[notice] " + body) : ("[notice] " + nick + ": " + body);
-      default -> nick.isEmpty() ? body : (nick + ": " + body);
-    };
-  }
-
   private String previewForMessageId(TranscriptState st, String messageId) {
-    if (st == null) return "";
-    String msgId = normalizeMessageId(messageId);
-    if (msgId.isEmpty()) return "";
-    return Objects.toString(st.messagePreviewByMsgId.get(msgId), "").trim();
-  }
-
-  private static String normalizeReplyPreviewText(String rawText) {
-    String raw = Objects.toString(rawText, "");
-    if (raw.isEmpty()) return "";
-
-    StringBuilder out = new StringBuilder(Math.min(REPLY_PREVIEW_TEXT_MAX_CHARS, raw.length()));
-    boolean pendingSpace = false;
-    for (int i = 0; i < raw.length(); i++) {
-      char c = raw.charAt(i);
-      if (Character.isWhitespace(c)) {
-        pendingSpace = out.length() > 0;
-        continue;
-      }
-      if (c < 0x20 && c != '\t') continue;
-      if (pendingSpace && out.length() > 0) {
-        out.append(' ');
-        pendingSpace = false;
-      }
-      out.append(c);
-      if (out.length() >= REPLY_PREVIEW_TEXT_MAX_CHARS) break;
-    }
-
-    String normalized = out.toString().trim();
-    if (normalized.length() >= REPLY_PREVIEW_TEXT_MAX_CHARS && raw.length() > normalized.length()) {
-      int max = Math.max(1, REPLY_PREVIEW_TEXT_MAX_CHARS - 3);
-      normalized = normalized.substring(0, Math.min(max, normalized.length())).trim() + "...";
-    }
-    return normalized;
-  }
-
-  private static LinkedHashMap<String, String> createBoundedReplyPreviewCache() {
-    return new LinkedHashMap<>() {
-      @Override
-      protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
-        return size() > REPLY_PREVIEW_CACHE_LIMIT_PER_TARGET;
-      }
-    };
+    return ChatTranscriptReplyPreviewSupport.previewForMessageId(
+        (st == null) ? null : st.messagePreviewByMsgId, messageId);
   }
 
   private Font safeTranscriptFont() {
@@ -4997,7 +4948,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     ReadMarkerControl readMarker;
     Long readMarkerEpochMs;
     Map<String, ReactionState> reactionsByTargetMsgId = new HashMap<>();
-    Map<String, String> messagePreviewByMsgId = createBoundedReplyPreviewCache();
+    Map<String, String> messagePreviewByMsgId =
+        ChatTranscriptReplyPreviewSupport.createBoundedReplyPreviewCache(
+            REPLY_PREVIEW_CACHE_LIMIT_PER_TARGET);
   }
 
   /** Tracks a contiguous run of filtered lines (represented by a single placeholder component). */
