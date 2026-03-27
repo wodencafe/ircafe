@@ -3142,9 +3142,8 @@ public class RuntimeConfigStore
       if (cmd.isEmpty() || cmd.equalsIgnoreCase("java")) cmd = "";
 
       Map<String, Object> doc = loadFileOrEmpty();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
-      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+      LaunchJvmWritePath path = getOrCreateLaunchJvmWritePath(doc);
+      Map<String, Object> jvm = path.jvm();
 
       if (cmd.isEmpty()) {
         jvm.remove("javaCommand");
@@ -3152,7 +3151,7 @@ public class RuntimeConfigStore
         jvm.put("javaCommand", cmd);
       }
 
-      cleanupLaunchJvm(ircafe, launch, jvm);
+      cleanupLaunchJvm(path);
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist launch.jvm.javaCommand to '{}'", file, e);
@@ -3166,9 +3165,8 @@ public class RuntimeConfigStore
       int v = clampLaunchJvmHeapMiB(xmsMiB);
 
       Map<String, Object> doc = loadFileOrEmpty();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
-      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+      LaunchJvmWritePath path = getOrCreateLaunchJvmWritePath(doc);
+      Map<String, Object> jvm = path.jvm();
 
       if (v <= 0) {
         jvm.remove("xmsMiB");
@@ -3176,7 +3174,7 @@ public class RuntimeConfigStore
         jvm.put("xmsMiB", v);
       }
 
-      cleanupLaunchJvm(ircafe, launch, jvm);
+      cleanupLaunchJvm(path);
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist launch.jvm.xmsMiB to '{}'", file, e);
@@ -3190,9 +3188,8 @@ public class RuntimeConfigStore
       int v = clampLaunchJvmHeapMiB(xmxMiB);
 
       Map<String, Object> doc = loadFileOrEmpty();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
-      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+      LaunchJvmWritePath path = getOrCreateLaunchJvmWritePath(doc);
+      Map<String, Object> jvm = path.jvm();
 
       if (v <= 0) {
         jvm.remove("xmxMiB");
@@ -3200,7 +3197,7 @@ public class RuntimeConfigStore
         jvm.put("xmxMiB", v);
       }
 
-      cleanupLaunchJvm(ircafe, launch, jvm);
+      cleanupLaunchJvm(path);
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist launch.jvm.xmxMiB to '{}'", file, e);
@@ -3214,9 +3211,8 @@ public class RuntimeConfigStore
       String normalized = normalizeLaunchJvmGc(gc);
 
       Map<String, Object> doc = loadFileOrEmpty();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
-      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+      LaunchJvmWritePath path = getOrCreateLaunchJvmWritePath(doc);
+      Map<String, Object> jvm = path.jvm();
 
       if (normalized.isEmpty()) {
         jvm.remove("gc");
@@ -3224,7 +3220,7 @@ public class RuntimeConfigStore
         jvm.put("gc", normalized);
       }
 
-      cleanupLaunchJvm(ircafe, launch, jvm);
+      cleanupLaunchJvm(path);
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist launch.jvm.gc to '{}'", file, e);
@@ -3238,9 +3234,8 @@ public class RuntimeConfigStore
       List<String> sanitized = sanitizeArgs(args);
 
       Map<String, Object> doc = loadFileOrEmpty();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
-      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+      LaunchJvmWritePath path = getOrCreateLaunchJvmWritePath(doc);
+      Map<String, Object> jvm = path.jvm();
 
       if (sanitized.isEmpty()) {
         jvm.remove("args");
@@ -3248,7 +3243,7 @@ public class RuntimeConfigStore
         jvm.put("args", sanitized);
       }
 
-      cleanupLaunchJvm(ircafe, launch, jvm);
+      cleanupLaunchJvm(path);
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist launch.jvm.args to '{}'", file, e);
@@ -3284,6 +3279,20 @@ public class RuntimeConfigStore
       ircafe.remove("launch");
     }
   }
+
+  private static void cleanupLaunchJvm(LaunchJvmWritePath path) {
+    cleanupLaunchJvm(path.ircafe(), path.launch(), path.jvm());
+  }
+
+  private static LaunchJvmWritePath getOrCreateLaunchJvmWritePath(Map<String, Object> doc) {
+    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+    Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
+    Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+    return new LaunchJvmWritePath(ircafe, launch, jvm);
+  }
+
+  private record LaunchJvmWritePath(
+      Map<String, Object> ircafe, Map<String, Object> launch, Map<String, Object> jvm) {}
 
   @Override
   public synchronized boolean readCtcpAutoRepliesEnabled(boolean defaultValue) {
