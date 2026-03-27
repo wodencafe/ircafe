@@ -7,7 +7,6 @@ import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.
 import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.normalizeMessageId;
 import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.normalizePendingId;
 import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.parseIrcv3TagsDisplay;
-import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.sanitizeTagForMeta;
 
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
 import cafe.woden.ircclient.app.api.PresenceEvent;
@@ -192,7 +191,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       Map<String, String> ircv3Tags) {
     String msgId = normalizeMessageId(messageId);
     Map<String, String> tagsMap = normalizeIrcv3Tags(ircv3Tags);
-    Set<String> tags = computeTags(kind, dir, fromNick, presenceEvent, msgId, tagsMap);
+    Set<String> tags =
+        ChatTranscriptLineTagSupport.computeTags(
+            kind, dir, fromNick, presenceEvent, msgId, tagsMap);
     return new LineMeta(
         bufferKey(ref),
         kind,
@@ -203,92 +204,6 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         msgId,
         formatIrcv3Tags(tagsMap),
         tagsMap);
-  }
-
-  private Set<String> computeTags(
-      LogKind kind, LogDirection dir, String fromNick, PresenceEvent presenceEvent) {
-    return computeTags(kind, dir, fromNick, presenceEvent, "", Map.of());
-  }
-
-  private Set<String> computeTags(
-      LogKind kind,
-      LogDirection dir,
-      String fromNick,
-      PresenceEvent presenceEvent,
-      String messageId,
-      Map<String, String> ircv3Tags) {
-    java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
-
-    if (kind != null) {
-      switch (kind) {
-        case CHAT -> out.add("irc_privmsg");
-        case ACTION -> out.add("irc_action");
-        case NOTICE -> out.add("irc_notice");
-        case PRESENCE -> out.add("irc_presence");
-        case STATUS -> out.add("irc_status");
-        case ERROR -> out.add("irc_error");
-        case SPOILER -> {
-          out.add("irc_privmsg");
-          out.add("irc_spoiler");
-        }
-        default -> out.add("irc_misc");
-      }
-    }
-
-    if (dir != null) {
-      switch (dir) {
-        case IN -> out.add("irc_in");
-        case OUT -> out.add("irc_out");
-        case SYSTEM -> out.add("irc_system");
-      }
-    }
-
-    String fn = java.util.Objects.toString(fromNick, "").trim();
-    if (!fn.isEmpty()) {
-      out.add("nick_" + fn.toLowerCase(java.util.Locale.ROOT));
-    }
-
-    if (presenceEvent != null) {
-      try {
-        String nick = java.util.Objects.toString(presenceEvent.nick(), "").trim();
-        String oldNick = java.util.Objects.toString(presenceEvent.oldNick(), "").trim();
-        String newNick = java.util.Objects.toString(presenceEvent.newNick(), "").trim();
-        switch (presenceEvent.kind()) {
-          case JOIN -> {
-            out.add("irc_join");
-            if (!nick.isEmpty()) out.add("nick_" + nick.toLowerCase(java.util.Locale.ROOT));
-          }
-          case PART -> {
-            out.add("irc_part");
-            if (!nick.isEmpty()) out.add("nick_" + nick.toLowerCase(java.util.Locale.ROOT));
-          }
-          case QUIT -> {
-            out.add("irc_quit");
-            if (!nick.isEmpty()) out.add("nick_" + nick.toLowerCase(java.util.Locale.ROOT));
-          }
-          case NICK -> {
-            out.add("irc_nick");
-            if (!oldNick.isEmpty()) out.add("nick_" + oldNick.toLowerCase(java.util.Locale.ROOT));
-            if (!newNick.isEmpty()) out.add("nick_" + newNick.toLowerCase(java.util.Locale.ROOT));
-          }
-        }
-      } catch (Exception ignored) {
-      }
-    }
-
-    if (messageId != null && !messageId.isBlank()) {
-      out.add("ircv3_msgid");
-    }
-
-    if (ircv3Tags != null && !ircv3Tags.isEmpty()) {
-      out.add("ircv3_tagged");
-      for (String rawKey : ircv3Tags.keySet()) {
-        String key = sanitizeTagForMeta(rawKey);
-        if (!key.isEmpty()) out.add("ircv3_tag_" + key);
-      }
-    }
-
-    return java.util.Set.copyOf(out);
   }
 
   private SimpleAttributeSet withLineMeta(AttributeSet base, LineMeta meta) {
