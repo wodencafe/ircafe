@@ -2850,25 +2850,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return clampAssertjFreezeThresholdMs(defaultValue);
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe))
-        return clampAssertjFreezeThresholdMs(defaultValue);
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return clampAssertjFreezeThresholdMs(defaultValue);
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics))
-        return clampAssertjFreezeThresholdMs(defaultValue);
-
-      Object assertjObj = appDiagnostics.get("assertjSwing");
-      if (!(assertjObj instanceof Map<?, ?> assertjSwing))
-        return clampAssertjFreezeThresholdMs(defaultValue);
-
-      if (!assertjSwing.containsKey("edtFreezeThresholdMs"))
-        return clampAssertjFreezeThresholdMs(defaultValue);
-      return clampAssertjFreezeThresholdMs(
-          asInt(assertjSwing.get("edtFreezeThresholdMs")).orElse(defaultValue));
+      return readAssertjSwingValue(doc, "edtFreezeThresholdMs")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(RuntimeConfigStore::clampAssertjFreezeThresholdMs)
+          .orElse(clampAssertjFreezeThresholdMs(defaultValue));
     } catch (Exception e) {
       log.warn(
           "[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtFreezeThresholdMs from '{}'",
@@ -2884,24 +2869,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return clampAssertjWatchdogPollMs(defaultValue);
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return clampAssertjWatchdogPollMs(defaultValue);
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return clampAssertjWatchdogPollMs(defaultValue);
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics))
-        return clampAssertjWatchdogPollMs(defaultValue);
-
-      Object assertjObj = appDiagnostics.get("assertjSwing");
-      if (!(assertjObj instanceof Map<?, ?> assertjSwing))
-        return clampAssertjWatchdogPollMs(defaultValue);
-
-      if (!assertjSwing.containsKey("edtWatchdogPollMs"))
-        return clampAssertjWatchdogPollMs(defaultValue);
-      return clampAssertjWatchdogPollMs(
-          asInt(assertjSwing.get("edtWatchdogPollMs")).orElse(defaultValue));
+      return readAssertjSwingValue(doc, "edtWatchdogPollMs")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(RuntimeConfigStore::clampAssertjWatchdogPollMs)
+          .orElse(clampAssertjWatchdogPollMs(defaultValue));
     } catch (Exception e) {
       log.warn(
           "[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtWatchdogPollMs from '{}'",
@@ -2918,28 +2889,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return clampAssertjFallbackViolationReportMs(defaultValue);
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe))
-        return clampAssertjFallbackViolationReportMs(defaultValue);
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui))
-        return clampAssertjFallbackViolationReportMs(defaultValue);
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics))
-        return clampAssertjFallbackViolationReportMs(defaultValue);
-
-      Object assertjObj = appDiagnostics.get("assertjSwing");
-      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) {
-        return clampAssertjFallbackViolationReportMs(defaultValue);
-      }
-
-      if (!assertjSwing.containsKey("edtFallbackViolationReportMs")) {
-        return clampAssertjFallbackViolationReportMs(defaultValue);
-      }
-      return clampAssertjFallbackViolationReportMs(
-          asInt(assertjSwing.get("edtFallbackViolationReportMs")).orElse(defaultValue));
+      return readAssertjSwingValue(doc, "edtFallbackViolationReportMs")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(RuntimeConfigStore::clampAssertjFallbackViolationReportMs)
+          .orElse(clampAssertjFallbackViolationReportMs(defaultValue));
     } catch (Exception e) {
       log.warn(
           "[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtFallbackViolationReportMs from '{}'",
@@ -2964,20 +2917,9 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return defaultValue;
-
-      Object jhiccupObj = appDiagnostics.get("jhiccup");
-      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return defaultValue;
-
-      if (!jhiccup.containsKey("enabled")) return defaultValue;
-      return asBoolean(jhiccup.get("enabled")).orElse(defaultValue);
+      return readJhiccupValue(doc, "enabled")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.enabled from '{}'", file, e);
       return defaultValue;
@@ -2986,28 +2928,16 @@ public class RuntimeConfigStore
 
   public synchronized String readAppDiagnosticsJhiccupJarPath(String defaultValue) {
     try {
-      if (file.toString().isBlank()) return Objects.toString(defaultValue, "").trim();
-      if (!Files.exists(file)) return Objects.toString(defaultValue, "").trim();
+      String fallback = Objects.toString(defaultValue, "").trim();
+      if (file.toString().isBlank()) return fallback;
+      if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe))
-        return Objects.toString(defaultValue, "").trim();
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return Objects.toString(defaultValue, "").trim();
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics))
-        return Objects.toString(defaultValue, "").trim();
-
-      Object jhiccupObj = appDiagnostics.get("jhiccup");
-      if (!(jhiccupObj instanceof Map<?, ?> jhiccup))
-        return Objects.toString(defaultValue, "").trim();
-
-      if (!jhiccup.containsKey("jarPath")) return Objects.toString(defaultValue, "").trim();
-      String raw = Objects.toString(jhiccup.get("jarPath"), "").trim();
-      return raw.isEmpty() ? Objects.toString(defaultValue, "").trim() : raw;
+      String raw =
+          readJhiccupValue(doc, "jarPath")
+              .map(value -> Objects.toString(value, "").trim())
+              .orElse("");
+      return raw.isEmpty() ? fallback : raw;
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.jarPath from '{}'", file, e);
       return Objects.toString(defaultValue, "").trim();
@@ -3022,20 +2952,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return fallback;
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return fallback;
-
-      Object jhiccupObj = appDiagnostics.get("jhiccup");
-      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return fallback;
-
-      if (!jhiccup.containsKey("javaCommand")) return fallback;
-      String raw = Objects.toString(jhiccup.get("javaCommand"), "").trim();
+      String raw =
+          readJhiccupValue(doc, "javaCommand")
+              .map(value -> Objects.toString(value, "").trim())
+              .orElse("");
       return raw.isEmpty() ? fallback : raw;
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.javaCommand from '{}'", file, e);
@@ -3050,20 +2970,7 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return sanitizeArgs(defaultValue);
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return sanitizeArgs(defaultValue);
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return sanitizeArgs(defaultValue);
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return sanitizeArgs(defaultValue);
-
-      Object jhiccupObj = appDiagnostics.get("jhiccup");
-      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return sanitizeArgs(defaultValue);
-
-      if (!jhiccup.containsKey("args")) return sanitizeArgs(defaultValue);
-      Object argsObj = jhiccup.get("args");
+      Object argsObj = readJhiccupValue(doc, "args").orElse(null);
       if (!(argsObj instanceof List<?> raw)) return sanitizeArgs(defaultValue);
 
       List<String> out = new ArrayList<>();
@@ -3084,24 +2991,30 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return defaultValue;
-
-      Object assertjObj = appDiagnostics.get("assertjSwing");
-      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) return defaultValue;
-
-      if (!assertjSwing.containsKey(key)) return defaultValue;
-      return asBoolean(assertjSwing.get(key)).orElse(defaultValue);
+      return readAssertjSwingValue(doc, key)
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.appDiagnostics.assertjSwing.{} from '{}'", key, file, e);
       return defaultValue;
     }
+  }
+
+  private Optional<Object> readAssertjSwingValue(Map<String, Object> doc, String key) {
+    return readAppDiagnosticsValue(doc, "assertjSwing", key);
+  }
+
+  private Optional<Object> readJhiccupValue(Map<String, Object> doc, String key) {
+    return readAppDiagnosticsValue(doc, "jhiccup", key);
+  }
+
+  private Optional<Object> readAppDiagnosticsValue(Map<String, Object> doc, String... path) {
+    String[] fullPath = new String[path.length + 3];
+    fullPath[0] = "ircafe";
+    fullPath[1] = "ui";
+    fullPath[2] = "appDiagnostics";
+    System.arraycopy(path, 0, fullPath, 3, path.length);
+    return RuntimeConfigDocumentPathReader.readValue(doc, fullPath);
   }
 
   private static int clampAssertjFreezeThresholdMs(int value) {
