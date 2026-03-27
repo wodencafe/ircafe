@@ -1269,7 +1269,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
 
@@ -1339,7 +1339,7 @@ public class RuntimeConfigStore
       if (file.toString().isBlank()) return;
 
       int normalized = clampMemoryUsageRefreshIntervalMs(intervalMs);
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       ui.put("memoryUsageRefreshIntervalMs", normalized);
@@ -1425,7 +1425,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       Map<String, Object> appDiag = getOrCreateMap(ui, "appDiagnostics");
@@ -2287,7 +2287,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       Map<String, Object> invites = getOrCreateMap(ui, "invites");
@@ -2304,7 +2304,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       Map<String, Object> updateNotifier = getOrCreateMap(ui, "updateNotifier");
@@ -2321,7 +2321,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       Map<String, Object> lagIndicator = getOrCreateMap(ui, "lagIndicator");
@@ -2355,7 +2355,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       Map<String, Object> tray = getOrCreateMap(ui, "tray");
@@ -2372,7 +2372,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       Map<String, Object> tray = getOrCreateMap(ui, "tray");
@@ -3231,7 +3231,7 @@ public class RuntimeConfigStore
       String cmd = Objects.toString(javaCommand, "").trim();
       if (cmd.isEmpty() || cmd.equalsIgnoreCase("java")) cmd = "";
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
       Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
@@ -3255,7 +3255,7 @@ public class RuntimeConfigStore
 
       int v = clampLaunchJvmHeapMiB(xmsMiB);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
       Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
@@ -3279,7 +3279,7 @@ public class RuntimeConfigStore
 
       int v = clampLaunchJvmHeapMiB(xmxMiB);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
       Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
@@ -3303,7 +3303,7 @@ public class RuntimeConfigStore
 
       String normalized = normalizeLaunchJvmGc(gc);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
       Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
@@ -3327,7 +3327,7 @@ public class RuntimeConfigStore
 
       List<String> sanitized = sanitizeArgs(args);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
       Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
@@ -6931,6 +6931,10 @@ public class RuntimeConfigStore
       }
       return new LinkedHashMap<>();
     }
+  }
+
+  private Map<String, Object> loadFileOrEmpty() throws IOException {
+    return Files.exists(file) ? loadFile() : new LinkedHashMap<>();
   }
 
   private void writeFile(Map<String, Object> doc) throws IOException {
