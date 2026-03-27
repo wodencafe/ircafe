@@ -3140,17 +3140,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object launchObj = ircafe.get("launch");
-      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
-
-      Object jvmObj = launch.get("jvm");
-      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
-
-      if (!jvm.containsKey("javaCommand")) return fallback;
-      String raw = Objects.toString(jvm.get("javaCommand"), "").trim();
+      String raw =
+          RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "launch", "jvm", "javaCommand")
+              .map(value -> Objects.toString(value, "").trim())
+              .orElse("");
       return raw.isEmpty() ? fallback : raw;
     } catch (Exception e) {
       log.warn("[ircafe] Could not read launch.jvm.javaCommand from '{}'", file, e);
@@ -3165,17 +3158,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object launchObj = ircafe.get("launch");
-      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
-
-      Object jvmObj = launch.get("jvm");
-      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
-
-      if (!jvm.containsKey("xmsMiB")) return fallback;
-      return clampLaunchJvmHeapMiB(asInt(jvm.get("xmsMiB")).orElse(fallback));
+      return RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "launch", "jvm", "xmsMiB")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(RuntimeConfigStore::clampLaunchJvmHeapMiB)
+          .orElse(fallback);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read launch.jvm.xmsMiB from '{}'", file, e);
       return fallback;
@@ -3189,17 +3175,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object launchObj = ircafe.get("launch");
-      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
-
-      Object jvmObj = launch.get("jvm");
-      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
-
-      if (!jvm.containsKey("xmxMiB")) return fallback;
-      return clampLaunchJvmHeapMiB(asInt(jvm.get("xmxMiB")).orElse(fallback));
+      return RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "launch", "jvm", "xmxMiB")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(RuntimeConfigStore::clampLaunchJvmHeapMiB)
+          .orElse(fallback);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read launch.jvm.xmxMiB from '{}'", file, e);
       return fallback;
@@ -3213,17 +3192,9 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object launchObj = ircafe.get("launch");
-      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
-
-      Object jvmObj = launch.get("jvm");
-      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
-
-      if (!jvm.containsKey("gc")) return fallback;
-      return normalizeLaunchJvmGc(jvm.get("gc"));
+      return RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "launch", "jvm", "gc")
+          .map(RuntimeConfigStore::normalizeLaunchJvmGc)
+          .orElse(fallback);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read launch.jvm.gc from '{}'", file, e);
       return fallback;
@@ -3236,17 +3207,9 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return sanitizeArgs(defaultValue);
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return sanitizeArgs(defaultValue);
-
-      Object launchObj = ircafe.get("launch");
-      if (!(launchObj instanceof Map<?, ?> launch)) return sanitizeArgs(defaultValue);
-
-      Object jvmObj = launch.get("jvm");
-      if (!(jvmObj instanceof Map<?, ?> jvm)) return sanitizeArgs(defaultValue);
-
-      if (!jvm.containsKey("args")) return sanitizeArgs(defaultValue);
-      Object argsObj = jvm.get("args");
+      Object argsObj =
+          RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "launch", "jvm", "args")
+              .orElse(null);
       if (!(argsObj instanceof List<?> raw)) return sanitizeArgs(defaultValue);
 
       List<String> out = new ArrayList<>();
