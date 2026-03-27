@@ -182,19 +182,11 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return Optional.empty();
 
       Map<String, Object> doc = loadFile();
+      Optional<Object> value =
+          RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "ui", "tray", "closeToTray");
+      if (value.isEmpty()) return Optional.empty();
 
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Optional.empty();
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return Optional.empty();
-
-      Object trayObj = ui.get("tray");
-      if (!(trayObj instanceof Map<?, ?> tray)) return Optional.empty();
-
-      if (!tray.containsKey("closeToTray")) return Optional.empty();
-
-      Object v = tray.get("closeToTray");
+      Object v = value.get();
       if (v == null) return Optional.empty();
 
       if (v instanceof Boolean b) return Optional.of(b);
@@ -222,17 +214,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object trayObj = ui.get("tray");
-      if (!(trayObj instanceof Map<?, ?> tray)) return defaultValue;
-
-      if (!tray.containsKey("closeToTrayHintShown")) return defaultValue;
-      return asBoolean(tray.get("closeToTrayHintShown")).orElse(defaultValue);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "tray", "closeToTrayHintShown")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read tray.closeToTrayHintShown from '{}'", file, e);
       return defaultValue;
@@ -251,17 +236,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object invitesObj = ui.get("invites");
-      if (!(invitesObj instanceof Map<?, ?> invites)) return defaultValue;
-
-      if (!invites.containsKey("autoJoinOnInvite")) return defaultValue;
-      return asBoolean(invites.get("autoJoinOnInvite")).orElse(defaultValue);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "invites", "autoJoinOnInvite")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read invites.autoJoinOnInvite from '{}'", file, e);
       return defaultValue;
@@ -279,17 +257,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object updateNotifierObj = ui.get("updateNotifier");
-      if (!(updateNotifierObj instanceof Map<?, ?> updateNotifier)) return defaultValue;
-
-      if (!updateNotifier.containsKey("enabled")) return defaultValue;
-      return asBoolean(updateNotifier.get("enabled")).orElse(defaultValue);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "updateNotifier", "enabled")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.updateNotifier.enabled from '{}'", file, e);
       return defaultValue;
@@ -307,17 +278,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object lagIndicatorObj = ui.get("lagIndicator");
-      if (!(lagIndicatorObj instanceof Map<?, ?> lagIndicator)) return defaultValue;
-
-      if (!lagIndicator.containsKey("enabled")) return defaultValue;
-      return asBoolean(lagIndicator.get("enabled")).orElse(defaultValue);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "lagIndicator", "enabled")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.lagIndicator.enabled from '{}'", file, e);
       return defaultValue;
@@ -1288,13 +1252,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return Optional.empty();
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Optional.empty();
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return Optional.empty();
-
-      String theme = Objects.toString(ui.get("startupThemePending"), "").trim();
+      String theme =
+          RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "ui", "startupThemePending")
+              .map(raw -> Objects.toString(raw, "").trim())
+              .orElse("");
       if (theme.isEmpty()) return Optional.empty();
       return Optional.of(theme);
     } catch (Exception e) {
@@ -1362,16 +1323,11 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return fallback;
-
-      Object raw = ui.get("memoryUsageRefreshIntervalMs");
-      if (raw == null) return fallback;
-
-      return asInt(raw).map(this::clampMemoryUsageRefreshIntervalMs).orElse(fallback);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "memoryUsageRefreshIntervalMs")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(this::clampMemoryUsageRefreshIntervalMs)
+          .orElse(fallback);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.memoryUsageRefreshIntervalMs from '{}'", file, e);
       return fallback;
@@ -1450,20 +1406,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object appDiagObj = ui.get("appDiagnostics");
-      if (!(appDiagObj instanceof Map<?, ?> appDiag)) return defaultValue;
-
-      Object jfrObj = appDiag.get("jfr");
-      if (!(jfrObj instanceof Map<?, ?> jfr)) return defaultValue;
-
-      if (!jfr.containsKey("enabled")) return defaultValue;
-      return asBoolean(jfr.get("enabled")).orElse(defaultValue);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "appDiagnostics", "jfr", "enabled")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.appDiagnostics.jfr.enabled from '{}'", file, e);
       return defaultValue;
