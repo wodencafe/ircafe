@@ -1426,10 +1426,7 @@ public class RuntimeConfigStore
       if (file.toString().isBlank()) return;
 
       Map<String, Object> doc = loadFileOrEmpty();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiag = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> jfr = getOrCreateMap(appDiag, "jfr");
+      Map<String, Object> jfr = getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "jfr");
       jfr.put("enabled", enabled);
 
       writeFile(doc);
@@ -3389,11 +3386,9 @@ public class RuntimeConfigStore
 
       int v = clampAssertjFreezeThresholdMs(ms);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> assertjSwing =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "assertjSwing");
 
       assertjSwing.put("edtFreezeThresholdMs", v);
 
@@ -3412,11 +3407,9 @@ public class RuntimeConfigStore
 
       int v = clampAssertjWatchdogPollMs(ms);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> assertjSwing =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "assertjSwing");
 
       assertjSwing.put("edtWatchdogPollMs", v);
 
@@ -3435,11 +3428,9 @@ public class RuntimeConfigStore
 
       int v = clampAssertjFallbackViolationReportMs(ms);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> assertjSwing =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "assertjSwing");
 
       assertjSwing.put("edtFallbackViolationReportMs", v);
 
@@ -3466,11 +3457,9 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> jhiccup =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "jhiccup");
 
       jhiccup.put("enabled", enabled);
 
@@ -3486,11 +3475,9 @@ public class RuntimeConfigStore
 
       String v = Objects.toString(jarPath, "").trim();
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> jhiccup =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "jhiccup");
 
       if (v.isEmpty()) {
         jhiccup.remove("jarPath");
@@ -3510,11 +3497,9 @@ public class RuntimeConfigStore
 
       String v = Objects.toString(javaCommand, "").trim();
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> jhiccup =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "jhiccup");
 
       if (v.isEmpty()) {
         jhiccup.remove("javaCommand");
@@ -3534,11 +3519,9 @@ public class RuntimeConfigStore
 
       List<String> sanitized = sanitizeArgs(args);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> jhiccup =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "jhiccup");
 
       if (sanitized.isEmpty()) {
         jhiccup.remove("args");
@@ -3556,11 +3539,9 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> assertjSwing =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "assertjSwing");
 
       assertjSwing.put(key, value);
 
@@ -6876,6 +6857,14 @@ public class RuntimeConfigStore
     Map<String, Object> created = new LinkedHashMap<>();
     parent.put(key, created);
     return created;
+  }
+
+  private static Map<String, Object> getOrCreateMapPath(Map<String, Object> root, String... path) {
+    Map<String, Object> current = root;
+    for (String segment : path) {
+      current = getOrCreateMap(current, segment);
+    }
+    return current;
   }
 
   @SuppressWarnings("unchecked")
