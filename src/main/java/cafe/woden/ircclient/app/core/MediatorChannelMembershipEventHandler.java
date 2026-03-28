@@ -75,8 +75,9 @@ public class MediatorChannelMembershipEventHandler {
     callbacks.observeChannelActivity(sid, event.channel());
     TargetRef channel = new TargetRef(sid, event.channel());
     ui.ensureTargetExists(channel);
-    ui.appendPresence(channel, PresenceEvent.join(event.nick()));
     String joinedNick = Objects.toString(event.nick(), "").trim();
+    String joinedHostmask = callbacks.learnedHostmaskForNick(sid, joinedNick);
+    ui.appendPresence(channel, PresenceEvent.join(event.nick(), joinedHostmask));
     String body = (joinedNick.isEmpty() ? "Someone" : joinedNick) + " joined " + event.channel();
     callbacks.notifyIrcEvent(
         IrcEventNotificationRule.EventType.USER_JOINED,
@@ -99,9 +100,10 @@ public class MediatorChannelMembershipEventHandler {
     callbacks.observeChannelActivity(sid, event.channel());
     TargetRef channel = new TargetRef(sid, event.channel());
     ui.ensureTargetExists(channel);
-    ui.appendPresence(channel, PresenceEvent.part(event.nick(), event.reason()));
     String targetChannel = Objects.toString(event.channel(), "").trim();
     String nick = Objects.toString(event.nick(), "").trim();
+    String hostmask = callbacks.learnedHostmaskForNick(sid, nick);
+    ui.appendPresence(channel, PresenceEvent.part(event.nick(), event.reason(), hostmask));
     String reason = Objects.toString(event.reason(), "").trim();
     String body = (nick.isEmpty() ? "Someone" : nick) + " parted " + targetChannel;
     if (!reason.isEmpty()) {
@@ -200,9 +202,10 @@ public class MediatorChannelMembershipEventHandler {
     callbacks.markPrivateMessagePeerOffline(sid, event.nick());
     TargetRef channel = new TargetRef(sid, event.channel());
     ui.ensureTargetExists(channel);
-    ui.appendPresence(channel, PresenceEvent.quit(event.nick(), event.reason()));
     String targetChannel = Objects.toString(event.channel(), "").trim();
     String nick = Objects.toString(event.nick(), "").trim();
+    String hostmask = callbacks.learnedHostmaskForNick(sid, nick);
+    ui.appendPresence(channel, PresenceEvent.quit(event.nick(), event.reason(), hostmask));
     String reason = Objects.toString(event.reason(), "").trim();
     String body = (nick.isEmpty() ? "Someone" : nick) + " quit";
     if (!reason.isEmpty()) {

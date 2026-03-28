@@ -3306,17 +3306,18 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
 
     if (isJoinMessage(typeBits)) {
-      handleJoinMessage(session, at, target, fromDisplay, networkId);
+      handleJoinMessage(session, at, target, fromDisplay, senderHostmask, networkId);
       return;
     }
 
     if (isPartMessage(typeBits)) {
-      handlePartMessage(session, at, target, fromDisplay, payloadText, networkId);
+      handlePartMessage(session, at, target, fromDisplay, senderHostmask, payloadText, networkId);
       return;
     }
 
     if (isQuitMessage(typeBits)) {
       if (!target.isEmpty()) {
+        emitObservedHostmask(session, at, target, fromDisplay, senderHostmask);
         bus.onNext(
             new ServerIrcEvent(
                 session.serverId,
@@ -4029,7 +4030,12 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   private void handleJoinMessage(
-      QuasselSession session, Instant at, String channel, String fromDisplay, int networkId) {
+      QuasselSession session,
+      Instant at,
+      String channel,
+      String fromDisplay,
+      String senderHostmask,
+      int networkId) {
     if (channel.isEmpty()) return;
     if (isSelfNick(session, fromDisplay, networkId)) {
       if (markChannelMembershipJoined(session, channel, networkId)) {
@@ -4037,6 +4043,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       }
       return;
     }
+    emitObservedHostmask(session, at, channel, fromDisplay, senderHostmask);
     bus.onNext(
         new ServerIrcEvent(
             session.serverId, new IrcEvent.UserJoinedChannel(at, channel, fromDisplay)));
@@ -4047,6 +4054,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       Instant at,
       String channel,
       String fromDisplay,
+      String senderHostmask,
       String content,
       int networkId) {
     if (channel.isEmpty()) return;
@@ -4057,6 +4065,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
           new ServerIrcEvent(session.serverId, new IrcEvent.LeftChannel(at, channel, reason)));
       return;
     }
+    emitObservedHostmask(session, at, channel, fromDisplay, senderHostmask);
     bus.onNext(
         new ServerIrcEvent(
             session.serverId, new IrcEvent.UserPartedChannel(at, channel, fromDisplay, reason)));
@@ -5210,6 +5219,20 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     int bang = hostmask.indexOf('!');
     if (bang <= 0) return hostmask;
     return hostmask.substring(0, bang);
+  }
+
+  private void emitObservedHostmask(
+      QuasselSession session, Instant at, String channel, String nick, String hostmask) {
+    if (session == null) return;
+    String normalizedNick = Objects.toString(nick, "").trim();
+    String normalizedHostmask = Objects.toString(hostmask, "").trim();
+    if (normalizedNick.isEmpty() || !PircbotxUtil.isUsefulHostmask(normalizedHostmask)) {
+      return;
+    }
+    bus.onNext(
+        new ServerIrcEvent(
+            session.serverId,
+            new IrcEvent.UserHostmaskObserved(at, channel, normalizedNick, normalizedHostmask)));
   }
 
   private static String renderUnknownMessageType(
