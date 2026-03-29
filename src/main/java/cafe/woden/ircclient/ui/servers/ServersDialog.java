@@ -33,6 +33,7 @@ public class ServersDialog extends JDialog {
 
   private final ServerRegistry serverRegistry;
   private final ServerAutoConnectRuntimeConfigPort runtimeConfig;
+  private final ServerEditorBackendProfiles backendProfiles;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   private final DefaultListModel<IrcProperties.Server> model = new DefaultListModel<>();
@@ -47,9 +48,18 @@ public class ServersDialog extends JDialog {
       Window parent,
       ServerRegistry serverRegistry,
       ServerAutoConnectRuntimeConfigPort runtimeConfig) {
+    this(parent, serverRegistry, runtimeConfig, ServerEditorBackendProfiles.builtIns());
+  }
+
+  ServersDialog(
+      Window parent,
+      ServerRegistry serverRegistry,
+      ServerAutoConnectRuntimeConfigPort runtimeConfig,
+      ServerEditorBackendProfiles backendProfiles) {
     super(parent, "Servers", ModalityType.APPLICATION_MODAL);
     this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
+    this.backendProfiles = Objects.requireNonNull(backendProfiles, "backendProfiles");
 
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
     setLayout(new BorderLayout(10, 10));
@@ -170,7 +180,8 @@ public class ServersDialog extends JDialog {
   }
 
   private void onAdd() {
-    ServerEditorDialog dlg = new ServerEditorDialog(this, "Add Server", null, true);
+    ServerEditorDialog dlg =
+        new ServerEditorDialog(this, "Add Server", null, true, backendProfiles);
     Optional<IrcProperties.Server> out = dlg.open();
     out.ifPresent(
         next -> {
@@ -186,7 +197,8 @@ public class ServersDialog extends JDialog {
 
     String originalId = cur.id();
     boolean autoConnectOnStart = runtimeConfig.readServerAutoConnectOnStart(originalId, true);
-    ServerEditorDialog dlg = new ServerEditorDialog(this, "Edit Server", cur, autoConnectOnStart);
+    ServerEditorDialog dlg =
+        new ServerEditorDialog(this, "Edit Server", cur, autoConnectOnStart, backendProfiles);
     Optional<IrcProperties.Server> out = dlg.open();
     if (out.isEmpty()) return;
 

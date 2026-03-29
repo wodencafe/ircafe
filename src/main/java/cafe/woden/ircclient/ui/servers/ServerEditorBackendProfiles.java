@@ -42,6 +42,18 @@ final class ServerEditorBackendProfiles {
     return BUILT_INS;
   }
 
+  static ServerEditorBackendProfiles forAvailableBackendIds(List<String> backendIds) {
+    ArrayList<ServerEditorBackendProfile> availableProfiles = new ArrayList<>(BUILT_INS.profiles);
+    for (String backendId : Objects.requireNonNullElse(backendIds, List.<String>of())) {
+      String normalized = BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendId);
+      if (BUILT_INS.profilesByBackendId.containsKey(normalized)) {
+        continue;
+      }
+      availableProfiles.add(BUILT_INS.fallbackProfile(normalized));
+    }
+    return new ServerEditorBackendProfiles(availableProfiles);
+  }
+
   List<String> selectableBackendIds(String selectedBackendId) {
     String normalized = BACKEND_DESCRIPTORS.normalizeIdOrDefault(selectedBackendId);
     ArrayList<String> backendIds = new ArrayList<>(profiles.size() + 1);

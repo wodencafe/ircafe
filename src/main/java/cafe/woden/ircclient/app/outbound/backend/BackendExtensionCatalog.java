@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.outbound.backend;
 
+import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
 import cafe.woden.ircclient.app.outbound.backend.spi.BackendExtension;
 import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
@@ -25,7 +26,7 @@ import org.springframework.stereotype.Component;
 /** Registry for backend extension bundles from built-ins and ServiceLoader plugins. */
 @Component
 @ApplicationLayer
-public final class BackendExtensionCatalog {
+public final class BackendExtensionCatalog implements AvailableBackendIdsPort {
 
   private static final Logger log = LoggerFactory.getLogger(BackendExtensionCatalog.class);
   private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
@@ -142,6 +143,11 @@ public final class BackendExtensionCatalog {
 
   public UploadCommandTranslationHandler uploadTranslationHandlerFor(String backendId) {
     return extensionFor(backendId).uploadCommandTranslationHandler();
+  }
+
+  @Override
+  public List<String> availableBackendIds() {
+    return List.copyOf(extensionsByBackendId.keySet());
   }
 
   private static LoadedCatalogState loadInstalledCatalogState(

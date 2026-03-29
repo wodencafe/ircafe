@@ -66,6 +66,7 @@ class BackendExtensionCatalogTest {
         new BackendExtensionCatalog(java.util.List.of(new PluginBackendExtension()));
 
     assertTrue(catalog.featureAdapterFor("plugin-backend").supportsSemanticUpload());
+    assertTrue(catalog.availableBackendIds().contains("plugin-backend"));
   }
 
   @Test

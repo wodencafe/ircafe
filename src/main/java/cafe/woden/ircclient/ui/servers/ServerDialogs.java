@@ -20,20 +20,25 @@ public class ServerDialogs {
   private final ServerRegistry serverRegistry;
   private final EphemeralServerRegistry ephemeralServers;
   private final ServerAutoConnectRuntimeConfigPort runtimeConfig;
+  private final ServerEditorBackendProfilesProvider backendProfilesProvider;
 
   public ServerDialogs(
       ServerRegistry serverRegistry,
       EphemeralServerRegistry ephemeralServers,
-      ServerAutoConnectRuntimeConfigPort runtimeConfig) {
+      ServerAutoConnectRuntimeConfigPort runtimeConfig,
+      ServerEditorBackendProfilesProvider backendProfilesProvider) {
     this.serverRegistry = serverRegistry;
     this.ephemeralServers = ephemeralServers;
     this.runtimeConfig = runtimeConfig;
+    this.backendProfilesProvider = backendProfilesProvider;
   }
 
   public void openAddServer(Window parent) {
     runOnEdt(
         () -> {
-          ServerEditorDialog dlg = new ServerEditorDialog(parent, "Add Server", null, true);
+          ServerEditorDialog dlg =
+              new ServerEditorDialog(
+                  parent, "Add Server", null, true, backendProfilesProvider.backendProfiles());
           Optional<IrcProperties.Server> result = dlg.open();
           result.ifPresent(
               next -> {
@@ -47,7 +52,9 @@ public class ServerDialogs {
   public void openManageServers(Window parent) {
     runOnEdt(
         () -> {
-          ServersDialog dlg = new ServersDialog(parent, serverRegistry, runtimeConfig);
+          ServersDialog dlg =
+              new ServersDialog(
+                  parent, serverRegistry, runtimeConfig, backendProfilesProvider.backendProfiles());
           dlg.open();
         });
   }
@@ -76,7 +83,12 @@ public class ServerDialogs {
           boolean autoConnectOnStart = runtimeConfig.readServerAutoConnectOnStart(originalId, true);
 
           ServerEditorDialog dlg =
-              new ServerEditorDialog(parent, "Edit Server", cur, autoConnectOnStart);
+              new ServerEditorDialog(
+                  parent,
+                  "Edit Server",
+                  cur,
+                  autoConnectOnStart,
+                  backendProfilesProvider.backendProfiles());
           Optional<IrcProperties.Server> out = dlg.open();
           if (out.isEmpty()) return;
 
@@ -131,7 +143,12 @@ public class ServerDialogs {
           boolean autoConnectOnStart = runtimeConfig.readServerAutoConnectOnStart(id, true);
 
           ServerEditorDialog dlg =
-              new ServerEditorDialog(parent, "Save Server", seed, autoConnectOnStart);
+              new ServerEditorDialog(
+                  parent,
+                  "Save Server",
+                  seed,
+                  autoConnectOnStart,
+                  backendProfilesProvider.backendProfiles());
           Optional<IrcProperties.Server> out = dlg.open();
           if (out.isEmpty()) return;
 

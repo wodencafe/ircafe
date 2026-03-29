@@ -60,4 +60,13 @@ class ServerEditorBackendProfilesTest {
     assertEquals(6697, custom.defaultPort(true));
     assertTrue(profiles.selectableBackendIds("Plugin-Backend").contains("plugin-backend"));
   }
+
+  @Test
+  void availablePluginBackendIdsAppearInSelectionList() {
+    ServerEditorBackendProfiles profiles =
+        ServerEditorBackendProfiles.forAvailableBackendIds(java.util.List.of("plugin-backend"));
+
+    assertTrue(
+        profiles.selectableBackendIds(profiles.defaultBackendId()).contains("plugin-backend"));
+  }
 }
