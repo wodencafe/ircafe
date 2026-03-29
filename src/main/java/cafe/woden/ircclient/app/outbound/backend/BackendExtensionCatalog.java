@@ -162,6 +162,23 @@ public final class BackendExtensionCatalog implements AvailableBackendIdsPort {
     return List.copyOf(profiles);
   }
 
+  @Override
+  public String backendDisplayName(String backendId) {
+    String normalized = normalizeBackendId(backendId);
+    if (normalized.isEmpty()) return "";
+    BackendExtension extension = extensionsByBackendId.get(normalized);
+    if (extension != null && extension.editorProfile() != null) {
+      String displayName = Objects.toString(extension.editorProfile().displayName(), "").trim();
+      if (!displayName.isEmpty()) {
+        return displayName;
+      }
+    }
+    return BACKEND_DESCRIPTORS
+        .descriptorForId(normalized)
+        .map(descriptor -> Objects.toString(descriptor.displayName(), "").trim())
+        .orElse(normalized);
+  }
+
   private static LoadedCatalogState loadInstalledCatalogState(
       List<BackendExtension> builtInExtensions,
       Path pluginDirectory,

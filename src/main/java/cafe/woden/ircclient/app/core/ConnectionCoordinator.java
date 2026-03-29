@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.core;
 
+import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
@@ -67,6 +68,7 @@ public class ConnectionCoordinator {
   private final LogProperties logProps;
   private final TrayNotificationsPort trayNotificationService;
   private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  private final AvailableBackendIdsPort backendMetadata;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   /** Per-server connection states (missing => {@link ConnectionState#DISCONNECTED}). */
@@ -113,7 +115,8 @@ public class ConnectionCoordinator {
       ConnectionRuntimeConfigPort runtimeConfig,
       LogProperties logProps,
       TrayNotificationsPort trayNotificationService,
-      OutboundBackendCapabilityPolicy backendCapabilityPolicy) {
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
+      AvailableBackendIdsPort backendMetadata) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
     this.quasselControl = Objects.requireNonNull(quasselControl, "quasselControl");
@@ -125,6 +128,9 @@ public class ConnectionCoordinator {
     this.trayNotificationService =
         Objects.requireNonNull(trayNotificationService, "trayNotificationService");
     this.backendCapabilityPolicy = backendCapabilityPolicy;
+    this.backendMetadata =
+        Objects.requireNonNullElseGet(
+            backendMetadata, ConnectionCoordinator::defaultBackendMetadata);
 
     configuredServers.addAll(serverRegistry.serverIds());
     List<IrcProperties.Server> initialServers = serverRegistry.servers();
@@ -166,7 +172,8 @@ public class ConnectionCoordinator {
         runtimeConfig,
         logProps,
         trayNotificationService,
-        null);
+        null,
+        defaultBackendMetadata());
   }
 
   @PreDestroy
@@ -887,13 +894,6 @@ public class ConnectionCoordinator {
     ui.setServerDesiredOnline(sid, desired);
   }
 
-  private static String renderError(Throwable err) {
-    if (err == null) return "";
-    String msg = Objects.toString(err.getMessage(), "").trim();
-    if (!msg.isEmpty()) return msg;
-    return String.valueOf(err);
-  }
-
   private ConnectivityChange handleConnectionFeaturesUpdate(
       String serverId,
       IrcEvent.ConnectionFeaturesUpdated event,
@@ -1436,7 +1436,7 @@ public class ConnectionCoordinator {
     return !Objects.equals(previous.sasl(), next.sasl());
   }
 
-  private static String summarizeReconnectChange(
+  private String summarizeReconnectChange(
       IrcProperties.Server previous, IrcProperties.Server next) {
     if (previous == null || next == null) return "connection profile updated";
     if (!Objects.equals(previous.backendId(), next.backendId())) {
@@ -1472,7 +1472,38 @@ public class ConnectionCoordinator {
     return Objects.toString(a, "").trim().equals(Objects.toString(b, "").trim());
   }
 
-  private static String renderBackend(String backendId) {
-    return BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendId);
+  private String renderBackend(String backendId) {
+    String normalized = BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendId);
+    String displayName =
+        Objects.toString(backendMetadata.backendDisplayName(normalized), "").trim();
+    return displayName.isEmpty() ? normalized : displayName;
+  }
+
+  private String renderError(Throwable err) {
+    if (err == null) return "";
+    if (err instanceof BackendNotAvailableException backendErr) {
+      return backendErr.displayMessage(backendMetadata::backendDisplayName);
+    }
+    String msg = Objects.toString(err.getMessage(), "").trim();
+    if (!msg.isEmpty()) return msg;
+    return String.valueOf(err);
+  }
+
+  private static AvailableBackendIdsPort defaultBackendMetadata() {
+    return new AvailableBackendIdsPort() {
+      @Override
+      public List<String> availableBackendIds() {
+        return List.of();
+      }
+
+      @Override
+      public String backendDisplayName(String backendId) {
+        String normalized = BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendId);
+        return BACKEND_DESCRIPTORS
+            .descriptorForId(normalized)
+            .map(descriptor -> Objects.toString(descriptor.displayName(), "").trim())
+            .orElse(normalized);
+      }
+    };
   }
 }

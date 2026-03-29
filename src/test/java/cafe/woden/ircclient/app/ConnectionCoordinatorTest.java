@@ -1030,6 +1030,23 @@ class ConnectionCoordinatorTest {
 
   @Test
   void reconnectChangeSummaryUsesCustomBackendIds() throws Exception {
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            IrcConnectionLifecyclePort.from(irc),
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
     var method =
         ConnectionCoordinator.class.getDeclaredMethod(
             "summarizeReconnectChange", IrcProperties.Server.class, IrcProperties.Server.class);
@@ -1037,7 +1054,7 @@ class ConnectionCoordinatorTest {
 
     Object summary =
         method.invoke(
-            null,
+            coordinator,
             server("plugin-a", "irc.example.net", 6697, true, "plugin-a"),
             server("plugin-a", "irc.example.net", 6697, true, "plugin-b"));
 

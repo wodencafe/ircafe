@@ -33,4 +33,15 @@ class BackendNotAvailableExceptionTest {
     assertEquals(
         "Matrix backend is not configured (connect) for server 'matrix'", exception.getMessage());
   }
+
+  @Test
+  void displayMessageUsesPluginAwareDisplayNames() {
+    BackendNotAvailableException exception =
+        new BackendNotAvailableException("plugin-backend", "connect", "plugin", "not installed");
+
+    assertEquals(
+        "Fancy Plugin backend is not installed (connect) for server 'plugin'",
+        exception.displayMessage(
+            backendId -> "plugin-backend".equals(backendId) ? "Fancy Plugin" : backendId));
+  }
 }
