@@ -11,11 +11,13 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public interface OutboundBackendFeatureAdapter {
 
-  IrcProperties.Server.Backend backend();
+  @Deprecated(forRemoval = false)
+  default IrcProperties.Server.Backend backend() {
+    return BackendDescriptorCatalog.builtIns().backendForId(backendId()).orElse(null);
+  }
 
   default String backendId() {
-    IrcProperties.Server.Backend backend = backend();
-    return backend == null ? "" : BackendDescriptorCatalog.builtIns().idFor(backend);
+    return "";
   }
 
   default boolean supportsSemanticUpload() {

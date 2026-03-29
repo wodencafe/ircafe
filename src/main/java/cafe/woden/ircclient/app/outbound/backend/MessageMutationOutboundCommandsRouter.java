@@ -61,7 +61,7 @@ public final class MessageMutationOutboundCommandsRouter {
     LinkedHashMap<String, MessageMutationOutboundCommands> index = new LinkedHashMap<>();
     for (MessageMutationOutboundCommands handler : handlers) {
       if (handler == null) continue;
-      String backendId = normalizeBackendId(handler.backendId());
+      String backendId = backendIdOf(handler);
       if (backendId.isEmpty()) continue;
       MessageMutationOutboundCommands previous = index.putIfAbsent(backendId, handler);
       if (previous != null) {
@@ -75,6 +75,7 @@ public final class MessageMutationOutboundCommandsRouter {
     return Map.copyOf(index);
   }
 
+  @Deprecated(forRemoval = false)
   public MessageMutationOutboundCommands commandsFor(IrcProperties.Server.Backend backend) {
     return commandsFor(backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
   }
@@ -90,5 +91,14 @@ public final class MessageMutationOutboundCommandsRouter {
 
   private static String normalizeBackendId(String backendId) {
     return Objects.toString(backendId, "").trim().toLowerCase(Locale.ROOT);
+  }
+
+  private static String backendIdOf(MessageMutationOutboundCommands handler) {
+    String backendId = normalizeBackendId(handler.backendId());
+    if (!backendId.isEmpty()) {
+      return backendId;
+    }
+    IrcProperties.Server.Backend backend = handler.backend();
+    return backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend);
   }
 }

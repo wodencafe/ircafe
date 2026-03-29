@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc.quassel;
 
+import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.*;
@@ -62,6 +63,8 @@ import org.springframework.stereotype.Service;
 @InfrastructureLayer
 public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private static final Logger log = LoggerFactory.getLogger(QuasselCoreIrcClientService.class);
+  private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
+      BackendDescriptorCatalog.builtIns();
 
   private static final int BUFFER_STATUS = 0x01;
   private static final int BUFFER_CHANNEL = 0x02;
@@ -204,8 +207,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   @Override
-  public IrcProperties.Server.Backend backend() {
-    return IrcProperties.Server.Backend.QUASSEL_CORE;
+  public String backendId() {
+    return BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.QUASSEL_CORE);
   }
 
   @Override

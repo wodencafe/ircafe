@@ -47,6 +47,7 @@ class OutboundBackendCapabilityPolicyTest {
     assertTrue(policy.supportsSemanticUpload("matrix"));
     assertTrue(policy.persistsJoinedChannelsLocally("matrix"));
     assertFalse(policy.supportsQuasselCoreCommands("matrix"));
+    assertTrue(policy.supportsSemanticUploadByBackendId("matrix"));
   }
 
   @Test
@@ -61,6 +62,8 @@ class OutboundBackendCapabilityPolicyTest {
     assertTrue(policy.supportsQuasselCoreCommands("quassel"));
     assertFalse(policy.persistsJoinedChannelsLocally("quassel"));
     assertFalse(policy.supportsSemanticUpload("quassel"));
+    assertTrue(policy.supportsQuasselCoreCommandsByBackendId("quassel-core"));
+    assertFalse(policy.persistsJoinedChannelsLocallyByBackendId("quassel-core"));
   }
 
   @Test
@@ -100,6 +103,8 @@ class OutboundBackendCapabilityPolicyTest {
             commandTargetPolicy, registry, IrcNegotiatedFeaturePort.from(irc), backendAvailability);
 
     assertTrue(customPolicy.supportsSemanticUpload("plugin"));
+    assertTrue(customPolicy.supportsSemanticUploadByBackendId("plugin-backend"));
+    assertFalse(customPolicy.supportsQuasselCoreCommandsByBackendId("plugin-backend"));
   }
 
   private static IrcProperties.Server server(String id, IrcProperties.Server.Backend backend) {
@@ -139,11 +144,6 @@ class OutboundBackendCapabilityPolicyTest {
   }
 
   private static final class PluginBackendFeatureAdapter implements OutboundBackendFeatureAdapter {
-    @Override
-    public IrcProperties.Server.Backend backend() {
-      return null;
-    }
-
     @Override
     public String backendId() {
       return "plugin-backend";

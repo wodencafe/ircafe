@@ -38,6 +38,7 @@ public class CommandTargetPolicy {
     this.backendExtensionCatalog = backendExtensionCatalog;
   }
 
+  @Deprecated(forRemoval = false)
   public IrcProperties.Server.Backend backendForServer(String serverId) {
     return BACKEND_DESCRIPTORS.backendForId(backendIdForServer(serverId)).orElse(null);
   }

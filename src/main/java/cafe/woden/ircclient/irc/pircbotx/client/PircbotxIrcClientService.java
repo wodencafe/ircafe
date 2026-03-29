@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc.pircbotx.client;
 
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.bouncer.BouncerDiscoveryEventPort;
+import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
@@ -42,6 +43,8 @@ public class PircbotxIrcClientService
     implements IrcBackendClientService, IrcDisconnectWithSourcePort {
 
   private static final Logger log = LoggerFactory.getLogger(PircbotxIrcClientService.class);
+  private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
+      BackendDescriptorCatalog.builtIns();
 
   private final FlowableProcessor<ServerIrcEvent> bus =
       PublishProcessor.<ServerIrcEvent>create().toSerialized();
@@ -133,8 +136,8 @@ public class PircbotxIrcClientService
   }
 
   @Override
-  public IrcProperties.Server.Backend backend() {
-    return IrcProperties.Server.Backend.IRC;
+  public String backendId() {
+    return BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.IRC);
   }
 
   /**

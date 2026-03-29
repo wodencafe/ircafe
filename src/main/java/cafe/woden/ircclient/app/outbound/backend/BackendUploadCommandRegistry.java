@@ -46,7 +46,7 @@ public final class BackendUploadCommandRegistry {
     LinkedHashMap<String, UploadCommandTranslationHandler> map = new LinkedHashMap<>();
     for (UploadCommandTranslationHandler handler : handlers) {
       if (handler == null) continue;
-      String backendId = normalizeBackendId(handler.backendId());
+      String backendId = backendIdOf(handler);
       if (backendId.isEmpty()) continue;
       UploadCommandTranslationHandler previous = map.putIfAbsent(backendId, handler);
       if (previous != null) {
@@ -57,6 +57,7 @@ public final class BackendUploadCommandRegistry {
     return Map.copyOf(map);
   }
 
+  @Deprecated(forRemoval = false)
   public UploadCommandTranslationHandler find(IrcProperties.Server.Backend backend) {
     return find(backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
   }
@@ -72,5 +73,14 @@ public final class BackendUploadCommandRegistry {
 
   private static String normalizeBackendId(String backendId) {
     return Objects.toString(backendId, "").trim().toLowerCase(Locale.ROOT);
+  }
+
+  private static String backendIdOf(UploadCommandTranslationHandler handler) {
+    String backendId = normalizeBackendId(handler.backendId());
+    if (!backendId.isEmpty()) {
+      return backendId;
+    }
+    IrcProperties.Server.Backend backend = handler.backend();
+    return backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend);
   }
 }

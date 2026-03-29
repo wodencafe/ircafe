@@ -43,8 +43,8 @@ final class QuasselOutboundCommandSupport {
       appendStatusMirrored(ui, out, fallbackOut, statusTag, "Unknown server '" + sid + "'.");
       return false;
     }
-    IrcProperties.Server.Backend backend = server.orElseThrow().backend();
-    if (backendCapabilityPolicy.supportsQuasselCoreCommands(backend)) {
+    if (backendCapabilityPolicy.supportsQuasselCoreCommandsByBackendId(
+        server.orElseThrow().backendId())) {
       return true;
     }
     appendStatusMirrored(

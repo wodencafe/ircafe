@@ -37,8 +37,8 @@ public final class BackendExtensionCatalog {
   private static final OutboundBackendFeatureAdapter DEFAULT_FEATURE_ADAPTER =
       new OutboundBackendFeatureAdapter() {
         @Override
-        public IrcProperties.Server.Backend backend() {
-          return IrcProperties.Server.Backend.IRC;
+        public String backendId() {
+          return BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.IRC);
         }
       };
 
@@ -99,6 +99,7 @@ public final class BackendExtensionCatalog {
         pluginClassLoaders, log, "[ircafe] failed to close backend extension plugin classloader");
   }
 
+  @Deprecated(forRemoval = false)
   public BackendExtension extensionFor(IrcProperties.Server.Backend backend) {
     return extensionFor(backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
   }
@@ -111,6 +112,7 @@ public final class BackendExtensionCatalog {
     return extensionsByBackendId.getOrDefault(id, defaultExtension());
   }
 
+  @Deprecated(forRemoval = false)
   public OutboundBackendFeatureAdapter featureAdapterFor(IrcProperties.Server.Backend backend) {
     return featureAdapterFor(backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
   }
@@ -120,6 +122,7 @@ public final class BackendExtensionCatalog {
     return featureAdapter != null ? featureAdapter : DEFAULT_FEATURE_ADAPTER;
   }
 
+  @Deprecated(forRemoval = false)
   public MessageMutationOutboundCommands messageMutationCommandsFor(
       IrcProperties.Server.Backend backend) {
     return messageMutationCommandsFor(backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
@@ -131,6 +134,7 @@ public final class BackendExtensionCatalog {
     return commands != null ? commands : DEFAULT_MESSAGE_MUTATION_COMMANDS;
   }
 
+  @Deprecated(forRemoval = false)
   public UploadCommandTranslationHandler uploadTranslationHandlerFor(
       IrcProperties.Server.Backend backend) {
     return uploadTranslationHandlerFor(backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
@@ -160,7 +164,7 @@ public final class BackendExtensionCatalog {
     for (BackendExtension extension :
         Objects.requireNonNullElse(extensions, List.<BackendExtension>of())) {
       if (extension == null) continue;
-      String backendId = normalizeBackendId(extension.backendId());
+      String backendId = backendIdOf(extension);
       if (backendId.isEmpty()) {
         throw new IllegalStateException(
             "Backend extension reported blank backend id: " + extension.getClass().getName());
@@ -199,7 +203,7 @@ public final class BackendExtensionCatalog {
     if (featureAdapter == null) return;
     validateContributionBackend(
         backendId,
-        featureAdapter.backendId(),
+        backendIdOf(featureAdapter),
         contributionType,
         extension,
         featureAdapter.getClass());
@@ -212,7 +216,7 @@ public final class BackendExtensionCatalog {
       BackendExtension extension) {
     if (commands == null) return;
     validateContributionBackend(
-        backendId, commands.backendId(), contributionType, extension, commands.getClass());
+        backendId, backendIdOf(commands), contributionType, extension, commands.getClass());
   }
 
   private static void validateContributionBackend(
@@ -223,7 +227,7 @@ public final class BackendExtensionCatalog {
     if (translationHandler == null) return;
     validateContributionBackend(
         backendId,
-        translationHandler.backendId(),
+        backendIdOf(translationHandler),
         contributionType,
         extension,
         translationHandler.getClass());
@@ -257,8 +261,8 @@ public final class BackendExtensionCatalog {
   private static BackendExtension defaultExtension() {
     return new BackendExtension() {
       @Override
-      public IrcProperties.Server.Backend backend() {
-        return IrcProperties.Server.Backend.IRC;
+      public String backendId() {
+        return BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.IRC);
       }
 
       @Override
@@ -275,6 +279,42 @@ public final class BackendExtensionCatalog {
 
   private static String normalizeBackendId(String backendId) {
     return Objects.toString(backendId, "").trim().toLowerCase(Locale.ROOT);
+  }
+
+  private static String backendIdOf(BackendExtension extension) {
+    String backendId = normalizeBackendId(extension.backendId());
+    if (!backendId.isEmpty()) {
+      return backendId;
+    }
+    IrcProperties.Server.Backend backend = extension.backend();
+    return backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend);
+  }
+
+  private static String backendIdOf(OutboundBackendFeatureAdapter featureAdapter) {
+    String backendId = normalizeBackendId(featureAdapter.backendId());
+    if (!backendId.isEmpty()) {
+      return backendId;
+    }
+    IrcProperties.Server.Backend backend = featureAdapter.backend();
+    return backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend);
+  }
+
+  private static String backendIdOf(MessageMutationOutboundCommands commands) {
+    String backendId = normalizeBackendId(commands.backendId());
+    if (!backendId.isEmpty()) {
+      return backendId;
+    }
+    IrcProperties.Server.Backend backend = commands.backend();
+    return backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend);
+  }
+
+  private static String backendIdOf(UploadCommandTranslationHandler translationHandler) {
+    String backendId = normalizeBackendId(translationHandler.backendId());
+    if (!backendId.isEmpty()) {
+      return backendId;
+    }
+    IrcProperties.Server.Backend backend = translationHandler.backend();
+    return backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend);
   }
 
   private record LoadedCatalogState(

@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.outbound.backend;
 
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
+import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.model.TargetRef;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
@@ -12,10 +13,12 @@ import org.springframework.stereotype.Component;
 @SecondaryAdapter
 @ApplicationLayer
 public final class IrcMessageMutationOutboundCommands implements MessageMutationOutboundCommands {
+  private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
+      BackendDescriptorCatalog.builtIns();
 
   @Override
-  public IrcProperties.Server.Backend backend() {
-    return IrcProperties.Server.Backend.IRC;
+  public String backendId() {
+    return BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.IRC);
   }
 
   @Override

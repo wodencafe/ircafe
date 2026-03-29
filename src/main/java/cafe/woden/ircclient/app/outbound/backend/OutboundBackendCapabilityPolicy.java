@@ -31,6 +31,7 @@ public final class OutboundBackendCapabilityPolicy {
   @Qualifier("ircClientService")
   private final IrcBackendAvailabilityPort backendAvailability;
 
+  @Deprecated(forRemoval = false)
   public IrcProperties.Server.Backend backendForServer(String serverId) {
     return commandTargetPolicy.backendForServer(serverId);
   }
@@ -40,29 +41,45 @@ public final class OutboundBackendCapabilityPolicy {
   }
 
   public boolean supportsSemanticUpload(String serverId) {
-    return supportsSemanticUploadById(backendIdForServer(serverId));
+    return supportsSemanticUploadByBackendId(backendIdForServer(serverId));
   }
 
+  @Deprecated(forRemoval = false)
   public boolean supportsSemanticUpload(IrcProperties.Server.Backend backend) {
-    return supportsSemanticUploadById(backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
+    return supportsSemanticUploadByBackendId(
+        backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
   }
 
   public boolean supportsQuasselCoreCommands(String serverId) {
-    return supportsQuasselCoreCommandsById(backendIdForServer(serverId));
+    return supportsQuasselCoreCommandsByBackendId(backendIdForServer(serverId));
   }
 
+  @Deprecated(forRemoval = false)
   public boolean supportsQuasselCoreCommands(IrcProperties.Server.Backend backend) {
-    return supportsQuasselCoreCommandsById(
+    return supportsQuasselCoreCommandsByBackendId(
         backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
   }
 
   public boolean persistsJoinedChannelsLocally(String serverId) {
-    return persistsJoinedChannelsLocallyById(backendIdForServer(serverId));
+    return persistsJoinedChannelsLocallyByBackendId(backendIdForServer(serverId));
   }
 
+  @Deprecated(forRemoval = false)
   public boolean persistsJoinedChannelsLocally(IrcProperties.Server.Backend backend) {
-    return persistsJoinedChannelsLocallyById(
+    return persistsJoinedChannelsLocallyByBackendId(
         backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
+  }
+
+  public boolean supportsSemanticUploadByBackendId(String backendId) {
+    return outboundBackendFeatureRegistry.adapterFor(backendId).supportsSemanticUpload();
+  }
+
+  public boolean supportsQuasselCoreCommandsByBackendId(String backendId) {
+    return outboundBackendFeatureRegistry.adapterFor(backendId).supportsQuasselCoreCommands();
+  }
+
+  public boolean persistsJoinedChannelsLocallyByBackendId(String backendId) {
+    return outboundBackendFeatureRegistry.adapterFor(backendId).persistsJoinedChannelsLocally();
   }
 
   public boolean supportsReadMarker(String serverId) {
@@ -167,17 +184,5 @@ public final class OutboundBackendCapabilityPolicy {
 
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
-  }
-
-  private boolean supportsSemanticUploadById(String backendId) {
-    return outboundBackendFeatureRegistry.adapterFor(backendId).supportsSemanticUpload();
-  }
-
-  private boolean supportsQuasselCoreCommandsById(String backendId) {
-    return outboundBackendFeatureRegistry.adapterFor(backendId).supportsQuasselCoreCommands();
-  }
-
-  private boolean persistsJoinedChannelsLocallyById(String backendId) {
-    return outboundBackendFeatureRegistry.adapterFor(backendId).persistsJoinedChannelsLocally();
   }
 }

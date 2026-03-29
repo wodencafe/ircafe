@@ -10,11 +10,13 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public interface UploadCommandTranslationHandler {
 
-  IrcProperties.Server.Backend backend();
+  @Deprecated(forRemoval = false)
+  default IrcProperties.Server.Backend backend() {
+    return BackendDescriptorCatalog.builtIns().backendForId(backendId()).orElse(null);
+  }
 
   default String backendId() {
-    IrcProperties.Server.Backend backend = backend();
-    return backend == null ? "" : BackendDescriptorCatalog.builtIns().idFor(backend);
+    return "";
   }
 
   String translateUpload(String target, String msgType, String sourcePath, String displayBody);

@@ -22,8 +22,8 @@ public final class OutboundBackendFeatureRegistry {
   private static final OutboundBackendFeatureAdapter DEFAULT_ADAPTER =
       new OutboundBackendFeatureAdapter() {
         @Override
-        public IrcProperties.Server.Backend backend() {
-          return IrcProperties.Server.Backend.IRC;
+        public String backendId() {
+          return BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.IRC);
         }
       };
 
@@ -53,7 +53,7 @@ public final class OutboundBackendFeatureRegistry {
     LinkedHashMap<String, OutboundBackendFeatureAdapter> map = new LinkedHashMap<>();
     for (OutboundBackendFeatureAdapter adapter : adapters) {
       if (adapter == null) continue;
-      String backendId = normalizeBackendId(adapter.backendId());
+      String backendId = backendIdOf(adapter);
       if (backendId.isEmpty()) continue;
       OutboundBackendFeatureAdapter previous = map.putIfAbsent(backendId, adapter);
       if (previous != null) {
@@ -64,6 +64,7 @@ public final class OutboundBackendFeatureRegistry {
     return Map.copyOf(map);
   }
 
+  @Deprecated(forRemoval = false)
   public OutboundBackendFeatureAdapter adapterFor(IrcProperties.Server.Backend backend) {
     return adapterFor(backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
   }
@@ -79,5 +80,14 @@ public final class OutboundBackendFeatureRegistry {
 
   private static String normalizeBackendId(String backendId) {
     return Objects.toString(backendId, "").trim().toLowerCase(Locale.ROOT);
+  }
+
+  private static String backendIdOf(OutboundBackendFeatureAdapter adapter) {
+    String backendId = normalizeBackendId(adapter.backendId());
+    if (!backendId.isEmpty()) {
+      return backendId;
+    }
+    IrcProperties.Server.Backend backend = adapter.backend();
+    return backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend);
   }
 }
