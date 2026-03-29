@@ -43,6 +43,7 @@ class ServerTreeViewInteractionCollaboratorsFactoryTest {
                 mock(ServerTreeRuntimeState.class),
                 mock(ServerTreeServerLabelPolicy.class),
                 new HashMap<>(),
+                __ -> "",
                 new HashMap<>(),
                 Map.of(),
                 Map.of(),

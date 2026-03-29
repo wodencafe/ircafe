@@ -865,6 +865,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 runtimeState,
                 serverLabelPolicy,
                 serverDisplayNames,
+                serverId ->
+                    backendUiProfileProvider == null
+                        ? ""
+                        : backendUiProfileProvider.backendDisplayNameForServer(serverId),
                 bouncerControlServerIdsByBackendId,
                 originByServerIdByBackendId,
                 autoConnectStoreByBackendId,

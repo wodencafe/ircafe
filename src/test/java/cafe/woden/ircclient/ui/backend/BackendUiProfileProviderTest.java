@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
 import cafe.woden.ircclient.irc.backend.IrcBackendModePort;
 import org.junit.jupiter.api.Test;
 
@@ -62,5 +63,18 @@ class BackendUiProfileProviderTest {
     assertFalse(provider.supportsQuasselCoreCommands("libera"));
     verify(backendMode).supportsQuasselCoreCommands("quassel");
     verify(backendMode).supportsQuasselCoreCommands("libera");
+  }
+
+  @Test
+  void backendDisplayNameForServerUsesBackendMetadataPort() {
+    IrcBackendModePort backendMode = mock(IrcBackendModePort.class);
+    AvailableBackendIdsPort backendMetadata = mock(AvailableBackendIdsPort.class);
+    when(backendMode.backendIdForServer("plugin")).thenReturn("plugin-backend");
+    when(backendMetadata.backendDisplayName("plugin-backend")).thenReturn("Fancy Plugin");
+    BackendUiProfileProvider provider = new BackendUiProfileProvider(backendMode, backendMetadata);
+
+    assertEquals("Fancy Plugin", provider.backendDisplayNameForServer(" plugin "));
+    verify(backendMode).backendIdForServer("plugin");
+    verify(backendMetadata).backendDisplayName("plugin-backend");
   }
 }

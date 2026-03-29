@@ -36,6 +36,7 @@ class ServerTreeTooltipProviderContextTest {
             serverId -> ConnectionState.CONNECTED,
             serverId -> true,
             serverId -> " diagnostic",
+            serverId -> "Backend " + serverId,
             serverId ->
                 "soju".equals(serverId)
                     ? ServerTreeBouncerBackends.SOJU
@@ -66,6 +67,7 @@ class ServerTreeTooltipProviderContextTest {
     assertEquals(ConnectionState.CONNECTED, context.connectionStateForServer("libera"));
     assertTrue(context.desiredOnlineForServer("libera"));
     assertEquals(" diagnostic", context.connectionDiagnosticsTipForServer("libera"));
+    assertEquals("Backend libera", context.backendDisplayNameForServer("libera"));
     assertEquals(ServerTreeBouncerBackends.SOJU, context.backendIdForEphemeralServer("soju"));
     assertEquals(ServerTreeBouncerBackends.ZNC, context.backendIdForEphemeralServer("znc"));
     assertEquals(ServerTreeBouncerBackends.GENERIC, context.backendIdForEphemeralServer("bouncer"));

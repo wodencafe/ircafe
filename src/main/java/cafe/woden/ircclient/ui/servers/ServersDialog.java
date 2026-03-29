@@ -70,7 +70,7 @@ public class ServersDialog extends JDialog {
     add(title, BorderLayout.NORTH);
 
     list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-    list.setCellRenderer(new ServerCellRenderer());
+    list.setCellRenderer(new ServerCellRenderer(backendProfiles));
     list.putClientProperty(FlatClientProperties.STYLE, "selectionArc:12;");
 
     JScrollPane scroll = new JScrollPane(list);
@@ -240,40 +240,57 @@ public class ServersDialog extends JDialog {
     runtimeConfig.rememberServerAutoConnectOnStart(cur.id(), true);
   }
 
+  static String serverListLabel(
+      ServerEditorBackendProfiles backendProfiles, IrcProperties.Server s) {
+    if (s == null) return "";
+    String host = Objects.toString(s.host(), "");
+    int port = s.port();
+    String tls = s.tls() ? "TLS" : "plain";
+    String backend =
+        backendProfiles == null
+            ? Objects.toString(s.backendId(), "")
+            : backendProfiles.profileForBackendId(s.backendId()).displayName();
+    String nick = Objects.toString(s.nick(), "");
+    return "<html><b>"
+        + escape(s.id())
+        + "</b>  <span style='opacity:0.75'>"
+        + escape(host)
+        + ":"
+        + port
+        + " · "
+        + tls
+        + "</span><br/>"
+        + "<span style='opacity:0.75'>Backend:</span> "
+        + escape(backend)
+        + "  <span style='opacity:0.75'>· Nick:</span> "
+        + escape(nick)
+        + "</html>";
+  }
+
+  private static String escape(String s) {
+    if (s == null) return "";
+    return s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;");
+  }
+
   private static final class ServerCellRenderer extends DefaultListCellRenderer {
+    private final ServerEditorBackendProfiles backendProfiles;
+
+    private ServerCellRenderer(ServerEditorBackendProfiles backendProfiles) {
+      this.backendProfiles = Objects.requireNonNull(backendProfiles, "backendProfiles");
+    }
+
     @Override
     public java.awt.Component getListCellRendererComponent(
         JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
       super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
       if (value instanceof IrcProperties.Server s) {
-        String host = Objects.toString(s.host(), "");
-        int port = s.port();
-        String tls = s.tls() ? "TLS" : "plain";
-        String nick = Objects.toString(s.nick(), "");
-        setText(
-            "<html><b>"
-                + escape(s.id())
-                + "</b>  <span style='opacity:0.75'>"
-                + escape(host)
-                + ":"
-                + port
-                + " · "
-                + tls
-                + "</span><br/>"
-                + "<span style='opacity:0.75'>Nick:</span> "
-                + escape(nick)
-                + "</html>");
+        setText(serverListLabel(backendProfiles, s));
       }
       setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
       return this;
-    }
-
-    private static String escape(String s) {
-      if (s == null) return "";
-      return s.replace("&", "&amp;")
-          .replace("<", "&lt;")
-          .replace(">", "&gt;")
-          .replace("\"", "&quot;");
     }
   }
 }

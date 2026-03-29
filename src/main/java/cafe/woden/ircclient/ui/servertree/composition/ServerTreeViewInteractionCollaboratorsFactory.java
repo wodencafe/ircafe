@@ -87,6 +87,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             in.uiHooks()::connectionStateForServer,
             Objects.requireNonNull(in.runtimeState(), "runtimeState")::desiredOnlineForServer,
             in.runtimeState()::connectionDiagnosticsTipForServer,
+            Objects.requireNonNull(in.backendDisplayNameForServer(), "backendDisplayNameForServer"),
             serverId -> backendIdForEphemeralServer(in, serverId),
             (backendId, serverId) -> originForServer(in, backendId, serverId),
             serverId ->
@@ -452,6 +453,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerTreeRuntimeState runtimeState,
       ServerTreeServerLabelPolicy serverLabelPolicy,
       Map<String, String> serverDisplayNames,
+      java.util.function.Function<String, String> backendDisplayNameForServer,
       Map<String, Set<String>> bouncerControlServerIdsByBackendId,
       Map<String, Map<String, String>> originByServerIdByBackendId,
       Map<String, BouncerAutoConnectStore> autoConnectStoreByBackendId,
