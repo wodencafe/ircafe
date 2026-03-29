@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
 import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.config.IrcProperties;
@@ -105,6 +106,29 @@ class OutboundBackendCapabilityPolicyTest {
     assertTrue(customPolicy.supportsSemanticUpload("plugin"));
     assertTrue(customPolicy.supportsSemanticUploadByBackendId("plugin-backend"));
     assertFalse(customPolicy.supportsQuasselCoreCommandsByBackendId("plugin-backend"));
+  }
+
+  @Test
+  void backendReasonUsesPluginDisplayNameWhenReasonIsGeneric() {
+    when(serverCatalog.find("plugin")).thenReturn(Optional.of(server("plugin", "plugin-backend")));
+    when(irc.backendAvailabilityReason("plugin")).thenReturn("not connected");
+    AvailableBackendIdsPort backendMetadata = mock(AvailableBackendIdsPort.class);
+    when(backendMetadata.backendDisplayName("plugin-backend")).thenReturn("Fancy Plugin");
+
+    OutboundBackendCapabilityPolicy customPolicy =
+        new OutboundBackendCapabilityPolicy(
+            commandTargetPolicy,
+            outboundBackendFeatureRegistry,
+            IrcNegotiatedFeaturePort.from(irc),
+            backendAvailability,
+            backendMetadata);
+
+    assertEquals(
+        "Fancy Plugin backend: not connected",
+        customPolicy.unavailableReasonForHelp("plugin", "fallback"));
+    assertEquals(
+        "Fancy Plugin backend: not connected.",
+        customPolicy.featureUnavailableMessage("plugin", "fallback"));
   }
 
   private static IrcProperties.Server server(String id, IrcProperties.Server.Backend backend) {
