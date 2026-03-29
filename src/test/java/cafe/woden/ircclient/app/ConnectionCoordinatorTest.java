@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -1011,10 +1012,49 @@ class ConnectionCoordinatorTest {
     verify(runtimeConfig, never()).readKnownChannels("quassel");
   }
 
+  @Test
+  void controlledReconnectTriggersWhenCustomBackendIdChanges() throws Exception {
+    var method =
+        ConnectionCoordinator.class.getDeclaredMethod(
+            "requiresControlledReconnect", IrcProperties.Server.class, IrcProperties.Server.class);
+    method.setAccessible(true);
+
+    Object changed =
+        method.invoke(
+            null,
+            server("plugin-a", "irc.example.net", 6697, true, "plugin-a"),
+            server("plugin-a", "irc.example.net", 6697, true, "plugin-b"));
+
+    assertTrue(Boolean.TRUE.equals(changed));
+  }
+
+  @Test
+  void reconnectChangeSummaryUsesCustomBackendIds() throws Exception {
+    var method =
+        ConnectionCoordinator.class.getDeclaredMethod(
+            "summarizeReconnectChange", IrcProperties.Server.class, IrcProperties.Server.class);
+    method.setAccessible(true);
+
+    Object summary =
+        method.invoke(
+            null,
+            server("plugin-a", "irc.example.net", 6697, true, "plugin-a"),
+            server("plugin-a", "irc.example.net", 6697, true, "plugin-b"));
+
+    assertEquals("backend plugin-a → plugin-b", summary);
+  }
+
   private static IrcProperties.Server server(
       String id, String host, int port, boolean tls, IrcProperties.Server.Backend backend) {
     return new IrcProperties.Server(
         id, host, port, tls, "", "tester", "tester", "Tester", null, null, List.of(), List.of(),
         null, backend);
+  }
+
+  private static IrcProperties.Server server(
+      String id, String host, int port, boolean tls, String backendId) {
+    return new IrcProperties.Server(
+        id, host, port, tls, "", "tester", "tester", "Tester", null, null, List.of(), List.of(),
+        null, backendId);
   }
 }

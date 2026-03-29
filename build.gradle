@@ -48,7 +48,9 @@ rewrite {
 
 dependencies {
     compileOnly lib('lombok')
+    compileOnly lib('autoServiceAnnotations')
     annotationProcessor lib('lombok')
+    annotationProcessor lib('autoService')
     testCompileOnly lib('lombok')
     testAnnotationProcessor lib('lombok')
     functionalTestCompileOnly lib('lombok')

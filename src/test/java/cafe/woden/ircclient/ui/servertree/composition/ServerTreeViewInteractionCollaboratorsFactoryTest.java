@@ -71,6 +71,7 @@ class ServerTreeViewInteractionCollaboratorsFactoryTest {
                 __ -> false,
                 __ -> false,
                 __ -> false,
+                __ -> false,
                 (serverId, networkToken) -> ""));
 
     assertNotNull(collaborators.tooltipProvider());

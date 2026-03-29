@@ -4,7 +4,6 @@ import cafe.woden.ircclient.app.api.QuasselNetworkManagerAction;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpContributor;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Single;
@@ -30,7 +29,7 @@ import org.springframework.stereotype.Component;
 @Component
 @SecondaryAdapter
 @ApplicationLayer
-final class QuasselOutboundCommandService implements OutboundHelpContributor {
+public final class QuasselOutboundCommandService {
   private static final Logger log = LoggerFactory.getLogger(QuasselOutboundCommandService.class);
   private static final long NETWORK_OBSERVE_TIMEOUT_MS = 3_000L;
 
@@ -55,16 +54,6 @@ final class QuasselOutboundCommandService implements OutboundHelpContributor {
     this.quasselCommandSupport =
         Objects.requireNonNull(quasselCommandSupport, "quasselCommandSupport");
     this.quasselNetworkVerbHandlers = buildQuasselNetworkVerbHandlers();
-  }
-
-  @Override
-  public void appendGeneralHelp(TargetRef out) {
-    ui.appendStatus(
-        out, "(help)", "/quasselsetup [serverId] (complete pending Quassel Core setup)");
-    ui.appendStatus(
-        out,
-        "(help)",
-        "/quasselnet [serverId] list|connect|disconnect|remove|add|edit ... (manage Quassel networks)");
   }
 
   public void handleQuasselSetup(CompositeDisposable disposables, String serverId) {

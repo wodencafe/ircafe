@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.ConstructorBinding;
+import org.springframework.boot.context.properties.bind.Name;
 
 /**
  * IRC client configuration.
@@ -144,7 +145,7 @@ public record IrcProperties(Client client, List<Server> servers) {
        * enabled} is {@code false}, the server explicitly disables proxying.
        */
       Proxy proxy,
-      Backend backend) {
+      @Name("backend") String backendId) {
     /** Transport backend used for this server entry. */
     public enum Backend {
       IRC("irc"),
@@ -227,9 +228,7 @@ public record IrcProperties(Client client, List<Server> servers) {
       if (perform == null) {
         perform = List.of();
       }
-      if (backend == null) {
-        backend = Backend.IRC;
-      }
+      backendId = BackendDescriptorCatalog.builtIns().normalizeIdOrDefault(backendId);
     }
 
     // Legacy constructor kept for call sites that don't set backend explicitly.
@@ -261,7 +260,7 @@ public record IrcProperties(Client client, List<Server> servers) {
           autoJoin,
           perform,
           proxy,
-          Backend.IRC);
+          BackendDescriptorCatalog.builtIns().idFor(Backend.IRC));
     }
 
     public Server(
@@ -291,7 +290,39 @@ public record IrcProperties(Client client, List<Server> servers) {
           autoJoin,
           perform,
           proxy,
-          Backend.IRC);
+          BackendDescriptorCatalog.builtIns().idFor(Backend.IRC));
+    }
+
+    public Server(
+        String id,
+        String host,
+        int port,
+        boolean tls,
+        String serverPassword,
+        String nick,
+        String login,
+        String realName,
+        Sasl sasl,
+        Nickserv nickserv,
+        List<String> autoJoin,
+        List<String> perform,
+        Proxy proxy,
+        Backend backend) {
+      this(
+          id,
+          host,
+          port,
+          tls,
+          serverPassword,
+          nick,
+          login,
+          realName,
+          sasl,
+          nickserv,
+          autoJoin,
+          perform,
+          proxy,
+          BackendDescriptorCatalog.builtIns().idFor(backend));
     }
 
     public Server withAutoJoin(List<String> nextAutoJoin) {
@@ -310,7 +341,7 @@ public record IrcProperties(Client client, List<Server> servers) {
           value,
           perform,
           proxy,
-          backend);
+          backendId);
     }
 
     public Server withTransport(int nextPort, boolean nextTls) {
@@ -328,7 +359,11 @@ public record IrcProperties(Client client, List<Server> servers) {
           autoJoin,
           perform,
           proxy,
-          backend);
+          backendId);
+    }
+
+    public Backend backend() {
+      return BackendDescriptorCatalog.builtIns().backendForId(backendId).orElse(null);
     }
   }
 

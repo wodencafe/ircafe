@@ -51,4 +51,16 @@ class BackendUiProfileProviderTest {
     verify(backendMode).isMatrixBackendServer("matrix");
     verify(backendMode).isMatrixBackendServer("libera");
   }
+
+  @Test
+  void supportsQuasselCommandsDelegatesToBackendPort() {
+    IrcBackendModePort backendMode = mock(IrcBackendModePort.class);
+    when(backendMode.supportsQuasselCoreCommands("quassel")).thenReturn(true);
+    BackendUiProfileProvider provider = new BackendUiProfileProvider(backendMode);
+
+    assertTrue(provider.supportsQuasselCoreCommands(" quassel "));
+    assertFalse(provider.supportsQuasselCoreCommands("libera"));
+    verify(backendMode).supportsQuasselCoreCommands("quassel");
+    verify(backendMode).supportsQuasselCoreCommands("libera");
+  }
 }

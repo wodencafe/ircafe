@@ -3,7 +3,6 @@ package cafe.woden.ircclient.app.outbound.backend;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.outbound.upload.spi.SemanticUploadCommandHandler;
 import cafe.woden.ircclient.app.outbound.upload.spi.UploadCommandTranslationHandler;
-import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Objects;
 import lombok.NonNull;
@@ -45,15 +44,15 @@ public final class MatrixOutboundCommandService implements SemanticUploadCommand
       return usage();
     }
 
-    IrcProperties.Server.Backend backend =
-        backendCapabilityPolicy.backendForServer(target.serverId());
-    if (!backendCapabilityPolicy.supportsSemanticUpload(backend)) {
+    String backendId = backendCapabilityPolicy.backendIdForServer(target.serverId());
+    if (!backendCapabilityPolicy.supportsSemanticUpload(target.serverId())) {
       return unsupportedBackend(
           "Server '"
               + target.serverId()
               + "' does not use the Matrix backend. /upload is only available on Matrix-backed servers.");
     }
-    UploadCommandTranslationHandler translationHandler = backendUploadCommandRegistry.find(backend);
+    UploadCommandTranslationHandler translationHandler =
+        backendUploadCommandRegistry.find(backendId);
     if (translationHandler == null) {
       return unsupportedBackend(
           "Server '"

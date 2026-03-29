@@ -1,17 +1,9 @@
 package cafe.woden.ircclient.app.outbound.help.spi;
 
-import cafe.woden.ircclient.model.TargetRef;
-import java.util.Map;
-import java.util.function.Consumer;
+import cafe.woden.ircclient.app.commands.SlashCommandPresentationContributor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
-/** Contributes backend-specific help snippets and topic handlers to outbound chat help. */
+/** Transitional alias for command presentation contributors used by help/autocomplete surfaces. */
+@Deprecated(forRemoval = false)
 @ApplicationLayer
-public interface OutboundHelpContributor {
-
-  default void appendGeneralHelp(TargetRef out) {}
-
-  default Map<String, Consumer<TargetRef>> topicHelpHandlers() {
-    return Map.of();
-  }
-}
+public interface OutboundHelpContributor extends SlashCommandPresentationContributor {}

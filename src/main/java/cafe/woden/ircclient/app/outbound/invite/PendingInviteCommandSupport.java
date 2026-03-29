@@ -5,7 +5,6 @@ import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.app.outbound.support.OutboundRawCommandSupport;
-import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
 import cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer;
@@ -262,7 +261,6 @@ final class PendingInviteCommandSupport {
   }
 
   private boolean shouldPersistJoinedChannel(String serverId) {
-    return commandTargetPolicy.backendForServer(serverId)
-        != IrcProperties.Server.Backend.QUASSEL_CORE;
+    return commandTargetPolicy.persistsJoinedChannelsLocally(serverId);
   }
 }

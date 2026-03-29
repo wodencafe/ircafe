@@ -20,4 +20,9 @@ public final class QuasselOutboundBackendFeatureAdapter implements OutboundBacke
   public boolean supportsQuasselCoreCommands() {
     return true;
   }
+
+  @Override
+  public boolean persistsJoinedChannelsLocally() {
+    return false;
+  }
 }

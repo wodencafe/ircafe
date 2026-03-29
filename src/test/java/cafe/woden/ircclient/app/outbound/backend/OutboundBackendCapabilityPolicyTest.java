@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
@@ -44,6 +45,7 @@ class OutboundBackendCapabilityPolicyTest {
     assertTrue(policy.supportsDraftReply("matrix"));
     assertTrue(policy.supportsMultiline("matrix"));
     assertTrue(policy.supportsSemanticUpload("matrix"));
+    assertTrue(policy.persistsJoinedChannelsLocally("matrix"));
     assertFalse(policy.supportsQuasselCoreCommands("matrix"));
   }
 
@@ -57,6 +59,7 @@ class OutboundBackendCapabilityPolicyTest {
     assertTrue(policy.supportsReadMarker("quassel"));
     assertTrue(policy.supportsLabeledResponse("quassel"));
     assertTrue(policy.supportsQuasselCoreCommands("quassel"));
+    assertFalse(policy.persistsJoinedChannelsLocally("quassel"));
     assertFalse(policy.supportsSemanticUpload("quassel"));
   }
 
@@ -86,6 +89,19 @@ class OutboundBackendCapabilityPolicyTest {
             "libera", "requires negotiated read-marker or draft/read-marker"));
   }
 
+  @Test
+  void supportsCustomBackendIdsViaAdapterRegistry() {
+    when(serverCatalog.find("plugin")).thenReturn(Optional.of(server("plugin", "plugin-backend")));
+
+    OutboundBackendFeatureRegistry registry =
+        new OutboundBackendFeatureRegistry(List.of(new PluginBackendFeatureAdapter()));
+    OutboundBackendCapabilityPolicy customPolicy =
+        new OutboundBackendCapabilityPolicy(
+            commandTargetPolicy, registry, IrcNegotiatedFeaturePort.from(irc), backendAvailability);
+
+    assertTrue(customPolicy.supportsSemanticUpload("plugin"));
+  }
+
   private static IrcProperties.Server server(String id, IrcProperties.Server.Backend backend) {
     return new IrcProperties.Server(
         id,
@@ -102,5 +118,40 @@ class OutboundBackendCapabilityPolicyTest {
         List.of(),
         null,
         backend);
+  }
+
+  private static IrcProperties.Server server(String id, String backendId) {
+    return new IrcProperties.Server(
+        id,
+        "plugin.example.net",
+        9000,
+        false,
+        "",
+        "ircafe",
+        "ircafe",
+        "IRCafe User",
+        null,
+        null,
+        List.of(),
+        List.of(),
+        null,
+        backendId);
+  }
+
+  private static final class PluginBackendFeatureAdapter implements OutboundBackendFeatureAdapter {
+    @Override
+    public IrcProperties.Server.Backend backend() {
+      return null;
+    }
+
+    @Override
+    public String backendId() {
+      return "plugin-backend";
+    }
+
+    @Override
+    public boolean supportsSemanticUpload() {
+      return true;
+    }
   }
 }

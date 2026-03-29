@@ -7,6 +7,7 @@ import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
 import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
@@ -20,6 +21,7 @@ import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
@@ -344,6 +346,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final ServerTreeSettingsSynchronizer settingsSynchronizer;
   private final ServerCatalog serverCatalog;
+  private final BackendUiProfileProvider backendUiProfileProvider;
   private volatile ServerTreeTypingIndicatorStyle typingIndicatorStyle =
       ServerTreeTypingIndicatorStyle.DOTS;
   private volatile boolean typingIndicatorsTreeEnabled = true;
@@ -380,6 +383,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         interceptorStore,
         settingsBus,
         serverDialogs,
+        null,
         null);
   }
 
@@ -409,6 +413,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         interceptorStore,
         settingsBus,
         serverDialogs,
+        null,
         null);
   }
 
@@ -426,12 +431,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       InterceptorStore interceptorStore,
       UiSettingsBus settingsBus,
       ServerDialogs serverDialogs,
+      BackendUiProfileProvider backendUiProfileProvider,
       JfrRuntimeEventsService jfrRuntimeEventsService) {
     super(new BorderLayout());
 
     this.runtimeConfig = runtimeConfig;
     this.logProps = logProps;
     this.serverCatalog = serverCatalog;
+    this.backendUiProfileProvider = backendUiProfileProvider;
 
     this.interceptorStore = interceptorStore;
     this.jfrRuntimeEventsService = jfrRuntimeEventsService;
@@ -884,6 +891,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::setChannelMuted,
                 requestStreams,
                 channelTargetOperations::canEditChannelModesForTarget,
+                this::isQuasselServer,
                 quasselNetworkParentResolver::isQuasselNetworkNode,
                 quasselNetworkParentResolver::isQuasselEmptyStateNode,
                 this::quasselNetworkTooltip));
@@ -1982,10 +1990,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private boolean isQuasselServer(String serverId) {
     String sid = normalizeServerId(serverId);
-    if (sid.isEmpty() || serverCatalog == null) return false;
+    if (sid.isEmpty()) return false;
+    if (backendUiProfileProvider != null) {
+      return backendUiProfileProvider.supportsQuasselCoreCommands(sid);
+    }
+    if (serverCatalog == null) return false;
     return serverCatalog
-        .find(sid)
-        .map(server -> server.backend() == IrcProperties.Server.Backend.QUASSEL_CORE)
+        .findEntry(sid)
+        .map(ServerEntry::server)
+        .map(server -> IrcProperties.Server.Backend.QUASSEL_CORE.token().equals(server.backendId()))
         .orElse(false);
   }
 

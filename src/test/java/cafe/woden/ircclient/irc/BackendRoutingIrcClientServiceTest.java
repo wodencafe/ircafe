@@ -2,6 +2,7 @@ package cafe.woden.ircclient.irc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -81,6 +82,34 @@ class BackendRoutingIrcClientServiceTest {
   }
 
   @Test
+  void routesCallsByConfiguredCustomBackendId() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+    IrcBackendClientService pluginBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(pluginBackend.backend()).thenReturn(null);
+    when(pluginBackend.backendId()).thenReturn("plugin-backend");
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(pluginBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("plugin")).thenReturn(Optional.of(server("plugin", "plugin-backend")));
+    when(pluginBackend.connect("plugin")).thenReturn(Completable.complete());
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, pluginBackend));
+
+    assertEquals("plugin-backend", service.backendIdForServer("plugin"));
+    assertNull(service.backendForServer("plugin"));
+
+    service.connect("plugin").blockingAwait();
+
+    verify(pluginBackend).connect("plugin");
+    verify(ircBackend, never()).connect("plugin");
+  }
+
+  @Test
   void reportsMatrixBackendServerFromConfiguration() {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
@@ -100,6 +129,7 @@ class BackendRoutingIrcClientServiceTest {
     BackendRoutingIrcClientService service =
         new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, matrixBackend));
 
+    assertEquals("matrix", service.backendIdForServer("matrix"));
     assertTrue(service.isMatrixBackendServer("matrix"));
     assertFalse(service.isMatrixBackendServer("irc"));
   }
@@ -439,5 +469,23 @@ class BackendRoutingIrcClientServiceTest {
         List.of(),
         null,
         backend);
+  }
+
+  private static IrcProperties.Server server(String id, String backendId) {
+    return new IrcProperties.Server(
+        id,
+        "irc.example.net",
+        6697,
+        true,
+        "",
+        "tester",
+        "tester",
+        "IRCafe Test",
+        null,
+        null,
+        List.of(),
+        List.of(),
+        null,
+        backendId);
   }
 }

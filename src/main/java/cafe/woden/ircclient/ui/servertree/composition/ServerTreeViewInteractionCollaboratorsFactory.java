@@ -127,6 +127,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         Objects.requireNonNull(in.requestEmitter(), "requestEmitter")::emitOpenQuasselSetup,
         in.requestEmitter()::emitOpenQuasselNetworkManager,
         serverId -> isQuasselSetupPending(in.runtimeState(), serverId),
+        in.supportsQuasselCoreCommands(),
         () -> in.interceptorStore() != null,
         in.interceptorActions()::promptAndAddInterceptor,
         () -> in.serverDialogs() != null,
@@ -477,6 +478,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       BiConsumer<TargetRef, Boolean> setChannelMuted,
       ServerTreeRequestStreams requestStreams,
       Predicate<TargetRef> canEditChannelModes,
+      Predicate<String> supportsQuasselCoreCommands,
       Predicate<javax.swing.tree.DefaultMutableTreeNode> isQuasselNetworkNode,
       Predicate<javax.swing.tree.DefaultMutableTreeNode> isQuasselEmptyStateNode,
       BiFunction<String, String, String> quasselNetworkTooltip) {}

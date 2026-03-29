@@ -394,6 +394,15 @@ class ArchitectureGuardrailsTest {
               "cafe.woden.ircclient.app.outbound.backend.BackendUploadCommandRegistry")
           .and()
           .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.backend.BackendExtensionCatalog")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.backend.spi.BackendExtension")
+          .and()
+          .doNotHaveFullyQualifiedName(
+              "cafe.woden.ircclient.app.outbound.backend.MatrixBackendExtension")
+          .and()
+          .doNotHaveFullyQualifiedName(
               "cafe.woden.ircclient.app.outbound.backend.MatrixUploadCommandTranslationHandler")
           .and()
           .doNotHaveFullyQualifiedName(
@@ -417,6 +426,9 @@ class ArchitectureGuardrailsTest {
               .and()
               .doNotHaveFullyQualifiedName(
                   "cafe.woden.ircclient.app.outbound.backend.MatrixOutboundCommandService")
+              .and()
+              .doNotHaveFullyQualifiedName(
+                  "cafe.woden.ircclient.app.outbound.backend.MatrixBackendExtension")
               .and()
               .doNotHaveFullyQualifiedName(
                   "cafe.woden.ircclient.app.outbound.backend.MatrixUploadCommandTranslationHandler")

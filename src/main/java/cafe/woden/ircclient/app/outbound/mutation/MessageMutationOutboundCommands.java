@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.outbound.mutation;
 
+import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Map;
@@ -13,6 +14,11 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 public interface MessageMutationOutboundCommands {
 
   IrcProperties.Server.Backend backend();
+
+  default String backendId() {
+    IrcProperties.Server.Backend backend = backend();
+    return backend == null ? "" : BackendDescriptorCatalog.builtIns().idFor(backend);
+  }
 
   String buildReplyRawLine(TargetRef target, String replyToMessageId, String message);
 

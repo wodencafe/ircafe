@@ -40,7 +40,9 @@ class MessageMutationOutboundCommandsRouterTest {
                 new IrcMessageMutationOutboundCommands(),
                 new MatrixMessageMutationOutboundCommands()));
 
-    assertInstanceOf(IrcMessageMutationOutboundCommands.class, router.commandsFor(null));
+    assertInstanceOf(
+        IrcMessageMutationOutboundCommands.class,
+        router.commandsFor((IrcProperties.Server.Backend) null));
     assertInstanceOf(
         IrcMessageMutationOutboundCommands.class,
         router.commandsFor(IrcProperties.Server.Backend.QUASSEL_CORE));

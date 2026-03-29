@@ -21,12 +21,13 @@ import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiPromptPort;
 import cafe.woden.ircclient.app.api.ZncPlaybackEventsPort;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandHandler;
 import cafe.woden.ircclient.app.commands.FilterCommand;
 import cafe.woden.ircclient.app.commands.UserCommandAliasesBus;
 import cafe.woden.ircclient.app.core.IrcMediator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
-import cafe.woden.ircclient.app.outbound.backend.spi.BackendNamedOutboundCommandHandler;
+import cafe.woden.ircclient.app.outbound.backend.spi.BackendExtension;
 import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.dispatch.DefaultOutboundCommandDispatcher;
 import cafe.woden.ircclient.app.outbound.dispatch.ObservedOutboundCommandDispatcher;
@@ -442,8 +443,8 @@ class SpringModulithIncrementalAdoptionTest {
     assertThat(UiPromptPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
     assertThat(UiPort.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
     assertThat(LocalFilterCommandHandler.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
-    assertThat(BackendNamedOutboundCommandHandler.class.isAnnotationPresent(SecondaryPort.class))
-        .isTrue();
+    assertThat(BackendNamedCommandHandler.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
+    assertThat(BackendExtension.class.isAnnotationPresent(SecondaryPort.class)).isTrue();
     assertThat(MessageMutationOutboundCommands.class.isAnnotationPresent(SecondaryPort.class))
         .isTrue();
     assertThat(OutboundBackendFeatureAdapter.class.isAnnotationPresent(SecondaryPort.class))

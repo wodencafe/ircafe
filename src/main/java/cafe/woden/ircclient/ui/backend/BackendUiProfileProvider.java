@@ -11,9 +11,11 @@ import org.springframework.stereotype.Component;
 @InterfaceLayer
 public class BackendUiProfileProvider {
 
+  private final IrcBackendModePort backendMode;
   private final BackendUiContext backendUiContext;
 
   public BackendUiProfileProvider(@Qualifier("ircClientService") IrcBackendModePort backendMode) {
+    this.backendMode = Objects.requireNonNull(backendMode, "backendMode");
     this.backendUiContext = BackendUiContext.fromBackendModePort(backendMode);
   }
 
@@ -23,6 +25,12 @@ public class BackendUiProfileProvider {
 
   public BackendUiProfile profileForServer(String serverId) {
     return new BackendUiProfile(normalizeServerId(serverId), backendUiContext);
+  }
+
+  public boolean supportsQuasselCoreCommands(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+    return backendMode.supportsQuasselCoreCommands(sid);
   }
 
   private static String normalizeServerId(String serverId) {

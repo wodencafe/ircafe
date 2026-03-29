@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.chat;
 
+import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -56,6 +57,7 @@ public class ChatDockManager {
   private final ActiveInputRouter activeInputRouter;
   private final CommandHistoryStore commandHistoryStore;
   private final ChatHistoryService chatHistoryService;
+  private final SlashCommandPresentationCatalog slashCommandPresentationCatalog;
 
   /**
    * Registered pinned dockables.
@@ -88,6 +90,7 @@ public class ChatDockManager {
       BackendUiProfileProvider backendUiProfileProvider,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ActiveInputRouter activeInputRouter,
+      SlashCommandPresentationCatalog slashCommandPresentationCatalog,
       ChatHistoryService chatHistoryService,
       CommandHistoryStore commandHistoryStore) {
     this.serverTree = serverTree;
@@ -104,6 +107,9 @@ public class ChatDockManager {
         java.util.Objects.requireNonNull(
             messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.activeInputRouter = activeInputRouter;
+    this.slashCommandPresentationCatalog =
+        java.util.Objects.requireNonNull(
+            slashCommandPresentationCatalog, "slashCommandPresentationCatalog");
     this.chatHistoryService = chatHistoryService;
     this.commandHistoryStore = commandHistoryStore;
   }
@@ -381,6 +387,7 @@ public class ChatDockManager {
             messageActionCapabilityPolicy,
             backendUiProfileProvider::profileForServer,
             activeInputRouter,
+            slashCommandPresentationCatalog,
             (t, draft) -> {
               if (t == null) return;
               pinnedDrafts.put(t, draft == null ? "" : draft);

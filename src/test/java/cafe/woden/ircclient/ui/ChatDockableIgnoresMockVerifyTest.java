@@ -11,6 +11,8 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.ChannelMetadataPort;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
+import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.ignore.IgnoreListService;
 import cafe.woden.ircclient.ignore.IgnoreStatusService;
@@ -115,6 +117,8 @@ class ChatDockableIgnoresMockVerifyTest {
     when(settingsBus.get()).thenReturn(null);
     SpellcheckSettingsBus spellcheckSettingsBus = mock(SpellcheckSettingsBus.class);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
+    SlashCommandPresentationCatalog slashCommandPresentationCatalog =
+        new SlashCommandPresentationCatalog(List.of(), new BackendNamedCommandCatalog(List.of()));
 
     AtomicReference<ChatDockable> holder = new AtomicReference<>();
     onEdt(
@@ -149,6 +153,7 @@ class ChatDockableIgnoresMockVerifyTest {
                     null,
                     null,
                     null,
+                    slashCommandPresentationCatalog,
                     settingsBus,
                     spellcheckSettingsBus,
                     commandHistoryStore,

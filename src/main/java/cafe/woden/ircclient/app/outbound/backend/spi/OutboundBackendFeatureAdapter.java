@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.outbound.backend.spi;
 
+import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import org.jmolecules.architecture.hexagonal.SecondaryPort;
@@ -12,12 +13,21 @@ public interface OutboundBackendFeatureAdapter {
 
   IrcProperties.Server.Backend backend();
 
+  default String backendId() {
+    IrcProperties.Server.Backend backend = backend();
+    return backend == null ? "" : BackendDescriptorCatalog.builtIns().idFor(backend);
+  }
+
   default boolean supportsSemanticUpload() {
     return false;
   }
 
   default boolean supportsQuasselCoreCommands() {
     return false;
+  }
+
+  default boolean persistsJoinedChannelsLocally() {
+    return true;
   }
 
   default boolean supportsReadMarker(IrcNegotiatedFeaturePort irc, String serverId) {

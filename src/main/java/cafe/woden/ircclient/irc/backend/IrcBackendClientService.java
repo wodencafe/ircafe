@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc.backend;
 
+import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
@@ -14,6 +15,11 @@ public interface IrcBackendClientService
 
   /** Backend kind implemented by this service. */
   IrcProperties.Server.Backend backend();
+
+  default String backendId() {
+    IrcProperties.Server.Backend backend = backend();
+    return backend == null ? "" : BackendDescriptorCatalog.builtIns().idFor(backend);
+  }
 
   /** Re-schedule heartbeats for active connections (best effort). */
   default void rescheduleActiveHeartbeats() {}

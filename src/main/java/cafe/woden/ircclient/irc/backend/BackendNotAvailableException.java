@@ -1,24 +1,35 @@
 package cafe.woden.ircclient.irc.backend;
 
+import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.Objects;
 
 /** Raised when a configured backend exists in config but is not available for operation yet. */
 public final class BackendNotAvailableException extends UnsupportedOperationException {
-  private final IrcProperties.Server.Backend backend;
+  private final String backendId;
   private final String operation;
   private final String serverId;
 
   public BackendNotAvailableException(
       IrcProperties.Server.Backend backend, String operation, String serverId, String detail) {
-    super(buildMessage(backend, operation, serverId, detail));
-    this.backend = Objects.requireNonNull(backend, "backend");
+    this(BackendDescriptorCatalog.builtIns().idFor(backend), operation, serverId, detail);
+  }
+
+  public BackendNotAvailableException(
+      String backendId, String operation, String serverId, String detail) {
+    super(buildMessage(backendId, operation, serverId, detail));
+    this.backendId = BackendDescriptorCatalog.builtIns().normalizeIdOrDefault(backendId);
     this.operation = Objects.toString(operation, "").trim();
     this.serverId = Objects.toString(serverId, "").trim();
   }
 
+  public String backendId() {
+    return backendId;
+  }
+
+  @Deprecated(forRemoval = false)
   public IrcProperties.Server.Backend backend() {
-    return backend;
+    return BackendDescriptorCatalog.builtIns().backendForId(backendId).orElse(null);
   }
 
   public String operation() {
@@ -30,15 +41,17 @@ public final class BackendNotAvailableException extends UnsupportedOperationExce
   }
 
   private static String buildMessage(
-      IrcProperties.Server.Backend backend, String operation, String serverId, String detail) {
+      String backendId, String operation, String serverId, String detail) {
     String backendLabel =
-        backend == null
-            ? "backend"
-            : switch (backend) {
-              case IRC -> "IRC backend";
-              case QUASSEL_CORE -> "Quassel Core backend";
-              case MATRIX -> "Matrix backend";
-            };
+        BackendDescriptorCatalog.builtIns()
+            .descriptorForId(backendId)
+            .map(descriptor -> descriptor.displayName() + " backend")
+            .orElseGet(
+                () -> {
+                  String normalized =
+                      BackendDescriptorCatalog.builtIns().normalizeIdOrDefault(backendId);
+                  return normalized.isBlank() ? "backend" : normalized + " backend";
+                });
     String op = Objects.toString(operation, "").trim();
     if (!op.isEmpty()) op = " (" + op + ")";
     String sid = Objects.toString(serverId, "").trim();

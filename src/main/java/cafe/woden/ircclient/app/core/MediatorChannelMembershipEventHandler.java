@@ -4,6 +4,7 @@ import cafe.woden.ircclient.app.InboundModeEventHandler;
 import cafe.woden.ircclient.app.api.InterceptorEventType;
 import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
@@ -16,14 +17,13 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Coordinates channel membership and join-flow side effects extracted from {@link IrcMediator}. */
 @Component
 @ApplicationLayer
-@RequiredArgsConstructor
 public class MediatorChannelMembershipEventHandler {
   private static final Duration JOIN_ROUTING_WINDOW = Duration.ofSeconds(15);
 
@@ -69,6 +69,53 @@ public class MediatorChannelMembershipEventHandler {
   private final JoinRoutingPort joinRoutingState;
   private final IrcSessionRuntimeConfigPort runtimeConfig;
   private final ServerRegistry serverRegistry;
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+
+  public MediatorChannelMembershipEventHandler(
+      UiPort ui,
+      ConnectionCoordinator connectionCoordinator,
+      TargetCoordinator targetCoordinator,
+      InboundModeEventHandler inboundModeEventHandler,
+      UserInfoEnrichmentService userInfoEnrichmentService,
+      JoinRoutingPort joinRoutingState,
+      IrcSessionRuntimeConfigPort runtimeConfig,
+      ServerRegistry serverRegistry) {
+    this(
+        ui,
+        connectionCoordinator,
+        targetCoordinator,
+        inboundModeEventHandler,
+        userInfoEnrichmentService,
+        joinRoutingState,
+        runtimeConfig,
+        serverRegistry,
+        null);
+  }
+
+  @Autowired
+  public MediatorChannelMembershipEventHandler(
+      UiPort ui,
+      ConnectionCoordinator connectionCoordinator,
+      TargetCoordinator targetCoordinator,
+      InboundModeEventHandler inboundModeEventHandler,
+      UserInfoEnrichmentService userInfoEnrichmentService,
+      JoinRoutingPort joinRoutingState,
+      IrcSessionRuntimeConfigPort runtimeConfig,
+      ServerRegistry serverRegistry,
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy) {
+    this.ui = Objects.requireNonNull(ui, "ui");
+    this.connectionCoordinator =
+        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
+    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
+    this.inboundModeEventHandler =
+        Objects.requireNonNull(inboundModeEventHandler, "inboundModeEventHandler");
+    this.userInfoEnrichmentService =
+        Objects.requireNonNull(userInfoEnrichmentService, "userInfoEnrichmentService");
+    this.joinRoutingState = Objects.requireNonNull(joinRoutingState, "joinRoutingState");
+    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
+    this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
+    this.backendCapabilityPolicy = backendCapabilityPolicy;
+  }
 
   public void handleUserJoinedChannel(
       Callbacks callbacks, String sid, IrcEvent.UserJoinedChannel event) {
@@ -355,6 +402,9 @@ public class MediatorChannelMembershipEventHandler {
     if (sid.isEmpty()) {
       return false;
     }
+    if (backendCapabilityPolicy != null) {
+      return backendCapabilityPolicy.supportsQuasselCoreCommands(sid);
+    }
     if (serverRegistry == null) {
       return false;
     }
@@ -363,7 +413,9 @@ public class MediatorChannelMembershipEventHandler {
       if (configured == null || configured.isEmpty()) {
         return false;
       }
-      return configured.orElseThrow().backend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+      return IrcProperties.Server.Backend.QUASSEL_CORE
+          .token()
+          .equals(configured.orElseThrow().backendId());
     } catch (Exception ignored) {
       return false;
     }

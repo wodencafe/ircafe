@@ -7,6 +7,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
+import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.*;
@@ -96,11 +98,12 @@ class OutboundHelpCommandServiceTest {
           outboundConnectionStatusSupport,
           ui,
           targetCoordinator);
+  private final SlashCommandPresentationCatalog slashCommandPresentationCatalog =
+      new SlashCommandPresentationCatalog(
+          List.of(uploadHelpContributor, messageMutationHelpContributor, readMarkerCommandService),
+          new BackendNamedCommandCatalog(List.of()));
   private final OutboundHelpCommandService service =
-      new OutboundHelpCommandService(
-          ui,
-          targetCoordinator,
-          List.of(uploadHelpContributor, messageMutationHelpContributor, readMarkerCommandService));
+      new OutboundHelpCommandService(ui, targetCoordinator, slashCommandPresentationCatalog);
 
   private void appendEditHelp(TargetRef out) {
     TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();

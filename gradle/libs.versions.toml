@@ -42,6 +42,7 @@ pitestCommandLine = "1.22.1"
 pitestJunit5Plugin = "1.2.3"
 googleJavaFormat = "1.34.1"
 checkstyle = "10.26.1"
+autoService = "1.1.1"
 
 [libraries]
 lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
@@ -87,6 +88,8 @@ testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "
 junitPlatformLauncher = { module = "org.junit.platform:junit-platform-launcher" }
 pitestCommandLine = { module = "org.pitest:pitest-command-line", version.ref = "pitestCommandLine" }
 pitestJunit5Plugin = { module = "org.pitest:pitest-junit5-plugin", version.ref = "pitestJunit5Plugin" }
+autoService = { module = "com.google.auto.service:auto-service", version.ref = "autoService" }
+autoServiceAnnotations = { module = "com.google.auto.service:auto-service-annotations", version.ref = "autoService" }
 
 [plugins]
 springBoot = { id = "org.springframework.boot", version.ref = "springBootPlugin" }

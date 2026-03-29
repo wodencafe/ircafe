@@ -1,11 +1,10 @@
 package cafe.woden.ircclient.app.outbound.help;
 
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpContributor;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -20,17 +19,17 @@ public final class OutboundHelpCommandService {
 
   private final UiPort ui;
   private final TargetCoordinator targetCoordinator;
-  private final List<OutboundHelpContributor> helpContributors;
+  private final SlashCommandPresentationCatalog slashCommandPresentationCatalog;
   private final Map<String, HelpTopicHandler> helpTopicHandlers;
 
   public OutboundHelpCommandService(
       UiPort ui,
       TargetCoordinator targetCoordinator,
-      List<OutboundHelpContributor> helpContributors) {
+      SlashCommandPresentationCatalog slashCommandPresentationCatalog) {
     this.ui = Objects.requireNonNull(ui, "ui");
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
-    this.helpContributors =
-        List.copyOf(Objects.requireNonNull(helpContributors, "helpContributors"));
+    this.slashCommandPresentationCatalog =
+        Objects.requireNonNull(slashCommandPresentationCatalog, "slashCommandPresentationCatalog");
     this.helpTopicHandlers = buildHelpTopicHandlers();
   }
 
@@ -55,7 +54,7 @@ public final class OutboundHelpCommandService {
         out,
         "(help)",
         "Invites: /invites /invjoin (/join -i) /invignore /invwhois /invblock /inviteautojoin (/ajinvite)");
-    helpContributors.forEach(contributor -> contributor.appendGeneralHelp(out));
+    slashCommandPresentationCatalog.appendGeneralHelp(out, this::appendStaticHelpLine);
     ui.appendStatus(out, "(help)", "Tip: /help dcc for direct-chat/file-transfer commands.");
     ui.appendStatus(
         out,
@@ -66,10 +65,14 @@ public final class OutboundHelpCommandService {
   private Map<String, HelpTopicHandler> buildHelpTopicHandlers() {
     LinkedHashMap<String, HelpTopicHandler> handlers = new LinkedHashMap<>();
     registerHelpTopicHandler(handlers, this::appendDccHelp, "dcc");
-    for (OutboundHelpContributor contributor : helpContributors) {
-      registerHelpTopicHandlers(handlers, contributor.topicHelpHandlers());
-    }
+    registerHelpTopicHandlers(
+        handlers, slashCommandPresentationCatalog.topicHelpHandlers(this::appendStaticHelpLine));
     return Map.copyOf(handlers);
+  }
+
+  private void appendStaticHelpLine(TargetRef out, String line) {
+    if (out == null || line == null || line.isBlank()) return;
+    ui.appendStatus(out, "(help)", line);
   }
 
   private static void registerHelpTopicHandler(

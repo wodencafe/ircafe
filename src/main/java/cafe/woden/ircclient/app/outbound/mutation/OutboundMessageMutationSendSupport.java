@@ -211,6 +211,6 @@ final class OutboundMessageMutationSendSupport {
 
   private MessageMutationOutboundCommands mutationCommandsForServer(String serverId) {
     return messageMutationOutboundCommandsRouter.commandsFor(
-        backendCapabilityPolicy.backendForServer(serverId));
+        backendCapabilityPolicy.backendIdForServer(serverId));
   }
 }

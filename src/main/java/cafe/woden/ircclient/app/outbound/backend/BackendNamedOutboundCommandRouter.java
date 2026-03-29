@@ -1,18 +1,18 @@
 package cafe.woden.ircclient.app.outbound.backend;
 
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandExecutionContext;
 import cafe.woden.ircclient.app.commands.ParsedInput;
+import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
-import cafe.woden.ircclient.app.outbound.backend.spi.BackendNamedOutboundCommandHandler;
+import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Routes parsed backend-specific command names to backend command handlers. */
@@ -20,26 +20,31 @@ import org.springframework.stereotype.Component;
 @ApplicationLayer
 public final class BackendNamedOutboundCommandRouter {
 
-  private final Map<String, BackendNamedOutboundCommandHandler> handlersByCommandName;
+  private final BackendNamedCommandCatalog commandCatalog;
   private final TargetCoordinator targetCoordinator;
+  private final ConnectionCoordinator connectionCoordinator;
+  private final IrcMediatorInteractionPort mediatorIrc;
   private final UiPort ui;
+  private final BackendNamedCommandExecutionContext pluginExecutionContext =
+      new RouterCommandExecutionContext();
 
   BackendNamedOutboundCommandRouter(
-      List<BackendNamedOutboundCommandHandler> handlers,
+      BackendNamedCommandCatalog commandCatalog,
       TargetCoordinator targetCoordinator,
+      ConnectionCoordinator connectionCoordinator,
+      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
       UiPort ui) {
-    List<BackendNamedOutboundCommandHandler> safeHandlers =
-        List.copyOf(Objects.requireNonNull(handlers, "handlers"));
-    this.handlersByCommandName = indexHandlersByCommandName(safeHandlers);
+    this.commandCatalog = Objects.requireNonNull(commandCatalog, "commandCatalog");
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
+    this.connectionCoordinator =
+        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
+    this.mediatorIrc = Objects.requireNonNull(mediatorIrc, "mediatorIrc");
     this.ui = Objects.requireNonNull(ui, "ui");
   }
 
   public void handle(CompositeDisposable disposables, ParsedInput.BackendNamed command) {
     String name = normalizeCommandName(command.command());
-    BackendNamedOutboundCommandHandler handler = handlersByCommandName.get(name);
-    if (handler != null) {
-      handler.handle(disposables, command);
+    if (commandCatalog.handle(pluginExecutionContext, disposables, command)) {
       return;
     }
     TargetRef active = targetCoordinator.getActiveTarget();
@@ -47,22 +52,55 @@ public final class BackendNamedOutboundCommandRouter {
     ui.appendStatus(out, "(system)", "Unknown command: /" + name);
   }
 
-  private static Map<String, BackendNamedOutboundCommandHandler> indexHandlersByCommandName(
-      List<BackendNamedOutboundCommandHandler> handlers) {
-    LinkedHashMap<String, BackendNamedOutboundCommandHandler> index = new LinkedHashMap<>();
-    for (BackendNamedOutboundCommandHandler handler : handlers) {
-      Set<String> commandNames =
-          Objects.requireNonNullElse(handler.supportedCommandNames(), Set.<String>of());
-      for (String commandName : commandNames) {
-        String key = normalizeCommandName(commandName);
-        BackendNamedOutboundCommandHandler previous = index.putIfAbsent(key, handler);
-        if (previous != null && previous != handler) {
-          throw new IllegalStateException(
-              "Duplicate backend named outbound command handler for '" + key + "'");
-        }
-      }
+  private final class RouterCommandExecutionContext implements BackendNamedCommandExecutionContext {
+
+    @Override
+    public TargetRef activeTarget() {
+      return targetCoordinator.getActiveTarget();
     }
-    return Map.copyOf(index);
+
+    @Override
+    public TargetRef safeStatusTarget() {
+      return targetCoordinator.safeStatusTarget();
+    }
+
+    @Override
+    public TargetRef statusTarget(String serverId) {
+      String sid = Objects.toString(serverId, "").trim();
+      return sid.isEmpty() ? safeStatusTarget() : new TargetRef(sid, "status");
+    }
+
+    @Override
+    public boolean isConnected(String serverId) {
+      return connectionCoordinator.isConnected(serverId);
+    }
+
+    @Override
+    public void appendStatus(TargetRef target, String prefix, String message) {
+      ui.appendStatus(target != null ? target : safeStatusTarget(), prefix, message);
+    }
+
+    @Override
+    public void appendError(TargetRef target, String prefix, String message) {
+      ui.appendError(target != null ? target : safeStatusTarget(), prefix, message);
+    }
+
+    @Override
+    public void ensureTargetExists(TargetRef target) {
+      if (target == null) return;
+      ui.ensureTargetExists(target);
+    }
+
+    @Override
+    public void selectTarget(TargetRef target) {
+      if (target == null) return;
+      ui.selectTarget(target);
+    }
+
+    @Override
+    public io.reactivex.rxjava3.core.Completable sendRaw(String serverId, String line) {
+      return mediatorIrc.sendRaw(serverId, line);
+    }
   }
 
   private static String normalizeCommandName(String commandName) {
