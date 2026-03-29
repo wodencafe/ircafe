@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.outbound.backend;
 
 import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
+import cafe.woden.ircclient.app.api.BackendEditorProfileSpec;
 import cafe.woden.ircclient.app.outbound.backend.spi.BackendExtension;
 import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
@@ -12,6 +13,7 @@ import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import jakarta.annotation.PreDestroy;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -150,6 +152,16 @@ public final class BackendExtensionCatalog implements AvailableBackendIdsPort {
     return List.copyOf(extensionsByBackendId.keySet());
   }
 
+  @Override
+  public List<BackendEditorProfileSpec> availableBackendEditorProfiles() {
+    ArrayList<BackendEditorProfileSpec> profiles = new ArrayList<>(extensionsByBackendId.size());
+    for (BackendExtension extension : extensionsByBackendId.values()) {
+      if (extension == null || extension.editorProfile() == null) continue;
+      profiles.add(extension.editorProfile());
+    }
+    return List.copyOf(profiles);
+  }
+
   private static LoadedCatalogState loadInstalledCatalogState(
       List<BackendExtension> builtInExtensions,
       Path pluginDirectory,
@@ -187,6 +199,8 @@ public final class BackendExtensionCatalog implements AvailableBackendIdsPort {
           extension.uploadCommandTranslationHandler(),
           "upload translation handler",
           extension);
+      validateContributionBackend(
+          backendId, extension.editorProfile(), "editor profile", extension);
       BackendExtension previous = index.putIfAbsent(backendId, extension);
       if (previous != null) {
         throw new IllegalStateException(
@@ -237,6 +251,20 @@ public final class BackendExtensionCatalog implements AvailableBackendIdsPort {
         contributionType,
         extension,
         translationHandler.getClass());
+  }
+
+  private static void validateContributionBackend(
+      String backendId,
+      BackendEditorProfileSpec editorProfile,
+      String contributionType,
+      BackendExtension extension) {
+    if (editorProfile == null) return;
+    validateContributionBackend(
+        backendId,
+        normalizeBackendId(editorProfile.backendId()),
+        contributionType,
+        extension,
+        editorProfile.getClass());
   }
 
   private static void validateContributionBackend(

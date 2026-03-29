@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.outbound.backend.spi;
 
+import cafe.woden.ircclient.app.api.BackendEditorProfileSpec;
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
 import cafe.woden.ircclient.app.outbound.upload.spi.UploadCommandTranslationHandler;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
@@ -30,6 +31,10 @@ public interface BackendExtension {
   }
 
   default UploadCommandTranslationHandler uploadCommandTranslationHandler() {
+    return null;
+  }
+
+  default BackendEditorProfileSpec editorProfile() {
     return null;
   }
 }

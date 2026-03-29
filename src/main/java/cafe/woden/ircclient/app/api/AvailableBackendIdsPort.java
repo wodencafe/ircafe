@@ -9,4 +9,8 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public interface AvailableBackendIdsPort {
   List<String> availableBackendIds();
+
+  default List<BackendEditorProfileSpec> availableBackendEditorProfiles() {
+    return List.of();
+  }
 }

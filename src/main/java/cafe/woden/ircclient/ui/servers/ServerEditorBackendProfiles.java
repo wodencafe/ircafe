@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.ui.servers;
 
+import cafe.woden.ircclient.app.api.BackendEditorProfileSpec;
+import cafe.woden.ircclient.app.api.BuiltInBackendEditorProfiles;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.ArrayList;
@@ -13,7 +15,7 @@ final class ServerEditorBackendProfiles {
   private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
       BackendDescriptorCatalog.builtIns();
   private static final ServerEditorBackendProfiles BUILT_INS =
-      new ServerEditorBackendProfiles(List.of(ircProfile(), quasselProfile(), matrixProfile()));
+      new ServerEditorBackendProfiles(profilesFromSpecs(BuiltInBackendEditorProfiles.all()));
 
   private final List<ServerEditorBackendProfile> profiles;
   private final Map<String, ServerEditorBackendProfile> profilesByBackendId;
@@ -43,15 +45,28 @@ final class ServerEditorBackendProfiles {
   }
 
   static ServerEditorBackendProfiles forAvailableBackendIds(List<String> backendIds) {
-    ArrayList<ServerEditorBackendProfile> availableProfiles = new ArrayList<>(BUILT_INS.profiles);
+    return forAvailableBackends(backendIds, List.of());
+  }
+
+  static ServerEditorBackendProfiles forAvailableBackends(
+      List<String> backendIds, List<BackendEditorProfileSpec> explicitProfiles) {
+    LinkedHashMap<String, ServerEditorBackendProfile> indexed = new LinkedHashMap<>();
+    for (ServerEditorBackendProfile profile : BUILT_INS.profiles) {
+      indexed.put(profile.backendId(), profile);
+    }
+    for (BackendEditorProfileSpec profileSpec :
+        Objects.requireNonNullElse(explicitProfiles, List.<BackendEditorProfileSpec>of())) {
+      if (profileSpec == null) continue;
+      indexed.put(profileSpec.backendId(), toProfile(profileSpec));
+    }
     for (String backendId : Objects.requireNonNullElse(backendIds, List.<String>of())) {
       String normalized = BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendId);
-      if (BUILT_INS.profilesByBackendId.containsKey(normalized)) {
+      if (indexed.containsKey(normalized)) {
         continue;
       }
-      availableProfiles.add(BUILT_INS.fallbackProfile(normalized));
+      indexed.put(normalized, BUILT_INS.fallbackProfile(normalized));
     }
-    return new ServerEditorBackendProfiles(availableProfiles);
+    return new ServerEditorBackendProfiles(new ArrayList<>(indexed.values()));
   }
 
   List<String> selectableBackendIds(String selectedBackendId) {
@@ -115,89 +130,41 @@ final class ServerEditorBackendProfiles {
         .orElse(backendId);
   }
 
-  private static ServerEditorBackendProfile ircProfile() {
-    return new ServerEditorBackendProfile(
-        BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.IRC),
-        BACKEND_DESCRIPTORS.displayNameFor(IrcProperties.Server.Backend.IRC),
-        6667,
-        6697,
-        true,
-        false,
-        true,
-        true,
-        false,
-        "",
-        "Host",
-        "Server password",
-        "Nick",
-        "Login/Ident",
-        "Real name",
-        "Use TLS (SSL)",
-        "Direct IRC connection using this profile.",
-        "No authentication on connect. Use this for networks that don't require account auth.",
-        "(optional)",
-        "irc.example.net",
-        "ircafe",
-        "IRCafeUser",
-        "IRCafe User");
+  private static List<ServerEditorBackendProfile> profilesFromSpecs(
+      List<BackendEditorProfileSpec> profileSpecs) {
+    ArrayList<ServerEditorBackendProfile> profiles = new ArrayList<>();
+    for (BackendEditorProfileSpec profileSpec :
+        Objects.requireNonNullElse(profileSpecs, List.<BackendEditorProfileSpec>of())) {
+      if (profileSpec == null) continue;
+      profiles.add(toProfile(profileSpec));
+    }
+    return List.copyOf(profiles);
   }
 
-  private static ServerEditorBackendProfile quasselProfile() {
+  private static ServerEditorBackendProfile toProfile(BackendEditorProfileSpec profileSpec) {
     return new ServerEditorBackendProfile(
-        BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.QUASSEL_CORE),
-        BACKEND_DESCRIPTORS.displayNameFor(IrcProperties.Server.Backend.QUASSEL_CORE),
-        4242,
-        4243,
-        false,
-        false,
-        false,
-        true,
-        true,
-        "quassel-user",
-        "Host",
-        "Core password",
-        "Default nick",
-        "Core username",
-        "Core real name",
-        "Use TLS (SSL)",
-        "Quassel backend logs into Quassel Core here (default ports: 4242 plain, 4243 TLS)."
-            + " Core password can be blank before initial setup. SASL/NickServ below are ignored.",
-        "Quassel backend does not run direct IRC SASL/NickServ auth from IRCafe."
-            + " Configure upstream network auth inside Quassel Core.",
-        "(optional until core is configured)",
-        "quassel.example.net",
-        "quassel-user",
-        "display nick (optional)",
-        "display name (optional)");
-  }
-
-  private static ServerEditorBackendProfile matrixProfile() {
-    return new ServerEditorBackendProfile(
-        BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.MATRIX),
-        BACKEND_DESCRIPTORS.displayNameFor(IrcProperties.Server.Backend.MATRIX),
-        80,
-        443,
-        false,
-        true,
-        false,
-        false,
-        false,
-        "",
-        "Homeserver",
-        "Credential",
-        "Nick (optional)",
-        "User ID (optional)",
-        "Display name (optional)",
-        "Use TLS (HTTPS)",
-        "Matrix backend connects to this homeserver and authenticates with either access token"
-            + " or username/password."
-            + " Defaults: 443 TLS, 80 plain. SASL/NickServ below are ignored.",
-        "Matrix backend authentication is configured here."
-            + " IRC SASL/NickServ settings are ignored.",
-        "matrix access token / password",
-        "https://matrix.example.org",
-        "@alice:matrix.example.org",
-        "IRCafeUser (optional)",
-        "IRCafe User (optional)");
+        profileSpec.backendId(),
+        profileSpec.displayName(),
+        profileSpec.defaultPlainPort(),
+        profileSpec.defaultTlsPort(),
+        profileSpec.directAuthEnabled(),
+        profileSpec.matrixAuthSupported(),
+        profileSpec.requiresNick(),
+        profileSpec.usesNickAsDefaultLogin(),
+        profileSpec.supportsQuasselCoreCommands(),
+        profileSpec.defaultLoginFallback(),
+        profileSpec.hostLabel(),
+        profileSpec.serverPasswordLabel(),
+        profileSpec.nickLabel(),
+        profileSpec.loginLabel(),
+        profileSpec.realNameLabel(),
+        profileSpec.tlsToggleLabel(),
+        profileSpec.connectionHint(),
+        profileSpec.authDisabledHint(),
+        profileSpec.serverPasswordPlaceholder(),
+        profileSpec.hostPlaceholder(),
+        profileSpec.loginPlaceholder(),
+        profileSpec.nickPlaceholder(),
+        profileSpec.realNamePlaceholder());
   }
 }

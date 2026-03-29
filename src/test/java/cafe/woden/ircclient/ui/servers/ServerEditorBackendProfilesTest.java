@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.app.api.BackendEditorProfileSpec;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import org.junit.jupiter.api.Test;
@@ -68,5 +69,47 @@ class ServerEditorBackendProfilesTest {
 
     assertTrue(
         profiles.selectableBackendIds(profiles.defaultBackendId()).contains("plugin-backend"));
+  }
+
+  @Test
+  void explicitPluginProfileOverridesFallbackDefaults() {
+    ServerEditorBackendProfiles profiles =
+        ServerEditorBackendProfiles.forAvailableBackends(
+            java.util.List.of("plugin-backend"), java.util.List.of(pluginProfile()));
+
+    ServerEditorBackendProfile plugin = profiles.profileForBackendId("plugin-backend");
+
+    assertEquals("Plugin Backend", plugin.displayName());
+    assertEquals(7000, plugin.defaultPort(false));
+    assertEquals(7443, plugin.defaultPort(true));
+    assertFalse(plugin.directAuthEnabled());
+    assertFalse(plugin.requiresNick());
+  }
+
+  private static BackendEditorProfileSpec pluginProfile() {
+    return new BackendEditorProfileSpec(
+        "plugin-backend",
+        "Plugin Backend",
+        7000,
+        7443,
+        false,
+        false,
+        false,
+        false,
+        false,
+        "",
+        "Endpoint",
+        "Credential",
+        "Nick",
+        "Login",
+        "Display name",
+        "Use TLS",
+        "Plugin backend connection.",
+        "Plugin backend credentials are configured here.",
+        "plugin secret",
+        "plugin.example.net",
+        "plugin-user",
+        "PluginNick",
+        "Plugin User");
   }
 }

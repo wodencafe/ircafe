@@ -1,5 +1,7 @@
 package cafe.woden.ircclient.app.outbound.backend;
 
+import cafe.woden.ircclient.app.api.BackendEditorProfileSpec;
+import cafe.woden.ircclient.app.api.BuiltInBackendEditorProfiles;
 import cafe.woden.ircclient.app.outbound.backend.spi.BackendExtension;
 import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
@@ -47,5 +49,10 @@ public final class MatrixBackendExtension implements BackendExtension {
   @Override
   public UploadCommandTranslationHandler uploadCommandTranslationHandler() {
     return UPLOAD_TRANSLATION_HANDLER;
+  }
+
+  @Override
+  public BackendEditorProfileSpec editorProfile() {
+    return BuiltInBackendEditorProfiles.matrix();
   }
 }

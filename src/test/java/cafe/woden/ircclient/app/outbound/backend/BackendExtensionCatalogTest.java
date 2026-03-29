@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.app.api.BackendEditorProfileSpec;
 import cafe.woden.ircclient.app.outbound.backend.spi.BackendExtension;
 import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
@@ -67,6 +68,9 @@ class BackendExtensionCatalogTest {
 
     assertTrue(catalog.featureAdapterFor("plugin-backend").supportsSemanticUpload());
     assertTrue(catalog.availableBackendIds().contains("plugin-backend"));
+    assertTrue(
+        catalog.availableBackendEditorProfiles().stream()
+            .anyMatch(profile -> "Plugin Backend".equals(profile.displayName())));
   }
 
   @Test
@@ -118,6 +122,34 @@ class BackendExtensionCatalogTest {
           return true;
         }
       };
+    }
+
+    @Override
+    public BackendEditorProfileSpec editorProfile() {
+      return new BackendEditorProfileSpec(
+          "plugin-backend",
+          "Plugin Backend",
+          7000,
+          7443,
+          true,
+          false,
+          true,
+          true,
+          false,
+          "plugin-user",
+          "Host",
+          "Server password",
+          "Nick",
+          "Login",
+          "Real name",
+          "Use TLS",
+          "Plugin backend connection.",
+          "Plugin backend auth is configured directly.",
+          "(optional)",
+          "plugin.example.net",
+          "plugin-user",
+          "PluginUser",
+          "Plugin User");
     }
   }
 

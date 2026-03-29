@@ -12,8 +12,9 @@ final class ServerEditorBackendProfilesProvider {
 
   ServerEditorBackendProfilesProvider(AvailableBackendIdsPort availableBackendIdsPort) {
     this.backendProfiles =
-        ServerEditorBackendProfiles.forAvailableBackendIds(
-            availableBackendIdsPort.availableBackendIds());
+        ServerEditorBackendProfiles.forAvailableBackends(
+            availableBackendIdsPort.availableBackendIds(),
+            availableBackendIdsPort.availableBackendEditorProfiles());
   }
 
   ServerEditorBackendProfiles backendProfiles() {
