@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.Icon;
 import javax.swing.JButton;
@@ -533,7 +534,12 @@ class ChannelListPanelManagedOrderTest {
             JButton.class,
             JTextField.class,
             JTextArea.class,
-            JTextArea.class);
+            JTable.class,
+            JTextArea.class,
+            JButton.class,
+            JButton.class,
+            JButton.class,
+            AtomicBoolean.class);
     constructor.setAccessible(true);
     return constructor.newInstance(
         dialog,
@@ -548,7 +554,12 @@ class ChannelListPanelManagedOrderTest {
         new JButton(),
         new JTextField(),
         new JTextArea(),
-        new JTextArea());
+        new JTable(),
+        new JTextArea(),
+        new JButton(),
+        new JButton(),
+        new JButton(),
+        new AtomicBoolean(false));
   }
 
   @FunctionalInterface

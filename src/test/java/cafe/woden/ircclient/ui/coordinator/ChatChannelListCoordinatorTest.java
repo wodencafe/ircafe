@@ -50,7 +50,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     when(serverTree.managedChannelsForServer("libera"))
         .thenReturn(List.of(new ServerTreeDockable.ManagedChannelEntry("#ircafe", false, true, 3)));
@@ -96,7 +96,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     when(serverTree.managedChannelsForServer("libera")).thenReturn(List.of());
     when(serverTree.channelSortModeForServer("libera"))
@@ -126,7 +126,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     when(serverTree.managedChannelsForServer("libera")).thenReturn(List.of());
     when(serverTree.channelSortModeForServer("libera"))
@@ -161,7 +161,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     coordinator.refreshManagedChannelsCard("  ");
 
@@ -193,7 +193,7 @@ class ChatChannelListCoordinatorTest {
             () -> new TargetRef("libera", "status"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -233,7 +233,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -272,7 +272,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -311,7 +311,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -348,7 +348,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -382,7 +382,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -415,7 +415,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -450,7 +450,7 @@ class ChatChannelListCoordinatorTest {
             () -> new TargetRef("other", "status"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of(),
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot,
             irc,
             modeRoutingState);
 
@@ -487,7 +487,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -521,7 +521,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "me",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -556,13 +556,13 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
     modeDetails.onNext(new TargetRef("libera", "#ircafe"));
 
-    verify(serverTree).selectTarget(TargetRef.channelList("libera"));
+    verify(serverTree, never()).selectTarget(TargetRef.channelList("libera"));
     verify(channelListPanel).showChannelDetails("libera", "#ircafe");
     disposables.dispose();
   }
@@ -589,7 +589,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -625,7 +625,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of(),
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot,
             irc,
             modeRoutingState);
 
@@ -666,7 +666,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "me",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -706,7 +706,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "me",
             (sid, channel) -> "",
-            (sid, channel) -> List.of(),
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot,
             irc,
             modeRoutingState);
 
@@ -743,7 +743,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -813,5 +813,10 @@ class ChatChannelListCoordinatorTest {
     ArgumentCaptor<Consumer> captor = ArgumentCaptor.forClass(Consumer.class);
     verify(channelListPanel).setOnAddChannelRequest(captor.capture());
     return captor.getValue();
+  }
+
+  private static ChannelListPanel.BanListSnapshot emptyBanListSnapshot(
+      String serverId, String channel) {
+    return ChannelListPanel.BanListSnapshot.empty();
   }
 }

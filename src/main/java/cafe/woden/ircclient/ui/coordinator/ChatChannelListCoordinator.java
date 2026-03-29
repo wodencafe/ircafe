@@ -57,7 +57,7 @@ public final class ChatChannelListCoordinator {
   private final Supplier<TargetRef> activeTargetSupplier;
   private final Function<String, String> currentNickLookup;
   private final BiFunction<String, String, String> topicLookup;
-  private final BiFunction<String, String, List<String>> banListSnapshotLookup;
+  private final BiFunction<String, String, ChannelListPanel.BanListSnapshot> banListSnapshotLookup;
   private CompositeDisposable bindDisposables;
 
   private final FlowableProcessor<String> channelListCommandRequests =
@@ -72,7 +72,7 @@ public final class ChatChannelListCoordinator {
       Supplier<TargetRef> activeTargetSupplier,
       Function<String, String> currentNickLookup,
       BiFunction<String, String, String> topicLookup,
-      BiFunction<String, String, List<String>> banListSnapshotLookup) {
+      BiFunction<String, String, ChannelListPanel.BanListSnapshot> banListSnapshotLookup) {
     this(
         channelListPanel,
         serverTree,
@@ -96,7 +96,7 @@ public final class ChatChannelListCoordinator {
       Supplier<TargetRef> activeTargetSupplier,
       Function<String, String> currentNickLookup,
       BiFunction<String, String, String> topicLookup,
-      BiFunction<String, String, List<String>> banListSnapshotLookup,
+      BiFunction<String, String, ChannelListPanel.BanListSnapshot> banListSnapshotLookup,
       IrcClientService irc,
       ModeRoutingPort modeRoutingState) {
     this.channelListPanel = Objects.requireNonNull(channelListPanel, "channelListPanel");
@@ -401,7 +401,6 @@ public final class ChatChannelListCoordinator {
     String sid = Objects.toString(target.serverId(), "").trim();
     String channel = normalizeChannelName(target.target());
     if (sid.isBlank() || channel.isEmpty()) return;
-    serverTree.selectTarget(TargetRef.channelList(sid));
     refreshManagedChannelsCard(sid);
     channelListPanel.showChannelDetails(sid, channel);
   }

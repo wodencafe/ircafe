@@ -63,38 +63,42 @@ public final class ChatBanListCoordinator {
     channelListPanel.refreshOpenChannelDetails(sid, ch);
   }
 
-  public List<String> snapshot(String serverId, String channel) {
+  public ChannelListPanel.BanListSnapshot snapshot(String serverId, String channel) {
     String sid = Objects.toString(serverId, "").trim();
     String ch = normalizeChannelName(channel);
-    if (sid.isEmpty() || ch.isEmpty()) return List.of();
+    if (sid.isEmpty() || ch.isEmpty()) return ChannelListPanel.BanListSnapshot.empty();
 
     Map<String, ArrayList<BanListEntry>> byChannel = entriesByServer.get(sid);
     ArrayList<BanListEntry> entries = byChannel == null ? null : byChannel.get(ch);
+    String summary = summaryByServer.getOrDefault(sid, Map.of()).getOrDefault(ch, "").trim();
     if (entries == null || entries.isEmpty()) {
-      return List.of();
+      return summary.isEmpty()
+          ? ChannelListPanel.BanListSnapshot.empty()
+          : new ChannelListPanel.BanListSnapshot(List.of(), summary);
     }
 
-    ArrayList<String> out = new ArrayList<>(entries.size() + 1);
+    ArrayList<ChannelListPanel.BanListEntryRow> out = new ArrayList<>(entries.size());
     for (BanListEntry entry : entries) {
       if (entry == null) continue;
-      StringBuilder line = new StringBuilder(entry.mask());
-      String by = Objects.toString(entry.setBy(), "").trim();
-      if (!by.isEmpty()) line.append("  |  set by ").append(by);
-      if (entry.setAtEpochSeconds() != null && entry.setAtEpochSeconds().longValue() > 0L) {
-        try {
-          line.append("  |  ").append(Instant.ofEpochSecond(entry.setAtEpochSeconds().longValue()));
-        } catch (Exception ignored) {
-        }
-      }
-      out.add(line.toString());
+      out.add(
+          new ChannelListPanel.BanListEntryRow(
+              entry.mask(), entry.setBy(), formatSetAt(entry.setAtEpochSeconds())));
     }
 
-    if (out.isEmpty()) {
-      return List.of();
+    return out.isEmpty()
+        ? (summary.isEmpty()
+            ? ChannelListPanel.BanListSnapshot.empty()
+            : new ChannelListPanel.BanListSnapshot(List.of(), summary))
+        : new ChannelListPanel.BanListSnapshot(out, summary);
+  }
+
+  private static String formatSetAt(Long setAtEpochSeconds) {
+    if (setAtEpochSeconds == null || setAtEpochSeconds.longValue() <= 0L) return "";
+    try {
+      return Instant.ofEpochSecond(setAtEpochSeconds.longValue()).toString();
+    } catch (Exception ignored) {
+      return "";
     }
-    String summary = summaryByServer.getOrDefault(sid, Map.of()).getOrDefault(ch, "").trim();
-    if (!summary.isEmpty()) out.add(summary);
-    return List.copyOf(out);
   }
 
   private static String normalizeChannelName(String channel) {

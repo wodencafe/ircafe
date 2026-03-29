@@ -340,11 +340,11 @@ public final class ServerTreeTargetNodeMenuBuilder {
     pinToggle.addActionListener(ev -> context.setChannelPinned(ref, !pinned));
     menu.add(pinToggle);
 
-    JMenu channelModes = new JMenu("Channel Modes");
+    JMenuItem channelDetails = new JMenuItem("Channel Details...");
+    channelDetails.addActionListener(ev -> context.openChannelModeDetails(ref));
+    menu.add(channelDetails);
 
-    JMenuItem modeDetails = new JMenuItem("View Details...");
-    modeDetails.addActionListener(ev -> context.openChannelModeDetails(ref));
-    channelModes.add(modeDetails);
+    JMenu channelModes = new JMenu("Channel Modes");
 
     JMenuItem refreshModes = new JMenuItem("Refresh Modes");
     refreshModes.addActionListener(ev -> context.requestChannelModeRefresh(ref));

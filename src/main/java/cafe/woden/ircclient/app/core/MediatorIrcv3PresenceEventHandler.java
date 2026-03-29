@@ -177,7 +177,7 @@ public class MediatorIrcv3PresenceEventHandler {
       String state,
       boolean prefEnabled,
       boolean typingAvailable) {
-    if (!log.isInfoEnabled()) {
+    if (!log.isDebugEnabled()) {
       return;
     }
 
@@ -202,7 +202,7 @@ public class MediatorIrcv3PresenceEventHandler {
 
     if (stateChanged || stale || "done".equals(normalizedState)) {
       lastTypingByKey.put(key, new TypingLogState(normalizedState, now));
-      log.info(
+      log.debug(
           "[{}] typing observed: from={} target={} state={} (prefsEnabled={} typingAvailable={})",
           sid,
           nick,
@@ -210,8 +210,8 @@ public class MediatorIrcv3PresenceEventHandler {
           normalizedState,
           prefEnabled,
           typingAvailable);
-    } else if (log.isDebugEnabled()) {
-      log.debug(
+    } else if (log.isTraceEnabled()) {
+      log.trace(
           "[{}] typing observed (repeat): from={} target={} state={}",
           sid,
           nick,

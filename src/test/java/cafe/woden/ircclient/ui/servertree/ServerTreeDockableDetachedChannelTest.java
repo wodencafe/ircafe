@@ -169,9 +169,9 @@ class ServerTreeDockableDetachedChannelTest {
 
             JPopupMenu menu = buildPopupMenuForTarget(dockable, chan);
             assertNotNull(menu);
+            assertNotNull(findMenuItem(menu, "Channel Details..."));
             JMenu channelModes = findSubMenu(menu, "Channel Modes");
             assertNotNull(channelModes);
-            assertNotNull(findMenuItem(channelModes, "View Details..."));
             assertNotNull(findMenuItem(channelModes, "Refresh Modes"));
             JMenuItem setModes = findMenuItem(channelModes, "Set Modes...");
             assertNotNull(setModes);
@@ -183,7 +183,7 @@ class ServerTreeDockableDetachedChannelTest {
   }
 
   @Test
-  void channelModesSubmenuEmitsDetailsAndRefreshRequests() throws Exception {
+  void channelContextMenuEmitsDetailsAndRefreshRequests() throws Exception {
     onEdt(
         () -> {
           Disposable detailsSub = null;
@@ -200,13 +200,11 @@ class ServerTreeDockableDetachedChannelTest {
             detailsSub = dockable.channelModeDetailsRequests().subscribe(detailsTarget::set);
             refreshSub = dockable.channelModeRefreshRequests().subscribe(refreshedTarget::set);
 
-            JMenu channelModes =
-                findSubMenu(
-                    Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan)),
-                    "Channel Modes");
+            JPopupMenu menu = Objects.requireNonNull(buildPopupMenuForTarget(dockable, chan));
+            JMenu channelModes = findSubMenu(menu, "Channel Modes");
             assertNotNull(channelModes);
 
-            JMenuItem detailsItem = findMenuItem(channelModes, "View Details...");
+            JMenuItem detailsItem = findMenuItem(menu, "Channel Details...");
             assertNotNull(detailsItem);
             detailsItem.doClick();
             assertEquals(chan, detailsTarget.get());
