@@ -48,10 +48,16 @@ public class BackendUiProfileProvider {
     return backendMode.supportsQuasselCoreCommands(sid);
   }
 
-  public String backendDisplayNameForServer(String serverId) {
+  public String backendIdForServer(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return "";
-    return backendDisplayName(backendMode.backendIdForServer(sid));
+    return BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendMode.backendIdForServer(sid));
+  }
+
+  public String backendDisplayNameForServer(String serverId) {
+    String backendId = backendIdForServer(serverId);
+    if (backendId.isEmpty()) return "";
+    return backendDisplayName(backendId);
   }
 
   public String backendDisplayName(String backendId) {

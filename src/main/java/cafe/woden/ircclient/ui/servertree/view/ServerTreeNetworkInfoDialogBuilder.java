@@ -47,6 +47,10 @@ public final class ServerTreeNetworkInfoDialogBuilder {
 
     boolean desiredOnlineForServer(String serverId);
 
+    String backendIdForServer(String serverId);
+
+    String backendDisplayNameForServer(String serverId);
+
     String prettyServerLabel(String serverId);
 
     String connectionDiagnosticsTipForServer(String serverId);
@@ -62,11 +66,15 @@ public final class ServerTreeNetworkInfoDialogBuilder {
   public static Context context(
       Function<String, ConnectionState> connectionStateForServer,
       Predicate<String> desiredOnlineForServer,
+      Function<String, String> backendIdForServer,
+      Function<String, String> backendDisplayNameForServer,
       Function<String, String> prettyServerLabel,
       Function<String, String> connectionDiagnosticsTipForServer,
       CapabilityToggleRequester capabilityToggleRequester) {
     Objects.requireNonNull(connectionStateForServer, "connectionStateForServer");
     Objects.requireNonNull(desiredOnlineForServer, "desiredOnlineForServer");
+    Objects.requireNonNull(backendIdForServer, "backendIdForServer");
+    Objects.requireNonNull(backendDisplayNameForServer, "backendDisplayNameForServer");
     Objects.requireNonNull(prettyServerLabel, "prettyServerLabel");
     Objects.requireNonNull(connectionDiagnosticsTipForServer, "connectionDiagnosticsTipForServer");
     Objects.requireNonNull(capabilityToggleRequester, "capabilityToggleRequester");
@@ -79,6 +87,16 @@ public final class ServerTreeNetworkInfoDialogBuilder {
       @Override
       public boolean desiredOnlineForServer(String serverId) {
         return desiredOnlineForServer.test(serverId);
+      }
+
+      @Override
+      public String backendIdForServer(String serverId) {
+        return backendIdForServer.apply(serverId);
+      }
+
+      @Override
+      public String backendDisplayNameForServer(String serverId) {
+        return backendDisplayNameForServer.apply(serverId);
       }
 
       @Override
@@ -204,7 +222,11 @@ public final class ServerTreeNetworkInfoDialogBuilder {
                 + "    Nick: "
                 + nick
                 + "    Intent: "
-                + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired)),
+                + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired)
+                + "    Backend: "
+                + renderBackendInfo(
+                    context.backendDisplayNameForServer(serverId),
+                    context.backendIdForServer(serverId))),
         "span 2, growx");
     return panel;
   }
@@ -220,31 +242,46 @@ public final class ServerTreeNetworkInfoDialogBuilder {
   private JPanel buildConnectionInfoPanel(String serverId, ServerRuntimeMetadata metadata) {
     JPanel panel = new JPanel(new MigLayout("insets 8, fillx, wrap 2", "[right][grow,fill]"));
     panel.setBorder(BorderFactory.createTitledBorder("Connection"));
+    for (InfoRow row : connectionInfoRows(context, serverId, metadata)) {
+      addInfoRow(panel, row.key(), row.value());
+    }
+    return panel;
+  }
 
+  static List<InfoRow> connectionInfoRows(
+      Context context, String serverId, ServerRuntimeMetadata metadata) {
+    Objects.requireNonNull(context, "context");
+    ServerRuntimeMetadata meta = metadata == null ? new ServerRuntimeMetadata() : metadata;
+    ArrayList<InfoRow> rows = new ArrayList<>();
     ConnectionState state = context.connectionStateForServer(serverId);
     boolean desired = context.desiredOnlineForServer(serverId);
 
-    addInfoRow(panel, "Network ID", serverId);
-    addInfoRow(panel, "Display", context.prettyServerLabel(serverId));
-    addInfoRow(panel, "State", ServerTreeConnectionStateViewModel.stateLabel(state));
-    addInfoRow(panel, "Intent", ServerTreeConnectionStateViewModel.desiredIntentLabel(desired));
-    addInfoRow(
-        panel,
-        "Connected endpoint",
-        formatConnectedEndpoint(metadata.connectedHost, metadata.connectedPort));
-    addInfoRow(panel, "Current nick", fallbackInfoValue(metadata.nick));
-    addInfoRow(
-        panel,
-        "Connected at",
-        metadata.connectedAt == null
-            ? "(unknown)"
-            : SERVER_META_TIME_FMT.format(metadata.connectedAt));
+    rows.add(new InfoRow("Network ID", serverId));
+    rows.add(new InfoRow("Display", context.prettyServerLabel(serverId)));
+    rows.add(
+        new InfoRow(
+            "Backend",
+            renderBackendInfo(
+                context.backendDisplayNameForServer(serverId),
+                context.backendIdForServer(serverId))));
+    rows.add(new InfoRow("State", ServerTreeConnectionStateViewModel.stateLabel(state)));
+    rows.add(new InfoRow("Intent", ServerTreeConnectionStateViewModel.desiredIntentLabel(desired)));
+    rows.add(
+        new InfoRow(
+            "Connected endpoint", formatConnectedEndpoint(meta.connectedHost, meta.connectedPort)));
+    rows.add(new InfoRow("Current nick", fallbackInfoValue(meta.nick)));
+    rows.add(
+        new InfoRow(
+            "Connected at",
+            meta.connectedAt == null
+                ? "(unknown)"
+                : SERVER_META_TIME_FMT.format(meta.connectedAt)));
 
     String diagnostics = context.connectionDiagnosticsTipForServer(serverId).trim();
     if (!diagnostics.isEmpty()) {
-      addInfoRow(panel, "Diagnostics", diagnostics);
+      rows.add(new InfoRow("Diagnostics", diagnostics));
     }
-    return panel;
+    return List.copyOf(rows);
   }
 
   private JPanel buildServerInfoPanel(ServerRuntimeMetadata metadata) {
@@ -447,6 +484,8 @@ public final class ServerTreeNetworkInfoDialogBuilder {
   }
 
   static record CapabilityFeatureStatus(String feature, String status, String detail) {}
+
+  static record InfoRow(String key, String value) {}
 
   private record CapabilityFeatureDefinition(
       String label, List<String> requiredAll, List<String> requiredAny) {}
@@ -655,6 +694,18 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     JLabel valueLabel = new JLabel(fallbackInfoValue(value));
     valueLabel.setToolTipText(fallbackInfoValue(value));
     panel.add(valueLabel, "growx, wrap");
+  }
+
+  private static String renderBackendInfo(String backendDisplayName, String backendId) {
+    String displayName = Objects.toString(backendDisplayName, "").trim();
+    String id = Objects.toString(backendId, "").trim();
+    if (displayName.isEmpty()) {
+      return fallbackInfoValue(id);
+    }
+    if (id.isEmpty() || displayName.equalsIgnoreCase(id)) {
+      return displayName;
+    }
+    return displayName + " (" + id + ")";
   }
 
   private static String fallbackInfoValue(String value) {

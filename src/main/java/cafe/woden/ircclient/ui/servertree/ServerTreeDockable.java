@@ -570,6 +570,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             ServerTreeNetworkInfoDialogBuilder.context(
                 uiHooks::connectionStateForServer,
                 runtimeState::desiredOnlineForServer,
+                serverId ->
+                    backendUiProfileProvider == null
+                        ? ""
+                        : backendUiProfileProvider.backendIdForServer(serverId),
+                serverId ->
+                    backendUiProfileProvider == null
+                        ? ""
+                        : backendUiProfileProvider.backendDisplayNameForServer(serverId),
                 serverLabelPolicy::prettyServerLabel,
                 runtimeState::connectionDiagnosticsTipForServer,
                 (serverId, capability, enable) ->

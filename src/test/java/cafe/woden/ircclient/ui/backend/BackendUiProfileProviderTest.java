@@ -77,4 +77,14 @@ class BackendUiProfileProviderTest {
     verify(backendMode).backendIdForServer("plugin");
     verify(backendMetadata).backendDisplayName("plugin-backend");
   }
+
+  @Test
+  void backendIdForServerNormalizesBackendIdFromPort() {
+    IrcBackendModePort backendMode = mock(IrcBackendModePort.class);
+    when(backendMode.backendIdForServer("plugin")).thenReturn(" Plugin-Backend ");
+    BackendUiProfileProvider provider = new BackendUiProfileProvider(backendMode);
+
+    assertEquals("plugin-backend", provider.backendIdForServer(" plugin "));
+    verify(backendMode).backendIdForServer("plugin");
+  }
 }
