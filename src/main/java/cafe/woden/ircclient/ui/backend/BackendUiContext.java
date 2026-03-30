@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.backend;
 
 import cafe.woden.ircclient.app.api.BackendUiMode;
-import cafe.woden.ircclient.irc.backend.IrcBackendModePort;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -42,11 +41,5 @@ public interface BackendUiContext {
         resolver.apply(Objects.toString(serverId, "").trim()) == BackendUiMode.MATRIX
             ? BackendMode.MATRIX
             : BackendMode.IRC;
-  }
-
-  @Deprecated(forRemoval = false)
-  static BackendUiContext fromBackendModePort(IrcBackendModePort backendMode) {
-    if (backendMode == null) return ircOnly();
-    return fromMatrixServerPredicate(backendMode::isMatrixBackendServer);
   }
 }

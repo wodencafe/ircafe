@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.backend;
 
 import cafe.woden.ircclient.app.api.BackendUiMode;
-import cafe.woden.ircclient.irc.backend.IrcBackendModePort;
 import java.util.Objects;
 import java.util.function.Function;
 
@@ -21,12 +20,6 @@ public record BackendUiProfile(String serverId, BackendUiContext backendUiContex
       Function<String, BackendUiMode> uiModeResolver, String serverId) {
     return new BackendUiProfile(
         serverId, BackendUiContext.fromBackendUiModeResolver(uiModeResolver));
-  }
-
-  @Deprecated(forRemoval = false)
-  public static BackendUiProfile fromBackendModePort(
-      IrcBackendModePort backendModePort, String serverId) {
-    return new BackendUiProfile(serverId, BackendUiContext.fromBackendModePort(backendModePort));
   }
 
   public BackendUiProfile withServerId(String serverId) {

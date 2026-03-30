@@ -129,8 +129,7 @@ class BackendRoutingIrcClientServiceTest {
         new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, matrixBackend));
 
     assertEquals("matrix", service.backendIdForServer("matrix"));
-    assertTrue(service.isMatrixBackendServer("matrix"));
-    assertFalse(service.isMatrixBackendServer("irc"));
+    assertEquals("irc", service.backendIdForServer("irc"));
   }
 
   @Test
