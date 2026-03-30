@@ -1060,7 +1060,8 @@ public class ServerEditorDialog extends JDialog {
 
   private void updateAuthModeUi() {
     AuthMode mode = selectedAuthMode();
-    if ((isQuasselBackendSelected() || isMatrixBackendSelected()) && mode != AuthMode.DISABLED) {
+    if ((selectedBackendSupportsQuasselCoreCommands() || selectedBackendSupportsMatrixAuth())
+        && mode != AuthMode.DISABLED) {
       mode = AuthMode.DISABLED;
       authModeCombo.setSelectedItem(mode);
     }
@@ -1085,11 +1086,11 @@ public class ServerEditorDialog extends JDialog {
     return backendProfiles.profileForBackendId(backendId);
   }
 
-  private boolean isQuasselBackendSelected() {
+  private boolean selectedBackendSupportsQuasselCoreCommands() {
     return selectedBackendProfile().supportsQuasselCoreCommands();
   }
 
-  private boolean isMatrixBackendSelected() {
+  private boolean selectedBackendSupportsMatrixAuth() {
     return selectedBackendProfile().matrixAuthSupported();
   }
 
@@ -1117,16 +1118,16 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private void updateMatrixAuthUi() {
-    boolean matrixBackend = isMatrixBackendSelected();
+    boolean matrixAuthBackend = selectedBackendSupportsMatrixAuth();
     boolean directAuthEnabled = selectedBackendProfile().directAuthEnabled();
 
     authModeLabel.setVisible(directAuthEnabled);
     authModeCombo.setVisible(directAuthEnabled);
-    authModeCardPanel.setVisible(!matrixBackend);
-    matrixAuthModeLabel.setVisible(matrixBackend);
-    matrixAuthModeCombo.setVisible(matrixBackend);
-    matrixAuthHintLabel.setVisible(matrixBackend);
-    if (!matrixBackend) {
+    authModeCardPanel.setVisible(!matrixAuthBackend);
+    matrixAuthModeLabel.setVisible(matrixAuthBackend);
+    matrixAuthModeCombo.setVisible(matrixAuthBackend);
+    matrixAuthHintLabel.setVisible(matrixAuthBackend);
+    if (!matrixAuthBackend) {
       matrixAuthUserLabel.setVisible(false);
       matrixAuthUserField.setVisible(false);
       matrixAuthUserField.setEnabled(false);
@@ -1291,8 +1292,8 @@ public class ServerEditorDialog extends JDialog {
   private void updateValidation() {
     boolean ok = true;
     ServerEditorBackendProfile profile = selectedBackendProfile();
-    boolean quasselBackend = profile.supportsQuasselCoreCommands();
-    boolean matrixBackend = profile.matrixAuthSupported();
+    boolean quasselCommandBackend = profile.supportsQuasselCoreCommands();
+    boolean matrixAuthBackend = profile.matrixAuthSupported();
 
     boolean idBad = trim(idField.getText()).isEmpty();
     setError(idField, idBad);
@@ -1308,13 +1309,13 @@ public class ServerEditorDialog extends JDialog {
 
     MatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
     boolean matrixPasswordMode =
-        matrixBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
-    boolean matrixCredentialBad = matrixBackend && trim(serverPasswordValue()).isEmpty();
+        matrixAuthBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
+    boolean matrixCredentialBad = matrixAuthBackend && trim(serverPasswordValue()).isEmpty();
     setError(serverPassField, matrixCredentialBad);
     ok &= !matrixCredentialBad;
 
     boolean matrixAuthUserBad = matrixPasswordMode && trim(matrixAuthUserField.getText()).isEmpty();
-    if (matrixBackend) {
+    if (matrixAuthBackend) {
       setError(matrixAuthUserField, matrixAuthUserBad);
       ok &= !matrixAuthUserBad;
     } else {
@@ -1332,7 +1333,7 @@ public class ServerEditorDialog extends JDialog {
     AuthMode authMode = selectedAuthMode();
 
     // SASL validation
-    if (quasselBackend || matrixBackend || authMode != AuthMode.SASL) {
+    if (quasselCommandBackend || matrixAuthBackend || authMode != AuthMode.SASL) {
       clearOutline(saslUserField);
       clearOutline(saslPassField);
     } else {
@@ -1371,7 +1372,7 @@ public class ServerEditorDialog extends JDialog {
     }
 
     // NickServ validation
-    if (quasselBackend || matrixBackend || authMode != AuthMode.NICKSERV) {
+    if (quasselCommandBackend || matrixAuthBackend || authMode != AuthMode.NICKSERV) {
       clearOutline(nickservServiceField);
       clearOutline(nickservPassField);
     } else {
@@ -1533,15 +1534,15 @@ public class ServerEditorDialog extends JDialog {
     String backendId = selectedBackendId();
     ServerEditorBackendProfile profile = backendProfile(backendId);
 
-    boolean matrixBackend = profile.matrixAuthSupported();
+    boolean matrixAuthBackend = profile.matrixAuthSupported();
 
     boolean tls = tlsBox.isSelected();
     String serverPassword = serverPasswordValue();
     MatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
     boolean matrixPasswordMode =
-        matrixBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
+        matrixAuthBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
     String matrixAuthUser = trim(matrixAuthUserField.getText());
-    if (matrixBackend && trim(serverPassword).isEmpty()) {
+    if (matrixAuthBackend && trim(serverPassword).isEmpty()) {
       throw new IllegalArgumentException(
           matrixPasswordMode ? "Matrix password is required" : "Matrix access token is required");
     }

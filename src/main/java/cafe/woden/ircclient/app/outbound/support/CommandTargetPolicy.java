@@ -63,10 +63,6 @@ public class CommandTargetPolicy {
         .orElse(BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.IRC));
   }
 
-  public boolean isMatrixBackendServer(String serverId) {
-    return backendUiModeForServer(serverId) == BackendUiMode.MATRIX;
-  }
-
   public boolean persistsJoinedChannelsLocally(String serverId) {
     String backendId = backendIdForServer(serverId);
     if (backendExtensionCatalog == null) {
@@ -81,7 +77,7 @@ public class CommandTargetPolicy {
     String raw = normalize(target);
     if (raw.isEmpty()) return false;
     if (raw.startsWith("#") || raw.startsWith("&")) return true;
-    return isMatrixBackendServer(serverId) && looksLikeMatrixRoomId(raw);
+    return backendUiModeForServer(serverId) == BackendUiMode.MATRIX && looksLikeMatrixRoomId(raw);
   }
 
   public boolean isChannelLikeTarget(TargetRef target) {
