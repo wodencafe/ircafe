@@ -21,6 +21,11 @@ final class ServerEditorConnectionPolicy {
       throw new IllegalArgumentException("Server ID is required");
     }
 
+    ServerEndpoint endpoint = parseEndpoint(host, portText);
+    return new ServerConnection(resolvedId, endpoint.host(), endpoint.port());
+  }
+
+  static ServerEndpoint parseEndpoint(String host, String portText) {
     String resolvedHost = trim(host);
     if (resolvedHost.isEmpty()) {
       throw new IllegalArgumentException("Host is required");
@@ -36,7 +41,7 @@ final class ServerEditorConnectionPolicy {
       throw new IllegalArgumentException("Port must be 1-65535");
     }
 
-    return new ServerConnection(resolvedId, resolvedHost, resolvedPort);
+    return new ServerEndpoint(resolvedHost, resolvedPort);
   }
 
   static String validateAndNormalizeNick(ServerEditorBackendProfile profile, String nick) {
@@ -63,6 +68,8 @@ final class ServerEditorConnectionPolicy {
   }
 
   record ConnectionValidation(boolean idBad, boolean hostBad, boolean portBad, boolean nickBad) {}
+
+  record ServerEndpoint(String host, int port) {}
 
   record ServerConnection(String id, String host, int port) {}
 }

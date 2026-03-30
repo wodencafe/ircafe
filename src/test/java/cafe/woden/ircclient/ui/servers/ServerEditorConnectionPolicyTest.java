@@ -51,6 +51,21 @@ class ServerEditorConnectionPolicyTest {
   }
 
   @Test
+  void parseEndpointValidatesHostAndPortWithoutServerId() {
+    ServerEditorConnectionPolicy.ServerEndpoint endpoint =
+        ServerEditorConnectionPolicy.parseEndpoint(" irc.libera.chat ", " 6697 ");
+
+    assertEquals("irc.libera.chat", endpoint.host());
+    assertEquals(6697, endpoint.port());
+
+    IllegalArgumentException hostError =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> ServerEditorConnectionPolicy.parseEndpoint(" ", "6697"));
+    assertEquals("Host is required", hostError.getMessage());
+  }
+
+  @Test
   void validateAndNormalizeNickUsesBackendRequirement() {
     String optionalNick =
         ServerEditorConnectionPolicy.validateAndNormalizeNick(

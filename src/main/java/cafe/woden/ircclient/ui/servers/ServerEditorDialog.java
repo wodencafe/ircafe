@@ -526,32 +526,20 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private void updateProxyEnabled() {
-    boolean override = proxyOverrideBox.isSelected();
     IrcProperties.Proxy global = NetProxyContext.normalize(NetProxyContext.settings());
+    ServerEditorProxyUiPolicy.ProxyUiState state =
+        ServerEditorProxyUiPolicy.uiState(
+            proxyOverrideBox.isSelected(), proxyEnabledBox.isSelected(), global);
 
-    if (!override) {
-      proxyHintLabel.setText(
-          global.enabled()
-              ? "Inheriting global proxy from Preferences (enabled: "
-                  + global.host()
-                  + ":"
-                  + global.port()
-                  + ")"
-              : "Inheriting global proxy from Preferences (disabled)");
-    } else {
-      proxyHintLabel.setText("Override the global proxy for this server.\n");
-    }
-
-    proxyEnabledBox.setEnabled(override);
-
-    boolean proxyDetailsEnabled = override && proxyEnabledBox.isSelected();
-    proxyHostField.setEnabled(proxyDetailsEnabled);
-    proxyPortField.setEnabled(proxyDetailsEnabled);
-    proxyRemoteDnsBox.setEnabled(proxyDetailsEnabled);
-    proxyUserField.setEnabled(proxyDetailsEnabled);
-    proxyPassField.setEnabled(proxyDetailsEnabled);
-    proxyConnectTimeoutMsField.setEnabled(override);
-    proxyReadTimeoutMsField.setEnabled(override);
+    proxyHintLabel.setText(state.hint());
+    proxyEnabledBox.setEnabled(state.proxyEnabledToggleEnabled());
+    proxyHostField.setEnabled(state.proxyDetailsEnabled());
+    proxyPortField.setEnabled(state.proxyDetailsEnabled());
+    proxyRemoteDnsBox.setEnabled(state.remoteDnsEnabled());
+    proxyUserField.setEnabled(state.proxyDetailsEnabled());
+    proxyPassField.setEnabled(state.proxyDetailsEnabled());
+    proxyConnectTimeoutMsField.setEnabled(state.connectTimeoutEnabled());
+    proxyReadTimeoutMsField.setEnabled(state.readTimeoutEnabled());
 
     proxyTestBtn.setEnabled(true);
 
@@ -566,8 +554,6 @@ public class ServerEditorDialog extends JDialog {
     lastProxyTestOk = null;
     updateValidation();
 
-    final String host = trim(hostField.getText());
-    final String portText = trim(portField.getText());
     final boolean tls = tlsBox.isSelected();
 
     final IrcProperties.Proxy cfg;
@@ -580,30 +566,15 @@ public class ServerEditorDialog extends JDialog {
           this, ex.getMessage(), "Invalid proxy settings", JOptionPane.ERROR_MESSAGE);
       return;
     }
-
-    int port;
+    final ServerEditorConnectionPolicy.ServerEndpoint endpoint;
     try {
-      port = Integer.parseInt(portText);
-    } catch (Exception e) {
+      endpoint =
+          ServerEditorConnectionPolicy.parseEndpoint(hostField.getText(), portField.getText());
+    } catch (IllegalArgumentException ex) {
       proxyStatusLabel.setText(" ");
       proxyTestBtn.setEnabled(true);
       JOptionPane.showMessageDialog(
-          this, "Port must be a number", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
-      return;
-    }
-
-    if (host.isBlank()) {
-      proxyStatusLabel.setText(" ");
-      proxyTestBtn.setEnabled(true);
-      JOptionPane.showMessageDialog(
-          this, "Host is required", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
-      return;
-    }
-    if (port <= 0 || port > 65535) {
-      proxyStatusLabel.setText(" ");
-      proxyTestBtn.setEnabled(true);
-      JOptionPane.showMessageDialog(
-          this, "Port must be 1-65535", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
+          this, ex.getMessage(), "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
       return;
     }
 
@@ -612,7 +583,7 @@ public class ServerEditorDialog extends JDialog {
       protected TestResult doInBackground() {
         long start = System.nanoTime();
         try {
-          testConnect(host, port, tls, cfg);
+          testConnect(endpoint.host(), endpoint.port(), tls, cfg);
           long elapsedMs = Duration.ofNanos(System.nanoTime() - start).toMillis();
           return TestResult.ok(elapsedMs);
         } catch (Exception e) {
@@ -671,31 +642,19 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private IrcProperties.Proxy resolveProxyForTest() {
-    boolean override = proxyOverrideBox.isSelected();
-    if (!override) {
-      return NetProxyContext.normalize(NetProxyContext.settings());
-    }
-
-    long connectMs = parseLongOrDefault(proxyConnectTimeoutMsField.getText(), 20_000);
-    long readMs = parseLongOrDefault(proxyReadTimeoutMsField.getText(), 30_000);
-
-    if (!proxyEnabledBox.isSelected()) {
-      // Explicitly disable proxy for this server.
-      return new IrcProperties.Proxy(false, "", 0, "", "", true, connectMs, readMs);
-    }
-
-    String host = trim(proxyHostField.getText());
-    int port;
-    try {
-      port = Integer.parseInt(trim(proxyPortField.getText()));
-    } catch (Exception e) {
-      throw new IllegalArgumentException("Proxy port must be a number");
-    }
-    boolean remoteDns = proxyRemoteDnsBox.isSelected();
-    String user = trim(proxyUserField.getText());
-    String pass = new String(proxyPassField.getPassword());
-
-    return new IrcProperties.Proxy(true, host, port, user, pass, remoteDns, connectMs, readMs);
+    IrcProperties.Proxy global = NetProxyContext.normalize(NetProxyContext.settings());
+    IrcProperties.Proxy override =
+        ServerEditorProxyBuildPolicy.buildOverride(
+            proxyOverrideBox.isSelected(),
+            proxyEnabledBox.isSelected(),
+            proxyHostField.getText(),
+            proxyPortField.getText(),
+            proxyUserField.getText(),
+            new String(proxyPassField.getPassword()),
+            proxyRemoteDnsBox.isSelected(),
+            proxyConnectTimeoutMsField.getText(),
+            proxyReadTimeoutMsField.getText());
+    return override != null ? override : global;
   }
 
   private static void testConnect(String host, int port, boolean tls, IrcProperties.Proxy cfg)
