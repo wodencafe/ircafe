@@ -71,43 +71,9 @@ public class ServerEditorDialog extends JDialog {
   private final JLabel loginLabel = new JLabel("Login/Ident");
   private final JLabel realNameLabel = new JLabel("Real name");
 
-  private enum AuthMode {
-    DISABLED("Disabled"),
-    SASL("SASL"),
-    NICKSERV("NickServ");
-
-    private final String label;
-
-    AuthMode(String label) {
-      this.label = label;
-    }
-
-    @Override
-    public String toString() {
-      return label;
-    }
-  }
-
-  private enum MatrixAuthMode {
-    ACCESS_TOKEN("Access token"),
-    USERNAME_PASSWORD("Username + password");
-
-    private final String label;
-
-    MatrixAuthMode(String label) {
-      this.label = label;
-    }
-
-    @Override
-    public String toString() {
-      return label;
-    }
-  }
-
   private static final String AUTH_CARD_DISABLED = "auth-disabled";
   private static final String AUTH_CARD_SASL = "auth-sasl";
   private static final String AUTH_CARD_NICKSERV = "auth-nickserv";
-  private static final String MATRIX_PASSWORD_AUTH_MECHANISM = "MATRIX_PASSWORD";
   private static final String AUTH_DISABLED_HINT_TEXT =
       "No authentication on connect. Use this for networks that don't require account auth.";
   private static final String SASL_CONTINUE_ON_FAILURE_TEXT =
@@ -115,16 +81,21 @@ public class ServerEditorDialog extends JDialog {
   private static final String NICKSERV_DELAY_JOIN_TEXT =
       "Delay channel auto-join until identification succeeds";
 
-  private final JComboBox<AuthMode> authModeCombo =
-      new JComboBox<>(new AuthMode[] {AuthMode.DISABLED, AuthMode.SASL, AuthMode.NICKSERV});
+  private final JComboBox<ServerEditorAuthMode> authModeCombo =
+      new JComboBox<>(
+          new ServerEditorAuthMode[] {
+            ServerEditorAuthMode.DISABLED, ServerEditorAuthMode.SASL, ServerEditorAuthMode.NICKSERV
+          });
   private final JLabel authModeLabel = new JLabel("Method");
   private final JPanel authModeCardPanel = new JPanel(new CardLayout());
   private final JLabel authDisabledHintLabel = new JLabel();
   private final JLabel matrixAuthModeLabel = new JLabel("Matrix auth");
   private final JLabel matrixAuthUserLabel = new JLabel("Username");
-  private final JComboBox<MatrixAuthMode> matrixAuthModeCombo =
+  private final JComboBox<ServerEditorMatrixAuthMode> matrixAuthModeCombo =
       new JComboBox<>(
-          new MatrixAuthMode[] {MatrixAuthMode.ACCESS_TOKEN, MatrixAuthMode.USERNAME_PASSWORD});
+          new ServerEditorMatrixAuthMode[] {
+            ServerEditorMatrixAuthMode.ACCESS_TOKEN, ServerEditorMatrixAuthMode.USERNAME_PASSWORD
+          });
   private final JTextField matrixAuthUserField = new JTextField();
   private final JLabel matrixAuthHintLabel = new JLabel();
 
@@ -242,8 +213,8 @@ public class ServerEditorDialog extends JDialog {
           }
         });
     // Keep combo sizing stable so short selections do not collapse Auth-tab field widths.
-    authModeCombo.setPrototypeDisplayValue(AuthMode.NICKSERV);
-    matrixAuthModeCombo.setPrototypeDisplayValue(MatrixAuthMode.USERNAME_PASSWORD);
+    authModeCombo.setPrototypeDisplayValue(ServerEditorAuthMode.NICKSERV);
+    matrixAuthModeCombo.setPrototypeDisplayValue(ServerEditorMatrixAuthMode.USERNAME_PASSWORD);
     saslMechanism.setPrototypeDisplayValue("ECDSA-NIST256P-CHALLENGE");
     nickservDelayJoinBox.setSelected(true);
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
@@ -307,9 +278,10 @@ public class ServerEditorDialog extends JDialog {
                 || seed.nickserv().delayJoinUntilIdentified());
       }
       setAuthMode(seedAuthMode(seed));
-      setMatrixAuthMode(seedMatrixAuthMode(seed));
-      if (backendProfile(seed.backendId()).matrixAuthSupported()
-          && isMatrixPasswordAuthMode(seed.sasl())) {
+      ServerEditorBackendProfile seedProfile = backendProfile(seed.backendId());
+      setMatrixAuthMode(ServerEditorAuthPolicy.seedMatrixAuthMode(seedProfile, seed));
+      if (seedProfile.matrixAuthSupported()
+          && ServerEditorAuthPolicy.isMatrixPasswordAuthMode(seed.sasl())) {
         matrixAuthUserField.setText(Objects.toString(seed.sasl().username(), ""));
         serverPassField.setText(Objects.toString(seed.sasl().password(), ""));
       }
@@ -327,8 +299,8 @@ public class ServerEditorDialog extends JDialog {
       tlsBox.setSelected(true);
       portField.setText("6697");
       portAuto = true;
-      setAuthMode(AuthMode.DISABLED);
-      setMatrixAuthMode(MatrixAuthMode.ACCESS_TOKEN);
+      setAuthMode(ServerEditorAuthMode.DISABLED);
+      setMatrixAuthMode(ServerEditorMatrixAuthMode.ACCESS_TOKEN);
 
       seedProxy(null);
     }
@@ -1005,51 +977,37 @@ public class ServerEditorDialog extends JDialog {
     return p;
   }
 
-  private AuthMode selectedAuthMode() {
+  private ServerEditorAuthMode selectedAuthMode() {
     Object selected = authModeCombo.getSelectedItem();
-    if (selected instanceof AuthMode mode) return mode;
-    return AuthMode.DISABLED;
+    if (selected instanceof ServerEditorAuthMode mode) return mode;
+    return ServerEditorAuthMode.DISABLED;
   }
 
-  private void setAuthMode(AuthMode mode) {
-    authModeCombo.setSelectedItem(mode == null ? AuthMode.DISABLED : mode);
+  private void setAuthMode(ServerEditorAuthMode mode) {
+    authModeCombo.setSelectedItem(mode == null ? ServerEditorAuthMode.DISABLED : mode);
   }
 
-  private MatrixAuthMode selectedMatrixAuthMode() {
+  private ServerEditorMatrixAuthMode selectedMatrixAuthMode() {
     Object selected = matrixAuthModeCombo.getSelectedItem();
-    if (selected instanceof MatrixAuthMode mode) return mode;
-    return MatrixAuthMode.ACCESS_TOKEN;
+    if (selected instanceof ServerEditorMatrixAuthMode mode) return mode;
+    return ServerEditorMatrixAuthMode.ACCESS_TOKEN;
   }
 
-  private void setMatrixAuthMode(MatrixAuthMode mode) {
-    matrixAuthModeCombo.setSelectedItem(mode == null ? MatrixAuthMode.ACCESS_TOKEN : mode);
+  private void setMatrixAuthMode(ServerEditorMatrixAuthMode mode) {
+    matrixAuthModeCombo.setSelectedItem(
+        mode == null ? ServerEditorMatrixAuthMode.ACCESS_TOKEN : mode);
   }
 
-  private static AuthMode seedAuthMode(IrcProperties.Server seed) {
-    if (seed == null) return AuthMode.DISABLED;
+  private static ServerEditorAuthMode seedAuthMode(IrcProperties.Server seed) {
+    if (seed == null) return ServerEditorAuthMode.DISABLED;
     boolean saslEnabled = seed.sasl() != null && seed.sasl().enabled();
     boolean nickservEnabled = seed.nickserv() != null && seed.nickserv().enabled();
-    if (saslEnabled) return AuthMode.SASL;
-    if (nickservEnabled) return AuthMode.NICKSERV;
-    return AuthMode.DISABLED;
+    if (saslEnabled) return ServerEditorAuthMode.SASL;
+    if (nickservEnabled) return ServerEditorAuthMode.NICKSERV;
+    return ServerEditorAuthMode.DISABLED;
   }
 
-  private MatrixAuthMode seedMatrixAuthMode(IrcProperties.Server seed) {
-    if (seed == null || !backendProfile(seed.backendId()).matrixAuthSupported()) {
-      return MatrixAuthMode.ACCESS_TOKEN;
-    }
-    return isMatrixPasswordAuthMode(seed.sasl())
-        ? MatrixAuthMode.USERNAME_PASSWORD
-        : MatrixAuthMode.ACCESS_TOKEN;
-  }
-
-  private static boolean isMatrixPasswordAuthMode(IrcProperties.Server.Sasl sasl) {
-    if (sasl == null || !sasl.enabled()) return false;
-    String mechanism = Objects.toString(sasl.mechanism(), "").trim();
-    return MATRIX_PASSWORD_AUTH_MECHANISM.equalsIgnoreCase(mechanism);
-  }
-
-  private void showAuthCard(AuthMode mode) {
+  private void showAuthCard(ServerEditorAuthMode mode) {
     CardLayout card = (CardLayout) authModeCardPanel.getLayout();
     switch (mode) {
       case SASL -> card.show(authModeCardPanel, AUTH_CARD_SASL);
@@ -1059,10 +1017,9 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private void updateAuthModeUi() {
-    AuthMode mode = selectedAuthMode();
-    if ((selectedBackendSupportsQuasselCoreCommands() || selectedBackendSupportsMatrixAuth())
-        && mode != AuthMode.DISABLED) {
-      mode = AuthMode.DISABLED;
+    ServerEditorAuthMode mode =
+        ServerEditorAuthPolicy.effectiveAuthMode(selectedBackendProfile(), selectedAuthMode());
+    if (mode != selectedAuthMode()) {
       authModeCombo.setSelectedItem(mode);
     }
     showAuthCard(mode);
@@ -1105,7 +1062,7 @@ public class ServerEditorDialog extends JDialog {
     connectionBackendHintLabel.setText(profile.connectionHint());
     authModeCombo.setEnabled(profile.directAuthEnabled());
     if (!profile.directAuthEnabled()) {
-      authModeCombo.setSelectedItem(AuthMode.DISABLED);
+      authModeCombo.setSelectedItem(ServerEditorAuthMode.DISABLED);
     }
     authDisabledHintLabel.setText(asHtml(profile.authDisabledHint()));
     applyFieldStyle(serverPassField, profile.serverPasswordPlaceholder());
@@ -1141,8 +1098,8 @@ public class ServerEditorDialog extends JDialog {
       return;
     }
 
-    MatrixAuthMode mode = selectedMatrixAuthMode();
-    boolean usernamePassword = mode == MatrixAuthMode.USERNAME_PASSWORD;
+    ServerEditorMatrixAuthMode mode = selectedMatrixAuthMode();
+    boolean usernamePassword = mode == ServerEditorMatrixAuthMode.USERNAME_PASSWORD;
     matrixAuthUserLabel.setVisible(usernamePassword);
     matrixAuthUserField.setVisible(usernamePassword);
     matrixAuthUserField.setEnabled(usernamePassword);
@@ -1168,7 +1125,7 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private void updateSaslEnabled() {
-    boolean en = selectedAuthMode() == AuthMode.SASL;
+    boolean en = selectedAuthMode() == ServerEditorAuthMode.SASL;
     saslMechanism.setEnabled(en);
     saslContinueOnFailureBox.setEnabled(en);
 
@@ -1226,7 +1183,7 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private void updateNickservEnabled() {
-    boolean en = selectedAuthMode() == AuthMode.NICKSERV;
+    boolean en = selectedAuthMode() == ServerEditorAuthMode.NICKSERV;
     nickservServiceField.setEnabled(en);
     nickservPassField.setEnabled(en);
     nickservDelayJoinBox.setEnabled(en);
@@ -1307,9 +1264,9 @@ public class ServerEditorDialog extends JDialog {
     setError(portField, portBad);
     ok &= !portBad;
 
-    MatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
+    ServerEditorMatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
     boolean matrixPasswordMode =
-        matrixAuthBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
+        ServerEditorAuthPolicy.isMatrixPasswordMode(profile, matrixAuthMode);
     boolean matrixCredentialBad = matrixAuthBackend && trim(serverPasswordValue()).isEmpty();
     setError(serverPassField, matrixCredentialBad);
     ok &= !matrixCredentialBad;
@@ -1330,10 +1287,11 @@ public class ServerEditorDialog extends JDialog {
     setError(nickField, nickBad);
     ok &= !nickBad;
 
-    AuthMode authMode = selectedAuthMode();
+    ServerEditorAuthMode authMode =
+        ServerEditorAuthPolicy.effectiveAuthMode(profile, selectedAuthMode());
 
     // SASL validation
-    if (quasselCommandBackend || matrixAuthBackend || authMode != AuthMode.SASL) {
+    if (quasselCommandBackend || matrixAuthBackend || authMode != ServerEditorAuthMode.SASL) {
       clearOutline(saslUserField);
       clearOutline(saslPassField);
     } else {
@@ -1372,7 +1330,7 @@ public class ServerEditorDialog extends JDialog {
     }
 
     // NickServ validation
-    if (quasselCommandBackend || matrixAuthBackend || authMode != AuthMode.NICKSERV) {
+    if (quasselCommandBackend || matrixAuthBackend || authMode != ServerEditorAuthMode.NICKSERV) {
       clearOutline(nickservServiceField);
       clearOutline(nickservPassField);
     } else {
@@ -1534,21 +1492,13 @@ public class ServerEditorDialog extends JDialog {
     String backendId = selectedBackendId();
     ServerEditorBackendProfile profile = backendProfile(backendId);
 
-    boolean matrixAuthBackend = profile.matrixAuthSupported();
-
     boolean tls = tlsBox.isSelected();
     String serverPassword = serverPasswordValue();
-    MatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
-    boolean matrixPasswordMode =
-        matrixAuthBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
+    ServerEditorMatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
+
     String matrixAuthUser = trim(matrixAuthUserField.getText());
-    if (matrixAuthBackend && trim(serverPassword).isEmpty()) {
-      throw new IllegalArgumentException(
-          matrixPasswordMode ? "Matrix password is required" : "Matrix access token is required");
-    }
-    if (matrixPasswordMode && matrixAuthUser.isEmpty()) {
-      throw new IllegalArgumentException("Matrix username is required");
-    }
+    ServerEditorAuthPolicy.validateMatrixCredentials(
+        profile, matrixAuthMode, serverPassword, matrixAuthUser);
     if (containsCrlf(serverPassword)) {
       throw new IllegalArgumentException("Server/Core password must not contain newlines");
     }
@@ -1558,10 +1508,9 @@ public class ServerEditorDialog extends JDialog {
       throw new IllegalArgumentException("Nick is required");
     }
 
-    String login = trim(loginField.getText());
-    if (login.isEmpty() && matrixPasswordMode) login = matrixAuthUser;
-    if (login.isEmpty() && profile.usesNickAsDefaultLogin()) login = nick;
-    if (login.isEmpty()) login = profile.defaultLoginFallback();
+    String login =
+        ServerEditorAuthPolicy.resolveLogin(
+            profile, loginField.getText(), nick, matrixAuthUser, matrixAuthMode);
 
     String realName = trim(realNameField.getText());
     if (realName.isEmpty()) realName = nick.isEmpty() ? login : nick;
@@ -1570,65 +1519,25 @@ public class ServerEditorDialog extends JDialog {
       nick = login;
     }
 
-    AuthMode authMode = selectedAuthMode();
-    if (!profile.directAuthEnabled()) {
-      authMode = AuthMode.DISABLED;
-    }
-
-    IrcProperties.Server.Sasl sasl;
-    if (matrixPasswordMode) {
-      sasl =
-          new IrcProperties.Server.Sasl(
-              true, matrixAuthUser, serverPassword, MATRIX_PASSWORD_AUTH_MECHANISM, true);
-      serverPassword = "";
-    } else if (authMode == AuthMode.SASL) {
-      String u = trim(saslUserField.getText());
-      // JPasswordField stores secret as a char[]. Convert only when building the immutable config
-      // object.
-      String p = new String(saslPassField.getPassword());
-      String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
-
-      String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
-      boolean hasSecret = !p.isBlank();
-      boolean needsUser =
-          switch (mechUpper) {
-            case "EXTERNAL" -> false;
-            case "AUTO" -> hasSecret;
-            default -> true;
-          };
-      boolean needsSecret =
-          switch (mechUpper) {
-            case "EXTERNAL" -> false;
-            case "AUTO" -> false;
-            default -> true;
-          };
-
-      if (needsUser && u.isEmpty()) {
-        throw new IllegalArgumentException("SASL username is required for mechanism " + mechUpper);
-      }
-      if (needsSecret && p.isBlank()) {
-        throw new IllegalArgumentException("SASL secret is required for mechanism " + mechUpper);
-      }
-      sasl =
-          new IrcProperties.Server.Sasl(true, u, p, mech, !saslContinueOnFailureBox.isSelected());
-    } else {
-      sasl = new IrcProperties.Server.Sasl(false, "", "", "PLAIN", null);
-    }
-
-    IrcProperties.Server.Nickserv nickserv;
-    if (authMode == AuthMode.NICKSERV) {
-      String service = trim(nickservServiceField.getText());
-      if (service.isEmpty()) service = "NickServ";
-      String pass = new String(nickservPassField.getPassword());
-      if (pass.isBlank()) {
-        throw new IllegalArgumentException(
-            "NickServ password is required when NickServ is enabled");
-      }
-      nickserv =
-          new IrcProperties.Server.Nickserv(true, pass, service, nickservDelayJoinBox.isSelected());
-    } else {
-      nickserv = new IrcProperties.Server.Nickserv(false, "", "NickServ", true);
-    }
+    ServerEditorAuthPolicy.SaslBuildResult saslConfig =
+        ServerEditorAuthPolicy.buildSasl(
+            profile,
+            selectedAuthMode(),
+            matrixAuthMode,
+            serverPassword,
+            matrixAuthUser,
+            saslUserField.getText(),
+            new String(saslPassField.getPassword()),
+            Objects.toString(saslMechanism.getSelectedItem(), "PLAIN"),
+            saslContinueOnFailureBox.isSelected());
+    serverPassword = saslConfig.serverPassword();
+    IrcProperties.Server.Sasl sasl = saslConfig.sasl();
+    IrcProperties.Server.Nickserv nickserv =
+        ServerEditorAuthPolicy.buildNickserv(
+            saslConfig.authMode(),
+            nickservServiceField.getText(),
+            new String(nickservPassField.getPassword()),
+            nickservDelayJoinBox.isSelected());
 
     List<String> autoJoin = new ArrayList<>();
     for (String line : Objects.toString(autoJoinArea.getText(), "").split("\\R")) {
