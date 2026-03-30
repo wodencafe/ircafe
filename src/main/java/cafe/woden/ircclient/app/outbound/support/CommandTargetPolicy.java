@@ -1,10 +1,17 @@
 package cafe.woden.ircclient.app.outbound.support;
 
+import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
+import cafe.woden.ircclient.app.api.BackendEditorProfileSpec;
+import cafe.woden.ircclient.app.api.BackendUiMode;
+import cafe.woden.ircclient.app.api.BuiltInBackendEditorProfiles;
 import cafe.woden.ircclient.app.outbound.backend.BackendExtensionCatalog;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.model.TargetRef;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.NonNull;
@@ -15,8 +22,8 @@ import org.springframework.stereotype.Component;
 /**
  * Backend-aware target classification for outbound slash-command handling.
  *
- * <p>Matrix room IDs ({@code !roomId:server}) are only treated as channel-like on Matrix-backed
- * servers.
+ * <p>Matrix room IDs ({@code !roomId:server}) are only treated as channel-like on backends whose
+ * profile opts into Matrix-style UI mode.
  */
 @Component
 @ApplicationLayer
@@ -26,16 +33,26 @@ public class CommandTargetPolicy {
 
   @NonNull private final ServerCatalog serverCatalog;
   private final BackendExtensionCatalog backendExtensionCatalog;
+  private final Map<String, BackendUiMode> backendUiModesById;
 
   public CommandTargetPolicy(ServerCatalog serverCatalog) {
-    this(serverCatalog, null);
+    this(serverCatalog, null, AvailableBackendIdsPort.builtInsOnly());
+  }
+
+  @Deprecated(forRemoval = false)
+  public CommandTargetPolicy(
+      ServerCatalog serverCatalog, BackendExtensionCatalog backendExtensionCatalog) {
+    this(serverCatalog, backendExtensionCatalog, AvailableBackendIdsPort.builtInsOnly());
   }
 
   @Autowired
   public CommandTargetPolicy(
-      ServerCatalog serverCatalog, BackendExtensionCatalog backendExtensionCatalog) {
+      ServerCatalog serverCatalog,
+      BackendExtensionCatalog backendExtensionCatalog,
+      AvailableBackendIdsPort backendMetadata) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     this.backendExtensionCatalog = backendExtensionCatalog;
+    this.backendUiModesById = indexBackendUiModes(backendMetadata);
   }
 
   @Deprecated(forRemoval = false)
@@ -56,9 +73,7 @@ public class CommandTargetPolicy {
   }
 
   public boolean isMatrixBackendServer(String serverId) {
-    return BACKEND_DESCRIPTORS
-        .idFor(IrcProperties.Server.Backend.MATRIX)
-        .equals(backendIdForServer(serverId));
+    return backendUiModeForServer(serverId) == BackendUiMode.MATRIX;
   }
 
   public boolean persistsJoinedChannelsLocally(String serverId) {
@@ -98,6 +113,28 @@ public class CommandTargetPolicy {
     if (!value.startsWith("!")) return false;
     int colon = value.indexOf(':');
     return colon > 1 && colon < value.length() - 1;
+  }
+
+  private BackendUiMode backendUiModeForServer(String serverId) {
+    String backendId = BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendIdForServer(serverId));
+    return backendUiModesById.getOrDefault(backendId, BackendUiMode.IRC);
+  }
+
+  private static Map<String, BackendUiMode> indexBackendUiModes(
+      AvailableBackendIdsPort backendMetadata) {
+    AvailableBackendIdsPort metadata =
+        Objects.requireNonNullElseGet(backendMetadata, AvailableBackendIdsPort::builtInsOnly);
+    LinkedHashMap<String, BackendUiMode> indexed = new LinkedHashMap<>();
+    for (BackendEditorProfileSpec profile : BuiltInBackendEditorProfiles.all()) {
+      indexed.put(profile.backendId(), profile.uiMode());
+    }
+    for (BackendEditorProfileSpec profile :
+        Objects.requireNonNullElse(
+            metadata.availableBackendEditorProfiles(), List.<BackendEditorProfileSpec>of())) {
+      if (profile == null) continue;
+      indexed.put(profile.backendId(), profile.uiMode());
+    }
+    return Map.copyOf(indexed);
   }
 
   private static String normalize(String value) {
