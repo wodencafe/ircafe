@@ -169,4 +169,45 @@ class ServerEditorAuthPolicyTest {
     assertFalse(disabled.applicable());
     assertFalse(disabled.passwordBad());
   }
+
+  @Test
+  void seedAuthModePrefersSaslThenNickserv() {
+    assertEquals(
+        ServerEditorAuthMode.SASL,
+        ServerEditorAuthPolicy.seedAuthMode(
+            new IrcProperties.Server(
+                "libera",
+                "irc.libera.chat",
+                6697,
+                true,
+                "",
+                "tester",
+                "tester",
+                "Tester",
+                new IrcProperties.Server.Sasl(true, "tester", "secret", "PLAIN", true),
+                new IrcProperties.Server.Nickserv(false, "", "NickServ", true),
+                List.of(),
+                List.of(),
+                null,
+                "irc")));
+    assertEquals(
+        ServerEditorAuthMode.NICKSERV,
+        ServerEditorAuthPolicy.seedAuthMode(
+            new IrcProperties.Server(
+                "libera",
+                "irc.libera.chat",
+                6697,
+                true,
+                "",
+                "tester",
+                "tester",
+                "Tester",
+                new IrcProperties.Server.Sasl(false, "", "", "PLAIN", true),
+                new IrcProperties.Server.Nickserv(true, "secret", "NickServ", true),
+                List.of(),
+                List.of(),
+                null,
+                "irc")));
+    assertEquals(ServerEditorAuthMode.DISABLED, ServerEditorAuthPolicy.seedAuthMode(null));
+  }
 }

@@ -275,7 +275,7 @@ public class ServerEditorDialog extends JDialog {
             seed.nickserv().delayJoinUntilIdentified() == null
                 || seed.nickserv().delayJoinUntilIdentified());
       }
-      setAuthMode(seedAuthMode(seed));
+      setAuthMode(ServerEditorAuthPolicy.seedAuthMode(seed));
       ServerEditorBackendProfile seedProfile = backendProfile(seed.backendId());
       setMatrixAuthMode(ServerEditorAuthPolicy.seedMatrixAuthMode(seedProfile, seed));
       if (seedProfile.matrixAuthSupported()
@@ -941,18 +941,9 @@ public class ServerEditorDialog extends JDialog {
         mode == null ? ServerEditorMatrixAuthMode.ACCESS_TOKEN : mode);
   }
 
-  private static ServerEditorAuthMode seedAuthMode(IrcProperties.Server seed) {
-    if (seed == null) return ServerEditorAuthMode.DISABLED;
-    boolean saslEnabled = seed.sasl() != null && seed.sasl().enabled();
-    boolean nickservEnabled = seed.nickserv() != null && seed.nickserv().enabled();
-    if (saslEnabled) return ServerEditorAuthMode.SASL;
-    if (nickservEnabled) return ServerEditorAuthMode.NICKSERV;
-    return ServerEditorAuthMode.DISABLED;
-  }
-
-  private void showAuthCard(ServerEditorAuthMode mode) {
+  private void showAuthCard(ServerEditorAuthModePresentationPolicy.ServerEditorAuthCard authCard) {
     CardLayout card = (CardLayout) authModeCardPanel.getLayout();
-    switch (mode) {
+    switch (authCard) {
       case SASL -> card.show(authModeCardPanel, AUTH_CARD_SASL);
       case NICKSERV -> card.show(authModeCardPanel, AUTH_CARD_NICKSERV);
       default -> card.show(authModeCardPanel, AUTH_CARD_DISABLED);
@@ -960,12 +951,14 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private void updateAuthModeUi() {
-    ServerEditorAuthMode mode =
-        ServerEditorAuthPolicy.effectiveAuthMode(selectedBackendProfile(), selectedAuthMode());
-    if (mode != selectedAuthMode()) {
-      authModeCombo.setSelectedItem(mode);
+    ServerEditorAuthModePresentationPolicy.AuthModePresentationState state =
+        ServerEditorAuthModePresentationPolicy.presentationState(
+            selectedBackendProfile(), selectedAuthMode());
+    authModeCombo.setEnabled(state.authModeEnabled());
+    if (state.authMode() != selectedAuthMode()) {
+      authModeCombo.setSelectedItem(state.authMode());
     }
-    showAuthCard(mode);
+    showAuthCard(state.authCard());
     updateMatrixAuthUi();
     updateSaslEnabled();
     updateNickservEnabled();
@@ -988,8 +981,7 @@ public class ServerEditorDialog extends JDialog {
 
   private void updateBackendUi() {
     ServerEditorBackendPresentationPolicy.BackendPresentationState state =
-        ServerEditorBackendPresentationPolicy.presentationState(
-            selectedBackendProfile(), selectedAuthMode());
+        ServerEditorBackendPresentationPolicy.presentationState(selectedBackendProfile());
 
     hostLabel.setText(state.hostLabel());
     serverPasswordLabel.setText(state.serverPasswordLabel());
@@ -998,10 +990,6 @@ public class ServerEditorDialog extends JDialog {
     realNameLabel.setText(state.realNameLabel());
     tlsBox.setText(state.tlsToggleLabel());
     connectionBackendHintLabel.setText(state.connectionHint());
-    authModeCombo.setEnabled(state.authModeEnabled());
-    if (state.authMode() != selectedAuthMode()) {
-      authModeCombo.setSelectedItem(state.authMode());
-    }
     authDisabledHintLabel.setText(asHtml(state.authDisabledHint()));
     applyFieldStyle(serverPassField, state.serverPasswordPlaceholder());
     applyFieldStyle(hostField, state.hostPlaceholder());

@@ -4,11 +4,7 @@ package cafe.woden.ircclient.ui.servers;
 final class ServerEditorBackendPresentationPolicy {
   private ServerEditorBackendPresentationPolicy() {}
 
-  static BackendPresentationState presentationState(
-      ServerEditorBackendProfile profile, ServerEditorAuthMode selectedAuthMode) {
-    ServerEditorAuthMode requestedMode =
-        selectedAuthMode == null ? ServerEditorAuthMode.DISABLED : selectedAuthMode;
-    boolean authModeEnabled = profile.directAuthEnabled();
+  static BackendPresentationState presentationState(ServerEditorBackendProfile profile) {
     return new BackendPresentationState(
         profile.hostLabel(),
         profile.serverPasswordLabel(),
@@ -22,9 +18,7 @@ final class ServerEditorBackendPresentationPolicy {
         profile.hostPlaceholder(),
         profile.loginPlaceholder(),
         profile.nickPlaceholder(),
-        profile.realNamePlaceholder(),
-        authModeEnabled,
-        authModeEnabled ? requestedMode : ServerEditorAuthMode.DISABLED);
+        profile.realNamePlaceholder());
   }
 
   record BackendPresentationState(
@@ -40,7 +34,5 @@ final class ServerEditorBackendPresentationPolicy {
       String hostPlaceholder,
       String loginPlaceholder,
       String nickPlaceholder,
-      String realNamePlaceholder,
-      boolean authModeEnabled,
-      ServerEditorAuthMode authMode) {}
+      String realNamePlaceholder) {}
 }

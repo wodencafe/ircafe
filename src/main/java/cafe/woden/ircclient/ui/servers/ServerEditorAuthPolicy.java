@@ -21,6 +21,21 @@ final class ServerEditorAuthPolicy {
         : ServerEditorMatrixAuthMode.ACCESS_TOKEN;
   }
 
+  static ServerEditorAuthMode seedAuthMode(IrcProperties.Server seed) {
+    if (seed == null) {
+      return ServerEditorAuthMode.DISABLED;
+    }
+    boolean saslEnabled = seed.sasl() != null && seed.sasl().enabled();
+    boolean nickservEnabled = seed.nickserv() != null && seed.nickserv().enabled();
+    if (saslEnabled) {
+      return ServerEditorAuthMode.SASL;
+    }
+    if (nickservEnabled) {
+      return ServerEditorAuthMode.NICKSERV;
+    }
+    return ServerEditorAuthMode.DISABLED;
+  }
+
   static boolean isMatrixPasswordAuthMode(IrcProperties.Server.Sasl sasl) {
     if (sasl == null || !sasl.enabled()) return false;
     String mechanism = Objects.toString(sasl.mechanism(), "").trim();
