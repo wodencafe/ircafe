@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.BackendMetadataPort;
 import cafe.woden.ircclient.irc.backend.BackendRoutingIrcClientService;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
@@ -262,7 +263,33 @@ class BackendRoutingIrcClientServiceTest {
     BackendRoutingIrcClientService service =
         new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend));
 
-    assertThrows(IllegalStateException.class, () -> service.connect("quassel"));
+    IllegalStateException err =
+        assertThrows(IllegalStateException.class, () -> service.connect("quassel"));
+
+    assertTrue(err.getMessage().contains("Quassel Core"));
+    assertTrue(err.getMessage().contains("quassel-core"));
+  }
+
+  @Test
+  void throwsWhenConfiguredPluginBackendIsMissingUsingPluginDisplayName() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    BackendMetadataPort backendMetadata = mock(BackendMetadataPort.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("plugin")).thenReturn(Optional.of(server("plugin", "plugin-backend")));
+    when(backendMetadata.backendDisplayName("plugin-backend")).thenReturn("Fancy Plugin");
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, backendMetadata, List.of(ircBackend));
+
+    IllegalStateException err =
+        assertThrows(IllegalStateException.class, () -> service.connect("plugin"));
+
+    assertTrue(err.getMessage().contains("Fancy Plugin"));
+    assertTrue(err.getMessage().contains("plugin-backend"));
   }
 
   @Test

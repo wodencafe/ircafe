@@ -3,6 +3,7 @@ package cafe.woden.ircclient.irc.backend;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.BackendMetadataPort;
 import cafe.woden.ircclient.irc.DisconnectRequestSource;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.IrcDisconnectWithSourcePort;
@@ -26,6 +27,7 @@ import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
@@ -51,15 +53,21 @@ public class BackendRoutingIrcClientService
       BackendDescriptorCatalog.builtIns();
 
   private final ServerCatalog serverCatalog;
+  private final BackendMetadataPort backendMetadata;
   private final Map<String, IrcBackendClientService> backendsById;
   private final List<IrcBackendClientService> backends;
   private final Map<String, String> activeBackendByServer = new ConcurrentHashMap<>();
   private final Flowable<ServerIrcEvent> mergedEvents;
   private final Flowable<QuasselCoreNetworkSnapshotEvent> mergedQuasselNetworkEvents;
 
+  @Autowired
   public BackendRoutingIrcClientService(
-      ServerCatalog serverCatalog, List<IrcBackendClientService> backendServices) {
+      ServerCatalog serverCatalog,
+      BackendMetadataPort backendMetadata,
+      List<IrcBackendClientService> backendServices) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
+    this.backendMetadata =
+        Objects.requireNonNullElseGet(backendMetadata, BackendMetadataPort::builtInsOnly);
     Objects.requireNonNull(backendServices, "backendServices");
 
     LinkedHashMap<String, IrcBackendClientService> map = new LinkedHashMap<>();
@@ -100,6 +108,12 @@ public class BackendRoutingIrcClientService
     }
     this.mergedEvents = Flowable.merge(streams).onBackpressureBuffer();
     this.mergedQuasselNetworkEvents = Flowable.merge(quasselNetworkStreams).onBackpressureBuffer();
+  }
+
+  @Deprecated(forRemoval = false)
+  public BackendRoutingIrcClientService(
+      ServerCatalog serverCatalog, List<IrcBackendClientService> backendServices) {
+    this(serverCatalog, BackendMetadataPort.builtInsOnly(), backendServices);
   }
 
   @Override
@@ -509,7 +523,10 @@ public class BackendRoutingIrcClientService
 
     if (configuredServer.isPresent()) {
       throw new IllegalStateException(
-          "[" + sid + "] no backend service registered for configured backend " + backendId);
+          "["
+              + sid
+              + "] no backend service registered for configured backend "
+              + renderBackend(backendId));
     }
 
     IrcBackendClientService fallback =
@@ -518,7 +535,10 @@ public class BackendRoutingIrcClientService
       if (sid.isEmpty()) {
         log.debug("Falling back to IRC backend for blank server id");
       } else {
-        log.warn("[{}] no backend registered for {}; falling back to IRC backend", sid, backendId);
+        log.warn(
+            "[{}] no backend registered for {}; falling back to IRC backend",
+            sid,
+            renderBackend(backendId));
       }
       return fallback;
     }
@@ -530,8 +550,8 @@ public class BackendRoutingIrcClientService
       log.warn(
           "[{}] no backend registered for {}; falling back to {}",
           sid,
-          backendId,
-          normalizeBackendId(first.backendId()));
+          renderBackend(backendId),
+          renderBackend(first.backendId()));
     }
     return first;
   }
@@ -553,6 +573,17 @@ public class BackendRoutingIrcClientService
         .map(BackendRoutingIrcClientService::normalizeBackendId)
         .filter(id -> !id.isEmpty())
         .orElseGet(() -> BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.IRC));
+  }
+
+  private String renderBackend(String backendId) {
+    String normalized = normalizeBackendId(backendId);
+    if (normalized.isEmpty()) return "backend";
+    String displayName =
+        Objects.toString(backendMetadata.backendDisplayName(normalized), "").trim();
+    if (displayName.isEmpty() || displayName.equalsIgnoreCase(normalized)) {
+      return normalized;
+    }
+    return displayName + " (" + normalized + ")";
   }
 
   private IrcBackendClientService resolveActiveOwner(String sid) {
