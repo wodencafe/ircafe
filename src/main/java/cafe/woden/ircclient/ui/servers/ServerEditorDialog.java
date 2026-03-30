@@ -987,24 +987,27 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private void updateBackendUi() {
-    ServerEditorBackendProfile profile = selectedBackendProfile();
-    hostLabel.setText(profile.hostLabel());
-    serverPasswordLabel.setText(profile.serverPasswordLabel());
-    nickLabel.setText(profile.nickLabel());
-    loginLabel.setText(profile.loginLabel());
-    realNameLabel.setText(profile.realNameLabel());
-    tlsBox.setText(profile.tlsToggleLabel());
-    connectionBackendHintLabel.setText(profile.connectionHint());
-    authModeCombo.setEnabled(profile.directAuthEnabled());
-    if (!profile.directAuthEnabled()) {
-      authModeCombo.setSelectedItem(ServerEditorAuthMode.DISABLED);
+    ServerEditorBackendPresentationPolicy.BackendPresentationState state =
+        ServerEditorBackendPresentationPolicy.presentationState(
+            selectedBackendProfile(), selectedAuthMode());
+
+    hostLabel.setText(state.hostLabel());
+    serverPasswordLabel.setText(state.serverPasswordLabel());
+    nickLabel.setText(state.nickLabel());
+    loginLabel.setText(state.loginLabel());
+    realNameLabel.setText(state.realNameLabel());
+    tlsBox.setText(state.tlsToggleLabel());
+    connectionBackendHintLabel.setText(state.connectionHint());
+    authModeCombo.setEnabled(state.authModeEnabled());
+    if (state.authMode() != selectedAuthMode()) {
+      authModeCombo.setSelectedItem(state.authMode());
     }
-    authDisabledHintLabel.setText(asHtml(profile.authDisabledHint()));
-    applyFieldStyle(serverPassField, profile.serverPasswordPlaceholder());
-    applyFieldStyle(hostField, profile.hostPlaceholder());
-    applyFieldStyle(loginField, profile.loginPlaceholder());
-    applyFieldStyle(nickField, profile.nickPlaceholder());
-    applyFieldStyle(realNameField, profile.realNamePlaceholder());
+    authDisabledHintLabel.setText(asHtml(state.authDisabledHint()));
+    applyFieldStyle(serverPassField, state.serverPasswordPlaceholder());
+    applyFieldStyle(hostField, state.hostPlaceholder());
+    applyFieldStyle(loginField, state.loginPlaceholder());
+    applyFieldStyle(nickField, state.nickPlaceholder());
+    applyFieldStyle(realNameField, state.realNamePlaceholder());
     updateMatrixAuthUi();
     updateValidation();
   }
