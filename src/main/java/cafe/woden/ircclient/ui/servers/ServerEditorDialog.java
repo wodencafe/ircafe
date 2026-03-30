@@ -1015,62 +1015,39 @@ public class ServerEditorDialog extends JDialog {
   private void updateMatrixAuthUi() {
     ServerEditorAuthUiPolicy.MatrixUiState state =
         ServerEditorAuthUiPolicy.matrixUiState(selectedBackendProfile(), selectedMatrixAuthMode());
-
-    authModeLabel.setVisible(state.authModeControlsVisible());
-    authModeCombo.setVisible(state.authModeControlsVisible());
-    authModeCardPanel.setVisible(state.authModeCardVisible());
-    matrixAuthModeLabel.setVisible(state.matrixAuthControlsVisible());
-    matrixAuthModeCombo.setVisible(state.matrixAuthControlsVisible());
-    matrixAuthHintLabel.setVisible(state.matrixAuthControlsVisible());
-    matrixAuthUserLabel.setVisible(state.matrixAuthUserVisible());
-    matrixAuthUserField.setVisible(state.matrixAuthUserVisible());
-    matrixAuthUserField.setEnabled(state.matrixAuthUserEnabled());
-
-    if (!state.matrixAuthControlsVisible()) {
-      matrixAuthHintLabel.setText(" ");
-      matrixAuthHintLabel.setToolTipText(null);
-      java.awt.Container parent = authModeLabel.getParent();
-      if (parent != null) {
-        parent.revalidate();
-        parent.repaint();
-      }
-      return;
-    }
-
-    serverPasswordLabel.setText(state.serverPasswordLabel());
-    applyFieldStyle(serverPassField, state.serverPasswordPlaceholder());
-    matrixAuthHintLabel.setText(asHtml(state.hint()));
-    matrixAuthHintLabel.setToolTipText(state.hint());
-    java.awt.Container parent = authModeLabel.getParent();
-    if (parent != null) {
-      parent.revalidate();
-      parent.repaint();
-    }
+    ServerEditorAuthUiApplier.applyMatrixUi(
+        state,
+        new ServerEditorAuthUiApplier.MatrixAuthWidgets(
+            authModeLabel,
+            authModeCombo,
+            authModeCardPanel,
+            matrixAuthModeLabel,
+            matrixAuthModeCombo,
+            matrixAuthHintLabel,
+            matrixAuthUserLabel,
+            matrixAuthUserField,
+            serverPasswordLabel,
+            serverPassField,
+            authModeLabel.getParent()));
   }
 
   private void updateSaslEnabled() {
     ServerEditorAuthUiPolicy.SaslUiState state =
         ServerEditorAuthUiPolicy.saslUiState(
             selectedAuthMode(), Objects.toString(saslMechanism.getSelectedItem(), "PLAIN"));
-
-    saslMechanism.setEnabled(state.mechanismEnabled());
-    saslContinueOnFailureBox.setEnabled(state.continueOnFailureEnabled());
-    saslUserField.setEnabled(state.userEnabled());
-    saslPassField.setEnabled(state.secretEnabled());
-    saslHintLabel.setText(state.hintVisible() ? asHtml(state.hint()) : " ");
-    saslHintLabel.setToolTipText(state.hint());
-    saslPassField.putClientProperty(
-        FlatClientProperties.PLACEHOLDER_TEXT, state.secretPlaceholder());
+    ServerEditorAuthUiApplier.applySaslUi(
+        state,
+        new ServerEditorAuthUiApplier.SaslWidgets(
+            saslMechanism, saslContinueOnFailureBox, saslUserField, saslPassField, saslHintLabel));
   }
 
   private void updateNickservEnabled() {
     ServerEditorAuthUiPolicy.NickservUiState state =
         ServerEditorAuthUiPolicy.nickservUiState(selectedAuthMode());
-    nickservServiceField.setEnabled(state.enabled());
-    nickservPassField.setEnabled(state.enabled());
-    nickservDelayJoinBox.setEnabled(state.enabled());
-    nickservHintLabel.setText(state.enabled() ? asHtml(state.hint()) : " ");
-    nickservHintLabel.setToolTipText(state.hint());
+    ServerEditorAuthUiApplier.applyNickservUi(
+        state,
+        new ServerEditorAuthUiApplier.NickservWidgets(
+            nickservServiceField, nickservPassField, nickservDelayJoinBox, nickservHintLabel));
   }
 
   // FlatLaf validation outlines.
