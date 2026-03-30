@@ -19,7 +19,6 @@ import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Socket;
 import java.time.Duration;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import javax.net.ssl.SSLSocket;
@@ -1283,64 +1282,32 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private IrcProperties.Server buildServer() {
-    ServerEditorConnectionPolicy.ServerConnection connection =
-        ServerEditorConnectionPolicy.parseConnection(
-            idField.getText(), hostField.getText(), portField.getText());
-
     String backendId = selectedBackendId();
-    ServerEditorBackendProfile profile = backendProfile(backendId);
-
-    boolean tls = tlsBox.isSelected();
-    String serverPassword = serverPasswordValue();
-    ServerEditorMatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
-
-    String matrixAuthUser = trim(matrixAuthUserField.getText());
-    ServerEditorAuthPolicy.validateMatrixCredentials(
-        profile, matrixAuthMode, serverPassword, matrixAuthUser);
-    if (containsCrlf(serverPassword)) {
-      throw new IllegalArgumentException("Server/Core password must not contain newlines");
-    }
-
-    String nick =
-        ServerEditorConnectionPolicy.validateAndNormalizeNick(profile, nickField.getText());
-
-    String login =
-        ServerEditorAuthPolicy.resolveLogin(
-            profile, loginField.getText(), nick, matrixAuthUser, matrixAuthMode);
-
-    String realName = trim(realNameField.getText());
-    if (realName.isEmpty()) realName = nick.isEmpty() ? login : nick;
-
-    if (nick.isEmpty() && !login.isEmpty()) {
-      nick = login;
-    }
-
-    ServerEditorAuthPolicy.SaslBuildResult saslConfig =
-        ServerEditorAuthPolicy.buildSasl(
-            profile,
+    return ServerEditorServerBuildPolicy.build(
+        new ServerEditorServerBuildPolicy.ServerBuildRequest(
+            backendProfile(backendId),
+            backendId,
+            idField.getText(),
+            hostField.getText(),
+            portField.getText(),
+            tlsBox.isSelected(),
+            serverPasswordValue(),
+            selectedMatrixAuthMode(),
+            matrixAuthUserField.getText(),
+            nickField.getText(),
+            loginField.getText(),
+            realNameField.getText(),
             selectedAuthMode(),
-            matrixAuthMode,
-            serverPassword,
-            matrixAuthUser,
             saslUserField.getText(),
             new String(saslPassField.getPassword()),
             Objects.toString(saslMechanism.getSelectedItem(), "PLAIN"),
-            saslContinueOnFailureBox.isSelected());
-    serverPassword = saslConfig.serverPassword();
-    IrcProperties.Server.Sasl sasl = saslConfig.sasl();
-    IrcProperties.Server.Nickserv nickserv =
-        ServerEditorAuthPolicy.buildNickserv(
-            saslConfig.authMode(),
+            saslContinueOnFailureBox.isSelected(),
             nickservServiceField.getText(),
             new String(nickservPassField.getPassword()),
-            nickservDelayJoinBox.isSelected());
-
-    List<String> autoJoin =
-        ServerEditorCommandListPolicy.autoJoinEntries(
-            autoJoinArea.getText(), autoJoinPmArea.getText());
-    List<String> perform = ServerEditorCommandListPolicy.performCommands(performArea.getText());
-    IrcProperties.Proxy proxyOverride =
-        ServerEditorProxyBuildPolicy.buildOverride(
+            nickservDelayJoinBox.isSelected(),
+            autoJoinArea.getText(),
+            autoJoinPmArea.getText(),
+            performArea.getText(),
             proxyOverrideBox.isSelected(),
             proxyEnabledBox.isSelected(),
             proxyHostField.getText(),
@@ -1349,23 +1316,7 @@ public class ServerEditorDialog extends JDialog {
             new String(proxyPassField.getPassword()),
             proxyRemoteDnsBox.isSelected(),
             proxyConnectTimeoutMsField.getText(),
-            proxyReadTimeoutMsField.getText());
-
-    return new IrcProperties.Server(
-        connection.id(),
-        connection.host(),
-        connection.port(),
-        tls,
-        serverPassword,
-        nick,
-        login,
-        realName,
-        sasl,
-        nickserv,
-        autoJoin,
-        perform,
-        proxyOverride,
-        backendId);
+            proxyReadTimeoutMsField.getText()));
   }
 
   private String serverPasswordValue() {
@@ -1443,10 +1394,5 @@ public class ServerEditorDialog extends JDialog {
 
   private static String trim(String s) {
     return s == null ? "" : s.trim();
-  }
-
-  private static boolean containsCrlf(String s) {
-    String v = Objects.toString(s, "");
-    return v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0;
   }
 }
