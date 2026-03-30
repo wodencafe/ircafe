@@ -40,7 +40,6 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
-import net.miginfocom.swing.MigLayout;
 
 /** Add/edit a single IRC server configuration. */
 public class ServerEditorDialog extends JDialog {
@@ -71,8 +70,6 @@ public class ServerEditorDialog extends JDialog {
   private static final String AUTH_CARD_DISABLED = "auth-disabled";
   private static final String AUTH_CARD_SASL = "auth-sasl";
   private static final String AUTH_CARD_NICKSERV = "auth-nickserv";
-  private static final String AUTH_DISABLED_HINT_TEXT =
-      "No authentication on connect. Use this for networks that don't require account auth.";
   private static final String SASL_CONTINUE_ON_FAILURE_TEXT =
       "Stay connected if SASL authentication fails";
   private static final String NICKSERV_DELAY_JOIN_TEXT =
@@ -772,80 +769,32 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private JPanel buildSaslPanel() {
-    JPanel p =
-        new JPanel(
-            new MigLayout(
-                "insets 8, fillx, wrap 2, hidemode 3",
-                "[right]12[grow,fill,min:0]",
-                "[]6[]6[]6[]8[grow,fill,min:0]"));
-
-    p.add(matrixAuthModeLabel);
-    p.add(matrixAuthModeCombo, "growx, wmin 0, wrap");
-    p.add(matrixAuthUserLabel);
-    p.add(matrixAuthUserField, "growx, wmin 0, wrap");
-    p.add(serverPasswordLabel);
-    p.add(serverPassField, "growx, wmin 0, wrap");
-    p.add(authModeLabel);
-    p.add(authModeCombo, "growx, wmin 0, wrap");
-    matrixAuthHintLabel.putClientProperty(
-        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    matrixAuthHintLabel.setText(" ");
-    p.add(matrixAuthHintLabel, "span 2, growx, wmin 0, wrap");
-
-    authModeCardPanel.add(buildAuthDisabledCard(), AUTH_CARD_DISABLED);
-    authModeCardPanel.add(buildAuthSaslCard(), AUTH_CARD_SASL);
-    authModeCardPanel.add(buildAuthNickservCard(), AUTH_CARD_NICKSERV);
-    p.add(authModeCardPanel, "span 2, grow, push, wmin 0");
-    return p;
-  }
-
-  private JPanel buildAuthDisabledCard() {
-    JPanel p = new JPanel(new MigLayout("insets 6 0 0 0, fillx", "[grow,fill,min:0]", "[]"));
-    authDisabledHintLabel.putClientProperty(
-        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    authDisabledHintLabel.setText(asHtml(AUTH_DISABLED_HINT_TEXT));
-    p.add(authDisabledHintLabel, "growx, wmin 0");
-    return p;
-  }
-
-  private JPanel buildAuthSaslCard() {
-    JPanel p =
-        new JPanel(
-            new MigLayout(
-                "insets 0, fillx, wrap 2", "[right]12[grow,fill,min:0]", "[]6[]6[]6[]8[]push"));
-    p.add(new JLabel("Username"));
-    p.add(saslUserField, "growx, wmin 0, wrap");
-    p.add(new JLabel("Secret"));
-    p.add(saslPassField, "growx, wmin 0, wrap");
-    p.add(new JLabel("Mechanism"));
-    p.add(saslMechanism, "growx, wmin 0, wrap");
-    p.add(new JLabel("On failure"), "top");
-    p.add(saslContinueOnFailureBox, "growx, wmin 0, wrap");
-
-    saslHintLabel.putClientProperty(
-        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    saslHintLabel.setText(" ");
-    p.add(saslHintLabel, "span 2, growx, wmin 0, pushy");
-    return p;
-  }
-
-  private JPanel buildAuthNickservCard() {
-    JPanel p =
-        new JPanel(
-            new MigLayout(
-                "insets 0, fillx, wrap 2", "[right]12[grow,fill,min:0]", "[]6[]6[]8[]push"));
-    p.add(new JLabel("Service"));
-    p.add(nickservServiceField, "growx, wmin 0, wrap");
-    p.add(new JLabel("Password"));
-    p.add(nickservPassField, "growx, wmin 0, wrap");
-    p.add(new JLabel("Delay auto-join"), "top");
-    p.add(nickservDelayJoinBox, "growx, wmin 0, wrap");
-
-    nickservHintLabel.putClientProperty(
-        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    nickservHintLabel.setText(" ");
-    p.add(nickservHintLabel, "span 2, growx, wmin 0, pushy");
-    return p;
+    return ServerEditorAuthTabBuilder.build(
+        new ServerEditorAuthTabBuilder.AuthTabWidgets(
+            matrixAuthModeLabel,
+            matrixAuthModeCombo,
+            matrixAuthUserLabel,
+            matrixAuthUserField,
+            serverPasswordLabel,
+            serverPassField,
+            authModeLabel,
+            authModeCombo,
+            matrixAuthHintLabel,
+            authModeCardPanel,
+            AUTH_CARD_DISABLED,
+            AUTH_CARD_SASL,
+            AUTH_CARD_NICKSERV,
+            "No authentication on connect. Use this for networks that don't require account auth.",
+            authDisabledHintLabel,
+            saslUserField,
+            saslPassField,
+            saslMechanism,
+            saslContinueOnFailureBox,
+            saslHintLabel,
+            nickservServiceField,
+            nickservPassField,
+            nickservDelayJoinBox,
+            nickservHintLabel));
   }
 
   private JPanel buildAutoJoinPanel() {
@@ -1233,15 +1182,6 @@ public class ServerEditorDialog extends JDialog {
     JLabel l = new JLabel(text);
     l.putClientProperty(FlatClientProperties.STYLE, "font:+0");
     return l;
-  }
-
-  private static String asHtml(String text) {
-    return "<html>" + escapeHtml(text) + "</html>";
-  }
-
-  private static String escapeHtml(String text) {
-    if (text == null || text.isEmpty()) return "";
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
   }
 
   private static String trim(String s) {
