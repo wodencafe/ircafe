@@ -47,12 +47,17 @@ public final class BackendEditorProfileCatalog {
     if (backendMetadata == null) {
       return builtIns();
     }
+    return fromProfiles(backendMetadata.availableBackendEditorProfiles());
+  }
+
+  public static BackendEditorProfileCatalog fromProfiles(List<BackendEditorProfileSpec> profiles) {
+    if (profiles == null) {
+      return builtIns();
+    }
     ArrayList<BackendEditorProfileSpec> merged =
-        new ArrayList<>(BuiltInBackendEditorProfiles.all().size() + 4);
+        new ArrayList<>(BuiltInBackendEditorProfiles.all().size() + profiles.size());
     merged.addAll(BuiltInBackendEditorProfiles.all());
-    merged.addAll(
-        Objects.requireNonNullElse(
-            backendMetadata.availableBackendEditorProfiles(), List.<BackendEditorProfileSpec>of()));
+    merged.addAll(profiles);
     return new BackendEditorProfileCatalog(merged);
   }
 

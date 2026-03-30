@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.servers;
 
+import cafe.woden.ircclient.app.api.BackendEditorProfileCatalog;
 import cafe.woden.ircclient.app.api.BackendEditorProfileSpec;
-import cafe.woden.ircclient.app.api.BuiltInBackendEditorProfiles;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.ArrayList;
@@ -14,8 +14,10 @@ import java.util.Objects;
 final class ServerEditorBackendProfiles {
   private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
       BackendDescriptorCatalog.builtIns();
+  private static final BackendEditorProfileCatalog BUILT_IN_PROFILE_CATALOG =
+      BackendEditorProfileCatalog.builtIns();
   private static final ServerEditorBackendProfiles BUILT_INS =
-      new ServerEditorBackendProfiles(profilesFromSpecs(BuiltInBackendEditorProfiles.all()));
+      new ServerEditorBackendProfiles(profilesFromSpecs(BUILT_IN_PROFILE_CATALOG.profiles()));
 
   private final List<ServerEditorBackendProfile> profiles;
   private final Map<String, ServerEditorBackendProfile> profilesByBackendId;
@@ -50,13 +52,10 @@ final class ServerEditorBackendProfiles {
 
   static ServerEditorBackendProfiles forAvailableBackends(
       List<String> backendIds, List<BackendEditorProfileSpec> explicitProfiles) {
+    BackendEditorProfileCatalog profileCatalog =
+        BackendEditorProfileCatalog.fromProfiles(explicitProfiles);
     LinkedHashMap<String, ServerEditorBackendProfile> indexed = new LinkedHashMap<>();
-    for (ServerEditorBackendProfile profile : BUILT_INS.profiles) {
-      indexed.put(profile.backendId(), profile);
-    }
-    for (BackendEditorProfileSpec profileSpec :
-        Objects.requireNonNullElse(explicitProfiles, List.<BackendEditorProfileSpec>of())) {
-      if (profileSpec == null) continue;
+    for (BackendEditorProfileSpec profileSpec : profileCatalog.profiles()) {
       indexed.put(profileSpec.backendId(), toProfile(profileSpec));
     }
     for (String backendId : Objects.requireNonNullElse(backendIds, List.<String>of())) {
@@ -125,10 +124,7 @@ final class ServerEditorBackendProfiles {
   }
 
   private String fallbackDisplayName(String backendId) {
-    return BACKEND_DESCRIPTORS
-        .descriptorForId(backendId)
-        .map(descriptor -> descriptor.displayName())
-        .orElse(backendId);
+    return BUILT_IN_PROFILE_CATALOG.displayName(backendId);
   }
 
   private static List<ServerEditorBackendProfile> profilesFromSpecs(
