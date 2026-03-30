@@ -943,24 +943,18 @@ public class ServerEditorDialog extends JDialog {
         mode == null ? ServerEditorMatrixAuthMode.ACCESS_TOKEN : mode);
   }
 
-  private void showAuthCard(ServerEditorAuthModePresentationPolicy.ServerEditorAuthCard authCard) {
-    CardLayout card = (CardLayout) authModeCardPanel.getLayout();
-    switch (authCard) {
-      case SASL -> card.show(authModeCardPanel, AUTH_CARD_SASL);
-      case NICKSERV -> card.show(authModeCardPanel, AUTH_CARD_NICKSERV);
-      default -> card.show(authModeCardPanel, AUTH_CARD_DISABLED);
-    }
-  }
-
   private void updateAuthModeUi() {
     ServerEditorAuthModePresentationPolicy.AuthModePresentationState state =
         ServerEditorAuthModePresentationPolicy.presentationState(
             selectedBackendProfile(), selectedAuthMode());
-    authModeCombo.setEnabled(state.authModeEnabled());
-    if (state.authMode() != selectedAuthMode()) {
-      authModeCombo.setSelectedItem(state.authMode());
-    }
-    showAuthCard(state.authCard());
+    ServerEditorAuthModeUiApplier.apply(
+        state,
+        new ServerEditorAuthModeUiApplier.AuthModeWidgets(
+            authModeCombo,
+            authModeCardPanel,
+            AUTH_CARD_DISABLED,
+            AUTH_CARD_SASL,
+            AUTH_CARD_NICKSERV));
     refreshAuthPanelUi();
     updateValidation();
   }
@@ -993,20 +987,22 @@ public class ServerEditorDialog extends JDialog {
   private void updateBackendUi() {
     ServerEditorBackendPresentationPolicy.BackendPresentationState state =
         ServerEditorBackendPresentationPolicy.presentationState(selectedBackendProfile());
-
-    hostLabel.setText(state.hostLabel());
-    serverPasswordLabel.setText(state.serverPasswordLabel());
-    nickLabel.setText(state.nickLabel());
-    loginLabel.setText(state.loginLabel());
-    realNameLabel.setText(state.realNameLabel());
-    tlsBox.setText(state.tlsToggleLabel());
-    connectionBackendHintLabel.setText(state.connectionHint());
-    authDisabledHintLabel.setText(asHtml(state.authDisabledHint()));
-    applyFieldStyle(serverPassField, state.serverPasswordPlaceholder());
-    applyFieldStyle(hostField, state.hostPlaceholder());
-    applyFieldStyle(loginField, state.loginPlaceholder());
-    applyFieldStyle(nickField, state.nickPlaceholder());
-    applyFieldStyle(realNameField, state.realNamePlaceholder());
+    ServerEditorBackendPresentationApplier.apply(
+        state,
+        new ServerEditorBackendPresentationApplier.BackendWidgets(
+            hostLabel,
+            serverPasswordLabel,
+            nickLabel,
+            loginLabel,
+            realNameLabel,
+            tlsBox,
+            connectionBackendHintLabel,
+            authDisabledHintLabel,
+            serverPassField,
+            hostField,
+            loginField,
+            nickField,
+            realNameField));
   }
 
   private void updateMatrixAuthUi() {
