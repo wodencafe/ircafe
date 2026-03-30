@@ -6,8 +6,10 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -18,16 +20,27 @@ import org.springframework.stereotype.Component;
 @AutoService(BackendNamedCommandHandler.class)
 public final class QuasselBackendNamedCommandHandler implements BackendNamedCommandHandler {
 
-  private final QuasselOutboundCommandService quasselOutboundCommandService;
+  private final Supplier<QuasselOutboundCommandService> quasselOutboundCommandServiceSupplier;
 
   public QuasselBackendNamedCommandHandler() {
-    this(null);
+    this(() -> null);
+  }
+
+  public QuasselBackendNamedCommandHandler(
+      QuasselOutboundCommandService quasselOutboundCommandService) {
+    this(() -> quasselOutboundCommandService);
   }
 
   @Autowired
   public QuasselBackendNamedCommandHandler(
-      QuasselOutboundCommandService quasselOutboundCommandService) {
-    this.quasselOutboundCommandService = quasselOutboundCommandService;
+      ObjectProvider<QuasselOutboundCommandService> quasselOutboundCommandServiceProvider) {
+    this(quasselOutboundCommandServiceProvider::getIfAvailable);
+  }
+
+  private QuasselBackendNamedCommandHandler(
+      Supplier<QuasselOutboundCommandService> quasselOutboundCommandServiceSupplier) {
+    this.quasselOutboundCommandServiceSupplier =
+        Objects.requireNonNull(quasselOutboundCommandServiceSupplier, "serviceSupplier");
   }
 
   @Override
@@ -80,6 +93,8 @@ public final class QuasselBackendNamedCommandHandler implements BackendNamedComm
       BackendNamedCommandExecutionContext context,
       CompositeDisposable disposables,
       ParsedInput.BackendNamed command) {
+    QuasselOutboundCommandService quasselOutboundCommandService =
+        quasselOutboundCommandServiceSupplier.get();
     if (quasselOutboundCommandService == null || disposables == null || command == null) {
       return false;
     }

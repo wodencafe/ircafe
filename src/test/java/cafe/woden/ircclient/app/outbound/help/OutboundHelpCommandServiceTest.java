@@ -99,11 +99,13 @@ class OutboundHelpCommandServiceTest {
           ui,
           targetCoordinator);
   private final SlashCommandPresentationCatalog slashCommandPresentationCatalog =
-      new SlashCommandPresentationCatalog(
-          List.of(uploadHelpContributor, messageMutationHelpContributor, readMarkerCommandService),
-          new BackendNamedCommandCatalog(List.of()));
+      new SlashCommandPresentationCatalog(List.of(), new BackendNamedCommandCatalog(List.of()));
   private final OutboundHelpCommandService service =
-      new OutboundHelpCommandService(ui, targetCoordinator, slashCommandPresentationCatalog);
+      new OutboundHelpCommandService(
+          ui,
+          targetCoordinator,
+          List.of(uploadHelpContributor, messageMutationHelpContributor, readMarkerCommandService),
+          slashCommandPresentationCatalog);
 
   private void appendEditHelp(TargetRef out) {
     TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();

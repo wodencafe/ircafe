@@ -3,6 +3,7 @@ package cafe.woden.ircclient.app.commands;
 import java.util.List;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,6 +17,7 @@ public class BackendNamedCommandParser {
 
   private final BackendNamedCommandCatalog commandCatalog;
 
+  @Autowired
   public BackendNamedCommandParser(BackendNamedCommandCatalog commandCatalog) {
     this.commandCatalog = Objects.requireNonNull(commandCatalog, "commandCatalog");
   }

@@ -7,6 +7,7 @@ import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.irc.backend.IrcBackendModePort;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -22,6 +23,7 @@ public class BackendUiProfileProvider {
   private final BackendEditorProfileCatalog backendProfiles;
   private final BackendUiContext backendUiContext;
 
+  @Autowired
   public BackendUiProfileProvider(
       @Qualifier("ircClientService") IrcBackendModePort backendMode,
       AvailableBackendIdsPort backendMetadata) {

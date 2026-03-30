@@ -8,6 +8,7 @@ import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import java.util.Objects;
 import lombok.NonNull;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -24,6 +25,7 @@ public final class OutboundBackendCapabilityPolicy {
 
   @NonNull private final AvailableBackendIdsPort backendMetadata;
 
+  @Autowired
   public OutboundBackendCapabilityPolicy(
       CommandTargetPolicy commandTargetPolicy,
       OutboundBackendFeatureRegistry outboundBackendFeatureRegistry,
