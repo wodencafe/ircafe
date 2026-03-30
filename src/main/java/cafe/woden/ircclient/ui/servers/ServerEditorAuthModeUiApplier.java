@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servers;
 
 import java.awt.CardLayout;
+import java.util.Objects;
 import javax.swing.JComboBox;
 import javax.swing.JPanel;
 
@@ -12,7 +13,9 @@ final class ServerEditorAuthModeUiApplier {
       ServerEditorAuthModePresentationPolicy.AuthModePresentationState state,
       AuthModeWidgets widgets) {
     widgets.authModeCombo().setEnabled(state.authModeEnabled());
-    widgets.authModeCombo().setSelectedItem(state.authMode());
+    if (!Objects.equals(widgets.authModeCombo().getSelectedItem(), state.authMode())) {
+      widgets.authModeCombo().setSelectedItem(state.authMode());
+    }
 
     CardLayout cardLayout = (CardLayout) widgets.authModeCardPanel().getLayout();
     cardLayout.show(widgets.authModeCardPanel(), cardId(state.authCard(), widgets));

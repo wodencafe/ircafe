@@ -362,13 +362,9 @@ public class ServerEditorDialog extends JDialog {
     tlsBox.addActionListener(e -> maybeAdjustPortForBackendAndTls());
     portField.getDocument().addDocumentListener(new PortTrackingListener());
 
-    authModeCombo.addActionListener(e -> updateAuthModeUi());
-    matrixAuthModeCombo.addActionListener(
-        e -> {
-          updateMatrixAuthUi();
-          updateValidation();
-        });
-    saslMechanism.addActionListener(e -> updateAuthModeUi());
+    authModeCombo.addActionListener(e -> refreshAuthPanelUiAndValidation());
+    matrixAuthModeCombo.addActionListener(e -> refreshAuthPanelUiAndValidation());
+    saslMechanism.addActionListener(e -> refreshAuthPanelUiAndValidation());
     nickservDelayJoinBox.addActionListener(e -> updateValidation());
     backendCombo.addActionListener(
         e -> {
@@ -943,31 +939,50 @@ public class ServerEditorDialog extends JDialog {
         mode == null ? ServerEditorMatrixAuthMode.ACCESS_TOKEN : mode);
   }
 
-  private void updateAuthModeUi() {
-    ServerEditorAuthModePresentationPolicy.AuthModePresentationState state =
-        ServerEditorAuthModePresentationPolicy.presentationState(
-            selectedBackendProfile(), selectedAuthMode());
-    ServerEditorAuthModeUiApplier.apply(
-        state,
-        new ServerEditorAuthModeUiApplier.AuthModeWidgets(
-            authModeCombo,
-            authModeCardPanel,
-            AUTH_CARD_DISABLED,
-            AUTH_CARD_SASL,
-            AUTH_CARD_NICKSERV));
-    refreshAuthPanelUi();
-    updateValidation();
-  }
-
   private void refreshBackendAndAuthUi() {
     updateBackendUi();
-    updateAuthModeUi();
+    refreshAuthPanelUiAndValidation();
   }
 
   private void refreshAuthPanelUi() {
-    updateMatrixAuthUi();
-    updateSaslEnabled();
-    updateNickservEnabled();
+    ServerEditorAuthPanelUiApplier.apply(
+        new ServerEditorAuthPanelUiApplier.RefreshRequest(
+            selectedBackendProfile(),
+            selectedAuthMode(),
+            selectedMatrixAuthMode(),
+            Objects.toString(saslMechanism.getSelectedItem(), "PLAIN")),
+        new ServerEditorAuthPanelUiApplier.AuthPanelWidgets(
+            new ServerEditorAuthModeUiApplier.AuthModeWidgets(
+                authModeCombo,
+                authModeCardPanel,
+                AUTH_CARD_DISABLED,
+                AUTH_CARD_SASL,
+                AUTH_CARD_NICKSERV),
+            new ServerEditorAuthUiApplier.MatrixAuthWidgets(
+                authModeLabel,
+                authModeCombo,
+                authModeCardPanel,
+                matrixAuthModeLabel,
+                matrixAuthModeCombo,
+                matrixAuthHintLabel,
+                matrixAuthUserLabel,
+                matrixAuthUserField,
+                serverPasswordLabel,
+                serverPassField,
+                authModeLabel.getParent()),
+            new ServerEditorAuthUiApplier.SaslWidgets(
+                saslMechanism,
+                saslContinueOnFailureBox,
+                saslUserField,
+                saslPassField,
+                saslHintLabel),
+            new ServerEditorAuthUiApplier.NickservWidgets(
+                nickservServiceField, nickservPassField, nickservDelayJoinBox, nickservHintLabel)));
+  }
+
+  private void refreshAuthPanelUiAndValidation() {
+    refreshAuthPanelUi();
+    updateValidation();
   }
 
   private String selectedBackendId() {
@@ -1003,44 +1018,6 @@ public class ServerEditorDialog extends JDialog {
             loginField,
             nickField,
             realNameField));
-  }
-
-  private void updateMatrixAuthUi() {
-    ServerEditorAuthUiPolicy.MatrixUiState state =
-        ServerEditorAuthUiPolicy.matrixUiState(selectedBackendProfile(), selectedMatrixAuthMode());
-    ServerEditorAuthUiApplier.applyMatrixUi(
-        state,
-        new ServerEditorAuthUiApplier.MatrixAuthWidgets(
-            authModeLabel,
-            authModeCombo,
-            authModeCardPanel,
-            matrixAuthModeLabel,
-            matrixAuthModeCombo,
-            matrixAuthHintLabel,
-            matrixAuthUserLabel,
-            matrixAuthUserField,
-            serverPasswordLabel,
-            serverPassField,
-            authModeLabel.getParent()));
-  }
-
-  private void updateSaslEnabled() {
-    ServerEditorAuthUiPolicy.SaslUiState state =
-        ServerEditorAuthUiPolicy.saslUiState(
-            selectedAuthMode(), Objects.toString(saslMechanism.getSelectedItem(), "PLAIN"));
-    ServerEditorAuthUiApplier.applySaslUi(
-        state,
-        new ServerEditorAuthUiApplier.SaslWidgets(
-            saslMechanism, saslContinueOnFailureBox, saslUserField, saslPassField, saslHintLabel));
-  }
-
-  private void updateNickservEnabled() {
-    ServerEditorAuthUiPolicy.NickservUiState state =
-        ServerEditorAuthUiPolicy.nickservUiState(selectedAuthMode());
-    ServerEditorAuthUiApplier.applyNickservUi(
-        state,
-        new ServerEditorAuthUiApplier.NickservWidgets(
-            nickservServiceField, nickservPassField, nickservDelayJoinBox, nickservHintLabel));
   }
 
   private void updateValidation() {
