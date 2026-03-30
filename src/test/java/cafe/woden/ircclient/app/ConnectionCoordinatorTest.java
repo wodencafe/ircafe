@@ -14,6 +14,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
@@ -518,6 +519,51 @@ class ConnectionCoordinatorTest {
 
     verify(ui).setChatCurrentNick("quassel", "readyNick");
     verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("quassel", "Alice"));
+  }
+
+  @Test
+  void connectedEventFormatsGenericPluginBackendReasonWithDisplayName() {
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+    AvailableBackendIdsPort backendMetadata = mock(AvailableBackendIdsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("plugin"));
+    when(serverRegistry.servers())
+        .thenReturn(List.of(server("plugin", "plugin.example.net", 6697, true, "plugin-backend")));
+    when(serverCatalog.containsId("plugin")).thenReturn(true);
+    when(runtimeConfig.readPrivateMessageTargets("plugin")).thenReturn(List.of());
+    when(runtimeConfig.readKnownChannels("plugin")).thenReturn(List.of());
+    when(irc.backendAvailabilityReason("plugin")).thenReturn("not connected");
+    when(backendMetadata.backendDisplayName("plugin-backend")).thenReturn("Fancy Plugin");
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            IrcConnectionLifecyclePort.from(irc),
+            irc,
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService,
+            null,
+            backendMetadata);
+
+    coordinator.handleConnectivityEvent(
+        "plugin",
+        new IrcEvent.Connected(Instant.now(), "plugin.example.net", 6697, "transportNick"),
+        null);
+
+    verify(ui)
+        .appendStatus(
+            new TargetRef("plugin", "status"),
+            "(conn)",
+            "Connected transport; waiting for backend readiness (Fancy Plugin backend: not connected)");
   }
 
   @Test

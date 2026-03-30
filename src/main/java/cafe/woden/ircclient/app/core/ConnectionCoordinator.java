@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.core;
 
 import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
+import cafe.woden.ircclient.app.api.BackendAvailabilityReasonFormatter;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
@@ -130,7 +131,7 @@ public class ConnectionCoordinator {
     this.backendCapabilityPolicy = backendCapabilityPolicy;
     this.backendMetadata =
         Objects.requireNonNullElseGet(
-            backendMetadata, ConnectionCoordinator::defaultBackendMetadata);
+            backendMetadata, BackendAvailabilityReasonFormatter::builtInsBackendMetadata);
 
     configuredServers.addAll(serverRegistry.serverIds());
     List<IrcProperties.Server> initialServers = serverRegistry.servers();
@@ -173,7 +174,7 @@ public class ConnectionCoordinator {
         logProps,
         trayNotificationService,
         null,
-        defaultBackendMetadata());
+        BackendAvailabilityReasonFormatter.builtInsBackendMetadata());
   }
 
   @PreDestroy
@@ -720,7 +721,10 @@ public class ConnectionCoordinator {
         }
 
         String backendReason =
-            Objects.toString(backendAvailability.backendAvailabilityReason(id), "").trim();
+            BackendAvailabilityReasonFormatter.decorate(
+                backendIdForServer(id),
+                Objects.toString(backendAvailability.backendAvailabilityReason(id), "").trim(),
+                backendMetadata);
         if (!backendReason.isEmpty()) {
           setState(id, ConnectionState.CONNECTING);
           ui.ensureTargetExists(status);
@@ -1479,6 +1483,32 @@ public class ConnectionCoordinator {
     return displayName.isEmpty() ? normalized : displayName;
   }
 
+  private String backendIdForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return "";
+    IrcProperties.Server configured = configuredServerConfigsById.get(sid);
+    if (configured != null) {
+      return configured.backendId();
+    }
+    return findServerConfig(sid).map(IrcProperties.Server::backendId).orElse("");
+  }
+
+  private Optional<IrcProperties.Server> findServerConfig(String serverId) {
+    try {
+      Optional<IrcProperties.Server> configured =
+          Objects.requireNonNullElse(serverRegistry.find(serverId), Optional.empty());
+      if (configured.isPresent()) {
+        return configured;
+      }
+    } catch (Exception ignored) {
+    }
+    try {
+      return Objects.requireNonNullElse(serverCatalog.find(serverId), Optional.empty());
+    } catch (Exception ignored) {
+      return Optional.empty();
+    }
+  }
+
   private String renderError(Throwable err) {
     if (err == null) return "";
     if (err instanceof BackendNotAvailableException backendErr) {
@@ -1487,23 +1517,5 @@ public class ConnectionCoordinator {
     String msg = Objects.toString(err.getMessage(), "").trim();
     if (!msg.isEmpty()) return msg;
     return String.valueOf(err);
-  }
-
-  private static AvailableBackendIdsPort defaultBackendMetadata() {
-    return new AvailableBackendIdsPort() {
-      @Override
-      public List<String> availableBackendIds() {
-        return List.of();
-      }
-
-      @Override
-      public String backendDisplayName(String backendId) {
-        String normalized = BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendId);
-        return BACKEND_DESCRIPTORS
-            .descriptorForId(normalized)
-            .map(descriptor -> Objects.toString(descriptor.displayName(), "").trim())
-            .orElse(normalized);
-      }
-    };
   }
 }
