@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.servers;
 
+import cafe.woden.ircclient.app.api.BackendUiMode;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -7,6 +8,7 @@ import java.util.Objects;
 record ServerEditorBackendProfile(
     String backendId,
     String displayName,
+    BackendUiMode uiMode,
     int defaultPlainPort,
     int defaultTlsPort,
     boolean directAuthEnabled,
@@ -35,6 +37,7 @@ record ServerEditorBackendProfile(
       throw new IllegalArgumentException("backendId must not be blank");
     }
     Objects.requireNonNull(displayName, "displayName");
+    Objects.requireNonNull(uiMode, "uiMode");
     Objects.requireNonNull(defaultLoginFallback, "defaultLoginFallback");
     Objects.requireNonNull(hostLabel, "hostLabel");
     Objects.requireNonNull(serverPasswordLabel, "serverPasswordLabel");

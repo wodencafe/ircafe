@@ -19,6 +19,7 @@ public final class BuiltInBackendEditorProfiles {
     return new BackendEditorProfileSpec(
         BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.IRC),
         BACKEND_DESCRIPTORS.displayNameFor(IrcProperties.Server.Backend.IRC),
+        BackendUiMode.IRC,
         6667,
         6697,
         true,
@@ -46,6 +47,7 @@ public final class BuiltInBackendEditorProfiles {
     return new BackendEditorProfileSpec(
         BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.QUASSEL_CORE),
         BACKEND_DESCRIPTORS.displayNameFor(IrcProperties.Server.Backend.QUASSEL_CORE),
+        BackendUiMode.IRC,
         4242,
         4243,
         false,
@@ -75,6 +77,7 @@ public final class BuiltInBackendEditorProfiles {
     return new BackendEditorProfileSpec(
         BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.MATRIX),
         BACKEND_DESCRIPTORS.displayNameFor(IrcProperties.Server.Backend.MATRIX),
+        BackendUiMode.MATRIX,
         80,
         443,
         false,

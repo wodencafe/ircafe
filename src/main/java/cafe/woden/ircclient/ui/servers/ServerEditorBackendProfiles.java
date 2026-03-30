@@ -100,6 +100,7 @@ final class ServerEditorBackendProfiles {
     return new ServerEditorBackendProfile(
         backendId,
         fallbackDisplayName(backendId),
+        defaults.uiMode(),
         defaults.defaultPlainPort(),
         defaults.defaultTlsPort(),
         defaults.directAuthEnabled(),
@@ -145,6 +146,7 @@ final class ServerEditorBackendProfiles {
     return new ServerEditorBackendProfile(
         profileSpec.backendId(),
         profileSpec.displayName(),
+        profileSpec.uiMode(),
         profileSpec.defaultPlainPort(),
         profileSpec.defaultTlsPort(),
         profileSpec.directAuthEnabled(),

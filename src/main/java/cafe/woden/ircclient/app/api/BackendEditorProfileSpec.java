@@ -7,6 +7,7 @@ import java.util.Objects;
 public record BackendEditorProfileSpec(
     String backendId,
     String displayName,
+    BackendUiMode uiMode,
     int defaultPlainPort,
     int defaultTlsPort,
     boolean directAuthEnabled,
@@ -35,6 +36,7 @@ public record BackendEditorProfileSpec(
       throw new IllegalArgumentException("backendId must not be blank");
     }
     Objects.requireNonNull(displayName, "displayName");
+    Objects.requireNonNull(uiMode, "uiMode");
     Objects.requireNonNull(defaultLoginFallback, "defaultLoginFallback");
     Objects.requireNonNull(hostLabel, "hostLabel");
     Objects.requireNonNull(serverPasswordLabel, "serverPasswordLabel");
@@ -53,5 +55,56 @@ public record BackendEditorProfileSpec(
 
   public int defaultPort(boolean tls) {
     return tls ? defaultTlsPort : defaultPlainPort;
+  }
+
+  public BackendEditorProfileSpec(
+      String backendId,
+      String displayName,
+      int defaultPlainPort,
+      int defaultTlsPort,
+      boolean directAuthEnabled,
+      boolean matrixAuthSupported,
+      boolean requiresNick,
+      boolean usesNickAsDefaultLogin,
+      boolean supportsQuasselCoreCommands,
+      String defaultLoginFallback,
+      String hostLabel,
+      String serverPasswordLabel,
+      String nickLabel,
+      String loginLabel,
+      String realNameLabel,
+      String tlsToggleLabel,
+      String connectionHint,
+      String authDisabledHint,
+      String serverPasswordPlaceholder,
+      String hostPlaceholder,
+      String loginPlaceholder,
+      String nickPlaceholder,
+      String realNamePlaceholder) {
+    this(
+        backendId,
+        displayName,
+        matrixAuthSupported ? BackendUiMode.MATRIX : BackendUiMode.IRC,
+        defaultPlainPort,
+        defaultTlsPort,
+        directAuthEnabled,
+        matrixAuthSupported,
+        requiresNick,
+        usesNickAsDefaultLogin,
+        supportsQuasselCoreCommands,
+        defaultLoginFallback,
+        hostLabel,
+        serverPasswordLabel,
+        nickLabel,
+        loginLabel,
+        realNameLabel,
+        tlsToggleLabel,
+        connectionHint,
+        authDisabledHint,
+        serverPasswordPlaceholder,
+        hostPlaceholder,
+        loginPlaceholder,
+        nickPlaceholder,
+        realNamePlaceholder);
   }
 }

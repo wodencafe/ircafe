@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.api.BackendEditorProfileSpec;
+import cafe.woden.ircclient.app.api.BackendUiMode;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ class ServerEditorBackendProfilesTest {
 
     assertEquals("irc", irc.backendId());
     assertEquals("IRC", irc.displayName());
+    assertEquals(BackendUiMode.IRC, irc.uiMode());
     assertEquals(6667, irc.defaultPort(false));
     assertEquals(6697, irc.defaultPort(true));
     assertTrue(irc.directAuthEnabled());
@@ -42,6 +44,7 @@ class ServerEditorBackendProfilesTest {
     assertEquals("quassel-user", quassel.defaultLoginFallback());
 
     assertEquals("Matrix", matrix.displayName());
+    assertEquals(BackendUiMode.MATRIX, matrix.uiMode());
     assertEquals(80, matrix.defaultPort(false));
     assertEquals(443, matrix.defaultPort(true));
     assertTrue(matrix.matrixAuthSupported());
@@ -57,6 +60,7 @@ class ServerEditorBackendProfilesTest {
 
     assertEquals("plugin-backend", custom.backendId());
     assertEquals("plugin-backend", custom.displayName());
+    assertEquals(BackendUiMode.IRC, custom.uiMode());
     assertEquals(6667, custom.defaultPort(false));
     assertEquals(6697, custom.defaultPort(true));
     assertTrue(profiles.selectableBackendIds("Plugin-Backend").contains("plugin-backend"));
@@ -80,6 +84,7 @@ class ServerEditorBackendProfilesTest {
     ServerEditorBackendProfile plugin = profiles.profileForBackendId("plugin-backend");
 
     assertEquals("Plugin Backend", plugin.displayName());
+    assertEquals(BackendUiMode.IRC, plugin.uiMode());
     assertEquals(7000, plugin.defaultPort(false));
     assertEquals(7443, plugin.defaultPort(true));
     assertFalse(plugin.directAuthEnabled());
