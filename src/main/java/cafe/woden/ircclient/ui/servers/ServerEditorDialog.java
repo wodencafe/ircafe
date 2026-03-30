@@ -249,59 +249,77 @@ public class ServerEditorDialog extends JDialog {
         });
     saveBtn.addActionListener(e -> onSave());
 
-    // Seed values
     if (seed != null) {
-      idField.setText(Objects.toString(seed.id(), ""));
-      hostField.setText(Objects.toString(seed.host(), ""));
-      portField.setText(String.valueOf(seed.port()));
-      tlsBox.setSelected(seed.tls());
-      serverPassField.setText(Objects.toString(seed.serverPassword(), ""));
-
-      nickField.setText(Objects.toString(seed.nick(), ""));
-      loginField.setText(Objects.toString(seed.login(), ""));
-      realNameField.setText(Objects.toString(seed.realName(), ""));
-
-      if (seed.sasl() != null) {
-        saslUserField.setText(Objects.toString(seed.sasl().username(), ""));
-        saslPassField.setText(Objects.toString(seed.sasl().password(), ""));
-        saslMechanism.setSelectedItem(Objects.toString(seed.sasl().mechanism(), "PLAIN"));
-        saslContinueOnFailureBox.setSelected(
-            !Boolean.TRUE.equals(seed.sasl().disconnectOnFailure()));
-      }
-      if (seed.nickserv() != null) {
-        nickservServiceField.setText(Objects.toString(seed.nickserv().service(), "NickServ"));
-        nickservPassField.setText(Objects.toString(seed.nickserv().password(), ""));
-        nickservDelayJoinBox.setSelected(
-            seed.nickserv().delayJoinUntilIdentified() == null
-                || seed.nickserv().delayJoinUntilIdentified());
-      }
-      setAuthMode(ServerEditorAuthPolicy.seedAuthMode(seed));
-      ServerEditorBackendProfile seedProfile = backendProfile(seed.backendId());
-      setMatrixAuthMode(ServerEditorAuthPolicy.seedMatrixAuthMode(seedProfile, seed));
-      if (seedProfile.matrixAuthSupported()
-          && ServerEditorAuthPolicy.isMatrixPasswordAuthMode(seed.sasl())) {
-        matrixAuthUserField.setText(Objects.toString(seed.sasl().username(), ""));
-        serverPassField.setText(Objects.toString(seed.sasl().password(), ""));
-      }
-
-      autoJoinArea.setText(ServerEditorCommandListPolicy.channelSeedText(seed.autoJoin()));
-      autoJoinPmArea.setText(ServerEditorCommandListPolicy.privateMessageSeedText(seed.autoJoin()));
-      performArea.setText(ServerEditorCommandListPolicy.performSeedText(seed.perform()));
-      portAuto = false; // user likely set explicitly
-
-      seedProxy(seed.proxy());
+      seedFromServer(seed);
     } else {
-      tlsBox.setSelected(true);
-      portField.setText("6697");
-      portAuto = true;
-      setAuthMode(ServerEditorAuthMode.DISABLED);
-      setMatrixAuthMode(ServerEditorMatrixAuthMode.ACCESS_TOKEN);
-
-      seedProxy(null);
+      seedDefaultValues();
     }
     autoConnectOnStartBox.setSelected(autoConnectOnStart);
 
-    // Placeholders / styling
+    configureFieldStyles();
+    installInteractionHandlers();
+    updateAuthModeUi();
+    updateBackendUi();
+    updateProxyEnabled();
+    installValidationListeners();
+    updateValidation();
+
+    setPreferredSize(new Dimension(640, 520));
+    pack();
+    setLocationRelativeTo(parent);
+  }
+
+  private void seedFromServer(IrcProperties.Server seed) {
+    idField.setText(Objects.toString(seed.id(), ""));
+    hostField.setText(Objects.toString(seed.host(), ""));
+    portField.setText(String.valueOf(seed.port()));
+    tlsBox.setSelected(seed.tls());
+    serverPassField.setText(Objects.toString(seed.serverPassword(), ""));
+
+    nickField.setText(Objects.toString(seed.nick(), ""));
+    loginField.setText(Objects.toString(seed.login(), ""));
+    realNameField.setText(Objects.toString(seed.realName(), ""));
+
+    if (seed.sasl() != null) {
+      saslUserField.setText(Objects.toString(seed.sasl().username(), ""));
+      saslPassField.setText(Objects.toString(seed.sasl().password(), ""));
+      saslMechanism.setSelectedItem(Objects.toString(seed.sasl().mechanism(), "PLAIN"));
+      saslContinueOnFailureBox.setSelected(!Boolean.TRUE.equals(seed.sasl().disconnectOnFailure()));
+    }
+    if (seed.nickserv() != null) {
+      nickservServiceField.setText(Objects.toString(seed.nickserv().service(), "NickServ"));
+      nickservPassField.setText(Objects.toString(seed.nickserv().password(), ""));
+      nickservDelayJoinBox.setSelected(
+          seed.nickserv().delayJoinUntilIdentified() == null
+              || seed.nickserv().delayJoinUntilIdentified());
+    }
+    setAuthMode(ServerEditorAuthPolicy.seedAuthMode(seed));
+    ServerEditorBackendProfile seedProfile = backendProfile(seed.backendId());
+    setMatrixAuthMode(ServerEditorAuthPolicy.seedMatrixAuthMode(seedProfile, seed));
+    if (seedProfile.matrixAuthSupported()
+        && ServerEditorAuthPolicy.isMatrixPasswordAuthMode(seed.sasl())) {
+      matrixAuthUserField.setText(Objects.toString(seed.sasl().username(), ""));
+      serverPassField.setText(Objects.toString(seed.sasl().password(), ""));
+    }
+
+    autoJoinArea.setText(ServerEditorCommandListPolicy.channelSeedText(seed.autoJoin()));
+    autoJoinPmArea.setText(ServerEditorCommandListPolicy.privateMessageSeedText(seed.autoJoin()));
+    performArea.setText(ServerEditorCommandListPolicy.performSeedText(seed.perform()));
+    portAuto = false;
+
+    seedProxy(seed.proxy());
+  }
+
+  private void seedDefaultValues() {
+    tlsBox.setSelected(true);
+    portField.setText("6697");
+    portAuto = true;
+    setAuthMode(ServerEditorAuthMode.DISABLED);
+    setMatrixAuthMode(ServerEditorMatrixAuthMode.ACCESS_TOKEN);
+    seedProxy(null);
+  }
+
+  private void configureFieldStyles() {
     applyFieldStyle(idField, "libera");
     applyFieldStyle(hostField, "irc.example.net");
     applyFieldStyle(portField, "6697");
@@ -314,23 +332,14 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(saslPassField, "password / key");
     applyFieldStyle(nickservServiceField, "NickServ");
     applyFieldStyle(nickservPassField, "password");
-    // FlatLaf: show the standard "reveal" (eye) button inside password fields.
-    // Using the string key avoids any compile-time dependency on FlatLaf constants.
-    serverPassField.putClientProperty("JPasswordField.showRevealButton", true);
-    appendStyle(serverPassField, "showRevealButton:true");
-    saslPassField.putClientProperty("JPasswordField.showRevealButton", true);
-    // FlatLaf also supports a STYLE flag; keep both for compatibility.
-    appendStyle(saslPassField, "showRevealButton:true");
-    nickservPassField.putClientProperty("JPasswordField.showRevealButton", true);
-    appendStyle(nickservPassField, "showRevealButton:true");
+    enablePasswordReveal(serverPassField);
+    enablePasswordReveal(saslPassField);
+    enablePasswordReveal(nickservPassField);
     applyFieldStyle(proxyHostField, "127.0.0.1");
     applyFieldStyle(proxyPortField, "1080");
     applyFieldStyle(proxyUserField, "(optional)");
     applyFieldStyle(proxyPassField, "(optional)");
-    // FlatLaf: show the standard "reveal" (eye) button inside password fields.
-    proxyPassField.putClientProperty("JPasswordField.showRevealButton", true);
-    // FlatLaf also supports a STYLE flag; keep both for compatibility.
-    appendStyle(proxyPassField, "showRevealButton:true");
+    enablePasswordReveal(proxyPassField);
     applyFieldStyle(proxyConnectTimeoutMsField, "20000");
     applyFieldStyle(proxyReadTimeoutMsField, "30000");
     appendStyle(backendCombo, "arc:10");
@@ -344,37 +353,16 @@ public class ServerEditorDialog extends JDialog {
             + "/join #project\n"
             + "/quote MONITOR +friend\n"
             + "/sleep 1000");
+  }
 
-    // Auto-update default port when toggling TLS, if the user hasn't customized it.
+  private void enablePasswordReveal(JPasswordField field) {
+    field.putClientProperty("JPasswordField.showRevealButton", true);
+    appendStyle(field, "showRevealButton:true");
+  }
+
+  private void installInteractionHandlers() {
     tlsBox.addActionListener(e -> maybeAdjustPortForBackendAndTls());
-    portField
-        .getDocument()
-        .addDocumentListener(
-            new javax.swing.event.DocumentListener() {
-              @Override
-              public void insertUpdate(javax.swing.event.DocumentEvent e) {
-                if (!updatingPortProgrammatically) {
-                  portAuto = false;
-                }
-                updateValidation();
-              }
-
-              @Override
-              public void removeUpdate(javax.swing.event.DocumentEvent e) {
-                if (!updatingPortProgrammatically) {
-                  portAuto = false;
-                }
-                updateValidation();
-              }
-
-              @Override
-              public void changedUpdate(javax.swing.event.DocumentEvent e) {
-                if (!updatingPortProgrammatically) {
-                  portAuto = false;
-                }
-                updateValidation();
-              }
-            });
+    portField.getDocument().addDocumentListener(new PortTrackingListener());
 
     authModeCombo.addActionListener(e -> updateAuthModeUi());
     matrixAuthModeCombo.addActionListener(
@@ -390,16 +378,15 @@ public class ServerEditorDialog extends JDialog {
           updateBackendUi();
           updateAuthModeUi();
         });
-    updateAuthModeUi();
-    updateBackendUi();
 
     proxyOverrideBox.addActionListener(e -> updateProxyEnabled());
     proxyEnabledBox.addActionListener(e -> updateProxyEnabled());
-    updateProxyEnabled();
+  }
 
-    // Live validation outlines + Save button state.
+  private void installValidationListeners() {
     Runnable validate = this::updateValidation;
     javax.swing.event.DocumentListener vdl = new SimpleDocListener(validate);
+
     idField.getDocument().addDocumentListener(vdl);
     hostField.getDocument().addDocumentListener(vdl);
     // portField already has a listener for portAuto; it also calls updateValidation().
@@ -420,12 +407,30 @@ public class ServerEditorDialog extends JDialog {
     proxyPassField.getDocument().addDocumentListener(vdl);
     proxyConnectTimeoutMsField.getDocument().addDocumentListener(vdl);
     proxyReadTimeoutMsField.getDocument().addDocumentListener(vdl);
+  }
 
-    updateValidation();
+  private final class PortTrackingListener implements javax.swing.event.DocumentListener {
+    @Override
+    public void insertUpdate(javax.swing.event.DocumentEvent e) {
+      updatePortAutoAndValidation();
+    }
 
-    setPreferredSize(new Dimension(640, 520));
-    pack();
-    setLocationRelativeTo(parent);
+    @Override
+    public void removeUpdate(javax.swing.event.DocumentEvent e) {
+      updatePortAutoAndValidation();
+    }
+
+    @Override
+    public void changedUpdate(javax.swing.event.DocumentEvent e) {
+      updatePortAutoAndValidation();
+    }
+
+    private void updatePortAutoAndValidation() {
+      if (!updatingPortProgrammatically) {
+        portAuto = false;
+      }
+      updateValidation();
+    }
   }
 
   private static JComponent wrapScrollTab(JComponent content) {
