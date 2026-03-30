@@ -798,64 +798,13 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private JPanel buildAutoJoinPanel() {
-    JPanel p = new JPanel(new BorderLayout(8, 8));
-    p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-    JLabel hint =
-        new JLabel(
-            "<html>Channels and PM targets restored after connect.<br/>One entry per line.</html>");
-    hint.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    p.add(hint, BorderLayout.NORTH);
-
-    JPanel center = new JPanel(new java.awt.GridLayout(2, 1, 0, 8));
-
-    JPanel channels = new JPanel(new BorderLayout(6, 6));
-    channels.add(new JLabel("Auto-join channels"), BorderLayout.NORTH);
-    autoJoinArea.setLineWrap(true);
-    autoJoinArea.setWrapStyleWord(true);
-    JScrollPane sc = new JScrollPane(autoJoinArea);
-    sc.putClientProperty(FlatClientProperties.STYLE, "arc:12;");
-    channels.add(sc, BorderLayout.CENTER);
-    center.add(channels);
-
-    JPanel pms = new JPanel(new BorderLayout(6, 6));
-    pms.add(new JLabel("Auto-open private messages"), BorderLayout.NORTH);
-    autoJoinPmArea.setLineWrap(true);
-    autoJoinPmArea.setWrapStyleWord(true);
-    JScrollPane pmSc = new JScrollPane(autoJoinPmArea);
-    pmSc.putClientProperty(FlatClientProperties.STYLE, "arc:12;");
-    pms.add(pmSc, BorderLayout.CENTER);
-    center.add(pms);
-
-    p.add(center, BorderLayout.CENTER);
-    return p;
+    return ServerEditorCommandTabBuilder.buildAutoJoinPanel(
+        new ServerEditorCommandTabBuilder.AutoJoinWidgets(autoJoinArea, autoJoinPmArea));
   }
 
   private JPanel buildPerformPanel() {
-    JPanel p = new JPanel(new BorderLayout(8, 8));
-    p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-
-    JLabel hint =
-        new JLabel(
-            "<html>Run commands automatically after connect.<br/>"
-                + "One command per line. Use slash commands (for example: /join, /msg, /quote, /sleep)."
-                + "</html>");
-    hint.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    p.add(hint, BorderLayout.NORTH);
-
-    performArea.setLineWrap(true);
-    performArea.setWrapStyleWord(true);
-    JScrollPane sc = new JScrollPane(performArea);
-    sc.putClientProperty(FlatClientProperties.STYLE, "arc:12;");
-    p.add(sc, BorderLayout.CENTER);
-
-    JLabel hint2 =
-        new JLabel(
-            "<html>Notes: prefer explicit channels in perform commands. "
-                + "/sleep accepts milliseconds between commands.</html>");
-    hint2.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    p.add(hint2, BorderLayout.SOUTH);
-
-    return p;
+    return ServerEditorCommandTabBuilder.buildPerformPanel(
+        new ServerEditorCommandTabBuilder.PerformWidgets(performArea));
   }
 
   private ServerEditorAuthMode selectedAuthMode() {
