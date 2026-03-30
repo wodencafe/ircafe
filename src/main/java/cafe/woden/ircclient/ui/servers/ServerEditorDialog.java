@@ -1158,30 +1158,25 @@ public class ServerEditorDialog extends JDialog {
     }
   }
 
-  private static boolean isValidPort(String s) {
-    try {
-      int p = Integer.parseInt(trim(s));
-      return p > 0 && p <= 65535;
-    } catch (Exception e) {
-      return false;
-    }
-  }
-
   private void updateValidation() {
     boolean ok = true;
     ServerEditorBackendProfile profile = selectedBackendProfile();
+    ServerEditorConnectionPolicy.ConnectionValidation connectionValidation =
+        ServerEditorConnectionPolicy.validation(
+            profile,
+            idField.getText(),
+            hostField.getText(),
+            portField.getText(),
+            nickField.getText());
 
-    boolean idBad = trim(idField.getText()).isEmpty();
-    setError(idField, idBad);
-    ok &= !idBad;
+    setError(idField, connectionValidation.idBad());
+    ok &= !connectionValidation.idBad();
 
-    boolean hostBad = trim(hostField.getText()).isEmpty();
-    setError(hostField, hostBad);
-    ok &= !hostBad;
+    setError(hostField, connectionValidation.hostBad());
+    ok &= !connectionValidation.hostBad();
 
-    boolean portBad = !isValidPort(portField.getText());
-    setError(portField, portBad);
-    ok &= !portBad;
+    setError(portField, connectionValidation.portBad());
+    ok &= !connectionValidation.portBad();
 
     ServerEditorMatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
     ServerEditorAuthPolicy.MatrixValidation matrixValidation =
@@ -1201,9 +1196,8 @@ public class ServerEditorDialog extends JDialog {
     setError(loginField, loginBad);
     ok &= !loginBad;
 
-    boolean nickBad = profile.requiresNick() && trim(nickField.getText()).isEmpty();
-    setError(nickField, nickBad);
-    ok &= !nickBad;
+    setError(nickField, connectionValidation.nickBad());
+    ok &= !connectionValidation.nickBad();
 
     ServerEditorAuthMode authMode =
         ServerEditorAuthPolicy.effectiveAuthMode(profile, selectedAuthMode());
@@ -1367,19 +1361,9 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private IrcProperties.Server buildServer() {
-    String id = trim(idField.getText());
-    if (id.isEmpty()) throw new IllegalArgumentException("Server ID is required");
-
-    String host = trim(hostField.getText());
-    if (host.isEmpty()) throw new IllegalArgumentException("Host is required");
-
-    int port;
-    try {
-      port = Integer.parseInt(trim(portField.getText()));
-    } catch (Exception e) {
-      throw new IllegalArgumentException("Port must be a number");
-    }
-    if (port <= 0 || port > 65535) throw new IllegalArgumentException("Port must be 1-65535");
+    ServerEditorConnectionPolicy.ServerConnection connection =
+        ServerEditorConnectionPolicy.parseConnection(
+            idField.getText(), hostField.getText(), portField.getText());
 
     String backendId = selectedBackendId();
     ServerEditorBackendProfile profile = backendProfile(backendId);
@@ -1395,10 +1379,8 @@ public class ServerEditorDialog extends JDialog {
       throw new IllegalArgumentException("Server/Core password must not contain newlines");
     }
 
-    String nick = trim(nickField.getText());
-    if (profile.requiresNick() && nick.isEmpty()) {
-      throw new IllegalArgumentException("Nick is required");
-    }
+    String nick =
+        ServerEditorConnectionPolicy.validateAndNormalizeNick(profile, nickField.getText());
 
     String login =
         ServerEditorAuthPolicy.resolveLogin(
@@ -1448,9 +1430,9 @@ public class ServerEditorDialog extends JDialog {
             proxyReadTimeoutMsField.getText());
 
     return new IrcProperties.Server(
-        id,
-        host,
-        port,
+        connection.id(),
+        connection.host(),
+        connection.port(),
         tls,
         serverPassword,
         nick,
