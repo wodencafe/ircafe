@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.app.api;
 
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
-import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -9,24 +8,6 @@ import java.util.Objects;
 public final class BackendAvailabilityReasonFormatter {
   private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
       BackendDescriptorCatalog.builtIns();
-
-  private static final AvailableBackendIdsPort BUILT_INS_BACKEND_METADATA =
-      new AvailableBackendIdsPort() {
-        @Override
-        public List<String> availableBackendIds() {
-          return List.of();
-        }
-
-        @Override
-        public String backendDisplayName(String backendId) {
-          String normalized = canonicalBackendId(backendId);
-          if (normalized.isEmpty()) return "";
-          return BACKEND_DESCRIPTORS
-              .descriptorForId(normalized)
-              .map(descriptor -> Objects.toString(descriptor.displayName(), "").trim())
-              .orElse(normalized);
-        }
-      };
 
   private BackendAvailabilityReasonFormatter() {}
 
@@ -47,7 +28,7 @@ public final class BackendAvailabilityReasonFormatter {
   }
 
   public static AvailableBackendIdsPort builtInsBackendMetadata() {
-    return BUILT_INS_BACKEND_METADATA;
+    return AvailableBackendIdsPort.builtInsOnly();
   }
 
   private static String canonicalBackendId(String backendId) {
@@ -67,7 +48,10 @@ public final class BackendAvailabilityReasonFormatter {
             backendMetadata, BackendAvailabilityReasonFormatter::builtInsBackendMetadata);
     String displayName = Objects.toString(metadata.backendDisplayName(backendId), "").trim();
     String label = displayName.isEmpty() ? backendId : displayName;
-    if (label.isEmpty()) return "";
+    if (label.isEmpty()) {
+      label = Objects.toString(metadata.backendDisplayLabel(backendId), "").trim();
+    }
+    if (label.isEmpty()) return backendId;
     return label.toLowerCase(Locale.ROOT).endsWith("backend") ? label : label + " backend";
   }
 

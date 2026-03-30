@@ -3,7 +3,6 @@ package cafe.woden.ircclient.ui.backend;
 import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.irc.backend.IrcBackendModePort;
-import java.util.List;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -25,13 +24,12 @@ public class BackendUiProfileProvider {
       AvailableBackendIdsPort backendMetadata) {
     this.backendMode = Objects.requireNonNull(backendMode, "backendMode");
     this.backendMetadata =
-        Objects.requireNonNullElseGet(
-            backendMetadata, BackendUiProfileProvider::defaultBackendMetadata);
+        Objects.requireNonNullElseGet(backendMetadata, AvailableBackendIdsPort::builtInsOnly);
     this.backendUiContext = BackendUiContext.fromBackendModePort(backendMode);
   }
 
   BackendUiProfileProvider(IrcBackendModePort backendMode) {
-    this(backendMode, defaultBackendMetadata());
+    this(backendMode, AvailableBackendIdsPort.builtInsOnly());
   }
 
   public BackendUiContext backendUiContext() {
@@ -69,23 +67,5 @@ public class BackendUiProfileProvider {
 
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
-  }
-
-  private static AvailableBackendIdsPort defaultBackendMetadata() {
-    return new AvailableBackendIdsPort() {
-      @Override
-      public List<String> availableBackendIds() {
-        return List.of();
-      }
-
-      @Override
-      public String backendDisplayName(String backendId) {
-        String normalized = BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendId);
-        return BACKEND_DESCRIPTORS
-            .descriptorForId(normalized)
-            .map(descriptor -> Objects.toString(descriptor.displayName(), "").trim())
-            .orElse(normalized);
-      }
-    };
   }
 }

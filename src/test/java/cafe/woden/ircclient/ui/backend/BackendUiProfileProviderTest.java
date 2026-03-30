@@ -79,6 +79,16 @@ class BackendUiProfileProviderTest {
   }
 
   @Test
+  void backendDisplayNameForServerFallsBackToBuiltInMetadata() {
+    IrcBackendModePort backendMode = mock(IrcBackendModePort.class);
+    when(backendMode.backendIdForServer("quassel")).thenReturn("quassel-core");
+    BackendUiProfileProvider provider = new BackendUiProfileProvider(backendMode);
+
+    assertEquals("Quassel Core", provider.backendDisplayNameForServer(" quassel "));
+    verify(backendMode).backendIdForServer("quassel");
+  }
+
+  @Test
   void backendIdForServerNormalizesBackendIdFromPort() {
     IrcBackendModePort backendMode = mock(IrcBackendModePort.class);
     when(backendMode.backendIdForServer("plugin")).thenReturn(" Plugin-Backend ");
