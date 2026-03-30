@@ -1047,166 +1047,65 @@ public class ServerEditorDialog extends JDialog {
             nickservServiceField, nickservPassField, nickservDelayJoinBox, nickservHintLabel));
   }
 
-  // FlatLaf validation outlines.
-  private static final String OUTLINE_PROP = "JComponent.outline";
-  private static final String OUTLINE_ERROR = "error";
-  private static final String OUTLINE_WARNING = "warning";
-  private static final String OUTLINE_SUCCESS = "success";
-
-  private static void setOutline(JComponent c, String outline) {
-    c.putClientProperty(OUTLINE_PROP, outline);
-  }
-
-  private static void clearOutline(JComponent c) {
-    c.putClientProperty(OUTLINE_PROP, null);
-  }
-
-  private static void setError(JComponent c, boolean on) {
-    setOutline(c, on ? OUTLINE_ERROR : null);
-  }
-
-  private static void setWarning(JComponent c, boolean on) {
-    setOutline(c, on ? OUTLINE_WARNING : null);
-  }
-
-  private static void setSuccess(JComponent c, boolean on) {
-    Object cur = c.getClientProperty(OUTLINE_PROP);
-    if (on) {
-      // Only paint success if nothing else (error/warning) is currently displayed.
-      if (cur == null) setOutline(c, OUTLINE_SUCCESS);
-    } else {
-      if (Objects.equals(cur, OUTLINE_SUCCESS)) clearOutline(c);
-    }
-  }
-
   private void updateValidation() {
-    boolean ok = true;
-    ServerEditorBackendProfile profile = selectedBackendProfile();
-    ServerEditorConnectionPolicy.ConnectionValidation connectionValidation =
-        ServerEditorConnectionPolicy.validation(
-            profile,
-            idField.getText(),
-            hostField.getText(),
-            portField.getText(),
-            nickField.getText());
+    ServerEditorValidationPolicy.ValidationState state =
+        ServerEditorValidationPolicy.validate(
+            new ServerEditorValidationPolicy.ValidationRequest(
+                selectedBackendProfile(),
+                idField.getText(),
+                hostField.getText(),
+                portField.getText(),
+                nickField.getText(),
+                selectedMatrixAuthMode(),
+                serverPasswordValue(),
+                matrixAuthUserField.getText(),
+                selectedAuthMode(),
+                Objects.toString(saslMechanism.getSelectedItem(), "PLAIN"),
+                saslUserField.getText(),
+                new String(saslPassField.getPassword()),
+                new String(nickservPassField.getPassword()),
+                proxyOverrideBox.isSelected(),
+                proxyEnabledBox.isSelected(),
+                proxyHostField.getText(),
+                proxyPortField.getText(),
+                proxyUserField.getText(),
+                new String(proxyPassField.getPassword()),
+                proxyConnectTimeoutMsField.getText(),
+                proxyReadTimeoutMsField.getText()));
 
-    setError(idField, connectionValidation.idBad());
-    ok &= !connectionValidation.idBad();
-
-    setError(hostField, connectionValidation.hostBad());
-    ok &= !connectionValidation.hostBad();
-
-    setError(portField, connectionValidation.portBad());
-    ok &= !connectionValidation.portBad();
-
-    ServerEditorMatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
-    ServerEditorAuthPolicy.MatrixValidation matrixValidation =
-        ServerEditorAuthPolicy.matrixValidation(
-            profile, matrixAuthMode, serverPasswordValue(), matrixAuthUserField.getText());
-    setError(serverPassField, matrixValidation.credentialBad());
-    ok &= !matrixValidation.credentialBad();
-
-    if (matrixValidation.applicable()) {
-      setError(matrixAuthUserField, matrixValidation.usernameBad());
-      ok &= !matrixValidation.usernameBad();
-    } else {
-      clearOutline(matrixAuthUserField);
-    }
-
-    boolean loginBad = false;
-    setError(loginField, loginBad);
-    ok &= !loginBad;
-
-    setError(nickField, connectionValidation.nickBad());
-    ok &= !connectionValidation.nickBad();
-
-    ServerEditorAuthMode authMode =
-        ServerEditorAuthPolicy.effectiveAuthMode(profile, selectedAuthMode());
-    ServerEditorAuthPolicy.SaslValidation saslValidation =
-        ServerEditorAuthPolicy.saslValidation(
-            authMode,
-            Objects.toString(saslMechanism.getSelectedItem(), "PLAIN"),
-            saslUserField.getText(),
-            new String(saslPassField.getPassword()));
-
-    // SASL validation
-    if (!saslValidation.applicable()) {
-      clearOutline(saslUserField);
-      clearOutline(saslPassField);
-    } else {
-      setError(saslUserField, saslValidation.userBad());
-      setError(saslPassField, saslValidation.secretBad());
-      ok &= !saslValidation.userBad();
-      ok &= !saslValidation.secretBad();
-    }
-
-    // NickServ validation
-    ServerEditorAuthPolicy.NickservValidation nickservValidation =
-        ServerEditorAuthPolicy.nickservValidation(
-            authMode, new String(nickservPassField.getPassword()));
-    if (!nickservValidation.applicable()) {
-      clearOutline(nickservServiceField);
-      clearOutline(nickservPassField);
-    } else {
-      setError(nickservServiceField, false);
-      setError(nickservPassField, nickservValidation.passwordBad());
-      ok &= !nickservValidation.passwordBad();
-    }
-
-    ServerEditorProxyValidationPolicy.ProxyValidation proxyValidation =
-        ServerEditorProxyValidationPolicy.validate(
-            proxyOverrideBox.isSelected(),
-            proxyEnabledBox.isSelected(),
-            proxyHostField.getText(),
-            proxyPortField.getText(),
-            proxyUserField.getText(),
-            new String(proxyPassField.getPassword()),
-            proxyConnectTimeoutMsField.getText(),
-            proxyReadTimeoutMsField.getText());
-
-    // Proxy override validation
-    if (!proxyValidation.applicable()) {
-      clearOutline(proxyHostField);
-      clearOutline(proxyPortField);
-      clearOutline(proxyUserField);
-      clearOutline(proxyPassField);
-      clearOutline(proxyConnectTimeoutMsField);
-      clearOutline(proxyReadTimeoutMsField);
-    } else {
-      setWarning(proxyConnectTimeoutMsField, proxyValidation.connectTimeoutWarning());
-      setWarning(proxyReadTimeoutMsField, proxyValidation.readTimeoutWarning());
-
-      if (!proxyValidation.proxyDetailsApplicable()) {
-        clearOutline(proxyHostField);
-        clearOutline(proxyPortField);
-        clearOutline(proxyUserField);
-        clearOutline(proxyPassField);
-      } else {
-        setError(proxyHostField, proxyValidation.hostBad());
-        setError(proxyPortField, proxyValidation.portBad());
-
-        ok &= !proxyValidation.hostBad();
-        ok &= !proxyValidation.portBad();
-
-        setWarning(proxyUserField, proxyValidation.authMismatch());
-        setWarning(proxyPassField, proxyValidation.authMismatch());
-      }
-    }
+    ServerEditorValidationUiApplier.apply(
+        state,
+        new ServerEditorValidationUiApplier.ValidationWidgets(
+            idField,
+            hostField,
+            portField,
+            serverPassField,
+            matrixAuthUserField,
+            loginField,
+            nickField,
+            saslUserField,
+            saslPassField,
+            nickservServiceField,
+            nickservPassField,
+            proxyHostField,
+            proxyPortField,
+            proxyUserField,
+            proxyPassField,
+            proxyConnectTimeoutMsField,
+            proxyReadTimeoutMsField,
+            saveBtn));
 
     // If a proxy test previously succeeded, keep success outlines only while inputs remain
     // unchanged.
     applyProxyTestSuccessDecoration();
-
-    saveBtn.setEnabled(ok);
-    saveBtn.setToolTipText(ok ? null : "Fix highlighted fields to enable Save.");
   }
 
   private void applyProxyTestSuccessDecoration() {
     // Clear success outlines by default.
-    setSuccess(proxyHostField, false);
-    setSuccess(proxyPortField, false);
-    setSuccess(proxyConnectTimeoutMsField, false);
-    setSuccess(proxyReadTimeoutMsField, false);
+    ServerEditorValidationUiApplier.setSuccess(proxyHostField, false);
+    ServerEditorValidationUiApplier.setSuccess(proxyPortField, false);
+    ServerEditorValidationUiApplier.setSuccess(proxyConnectTimeoutMsField, false);
+    ServerEditorValidationUiApplier.setSuccess(proxyReadTimeoutMsField, false);
 
     if (lastProxyTestOk == null) return;
 
@@ -1221,8 +1120,8 @@ public class ServerEditorDialog extends JDialog {
     if (!proxyHostField.isEnabled() || !proxyPortField.isEnabled()) return;
 
     // If the proxy fields have an error/warning outline, don't overwrite it.
-    setSuccess(proxyHostField, true);
-    setSuccess(proxyPortField, true);
+    ServerEditorValidationUiApplier.setSuccess(proxyHostField, true);
+    ServerEditorValidationUiApplier.setSuccess(proxyPortField, true);
 
     // Timeouts are part of the test config too; mark them success if user entered valid values or
     // left blank.
@@ -1232,8 +1131,8 @@ public class ServerEditorDialog extends JDialog {
     boolean rtoOk =
         trim(proxyReadTimeoutMsField.getText()).isEmpty()
             || parseLongOrDefault(proxyReadTimeoutMsField.getText(), -1) > 0;
-    setSuccess(proxyConnectTimeoutMsField, ctoOk);
-    setSuccess(proxyReadTimeoutMsField, rtoOk);
+    ServerEditorValidationUiApplier.setSuccess(proxyConnectTimeoutMsField, ctoOk);
+    ServerEditorValidationUiApplier.setSuccess(proxyReadTimeoutMsField, rtoOk);
   }
 
   private static final class SimpleDocListener implements javax.swing.event.DocumentListener {
