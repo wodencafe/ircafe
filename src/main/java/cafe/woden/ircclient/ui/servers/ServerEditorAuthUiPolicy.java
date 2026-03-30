@@ -1,8 +1,5 @@
 package cafe.woden.ircclient.ui.servers;
 
-import java.util.Locale;
-import java.util.Objects;
-
 /** Pure UI-state rules for server-editor auth controls. */
 final class ServerEditorAuthUiPolicy {
   private ServerEditorAuthUiPolicy() {}
@@ -42,46 +39,17 @@ final class ServerEditorAuthUiPolicy {
 
   static SaslUiState saslUiState(ServerEditorAuthMode authMode, String mechanism) {
     boolean enabled = authMode == ServerEditorAuthMode.SASL;
-    String mechanismUpper = Objects.toString(mechanism, "PLAIN").trim().toUpperCase(Locale.ROOT);
-
-    boolean userEnabled = enabled;
-    boolean secretEnabled = enabled;
-    String hint;
-    String secretPlaceholder;
-
-    switch (mechanismUpper) {
-      case "EXTERNAL" -> {
-        secretEnabled = false;
-        secretPlaceholder = "(ignored)";
-        hint =
-            "EXTERNAL uses your TLS client certificate. Secret is ignored; username is optional.";
-      }
-      case "ECDSA-NIST256P-CHALLENGE" -> {
-        secretPlaceholder = "base64 PKCS#8 EC private key";
-        hint =
-            "ECDSA challenge-response. Secret should be a base64 PKCS#8 EC private key. Username is usually required.";
-      }
-      case "SCRAM-SHA-256" -> {
-        secretPlaceholder = "password";
-        hint = "SCRAM-SHA-256 (recommended). Secret = password.";
-      }
-      case "SCRAM-SHA-1" -> {
-        secretPlaceholder = "password";
-        hint = "SCRAM-SHA-1. Secret = password.";
-      }
-      case "AUTO" -> {
-        secretPlaceholder = "password (leave blank for EXTERNAL)";
-        hint =
-            "AUTO prefers SCRAM (256/1) or PLAIN when a secret is provided, and falls back to EXTERNAL when secret is blank.";
-      }
-      default -> {
-        secretPlaceholder = "password";
-        hint = "PLAIN. Secret = password.";
-      }
-    }
+    ServerEditorAuthPolicy.SaslMechanismMetadata metadata =
+        ServerEditorAuthPolicy.saslMechanismMetadata(mechanism);
 
     return new SaslUiState(
-        enabled, enabled, enabled, userEnabled, secretEnabled, secretPlaceholder, hint);
+        enabled,
+        enabled,
+        enabled,
+        enabled,
+        enabled && metadata.secretEnabled(),
+        metadata.secretPlaceholder(),
+        metadata.hint());
   }
 
   static NickservUiState nickservUiState(ServerEditorAuthMode authMode) {

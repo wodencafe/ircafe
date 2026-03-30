@@ -1180,8 +1180,6 @@ public class ServerEditorDialog extends JDialog {
   private void updateValidation() {
     boolean ok = true;
     ServerEditorBackendProfile profile = selectedBackendProfile();
-    boolean quasselCommandBackend = profile.supportsQuasselCoreCommands();
-    boolean matrixAuthBackend = profile.matrixAuthSupported();
 
     boolean idBad = trim(idField.getText()).isEmpty();
     setError(idField, idBad);
@@ -1196,16 +1194,15 @@ public class ServerEditorDialog extends JDialog {
     ok &= !portBad;
 
     ServerEditorMatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
-    boolean matrixPasswordMode =
-        ServerEditorAuthPolicy.isMatrixPasswordMode(profile, matrixAuthMode);
-    boolean matrixCredentialBad = matrixAuthBackend && trim(serverPasswordValue()).isEmpty();
-    setError(serverPassField, matrixCredentialBad);
-    ok &= !matrixCredentialBad;
+    ServerEditorAuthPolicy.MatrixValidation matrixValidation =
+        ServerEditorAuthPolicy.matrixValidation(
+            profile, matrixAuthMode, serverPasswordValue(), matrixAuthUserField.getText());
+    setError(serverPassField, matrixValidation.credentialBad());
+    ok &= !matrixValidation.credentialBad();
 
-    boolean matrixAuthUserBad = matrixPasswordMode && trim(matrixAuthUserField.getText()).isEmpty();
-    if (matrixAuthBackend) {
-      setError(matrixAuthUserField, matrixAuthUserBad);
-      ok &= !matrixAuthUserBad;
+    if (matrixValidation.applicable()) {
+      setError(matrixAuthUserField, matrixValidation.usernameBad());
+      ok &= !matrixValidation.usernameBad();
     } else {
       clearOutline(matrixAuthUserField);
     }
@@ -1220,57 +1217,35 @@ public class ServerEditorDialog extends JDialog {
 
     ServerEditorAuthMode authMode =
         ServerEditorAuthPolicy.effectiveAuthMode(profile, selectedAuthMode());
+    ServerEditorAuthPolicy.SaslValidation saslValidation =
+        ServerEditorAuthPolicy.saslValidation(
+            authMode,
+            Objects.toString(saslMechanism.getSelectedItem(), "PLAIN"),
+            saslUserField.getText(),
+            new String(saslPassField.getPassword()));
 
     // SASL validation
-    if (quasselCommandBackend || matrixAuthBackend || authMode != ServerEditorAuthMode.SASL) {
+    if (!saslValidation.applicable()) {
       clearOutline(saslUserField);
       clearOutline(saslPassField);
     } else {
-      String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
-      String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
-
-      String u = trim(saslUserField.getText());
-      String p = new String(saslPassField.getPassword());
-      boolean hasSecret = !p.isBlank();
-
-      boolean needsUser =
-          switch (mechUpper) {
-            case "EXTERNAL" -> false;
-            case "AUTO" -> hasSecret;
-            default -> true;
-          };
-      boolean needsSecret =
-          switch (mechUpper) {
-            case "EXTERNAL" -> false;
-            case "AUTO" -> false;
-            default -> true;
-          };
-
-      boolean userBad = needsUser && u.isEmpty();
-      boolean secretBad = needsSecret && p.isBlank();
-
-      // Even if the fields are disabled (e.g. EXTERNAL), we clear outlines.
-      if (!saslUserField.isEnabled()) userBad = false;
-      if (!saslPassField.isEnabled()) secretBad = false;
-
-      setError(saslUserField, userBad);
-      setError(saslPassField, secretBad);
-
-      ok &= !userBad;
-      ok &= !secretBad;
+      setError(saslUserField, saslValidation.userBad());
+      setError(saslPassField, saslValidation.secretBad());
+      ok &= !saslValidation.userBad();
+      ok &= !saslValidation.secretBad();
     }
 
     // NickServ validation
-    if (quasselCommandBackend || matrixAuthBackend || authMode != ServerEditorAuthMode.NICKSERV) {
+    ServerEditorAuthPolicy.NickservValidation nickservValidation =
+        ServerEditorAuthPolicy.nickservValidation(
+            authMode, new String(nickservPassField.getPassword()));
+    if (!nickservValidation.applicable()) {
       clearOutline(nickservServiceField);
       clearOutline(nickservPassField);
     } else {
-      String pass = new String(nickservPassField.getPassword());
-      boolean passBad = pass.isBlank();
-
       setError(nickservServiceField, false);
-      setError(nickservPassField, passBad);
-      ok &= !passBad;
+      setError(nickservPassField, nickservValidation.passwordBad());
+      ok &= !nickservValidation.passwordBad();
     }
 
     // Proxy override validation

@@ -34,6 +34,18 @@ final class ServerEditorAuthPolicy {
         && mode == ServerEditorMatrixAuthMode.USERNAME_PASSWORD;
   }
 
+  static MatrixValidation matrixValidation(
+      ServerEditorBackendProfile profile,
+      ServerEditorMatrixAuthMode matrixAuthMode,
+      String serverPassword,
+      String matrixAuthUser) {
+    boolean applicable = profile != null && profile.matrixAuthSupported();
+    boolean credentialBad = applicable && trim(serverPassword).isEmpty();
+    boolean usernameBad =
+        isMatrixPasswordMode(profile, matrixAuthMode) && trim(matrixAuthUser).isEmpty();
+    return new MatrixValidation(applicable, credentialBad, usernameBad);
+  }
+
   static boolean disablesTraditionalAuthMode(ServerEditorBackendProfile profile) {
     return profile != null
         && (profile.supportsQuasselCoreCommands() || profile.matrixAuthSupported());
@@ -57,16 +69,15 @@ final class ServerEditorAuthPolicy {
       ServerEditorMatrixAuthMode matrixAuthMode,
       String serverPassword,
       String matrixAuthUser) {
-    if (profile == null || !profile.matrixAuthSupported()) {
-      return;
-    }
-    if (trim(serverPassword).isEmpty()) {
+    MatrixValidation validation =
+        matrixValidation(profile, matrixAuthMode, serverPassword, matrixAuthUser);
+    if (validation.credentialBad()) {
       throw new IllegalArgumentException(
-          isMatrixPasswordMode(profile, matrixAuthMode)
+          validation.usernameBad() || isMatrixPasswordMode(profile, matrixAuthMode)
               ? "Matrix password is required"
               : "Matrix access token is required");
     }
-    if (isMatrixPasswordMode(profile, matrixAuthMode) && trim(matrixAuthUser).isEmpty()) {
+    if (validation.usernameBad()) {
       throw new IllegalArgumentException("Matrix username is required");
     }
   }
@@ -119,34 +130,40 @@ final class ServerEditorAuthPolicy {
 
     String username = trim(saslUser);
     String secret = Objects.toString(saslSecret, "");
-    String mechanism = Objects.toString(saslMechanism, "PLAIN").trim();
-    String mechanismUpper = mechanism.toUpperCase(Locale.ROOT);
-    boolean hasSecret = !secret.isBlank();
-    boolean needsUser =
-        switch (mechanismUpper) {
-          case "EXTERNAL" -> false;
-          case "AUTO" -> hasSecret;
-          default -> true;
-        };
-    boolean needsSecret =
-        switch (mechanismUpper) {
-          case "EXTERNAL" -> false;
-          case "AUTO" -> false;
-          default -> true;
-        };
+    SaslMechanismMetadata metadata = saslMechanismMetadata(saslMechanism);
+    SaslRequirements requirements =
+        saslRequirements(metadata.normalizedMechanism(), !secret.isBlank());
 
-    if (needsUser && username.isEmpty()) {
+    if (requirements.userRequired() && username.isEmpty()) {
       throw new IllegalArgumentException(
-          "SASL username is required for mechanism " + mechanismUpper);
+          "SASL username is required for mechanism " + metadata.normalizedMechanism());
     }
-    if (needsSecret && secret.isBlank()) {
-      throw new IllegalArgumentException("SASL secret is required for mechanism " + mechanismUpper);
+    if (requirements.secretRequired() && secret.isBlank()) {
+      throw new IllegalArgumentException(
+          "SASL secret is required for mechanism " + metadata.normalizedMechanism());
     }
 
     return new SaslBuildResult(
         serverPassword,
-        new IrcProperties.Server.Sasl(true, username, secret, mechanism, !saslContinueOnFailure),
+        new IrcProperties.Server.Sasl(
+            true, username, secret, metadata.normalizedMechanism(), !saslContinueOnFailure),
         authMode);
+  }
+
+  static SaslValidation saslValidation(
+      ServerEditorAuthMode authMode, String mechanism, String username, String secret) {
+    if (authMode != ServerEditorAuthMode.SASL) {
+      return new SaslValidation(false, false, false);
+    }
+    SaslMechanismMetadata metadata = saslMechanismMetadata(mechanism);
+    SaslRequirements requirements =
+        saslRequirements(metadata.normalizedMechanism(), !Objects.toString(secret, "").isBlank());
+    boolean userBad = requirements.userRequired() && trim(username).isEmpty();
+    boolean secretBad =
+        metadata.secretEnabled()
+            && requirements.secretRequired()
+            && Objects.toString(secret, "").isBlank();
+    return new SaslValidation(true, userBad, secretBad);
   }
 
   static IrcProperties.Server.Nickserv buildNickserv(
@@ -169,10 +186,72 @@ final class ServerEditorAuthPolicy {
         true, resolvedPassword, resolvedService, delayJoinUntilIdentified);
   }
 
+  static NickservValidation nickservValidation(ServerEditorAuthMode authMode, String password) {
+    boolean applicable = authMode == ServerEditorAuthMode.NICKSERV;
+    boolean passwordBad = applicable && Objects.toString(password, "").isBlank();
+    return new NickservValidation(applicable, passwordBad);
+  }
+
+  static SaslMechanismMetadata saslMechanismMetadata(String mechanism) {
+    String normalizedMechanism =
+        Objects.toString(mechanism, "PLAIN").trim().toUpperCase(Locale.ROOT);
+    return switch (normalizedMechanism) {
+      case "EXTERNAL" ->
+          new SaslMechanismMetadata(
+              normalizedMechanism,
+              false,
+              "(ignored)",
+              "EXTERNAL uses your TLS client certificate. Secret is ignored; username is optional.");
+      case "ECDSA-NIST256P-CHALLENGE" ->
+          new SaslMechanismMetadata(
+              normalizedMechanism,
+              true,
+              "base64 PKCS#8 EC private key",
+              "ECDSA challenge-response. Secret should be a base64 PKCS#8 EC private key. Username is usually required.");
+      case "SCRAM-SHA-256" ->
+          new SaslMechanismMetadata(
+              normalizedMechanism,
+              true,
+              "password",
+              "SCRAM-SHA-256 (recommended). Secret = password.");
+      case "SCRAM-SHA-1" ->
+          new SaslMechanismMetadata(
+              normalizedMechanism, true, "password", "SCRAM-SHA-1. Secret = password.");
+      case "AUTO" ->
+          new SaslMechanismMetadata(
+              normalizedMechanism,
+              true,
+              "password (leave blank for EXTERNAL)",
+              "AUTO prefers SCRAM (256/1) or PLAIN when a secret is provided, and falls back to EXTERNAL when secret is blank.");
+      default ->
+          new SaslMechanismMetadata(
+              normalizedMechanism, true, "password", "PLAIN. Secret = password.");
+    };
+  }
+
   static String trim(String value) {
     return Objects.toString(value, "").trim();
   }
 
+  private static SaslRequirements saslRequirements(String mechanism, boolean hasSecret) {
+    return switch (mechanism) {
+      case "EXTERNAL" -> new SaslRequirements(false, false);
+      case "AUTO" -> new SaslRequirements(hasSecret, false);
+      default -> new SaslRequirements(true, true);
+    };
+  }
+
   record SaslBuildResult(
       String serverPassword, IrcProperties.Server.Sasl sasl, ServerEditorAuthMode authMode) {}
+
+  record MatrixValidation(boolean applicable, boolean credentialBad, boolean usernameBad) {}
+
+  record SaslValidation(boolean applicable, boolean userBad, boolean secretBad) {}
+
+  record NickservValidation(boolean applicable, boolean passwordBad) {}
+
+  record SaslMechanismMetadata(
+      String normalizedMechanism, boolean secretEnabled, String secretPlaceholder, String hint) {}
+
+  private record SaslRequirements(boolean userRequired, boolean secretRequired) {}
 }

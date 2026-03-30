@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.servers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import java.util.List;
@@ -111,5 +112,61 @@ class ServerEditorAuthPolicyTest {
     assertFalse(
         ServerEditorAuthPolicy.buildNickserv(ServerEditorAuthMode.DISABLED, "NickServ", "", true)
             .enabled());
+  }
+
+  @Test
+  void saslValidationUsesSharedMechanismRules() {
+    ServerEditorAuthPolicy.SaslValidation external =
+        ServerEditorAuthPolicy.saslValidation(ServerEditorAuthMode.SASL, "EXTERNAL", "", "");
+    ServerEditorAuthPolicy.SaslValidation scram =
+        ServerEditorAuthPolicy.saslValidation(ServerEditorAuthMode.SASL, "SCRAM-SHA-256", "", "");
+    ServerEditorAuthPolicy.SaslValidation autoNoSecret =
+        ServerEditorAuthPolicy.saslValidation(ServerEditorAuthMode.SASL, "AUTO", "", "");
+
+    assertTrue(external.applicable());
+    assertFalse(external.userBad());
+    assertFalse(external.secretBad());
+    assertTrue(scram.applicable());
+    assertTrue(scram.userBad());
+    assertTrue(scram.secretBad());
+    assertTrue(autoNoSecret.applicable());
+    assertFalse(autoNoSecret.userBad());
+    assertFalse(autoNoSecret.secretBad());
+  }
+
+  @Test
+  void matrixValidationTracksCredentialAndUsernameRequirements() {
+    ServerEditorAuthPolicy.MatrixValidation accessToken =
+        ServerEditorAuthPolicy.matrixValidation(
+            BACKEND_PROFILES.profileForBackendId("matrix"),
+            ServerEditorMatrixAuthMode.ACCESS_TOKEN,
+            "",
+            "");
+    ServerEditorAuthPolicy.MatrixValidation passwordMode =
+        ServerEditorAuthPolicy.matrixValidation(
+            BACKEND_PROFILES.profileForBackendId("matrix"),
+            ServerEditorMatrixAuthMode.USERNAME_PASSWORD,
+            "secret",
+            "");
+
+    assertTrue(accessToken.applicable());
+    assertTrue(accessToken.credentialBad());
+    assertFalse(accessToken.usernameBad());
+    assertTrue(passwordMode.applicable());
+    assertFalse(passwordMode.credentialBad());
+    assertTrue(passwordMode.usernameBad());
+  }
+
+  @Test
+  void nickservValidationOnlyAppliesWhenNickservIsSelected() {
+    ServerEditorAuthPolicy.NickservValidation enabled =
+        ServerEditorAuthPolicy.nickservValidation(ServerEditorAuthMode.NICKSERV, "");
+    ServerEditorAuthPolicy.NickservValidation disabled =
+        ServerEditorAuthPolicy.nickservValidation(ServerEditorAuthMode.DISABLED, "");
+
+    assertTrue(enabled.applicable());
+    assertTrue(enabled.passwordBad());
+    assertFalse(disabled.applicable());
+    assertFalse(disabled.passwordBad());
   }
 }
