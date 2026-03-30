@@ -1159,15 +1159,6 @@ public class ServerEditorDialog extends JDialog {
     }
   }
 
-  private static boolean isPositiveLong(String s) {
-    try {
-      long v = Long.parseLong(trim(s));
-      return v > 0;
-    } catch (Exception e) {
-      return false;
-    }
-  }
-
   private static boolean isValidPort(String s) {
     try {
       int p = Integer.parseInt(trim(s));
@@ -1248,8 +1239,19 @@ public class ServerEditorDialog extends JDialog {
       ok &= !nickservValidation.passwordBad();
     }
 
+    ServerEditorProxyValidationPolicy.ProxyValidation proxyValidation =
+        ServerEditorProxyValidationPolicy.validate(
+            proxyOverrideBox.isSelected(),
+            proxyEnabledBox.isSelected(),
+            proxyHostField.getText(),
+            proxyPortField.getText(),
+            proxyUserField.getText(),
+            new String(proxyPassField.getPassword()),
+            proxyConnectTimeoutMsField.getText(),
+            proxyReadTimeoutMsField.getText());
+
     // Proxy override validation
-    if (!proxyOverrideBox.isSelected()) {
+    if (!proxyValidation.applicable()) {
       clearOutline(proxyHostField);
       clearOutline(proxyPortField);
       clearOutline(proxyUserField);
@@ -1257,38 +1259,23 @@ public class ServerEditorDialog extends JDialog {
       clearOutline(proxyConnectTimeoutMsField);
       clearOutline(proxyReadTimeoutMsField);
     } else {
-      // Timeouts: optional (blank falls back), but warn if user typed something invalid.
-      String cto = trim(proxyConnectTimeoutMsField.getText());
-      String rto = trim(proxyReadTimeoutMsField.getText());
-      boolean ctoWarn = !cto.isEmpty() && !isPositiveLong(cto);
-      boolean rtoWarn = !rto.isEmpty() && !isPositiveLong(rto);
-      setWarning(proxyConnectTimeoutMsField, ctoWarn);
-      setWarning(proxyReadTimeoutMsField, rtoWarn);
+      setWarning(proxyConnectTimeoutMsField, proxyValidation.connectTimeoutWarning());
+      setWarning(proxyReadTimeoutMsField, proxyValidation.readTimeoutWarning());
 
-      if (!proxyEnabledBox.isSelected()) {
+      if (!proxyValidation.proxyDetailsApplicable()) {
         clearOutline(proxyHostField);
         clearOutline(proxyPortField);
         clearOutline(proxyUserField);
         clearOutline(proxyPassField);
       } else {
-        boolean pHostBad = trim(proxyHostField.getText()).isEmpty();
-        boolean pPortBad = !isValidPort(proxyPortField.getText());
+        setError(proxyHostField, proxyValidation.hostBad());
+        setError(proxyPortField, proxyValidation.portBad());
 
-        setError(proxyHostField, pHostBad);
-        setError(proxyPortField, pPortBad);
+        ok &= !proxyValidation.hostBad();
+        ok &= !proxyValidation.portBad();
 
-        ok &= !pHostBad;
-        ok &= !pPortBad;
-
-        // Auth mismatch warning (user XOR pass).
-        String user = trim(proxyUserField.getText());
-        String pass = new String(proxyPassField.getPassword()).trim();
-        boolean hasUser = !user.isEmpty();
-        boolean hasPass = !pass.isEmpty();
-        boolean mismatch = hasUser ^ hasPass;
-
-        setWarning(proxyUserField, mismatch);
-        setWarning(proxyPassField, mismatch);
+        setWarning(proxyUserField, proxyValidation.authMismatch());
+        setWarning(proxyPassField, proxyValidation.authMismatch());
       }
     }
 
@@ -1327,10 +1314,10 @@ public class ServerEditorDialog extends JDialog {
     // left blank.
     boolean ctoOk =
         trim(proxyConnectTimeoutMsField.getText()).isEmpty()
-            || isPositiveLong(proxyConnectTimeoutMsField.getText());
+            || parseLongOrDefault(proxyConnectTimeoutMsField.getText(), -1) > 0;
     boolean rtoOk =
         trim(proxyReadTimeoutMsField.getText()).isEmpty()
-            || isPositiveLong(proxyReadTimeoutMsField.getText());
+            || parseLongOrDefault(proxyReadTimeoutMsField.getText(), -1) > 0;
     setSuccess(proxyConnectTimeoutMsField, ctoOk);
     setSuccess(proxyReadTimeoutMsField, rtoOk);
   }
