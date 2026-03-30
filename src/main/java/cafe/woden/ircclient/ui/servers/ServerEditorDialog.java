@@ -704,15 +704,6 @@ public class ServerEditorDialog extends JDialog {
     }
   }
 
-  private static long parseLongOrDefault(String s, long dflt) {
-    try {
-      long v = Long.parseLong(trim(s));
-      return v > 0 ? v : dflt;
-    } catch (Exception e) {
-      return dflt;
-    }
-  }
-
   public Optional<IrcProperties.Server> open() {
     setVisible(true);
     return result;
@@ -1080,32 +1071,21 @@ public class ServerEditorDialog extends JDialog {
     ServerEditorValidationUiApplier.setSuccess(proxyConnectTimeoutMsField, false);
     ServerEditorValidationUiApplier.setSuccess(proxyReadTimeoutMsField, false);
 
-    if (lastProxyTestOk == null) return;
-
-    ProxyTestSnapshot now = ProxyTestSnapshot.capture(this);
-    if (!lastProxyTestOk.equals(now)) {
+    ServerEditorProxyTestDecorationPolicy.ProxyTestDecorationState state =
+        ServerEditorProxyTestDecorationPolicy.decorationState(
+            lastProxyTestOk != null,
+            lastProxyTestOk != null && lastProxyTestOk.equals(ProxyTestSnapshot.capture(this)),
+            proxyHostField.isEnabled() && proxyPortField.isEnabled(),
+            proxyConnectTimeoutMsField.getText(),
+            proxyReadTimeoutMsField.getText());
+    if (!state.retainLastSuccessfulSnapshot()) {
       lastProxyTestOk = null;
-      return;
     }
-
-    // Only paint success when the relevant proxy fields are enabled (per-server override + proxy
-    // enabled).
-    if (!proxyHostField.isEnabled() || !proxyPortField.isEnabled()) return;
-
-    // If the proxy fields have an error/warning outline, don't overwrite it.
-    ServerEditorValidationUiApplier.setSuccess(proxyHostField, true);
-    ServerEditorValidationUiApplier.setSuccess(proxyPortField, true);
-
-    // Timeouts are part of the test config too; mark them success if user entered valid values or
-    // left blank.
-    boolean ctoOk =
-        trim(proxyConnectTimeoutMsField.getText()).isEmpty()
-            || parseLongOrDefault(proxyConnectTimeoutMsField.getText(), -1) > 0;
-    boolean rtoOk =
-        trim(proxyReadTimeoutMsField.getText()).isEmpty()
-            || parseLongOrDefault(proxyReadTimeoutMsField.getText(), -1) > 0;
-    ServerEditorValidationUiApplier.setSuccess(proxyConnectTimeoutMsField, ctoOk);
-    ServerEditorValidationUiApplier.setSuccess(proxyReadTimeoutMsField, rtoOk);
+    ServerEditorValidationUiApplier.setSuccess(proxyHostField, state.hostSuccess());
+    ServerEditorValidationUiApplier.setSuccess(proxyPortField, state.portSuccess());
+    ServerEditorValidationUiApplier.setSuccess(
+        proxyConnectTimeoutMsField, state.connectTimeoutSuccess());
+    ServerEditorValidationUiApplier.setSuccess(proxyReadTimeoutMsField, state.readTimeoutSuccess());
   }
 
   private static final class SimpleDocListener implements javax.swing.event.DocumentListener {
