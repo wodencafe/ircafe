@@ -17,6 +17,7 @@ public interface IrcBackendModePort {
     return BACKEND_DESCRIPTORS.backendForId(backendIdForServer(serverId)).orElse(null);
   }
 
+  @Deprecated(forRemoval = false)
   default boolean isMatrixBackendServer(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
@@ -25,6 +26,7 @@ public interface IrcBackendModePort {
         .equals(BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendIdForServer(sid)));
   }
 
+  @Deprecated(forRemoval = false)
   default boolean supportsQuasselCoreCommands(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;

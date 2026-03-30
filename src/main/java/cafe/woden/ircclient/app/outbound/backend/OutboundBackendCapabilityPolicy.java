@@ -59,11 +59,6 @@ public final class OutboundBackendCapabilityPolicy {
         BackendAvailabilityReasonFormatter.builtInsBackendMetadata());
   }
 
-  @Deprecated(forRemoval = false)
-  public IrcProperties.Server.Backend backendForServer(String serverId) {
-    return commandTargetPolicy.backendForServer(serverId);
-  }
-
   public String backendIdForServer(String serverId) {
     return commandTargetPolicy.backendIdForServer(serverId);
   }

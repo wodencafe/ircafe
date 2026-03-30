@@ -44,6 +44,7 @@ public interface BackendUiContext {
             : BackendMode.IRC;
   }
 
+  @Deprecated(forRemoval = false)
   static BackendUiContext fromBackendModePort(IrcBackendModePort backendMode) {
     if (backendMode == null) return ircOnly();
     return fromMatrixServerPredicate(backendMode::isMatrixBackendServer);

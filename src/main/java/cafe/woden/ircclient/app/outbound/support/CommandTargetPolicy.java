@@ -1,17 +1,13 @@
 package cafe.woden.ircclient.app.outbound.support;
 
 import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
-import cafe.woden.ircclient.app.api.BackendEditorProfileSpec;
+import cafe.woden.ircclient.app.api.BackendEditorProfileCatalog;
 import cafe.woden.ircclient.app.api.BackendUiMode;
-import cafe.woden.ircclient.app.api.BuiltInBackendEditorProfiles;
 import cafe.woden.ircclient.app.outbound.backend.BackendExtensionCatalog;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.model.TargetRef;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.NonNull;
@@ -33,7 +29,7 @@ public class CommandTargetPolicy {
 
   @NonNull private final ServerCatalog serverCatalog;
   private final BackendExtensionCatalog backendExtensionCatalog;
-  private final Map<String, BackendUiMode> backendUiModesById;
+  private final BackendEditorProfileCatalog backendProfiles;
 
   public CommandTargetPolicy(ServerCatalog serverCatalog) {
     this(serverCatalog, null, AvailableBackendIdsPort.builtInsOnly());
@@ -52,12 +48,7 @@ public class CommandTargetPolicy {
       AvailableBackendIdsPort backendMetadata) {
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     this.backendExtensionCatalog = backendExtensionCatalog;
-    this.backendUiModesById = indexBackendUiModes(backendMetadata);
-  }
-
-  @Deprecated(forRemoval = false)
-  public IrcProperties.Server.Backend backendForServer(String serverId) {
-    return BACKEND_DESCRIPTORS.backendForId(backendIdForServer(serverId)).orElse(null);
+    this.backendProfiles = BackendEditorProfileCatalog.from(backendMetadata);
   }
 
   public String backendIdForServer(String serverId) {
@@ -116,25 +107,7 @@ public class CommandTargetPolicy {
   }
 
   private BackendUiMode backendUiModeForServer(String serverId) {
-    String backendId = BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendIdForServer(serverId));
-    return backendUiModesById.getOrDefault(backendId, BackendUiMode.IRC);
-  }
-
-  private static Map<String, BackendUiMode> indexBackendUiModes(
-      AvailableBackendIdsPort backendMetadata) {
-    AvailableBackendIdsPort metadata =
-        Objects.requireNonNullElseGet(backendMetadata, AvailableBackendIdsPort::builtInsOnly);
-    LinkedHashMap<String, BackendUiMode> indexed = new LinkedHashMap<>();
-    for (BackendEditorProfileSpec profile : BuiltInBackendEditorProfiles.all()) {
-      indexed.put(profile.backendId(), profile.uiMode());
-    }
-    for (BackendEditorProfileSpec profile :
-        Objects.requireNonNullElse(
-            metadata.availableBackendEditorProfiles(), List.<BackendEditorProfileSpec>of())) {
-      if (profile == null) continue;
-      indexed.put(profile.backendId(), profile.uiMode());
-    }
-    return Map.copyOf(indexed);
+    return backendProfiles.uiModeForBackendId(backendIdForServer(serverId));
   }
 
   private static String normalize(String value) {
