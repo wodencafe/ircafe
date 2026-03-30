@@ -20,7 +20,6 @@ import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Socket;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -1432,50 +1431,21 @@ public class ServerEditorDialog extends JDialog {
             new String(nickservPassField.getPassword()),
             nickservDelayJoinBox.isSelected());
 
-    List<String> autoJoin = new ArrayList<>();
-    for (String line : Objects.toString(autoJoinArea.getText(), "").split("\\R")) {
-      String ch = trim(line);
-      if (ch.isEmpty()) continue;
-      autoJoin.add(ch);
-    }
-    for (String line : Objects.toString(autoJoinPmArea.getText(), "").split("\\R")) {
-      String pmNick = trim(line);
-      if (pmNick.isEmpty()) continue;
-      String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(pmNick);
-      if (encoded.isEmpty()) continue;
-      autoJoin.add(encoded);
-    }
-
-    List<String> perform = new ArrayList<>();
-    for (String line : Objects.toString(performArea.getText(), "").split("\\R")) {
-      String cmd = trim(line);
-      if (cmd.isEmpty()) continue;
-      perform.add(cmd);
-    }
-
-    IrcProperties.Proxy proxyOverride = null;
-    if (proxyOverrideBox.isSelected()) {
-      // Build a per-server override (including the ability to explicitly disable proxying).
-      long connectMs = parseLongOrDefault(proxyConnectTimeoutMsField.getText(), 20_000);
-      long readMs = parseLongOrDefault(proxyReadTimeoutMsField.getText(), 30_000);
-
-      if (!proxyEnabledBox.isSelected()) {
-        proxyOverride = new IrcProperties.Proxy(false, "", 0, "", "", true, connectMs, readMs);
-      } else {
-        String pHost = trim(proxyHostField.getText());
-        int pPort;
-        try {
-          pPort = Integer.parseInt(trim(proxyPortField.getText()));
-        } catch (Exception e) {
-          throw new IllegalArgumentException("Proxy port must be a number");
-        }
-        boolean remoteDns = proxyRemoteDnsBox.isSelected();
-        String user = trim(proxyUserField.getText());
-        String pass = new String(proxyPassField.getPassword());
-        proxyOverride =
-            new IrcProperties.Proxy(true, pHost, pPort, user, pass, remoteDns, connectMs, readMs);
-      }
-    }
+    List<String> autoJoin =
+        ServerEditorCommandListPolicy.autoJoinEntries(
+            autoJoinArea.getText(), autoJoinPmArea.getText());
+    List<String> perform = ServerEditorCommandListPolicy.performCommands(performArea.getText());
+    IrcProperties.Proxy proxyOverride =
+        ServerEditorProxyBuildPolicy.buildOverride(
+            proxyOverrideBox.isSelected(),
+            proxyEnabledBox.isSelected(),
+            proxyHostField.getText(),
+            proxyPortField.getText(),
+            proxyUserField.getText(),
+            new String(proxyPassField.getPassword()),
+            proxyRemoteDnsBox.isSelected(),
+            proxyConnectTimeoutMsField.getText(),
+            proxyReadTimeoutMsField.getText());
 
     return new IrcProperties.Server(
         id,
