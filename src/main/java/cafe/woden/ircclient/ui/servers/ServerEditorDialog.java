@@ -258,8 +258,7 @@ public class ServerEditorDialog extends JDialog {
 
     configureFieldStyles();
     installInteractionHandlers();
-    updateAuthModeUi();
-    updateBackendUi();
+    refreshBackendAndAuthUi();
     updateProxyEnabled();
     installValidationListeners();
     updateValidation();
@@ -375,8 +374,7 @@ public class ServerEditorDialog extends JDialog {
     backendCombo.addActionListener(
         e -> {
           maybeAdjustPortForBackendAndTls();
-          updateBackendUi();
-          updateAuthModeUi();
+          refreshBackendAndAuthUi();
         });
 
     proxyOverrideBox.addActionListener(e -> updateProxyEnabled());
@@ -964,10 +962,19 @@ public class ServerEditorDialog extends JDialog {
       authModeCombo.setSelectedItem(state.authMode());
     }
     showAuthCard(state.authCard());
+    refreshAuthPanelUi();
+    updateValidation();
+  }
+
+  private void refreshBackendAndAuthUi() {
+    updateBackendUi();
+    updateAuthModeUi();
+  }
+
+  private void refreshAuthPanelUi() {
     updateMatrixAuthUi();
     updateSaslEnabled();
     updateNickservEnabled();
-    updateValidation();
   }
 
   private String selectedBackendId() {
@@ -1001,8 +1008,6 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(loginField, state.loginPlaceholder());
     applyFieldStyle(nickField, state.nickPlaceholder());
     applyFieldStyle(realNameField, state.realNamePlaceholder());
-    updateMatrixAuthUi();
-    updateValidation();
   }
 
   private void updateMatrixAuthUi() {
