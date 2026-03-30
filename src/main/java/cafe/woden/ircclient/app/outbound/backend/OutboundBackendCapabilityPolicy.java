@@ -3,8 +3,6 @@ package cafe.woden.ircclient.app.outbound.backend;
 import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
 import cafe.woden.ircclient.app.api.BackendAvailabilityReasonFormatter;
 import cafe.woden.ircclient.app.outbound.support.CommandTargetPolicy;
-import cafe.woden.ircclient.config.BackendDescriptorCatalog;
-import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import java.util.Objects;
@@ -17,9 +15,6 @@ import org.springframework.stereotype.Component;
 @Component
 @ApplicationLayer
 public final class OutboundBackendCapabilityPolicy {
-  private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
-      BackendDescriptorCatalog.builtIns();
-
   @NonNull private final CommandTargetPolicy commandTargetPolicy;
   @NonNull private final OutboundBackendFeatureRegistry outboundBackendFeatureRegistry;
 
@@ -67,30 +62,12 @@ public final class OutboundBackendCapabilityPolicy {
     return supportsSemanticUploadByBackendId(backendIdForServer(serverId));
   }
 
-  @Deprecated(forRemoval = false)
-  public boolean supportsSemanticUpload(IrcProperties.Server.Backend backend) {
-    return supportsSemanticUploadByBackendId(
-        backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
-  }
-
   public boolean supportsQuasselCoreCommands(String serverId) {
     return supportsQuasselCoreCommandsByBackendId(backendIdForServer(serverId));
   }
 
-  @Deprecated(forRemoval = false)
-  public boolean supportsQuasselCoreCommands(IrcProperties.Server.Backend backend) {
-    return supportsQuasselCoreCommandsByBackendId(
-        backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
-  }
-
   public boolean persistsJoinedChannelsLocally(String serverId) {
     return persistsJoinedChannelsLocallyByBackendId(backendIdForServer(serverId));
-  }
-
-  @Deprecated(forRemoval = false)
-  public boolean persistsJoinedChannelsLocally(IrcProperties.Server.Backend backend) {
-    return persistsJoinedChannelsLocallyByBackendId(
-        backend == null ? "" : BACKEND_DESCRIPTORS.idFor(backend));
   }
 
   public boolean supportsSemanticUploadByBackendId(String backendId) {

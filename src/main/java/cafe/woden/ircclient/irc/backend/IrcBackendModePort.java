@@ -13,11 +13,6 @@ public interface IrcBackendModePort {
   }
 
   @Deprecated(forRemoval = false)
-  default IrcProperties.Server.Backend backendForServer(String serverId) {
-    return BACKEND_DESCRIPTORS.backendForId(backendIdForServer(serverId)).orElse(null);
-  }
-
-  @Deprecated(forRemoval = false)
   default boolean isMatrixBackendServer(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;

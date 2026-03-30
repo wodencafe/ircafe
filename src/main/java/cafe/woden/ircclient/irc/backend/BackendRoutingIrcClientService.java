@@ -301,11 +301,6 @@ public class BackendRoutingIrcClientService
   }
 
   @Override
-  public IrcProperties.Server.Backend backendForServer(String serverId) {
-    return BACKEND_DESCRIPTORS.backendForId(backendIdForServer(serverId)).orElse(null);
-  }
-
-  @Override
   public boolean isQuasselCoreSetupPending(String serverId) {
     return routeActiveOrConfigured(serverId).isQuasselCoreSetupPending(serverId);
   }
