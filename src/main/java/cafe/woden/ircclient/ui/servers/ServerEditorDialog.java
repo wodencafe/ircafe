@@ -1043,14 +1043,6 @@ public class ServerEditorDialog extends JDialog {
     return backendProfiles.profileForBackendId(backendId);
   }
 
-  private boolean selectedBackendSupportsQuasselCoreCommands() {
-    return selectedBackendProfile().supportsQuasselCoreCommands();
-  }
-
-  private boolean selectedBackendSupportsMatrixAuth() {
-    return selectedBackendProfile().matrixAuthSupported();
-  }
-
   private void updateBackendUi() {
     ServerEditorBackendProfile profile = selectedBackendProfile();
     hostLabel.setText(profile.hostLabel());
@@ -1075,19 +1067,20 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private void updateMatrixAuthUi() {
-    boolean matrixAuthBackend = selectedBackendSupportsMatrixAuth();
-    boolean directAuthEnabled = selectedBackendProfile().directAuthEnabled();
+    ServerEditorAuthUiPolicy.MatrixUiState state =
+        ServerEditorAuthUiPolicy.matrixUiState(selectedBackendProfile(), selectedMatrixAuthMode());
 
-    authModeLabel.setVisible(directAuthEnabled);
-    authModeCombo.setVisible(directAuthEnabled);
-    authModeCardPanel.setVisible(!matrixAuthBackend);
-    matrixAuthModeLabel.setVisible(matrixAuthBackend);
-    matrixAuthModeCombo.setVisible(matrixAuthBackend);
-    matrixAuthHintLabel.setVisible(matrixAuthBackend);
-    if (!matrixAuthBackend) {
-      matrixAuthUserLabel.setVisible(false);
-      matrixAuthUserField.setVisible(false);
-      matrixAuthUserField.setEnabled(false);
+    authModeLabel.setVisible(state.authModeControlsVisible());
+    authModeCombo.setVisible(state.authModeControlsVisible());
+    authModeCardPanel.setVisible(state.authModeCardVisible());
+    matrixAuthModeLabel.setVisible(state.matrixAuthControlsVisible());
+    matrixAuthModeCombo.setVisible(state.matrixAuthControlsVisible());
+    matrixAuthHintLabel.setVisible(state.matrixAuthControlsVisible());
+    matrixAuthUserLabel.setVisible(state.matrixAuthUserVisible());
+    matrixAuthUserField.setVisible(state.matrixAuthUserVisible());
+    matrixAuthUserField.setEnabled(state.matrixAuthUserEnabled());
+
+    if (!state.matrixAuthControlsVisible()) {
       matrixAuthHintLabel.setText(" ");
       matrixAuthHintLabel.setToolTipText(null);
       java.awt.Container parent = authModeLabel.getParent();
@@ -1098,25 +1091,10 @@ public class ServerEditorDialog extends JDialog {
       return;
     }
 
-    ServerEditorMatrixAuthMode mode = selectedMatrixAuthMode();
-    boolean usernamePassword = mode == ServerEditorMatrixAuthMode.USERNAME_PASSWORD;
-    matrixAuthUserLabel.setVisible(usernamePassword);
-    matrixAuthUserField.setVisible(usernamePassword);
-    matrixAuthUserField.setEnabled(usernamePassword);
-
-    String hint;
-    if (usernamePassword) {
-      serverPasswordLabel.setText("Password");
-      applyFieldStyle(serverPassField, "matrix account password");
-      hint = "Username/password mode signs in via /login. Username and password are required.";
-    } else {
-      serverPasswordLabel.setText("Access token");
-      applyFieldStyle(serverPassField, "matrix access token");
-      hint = "Access-token mode uses the token directly for Matrix API requests.";
-    }
-
-    matrixAuthHintLabel.setText(asHtml(hint));
-    matrixAuthHintLabel.setToolTipText(hint);
+    serverPasswordLabel.setText(state.serverPasswordLabel());
+    applyFieldStyle(serverPassField, state.serverPasswordPlaceholder());
+    matrixAuthHintLabel.setText(asHtml(state.hint()));
+    matrixAuthHintLabel.setToolTipText(state.hint());
     java.awt.Container parent = authModeLabel.getParent();
     if (parent != null) {
       parent.revalidate();
@@ -1125,75 +1103,28 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private void updateSaslEnabled() {
-    boolean en = selectedAuthMode() == ServerEditorAuthMode.SASL;
-    saslMechanism.setEnabled(en);
-    saslContinueOnFailureBox.setEnabled(en);
+    ServerEditorAuthUiPolicy.SaslUiState state =
+        ServerEditorAuthUiPolicy.saslUiState(
+            selectedAuthMode(), Objects.toString(saslMechanism.getSelectedItem(), "PLAIN"));
 
-    String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
-    String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
-
-    // Default: username + secret are enabled when SASL is enabled.
-    boolean userEnabled = en;
-    boolean secretEnabled = en;
-
-    String hint;
-    String secretPlaceholder;
-
-    switch (mechUpper) {
-      case "EXTERNAL" -> {
-        // TLS client certificate auth; secret is unused.
-        secretEnabled = false;
-        secretPlaceholder = "(ignored)";
-        hint =
-            "EXTERNAL uses your TLS client certificate. Secret is ignored; username is optional.";
-      }
-      case "ECDSA-NIST256P-CHALLENGE" -> {
-        secretPlaceholder = "base64 PKCS#8 EC private key";
-        hint =
-            "ECDSA challenge-response. Secret should be a base64 PKCS#8 EC private key. Username is usually required.";
-      }
-      case "SCRAM-SHA-256" -> {
-        secretPlaceholder = "password";
-        hint = "SCRAM-SHA-256 (recommended). Secret = password.";
-      }
-      case "SCRAM-SHA-1" -> {
-        secretPlaceholder = "password";
-        hint = "SCRAM-SHA-1. Secret = password.";
-      }
-      case "AUTO" -> {
-        secretPlaceholder = "password (leave blank for EXTERNAL)";
-        hint =
-            "AUTO prefers SCRAM (256/1) or PLAIN when a secret is provided, and falls back to EXTERNAL when secret is blank.";
-      }
-      default -> {
-        secretPlaceholder = "password";
-        hint = "PLAIN. Secret = password.";
-      }
-    }
-
-    saslUserField.setEnabled(userEnabled);
-    saslPassField.setEnabled(secretEnabled);
-
-    String html = asHtml(hint);
-    saslHintLabel.setText(en ? html : " ");
-    saslHintLabel.setToolTipText(hint);
-
-    // Update placeholder dynamically.
-    saslPassField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, secretPlaceholder);
+    saslMechanism.setEnabled(state.mechanismEnabled());
+    saslContinueOnFailureBox.setEnabled(state.continueOnFailureEnabled());
+    saslUserField.setEnabled(state.userEnabled());
+    saslPassField.setEnabled(state.secretEnabled());
+    saslHintLabel.setText(state.hintVisible() ? asHtml(state.hint()) : " ");
+    saslHintLabel.setToolTipText(state.hint());
+    saslPassField.putClientProperty(
+        FlatClientProperties.PLACEHOLDER_TEXT, state.secretPlaceholder());
   }
 
   private void updateNickservEnabled() {
-    boolean en = selectedAuthMode() == ServerEditorAuthMode.NICKSERV;
-    nickservServiceField.setEnabled(en);
-    nickservPassField.setEnabled(en);
-    nickservDelayJoinBox.setEnabled(en);
-
-    String hint =
-        "NickServ identify runs after connect. Use this when the server doesn't offer SASL."
-            + " This is an alternative auth path; don't enable it together with SASL.";
-    String html = asHtml(hint);
-    nickservHintLabel.setText(en ? html : " ");
-    nickservHintLabel.setToolTipText(hint);
+    ServerEditorAuthUiPolicy.NickservUiState state =
+        ServerEditorAuthUiPolicy.nickservUiState(selectedAuthMode());
+    nickservServiceField.setEnabled(state.enabled());
+    nickservPassField.setEnabled(state.enabled());
+    nickservDelayJoinBox.setEnabled(state.enabled());
+    nickservHintLabel.setText(state.enabled() ? asHtml(state.hint()) : " ");
+    nickservHintLabel.setToolTipText(state.hint());
   }
 
   // FlatLaf validation outlines.
