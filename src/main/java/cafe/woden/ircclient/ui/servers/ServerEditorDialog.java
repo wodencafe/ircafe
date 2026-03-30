@@ -585,48 +585,48 @@ public class ServerEditorDialog extends JDialog {
         try {
           TestResult r = get();
           if (r.ok) {
-            proxyStatusLabel.setText("OK (" + r.elapsedMs + " ms)");
-
-            // Mark the tested proxy inputs as "known good" until they change.
-            lastProxyTestOk = ProxyTestSnapshot.capture(ServerEditorDialog.this);
-            updateValidation();
-
-            JOptionPane.showMessageDialog(
-                ServerEditorDialog.this,
-                "Connection test succeeded.\n\n"
-                    + "TLS: "
-                    + (tls ? "yes" : "no")
-                    + "\n"
-                    + "Proxy: "
-                    + (cfg.enabled() ? (cfg.host() + ":" + cfg.port()) : "disabled")
-                    + "\n"
-                    + "Time: "
-                    + r.elapsedMs
-                    + " ms",
-                "Proxy test",
-                JOptionPane.INFORMATION_MESSAGE);
+            handleSuccessfulProxyTest(tls, cfg, r.elapsedMs);
           } else {
-            proxyStatusLabel.setText("Failed: " + r.shortMessage());
-            lastProxyTestOk = null;
-            updateValidation();
-            JOptionPane.showMessageDialog(
-                ServerEditorDialog.this,
-                "Connection test failed.\n\n" + r.longMessage(),
-                "Proxy test",
-                JOptionPane.ERROR_MESSAGE);
+            handleFailedProxyTest(r.shortMessage(), r.longMessage());
           }
         } catch (Exception e) {
-          proxyStatusLabel.setText("Failed");
-          lastProxyTestOk = null;
-          updateValidation();
-          JOptionPane.showMessageDialog(
-              ServerEditorDialog.this,
-              "Connection test failed.\n\n" + e,
-              "Proxy test",
-              JOptionPane.ERROR_MESSAGE);
+          handleUnexpectedProxyTestFailure(e);
         }
       }
     }.execute();
+  }
+
+  private void handleSuccessfulProxyTest(boolean tls, IrcProperties.Proxy cfg, long elapsedMs) {
+    ServerEditorProxyTestPresentationPolicy.ProxyTestSuccessPresentation presentation =
+        ServerEditorProxyTestPresentationPolicy.successPresentation(tls, cfg, elapsedMs);
+    proxyStatusLabel.setText(presentation.statusText());
+
+    // Mark the tested proxy inputs as "known good" until they change.
+    lastProxyTestOk = ProxyTestSnapshot.capture(this);
+    updateValidation();
+
+    JOptionPane.showMessageDialog(
+        this, presentation.dialogMessage(), "Proxy test", JOptionPane.INFORMATION_MESSAGE);
+  }
+
+  private void handleFailedProxyTest(String shortMessage, String longMessage) {
+    ServerEditorProxyTestPresentationPolicy.ProxyTestFailurePresentation presentation =
+        ServerEditorProxyTestPresentationPolicy.failurePresentation(shortMessage, longMessage);
+    proxyStatusLabel.setText(presentation.statusText());
+    lastProxyTestOk = null;
+    updateValidation();
+    JOptionPane.showMessageDialog(
+        this, presentation.dialogMessage(), "Proxy test", JOptionPane.ERROR_MESSAGE);
+  }
+
+  private void handleUnexpectedProxyTestFailure(Exception error) {
+    ServerEditorProxyTestPresentationPolicy.ProxyTestFailurePresentation presentation =
+        ServerEditorProxyTestPresentationPolicy.unexpectedFailurePresentation(error.toString());
+    proxyStatusLabel.setText(presentation.statusText());
+    lastProxyTestOk = null;
+    updateValidation();
+    JOptionPane.showMessageDialog(
+        this, presentation.dialogMessage(), "Proxy test", JOptionPane.ERROR_MESSAGE);
   }
 
   private IrcProperties.Proxy resolveProxyForTest() {
