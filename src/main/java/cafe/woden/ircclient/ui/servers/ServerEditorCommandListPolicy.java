@@ -46,6 +46,23 @@ final class ServerEditorCommandListPolicy {
     return commands;
   }
 
+  static String channelSeedText(List<String> autoJoinEntries) {
+    return String.join(
+        "\n",
+        AutoJoinEntryCodec.channelEntries(autoJoinEntries == null ? List.of() : autoJoinEntries));
+  }
+
+  static String privateMessageSeedText(List<String> autoJoinEntries) {
+    return String.join(
+        "\n",
+        AutoJoinEntryCodec.privateMessageNicks(
+            autoJoinEntries == null ? List.of() : autoJoinEntries));
+  }
+
+  static String performSeedText(List<String> performEntries) {
+    return String.join("\n", performEntries == null ? List.of() : performEntries);
+  }
+
   private static String trim(String value) {
     return Objects.toString(value, "").trim();
   }

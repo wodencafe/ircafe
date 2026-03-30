@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.ui.servers;
 
-import cafe.woden.ircclient.config.AutoJoinEntryCodec;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.NetTlsContext;
@@ -285,12 +284,9 @@ public class ServerEditorDialog extends JDialog {
         serverPassField.setText(Objects.toString(seed.sasl().password(), ""));
       }
 
-      List<String> autoJoinSeed = seed.autoJoin() == null ? List.of() : seed.autoJoin();
-      autoJoinArea.setText(String.join("\n", AutoJoinEntryCodec.channelEntries(autoJoinSeed)));
-      autoJoinPmArea.setText(
-          String.join("\n", AutoJoinEntryCodec.privateMessageNicks(autoJoinSeed)));
-      List<String> performSeed = seed.perform() == null ? List.of() : seed.perform();
-      performArea.setText(String.join("\n", performSeed));
+      autoJoinArea.setText(ServerEditorCommandListPolicy.channelSeedText(seed.autoJoin()));
+      autoJoinPmArea.setText(ServerEditorCommandListPolicy.privateMessageSeedText(seed.autoJoin()));
+      performArea.setText(ServerEditorCommandListPolicy.performSeedText(seed.perform()));
       portAuto = false; // user likely set explicitly
 
       seedProxy(seed.proxy());
@@ -498,29 +494,18 @@ public class ServerEditorDialog extends JDialog {
 
   private void seedProxy(IrcProperties.Proxy serverProxy) {
     IrcProperties.Proxy global = NetProxyContext.normalize(NetProxyContext.settings());
+    ServerEditorProxySeedPolicy.ProxySeedState state =
+        ServerEditorProxySeedPolicy.seedState(serverProxy, global);
 
-    if (serverProxy != null) {
-      proxyOverrideBox.setSelected(true);
-      proxyEnabledBox.setSelected(serverProxy.enabled());
-      proxyHostField.setText(Objects.toString(serverProxy.host(), ""));
-      proxyPortField.setText(serverProxy.port() > 0 ? Integer.toString(serverProxy.port()) : "");
-      proxyRemoteDnsBox.setSelected(serverProxy.remoteDns());
-      proxyUserField.setText(Objects.toString(serverProxy.username(), ""));
-      proxyPassField.setText(Objects.toString(serverProxy.password(), ""));
-      proxyConnectTimeoutMsField.setText(Long.toString(serverProxy.connectTimeoutMs()));
-      proxyReadTimeoutMsField.setText(Long.toString(serverProxy.readTimeoutMs()));
-    } else {
-      proxyOverrideBox.setSelected(false);
-      // Show global values read-only as a hint, but server will inherit.
-      proxyEnabledBox.setSelected(global.enabled());
-      proxyHostField.setText(Objects.toString(global.host(), ""));
-      proxyPortField.setText(global.port() > 0 ? Integer.toString(global.port()) : "");
-      proxyRemoteDnsBox.setSelected(global.remoteDns());
-      proxyUserField.setText(Objects.toString(global.username(), ""));
-      proxyPassField.setText(Objects.toString(global.password(), ""));
-      proxyConnectTimeoutMsField.setText(Long.toString(global.connectTimeoutMs()));
-      proxyReadTimeoutMsField.setText(Long.toString(global.readTimeoutMs()));
-    }
+    proxyOverrideBox.setSelected(state.overrideSelected());
+    proxyEnabledBox.setSelected(state.proxyEnabled());
+    proxyHostField.setText(state.host());
+    proxyPortField.setText(state.portText());
+    proxyRemoteDnsBox.setSelected(state.remoteDns());
+    proxyUserField.setText(state.username());
+    proxyPassField.setText(state.password());
+    proxyConnectTimeoutMsField.setText(state.connectTimeoutMsText());
+    proxyReadTimeoutMsField.setText(state.readTimeoutMsText());
 
     updateProxyEnabled();
   }

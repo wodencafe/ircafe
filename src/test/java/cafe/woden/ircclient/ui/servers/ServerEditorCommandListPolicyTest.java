@@ -22,4 +22,15 @@ class ServerEditorCommandListPolicyTest {
 
     assertEquals(List.of("/msg NickServ identify", "/mode +B"), commands);
   }
+
+  @Test
+  void seedTextDecodesStoredEntriesForDialogFields() {
+    List<String> storedEntries = List.of("#irc", "query:alice", "#java", "query:bob");
+
+    assertEquals("#irc\n#java", ServerEditorCommandListPolicy.channelSeedText(storedEntries));
+    assertEquals("alice\nbob", ServerEditorCommandListPolicy.privateMessageSeedText(storedEntries));
+    assertEquals(
+        "/msg NickServ IDENTIFY",
+        ServerEditorCommandListPolicy.performSeedText(List.of("/msg NickServ IDENTIFY")));
+  }
 }
