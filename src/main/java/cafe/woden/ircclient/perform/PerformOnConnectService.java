@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -68,6 +69,22 @@ public class PerformOnConnectService {
   public PerformOnConnectService(
       IrcClientService irc,
       @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
+      ObjectProvider<AvailableBackendIdsPort> backendMetadataProvider,
+      ServerCatalog serverCatalog,
+      CommandParser commandParser,
+      UiPort ui) {
+    this(
+        irc,
+        backendAvailability,
+        backendMetadataProvider.getIfAvailable(),
+        serverCatalog,
+        commandParser,
+        ui);
+  }
+
+  public PerformOnConnectService(
+      IrcClientService irc,
+      IrcBackendAvailabilityPort backendAvailability,
       AvailableBackendIdsPort backendMetadata,
       ServerCatalog serverCatalog,
       CommandParser commandParser,

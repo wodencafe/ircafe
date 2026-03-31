@@ -27,6 +27,7 @@ import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
@@ -61,6 +62,13 @@ public class BackendRoutingIrcClientService
   private final Flowable<QuasselCoreNetworkSnapshotEvent> mergedQuasselNetworkEvents;
 
   @Autowired
+  public BackendRoutingIrcClientService(
+      ServerCatalog serverCatalog,
+      ObjectProvider<BackendMetadataPort> backendMetadataProvider,
+      List<IrcBackendClientService> backendServices) {
+    this(serverCatalog, backendMetadataProvider.getIfAvailable(), backendServices);
+  }
+
   public BackendRoutingIrcClientService(
       ServerCatalog serverCatalog,
       BackendMetadataPort backendMetadata,
