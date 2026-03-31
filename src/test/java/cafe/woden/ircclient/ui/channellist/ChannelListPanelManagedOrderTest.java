@@ -87,6 +87,7 @@ class ChannelListPanelManagedOrderTest {
     onEdt(() -> assertTrue(nextPageButton.isEnabled()));
 
     onEdt(nextPageButton::doClick);
+    waitFor(() -> "/list rust since nxt-42 limit 30".equals(command.get()), Duration.ofSeconds(3));
     assertEquals("/list rust since nxt-42 limit 30", command.get());
     onEdt(() -> assertFalse(nextPageButton.isEnabled()));
   }
