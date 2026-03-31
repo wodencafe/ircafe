@@ -214,7 +214,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
             if (closed) return;
             if (e == null) return;
             try {
-              lastPopupPoint = (e != null) ? e.getPoint() : null;
+              lastPopupPoint = e.getPoint();
             } catch (Exception ignored) {
               lastPopupPoint = null;
             }

@@ -1,0 +1,273 @@
+configurations {
+    mutationTestTool
+}
+
+sourceSets {
+    functionalTest {
+        java.srcDir('src/functionalTest/java')
+        resources.srcDir('src/functionalTest/resources')
+        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+configurations.named('functionalTestImplementation') {
+    extendsFrom(configurations.testImplementation)
+}
+configurations.named('functionalTestRuntimeOnly') {
+    extendsFrom(configurations.testRuntimeOnly)
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    filter {
+        // Functional Swing coverage lives in src/functionalTest and runs via the dedicated task.
+        excludeTestsMatching '*FunctionalTest'
+        // Integration coverage runs via the dedicated integrationTest task.
+        excludeTestsMatching '*IntegrationTest'
+    }
+}
+
+tasks.register('integrationTest', Test) {
+    group = 'verification'
+    description = 'Runs test-source-set integration tests (classes ending with IntegrationTest).'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching '*IntegrationTest'
+    }
+    shouldRunAfter(tasks.named('test'))
+}
+
+tasks.register('architectureTest', Test) {
+    group = 'verification'
+    description = 'Runs architecture and modulith guardrail tests.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching 'cafe.woden.ircclient.architecture.*'
+        includeTestsMatching 'cafe.woden.ircclient.modulith.*'
+    }
+    shouldRunAfter(tasks.named('test'))
+}
+
+tasks.register('functionalTest', Test) {
+    group = 'verification'
+    description = 'Runs Swing functional smoke tests.'
+    testClassesDirs = sourceSets.functionalTest.output.classesDirs
+    classpath = sourceSets.functionalTest.runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching '*FunctionalTest'
+    }
+    shouldRunAfter(tasks.named('test'))
+}
+
+tasks.register('pitestIgnoreCompatibility', JavaExec) {
+    group = 'verification'
+    description = 'Runs PIT mutation checks for ignore normalization and irssi parsing paths.'
+    dependsOn(tasks.named('testClasses'))
+    classpath = configurations.mutationTestTool
+    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
+
+    def reportDirProvider = layout.buildDirectory.dir('reports/pitest/ignore-compatibility')
+    inputs.files(sourceSets.main.output, sourceSets.test.output, configurations.testRuntimeClasspath)
+    outputs.dir(reportDirProvider)
+
+    doFirst {
+        String testClasspath =
+            files(
+                sourceSets.main.output,
+                sourceSets.test.output,
+                sourceSets.main.runtimeClasspath,
+                sourceSets.test.runtimeClasspath
+            ).files.collect { it.absolutePath }.join(',')
+        String mutableCodePaths =
+            sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
+        args = [
+            "--reportDir=${reportDirProvider.get().asFile.absolutePath}",
+            '--outputFormats=HTML,XML',
+            '--targetClasses=cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer*',
+            '--targetClasses=cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService*',
+            '--targetTests=cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizerTest*',
+            '--targetTests=cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandServiceTest*',
+            "--sourceDirs=${file('src/main/java').absolutePath}",
+            "--mutableCodePaths=${mutableCodePaths}",
+            "--classPath=${testClasspath}",
+            '--threads=4',
+            '--testPlugin',
+            'junit5',
+            '--verbose=true',
+            '--failWhenNoMutations=false'
+        ]
+    }
+}
+
+tasks.register('pitestExecutorLifecycle', JavaExec) {
+    group = 'verification'
+    description = 'Runs PIT mutation checks for executor ownership and lifecycle shutdown paths.'
+    dependsOn(tasks.named('testClasses'))
+    classpath = configurations.mutationTestTool
+    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
+
+    def reportDirProvider = layout.buildDirectory.dir('reports/pitest/executor-lifecycle')
+    inputs.files(sourceSets.main.output, sourceSets.test.output, configurations.testRuntimeClasspath)
+    outputs.dir(reportDirProvider)
+
+    doFirst {
+        String testClasspath =
+            files(
+                sourceSets.main.output,
+                sourceSets.test.output,
+                sourceSets.main.runtimeClasspath,
+                sourceSets.test.runtimeClasspath
+            ).files.collect { it.absolutePath }.join(',')
+        String mutableCodePaths =
+            sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
+        args = [
+            "--reportDir=${reportDirProvider.get().asFile.absolutePath}",
+            '--outputFormats=HTML,XML',
+            '--targetClasses=cafe.woden.ircclient.config.ExecutorConfig*',
+            '--targetClasses=cafe.woden.ircclient.util.VirtualThreads*',
+            '--targetClasses=cafe.woden.ircclient.util.RxVirtualSchedulers*',
+            '--targetClasses=cafe.woden.ircclient.ui.logviewer.LogViewerPanel',
+            '--targetClasses=cafe.woden.ircclient.ui.interceptors.InterceptorPanel',
+            '--targetClasses=cafe.woden.ircclient.ui.settings.PreferencesDialog',
+            '--targetClasses=cafe.woden.ircclient.ui.MessageInputSpellcheckLifecycle',
+            '--targetClasses=cafe.woden.ircclient.irc.ZncPlaybackCaptureCoordinator',
+            '--targetClasses=cafe.woden.ircclient.irc.ZncPlaybackCaptureLifecycle',
+            '--targetTests=cafe.woden.ircclient.config.ExecutorConfigTest*',
+            '--targetTests=cafe.woden.ircclient.config.ExecutorConfigIntegrationTest*',
+            '--targetTests=cafe.woden.ircclient.util.VirtualThreadsLifecycleTest*',
+            '--targetTests=cafe.woden.ircclient.util.VirtualThreadsLifecycleIntegrationTest*',
+            '--targetTests=cafe.woden.ircclient.util.RxVirtualSchedulersLifecycleIntegrationTest*',
+            '--targetTests=cafe.woden.ircclient.ui.logviewer.LogViewerPanelExecutorLifecycleTest*',
+            '--targetTests=cafe.woden.ircclient.ui.interceptors.InterceptorPanelExecutorLifecycleTest*',
+            '--targetTests=cafe.woden.ircclient.ui.settings.PreferencesDialogConstructorTest*',
+            '--targetTests=cafe.woden.ircclient.ui.MessageInputSpellcheckLifecycleIntegrationTest*',
+            '--targetTests=cafe.woden.ircclient.irc.ZncPlaybackCaptureLifecycleIntegrationTest*',
+            "--sourceDirs=${file('src/main/java').absolutePath}",
+            "--mutableCodePaths=${mutableCodePaths}",
+            "--classPath=${testClasspath}",
+            '--threads=4',
+            '--testPlugin',
+            'junit5',
+            '--verbose=true',
+            '--failWhenNoMutations=false'
+        ]
+    }
+}
+
+tasks.register('pitestQuasselBackend', JavaExec) {
+    group = 'verification'
+    description = 'Runs PIT mutation checks for Quassel backend routing and command orchestration.'
+    dependsOn(tasks.named('testClasses'))
+    classpath = configurations.mutationTestTool
+    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
+
+    def reportDirProvider = layout.buildDirectory.dir('reports/pitest/quassel-backend')
+    inputs.files(sourceSets.main.output, sourceSets.test.output, configurations.testRuntimeClasspath)
+    outputs.dir(reportDirProvider)
+
+    doFirst {
+        String testClasspath =
+            files(
+                sourceSets.main.output,
+                sourceSets.test.output,
+                sourceSets.main.runtimeClasspath,
+                sourceSets.test.runtimeClasspath
+            ).files.collect { it.absolutePath }.join(',')
+        String mutableCodePaths =
+            sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
+        args = [
+            "--reportDir=${reportDirProvider.get().asFile.absolutePath}",
+            '--outputFormats=HTML,XML',
+            '--targetClasses=cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder*',
+            '--targetClasses=cafe.woden.ircclient.app.outbound.DefaultOutboundCommandDispatcher*',
+            '--targetClasses=cafe.woden.ircclient.app.commands.CommandParser*',
+            '--targetClasses=cafe.woden.ircclient.irc.BackendRoutingIrcClientService*',
+            '--targetTests=cafe.woden.ircclient.app.MediatorUiSubscriptionBinderTest*',
+            '--targetTests=cafe.woden.ircclient.app.outbound.DefaultOutboundCommandDispatcherTest*',
+            '--targetTests=cafe.woden.ircclient.app.commands.CommandParserTest*',
+            '--targetTests=cafe.woden.ircclient.irc.BackendRoutingIrcClientServiceTest*',
+            "--sourceDirs=${file('src/main/java').absolutePath}",
+            "--mutableCodePaths=${mutableCodePaths}",
+            "--classPath=${testClasspath}",
+            '--threads=4',
+            '--testPlugin',
+            'junit5',
+            '--verbose=true',
+            '--failWhenNoMutations=false'
+        ]
+    }
+}
+
+tasks.register('pitestMatrixBackend', JavaExec) {
+    group = 'verification'
+    description = 'Runs PIT mutation checks for Matrix backend command translation and routing.'
+    dependsOn(tasks.named('testClasses'))
+    classpath = configurations.mutationTestTool
+    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
+
+    def reportDirProvider = layout.buildDirectory.dir('reports/pitest/matrix-backend')
+    inputs.files(sourceSets.main.output, sourceSets.test.output, configurations.testRuntimeClasspath)
+    outputs.dir(reportDirProvider)
+
+    doFirst {
+        String testClasspath =
+            files(
+                sourceSets.main.output,
+                sourceSets.test.output,
+                sourceSets.main.runtimeClasspath,
+                sourceSets.test.runtimeClasspath
+            ).files.collect { it.absolutePath }.join(',')
+        String mutableCodePaths =
+            sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
+        args = [
+            "--reportDir=${reportDirProvider.get().asFile.absolutePath}",
+            '--outputFormats=HTML,XML',
+            '--targetClasses=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupport*',
+            '--targetClasses=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandService*',
+            '--targetClasses=cafe.woden.ircclient.app.outbound.MatrixUploadCommandTranslationHandler*',
+            '--targetClasses=cafe.woden.ircclient.ui.backend.BackendUiProfileProvider*',
+            '--targetClasses=cafe.woden.ircclient.irc.BackendRoutingIrcClientService*',
+            '--targetTests=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupportTest*',
+            '--targetTests=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandServiceTest*',
+            '--targetTests=cafe.woden.ircclient.app.outbound.OutboundUploadCommandServiceTest*',
+            '--targetTests=cafe.woden.ircclient.ui.backend.BackendUiProfileProviderTest*',
+            '--targetTests=cafe.woden.ircclient.irc.BackendRoutingIrcClientServiceTest*',
+            "--sourceDirs=${file('src/main/java').absolutePath}",
+            "--mutableCodePaths=${mutableCodePaths}",
+            "--classPath=${testClasspath}",
+            '--threads=4',
+            '--testPlugin',
+            'junit5',
+            '--verbose=true',
+            '--failWhenNoMutations=false'
+        ]
+    }
+}
+
+tasks.register('mutationTest') {
+    group = 'verification'
+    description = 'Alias for focused PIT mutation checks.'
+    dependsOn(
+        tasks.named('pitestIgnoreCompatibility'),
+        tasks.named('pitestExecutorLifecycle'),
+        tasks.named('pitestQuasselBackend'),
+        tasks.named('pitestMatrixBackend')
+    )
+}
+
+tasks.register('themeValidate', Test) {
+    group = 'verification'
+    description = 'Runs Swing theme validation smoke tests.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching 'cafe.woden.ircclient.ui.settings.ThemeValidatorTest'
+    }
+}

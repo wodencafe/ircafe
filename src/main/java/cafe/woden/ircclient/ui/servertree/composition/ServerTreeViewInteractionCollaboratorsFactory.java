@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui.servertree.composition;
 
 import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
 import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
@@ -87,6 +87,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
             in.uiHooks()::connectionStateForServer,
             Objects.requireNonNull(in.runtimeState(), "runtimeState")::desiredOnlineForServer,
             in.runtimeState()::connectionDiagnosticsTipForServer,
+            Objects.requireNonNull(in.backendDisplayNameForServer(), "backendDisplayNameForServer"),
             serverId -> backendIdForEphemeralServer(in, serverId),
             (backendId, serverId) -> originForServer(in, backendId, serverId),
             serverId ->
@@ -127,6 +128,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
         Objects.requireNonNull(in.requestEmitter(), "requestEmitter")::emitOpenQuasselSetup,
         in.requestEmitter()::emitOpenQuasselNetworkManager,
         serverId -> isQuasselSetupPending(in.runtimeState(), serverId),
+        in.supportsQuasselCoreCommands(),
         () -> in.interceptorStore() != null,
         in.interceptorActions()::promptAndAddInterceptor,
         () -> in.serverDialogs() != null,
@@ -258,14 +260,14 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
   }
 
   private static boolean readServerAutoConnectOnStart(
-      RuntimeConfigStore runtimeConfig, String serverId, boolean defaultValue) {
+      ServerAutoConnectRuntimeConfigPort runtimeConfig, String serverId, boolean defaultValue) {
     return runtimeConfig == null
         ? defaultValue
         : runtimeConfig.readServerAutoConnectOnStart(serverId, defaultValue);
   }
 
   private static void rememberServerAutoConnectOnStart(
-      RuntimeConfigStore runtimeConfig, String serverId, boolean enabled) {
+      ServerAutoConnectRuntimeConfigPort runtimeConfig, String serverId, boolean enabled) {
     if (runtimeConfig == null) return;
     runtimeConfig.rememberServerAutoConnectOnStart(serverId, enabled);
   }
@@ -451,6 +453,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerTreeRuntimeState runtimeState,
       ServerTreeServerLabelPolicy serverLabelPolicy,
       Map<String, String> serverDisplayNames,
+      java.util.function.Function<String, String> backendDisplayNameForServer,
       Map<String, Set<String>> bouncerControlServerIdsByBackendId,
       Map<String, Map<String, String>> originByServerIdByBackendId,
       Map<String, BouncerAutoConnectStore> autoConnectStoreByBackendId,
@@ -465,7 +468,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       ServerTreeInterceptorActions interceptorActions,
       ServerDialogs serverDialogs,
       Component ownerComponent,
-      RuntimeConfigStore runtimeConfig,
+      ServerAutoConnectRuntimeConfigPort runtimeConfig,
       ServerTreeNodeBadgeUpdater nodeBadgeUpdater,
       ServerTreeBouncerDetachPolicy bouncerDetachPolicy,
       Predicate<TargetRef> isChannelDisconnected,
@@ -477,6 +480,7 @@ public final class ServerTreeViewInteractionCollaboratorsFactory {
       BiConsumer<TargetRef, Boolean> setChannelMuted,
       ServerTreeRequestStreams requestStreams,
       Predicate<TargetRef> canEditChannelModes,
+      Predicate<String> supportsQuasselCoreCommands,
       Predicate<javax.swing.tree.DefaultMutableTreeNode> isQuasselNetworkNode,
       Predicate<javax.swing.tree.DefaultMutableTreeNode> isQuasselEmptyStateNode,
       BiFunction<String, String, String> quasselNetworkTooltip) {}

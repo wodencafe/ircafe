@@ -5,7 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
@@ -36,11 +39,9 @@ class ServerTreeServerRootLifecycleManagerContextTest {
     AtomicReference<String> loadedChannelStateServer = new AtomicReference<>();
     AtomicBoolean showDccTransfersNodes = new AtomicBoolean(true);
     AtomicReference<ServerNodes> appliedBuiltInLayoutServer = new AtomicReference<>();
-    AtomicReference<RuntimeConfigStore.ServerTreeBuiltInLayout> appliedBuiltInLayout =
-        new AtomicReference<>();
+    AtomicReference<ServerTreeBuiltInLayout> appliedBuiltInLayout = new AtomicReference<>();
     AtomicReference<ServerNodes> appliedRootOrderServer = new AtomicReference<>();
-    AtomicReference<RuntimeConfigStore.ServerTreeRootSiblingOrder> appliedRootOrder =
-        new AtomicReference<>();
+    AtomicReference<ServerTreeRootSiblingOrder> appliedRootOrder = new AtomicReference<>();
     AtomicReference<String> refreshedNotificationsServer = new AtomicReference<>();
     AtomicReference<String> refreshedInterceptorsServer = new AtomicReference<>();
     AtomicReference<String> cleanedUpServer = new AtomicReference<>();
@@ -48,13 +49,12 @@ class ServerTreeServerRootLifecycleManagerContextTest {
 
     Map<String, ServerNodes> servers = new java.util.HashMap<>(Map.of(serverId, nodes));
     Map<TargetRef, DefaultMutableTreeNode> leaves = new java.util.HashMap<>();
-    RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout =
-        new RuntimeConfigStore.ServerTreeBuiltInLayout(
-            List.of(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER),
-            List.of(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR));
-    RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder =
-        new RuntimeConfigStore.ServerTreeRootSiblingOrder(
-            List.of(RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER));
+    ServerTreeBuiltInLayout builtInLayout =
+        new ServerTreeBuiltInLayout(
+            List.of(ServerTreeBuiltInLayoutNode.SERVER),
+            List.of(ServerTreeBuiltInLayoutNode.MONITOR));
+    ServerTreeRootSiblingOrder rootSiblingOrder =
+        new ServerTreeRootSiblingOrder(List.of(ServerTreeRootSiblingNode.OTHER));
     List<InterceptorDefinition> interceptorDefinitions = List.of();
 
     ServerTreeServerRootLifecycleManager.Context context =

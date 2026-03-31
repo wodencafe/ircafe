@@ -1,0 +1,143 @@
+def libsCatalog = extensions.getByType(org.gradle.api.artifacts.VersionCatalogsExtension).named("libs")
+def catalogVersion = { String alias -> libsCatalog.findVersion(alias).get().requiredVersion }
+def javaRelease = project.ext.javaRelease
+
+def errorPronePatchChecks =
+    (findProperty('errorPronePatchChecks')
+            ?: 'CheckReturnValue,ReturnValueIgnored,SelfAssignment,MisleadingEscapedSpace,DuplicateBranches,UnnecessaryParentheses,DeprecatedVariable,UnusedVariable')
+        .toString()
+
+spotless {
+    java {
+        target "src/**/*.java"
+        googleJavaFormat(catalogVersion("googleJavaFormat"))
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+    format("misc") {
+        target "*.md", ".gitignore", "gradle.properties", "settings.gradle", "build.gradle", "gradle/**/*.gradle"
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
+checkstyle {
+    toolVersion = providers.gradleProperty("checkstyleVersion").getOrElse(catalogVersion("checkstyle"))
+}
+
+def googleCheckstyleArchive = providers.provider {
+    configurations.checkstyle
+        .resolve()
+        .find { it.name.startsWith("checkstyle-") && it.name.endsWith(".jar") }
+}
+tasks.withType(Checkstyle).configureEach {
+    enabled = false
+    config = resources.text.fromArchiveEntry(googleCheckstyleArchive.get(), "google_checks.xml")
+    reports {
+        html.required = true
+        xml.required = false
+    }
+}
+
+tasks.matching { it.name.toLowerCase().startsWith('spotbugs') }.configureEach {
+    def confidenceClass = it.class.classLoader.loadClass('com.github.spotbugs.snom.Confidence')
+    reportLevel.set(Enum.valueOf(confidenceClass, 'HIGH'))
+    excludeFilter.set(rootProject.layout.projectDirectory.file('config/spotbugs/exclude.xml'))
+    reports {
+        html.required = true
+        xml.required = false
+    }
+}
+
+tasks.register('errorProneApplyMain', JavaCompile) {
+    group = 'formatting'
+    description = 'Applies Error Prone auto-fixes in-place for main Java sources.'
+    javaCompiler = javaToolchains.compilerFor {
+        languageVersion = JavaLanguageVersion.of(javaRelease)
+    }
+    source = sourceSets.main.java
+    classpath = sourceSets.main.compileClasspath
+    destinationDirectory = layout.buildDirectory.dir('tmp/errorproneApplyMain')
+    options.annotationProcessorPath = configurations.annotationProcessor
+    options.generatedSourceOutputDirectory =
+        layout.buildDirectory.dir('generated/sources/annotationProcessor/java/errorProneApplyMain')
+    options.errorprone.enabled = true
+    options.errorprone.errorproneArgs.addAll([
+        "-XepPatchChecks:${errorPronePatchChecks}",
+        '-XepPatchLocation:IN_PLACE'
+    ])
+}
+
+tasks.register('errorProneApply') {
+    group = 'formatting'
+    description =
+        'Runs Error Prone in-place auto-fixes. Override checks with -PerrorPronePatchChecks=Check1,Check2.'
+    dependsOn('errorProneApplyMain')
+}
+
+tasks.named('spotlessApply') {
+    dependsOn('errorProneApply')
+}
+
+tasks.named('spotlessCheck') {
+    mustRunAfter('errorProneApply')
+}
+
+tasks.register('spotlessLint') {
+    group = 'formatting'
+    description = 'Runs Error Prone auto-fixes first, then Spotless lint checks.'
+    dependsOn('errorProneApply', 'spotlessCheck')
+}
+
+tasks.register("lint") {
+    group = "verification"
+    description = "Runs formatting, style, and static analysis checks."
+    dependsOn(
+        "spotlessCheck",
+        "checkstyleMain",
+        "checkstyleTest",
+        "spotbugsMain",
+        "forbiddenApisMain",
+        "forbiddenApisTest"
+    )
+}
+tasks.named("check") { dependsOn("lint") }
+
+dependencyCheck {
+    failBuildOnCVSS = 8.0
+    formats = ["HTML", "JSON"]
+    suppressionFile = "config/dependency-check-suppressions.xml"
+}
+
+dependencyAnalysis {
+    issues {
+        all {
+            onAny {
+                severity("fail")
+            }
+        }
+    }
+}
+
+tasks.named("cyclonedxDirectBom") {
+    includeConfigs = ["runtimeClasspath"]
+
+    jsonOutput = file("$buildDir/reports/ircafe-sbom.json")
+}
+
+tasks.named("cyclonedxBom") {
+    jsonOutput = file("$buildDir/reports/ircafe-sbom-aggregate.json")
+}
+
+if (System.getenv("CI") == "true") {
+    tasks.named("check") { dependsOn("dependencyCheckAnalyze") }
+}
+
+forbiddenApis {
+    // Keep this task configured so it fails on accidental shell execution shortcuts.
+    signatures = [
+        "java.lang.Runtime#exec(java.lang.String)",
+        "java.lang.Runtime#exec(java.lang.String[])"
+    ]
+}

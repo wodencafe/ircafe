@@ -1,0 +1,107 @@
+[versions]
+springBootPlugin = "4.0.1"
+springDependencyManagementPlugin = "1.1.7"
+jpackagePlugin = "1.7.6"
+spotlessPlugin = "8.2.1"
+dependencyCheckPlugin = "12.2.0"
+cyclonedxPlugin = "3.2.0"
+dependencyAnalysisPlugin = "3.5.1"
+benManesVersionsPlugin = "0.53.0"
+openRewritePlugin = "7.28.2"
+spotbugsPlugin = "6.4.8"
+errorpronePlugin = "5.0.0"
+forbiddenapisPlugin = "3.10"
+dependencyLicenseReportPlugin = "3.1.1"
+
+lombok = "1.18.42"
+jmolecules = "2.0.1"
+springModulith = "2.0.3"
+errorproneCore = "2.46.0"
+soundlibsMp3spi = "1.9.5.4"
+soundlibsJlayer = "1.0.1.4"
+soundlibsTritonusShare = "0.3.7.4"
+twoSlices = "0.9.4"
+rxjava = "3.1.12"
+pircbotx = "b1b48bf"
+fastutil = "8.5.18"
+modernDocking = "1.4.1"
+flatlaf = "3.7"
+darklaf = "3.1.1"
+autocomplete = "3.3.3"
+languageTool = "6.7"
+webpImageio = "0.1.6"
+animatedGifLib = "1.4"
+miglayout = "11.4.2"
+jsoup = "1.22.1"
+systemTray = "4.4"
+notify = "4.5"
+dbusJava = "5.2.0"
+archunit = "1.4.1"
+testcontainers = "1.20.4"
+pitestCommandLine = "1.22.1"
+pitestJunit5Plugin = "1.2.3"
+googleJavaFormat = "1.34.1"
+checkstyle = "10.26.1"
+autoService = "1.1.1"
+
+[libraries]
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+jmoleculesDdd = { module = "org.jmolecules:jmolecules-ddd", version.ref = "jmolecules" }
+jmoleculesLayeredArchitecture = { module = "org.jmolecules:jmolecules-layered-architecture", version.ref = "jmolecules" }
+jmoleculesHexagonalArchitecture = { module = "org.jmolecules:jmolecules-hexagonal-architecture", version.ref = "jmolecules" }
+springModulithStarterCore = { module = "org.springframework.modulith:spring-modulith-starter-core" }
+springModulithStarterTest = { module = "org.springframework.modulith:spring-modulith-starter-test" }
+errorproneCore = { module = "com.google.errorprone:error_prone_core", version.ref = "errorproneCore" }
+soundlibsMp3spi = { module = "com.googlecode.soundlibs:mp3spi", version.ref = "soundlibsMp3spi" }
+soundlibsJlayer = { module = "com.googlecode.soundlibs:jlayer", version.ref = "soundlibsJlayer" }
+soundlibsTritonusShare = { module = "com.googlecode.soundlibs:tritonus-share", version.ref = "soundlibsTritonusShare" }
+twoSlices = { module = "com.sshtools:two-slices", version.ref = "twoSlices" }
+springBootStarter = { module = "org.springframework.boot:spring-boot-starter" }
+springBootStarterJdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
+flywayCore = { module = "org.flywaydb:flyway-core" }
+flywayDatabaseHsqldb = { module = "org.flywaydb:flyway-database-hsqldb" }
+hsqldb = { module = "org.hsqldb:hsqldb" }
+springBootDevtools = { module = "org.springframework.boot:spring-boot-devtools" }
+springBootConfigurationProcessor = { module = "org.springframework.boot:spring-boot-configuration-processor" }
+snakeyaml = { module = "org.yaml:snakeyaml" }
+jacksonDatabind = { module = "com.fasterxml.jackson.core:jackson-databind" }
+rxjava = { module = "io.reactivex.rxjava3:rxjava", version.ref = "rxjava" }
+pircbotx = { module = "com.github.pircbotx:pircbotx", version.ref = "pircbotx" }
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine" }
+fastutil = { module = "it.unimi.dsi:fastutil", version.ref = "fastutil" }
+modernDockingApi = { module = "io.github.andrewauclair:modern-docking-api", version.ref = "modernDocking" }
+modernDockingSingleApp = { module = "io.github.andrewauclair:modern-docking-single-app", version.ref = "modernDocking" }
+modernDockingUi = { module = "io.github.andrewauclair:modern-docking-ui", version.ref = "modernDocking" }
+autocomplete = { module = "com.fifesoft:autocomplete", version.ref = "autocomplete" }
+languageToolEn = { module = "org.languagetool:language-en", version.ref = "languageTool" }
+webpImageio = { module = "org.sejda.imageio:webp-imageio", version.ref = "webpImageio" }
+animatedGifLib = { module = "com.madgag:animated-gif-lib", version.ref = "animatedGifLib" }
+miglayoutSwing = { module = "com.miglayout:miglayout-swing", version.ref = "miglayout" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+systemTray = { module = "com.dorkbox:SystemTray", version.ref = "systemTray" }
+notify = { module = "com.dorkbox:Notify", version.ref = "notify" }
+dbusJavaCore = { module = "com.github.hypfvieh:dbus-java-core", version.ref = "dbusJava" }
+dbusJavaTransportNativeUnixsocket = { module = "com.github.hypfvieh:dbus-java-transport-native-unixsocket", version.ref = "dbusJava" }
+archunitJunit5 = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
+springBootStarterTest = { module = "org.springframework.boot:spring-boot-starter-test" }
+testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
+junitPlatformLauncher = { module = "org.junit.platform:junit-platform-launcher" }
+pitestCommandLine = { module = "org.pitest:pitest-command-line", version.ref = "pitestCommandLine" }
+pitestJunit5Plugin = { module = "org.pitest:pitest-junit5-plugin", version.ref = "pitestJunit5Plugin" }
+autoService = { module = "com.google.auto.service:auto-service", version.ref = "autoService" }
+autoServiceAnnotations = { module = "com.google.auto.service:auto-service-annotations", version.ref = "autoService" }
+
+[plugins]
+springBoot = { id = "org.springframework.boot", version.ref = "springBootPlugin" }
+springDependencyManagement = { id = "io.spring.dependency-management", version.ref = "springDependencyManagementPlugin" }
+jpackage = { id = "org.panteleyev.jpackageplugin", version.ref = "jpackagePlugin" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotlessPlugin" }
+dependencyCheck = { id = "org.owasp.dependencycheck", version.ref = "dependencyCheckPlugin" }
+cyclonedx = { id = "org.cyclonedx.bom", version.ref = "cyclonedxPlugin" }
+dependencyAnalysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependencyAnalysisPlugin" }
+benManesVersions = { id = "com.github.ben-manes.versions", version.ref = "benManesVersionsPlugin" }
+openRewrite = { id = "org.openrewrite.rewrite", version.ref = "openRewritePlugin" }
+spotbugs = { id = "com.github.spotbugs", version.ref = "spotbugsPlugin" }
+errorprone = { id = "net.ltgt.errorprone", version.ref = "errorpronePlugin" }
+forbiddenapis = { id = "de.thetaphi.forbiddenapis", version.ref = "forbiddenapisPlugin" }
+dependencyLicenseReport = { id = "com.github.jk1.dependency-license-report", version.ref = "dependencyLicenseReportPlugin" }

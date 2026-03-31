@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.app.commands;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
 import cafe.woden.ircclient.model.UserCommandAlias;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
@@ -23,7 +23,7 @@ public class UserCommandAliasesBus {
   private volatile List<UserCommandAlias> current;
   private volatile boolean unknownCommandAsRawEnabled;
 
-  public UserCommandAliasesBus(RuntimeConfigStore runtimeConfig) {
+  public UserCommandAliasesBus(UserCommandAliasesConfigPort runtimeConfig) {
     List<UserCommandAlias> seeded =
         runtimeConfig != null ? runtimeConfig.readUserCommandAliases() : List.of();
     this.current = sanitize(seeded);

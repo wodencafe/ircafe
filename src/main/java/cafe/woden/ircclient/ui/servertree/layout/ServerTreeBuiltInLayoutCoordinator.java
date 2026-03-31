@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.ui.servertree.layout;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,98 +14,95 @@ import javax.swing.tree.DefaultMutableTreeNode;
 /** Coordinates per-server built-in node layout state and runtime-config persistence. */
 public final class ServerTreeBuiltInLayoutCoordinator {
 
-  private final ServerTreePerServerNormalizedStore<RuntimeConfigStore.ServerTreeBuiltInLayout>
-      byServer;
+  private final ServerTreePerServerNormalizedStore<ServerTreeBuiltInLayout> byServer;
 
-  public ServerTreeBuiltInLayoutCoordinator(RuntimeConfigStore runtimeConfig) {
+  public ServerTreeBuiltInLayoutCoordinator(ServerTreeLayoutConfigPort runtimeConfig) {
     byServer =
         new ServerTreePerServerNormalizedStore<>(
             runtimeConfig,
-            RuntimeConfigStore.ServerTreeBuiltInLayout.defaults(),
+            ServerTreeBuiltInLayout.defaults(),
             ServerTreeBuiltInLayoutCoordinator::normalizeLayout,
             new ServerTreePerServerNormalizedStore.Persistence<>() {
               @Override
-              public Map<String, RuntimeConfigStore.ServerTreeBuiltInLayout> read(
-                  RuntimeConfigStore config) {
+              public Map<String, ServerTreeBuiltInLayout> read(ServerTreeLayoutConfigPort config) {
                 return config.readServerTreeBuiltInLayoutByServer();
               }
 
               @Override
               public void write(
-                  RuntimeConfigStore config,
+                  ServerTreeLayoutConfigPort config,
                   String serverId,
-                  RuntimeConfigStore.ServerTreeBuiltInLayout value) {
+                  ServerTreeBuiltInLayout value) {
                 config.rememberServerTreeBuiltInLayout(serverId, value);
               }
             });
   }
 
-  public RuntimeConfigStore.ServerTreeBuiltInLayout layoutForServer(String serverId) {
+  public ServerTreeBuiltInLayout layoutForServer(String serverId) {
     return byServer.valueForServer(serverId);
   }
 
-  public void rememberLayout(String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
+  public void rememberLayout(String serverId, ServerTreeBuiltInLayout layout) {
     byServer.remember(serverId, layout);
   }
 
-  public RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKindForNode(
+  public ServerTreeBuiltInLayoutNode nodeKindForNode(
       DefaultMutableTreeNode node,
       Predicate<DefaultMutableTreeNode> isMonitorGroupNode,
       Predicate<DefaultMutableTreeNode> isInterceptorsGroupNode,
       Function<DefaultMutableTreeNode, TargetRef> nodeRefExtractor) {
     if (node == null) return null;
     if (isMonitorGroupNode != null && isMonitorGroupNode.test(node)) {
-      return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR;
+      return ServerTreeBuiltInLayoutNode.MONITOR;
     }
     if (isInterceptorsGroupNode != null && isInterceptorsGroupNode.test(node)) {
-      return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.INTERCEPTORS;
+      return ServerTreeBuiltInLayoutNode.INTERCEPTORS;
     }
     if (nodeRefExtractor == null) return null;
     return nodeKindForRef(nodeRefExtractor.apply(node));
   }
 
-  public static RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKindForRef(TargetRef ref) {
+  public static ServerTreeBuiltInLayoutNode nodeKindForRef(TargetRef ref) {
     if (ref == null) return null;
-    if (ref.isStatus()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER;
-    if (ref.isNotifications()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS;
-    if (ref.isLogViewer()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.LOG_VIEWER;
-    if (ref.isWeechatFilters()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.FILTERS;
-    if (ref.isIgnores()) return RuntimeConfigStore.ServerTreeBuiltInLayoutNode.IGNORES;
+    if (ref.isStatus()) return ServerTreeBuiltInLayoutNode.SERVER;
+    if (ref.isNotifications()) return ServerTreeBuiltInLayoutNode.NOTIFICATIONS;
+    if (ref.isLogViewer()) return ServerTreeBuiltInLayoutNode.LOG_VIEWER;
+    if (ref.isWeechatFilters()) return ServerTreeBuiltInLayoutNode.FILTERS;
+    if (ref.isIgnores()) return ServerTreeBuiltInLayoutNode.IGNORES;
     return null;
   }
 
-  public static RuntimeConfigStore.ServerTreeBuiltInLayout normalizeLayout(
-      RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
-    List<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> defaultOther =
-        RuntimeConfigStore.ServerTreeBuiltInLayout.defaults().otherOrder();
+  public static ServerTreeBuiltInLayout normalizeLayout(ServerTreeBuiltInLayout layout) {
+    List<ServerTreeBuiltInLayoutNode> defaultOther =
+        ServerTreeBuiltInLayout.defaults().otherOrder();
 
-    List<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> rawRoot =
+    List<ServerTreeBuiltInLayoutNode> rawRoot =
         layout == null || layout.rootOrder() == null ? List.of() : layout.rootOrder();
-    List<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> rawOther =
+    List<ServerTreeBuiltInLayoutNode> rawOther =
         layout == null || layout.otherOrder() == null ? List.of() : layout.otherOrder();
 
-    java.util.EnumSet<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> seen =
-        java.util.EnumSet.noneOf(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.class);
-    ArrayList<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> root = new ArrayList<>();
-    for (RuntimeConfigStore.ServerTreeBuiltInLayoutNode node : rawRoot) {
+    java.util.EnumSet<ServerTreeBuiltInLayoutNode> seen =
+        java.util.EnumSet.noneOf(ServerTreeBuiltInLayoutNode.class);
+    ArrayList<ServerTreeBuiltInLayoutNode> root = new ArrayList<>();
+    for (ServerTreeBuiltInLayoutNode node : rawRoot) {
       if (node == null || seen.contains(node)) continue;
       root.add(node);
       seen.add(node);
     }
 
-    ArrayList<RuntimeConfigStore.ServerTreeBuiltInLayoutNode> other = new ArrayList<>();
-    for (RuntimeConfigStore.ServerTreeBuiltInLayoutNode node : rawOther) {
+    ArrayList<ServerTreeBuiltInLayoutNode> other = new ArrayList<>();
+    for (ServerTreeBuiltInLayoutNode node : rawOther) {
       if (node == null || seen.contains(node)) continue;
       other.add(node);
       seen.add(node);
     }
 
-    for (RuntimeConfigStore.ServerTreeBuiltInLayoutNode node : defaultOther) {
+    for (ServerTreeBuiltInLayoutNode node : defaultOther) {
       if (node == null || seen.contains(node)) continue;
       other.add(node);
       seen.add(node);
     }
 
-    return new RuntimeConfigStore.ServerTreeBuiltInLayout(List.copyOf(root), List.copyOf(other));
+    return new ServerTreeBuiltInLayout(List.copyOf(root), List.copyOf(other));
   }
 }

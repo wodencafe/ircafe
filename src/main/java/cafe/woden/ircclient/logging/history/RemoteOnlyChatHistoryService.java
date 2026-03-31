@@ -318,21 +318,9 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
         () -> {
           try {
             LoadOlderResult res = fetchRemote(target, pageSize);
-
-            try {
-              if (res != null) {
-                oldestCursor.put(target, res.newOldestCursor());
-                if (!res.hasMore()) noMoreOlder.put(target, Boolean.TRUE);
-              }
-            } catch (Exception ignored) {
-            }
-
-            LoadOlderResult safeRes =
-                res != null
-                    ? res
-                    : new LoadOlderResult(
-                        List.of(), oldestCursor.getOrDefault(target, new LogCursor(0, 0)), true);
-            SwingUtilities.invokeLater(() -> callback.accept(safeRes));
+            oldestCursor.put(target, res.newOldestCursor());
+            if (!res.hasMore()) noMoreOlder.put(target, Boolean.TRUE);
+            SwingUtilities.invokeLater(() -> callback.accept(res));
           } finally {
             inFlight.remove(target);
           }

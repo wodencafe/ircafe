@@ -283,6 +283,14 @@ ircafe:
       # Store the DB next to the runtime YAML config file (loaded via spring.config.import).
       nextToRuntimeConfig: true
 
+logging:
+  level:
+    # Raw inbound IRC lines are extremely noisy under normal use and are only useful for
+    # protocol-level debugging.
+    org.pircbotx.InputParser: WARN
+    # Raw outbound IRC writes are similarly noisy outside targeted debugging sessions.
+    org.pircbotx.output.OutputRaw: WARN
+
 irc:
   client:
     version: "${IRCAFE_CTCP_VERSION:IRCafe}"

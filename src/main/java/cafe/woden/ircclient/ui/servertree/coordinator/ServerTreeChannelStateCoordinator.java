@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelPreference;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelSortMode;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelState;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
@@ -73,7 +76,7 @@ public final class ServerTreeChannelStateCoordinator {
     };
   }
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final ServerTreeChannelStateConfigPort runtimeConfig;
   private final Map<String, ServerTreeDockable.ChannelSortMode> channelSortModeByServer;
   private final Map<String, ArrayList<String>> channelCustomOrderByServer;
   private final Map<String, Map<String, Boolean>> channelAutoReattachByServer;
@@ -85,7 +88,7 @@ public final class ServerTreeChannelStateCoordinator {
   private long channelActivityRankCounter = 0L;
 
   public ServerTreeChannelStateCoordinator(
-      RuntimeConfigStore runtimeConfig,
+      ServerTreeChannelStateConfigPort runtimeConfig,
       ServerTreeChannelStateStore channelStateStore,
       DefaultTreeModel model,
       Context context) {
@@ -525,8 +528,7 @@ public final class ServerTreeChannelStateCoordinator {
     Map<String, Boolean> mutedByChannel = new HashMap<>();
 
     if (runtimeConfig != null) {
-      RuntimeConfigStore.ServerTreeChannelState state =
-          runtimeConfig.readServerTreeChannelState(sid);
+      ServerTreeChannelState state = runtimeConfig.readServerTreeChannelState(sid);
       if (state != null && state.sortMode() != null) {
         sortMode = uiChannelSortMode(state.sortMode());
       }
@@ -534,7 +536,7 @@ public final class ServerTreeChannelStateCoordinator {
         customOrder.addAll(normalizeCustomOrderList(state.customOrder()));
       }
       if (state != null && state.channels() != null) {
-        for (RuntimeConfigStore.ServerTreeChannelPreference pref : state.channels()) {
+        for (ServerTreeChannelPreference pref : state.channels()) {
           if (pref == null) continue;
           String channel = Objects.toString(pref.channel(), "").trim();
           if (channel.isEmpty()) continue;
@@ -587,22 +589,19 @@ public final class ServerTreeChannelStateCoordinator {
     }
   }
 
-  private static RuntimeConfigStore.ServerTreeChannelSortMode runtimeChannelSortMode(
+  private static ServerTreeChannelSortMode runtimeChannelSortMode(
       ServerTreeDockable.ChannelSortMode mode) {
     return switch (mode) {
-      case ALPHABETICAL -> RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL;
-      case MOST_RECENT_ACTIVITY ->
-          RuntimeConfigStore.ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY;
-      case MOST_UNREAD_MESSAGES ->
-          RuntimeConfigStore.ServerTreeChannelSortMode.MOST_UNREAD_MESSAGES;
-      case MOST_UNREAD_NOTIFICATIONS ->
-          RuntimeConfigStore.ServerTreeChannelSortMode.MOST_UNREAD_NOTIFICATIONS;
-      case CUSTOM -> RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM;
+      case ALPHABETICAL -> ServerTreeChannelSortMode.ALPHABETICAL;
+      case MOST_RECENT_ACTIVITY -> ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY;
+      case MOST_UNREAD_MESSAGES -> ServerTreeChannelSortMode.MOST_UNREAD_MESSAGES;
+      case MOST_UNREAD_NOTIFICATIONS -> ServerTreeChannelSortMode.MOST_UNREAD_NOTIFICATIONS;
+      case CUSTOM -> ServerTreeChannelSortMode.CUSTOM;
     };
   }
 
   private static ServerTreeDockable.ChannelSortMode uiChannelSortMode(
-      RuntimeConfigStore.ServerTreeChannelSortMode mode) {
+      ServerTreeChannelSortMode mode) {
     if (mode == null) return ServerTreeDockable.ChannelSortMode.CUSTOM;
     return switch (mode) {
       case ALPHABETICAL -> ServerTreeDockable.ChannelSortMode.ALPHABETICAL;

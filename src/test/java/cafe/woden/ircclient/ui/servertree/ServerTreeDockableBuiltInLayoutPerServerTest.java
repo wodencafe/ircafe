@@ -7,6 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
@@ -73,16 +77,14 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
         new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of(server("libera"))));
     runtime.rememberServerTreeBuiltInLayout(
         "libera",
-        new RuntimeConfigStore.ServerTreeBuiltInLayout(
+        new ServerTreeBuiltInLayout(
+            List.of(ServerTreeBuiltInLayoutNode.SERVER, ServerTreeBuiltInLayoutNode.MONITOR),
             List.of(
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR),
-            List.of(
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.LOG_VIEWER,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.FILTERS,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.IGNORES,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.INTERCEPTORS)));
+                ServerTreeBuiltInLayoutNode.NOTIFICATIONS,
+                ServerTreeBuiltInLayoutNode.LOG_VIEWER,
+                ServerTreeBuiltInLayoutNode.FILTERS,
+                ServerTreeBuiltInLayoutNode.IGNORES,
+                ServerTreeBuiltInLayoutNode.INTERCEPTORS)));
 
     onEdt(
         () -> {
@@ -131,12 +133,10 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
 
             invokePersistBuiltInLayoutFromTree(dockable, "libera");
 
-            RuntimeConfigStore.ServerTreeBuiltInLayout persisted =
+            ServerTreeBuiltInLayout persisted =
                 runtime.readServerTreeBuiltInLayoutByServer().get("libera");
             assertNotNull(persisted);
-            assertEquals(
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
-                persisted.rootOrder().get(0));
+            assertEquals(ServerTreeBuiltInLayoutNode.SERVER, persisted.rootOrder().get(0));
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
@@ -150,23 +150,23 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
         new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of(server("libera"))));
     runtime.rememberServerTreeBuiltInLayout(
         "libera",
-        new RuntimeConfigStore.ServerTreeBuiltInLayout(
-            List.of(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS),
+        new ServerTreeBuiltInLayout(
+            List.of(ServerTreeBuiltInLayoutNode.NOTIFICATIONS),
             List.of(
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.LOG_VIEWER,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.FILTERS,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.IGNORES,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.INTERCEPTORS)));
+                ServerTreeBuiltInLayoutNode.SERVER,
+                ServerTreeBuiltInLayoutNode.LOG_VIEWER,
+                ServerTreeBuiltInLayoutNode.FILTERS,
+                ServerTreeBuiltInLayoutNode.IGNORES,
+                ServerTreeBuiltInLayoutNode.MONITOR,
+                ServerTreeBuiltInLayoutNode.INTERCEPTORS)));
     runtime.rememberServerTreeRootSiblingOrder(
         "libera",
-        new RuntimeConfigStore.ServerTreeRootSiblingOrder(
+        new ServerTreeRootSiblingOrder(
             List.of(
-                RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER,
-                RuntimeConfigStore.ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
-                RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST,
-                RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS)));
+                ServerTreeRootSiblingNode.OTHER,
+                ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
+                ServerTreeRootSiblingNode.CHANNEL_LIST,
+                ServerTreeRootSiblingNode.NOTIFICATIONS)));
 
     onEdt(
         () -> {
@@ -200,15 +200,15 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
         new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of(server("libera"))));
     runtime.rememberServerTreeBuiltInLayout(
         "libera",
-        new RuntimeConfigStore.ServerTreeBuiltInLayout(
-            List.of(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS),
+        new ServerTreeBuiltInLayout(
+            List.of(ServerTreeBuiltInLayoutNode.NOTIFICATIONS),
             List.of(
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.LOG_VIEWER,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.FILTERS,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.IGNORES,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.INTERCEPTORS)));
+                ServerTreeBuiltInLayoutNode.SERVER,
+                ServerTreeBuiltInLayoutNode.LOG_VIEWER,
+                ServerTreeBuiltInLayoutNode.FILTERS,
+                ServerTreeBuiltInLayoutNode.IGNORES,
+                ServerTreeBuiltInLayoutNode.MONITOR,
+                ServerTreeBuiltInLayoutNode.INTERCEPTORS)));
 
     onEdt(
         () -> {
@@ -233,15 +233,15 @@ class ServerTreeDockableBuiltInLayoutPerServerTest {
 
             invokePersistRootSiblingOrderFromTree(dockable, "libera");
 
-            RuntimeConfigStore.ServerTreeRootSiblingOrder persisted =
+            ServerTreeRootSiblingOrder persisted =
                 runtime.readServerTreeRootSiblingOrderByServer().get("libera");
             assertNotNull(persisted);
             assertEquals(
                 List.of(
-                    RuntimeConfigStore.ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
-                    RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST,
-                    RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER,
-                    RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS),
+                    ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
+                    ServerTreeRootSiblingNode.CHANNEL_LIST,
+                    ServerTreeRootSiblingNode.OTHER,
+                    ServerTreeRootSiblingNode.NOTIFICATIONS),
                 persisted.order());
           } catch (Exception e) {
             throw new RuntimeException(e);

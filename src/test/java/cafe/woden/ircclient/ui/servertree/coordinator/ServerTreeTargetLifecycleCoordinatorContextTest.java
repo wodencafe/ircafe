@@ -5,7 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
@@ -22,13 +25,12 @@ class ServerTreeTargetLifecycleCoordinatorContextTest {
     String serverId = "libera";
     TargetRef channelRef = new TargetRef(serverId, "#ircafe");
     ServerNodes nodes = serverNodes(serverId);
-    RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout =
-        new RuntimeConfigStore.ServerTreeBuiltInLayout(
-            List.of(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER),
-            List.of(RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR));
-    RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder =
-        new RuntimeConfigStore.ServerTreeRootSiblingOrder(
-            List.of(RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER));
+    ServerTreeBuiltInLayout builtInLayout =
+        new ServerTreeBuiltInLayout(
+            List.of(ServerTreeBuiltInLayoutNode.SERVER),
+            List.of(ServerTreeBuiltInLayoutNode.MONITOR));
+    ServerTreeRootSiblingOrder rootSiblingOrder =
+        new ServerTreeRootSiblingOrder(List.of(ServerTreeRootSiblingNode.OTHER));
     AtomicBoolean applicationRootVisible = new AtomicBoolean(true);
     AtomicBoolean dccTransfersNodesVisible = new AtomicBoolean(false);
     AtomicReference<Boolean> setApplicationRootVisible = new AtomicReference<>();
@@ -37,11 +39,9 @@ class ServerTreeTargetLifecycleCoordinatorContextTest {
     AtomicBoolean applicationRootStructureChanged = new AtomicBoolean(false);
     AtomicReference<Boolean> setDccTransfersVisible = new AtomicReference<>();
     AtomicReference<ServerNodes> appliedBuiltInLayoutServer = new AtomicReference<>();
-    AtomicReference<RuntimeConfigStore.ServerTreeBuiltInLayout> appliedBuiltInLayout =
-        new AtomicReference<>();
+    AtomicReference<ServerTreeBuiltInLayout> appliedBuiltInLayout = new AtomicReference<>();
     AtomicReference<ServerNodes> appliedRootOrderServer = new AtomicReference<>();
-    AtomicReference<RuntimeConfigStore.ServerTreeRootSiblingOrder> appliedRootOrder =
-        new AtomicReference<>();
+    AtomicReference<ServerTreeRootSiblingOrder> appliedRootOrder = new AtomicReference<>();
     AtomicReference<String> persistedBuiltInLayoutServer = new AtomicReference<>();
     AtomicReference<String> rememberedPmServer = new AtomicReference<>();
     AtomicReference<String> rememberedPmTarget = new AtomicReference<>();
@@ -67,7 +67,7 @@ class ServerTreeTargetLifecycleCoordinatorContextTest {
             setDccTransfersVisible::set,
             id -> ServerBuiltInNodesVisibility.defaults(),
             id -> serverId.equals(id) ? nodes : null,
-            ref -> RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
+            ref -> ServerTreeBuiltInLayoutNode.SERVER,
             id -> builtInLayout,
             id -> rootSiblingOrder,
             (ref, serverNodes) -> {
@@ -119,8 +119,7 @@ class ServerTreeTargetLifecycleCoordinatorContextTest {
     assertTrue(context.builtInNodesVisibility(serverId).server());
     assertSame(nodes, context.addServerRoot(serverId));
     assertEquals(
-        RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
-        context.builtInLayoutNodeKindForRef(channelRef));
+        ServerTreeBuiltInLayoutNode.SERVER, context.builtInLayoutNodeKindForRef(channelRef));
     assertSame(builtInLayout, context.builtInLayout(serverId));
     assertSame(rootSiblingOrder, context.rootSiblingOrder(serverId));
     assertSame(nodes.pmNode, context.backendSpecificParent(channelRef, nodes));

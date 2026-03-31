@@ -5,7 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -41,8 +42,8 @@ class ServerTreeMiddleDragReorderHandlerContextTest {
             value -> true,
             value -> "libera",
             value -> serverNodes,
-            value -> RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST,
-            value -> RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
+            value -> ServerTreeRootSiblingNode.CHANNEL_LIST,
+            value -> ServerTreeBuiltInLayoutNode.SERVER,
             value -> 1,
             value -> 3,
             (nodes, desired) -> 2,
@@ -70,12 +71,8 @@ class ServerTreeMiddleDragReorderHandlerContextTest {
     assertTrue(context.isMovableBuiltInNode(node));
     assertEquals("libera", context.owningServerIdForNode(node));
     assertSame(serverNodes, context.serverNodes("libera"));
-    assertEquals(
-        RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST,
-        context.rootSiblingNodeKindForNode(node));
-    assertEquals(
-        RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
-        context.builtInLayoutNodeKindForNode(node));
+    assertEquals(ServerTreeRootSiblingNode.CHANNEL_LIST, context.rootSiblingNodeKindForNode(node));
+    assertEquals(ServerTreeBuiltInLayoutNode.SERVER, context.builtInLayoutNodeKindForNode(node));
     assertEquals(1, context.minInsertIndex(node));
     assertEquals(3, context.maxInsertIndex(node));
     assertEquals(2, context.rootBuiltInInsertIndex(serverNodes, 10));

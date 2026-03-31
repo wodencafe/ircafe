@@ -1,13 +1,18 @@
 package cafe.woden.ircclient.app.core;
 
+import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
+import cafe.woden.ircclient.app.api.BackendAvailabilityReasonFormatter;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
+import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
+import cafe.woden.ircclient.irc.DisconnectRequestSource;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.backend.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
@@ -44,6 +49,8 @@ import org.springframework.stereotype.Component;
 @ApplicationLayer
 public class ConnectionCoordinator {
   private static final Logger log = LoggerFactory.getLogger(ConnectionCoordinator.class);
+  private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
+      BackendDescriptorCatalog.builtIns();
   private static final Scheduler EDT_SCHEDULER = Schedulers.from(SwingUtilities::invokeLater);
   private static final int TARGET_RESTORE_CHUNK_SIZE = 48;
 
@@ -61,6 +68,8 @@ public class ConnectionCoordinator {
   private final ConnectionRuntimeConfigPort runtimeConfig;
   private final LogProperties logProps;
   private final TrayNotificationsPort trayNotificationService;
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  private final AvailableBackendIdsPort backendMetadata;
   private final CompositeDisposable disposables = new CompositeDisposable();
 
   /** Per-server connection states (missing => {@link ConnectionState#DISCONNECTED}). */
@@ -106,7 +115,9 @@ public class ConnectionCoordinator {
       ServerCatalog serverCatalog,
       ConnectionRuntimeConfigPort runtimeConfig,
       LogProperties logProps,
-      TrayNotificationsPort trayNotificationService) {
+      TrayNotificationsPort trayNotificationService,
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
+      AvailableBackendIdsPort backendMetadata) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
     this.quasselControl = Objects.requireNonNull(quasselControl, "quasselControl");
@@ -117,6 +128,10 @@ public class ConnectionCoordinator {
     this.logProps = Objects.requireNonNull(logProps, "logProps");
     this.trayNotificationService =
         Objects.requireNonNull(trayNotificationService, "trayNotificationService");
+    this.backendCapabilityPolicy = backendCapabilityPolicy;
+    this.backendMetadata =
+        Objects.requireNonNullElseGet(
+            backendMetadata, BackendAvailabilityReasonFormatter::builtInsBackendMetadata);
 
     configuredServers.addAll(serverRegistry.serverIds());
     List<IrcProperties.Server> initialServers = serverRegistry.servers();
@@ -157,7 +172,9 @@ public class ConnectionCoordinator {
         serverCatalog,
         runtimeConfig,
         logProps,
-        trayNotificationService);
+        trayNotificationService,
+        null,
+        BackendAvailabilityReasonFormatter.builtInsBackendMetadata());
   }
 
   @PreDestroy
@@ -261,7 +278,7 @@ public class ConnectionCoordinator {
     Set<String> serverIds = serverRegistry.serverIds();
 
     for (String sid : serverIds) {
-      requestDisconnect(sid, reason, false);
+      requestDisconnect(sid, reason, false, DisconnectRequestSource.USER_REQUEST);
     }
   }
 
@@ -272,7 +289,7 @@ public class ConnectionCoordinator {
   public void disconnectOne(String serverId, String reason) {
     String sid = normalizedKnownServerId(serverId, "(disc)");
     if (sid == null) return;
-    requestDisconnect(sid, reason, true);
+    requestDisconnect(sid, reason, true, DisconnectRequestSource.USER_REQUEST);
   }
 
   public void reconnectAll() {
@@ -315,7 +332,9 @@ public class ConnectionCoordinator {
     updateConnectionUi();
 
     io.reactivex.rxjava3.core.Completable reconnect =
-        irc.disconnect(sid).onErrorComplete().andThen(irc.connect(sid));
+        irc.disconnect(sid, null, DisconnectRequestSource.RECONNECT)
+            .onErrorComplete()
+            .andThen(irc.connect(sid));
 
     disposables.add(
         reconnect
@@ -363,7 +382,7 @@ public class ConnectionCoordinator {
     }
     if (current == null || current.isEmpty()) return;
     IrcProperties.Server existing = current.orElseThrow();
-    if (existing.backend() != IrcProperties.Server.Backend.QUASSEL_CORE) return;
+    if (!supportsQuasselCoreCommands(existing.backendId())) return;
 
     String existingLogin = Objects.toString(existing.login(), "").trim();
     String existingPassword = Objects.toString(existing.serverPassword(), "");
@@ -384,32 +403,42 @@ public class ConnectionCoordinator {
             existing.autoJoin(),
             existing.perform(),
             existing.proxy(),
-            existing.backend());
+            existing.backendId());
     serverRegistry.upsert(updated);
   }
 
   private boolean isQuasselCoreServer(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
+    if (backendCapabilityPolicy != null) {
+      return backendCapabilityPolicy.supportsQuasselCoreCommands(sid);
+    }
 
     try {
       Optional<IrcProperties.Server> current = serverRegistry.find(sid);
       if (current != null && current.isPresent()) {
-        return current.orElseThrow().backend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+        return supportsQuasselCoreCommands(current.orElseThrow().backendId());
       }
     } catch (Exception ignored) {
     }
 
     IrcProperties.Server configured = configuredServerConfigsById.get(sid);
     if (configured != null) {
-      return configured.backend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+      return supportsQuasselCoreCommands(configured.backendId());
     }
     for (Map.Entry<String, IrcProperties.Server> entry : configuredServerConfigsById.entrySet()) {
       if (entry == null || entry.getValue() == null) continue;
       if (!sid.equalsIgnoreCase(Objects.toString(entry.getKey(), "").trim())) continue;
-      return entry.getValue().backend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+      return supportsQuasselCoreCommands(entry.getValue().backendId());
     }
     return false;
+  }
+
+  private boolean supportsQuasselCoreCommands(String backendId) {
+    String normalized = BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendId);
+    return backendCapabilityPolicy != null
+        ? backendCapabilityPolicy.supportsQuasselCoreCommands(normalized)
+        : BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.QUASSEL_CORE).equals(normalized);
   }
 
   private static boolean isStartupAutoConnectEnabled(
@@ -520,7 +549,11 @@ public class ConnectionCoordinator {
     if (refreshUiNow) updateConnectionUi();
   }
 
-  private void requestDisconnect(String sid, String reason, boolean announceWhenAlreadyOffline) {
+  private void requestDisconnect(
+      String sid,
+      String reason,
+      boolean announceWhenAlreadyOffline,
+      DisconnectRequestSource source) {
     String id = Objects.toString(sid, "").trim();
     if (id.isEmpty()) return;
 
@@ -544,7 +577,7 @@ public class ConnectionCoordinator {
     }
 
     disposables.add(
-        irc.disconnect(id, reason)
+        irc.disconnect(id, reason, source)
             .observeOn(EDT_SCHEDULER)
             .subscribe(
                 () -> {},
@@ -601,7 +634,7 @@ public class ConnectionCoordinator {
         ui.appendStatus(status, "(servers)", "Server removed from configuration; disconnecting…");
         setDesiredOnline(sid, false);
         disposables.add(
-            irc.disconnect(sid)
+            irc.disconnect(sid, null, DisconnectRequestSource.SERVER_REMOVED)
                 .observeOn(EDT_SCHEDULER)
                 .subscribe(
                     () -> {}, err -> ui.appendError(status, "(disc-error)", String.valueOf(err))));
@@ -649,7 +682,7 @@ public class ConnectionCoordinator {
         if (!isDesiredOnline(id) && previous == ConnectionState.DISCONNECTING) {
           ui.ensureTargetExists(status);
           ui.appendStatus(status, "(conn)", "Connection attempt suppressed (server set offline)");
-          requestDisconnect(id, null, false);
+          requestDisconnect(id, null, false, DisconnectRequestSource.USER_REQUEST);
           return ConnectivityChange.CHANGED;
         }
         if (!isDesiredOnline(id)) {
@@ -680,7 +713,7 @@ public class ConnectionCoordinator {
         if (!isDesiredOnline(id) && previous == ConnectionState.DISCONNECTING) {
           ui.ensureTargetExists(status);
           ui.appendStatus(status, "(conn)", "Connected while marked offline; disconnecting…");
-          requestDisconnect(id, null, false);
+          requestDisconnect(id, null, false, DisconnectRequestSource.USER_REQUEST);
           return ConnectivityChange.CHANGED;
         }
         if (!isDesiredOnline(id)) {
@@ -688,7 +721,10 @@ public class ConnectionCoordinator {
         }
 
         String backendReason =
-            Objects.toString(backendAvailability.backendAvailabilityReason(id), "").trim();
+            BackendAvailabilityReasonFormatter.decorate(
+                backendIdForServer(id),
+                Objects.toString(backendAvailability.backendAvailabilityReason(id), "").trim(),
+                backendMetadata);
         if (!backendReason.isEmpty()) {
           setState(id, ConnectionState.CONNECTING);
           ui.ensureTargetExists(status);
@@ -764,7 +800,7 @@ public class ConnectionCoordinator {
         if (!isDesiredOnline(id) && previous == ConnectionState.DISCONNECTING) {
           ui.ensureTargetExists(status);
           ui.appendStatus(status, "(conn)", "Reconnect suppressed (server set offline)");
-          requestDisconnect(id, null, false);
+          requestDisconnect(id, null, false, DisconnectRequestSource.USER_REQUEST);
           return ConnectivityChange.CHANGED;
         }
         if (!isDesiredOnline(id)) {
@@ -860,13 +896,6 @@ public class ConnectionCoordinator {
     if (desired) desiredOnline.add(sid);
     else desiredOnline.remove(sid);
     ui.setServerDesiredOnline(sid, desired);
-  }
-
-  private static String renderError(Throwable err) {
-    if (err == null) return "";
-    String msg = Objects.toString(err.getMessage(), "").trim();
-    if (!msg.isEmpty()) return msg;
-    return String.valueOf(err);
   }
 
   private ConnectivityChange handleConnectionFeaturesUpdate(
@@ -1400,7 +1429,7 @@ public class ConnectionCoordinator {
   private static boolean requiresControlledReconnect(
       IrcProperties.Server previous, IrcProperties.Server next) {
     if (previous == null || next == null) return false;
-    if (previous.backend() != next.backend()) return true;
+    if (!Objects.equals(previous.backendId(), next.backendId())) return true;
     if (!sameTrimmed(previous.host(), next.host())) return true;
     if (previous.port() != next.port()) return true;
     if (previous.tls() != next.tls()) return true;
@@ -1411,11 +1440,14 @@ public class ConnectionCoordinator {
     return !Objects.equals(previous.sasl(), next.sasl());
   }
 
-  private static String summarizeReconnectChange(
+  private String summarizeReconnectChange(
       IrcProperties.Server previous, IrcProperties.Server next) {
     if (previous == null || next == null) return "connection profile updated";
-    if (previous.backend() != next.backend()) {
-      return "backend " + renderBackend(previous.backend()) + " → " + renderBackend(next.backend());
+    if (!Objects.equals(previous.backendId(), next.backendId())) {
+      return "backend "
+          + renderBackend(previous.backendId())
+          + " → "
+          + renderBackend(next.backendId());
     }
     if (!sameTrimmed(previous.host(), next.host())
         || previous.port() != next.port()
@@ -1444,8 +1476,46 @@ public class ConnectionCoordinator {
     return Objects.toString(a, "").trim().equals(Objects.toString(b, "").trim());
   }
 
-  private static String renderBackend(IrcProperties.Server.Backend backend) {
-    if (backend == null) return "irc";
-    return backend.token();
+  private String renderBackend(String backendId) {
+    String normalized = BACKEND_DESCRIPTORS.normalizeIdOrDefault(backendId);
+    String displayName =
+        Objects.toString(backendMetadata.backendDisplayName(normalized), "").trim();
+    return displayName.isEmpty() ? normalized : displayName;
+  }
+
+  private String backendIdForServer(String serverId) {
+    String sid = Objects.toString(serverId, "").trim();
+    if (sid.isEmpty()) return "";
+    IrcProperties.Server configured = configuredServerConfigsById.get(sid);
+    if (configured != null) {
+      return configured.backendId();
+    }
+    return findServerConfig(sid).map(IrcProperties.Server::backendId).orElse("");
+  }
+
+  private Optional<IrcProperties.Server> findServerConfig(String serverId) {
+    try {
+      Optional<IrcProperties.Server> configured =
+          Objects.requireNonNullElse(serverRegistry.find(serverId), Optional.empty());
+      if (configured.isPresent()) {
+        return configured;
+      }
+    } catch (Exception ignored) {
+    }
+    try {
+      return Objects.requireNonNullElse(serverCatalog.find(serverId), Optional.empty());
+    } catch (Exception ignored) {
+      return Optional.empty();
+    }
+  }
+
+  private String renderError(Throwable err) {
+    if (err == null) return "";
+    if (err instanceof BackendNotAvailableException backendErr) {
+      return backendErr.displayMessage(backendMetadata::backendDisplayName);
+    }
+    String msg = Objects.toString(err.getMessage(), "").trim();
+    if (!msg.isEmpty()) return msg;
+    return String.valueOf(err);
   }
 }

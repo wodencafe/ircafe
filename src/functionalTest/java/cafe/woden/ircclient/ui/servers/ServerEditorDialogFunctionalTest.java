@@ -75,7 +75,7 @@ class ServerEditorDialogFunctionalTest {
       onEdt(
           () ->
               assertEquals(
-                  IrcProperties.Server.Backend.IRC,
+                  IrcProperties.Server.Backend.IRC.token(),
                   backendCombo.getSelectedItem(),
                   "new servers should default to IRC backend"));
       onEdt(
@@ -129,7 +129,7 @@ class ServerEditorDialogFunctionalTest {
             saslPassField.setText("sasl-secret");
             saslContinueOnFailureBox.setSelected(true);
           });
-      onEdt(() -> backendCombo.setSelectedItem(IrcProperties.Server.Backend.QUASSEL_CORE));
+      onEdt(() -> backendCombo.setSelectedItem(IrcProperties.Server.Backend.QUASSEL_CORE.token()));
       onEdt(
           () -> {
             assertEquals(
@@ -155,6 +155,8 @@ class ServerEditorDialogFunctionalTest {
       assertEquals("libera", id.invoke(server));
       Method backend = server.getClass().getMethod("backend");
       assertEquals(IrcProperties.Server.Backend.QUASSEL_CORE, backend.invoke(server));
+      Method backendId = server.getClass().getMethod("backendId");
+      assertEquals(IrcProperties.Server.Backend.QUASSEL_CORE.token(), backendId.invoke(server));
       Method login = server.getClass().getMethod("login");
       assertEquals("core-user", login.invoke(server));
       Method serverPassword = server.getClass().getMethod("serverPassword");
@@ -202,7 +204,7 @@ class ServerEditorDialogFunctionalTest {
           () -> {
             idField.setText("matrix");
             hostField.setText("https://matrix.example.org");
-            backendCombo.setSelectedItem(IrcProperties.Server.Backend.MATRIX);
+            backendCombo.setSelectedItem(IrcProperties.Server.Backend.MATRIX.token());
           });
       onEdt(
           () -> {
@@ -230,6 +232,8 @@ class ServerEditorDialogFunctionalTest {
       Object server = result.get();
       Method backend = server.getClass().getMethod("backend");
       assertEquals(IrcProperties.Server.Backend.MATRIX, backend.invoke(server));
+      Method backendId = server.getClass().getMethod("backendId");
+      assertEquals(IrcProperties.Server.Backend.MATRIX.token(), backendId.invoke(server));
       Method serverPassword = server.getClass().getMethod("serverPassword");
       assertEquals("matrix-access-token", serverPassword.invoke(server));
 
@@ -267,7 +271,7 @@ class ServerEditorDialogFunctionalTest {
           () -> {
             idField.setText("matrix");
             hostField.setText("https://matrix.example.org");
-            backendCombo.setSelectedItem(IrcProperties.Server.Backend.MATRIX);
+            backendCombo.setSelectedItem(IrcProperties.Server.Backend.MATRIX.token());
             matrixAuthModeCombo.setSelectedIndex(1);
           });
 
@@ -287,6 +291,8 @@ class ServerEditorDialogFunctionalTest {
 
       Method backend = server.getClass().getMethod("backend");
       assertEquals(IrcProperties.Server.Backend.MATRIX, backend.invoke(server));
+      Method backendId = server.getClass().getMethod("backendId");
+      assertEquals(IrcProperties.Server.Backend.MATRIX.token(), backendId.invoke(server));
       Method serverPassword = server.getClass().getMethod("serverPassword");
       assertEquals("", serverPassword.invoke(server));
       Method login = server.getClass().getMethod("login");

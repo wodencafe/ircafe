@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.bouncer;
 
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.api.BouncerDiscoveryConfigPort;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
@@ -24,7 +24,7 @@ public class GenericBouncerEphemeralNetworkImporter implements BouncerBackendDis
       ServerRegistry serverRegistry,
       EphemeralServerRegistry ephemeralServers,
       GenericBouncerAutoConnectStore autoConnect,
-      RuntimeConfigStore runtimeConfig,
+      BouncerDiscoveryConfigPort runtimeConfig,
       BouncerConnectionPort connectionPort) {
     this.orchestrator =
         new BouncerNetworkDiscoveryOrchestrator(

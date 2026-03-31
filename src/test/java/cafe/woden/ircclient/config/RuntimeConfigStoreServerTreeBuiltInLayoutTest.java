@@ -3,6 +3,8 @@ package cafe.woden.ircclient.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -23,26 +25,22 @@ class RuntimeConfigStoreServerTreeBuiltInLayoutTest {
 
     assertEquals(Map.of(), store.readServerTreeBuiltInLayoutByServer());
 
-    RuntimeConfigStore.ServerTreeBuiltInLayout layout =
-        new RuntimeConfigStore.ServerTreeBuiltInLayout(
+    ServerTreeBuiltInLayout layout =
+        new ServerTreeBuiltInLayout(
+            List.of(ServerTreeBuiltInLayoutNode.MONITOR, ServerTreeBuiltInLayoutNode.SERVER),
             List.of(
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER),
-            List.of(
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.LOG_VIEWER,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.FILTERS,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.IGNORES,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.INTERCEPTORS));
+                ServerTreeBuiltInLayoutNode.NOTIFICATIONS,
+                ServerTreeBuiltInLayoutNode.LOG_VIEWER,
+                ServerTreeBuiltInLayoutNode.FILTERS,
+                ServerTreeBuiltInLayoutNode.IGNORES,
+                ServerTreeBuiltInLayoutNode.INTERCEPTORS));
     store.rememberServerTreeBuiltInLayout("libera", layout);
 
-    Map<String, RuntimeConfigStore.ServerTreeBuiltInLayout> persisted =
-        store.readServerTreeBuiltInLayoutByServer();
+    Map<String, ServerTreeBuiltInLayout> persisted = store.readServerTreeBuiltInLayoutByServer();
     assertEquals(1, persisted.size());
     assertEquals(layout, persisted.get("libera"));
 
-    store.rememberServerTreeBuiltInLayout(
-        "libera", RuntimeConfigStore.ServerTreeBuiltInLayout.defaults());
+    store.rememberServerTreeBuiltInLayout("libera", ServerTreeBuiltInLayout.defaults());
     assertEquals(Map.of(), store.readServerTreeBuiltInLayoutByServer());
 
     String yaml = Files.readString(cfg);
@@ -70,20 +68,17 @@ class RuntimeConfigStoreServerTreeBuiltInLayoutTest {
     RuntimeConfigStore store =
         new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
 
-    Map<String, RuntimeConfigStore.ServerTreeBuiltInLayout> persisted =
-        store.readServerTreeBuiltInLayoutByServer();
+    Map<String, ServerTreeBuiltInLayout> persisted = store.readServerTreeBuiltInLayoutByServer();
 
-    RuntimeConfigStore.ServerTreeBuiltInLayout expected =
-        new RuntimeConfigStore.ServerTreeBuiltInLayout(
+    ServerTreeBuiltInLayout expected =
+        new ServerTreeBuiltInLayout(
+            List.of(ServerTreeBuiltInLayoutNode.MONITOR, ServerTreeBuiltInLayoutNode.SERVER),
             List.of(
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.MONITOR,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER),
-            List.of(
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.FILTERS,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.NOTIFICATIONS,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.LOG_VIEWER,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.IGNORES,
-                RuntimeConfigStore.ServerTreeBuiltInLayoutNode.INTERCEPTORS));
+                ServerTreeBuiltInLayoutNode.FILTERS,
+                ServerTreeBuiltInLayoutNode.NOTIFICATIONS,
+                ServerTreeBuiltInLayoutNode.LOG_VIEWER,
+                ServerTreeBuiltInLayoutNode.IGNORES,
+                ServerTreeBuiltInLayoutNode.INTERCEPTORS));
     assertEquals(expected, persisted.get("libera"));
   }
 

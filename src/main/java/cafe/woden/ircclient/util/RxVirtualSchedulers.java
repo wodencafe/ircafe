@@ -16,36 +16,29 @@ public final class RxVirtualSchedulers {
   private static final long DEFAULT_SHUTDOWN_GRACE_MS = 1500L;
   private static final String SHUTDOWN_GRACE_PROPERTY = "ircafe.rx.shutdown.grace.ms";
 
-  private static final Object LOCK = new Object();
   private static ExecutorService ioExec;
   private static ScheduledExecutorService computationExec;
   private static Scheduler ioScheduler;
   private static Scheduler computationScheduler;
 
-  public static Scheduler io() {
-    synchronized (LOCK) {
-      ensureInitializedLocked();
-      return ioScheduler;
-    }
+  public static synchronized Scheduler io() {
+    ensureInitialized();
+    return ioScheduler;
   }
 
-  public static Scheduler computation() {
-    synchronized (LOCK) {
-      ensureInitializedLocked();
-      return computationScheduler;
-    }
+  public static synchronized Scheduler computation() {
+    ensureInitialized();
+    return computationScheduler;
   }
 
-  public static void shutdown() {
-    synchronized (LOCK) {
-      long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(shutdownGraceMillis());
-      shutdownExecutor(ioExec, deadlineNanos);
-      shutdownExecutor(computationExec, deadlineNanos);
-      ioExec = null;
-      computationExec = null;
-      ioScheduler = null;
-      computationScheduler = null;
-    }
+  public static synchronized void shutdown() {
+    long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(shutdownGraceMillis());
+    shutdownExecutor(ioExec, deadlineNanos);
+    shutdownExecutor(computationExec, deadlineNanos);
+    ioExec = null;
+    computationExec = null;
+    ioScheduler = null;
+    computationScheduler = null;
   }
 
   private static void shutdownExecutor(ExecutorService exec, long deadlineNanos) {
@@ -76,7 +69,7 @@ public final class RxVirtualSchedulers {
     }
   }
 
-  private static void ensureInitializedLocked() {
+  private static void ensureInitialized() {
     if (ioExec == null || ioExec.isShutdown() || ioExec.isTerminated()) {
       ioExec = VirtualThreads.newThreadPerTaskExecutor("ircafe-rx-io");
       ioScheduler = Schedulers.from(ioExec);

@@ -57,7 +57,7 @@ public final class ChatChannelListCoordinator {
   private final Supplier<TargetRef> activeTargetSupplier;
   private final Function<String, String> currentNickLookup;
   private final BiFunction<String, String, String> topicLookup;
-  private final BiFunction<String, String, List<String>> banListSnapshotLookup;
+  private final BiFunction<String, String, ChannelListPanel.BanListSnapshot> banListSnapshotLookup;
   private CompositeDisposable bindDisposables;
 
   private final FlowableProcessor<String> channelListCommandRequests =
@@ -72,7 +72,7 @@ public final class ChatChannelListCoordinator {
       Supplier<TargetRef> activeTargetSupplier,
       Function<String, String> currentNickLookup,
       BiFunction<String, String, String> topicLookup,
-      BiFunction<String, String, List<String>> banListSnapshotLookup) {
+      BiFunction<String, String, ChannelListPanel.BanListSnapshot> banListSnapshotLookup) {
     this(
         channelListPanel,
         serverTree,
@@ -96,7 +96,7 @@ public final class ChatChannelListCoordinator {
       Supplier<TargetRef> activeTargetSupplier,
       Function<String, String> currentNickLookup,
       BiFunction<String, String, String> topicLookup,
-      BiFunction<String, String, List<String>> banListSnapshotLookup,
+      BiFunction<String, String, ChannelListPanel.BanListSnapshot> banListSnapshotLookup,
       IrcClientService irc,
       ModeRoutingPort modeRoutingState) {
     this.channelListPanel = Objects.requireNonNull(channelListPanel, "channelListPanel");
@@ -123,8 +123,7 @@ public final class ChatChannelListCoordinator {
           String sid = channelListServerIdForActions();
           String ch = normalizeChannelName(channel);
           if (sid.isBlank() || ch.isEmpty()) return;
-          serverTree.requestJoinChannel(new TargetRef(sid, ch));
-          refreshManagedChannelsCard(sid);
+          handleChannelListJoinSelection(sid, ch);
         });
     channelListPanel.setOnRunListRequest(
         () -> {
@@ -149,6 +148,7 @@ public final class ChatChannelListCoordinator {
           TargetRef ref = new TargetRef(sid, ch);
           serverTree.ensureNode(ref);
           serverTree.setChannelAutoReattach(ref, true);
+          serverTree.setChannelDisconnected(ref, true);
           serverTree.requestJoinChannel(ref);
           refreshManagedChannelsCard(sid);
         });
@@ -401,7 +401,6 @@ public final class ChatChannelListCoordinator {
     String sid = Objects.toString(target.serverId(), "").trim();
     String channel = normalizeChannelName(target.target());
     if (sid.isBlank() || channel.isEmpty()) return;
-    serverTree.selectTarget(TargetRef.channelList(sid));
     refreshManagedChannelsCard(sid);
     channelListPanel.showChannelDetails(sid, channel);
   }
@@ -471,5 +470,38 @@ public final class ChatChannelListCoordinator {
     String c = Objects.toString(channel, "").trim();
     if (c.isEmpty()) return "";
     return (c.startsWith("#") || c.startsWith("&")) ? c : "";
+  }
+
+  private void handleChannelListJoinSelection(String serverId, String channel) {
+    TargetRef ref = new TargetRef(serverId, channel);
+    ServerTreeDockable.ManagedChannelEntry managed = managedChannelEntry(serverId, channel);
+    if (managed != null && !managed.detached()) {
+      serverTree.selectTarget(ref);
+      return;
+    }
+
+    serverTree.ensureNode(ref);
+    serverTree.setChannelDisconnected(ref, true);
+    serverTree.selectTarget(ref);
+    serverTree.requestJoinChannel(ref);
+    refreshManagedChannelsCard(serverId);
+  }
+
+  private ServerTreeDockable.ManagedChannelEntry managedChannelEntry(
+      String serverId, String channel) {
+    if (serverTree == null) return null;
+    String sid = Objects.toString(serverId, "").trim();
+    String ch = normalizeChannelName(channel);
+    if (sid.isBlank() || ch.isEmpty()) return null;
+
+    List<ServerTreeDockable.ManagedChannelEntry> managed = serverTree.managedChannelsForServer(sid);
+    if (managed == null || managed.isEmpty()) return null;
+    for (ServerTreeDockable.ManagedChannelEntry entry : managed) {
+      if (entry == null) continue;
+      if (ch.equalsIgnoreCase(Objects.toString(entry.channel(), "").trim())) {
+        return entry;
+      }
+    }
+    return null;
   }
 }

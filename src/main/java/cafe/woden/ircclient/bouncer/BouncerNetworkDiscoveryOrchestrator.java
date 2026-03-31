@@ -2,8 +2,8 @@ package cafe.woden.ircclient.bouncer;
 
 import cafe.woden.ircclient.config.EphemeralServerRegistry;
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.api.BouncerDiscoveryConfigPort;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -29,7 +29,7 @@ public final class BouncerNetworkDiscoveryOrchestrator {
   @NonNull private final ServerRegistry serverRegistry;
   @NonNull private final EphemeralServerRegistry ephemeralServers;
   @NonNull private final BouncerAutoConnectStore autoConnect;
-  @NonNull private final RuntimeConfigStore runtimeConfig;
+  @NonNull private final BouncerDiscoveryConfigPort runtimeConfig;
   @NonNull private final BouncerConnectionPort connectionPort;
 
   /** Guard against repeated connect() calls when a bouncer repeats network discovery lines. */

@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.view;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
-import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerEntry;
 import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.model.TargetRef;
@@ -56,6 +55,8 @@ public final class ServerTreeServerNodeMenuBuilder {
     void openQuasselNetworkManager(String serverId);
 
     boolean isQuasselSetupPending(String serverId);
+
+    boolean supportsQuasselCoreCommands(String serverId);
 
     boolean interceptorStoreAvailable();
 
@@ -113,6 +114,7 @@ public final class ServerTreeServerNodeMenuBuilder {
       Consumer<String> openQuasselSetup,
       Consumer<String> openQuasselNetworkManager,
       Function<String, Boolean> isQuasselSetupPending,
+      Predicate<String> supportsQuasselCoreCommands,
       Supplier<Boolean> interceptorStoreAvailable,
       Consumer<String> promptAndAddInterceptor,
       Supplier<Boolean> serverDialogsAvailable,
@@ -141,6 +143,7 @@ public final class ServerTreeServerNodeMenuBuilder {
     Objects.requireNonNull(openQuasselSetup, "openQuasselSetup");
     Objects.requireNonNull(openQuasselNetworkManager, "openQuasselNetworkManager");
     Objects.requireNonNull(isQuasselSetupPending, "isQuasselSetupPending");
+    Objects.requireNonNull(supportsQuasselCoreCommands, "supportsQuasselCoreCommands");
     Objects.requireNonNull(interceptorStoreAvailable, "interceptorStoreAvailable");
     Objects.requireNonNull(promptAndAddInterceptor, "promptAndAddInterceptor");
     Objects.requireNonNull(serverDialogsAvailable, "serverDialogsAvailable");
@@ -220,6 +223,11 @@ public final class ServerTreeServerNodeMenuBuilder {
       @Override
       public boolean isQuasselSetupPending(String serverId) {
         return Boolean.TRUE.equals(isQuasselSetupPending.apply(serverId));
+      }
+
+      @Override
+      public boolean supportsQuasselCoreCommands(String serverId) {
+        return supportsQuasselCoreCommands.test(serverId);
       }
 
       @Override
@@ -345,12 +353,7 @@ public final class ServerTreeServerNodeMenuBuilder {
     networkInfo.addActionListener(ev -> context.openServerInfoDialog(serverId));
     menu.add(networkInfo);
 
-    boolean quasselCoreServer =
-        serverEntry
-            .map(ServerEntry::server)
-            .map(IrcProperties.Server::backend)
-            .map(backend -> backend == IrcProperties.Server.Backend.QUASSEL_CORE)
-            .orElse(false);
+    boolean quasselCoreServer = context.supportsQuasselCoreCommands(serverId);
     if (quasselCoreServer) {
       if (context.isQuasselSetupPending(serverId)) {
         JMenuItem completeQuasselSetup = new JMenuItem("Complete Quassel Setup...");

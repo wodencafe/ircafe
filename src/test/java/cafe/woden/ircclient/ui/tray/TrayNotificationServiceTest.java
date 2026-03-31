@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.tray;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -13,8 +14,13 @@ import cafe.woden.ircclient.ui.settings.NotificationBackendMode;
 import cafe.woden.ircclient.ui.settings.UiSettings;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.shell.MainFrame;
+import io.reactivex.rxjava3.core.Scheduler;
+import io.reactivex.rxjava3.schedulers.Schedulers;
+import io.reactivex.rxjava3.schedulers.TestScheduler;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -59,8 +65,70 @@ class TrayNotificationServiceTest {
     assertTrue(invokeShouldUseNotifySendFallback(false, NotificationBackendMode.NATIVE_ONLY));
   }
 
+  @Test
+  void windowsToastIsForcedClosedWhenLibraryTimeoutDoesNotFire() throws Exception {
+    TestScheduler computationScheduler = new TestScheduler();
+    TrayNotificationService service =
+        newService(
+            baseSettings(true, true), false, null, computationScheduler, Schedulers.trampoline());
+    AtomicInteger closes = new AtomicInteger();
+    try {
+      invokeTrackWindowsToast(service, 7L, closes::incrementAndGet);
+
+      computationScheduler.advanceTimeBy(4, TimeUnit.SECONDS);
+      assertEquals(0, closes.get());
+
+      computationScheduler.advanceTimeBy(6, TimeUnit.SECONDS);
+      assertEquals(1, closes.get());
+    } finally {
+      service.shutdown();
+    }
+  }
+
+  @Test
+  void windowsToastForceCloseIsCancelledAfterNormalClose() throws Exception {
+    TestScheduler computationScheduler = new TestScheduler();
+    TrayNotificationService service =
+        newService(
+            baseSettings(true, true), false, null, computationScheduler, Schedulers.trampoline());
+    AtomicInteger closes = new AtomicInteger();
+    try {
+      invokeTrackWindowsToast(service, 9L, closes::incrementAndGet);
+      invokeMarkWindowsToastClosed(service, 9L);
+
+      computationScheduler.advanceTimeBy(12, TimeUnit.SECONDS);
+      assertEquals(0, closes.get());
+    } finally {
+      service.shutdown();
+    }
+  }
+
+  @Test
+  void shutdownClosesTrackedWindowsToasts() throws Exception {
+    TestScheduler computationScheduler = new TestScheduler();
+    TrayNotificationService service =
+        newService(
+            baseSettings(true, true), false, null, computationScheduler, Schedulers.trampoline());
+    AtomicInteger closes = new AtomicInteger();
+
+    invokeTrackWindowsToast(service, 11L, closes::incrementAndGet);
+    service.shutdown();
+
+    assertEquals(1, closes.get());
+  }
+
   private static TrayNotificationService newService(
       UiSettings settings, boolean frameActive, TargetRef activeTarget) {
+    return newService(
+        settings, frameActive, activeTarget, new TestScheduler(), Schedulers.trampoline());
+  }
+
+  private static TrayNotificationService newService(
+      UiSettings settings,
+      boolean frameActive,
+      TargetRef activeTarget,
+      Scheduler computationScheduler,
+      Scheduler ioScheduler) {
     UiSettingsBus settingsBus = mock(UiSettingsBus.class);
     when(settingsBus.get()).thenReturn(settings);
 
@@ -103,7 +171,9 @@ class TrayNotificationServiceTest {
         targetCoordinatorProvider,
         serverTreeProvider,
         gnomeDbusProvider,
-        soundService);
+        soundService,
+        computationScheduler,
+        ioScheduler);
   }
 
   private static boolean invokePassesNotifyConditions(
@@ -123,6 +193,23 @@ class TrayNotificationServiceTest {
             "shouldUseNotifySendFallback", boolean.class, NotificationBackendMode.class);
     m.setAccessible(true);
     return (boolean) m.invoke(null, hasClickHandler, mode);
+  }
+
+  private static void invokeTrackWindowsToast(
+      TrayNotificationService service, long toastId, Runnable closeAction) throws Exception {
+    Method m =
+        TrayNotificationService.class.getDeclaredMethod(
+            "trackWindowsToast", long.class, Runnable.class);
+    m.setAccessible(true);
+    m.invoke(service, toastId, closeAction);
+  }
+
+  private static void invokeMarkWindowsToastClosed(TrayNotificationService service, long toastId)
+      throws Exception {
+    Method m =
+        TrayNotificationService.class.getDeclaredMethod("markWindowsToastClosed", long.class);
+    m.setAccessible(true);
+    m.invoke(service, toastId);
   }
 
   private static UiSettings baseSettings(

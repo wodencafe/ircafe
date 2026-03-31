@@ -1,7 +1,8 @@
 package cafe.woden.ircclient.ui.backend;
 
-import cafe.woden.ircclient.irc.backend.IrcBackendModePort;
+import cafe.woden.ircclient.app.api.BackendUiMode;
 import java.util.Objects;
+import java.util.function.Function;
 
 /** Backend-aware UI profile for a specific server selection. */
 public record BackendUiProfile(String serverId, BackendUiContext backendUiContext) {
@@ -15,9 +16,10 @@ public record BackendUiProfile(String serverId, BackendUiContext backendUiContex
     return new BackendUiProfile(serverId, BackendUiContext.ircOnly());
   }
 
-  public static BackendUiProfile fromBackendModePort(
-      IrcBackendModePort backendModePort, String serverId) {
-    return new BackendUiProfile(serverId, BackendUiContext.fromBackendModePort(backendModePort));
+  public static BackendUiProfile fromBackendUiModeResolver(
+      Function<String, BackendUiMode> uiModeResolver, String serverId) {
+    return new BackendUiProfile(
+        serverId, BackendUiContext.fromBackendUiModeResolver(uiModeResolver));
   }
 
   public BackendUiProfile withServerId(String serverId) {

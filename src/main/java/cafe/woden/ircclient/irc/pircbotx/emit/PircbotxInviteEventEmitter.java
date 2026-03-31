@@ -3,7 +3,6 @@ package cafe.woden.ircclient.irc.pircbotx.emit;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxEventAccessors;
 import cafe.woden.ircclient.irc.playback.*;

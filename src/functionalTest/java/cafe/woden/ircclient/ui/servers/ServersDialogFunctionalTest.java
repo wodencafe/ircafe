@@ -177,7 +177,7 @@ class ServersDialogFunctionalTest {
 
     idField.setText(id);
     hostField.setText(host);
-    backendCombo.setSelectedItem(IrcProperties.Server.Backend.QUASSEL_CORE);
+    backendCombo.setSelectedItem(IrcProperties.Server.Backend.QUASSEL_CORE.token());
     if (tlsBox.isSelected()) {
       tlsBox.doClick();
     }

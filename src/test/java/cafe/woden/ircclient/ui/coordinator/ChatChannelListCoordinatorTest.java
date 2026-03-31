@@ -50,7 +50,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     when(serverTree.managedChannelsForServer("libera"))
         .thenReturn(List.of(new ServerTreeDockable.ManagedChannelEntry("#ircafe", false, true, 3)));
@@ -96,7 +96,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     when(serverTree.managedChannelsForServer("libera")).thenReturn(List.of());
     when(serverTree.channelSortModeForServer("libera"))
@@ -126,7 +126,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     when(serverTree.managedChannelsForServer("libera")).thenReturn(List.of());
     when(serverTree.channelSortModeForServer("libera"))
@@ -161,7 +161,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     coordinator.refreshManagedChannelsCard("  ");
 
@@ -193,16 +193,136 @@ class ChatChannelListCoordinatorTest {
             () -> new TargetRef("libera", "status"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
     Consumer<String> joinChannel = captureJoinChannelCallback(channelListPanel);
     joinChannel.accept("#ircafe");
 
+    TargetRef ref = new TargetRef("libera", "#ircafe");
+    verify(serverTree).ensureNode(ref);
+    verify(serverTree).setChannelDisconnected(ref, true);
+    verify(serverTree).selectTarget(ref);
     verify(serverTree).requestJoinChannel(new TargetRef("libera", "#ircafe"));
     verify(channelListPanel)
         .setManagedChannels(eq("libera"), anyList(), eq(ChannelListPanel.ManagedSortMode.CUSTOM));
+    disposables.dispose();
+  }
+
+  @Test
+  void bindJoinChannelCallbackSelectsConnectedManagedChannelWithoutRejoin() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(channelListPanel.currentServerId()).thenReturn("libera");
+    when(serverTree.managedChannelsForServer("libera"))
+        .thenReturn(List.of(new ServerTreeDockable.ManagedChannelEntry("#ircafe", false, true, 0)));
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            sid -> "",
+            (sid, channel) -> "",
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    Consumer<String> joinChannel = captureJoinChannelCallback(channelListPanel);
+    joinChannel.accept("#ircafe");
+
+    TargetRef ref = new TargetRef("libera", "#ircafe");
+    verify(serverTree).selectTarget(ref);
+    verify(serverTree, never()).requestJoinChannel(ref);
+    verify(serverTree, never()).setChannelDisconnected(ref, true);
+    disposables.dispose();
+  }
+
+  @Test
+  void bindJoinChannelCallbackReconnectsDetachedManagedChannelAndSelectsIt() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(channelListPanel.currentServerId()).thenReturn("libera");
+    when(serverTree.managedChannelsForServer("libera"))
+        .thenReturn(List.of(new ServerTreeDockable.ManagedChannelEntry("#ircafe", true, true, 0)));
+    when(serverTree.channelSortModeForServer("libera"))
+        .thenReturn(ServerTreeDockable.ChannelSortMode.CUSTOM);
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            sid -> "",
+            (sid, channel) -> "",
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    Consumer<String> joinChannel = captureJoinChannelCallback(channelListPanel);
+    joinChannel.accept("#ircafe");
+
+    TargetRef ref = new TargetRef("libera", "#ircafe");
+    verify(serverTree).ensureNode(ref);
+    verify(serverTree).setChannelDisconnected(ref, true);
+    verify(serverTree).selectTarget(ref);
+    verify(serverTree).requestJoinChannel(ref);
+    disposables.dispose();
+  }
+
+  @Test
+  void bindAddChannelCallbackMarksChannelDetachedBeforeJoin() {
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    ServerTreeDockable serverTree = mock(ServerTreeDockable.class);
+    UserListStore userListStore = mock(UserListStore.class);
+    UserListDockable usersDock = mock(UserListDockable.class);
+    OutboundLineBus outboundLineBus = mock(OutboundLineBus.class);
+    FlowableProcessor<String> changes = PublishProcessor.<String>create().toSerialized();
+    when(serverTree.managedChannelsChangedByServer()).thenReturn(changes.onBackpressureBuffer());
+    when(channelListPanel.currentServerId()).thenReturn("libera");
+    when(serverTree.managedChannelsForServer("libera")).thenReturn(List.of());
+    when(serverTree.channelSortModeForServer("libera"))
+        .thenReturn(ServerTreeDockable.ChannelSortMode.CUSTOM);
+
+    ChatChannelListCoordinator coordinator =
+        new ChatChannelListCoordinator(
+            channelListPanel,
+            serverTree,
+            outboundLineBus,
+            userListStore,
+            usersDock,
+            () -> TargetRef.channelList("libera"),
+            sid -> "",
+            (sid, channel) -> "",
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
+
+    CompositeDisposable disposables = new CompositeDisposable();
+    coordinator.bind(disposables);
+    Consumer<String> addChannel = captureAddChannelCallback(channelListPanel);
+    addChannel.accept("#ircafe");
+
+    TargetRef ref = new TargetRef("libera", "#ircafe");
+    verify(serverTree).ensureNode(ref);
+    verify(serverTree).setChannelAutoReattach(ref, true);
+    verify(serverTree).setChannelDisconnected(ref, true);
+    verify(serverTree).requestJoinChannel(ref);
     disposables.dispose();
   }
 
@@ -228,7 +348,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -262,7 +382,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -295,7 +415,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -330,7 +450,7 @@ class ChatChannelListCoordinatorTest {
             () -> new TargetRef("other", "status"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of(),
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot,
             irc,
             modeRoutingState);
 
@@ -367,7 +487,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -401,7 +521,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "me",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -436,13 +556,13 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
     modeDetails.onNext(new TargetRef("libera", "#ircafe"));
 
-    verify(serverTree).selectTarget(TargetRef.channelList("libera"));
+    verify(serverTree, never()).selectTarget(TargetRef.channelList("libera"));
     verify(channelListPanel).showChannelDetails("libera", "#ircafe");
     disposables.dispose();
   }
@@ -469,7 +589,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -505,7 +625,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of(),
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot,
             irc,
             modeRoutingState);
 
@@ -546,7 +666,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "me",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -586,7 +706,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "me",
             (sid, channel) -> "",
-            (sid, channel) -> List.of(),
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot,
             irc,
             modeRoutingState);
 
@@ -623,7 +743,7 @@ class ChatChannelListCoordinatorTest {
             () -> TargetRef.channelList("libera"),
             sid -> "",
             (sid, channel) -> "",
-            (sid, channel) -> List.of());
+            ChatChannelListCoordinatorTest::emptyBanListSnapshot);
 
     CompositeDisposable disposables = new CompositeDisposable();
     coordinator.bind(disposables);
@@ -686,5 +806,17 @@ class ChatChannelListCoordinatorTest {
     ArgumentCaptor<Consumer> captor = ArgumentCaptor.forClass(Consumer.class);
     verify(channelListPanel).setOnManagedChannelSelected(captor.capture());
     return captor.getValue();
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static Consumer<String> captureAddChannelCallback(ChannelListPanel channelListPanel) {
+    ArgumentCaptor<Consumer> captor = ArgumentCaptor.forClass(Consumer.class);
+    verify(channelListPanel).setOnAddChannelRequest(captor.capture());
+    return captor.getValue();
+  }
+
+  private static ChannelListPanel.BanListSnapshot emptyBanListSnapshot(
+      String serverId, String channel) {
+    return ChannelListPanel.BanListSnapshot.empty();
   }
 }

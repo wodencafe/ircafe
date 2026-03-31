@@ -3,7 +3,6 @@ package cafe.woden.ircclient.irc.quassel;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.pircbotx.*;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;

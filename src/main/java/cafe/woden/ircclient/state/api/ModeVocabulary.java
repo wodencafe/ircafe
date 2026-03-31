@@ -8,9 +8,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /** Effective per-server IRC mode grammar derived from RPL_ISUPPORT and conservative fallbacks. */
 @ApplicationLayer
+@ValueObject
 public record ModeVocabulary(
     Set<Character> statusModes,
     Set<Character> explicitStatusModes,

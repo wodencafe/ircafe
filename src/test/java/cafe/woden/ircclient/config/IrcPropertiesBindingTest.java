@@ -3,6 +3,7 @@ package cafe.woden.ircclient.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -195,6 +196,22 @@ class IrcPropertiesBindingTest {
               assertEquals("", server.nickserv().password());
               assertEquals("NickServ", server.nickserv().service());
               assertTrue(server.nickserv().delayJoinUntilIdentified());
+            });
+  }
+
+  @Test
+  void customBackendIdBindsFromExistingBackendProperty() {
+    runner
+        .withPropertyValues(
+            "irc.servers[0].id=plugin",
+            "irc.servers[0].host=plugin.example.net",
+            "irc.servers[0].port=9000",
+            "irc.servers[0].backend=custom-plugin")
+        .run(
+            ctx -> {
+              IrcProperties.Server server = ctx.getBean(IrcProperties.class).servers().getFirst();
+              assertEquals("custom-plugin", server.backendId());
+              assertNull(server.backend());
             });
   }
 

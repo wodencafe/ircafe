@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelSortMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -76,9 +77,8 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
         new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
 
     assertEquals(
-        RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL,
-        store.readServerTreeChannelSortMode(
-            "libera", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM));
+        ServerTreeChannelSortMode.ALPHABETICAL,
+        store.readServerTreeChannelSortMode("libera", ServerTreeChannelSortMode.CUSTOM));
     assertEquals(List.of("#beta", "#alpha"), store.readServerTreeChannelCustomOrder("libera"));
     assertEquals(List.of("#alpha", "#beta"), store.readKnownChannels("libera"));
     assertTrue(store.readServerTreeChannelAutoReattach("libera", "#alpha", false));
@@ -140,9 +140,8 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
         new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
 
     assertEquals(
-        RuntimeConfigStore.ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY,
-        store.readServerTreeChannelSortMode(
-            "libera", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM));
+        ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY,
+        store.readServerTreeChannelSortMode("libera", ServerTreeChannelSortMode.CUSTOM));
   }
 
   @Test
@@ -175,13 +174,11 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
         new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
 
     assertEquals(
-        RuntimeConfigStore.ServerTreeChannelSortMode.MOST_UNREAD_MESSAGES,
-        store.readServerTreeChannelSortMode(
-            "libera", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM));
+        ServerTreeChannelSortMode.MOST_UNREAD_MESSAGES,
+        store.readServerTreeChannelSortMode("libera", ServerTreeChannelSortMode.CUSTOM));
     assertEquals(
-        RuntimeConfigStore.ServerTreeChannelSortMode.MOST_UNREAD_NOTIFICATIONS,
-        store.readServerTreeChannelSortMode(
-            "oftc", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM));
+        ServerTreeChannelSortMode.MOST_UNREAD_NOTIFICATIONS,
+        store.readServerTreeChannelSortMode("oftc", ServerTreeChannelSortMode.CUSTOM));
   }
 
   @Test
@@ -230,23 +227,19 @@ class RuntimeConfigStoreServerTreeChannelStateTest {
 
     store.rememberServerTreeChannel("libera", "#beta");
     store.rememberServerTreeChannel("libera", "#alpha");
-    store.rememberServerTreeChannelSortMode(
-        "libera", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM);
+    store.rememberServerTreeChannelSortMode("libera", ServerTreeChannelSortMode.CUSTOM);
     store.rememberServerTreeChannelCustomOrder("libera", List.of("#beta", "#alpha"));
 
     store.rememberServerTreeChannel("oftc", "#beta");
     store.rememberServerTreeChannel("oftc", "#alpha");
-    store.rememberServerTreeChannelSortMode(
-        "oftc", RuntimeConfigStore.ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY);
+    store.rememberServerTreeChannelSortMode("oftc", ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY);
 
     assertEquals(
-        RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM,
-        store.readServerTreeChannelSortMode(
-            "libera", RuntimeConfigStore.ServerTreeChannelSortMode.ALPHABETICAL));
+        ServerTreeChannelSortMode.CUSTOM,
+        store.readServerTreeChannelSortMode("libera", ServerTreeChannelSortMode.ALPHABETICAL));
     assertEquals(
-        RuntimeConfigStore.ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY,
-        store.readServerTreeChannelSortMode(
-            "oftc", RuntimeConfigStore.ServerTreeChannelSortMode.CUSTOM));
+        ServerTreeChannelSortMode.MOST_RECENT_ACTIVITY,
+        store.readServerTreeChannelSortMode("oftc", ServerTreeChannelSortMode.CUSTOM));
     assertEquals(List.of("#beta", "#alpha"), store.readServerTreeChannelCustomOrder("libera"));
     assertEquals(List.of("#beta", "#alpha"), store.readServerTreeChannelCustomOrder("oftc"));
   }

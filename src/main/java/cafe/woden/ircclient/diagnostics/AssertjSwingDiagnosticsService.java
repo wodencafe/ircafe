@@ -2,8 +2,8 @@ package cafe.woden.ircclient.diagnostics;
 
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notify.sound.NotificationSoundService;
@@ -56,7 +56,7 @@ public class AssertjSwingDiagnosticsService {
 
   private final ApplicationDiagnosticsService diagnostics;
   private final UiProperties uiProps;
-  private final RuntimeConfigStore runtimeConfig;
+  private final DiagnosticsRuntimeConfigPort runtimeConfig;
   private final ObjectProvider<NotificationSoundService> soundServiceProvider;
   private final ObjectProvider<TrayNotificationsPort> trayNotificationServiceProvider;
 
@@ -81,7 +81,7 @@ public class AssertjSwingDiagnosticsService {
   public AssertjSwingDiagnosticsService(
       ApplicationDiagnosticsService diagnostics,
       UiProperties uiProps,
-      RuntimeConfigStore runtimeConfig,
+      DiagnosticsRuntimeConfigPort runtimeConfig,
       ObjectProvider<NotificationSoundService> soundServiceProvider,
       ObjectProvider<TrayNotificationsPort> trayNotificationServiceProvider,
       @Qualifier(ExecutorConfig.ASSERTJ_WATCHDOG_SCHEDULER) ScheduledExecutorService watchdogExec) {

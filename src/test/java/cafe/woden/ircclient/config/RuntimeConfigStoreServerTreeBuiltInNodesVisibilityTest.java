@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort.ServerTreeBuiltInNodesVisibility;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -24,17 +25,17 @@ class RuntimeConfigStoreServerTreeBuiltInNodesVisibilityTest {
 
     assertEquals(Map.of(), store.readServerTreeBuiltInNodesVisibility());
 
-    RuntimeConfigStore.ServerTreeBuiltInNodesVisibility hidden =
-        new RuntimeConfigStore.ServerTreeBuiltInNodesVisibility(false, false, true, true, false);
+    ServerTreeBuiltInNodesVisibility hidden =
+        new ServerTreeBuiltInNodesVisibility(false, false, true, true, false);
     store.rememberServerTreeBuiltInNodesVisibility("libera", hidden);
 
-    Map<String, RuntimeConfigStore.ServerTreeBuiltInNodesVisibility> persisted =
+    Map<String, ServerTreeBuiltInNodesVisibility> persisted =
         store.readServerTreeBuiltInNodesVisibility();
     assertEquals(1, persisted.size());
     assertEquals(hidden, persisted.get("libera"));
 
     store.rememberServerTreeBuiltInNodesVisibility(
-        "libera", RuntimeConfigStore.ServerTreeBuiltInNodesVisibility.defaults());
+        "libera", ServerTreeBuiltInNodesVisibility.defaults());
 
     assertEquals(Map.of(), store.readServerTreeBuiltInNodesVisibility());
     String yaml = Files.readString(cfg);
@@ -56,9 +57,9 @@ class RuntimeConfigStoreServerTreeBuiltInNodesVisibilityTest {
     RuntimeConfigStore store =
         new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
 
-    Map<String, RuntimeConfigStore.ServerTreeBuiltInNodesVisibility> persisted =
+    Map<String, ServerTreeBuiltInNodesVisibility> persisted =
         store.readServerTreeBuiltInNodesVisibility();
-    RuntimeConfigStore.ServerTreeBuiltInNodesVisibility visibility = persisted.get("libera");
+    ServerTreeBuiltInNodesVisibility visibility = persisted.get("libera");
 
     assertTrue(visibility.server());
     assertFalse(visibility.notifications());

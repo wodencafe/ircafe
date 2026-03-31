@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.ui.tray;
 
 import cafe.woden.ircclient.app.ApplicationShutdownCoordinator;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.shell.MainFrame;
 import dorkbox.systemTray.MenuItem;
@@ -29,7 +29,7 @@ public class TrayService {
   private final ObjectProvider<MainFrame> frameProvider;
   private final ObjectProvider<TrayNotificationService> trayNotificationServiceProvider;
   private final ApplicationShutdownCoordinator shutdownCoordinator;
-  private final RuntimeConfigStore runtimeConfigStore;
+  private final UiShellRuntimeConfigPort runtimeConfigStore;
 
   private final AtomicBoolean installed = new AtomicBoolean(false);
   private final AtomicBoolean exitRequested = new AtomicBoolean(false);
@@ -45,7 +45,7 @@ public class TrayService {
       ObjectProvider<MainFrame> frameProvider,
       ObjectProvider<TrayNotificationService> trayNotificationServiceProvider,
       ApplicationShutdownCoordinator shutdownCoordinator,
-      RuntimeConfigStore runtimeConfigStore) {
+      UiShellRuntimeConfigPort runtimeConfigStore) {
     this.settingsBus = settingsBus;
     this.frameProvider = frameProvider;
     this.trayNotificationServiceProvider = trayNotificationServiceProvider;

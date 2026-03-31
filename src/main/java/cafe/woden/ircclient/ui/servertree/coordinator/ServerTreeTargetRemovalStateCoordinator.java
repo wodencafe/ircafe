@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.state.ServerTreeChannelStateStore;
@@ -59,7 +59,7 @@ public final class ServerTreeTargetRemovalStateCoordinator {
   }
 
   private final ServerTreePrivateMessageOnlineStateStore privateMessageOnlineStateStore;
-  private final RuntimeConfigStore runtimeConfig;
+  private final IrcSessionRuntimeConfigPort runtimeConfig;
   private final Map<String, Map<String, Boolean>> channelAutoReattachByServer;
   private final Map<String, Map<String, Long>> channelActivityRankByServer;
   private final Map<String, ArrayList<String>> channelCustomOrderByServer;
@@ -69,7 +69,7 @@ public final class ServerTreeTargetRemovalStateCoordinator {
 
   public ServerTreeTargetRemovalStateCoordinator(
       ServerTreePrivateMessageOnlineStateStore privateMessageOnlineStateStore,
-      RuntimeConfigStore runtimeConfig,
+      IrcSessionRuntimeConfigPort runtimeConfig,
       ServerTreeChannelStateStore channelStateStore,
       Context context) {
     ServerTreeChannelStateStore stateStore =

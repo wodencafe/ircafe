@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.diagnostics;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
 import cafe.woden.ircclient.util.VirtualThreads;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -27,7 +27,7 @@ public class JhiccupDiagnosticsService {
 
   private final ApplicationDiagnosticsService diagnostics;
   private final UiProperties uiProps;
-  private final RuntimeConfigStore runtimeConfig;
+  private final DiagnosticsRuntimeConfigPort runtimeConfig;
 
   private volatile Process process;
   private volatile boolean started = false;
@@ -35,7 +35,7 @@ public class JhiccupDiagnosticsService {
   public JhiccupDiagnosticsService(
       ApplicationDiagnosticsService diagnostics,
       UiProperties uiProps,
-      RuntimeConfigStore runtimeConfig) {
+      DiagnosticsRuntimeConfigPort runtimeConfig) {
     this.diagnostics = diagnostics;
     this.uiProps = uiProps;
     this.runtimeConfig = runtimeConfig;

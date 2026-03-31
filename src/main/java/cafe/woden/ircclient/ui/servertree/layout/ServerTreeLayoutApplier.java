@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.layout;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import java.util.ArrayList;
 import javax.swing.tree.DefaultMutableTreeNode;
 
@@ -8,15 +11,15 @@ import javax.swing.tree.DefaultMutableTreeNode;
 public final class ServerTreeLayoutApplier {
 
   public interface BuiltInNodeResolver {
-    DefaultMutableTreeNode resolve(RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKind);
+    DefaultMutableTreeNode resolve(ServerTreeBuiltInLayoutNode nodeKind);
   }
 
   public interface RootSiblingNodeResolver {
-    DefaultMutableTreeNode resolve(RuntimeConfigStore.ServerTreeRootSiblingNode nodeKind);
+    DefaultMutableTreeNode resolve(ServerTreeRootSiblingNode nodeKind);
   }
 
   public interface RootSiblingKindResolver {
-    RuntimeConfigStore.ServerTreeRootSiblingNode resolve(DefaultMutableTreeNode node);
+    ServerTreeRootSiblingNode resolve(DefaultMutableTreeNode node);
   }
 
   public interface StructureUpdater {
@@ -60,7 +63,7 @@ public final class ServerTreeLayoutApplier {
       DefaultMutableTreeNode privateMessagesNode,
       DefaultMutableTreeNode channelListNode,
       DefaultMutableTreeNode dccTransfersNode,
-      RuntimeConfigStore.ServerTreeBuiltInLayout requestedLayout,
+      ServerTreeBuiltInLayout requestedLayout,
       BuiltInNodeResolver nodeResolver,
       StructureUpdater structureUpdater) {
     if (serverNode == null
@@ -70,7 +73,7 @@ public final class ServerTreeLayoutApplier {
       return;
     }
 
-    RuntimeConfigStore.ServerTreeBuiltInLayout layout =
+    ServerTreeBuiltInLayout layout =
         ServerTreeBuiltInLayoutCoordinator.normalizeLayout(requestedLayout);
     boolean changed = false;
 
@@ -81,7 +84,7 @@ public final class ServerTreeLayoutApplier {
       changed = true;
     }
 
-    for (RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKind : layout.rootOrder()) {
+    for (ServerTreeBuiltInLayoutNode nodeKind : layout.rootOrder()) {
       DefaultMutableTreeNode node = nodeResolver.resolve(nodeKind);
       if (node == null) continue;
       DefaultMutableTreeNode currentParent = (DefaultMutableTreeNode) node.getParent();
@@ -101,7 +104,7 @@ public final class ServerTreeLayoutApplier {
       changed = true;
     }
 
-    for (RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKind : layout.otherOrder()) {
+    for (ServerTreeBuiltInLayoutNode nodeKind : layout.otherOrder()) {
       DefaultMutableTreeNode node = nodeResolver.resolve(nodeKind);
       if (node == null) continue;
       DefaultMutableTreeNode currentParent = (DefaultMutableTreeNode) node.getParent();
@@ -120,7 +123,7 @@ public final class ServerTreeLayoutApplier {
 
   public void applyRootSiblingOrder(
       DefaultMutableTreeNode serverNode,
-      RuntimeConfigStore.ServerTreeRootSiblingOrder requestedOrder,
+      ServerTreeRootSiblingOrder requestedOrder,
       RootSiblingNodeResolver nodeResolver,
       RootSiblingKindResolver kindResolver,
       StructureUpdater structureUpdater) {
@@ -131,7 +134,7 @@ public final class ServerTreeLayoutApplier {
       return;
     }
 
-    RuntimeConfigStore.ServerTreeRootSiblingOrder order =
+    ServerTreeRootSiblingOrder order =
         ServerTreeRootSiblingOrderCoordinator.normalizeOrder(requestedOrder);
 
     ArrayList<DefaultMutableTreeNode> current = new ArrayList<>();
@@ -145,7 +148,7 @@ public final class ServerTreeLayoutApplier {
     if (current.size() <= 1) return;
 
     ArrayList<DefaultMutableTreeNode> desired = new ArrayList<>();
-    for (RuntimeConfigStore.ServerTreeRootSiblingNode nodeKind : order.order()) {
+    for (ServerTreeRootSiblingNode nodeKind : order.order()) {
       DefaultMutableTreeNode node = nodeResolver.resolve(nodeKind);
       if (node == null || node.getParent() != serverNode || desired.contains(node)) continue;
       desired.add(node);

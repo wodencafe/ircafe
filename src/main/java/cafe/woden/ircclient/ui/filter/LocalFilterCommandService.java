@@ -3,8 +3,8 @@ package cafe.woden.ircclient.ui.filter;
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.FilterCommand;
-import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.app.outbound.spi.LocalFilterCommandHandler;
+import cafe.woden.ircclient.config.api.FilterSettingsConfigPort;
 import cafe.woden.ircclient.model.FilterAction;
 import cafe.woden.ircclient.model.FilterDirection;
 import cafe.woden.ircclient.model.FilterRule;
@@ -43,7 +43,7 @@ public class LocalFilterCommandService implements LocalFilterCommandHandler {
   private final ActiveTargetPort targetCoordinator;
   private final FilterSettingsBus filterSettingsBus;
   private final FilterEngine filterEngine;
-  private final RuntimeConfigStore runtimeConfig;
+  private final FilterSettingsConfigPort runtimeConfig;
   private final TranscriptRebuildService rebuildService;
 
   public LocalFilterCommandService(
@@ -51,7 +51,7 @@ public class LocalFilterCommandService implements LocalFilterCommandHandler {
       ActiveTargetPort targetCoordinator,
       FilterSettingsBus filterSettingsBus,
       FilterEngine filterEngine,
-      RuntimeConfigStore runtimeConfig,
+      FilterSettingsConfigPort runtimeConfig,
       TranscriptRebuildService rebuildService) {
 
     this.ui = ui;

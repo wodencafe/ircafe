@@ -19,7 +19,9 @@ import com.sshtools.twoslices.ToasterSettings;
 import dorkbox.notify.Notify;
 import dorkbox.notify.Position;
 import dorkbox.notify.Theme;
+import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PreDestroy;
@@ -47,6 +49,7 @@ import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -73,6 +76,7 @@ public class TrayNotificationService implements TrayNotificationsPort {
       "terminal-notifier.app/Contents/MacOS/terminal-notifier";
   private static final int TOAST_TIMEOUT_SECONDS = 5;
   private static final Duration TWO_SLICES_FAILURE_COOLDOWN = Duration.ofSeconds(30);
+  private static final Duration WINDOWS_TOAST_FORCE_CLOSE_GRACE = Duration.ofSeconds(2);
 
   private final UiSettingsBus settingsBus;
   private final ObjectProvider<TrayService> trayServiceProvider;
@@ -83,14 +87,20 @@ public class TrayNotificationService implements TrayNotificationsPort {
       serverTreeProvider;
   private final ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider;
   private final NotificationSoundService soundService;
+  private final Scheduler computationScheduler;
+  private final Scheduler ioScheduler;
   private final FlowableProcessor<NotificationRequest> requests;
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final Map<String, Long> lastContentAtMs = new ConcurrentHashMap<>();
+  private final Map<Long, Runnable> activeWindowsToastClosers = new ConcurrentHashMap<>();
+  private final Map<Long, Disposable> activeWindowsToastTimeouts = new ConcurrentHashMap<>();
+  private final AtomicLong windowsToastIds = new AtomicLong();
   private final AtomicLong twoSlicesDisabledUntilMs = new AtomicLong(0L);
   private final Object twoSlicesInitLock = new Object();
   private volatile boolean twoSlicesInitialized;
   private volatile URL twoSlicesIconUrl;
 
+  @Autowired
   public TrayNotificationService(
       UiSettingsBus settingsBus,
       ObjectProvider<TrayService> trayServiceProvider,
@@ -100,6 +110,30 @@ public class TrayNotificationService implements TrayNotificationsPort {
       ObjectProvider<cafe.woden.ircclient.ui.servertree.ServerTreeDockable> serverTreeProvider,
       ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider,
       NotificationSoundService soundService) {
+    this(
+        settingsBus,
+        trayServiceProvider,
+        mainFrameProvider,
+        statusBarProvider,
+        targetCoordinatorProvider,
+        serverTreeProvider,
+        gnomeDbusProvider,
+        soundService,
+        RxVirtualSchedulers.computation(),
+        RxVirtualSchedulers.io());
+  }
+
+  TrayNotificationService(
+      UiSettingsBus settingsBus,
+      ObjectProvider<TrayService> trayServiceProvider,
+      ObjectProvider<MainFrame> mainFrameProvider,
+      ObjectProvider<StatusBar> statusBarProvider,
+      ObjectProvider<ActiveTargetPort> targetCoordinatorProvider,
+      ObjectProvider<cafe.woden.ircclient.ui.servertree.ServerTreeDockable> serverTreeProvider,
+      ObjectProvider<GnomeDbusNotificationBackend> gnomeDbusProvider,
+      NotificationSoundService soundService,
+      Scheduler computationScheduler,
+      Scheduler ioScheduler) {
     this.settingsBus = settingsBus;
     this.trayServiceProvider = trayServiceProvider;
     this.mainFrameProvider = mainFrameProvider;
@@ -108,6 +142,9 @@ public class TrayNotificationService implements TrayNotificationsPort {
     this.serverTreeProvider = serverTreeProvider;
     this.gnomeDbusProvider = gnomeDbusProvider;
     this.soundService = soundService;
+    this.computationScheduler =
+        Objects.requireNonNull(computationScheduler, "computationScheduler");
+    this.ioScheduler = Objects.requireNonNull(ioScheduler, "ioScheduler");
 
     this.requests = PublishProcessor.<NotificationRequest>create().toSerialized();
     installRateLimiterPipeline();
@@ -115,6 +152,7 @@ public class TrayNotificationService implements TrayNotificationsPort {
 
   @PreDestroy
   void shutdown() {
+    closeTrackedWindowsToasts();
     try {
       disposables.dispose();
     } catch (Exception ignored) {
@@ -390,8 +428,7 @@ public class TrayNotificationService implements TrayNotificationsPort {
   private void installRateLimiterPipeline() {
     // Periodic cleanup of dedupe keys so long-running sessions don't accumulate unlimited entries.
     disposables.add(
-        io.reactivex.rxjava3.core.Flowable.interval(
-                1, 1, TimeUnit.MINUTES, RxVirtualSchedulers.computation())
+        io.reactivex.rxjava3.core.Flowable.interval(1, 1, TimeUnit.MINUTES, computationScheduler)
             .subscribe(
                 tick -> cleanupContentKeys(),
                 err -> log.debug("[ircafe] notify cleanup failed", err)));
@@ -414,7 +451,7 @@ public class TrayNotificationService implements TrayNotificationsPort {
             // Global: allow up to N per window.
             .window(RATE_WINDOW.toMillis(), TimeUnit.MILLISECONDS)
             .flatMap(win -> win.take(GLOBAL_MAX_PER_WINDOW))
-            .observeOn(RxVirtualSchedulers.io())
+            .observeOn(ioScheduler)
             .subscribe(this::sendNow, err -> log.debug("[ircafe] tray notify stream failed", err)));
   }
 
@@ -539,45 +576,81 @@ public class TrayNotificationService implements TrayNotificationsPort {
       UiSettings s = settingsBus.get();
       boolean light =
           s != null && s.theme() != null && s.theme().toLowerCase(Locale.ROOT).contains("light");
-
-      Runnable show =
-          () -> {
-            try {
-              Function1<Notify, Unit> click =
-                  n -> {
-                    if (onClick != null) {
-                      try {
-                        onClick.run();
-                      } catch (Throwable ignored) {
-                      }
-                    }
-                    return Unit.INSTANCE;
-                  };
-
-              Notify.Companion.create()
-                  .title(title)
-                  .text(body)
-                  .position(Position.BOTTOM_RIGHT)
-                  .hideAfter(5_000)
-                  .theme(
-                      light ? Theme.Companion.getDefaultLight() : Theme.Companion.getDefaultDark())
-                  .onClickAction(click)
-                  .showWarning();
-            } catch (Throwable t) {
-              // If this fails for any reason, we fall back to other mechanisms.
-              throw new RuntimeException(t);
+      long toastId = windowsToastIds.incrementAndGet();
+      Function1<Notify, Unit> click =
+          n -> {
+            if (onClick != null) {
+              try {
+                onClick.run();
+              } catch (Throwable ignored) {
+              }
             }
+            return Unit.INSTANCE;
+          };
+      Function1<Notify, Unit> onClose =
+          n -> {
+            markWindowsToastClosed(toastId);
+            return Unit.INSTANCE;
           };
 
-      // Keep it Swing-safe.
-      if (SwingUtilities.isEventDispatchThread()) {
-        show.run();
-      } else {
-        SwingUtilities.invokeLater(show);
-      }
+      Notify notification =
+          Notify.Companion.create()
+              .title(sanitizeDesktopText(title))
+              .text(sanitizeDesktopText(body))
+              .position(Position.BOTTOM_RIGHT)
+              .hideAfter(TOAST_TIMEOUT_SECONDS * 1000)
+              .theme(light ? Theme.Companion.getDefaultLight() : Theme.Companion.getDefaultDark())
+              .onClickAction(click)
+              .onCloseAction(onClose);
+      notification.showWarning();
+      trackWindowsToast(toastId, notification::close);
       return true;
     } catch (Throwable ignored) {
       return false;
+    }
+  }
+
+  private void trackWindowsToast(long toastId, Runnable closeAction) {
+    if (closeAction == null) return;
+    activeWindowsToastClosers.put(toastId, closeAction);
+    Disposable timeout =
+        computationScheduler.scheduleDirect(
+            () -> forceCloseWindowsToast(toastId),
+            TOAST_TIMEOUT_SECONDS * 1000L + WINDOWS_TOAST_FORCE_CLOSE_GRACE.toMillis(),
+            TimeUnit.MILLISECONDS);
+    Disposable previous = activeWindowsToastTimeouts.put(toastId, timeout);
+    if (previous != null && !previous.isDisposed()) {
+      previous.dispose();
+    }
+  }
+
+  private void markWindowsToastClosed(long toastId) {
+    activeWindowsToastClosers.remove(toastId);
+    disposeWindowsToastTimeout(toastId);
+  }
+
+  private void disposeWindowsToastTimeout(long toastId) {
+    Disposable timeout = activeWindowsToastTimeouts.remove(toastId);
+    if (timeout != null && !timeout.isDisposed()) {
+      timeout.dispose();
+    }
+  }
+
+  private void forceCloseWindowsToast(long toastId) {
+    disposeWindowsToastTimeout(toastId);
+    Runnable closeAction = activeWindowsToastClosers.remove(toastId);
+    if (closeAction == null) return;
+    try {
+      log.debug("[ircafe] forcing close of stalled Windows toast {}", toastId);
+      closeAction.run();
+    } catch (Throwable t) {
+      log.debug("[ircafe] failed to force-close Windows toast {}", toastId, t);
+    }
+  }
+
+  private void closeTrackedWindowsToasts() {
+    for (Long toastId : List.copyOf(activeWindowsToastClosers.keySet())) {
+      forceCloseWindowsToast(toastId.longValue());
     }
   }
 

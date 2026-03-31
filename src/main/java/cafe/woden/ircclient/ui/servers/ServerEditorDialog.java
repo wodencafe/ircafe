@@ -1,6 +1,5 @@
 package cafe.woden.ircclient.ui.servers;
 
-import cafe.woden.ircclient.config.AutoJoinEntryCodec;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.net.NetTlsContext;
@@ -20,8 +19,6 @@ import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Socket;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import javax.net.ssl.SSLSocket;
@@ -43,15 +40,14 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
-import net.miginfocom.swing.MigLayout;
 
 /** Add/edit a single IRC server configuration. */
 public class ServerEditorDialog extends JDialog {
 
   private Optional<IrcProperties.Server> result = Optional.empty();
-  private final IrcProperties.Server.Backend seedBackend;
-  private final JComboBox<IrcProperties.Server.Backend> backendCombo =
-      new JComboBox<>(IrcProperties.Server.Backend.values());
+  private final String seedBackendId;
+  private final ServerEditorBackendProfiles backendProfiles;
+  private final JComboBox<String> backendCombo;
 
   private final JTextField idField = new JTextField();
   private final JTextField hostField = new JTextField();
@@ -71,63 +67,29 @@ public class ServerEditorDialog extends JDialog {
   private final JLabel loginLabel = new JLabel("Login/Ident");
   private final JLabel realNameLabel = new JLabel("Real name");
 
-  private enum AuthMode {
-    DISABLED("Disabled"),
-    SASL("SASL"),
-    NICKSERV("NickServ");
-
-    private final String label;
-
-    AuthMode(String label) {
-      this.label = label;
-    }
-
-    @Override
-    public String toString() {
-      return label;
-    }
-  }
-
-  private enum MatrixAuthMode {
-    ACCESS_TOKEN("Access token"),
-    USERNAME_PASSWORD("Username + password");
-
-    private final String label;
-
-    MatrixAuthMode(String label) {
-      this.label = label;
-    }
-
-    @Override
-    public String toString() {
-      return label;
-    }
-  }
-
   private static final String AUTH_CARD_DISABLED = "auth-disabled";
   private static final String AUTH_CARD_SASL = "auth-sasl";
   private static final String AUTH_CARD_NICKSERV = "auth-nickserv";
-  private static final String MATRIX_PASSWORD_AUTH_MECHANISM = "MATRIX_PASSWORD";
-  private static final String AUTH_DISABLED_HINT_TEXT =
-      "No authentication on connect. Use this for networks that don't require account auth.";
   private static final String SASL_CONTINUE_ON_FAILURE_TEXT =
       "Stay connected if SASL authentication fails";
   private static final String NICKSERV_DELAY_JOIN_TEXT =
       "Delay channel auto-join until identification succeeds";
-  private static final String MATRIX_AUTH_DISABLED_HINT_TEXT =
-      "Matrix backend authentication is configured here."
-          + " IRC SASL/NickServ settings are ignored.";
 
-  private final JComboBox<AuthMode> authModeCombo =
-      new JComboBox<>(new AuthMode[] {AuthMode.DISABLED, AuthMode.SASL, AuthMode.NICKSERV});
+  private final JComboBox<ServerEditorAuthMode> authModeCombo =
+      new JComboBox<>(
+          new ServerEditorAuthMode[] {
+            ServerEditorAuthMode.DISABLED, ServerEditorAuthMode.SASL, ServerEditorAuthMode.NICKSERV
+          });
   private final JLabel authModeLabel = new JLabel("Method");
   private final JPanel authModeCardPanel = new JPanel(new CardLayout());
   private final JLabel authDisabledHintLabel = new JLabel();
   private final JLabel matrixAuthModeLabel = new JLabel("Matrix auth");
   private final JLabel matrixAuthUserLabel = new JLabel("Username");
-  private final JComboBox<MatrixAuthMode> matrixAuthModeCombo =
+  private final JComboBox<ServerEditorMatrixAuthMode> matrixAuthModeCombo =
       new JComboBox<>(
-          new MatrixAuthMode[] {MatrixAuthMode.ACCESS_TOKEN, MatrixAuthMode.USERNAME_PASSWORD});
+          new ServerEditorMatrixAuthMode[] {
+            ServerEditorMatrixAuthMode.ACCESS_TOKEN, ServerEditorMatrixAuthMode.USERNAME_PASSWORD
+          });
   private final JTextField matrixAuthUserField = new JTextField();
   private final JLabel matrixAuthHintLabel = new JLabel();
 
@@ -206,14 +168,29 @@ public class ServerEditorDialog extends JDialog {
   }
 
   public ServerEditorDialog(Window parent, String title, IrcProperties.Server seed) {
-    this(parent, title, seed, true);
+    this(parent, title, seed, true, ServerEditorBackendProfiles.builtIns());
   }
 
   public ServerEditorDialog(
       Window parent, String title, IrcProperties.Server seed, boolean autoConnectOnStart) {
+    this(parent, title, seed, autoConnectOnStart, ServerEditorBackendProfiles.builtIns());
+  }
+
+  ServerEditorDialog(
+      Window parent,
+      String title,
+      IrcProperties.Server seed,
+      boolean autoConnectOnStart,
+      ServerEditorBackendProfiles backendProfiles) {
     super(parent, title, ModalityType.APPLICATION_MODAL);
-    this.seedBackend = seed != null ? seed.backend() : IrcProperties.Server.Backend.IRC;
-    backendCombo.setSelectedItem(seedBackend);
+    this.backendProfiles = Objects.requireNonNull(backendProfiles, "backendProfiles");
+    this.seedBackendId =
+        seed != null
+            ? backendProfile(seed.backendId()).backendId()
+            : backendProfiles.defaultBackendId();
+    this.backendCombo =
+        new JComboBox<>(backendProfiles.selectableBackendIds(seedBackendId).toArray(String[]::new));
+    backendCombo.setSelectedItem(seedBackendId);
     backendCombo.setRenderer(
         new DefaultListCellRenderer() {
           @Override
@@ -223,15 +200,15 @@ public class ServerEditorDialog extends JDialog {
                 (JLabel)
                     super.getListCellRendererComponent(
                         list, value, index, isSelected, cellHasFocus);
-            if (value instanceof IrcProperties.Server.Backend backend) {
-              label.setText(backendLabel(backend));
+            if (value instanceof String backendId) {
+              label.setText(backendLabel(backendId));
             }
             return label;
           }
         });
     // Keep combo sizing stable so short selections do not collapse Auth-tab field widths.
-    authModeCombo.setPrototypeDisplayValue(AuthMode.NICKSERV);
-    matrixAuthModeCombo.setPrototypeDisplayValue(MatrixAuthMode.USERNAME_PASSWORD);
+    authModeCombo.setPrototypeDisplayValue(ServerEditorAuthMode.NICKSERV);
+    matrixAuthModeCombo.setPrototypeDisplayValue(ServerEditorMatrixAuthMode.USERNAME_PASSWORD);
     saslMechanism.setPrototypeDisplayValue("ECDSA-NIST256P-CHALLENGE");
     nickservDelayJoinBox.setSelected(true);
     setDefaultCloseOperation(DISPOSE_ON_CLOSE);
@@ -268,61 +245,76 @@ public class ServerEditorDialog extends JDialog {
         });
     saveBtn.addActionListener(e -> onSave());
 
-    // Seed values
     if (seed != null) {
-      idField.setText(Objects.toString(seed.id(), ""));
-      hostField.setText(Objects.toString(seed.host(), ""));
-      portField.setText(String.valueOf(seed.port()));
-      tlsBox.setSelected(seed.tls());
-      serverPassField.setText(Objects.toString(seed.serverPassword(), ""));
-
-      nickField.setText(Objects.toString(seed.nick(), ""));
-      loginField.setText(Objects.toString(seed.login(), ""));
-      realNameField.setText(Objects.toString(seed.realName(), ""));
-
-      if (seed.sasl() != null) {
-        saslUserField.setText(Objects.toString(seed.sasl().username(), ""));
-        saslPassField.setText(Objects.toString(seed.sasl().password(), ""));
-        saslMechanism.setSelectedItem(Objects.toString(seed.sasl().mechanism(), "PLAIN"));
-        saslContinueOnFailureBox.setSelected(
-            !Boolean.TRUE.equals(seed.sasl().disconnectOnFailure()));
-      }
-      if (seed.nickserv() != null) {
-        nickservServiceField.setText(Objects.toString(seed.nickserv().service(), "NickServ"));
-        nickservPassField.setText(Objects.toString(seed.nickserv().password(), ""));
-        nickservDelayJoinBox.setSelected(
-            seed.nickserv().delayJoinUntilIdentified() == null
-                || seed.nickserv().delayJoinUntilIdentified());
-      }
-      setAuthMode(seedAuthMode(seed));
-      setMatrixAuthMode(seedMatrixAuthMode(seed));
-      if (seed.backend() == IrcProperties.Server.Backend.MATRIX
-          && isMatrixPasswordAuthMode(seed.sasl())) {
-        matrixAuthUserField.setText(Objects.toString(seed.sasl().username(), ""));
-        serverPassField.setText(Objects.toString(seed.sasl().password(), ""));
-      }
-
-      List<String> autoJoinSeed = seed.autoJoin() == null ? List.of() : seed.autoJoin();
-      autoJoinArea.setText(String.join("\n", AutoJoinEntryCodec.channelEntries(autoJoinSeed)));
-      autoJoinPmArea.setText(
-          String.join("\n", AutoJoinEntryCodec.privateMessageNicks(autoJoinSeed)));
-      List<String> performSeed = seed.perform() == null ? List.of() : seed.perform();
-      performArea.setText(String.join("\n", performSeed));
-      portAuto = false; // user likely set explicitly
-
-      seedProxy(seed.proxy());
+      seedFromServer(seed);
     } else {
-      tlsBox.setSelected(true);
-      portField.setText("6697");
-      portAuto = true;
-      setAuthMode(AuthMode.DISABLED);
-      setMatrixAuthMode(MatrixAuthMode.ACCESS_TOKEN);
-
-      seedProxy(null);
+      seedDefaultValues();
     }
     autoConnectOnStartBox.setSelected(autoConnectOnStart);
 
-    // Placeholders / styling
+    configureFieldStyles();
+    installInteractionHandlers();
+    refreshBackendAndAuthUi();
+    updateProxyEnabled();
+    installValidationListeners();
+    updateValidation();
+
+    setPreferredSize(new Dimension(640, 520));
+    pack();
+    setLocationRelativeTo(parent);
+  }
+
+  private void seedFromServer(IrcProperties.Server seed) {
+    idField.setText(Objects.toString(seed.id(), ""));
+    hostField.setText(Objects.toString(seed.host(), ""));
+    portField.setText(String.valueOf(seed.port()));
+    tlsBox.setSelected(seed.tls());
+    serverPassField.setText(Objects.toString(seed.serverPassword(), ""));
+
+    nickField.setText(Objects.toString(seed.nick(), ""));
+    loginField.setText(Objects.toString(seed.login(), ""));
+    realNameField.setText(Objects.toString(seed.realName(), ""));
+
+    if (seed.sasl() != null) {
+      saslUserField.setText(Objects.toString(seed.sasl().username(), ""));
+      saslPassField.setText(Objects.toString(seed.sasl().password(), ""));
+      saslMechanism.setSelectedItem(Objects.toString(seed.sasl().mechanism(), "PLAIN"));
+      saslContinueOnFailureBox.setSelected(!Boolean.TRUE.equals(seed.sasl().disconnectOnFailure()));
+    }
+    if (seed.nickserv() != null) {
+      nickservServiceField.setText(Objects.toString(seed.nickserv().service(), "NickServ"));
+      nickservPassField.setText(Objects.toString(seed.nickserv().password(), ""));
+      nickservDelayJoinBox.setSelected(
+          seed.nickserv().delayJoinUntilIdentified() == null
+              || seed.nickserv().delayJoinUntilIdentified());
+    }
+    setAuthMode(ServerEditorAuthPolicy.seedAuthMode(seed));
+    ServerEditorBackendProfile seedProfile = backendProfile(seed.backendId());
+    setMatrixAuthMode(ServerEditorAuthPolicy.seedMatrixAuthMode(seedProfile, seed));
+    if (seedProfile.matrixAuthSupported()
+        && ServerEditorAuthPolicy.isMatrixPasswordAuthMode(seed.sasl())) {
+      matrixAuthUserField.setText(Objects.toString(seed.sasl().username(), ""));
+      serverPassField.setText(Objects.toString(seed.sasl().password(), ""));
+    }
+
+    autoJoinArea.setText(ServerEditorCommandListPolicy.channelSeedText(seed.autoJoin()));
+    autoJoinPmArea.setText(ServerEditorCommandListPolicy.privateMessageSeedText(seed.autoJoin()));
+    performArea.setText(ServerEditorCommandListPolicy.performSeedText(seed.perform()));
+    portAuto = false;
+
+    seedProxy(seed.proxy());
+  }
+
+  private void seedDefaultValues() {
+    tlsBox.setSelected(true);
+    portField.setText("6697");
+    portAuto = true;
+    setAuthMode(ServerEditorAuthMode.DISABLED);
+    setMatrixAuthMode(ServerEditorMatrixAuthMode.ACCESS_TOKEN);
+    seedProxy(null);
+  }
+
+  private void configureFieldStyles() {
     applyFieldStyle(idField, "libera");
     applyFieldStyle(hostField, "irc.example.net");
     applyFieldStyle(portField, "6697");
@@ -335,23 +327,14 @@ public class ServerEditorDialog extends JDialog {
     applyFieldStyle(saslPassField, "password / key");
     applyFieldStyle(nickservServiceField, "NickServ");
     applyFieldStyle(nickservPassField, "password");
-    // FlatLaf: show the standard "reveal" (eye) button inside password fields.
-    // Using the string key avoids any compile-time dependency on FlatLaf constants.
-    serverPassField.putClientProperty("JPasswordField.showRevealButton", true);
-    appendStyle(serverPassField, "showRevealButton:true");
-    saslPassField.putClientProperty("JPasswordField.showRevealButton", true);
-    // FlatLaf also supports a STYLE flag; keep both for compatibility.
-    appendStyle(saslPassField, "showRevealButton:true");
-    nickservPassField.putClientProperty("JPasswordField.showRevealButton", true);
-    appendStyle(nickservPassField, "showRevealButton:true");
+    enablePasswordReveal(serverPassField);
+    enablePasswordReveal(saslPassField);
+    enablePasswordReveal(nickservPassField);
     applyFieldStyle(proxyHostField, "127.0.0.1");
     applyFieldStyle(proxyPortField, "1080");
     applyFieldStyle(proxyUserField, "(optional)");
     applyFieldStyle(proxyPassField, "(optional)");
-    // FlatLaf: show the standard "reveal" (eye) button inside password fields.
-    proxyPassField.putClientProperty("JPasswordField.showRevealButton", true);
-    // FlatLaf also supports a STYLE flag; keep both for compatibility.
-    appendStyle(proxyPassField, "showRevealButton:true");
+    enablePasswordReveal(proxyPassField);
     applyFieldStyle(proxyConnectTimeoutMsField, "20000");
     applyFieldStyle(proxyReadTimeoutMsField, "30000");
     appendStyle(backendCombo, "arc:10");
@@ -365,62 +348,35 @@ public class ServerEditorDialog extends JDialog {
             + "/join #project\n"
             + "/quote MONITOR +friend\n"
             + "/sleep 1000");
+  }
 
-    // Auto-update default port when toggling TLS, if the user hasn't customized it.
+  private void enablePasswordReveal(JPasswordField field) {
+    field.putClientProperty("JPasswordField.showRevealButton", true);
+    appendStyle(field, "showRevealButton:true");
+  }
+
+  private void installInteractionHandlers() {
     tlsBox.addActionListener(e -> maybeAdjustPortForBackendAndTls());
-    portField
-        .getDocument()
-        .addDocumentListener(
-            new javax.swing.event.DocumentListener() {
-              @Override
-              public void insertUpdate(javax.swing.event.DocumentEvent e) {
-                if (!updatingPortProgrammatically) {
-                  portAuto = false;
-                }
-                updateValidation();
-              }
+    portField.getDocument().addDocumentListener(new PortTrackingListener());
 
-              @Override
-              public void removeUpdate(javax.swing.event.DocumentEvent e) {
-                if (!updatingPortProgrammatically) {
-                  portAuto = false;
-                }
-                updateValidation();
-              }
-
-              @Override
-              public void changedUpdate(javax.swing.event.DocumentEvent e) {
-                if (!updatingPortProgrammatically) {
-                  portAuto = false;
-                }
-                updateValidation();
-              }
-            });
-
-    authModeCombo.addActionListener(e -> updateAuthModeUi());
-    matrixAuthModeCombo.addActionListener(
-        e -> {
-          updateMatrixAuthUi();
-          updateValidation();
-        });
-    saslMechanism.addActionListener(e -> updateAuthModeUi());
+    authModeCombo.addActionListener(e -> refreshAuthPanelUiAndValidation());
+    matrixAuthModeCombo.addActionListener(e -> refreshAuthPanelUiAndValidation());
+    saslMechanism.addActionListener(e -> refreshAuthPanelUiAndValidation());
     nickservDelayJoinBox.addActionListener(e -> updateValidation());
     backendCombo.addActionListener(
         e -> {
           maybeAdjustPortForBackendAndTls();
-          updateBackendUi();
-          updateAuthModeUi();
+          refreshBackendAndAuthUi();
         });
-    updateAuthModeUi();
-    updateBackendUi();
 
     proxyOverrideBox.addActionListener(e -> updateProxyEnabled());
     proxyEnabledBox.addActionListener(e -> updateProxyEnabled());
-    updateProxyEnabled();
+  }
 
-    // Live validation outlines + Save button state.
+  private void installValidationListeners() {
     Runnable validate = this::updateValidation;
     javax.swing.event.DocumentListener vdl = new SimpleDocListener(validate);
+
     idField.getDocument().addDocumentListener(vdl);
     hostField.getDocument().addDocumentListener(vdl);
     // portField already has a listener for portAuto; it also calls updateValidation().
@@ -441,12 +397,30 @@ public class ServerEditorDialog extends JDialog {
     proxyPassField.getDocument().addDocumentListener(vdl);
     proxyConnectTimeoutMsField.getDocument().addDocumentListener(vdl);
     proxyReadTimeoutMsField.getDocument().addDocumentListener(vdl);
+  }
 
-    updateValidation();
+  private final class PortTrackingListener implements javax.swing.event.DocumentListener {
+    @Override
+    public void insertUpdate(javax.swing.event.DocumentEvent e) {
+      updatePortAutoAndValidation();
+    }
 
-    setPreferredSize(new Dimension(640, 520));
-    pack();
-    setLocationRelativeTo(parent);
+    @Override
+    public void removeUpdate(javax.swing.event.DocumentEvent e) {
+      updatePortAutoAndValidation();
+    }
+
+    @Override
+    public void changedUpdate(javax.swing.event.DocumentEvent e) {
+      updatePortAutoAndValidation();
+    }
+
+    private void updatePortAutoAndValidation() {
+      if (!updatingPortProgrammatically) {
+        portAuto = false;
+      }
+      updateValidation();
+    }
   }
 
   private static JComponent wrapScrollTab(JComponent content) {
@@ -515,60 +489,37 @@ public class ServerEditorDialog extends JDialog {
 
   private void seedProxy(IrcProperties.Proxy serverProxy) {
     IrcProperties.Proxy global = NetProxyContext.normalize(NetProxyContext.settings());
+    ServerEditorProxySeedPolicy.ProxySeedState state =
+        ServerEditorProxySeedPolicy.seedState(serverProxy, global);
 
-    if (serverProxy != null) {
-      proxyOverrideBox.setSelected(true);
-      proxyEnabledBox.setSelected(serverProxy.enabled());
-      proxyHostField.setText(Objects.toString(serverProxy.host(), ""));
-      proxyPortField.setText(serverProxy.port() > 0 ? Integer.toString(serverProxy.port()) : "");
-      proxyRemoteDnsBox.setSelected(serverProxy.remoteDns());
-      proxyUserField.setText(Objects.toString(serverProxy.username(), ""));
-      proxyPassField.setText(Objects.toString(serverProxy.password(), ""));
-      proxyConnectTimeoutMsField.setText(Long.toString(serverProxy.connectTimeoutMs()));
-      proxyReadTimeoutMsField.setText(Long.toString(serverProxy.readTimeoutMs()));
-    } else {
-      proxyOverrideBox.setSelected(false);
-      // Show global values read-only as a hint, but server will inherit.
-      proxyEnabledBox.setSelected(global.enabled());
-      proxyHostField.setText(Objects.toString(global.host(), ""));
-      proxyPortField.setText(global.port() > 0 ? Integer.toString(global.port()) : "");
-      proxyRemoteDnsBox.setSelected(global.remoteDns());
-      proxyUserField.setText(Objects.toString(global.username(), ""));
-      proxyPassField.setText(Objects.toString(global.password(), ""));
-      proxyConnectTimeoutMsField.setText(Long.toString(global.connectTimeoutMs()));
-      proxyReadTimeoutMsField.setText(Long.toString(global.readTimeoutMs()));
-    }
+    proxyOverrideBox.setSelected(state.overrideSelected());
+    proxyEnabledBox.setSelected(state.proxyEnabled());
+    proxyHostField.setText(state.host());
+    proxyPortField.setText(state.portText());
+    proxyRemoteDnsBox.setSelected(state.remoteDns());
+    proxyUserField.setText(state.username());
+    proxyPassField.setText(state.password());
+    proxyConnectTimeoutMsField.setText(state.connectTimeoutMsText());
+    proxyReadTimeoutMsField.setText(state.readTimeoutMsText());
 
     updateProxyEnabled();
   }
 
   private void updateProxyEnabled() {
-    boolean override = proxyOverrideBox.isSelected();
     IrcProperties.Proxy global = NetProxyContext.normalize(NetProxyContext.settings());
+    ServerEditorProxyUiPolicy.ProxyUiState state =
+        ServerEditorProxyUiPolicy.uiState(
+            proxyOverrideBox.isSelected(), proxyEnabledBox.isSelected(), global);
 
-    if (!override) {
-      proxyHintLabel.setText(
-          global.enabled()
-              ? "Inheriting global proxy from Preferences (enabled: "
-                  + global.host()
-                  + ":"
-                  + global.port()
-                  + ")"
-              : "Inheriting global proxy from Preferences (disabled)");
-    } else {
-      proxyHintLabel.setText("Override the global proxy for this server.\n");
-    }
-
-    proxyEnabledBox.setEnabled(override);
-
-    boolean proxyDetailsEnabled = override && proxyEnabledBox.isSelected();
-    proxyHostField.setEnabled(proxyDetailsEnabled);
-    proxyPortField.setEnabled(proxyDetailsEnabled);
-    proxyRemoteDnsBox.setEnabled(proxyDetailsEnabled);
-    proxyUserField.setEnabled(proxyDetailsEnabled);
-    proxyPassField.setEnabled(proxyDetailsEnabled);
-    proxyConnectTimeoutMsField.setEnabled(override);
-    proxyReadTimeoutMsField.setEnabled(override);
+    proxyHintLabel.setText(state.hint());
+    proxyEnabledBox.setEnabled(state.proxyEnabledToggleEnabled());
+    proxyHostField.setEnabled(state.proxyDetailsEnabled());
+    proxyPortField.setEnabled(state.proxyDetailsEnabled());
+    proxyRemoteDnsBox.setEnabled(state.remoteDnsEnabled());
+    proxyUserField.setEnabled(state.proxyDetailsEnabled());
+    proxyPassField.setEnabled(state.proxyDetailsEnabled());
+    proxyConnectTimeoutMsField.setEnabled(state.connectTimeoutEnabled());
+    proxyReadTimeoutMsField.setEnabled(state.readTimeoutEnabled());
 
     proxyTestBtn.setEnabled(true);
 
@@ -583,8 +534,6 @@ public class ServerEditorDialog extends JDialog {
     lastProxyTestOk = null;
     updateValidation();
 
-    final String host = trim(hostField.getText());
-    final String portText = trim(portField.getText());
     final boolean tls = tlsBox.isSelected();
 
     final IrcProperties.Proxy cfg;
@@ -597,30 +546,15 @@ public class ServerEditorDialog extends JDialog {
           this, ex.getMessage(), "Invalid proxy settings", JOptionPane.ERROR_MESSAGE);
       return;
     }
-
-    int port;
+    final ServerEditorConnectionPolicy.ServerEndpoint endpoint;
     try {
-      port = Integer.parseInt(portText);
-    } catch (Exception e) {
+      endpoint =
+          ServerEditorConnectionPolicy.parseEndpoint(hostField.getText(), portField.getText());
+    } catch (IllegalArgumentException ex) {
       proxyStatusLabel.setText(" ");
       proxyTestBtn.setEnabled(true);
       JOptionPane.showMessageDialog(
-          this, "Port must be a number", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
-      return;
-    }
-
-    if (host.isBlank()) {
-      proxyStatusLabel.setText(" ");
-      proxyTestBtn.setEnabled(true);
-      JOptionPane.showMessageDialog(
-          this, "Host is required", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
-      return;
-    }
-    if (port <= 0 || port > 65535) {
-      proxyStatusLabel.setText(" ");
-      proxyTestBtn.setEnabled(true);
-      JOptionPane.showMessageDialog(
-          this, "Port must be 1-65535", "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
+          this, ex.getMessage(), "Invalid server configuration", JOptionPane.ERROR_MESSAGE);
       return;
     }
 
@@ -629,7 +563,7 @@ public class ServerEditorDialog extends JDialog {
       protected TestResult doInBackground() {
         long start = System.nanoTime();
         try {
-          testConnect(host, port, tls, cfg);
+          testConnect(endpoint.host(), endpoint.port(), tls, cfg);
           long elapsedMs = Duration.ofNanos(System.nanoTime() - start).toMillis();
           return TestResult.ok(elapsedMs);
         } catch (Exception e) {
@@ -643,76 +577,64 @@ public class ServerEditorDialog extends JDialog {
         try {
           TestResult r = get();
           if (r.ok) {
-            proxyStatusLabel.setText("OK (" + r.elapsedMs + " ms)");
-
-            // Mark the tested proxy inputs as "known good" until they change.
-            lastProxyTestOk = ProxyTestSnapshot.capture(ServerEditorDialog.this);
-            updateValidation();
-
-            JOptionPane.showMessageDialog(
-                ServerEditorDialog.this,
-                "Connection test succeeded.\n\n"
-                    + "TLS: "
-                    + (tls ? "yes" : "no")
-                    + "\n"
-                    + "Proxy: "
-                    + (cfg.enabled() ? (cfg.host() + ":" + cfg.port()) : "disabled")
-                    + "\n"
-                    + "Time: "
-                    + r.elapsedMs
-                    + " ms",
-                "Proxy test",
-                JOptionPane.INFORMATION_MESSAGE);
+            handleSuccessfulProxyTest(tls, cfg, r.elapsedMs);
           } else {
-            proxyStatusLabel.setText("Failed: " + r.shortMessage());
-            lastProxyTestOk = null;
-            updateValidation();
-            JOptionPane.showMessageDialog(
-                ServerEditorDialog.this,
-                "Connection test failed.\n\n" + r.longMessage(),
-                "Proxy test",
-                JOptionPane.ERROR_MESSAGE);
+            handleFailedProxyTest(r.shortMessage(), r.longMessage());
           }
         } catch (Exception e) {
-          proxyStatusLabel.setText("Failed");
-          lastProxyTestOk = null;
-          updateValidation();
-          JOptionPane.showMessageDialog(
-              ServerEditorDialog.this,
-              "Connection test failed.\n\n" + e,
-              "Proxy test",
-              JOptionPane.ERROR_MESSAGE);
+          handleUnexpectedProxyTestFailure(e);
         }
       }
     }.execute();
   }
 
+  private void handleSuccessfulProxyTest(boolean tls, IrcProperties.Proxy cfg, long elapsedMs) {
+    ServerEditorProxyTestPresentationPolicy.ProxyTestSuccessPresentation presentation =
+        ServerEditorProxyTestPresentationPolicy.successPresentation(tls, cfg, elapsedMs);
+    proxyStatusLabel.setText(presentation.statusText());
+
+    // Mark the tested proxy inputs as "known good" until they change.
+    lastProxyTestOk = ProxyTestSnapshot.capture(this);
+    updateValidation();
+
+    JOptionPane.showMessageDialog(
+        this, presentation.dialogMessage(), "Proxy test", JOptionPane.INFORMATION_MESSAGE);
+  }
+
+  private void handleFailedProxyTest(String shortMessage, String longMessage) {
+    ServerEditorProxyTestPresentationPolicy.ProxyTestFailurePresentation presentation =
+        ServerEditorProxyTestPresentationPolicy.failurePresentation(shortMessage, longMessage);
+    proxyStatusLabel.setText(presentation.statusText());
+    lastProxyTestOk = null;
+    updateValidation();
+    JOptionPane.showMessageDialog(
+        this, presentation.dialogMessage(), "Proxy test", JOptionPane.ERROR_MESSAGE);
+  }
+
+  private void handleUnexpectedProxyTestFailure(Exception error) {
+    ServerEditorProxyTestPresentationPolicy.ProxyTestFailurePresentation presentation =
+        ServerEditorProxyTestPresentationPolicy.unexpectedFailurePresentation(error.toString());
+    proxyStatusLabel.setText(presentation.statusText());
+    lastProxyTestOk = null;
+    updateValidation();
+    JOptionPane.showMessageDialog(
+        this, presentation.dialogMessage(), "Proxy test", JOptionPane.ERROR_MESSAGE);
+  }
+
   private IrcProperties.Proxy resolveProxyForTest() {
-    boolean override = proxyOverrideBox.isSelected();
-    if (!override) {
-      return NetProxyContext.normalize(NetProxyContext.settings());
-    }
-
-    long connectMs = parseLongOrDefault(proxyConnectTimeoutMsField.getText(), 20_000);
-    long readMs = parseLongOrDefault(proxyReadTimeoutMsField.getText(), 30_000);
-
-    if (!proxyEnabledBox.isSelected()) {
-      // Explicitly disable proxy for this server.
-      return new IrcProperties.Proxy(false, "", 0, "", "", true, connectMs, readMs);
-    }
-
-    String host = trim(proxyHostField.getText());
-    int port;
-    try {
-      port = Integer.parseInt(trim(proxyPortField.getText()));
-    } catch (Exception e) {
-      throw new IllegalArgumentException("Proxy port must be a number");
-    }
-    boolean remoteDns = proxyRemoteDnsBox.isSelected();
-    String user = trim(proxyUserField.getText());
-    String pass = new String(proxyPassField.getPassword());
-
-    return new IrcProperties.Proxy(true, host, port, user, pass, remoteDns, connectMs, readMs);
+    IrcProperties.Proxy global = NetProxyContext.normalize(NetProxyContext.settings());
+    IrcProperties.Proxy override =
+        ServerEditorProxyBuildPolicy.buildOverride(
+            proxyOverrideBox.isSelected(),
+            proxyEnabledBox.isSelected(),
+            proxyHostField.getText(),
+            proxyPortField.getText(),
+            proxyUserField.getText(),
+            new String(proxyPassField.getPassword()),
+            proxyRemoteDnsBox.isSelected(),
+            proxyConnectTimeoutMsField.getText(),
+            proxyReadTimeoutMsField.getText());
+    return override != null ? override : global;
   }
 
   private static void testConnect(String host, int port, boolean tls, IrcProperties.Proxy cfg)
@@ -776,15 +698,6 @@ public class ServerEditorDialog extends JDialog {
       if (err == null) return "";
       String msg = err.toString();
       return msg;
-    }
-  }
-
-  private static long parseLongOrDefault(String s, long dflt) {
-    try {
-      long v = Long.parseLong(trim(s));
-      return v > 0 ? v : dflt;
-    } catch (Exception e) {
-      return dflt;
     }
   }
 
@@ -856,638 +769,221 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private JPanel buildSaslPanel() {
-    JPanel p =
-        new JPanel(
-            new MigLayout(
-                "insets 8, fillx, wrap 2, hidemode 3",
-                "[right]12[grow,fill,min:0]",
-                "[]6[]6[]6[]8[grow,fill,min:0]"));
-
-    p.add(matrixAuthModeLabel);
-    p.add(matrixAuthModeCombo, "growx, wmin 0, wrap");
-    p.add(matrixAuthUserLabel);
-    p.add(matrixAuthUserField, "growx, wmin 0, wrap");
-    p.add(serverPasswordLabel);
-    p.add(serverPassField, "growx, wmin 0, wrap");
-    p.add(authModeLabel);
-    p.add(authModeCombo, "growx, wmin 0, wrap");
-    matrixAuthHintLabel.putClientProperty(
-        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    matrixAuthHintLabel.setText(" ");
-    p.add(matrixAuthHintLabel, "span 2, growx, wmin 0, wrap");
-
-    authModeCardPanel.add(buildAuthDisabledCard(), AUTH_CARD_DISABLED);
-    authModeCardPanel.add(buildAuthSaslCard(), AUTH_CARD_SASL);
-    authModeCardPanel.add(buildAuthNickservCard(), AUTH_CARD_NICKSERV);
-    p.add(authModeCardPanel, "span 2, grow, push, wmin 0");
-    return p;
-  }
-
-  private JPanel buildAuthDisabledCard() {
-    JPanel p = new JPanel(new MigLayout("insets 6 0 0 0, fillx", "[grow,fill,min:0]", "[]"));
-    authDisabledHintLabel.putClientProperty(
-        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    authDisabledHintLabel.setText(asHtml(AUTH_DISABLED_HINT_TEXT));
-    p.add(authDisabledHintLabel, "growx, wmin 0");
-    return p;
-  }
-
-  private JPanel buildAuthSaslCard() {
-    JPanel p =
-        new JPanel(
-            new MigLayout(
-                "insets 0, fillx, wrap 2", "[right]12[grow,fill,min:0]", "[]6[]6[]6[]8[]push"));
-    p.add(new JLabel("Username"));
-    p.add(saslUserField, "growx, wmin 0, wrap");
-    p.add(new JLabel("Secret"));
-    p.add(saslPassField, "growx, wmin 0, wrap");
-    p.add(new JLabel("Mechanism"));
-    p.add(saslMechanism, "growx, wmin 0, wrap");
-    p.add(new JLabel("On failure"), "top");
-    p.add(saslContinueOnFailureBox, "growx, wmin 0, wrap");
-
-    saslHintLabel.putClientProperty(
-        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    saslHintLabel.setText(" ");
-    p.add(saslHintLabel, "span 2, growx, wmin 0, pushy");
-    return p;
-  }
-
-  private JPanel buildAuthNickservCard() {
-    JPanel p =
-        new JPanel(
-            new MigLayout(
-                "insets 0, fillx, wrap 2", "[right]12[grow,fill,min:0]", "[]6[]6[]8[]push"));
-    p.add(new JLabel("Service"));
-    p.add(nickservServiceField, "growx, wmin 0, wrap");
-    p.add(new JLabel("Password"));
-    p.add(nickservPassField, "growx, wmin 0, wrap");
-    p.add(new JLabel("Delay auto-join"), "top");
-    p.add(nickservDelayJoinBox, "growx, wmin 0, wrap");
-
-    nickservHintLabel.putClientProperty(
-        FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    nickservHintLabel.setText(" ");
-    p.add(nickservHintLabel, "span 2, growx, wmin 0, pushy");
-    return p;
+    return ServerEditorAuthTabBuilder.build(
+        new ServerEditorAuthTabBuilder.AuthTabWidgets(
+            matrixAuthModeLabel,
+            matrixAuthModeCombo,
+            matrixAuthUserLabel,
+            matrixAuthUserField,
+            serverPasswordLabel,
+            serverPassField,
+            authModeLabel,
+            authModeCombo,
+            matrixAuthHintLabel,
+            authModeCardPanel,
+            AUTH_CARD_DISABLED,
+            AUTH_CARD_SASL,
+            AUTH_CARD_NICKSERV,
+            "No authentication on connect. Use this for networks that don't require account auth.",
+            authDisabledHintLabel,
+            saslUserField,
+            saslPassField,
+            saslMechanism,
+            saslContinueOnFailureBox,
+            saslHintLabel,
+            nickservServiceField,
+            nickservPassField,
+            nickservDelayJoinBox,
+            nickservHintLabel));
   }
 
   private JPanel buildAutoJoinPanel() {
-    JPanel p = new JPanel(new BorderLayout(8, 8));
-    p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-    JLabel hint =
-        new JLabel(
-            "<html>Channels and PM targets restored after connect.<br/>One entry per line.</html>");
-    hint.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    p.add(hint, BorderLayout.NORTH);
-
-    JPanel center = new JPanel(new java.awt.GridLayout(2, 1, 0, 8));
-
-    JPanel channels = new JPanel(new BorderLayout(6, 6));
-    channels.add(new JLabel("Auto-join channels"), BorderLayout.NORTH);
-    autoJoinArea.setLineWrap(true);
-    autoJoinArea.setWrapStyleWord(true);
-    JScrollPane sc = new JScrollPane(autoJoinArea);
-    sc.putClientProperty(FlatClientProperties.STYLE, "arc:12;");
-    channels.add(sc, BorderLayout.CENTER);
-    center.add(channels);
-
-    JPanel pms = new JPanel(new BorderLayout(6, 6));
-    pms.add(new JLabel("Auto-open private messages"), BorderLayout.NORTH);
-    autoJoinPmArea.setLineWrap(true);
-    autoJoinPmArea.setWrapStyleWord(true);
-    JScrollPane pmSc = new JScrollPane(autoJoinPmArea);
-    pmSc.putClientProperty(FlatClientProperties.STYLE, "arc:12;");
-    pms.add(pmSc, BorderLayout.CENTER);
-    center.add(pms);
-
-    p.add(center, BorderLayout.CENTER);
-    return p;
+    return ServerEditorCommandTabBuilder.buildAutoJoinPanel(
+        new ServerEditorCommandTabBuilder.AutoJoinWidgets(autoJoinArea, autoJoinPmArea));
   }
 
   private JPanel buildPerformPanel() {
-    JPanel p = new JPanel(new BorderLayout(8, 8));
-    p.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-
-    JLabel hint =
-        new JLabel(
-            "<html>Run commands automatically after connect.<br/>"
-                + "One command per line. Use slash commands (for example: /join, /msg, /quote, /sleep)."
-                + "</html>");
-    hint.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    p.add(hint, BorderLayout.NORTH);
-
-    performArea.setLineWrap(true);
-    performArea.setWrapStyleWord(true);
-    JScrollPane sc = new JScrollPane(performArea);
-    sc.putClientProperty(FlatClientProperties.STYLE, "arc:12;");
-    p.add(sc, BorderLayout.CENTER);
-
-    JLabel hint2 =
-        new JLabel(
-            "<html>Notes: prefer explicit channels in perform commands. "
-                + "/sleep accepts milliseconds between commands.</html>");
-    hint2.putClientProperty(FlatClientProperties.STYLE, "foreground:$Label.disabledForeground");
-    p.add(hint2, BorderLayout.SOUTH);
-
-    return p;
+    return ServerEditorCommandTabBuilder.buildPerformPanel(
+        new ServerEditorCommandTabBuilder.PerformWidgets(performArea));
   }
 
-  private AuthMode selectedAuthMode() {
+  private ServerEditorAuthMode selectedAuthMode() {
     Object selected = authModeCombo.getSelectedItem();
-    if (selected instanceof AuthMode mode) return mode;
-    return AuthMode.DISABLED;
+    if (selected instanceof ServerEditorAuthMode mode) return mode;
+    return ServerEditorAuthMode.DISABLED;
   }
 
-  private void setAuthMode(AuthMode mode) {
-    authModeCombo.setSelectedItem(mode == null ? AuthMode.DISABLED : mode);
+  private void setAuthMode(ServerEditorAuthMode mode) {
+    authModeCombo.setSelectedItem(mode == null ? ServerEditorAuthMode.DISABLED : mode);
   }
 
-  private MatrixAuthMode selectedMatrixAuthMode() {
+  private ServerEditorMatrixAuthMode selectedMatrixAuthMode() {
     Object selected = matrixAuthModeCombo.getSelectedItem();
-    if (selected instanceof MatrixAuthMode mode) return mode;
-    return MatrixAuthMode.ACCESS_TOKEN;
+    if (selected instanceof ServerEditorMatrixAuthMode mode) return mode;
+    return ServerEditorMatrixAuthMode.ACCESS_TOKEN;
   }
 
-  private void setMatrixAuthMode(MatrixAuthMode mode) {
-    matrixAuthModeCombo.setSelectedItem(mode == null ? MatrixAuthMode.ACCESS_TOKEN : mode);
+  private void setMatrixAuthMode(ServerEditorMatrixAuthMode mode) {
+    matrixAuthModeCombo.setSelectedItem(
+        mode == null ? ServerEditorMatrixAuthMode.ACCESS_TOKEN : mode);
   }
 
-  private static AuthMode seedAuthMode(IrcProperties.Server seed) {
-    if (seed == null) return AuthMode.DISABLED;
-    boolean saslEnabled = seed.sasl() != null && seed.sasl().enabled();
-    boolean nickservEnabled = seed.nickserv() != null && seed.nickserv().enabled();
-    if (saslEnabled) return AuthMode.SASL;
-    if (nickservEnabled) return AuthMode.NICKSERV;
-    return AuthMode.DISABLED;
+  private void refreshBackendAndAuthUi() {
+    updateBackendUi();
+    refreshAuthPanelUiAndValidation();
   }
 
-  private static MatrixAuthMode seedMatrixAuthMode(IrcProperties.Server seed) {
-    if (seed == null || seed.backend() != IrcProperties.Server.Backend.MATRIX) {
-      return MatrixAuthMode.ACCESS_TOKEN;
-    }
-    return isMatrixPasswordAuthMode(seed.sasl())
-        ? MatrixAuthMode.USERNAME_PASSWORD
-        : MatrixAuthMode.ACCESS_TOKEN;
+  private void refreshAuthPanelUi() {
+    ServerEditorAuthPanelUiApplier.apply(
+        new ServerEditorAuthPanelUiApplier.RefreshRequest(
+            selectedBackendProfile(),
+            selectedAuthMode(),
+            selectedMatrixAuthMode(),
+            Objects.toString(saslMechanism.getSelectedItem(), "PLAIN")),
+        new ServerEditorAuthPanelUiApplier.AuthPanelWidgets(
+            new ServerEditorAuthModeUiApplier.AuthModeWidgets(
+                authModeCombo,
+                authModeCardPanel,
+                AUTH_CARD_DISABLED,
+                AUTH_CARD_SASL,
+                AUTH_CARD_NICKSERV),
+            new ServerEditorAuthUiApplier.MatrixAuthWidgets(
+                authModeLabel,
+                authModeCombo,
+                authModeCardPanel,
+                matrixAuthModeLabel,
+                matrixAuthModeCombo,
+                matrixAuthHintLabel,
+                matrixAuthUserLabel,
+                matrixAuthUserField,
+                serverPasswordLabel,
+                serverPassField,
+                authModeLabel.getParent()),
+            new ServerEditorAuthUiApplier.SaslWidgets(
+                saslMechanism,
+                saslContinueOnFailureBox,
+                saslUserField,
+                saslPassField,
+                saslHintLabel),
+            new ServerEditorAuthUiApplier.NickservWidgets(
+                nickservServiceField, nickservPassField, nickservDelayJoinBox, nickservHintLabel)));
   }
 
-  private static boolean isMatrixPasswordAuthMode(IrcProperties.Server.Sasl sasl) {
-    if (sasl == null || !sasl.enabled()) return false;
-    String mechanism = Objects.toString(sasl.mechanism(), "").trim();
-    return MATRIX_PASSWORD_AUTH_MECHANISM.equalsIgnoreCase(mechanism);
-  }
-
-  private void showAuthCard(AuthMode mode) {
-    CardLayout card = (CardLayout) authModeCardPanel.getLayout();
-    switch (mode) {
-      case SASL -> card.show(authModeCardPanel, AUTH_CARD_SASL);
-      case NICKSERV -> card.show(authModeCardPanel, AUTH_CARD_NICKSERV);
-      default -> card.show(authModeCardPanel, AUTH_CARD_DISABLED);
-    }
-  }
-
-  private void updateAuthModeUi() {
-    AuthMode mode = selectedAuthMode();
-    if ((isQuasselBackendSelected() || isMatrixBackendSelected()) && mode != AuthMode.DISABLED) {
-      mode = AuthMode.DISABLED;
-      authModeCombo.setSelectedItem(mode);
-    }
-    showAuthCard(mode);
-    updateMatrixAuthUi();
-    updateSaslEnabled();
-    updateNickservEnabled();
+  private void refreshAuthPanelUiAndValidation() {
+    refreshAuthPanelUi();
     updateValidation();
   }
 
-  private IrcProperties.Server.Backend selectedBackend() {
+  private String selectedBackendId() {
     Object selected = backendCombo.getSelectedItem();
-    if (selected instanceof IrcProperties.Server.Backend backend) return backend;
-    return seedBackend;
+    if (selected instanceof String backendId) return backendId;
+    return seedBackendId;
   }
 
-  private boolean isQuasselBackendSelected() {
-    return selectedBackend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+  private ServerEditorBackendProfile selectedBackendProfile() {
+    return backendProfile(selectedBackendId());
   }
 
-  private boolean isMatrixBackendSelected() {
-    return selectedBackend() == IrcProperties.Server.Backend.MATRIX;
+  private ServerEditorBackendProfile backendProfile(String backendId) {
+    return backendProfiles.profileForBackendId(backendId);
   }
 
   private void updateBackendUi() {
-    IrcProperties.Server.Backend backend = selectedBackend();
-    if (backend == IrcProperties.Server.Backend.QUASSEL_CORE) {
-      hostLabel.setText("Host");
-      serverPasswordLabel.setText("Core password");
-      nickLabel.setText("Default nick");
-      loginLabel.setText("Core username");
-      realNameLabel.setText("Core real name");
-      tlsBox.setText("Use TLS (SSL)");
-      connectionBackendHintLabel.setText(
-          "Quassel backend logs into Quassel Core here (default ports: 4242 plain, 4243 TLS)."
-              + " Core password can be blank before initial setup. SASL/NickServ below are ignored.");
-      authModeCombo.setEnabled(false);
-      authModeCombo.setSelectedItem(AuthMode.DISABLED);
-      authDisabledHintLabel.setText(
-          asHtml(
-              "Quassel backend does not run direct IRC SASL/NickServ auth from IRCafe."
-                  + " Configure upstream network auth inside Quassel Core."));
-      applyFieldStyle(serverPassField, "(optional until core is configured)");
-      applyFieldStyle(hostField, "quassel.example.net");
-      applyFieldStyle(loginField, "quassel-user");
-      applyFieldStyle(nickField, "display nick (optional)");
-      applyFieldStyle(realNameField, "display name (optional)");
-    } else if (backend == IrcProperties.Server.Backend.MATRIX) {
-      hostLabel.setText("Homeserver");
-      serverPasswordLabel.setText("Credential");
-      nickLabel.setText("Nick (optional)");
-      loginLabel.setText("User ID (optional)");
-      realNameLabel.setText("Display name (optional)");
-      tlsBox.setText("Use TLS (HTTPS)");
-      connectionBackendHintLabel.setText(
-          "Matrix backend connects to this homeserver and authenticates with either access token"
-              + " or username/password."
-              + " Defaults: 443 TLS, 80 plain. SASL/NickServ below are ignored.");
-      authModeCombo.setEnabled(false);
-      authModeCombo.setSelectedItem(AuthMode.DISABLED);
-      authDisabledHintLabel.setText(asHtml(MATRIX_AUTH_DISABLED_HINT_TEXT));
-      applyFieldStyle(serverPassField, "matrix access token / password");
-      applyFieldStyle(hostField, "https://matrix.example.org");
-      applyFieldStyle(loginField, "@alice:matrix.example.org");
-      applyFieldStyle(nickField, "IRCafeUser (optional)");
-      applyFieldStyle(realNameField, "IRCafe User (optional)");
-    } else {
-      hostLabel.setText("Host");
-      serverPasswordLabel.setText("Server password");
-      nickLabel.setText("Nick");
-      loginLabel.setText("Login/Ident");
-      realNameLabel.setText("Real name");
-      tlsBox.setText("Use TLS (SSL)");
-      connectionBackendHintLabel.setText("Direct IRC connection using this profile.");
-      authModeCombo.setEnabled(true);
-      authDisabledHintLabel.setText(asHtml(AUTH_DISABLED_HINT_TEXT));
-      applyFieldStyle(serverPassField, "(optional)");
-      applyFieldStyle(hostField, "irc.example.net");
-      applyFieldStyle(loginField, "ircafe");
-      applyFieldStyle(nickField, "IRCafeUser");
-      applyFieldStyle(realNameField, "IRCafe User");
-    }
-    updateMatrixAuthUi();
-    updateValidation();
-  }
-
-  private void updateMatrixAuthUi() {
-    boolean matrixBackend = isMatrixBackendSelected();
-    boolean ircBackend = selectedBackend() == IrcProperties.Server.Backend.IRC;
-
-    authModeLabel.setVisible(ircBackend);
-    authModeCombo.setVisible(ircBackend);
-    authModeCardPanel.setVisible(!matrixBackend);
-    matrixAuthModeLabel.setVisible(matrixBackend);
-    matrixAuthModeCombo.setVisible(matrixBackend);
-    matrixAuthHintLabel.setVisible(matrixBackend);
-    if (!matrixBackend) {
-      matrixAuthUserLabel.setVisible(false);
-      matrixAuthUserField.setVisible(false);
-      matrixAuthUserField.setEnabled(false);
-      matrixAuthHintLabel.setText(" ");
-      matrixAuthHintLabel.setToolTipText(null);
-      java.awt.Container parent = authModeLabel.getParent();
-      if (parent != null) {
-        parent.revalidate();
-        parent.repaint();
-      }
-      return;
-    }
-
-    MatrixAuthMode mode = selectedMatrixAuthMode();
-    boolean usernamePassword = mode == MatrixAuthMode.USERNAME_PASSWORD;
-    matrixAuthUserLabel.setVisible(usernamePassword);
-    matrixAuthUserField.setVisible(usernamePassword);
-    matrixAuthUserField.setEnabled(usernamePassword);
-
-    String hint;
-    if (usernamePassword) {
-      serverPasswordLabel.setText("Password");
-      applyFieldStyle(serverPassField, "matrix account password");
-      hint = "Username/password mode signs in via /login. Username and password are required.";
-    } else {
-      serverPasswordLabel.setText("Access token");
-      applyFieldStyle(serverPassField, "matrix access token");
-      hint = "Access-token mode uses the token directly for Matrix API requests.";
-    }
-
-    matrixAuthHintLabel.setText(asHtml(hint));
-    matrixAuthHintLabel.setToolTipText(hint);
-    java.awt.Container parent = authModeLabel.getParent();
-    if (parent != null) {
-      parent.revalidate();
-      parent.repaint();
-    }
-  }
-
-  private void updateSaslEnabled() {
-    boolean en = selectedAuthMode() == AuthMode.SASL;
-    saslMechanism.setEnabled(en);
-    saslContinueOnFailureBox.setEnabled(en);
-
-    String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
-    String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
-
-    // Default: username + secret are enabled when SASL is enabled.
-    boolean userEnabled = en;
-    boolean secretEnabled = en;
-
-    String hint;
-    String secretPlaceholder;
-
-    switch (mechUpper) {
-      case "EXTERNAL" -> {
-        // TLS client certificate auth; secret is unused.
-        secretEnabled = false;
-        secretPlaceholder = "(ignored)";
-        hint =
-            "EXTERNAL uses your TLS client certificate. Secret is ignored; username is optional.";
-      }
-      case "ECDSA-NIST256P-CHALLENGE" -> {
-        secretPlaceholder = "base64 PKCS#8 EC private key";
-        hint =
-            "ECDSA challenge-response. Secret should be a base64 PKCS#8 EC private key. Username is usually required.";
-      }
-      case "SCRAM-SHA-256" -> {
-        secretPlaceholder = "password";
-        hint = "SCRAM-SHA-256 (recommended). Secret = password.";
-      }
-      case "SCRAM-SHA-1" -> {
-        secretPlaceholder = "password";
-        hint = "SCRAM-SHA-1. Secret = password.";
-      }
-      case "AUTO" -> {
-        secretPlaceholder = "password (leave blank for EXTERNAL)";
-        hint =
-            "AUTO prefers SCRAM (256/1) or PLAIN when a secret is provided, and falls back to EXTERNAL when secret is blank.";
-      }
-      default -> {
-        secretPlaceholder = "password";
-        hint = "PLAIN. Secret = password.";
-      }
-    }
-
-    saslUserField.setEnabled(userEnabled);
-    saslPassField.setEnabled(secretEnabled);
-
-    String html = asHtml(hint);
-    saslHintLabel.setText(en ? html : " ");
-    saslHintLabel.setToolTipText(hint);
-
-    // Update placeholder dynamically.
-    saslPassField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, secretPlaceholder);
-  }
-
-  private void updateNickservEnabled() {
-    boolean en = selectedAuthMode() == AuthMode.NICKSERV;
-    nickservServiceField.setEnabled(en);
-    nickservPassField.setEnabled(en);
-    nickservDelayJoinBox.setEnabled(en);
-
-    String hint =
-        "NickServ identify runs after connect. Use this when the server doesn't offer SASL."
-            + " This is an alternative auth path; don't enable it together with SASL.";
-    String html = asHtml(hint);
-    nickservHintLabel.setText(en ? html : " ");
-    nickservHintLabel.setToolTipText(hint);
-  }
-
-  // FlatLaf validation outlines.
-  private static final String OUTLINE_PROP = "JComponent.outline";
-  private static final String OUTLINE_ERROR = "error";
-  private static final String OUTLINE_WARNING = "warning";
-  private static final String OUTLINE_SUCCESS = "success";
-
-  private static void setOutline(JComponent c, String outline) {
-    c.putClientProperty(OUTLINE_PROP, outline);
-  }
-
-  private static void clearOutline(JComponent c) {
-    c.putClientProperty(OUTLINE_PROP, null);
-  }
-
-  private static void setError(JComponent c, boolean on) {
-    setOutline(c, on ? OUTLINE_ERROR : null);
-  }
-
-  private static void setWarning(JComponent c, boolean on) {
-    setOutline(c, on ? OUTLINE_WARNING : null);
-  }
-
-  private static void setSuccess(JComponent c, boolean on) {
-    Object cur = c.getClientProperty(OUTLINE_PROP);
-    if (on) {
-      // Only paint success if nothing else (error/warning) is currently displayed.
-      if (cur == null) setOutline(c, OUTLINE_SUCCESS);
-    } else {
-      if (Objects.equals(cur, OUTLINE_SUCCESS)) clearOutline(c);
-    }
-  }
-
-  private static boolean isPositiveLong(String s) {
-    try {
-      long v = Long.parseLong(trim(s));
-      return v > 0;
-    } catch (Exception e) {
-      return false;
-    }
-  }
-
-  private static boolean isValidPort(String s) {
-    try {
-      int p = Integer.parseInt(trim(s));
-      return p > 0 && p <= 65535;
-    } catch (Exception e) {
-      return false;
-    }
+    ServerEditorBackendPresentationPolicy.BackendPresentationState state =
+        ServerEditorBackendPresentationPolicy.presentationState(selectedBackendProfile());
+    ServerEditorBackendPresentationApplier.apply(
+        state,
+        new ServerEditorBackendPresentationApplier.BackendWidgets(
+            hostLabel,
+            serverPasswordLabel,
+            nickLabel,
+            loginLabel,
+            realNameLabel,
+            tlsBox,
+            connectionBackendHintLabel,
+            authDisabledHintLabel,
+            serverPassField,
+            hostField,
+            loginField,
+            nickField,
+            realNameField));
   }
 
   private void updateValidation() {
-    boolean ok = true;
-    boolean quasselBackend = isQuasselBackendSelected();
-    boolean matrixBackend = isMatrixBackendSelected();
+    ServerEditorValidationPolicy.ValidationState state =
+        ServerEditorValidationPolicy.validate(
+            new ServerEditorValidationPolicy.ValidationRequest(
+                selectedBackendProfile(),
+                idField.getText(),
+                hostField.getText(),
+                portField.getText(),
+                nickField.getText(),
+                selectedMatrixAuthMode(),
+                serverPasswordValue(),
+                matrixAuthUserField.getText(),
+                selectedAuthMode(),
+                Objects.toString(saslMechanism.getSelectedItem(), "PLAIN"),
+                saslUserField.getText(),
+                new String(saslPassField.getPassword()),
+                new String(nickservPassField.getPassword()),
+                proxyOverrideBox.isSelected(),
+                proxyEnabledBox.isSelected(),
+                proxyHostField.getText(),
+                proxyPortField.getText(),
+                proxyUserField.getText(),
+                new String(proxyPassField.getPassword()),
+                proxyConnectTimeoutMsField.getText(),
+                proxyReadTimeoutMsField.getText()));
 
-    boolean idBad = trim(idField.getText()).isEmpty();
-    setError(idField, idBad);
-    ok &= !idBad;
-
-    boolean hostBad = trim(hostField.getText()).isEmpty();
-    setError(hostField, hostBad);
-    ok &= !hostBad;
-
-    boolean portBad = !isValidPort(portField.getText());
-    setError(portField, portBad);
-    ok &= !portBad;
-
-    MatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
-    boolean matrixPasswordMode =
-        matrixBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
-    boolean matrixCredentialBad = matrixBackend && trim(serverPasswordValue()).isEmpty();
-    setError(serverPassField, matrixCredentialBad);
-    ok &= !matrixCredentialBad;
-
-    boolean matrixAuthUserBad = matrixPasswordMode && trim(matrixAuthUserField.getText()).isEmpty();
-    if (matrixBackend) {
-      setError(matrixAuthUserField, matrixAuthUserBad);
-      ok &= !matrixAuthUserBad;
-    } else {
-      clearOutline(matrixAuthUserField);
-    }
-
-    boolean loginBad = false;
-    setError(loginField, loginBad);
-    ok &= !loginBad;
-
-    boolean nickBad =
-        selectedBackend() == IrcProperties.Server.Backend.IRC
-            && trim(nickField.getText()).isEmpty();
-    setError(nickField, nickBad);
-    ok &= !nickBad;
-
-    AuthMode authMode = selectedAuthMode();
-
-    // SASL validation
-    if (quasselBackend || matrixBackend || authMode != AuthMode.SASL) {
-      clearOutline(saslUserField);
-      clearOutline(saslPassField);
-    } else {
-      String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
-      String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
-
-      String u = trim(saslUserField.getText());
-      String p = new String(saslPassField.getPassword());
-      boolean hasSecret = !p.isBlank();
-
-      boolean needsUser =
-          switch (mechUpper) {
-            case "EXTERNAL" -> false;
-            case "AUTO" -> hasSecret;
-            default -> true;
-          };
-      boolean needsSecret =
-          switch (mechUpper) {
-            case "EXTERNAL" -> false;
-            case "AUTO" -> false;
-            default -> true;
-          };
-
-      boolean userBad = needsUser && u.isEmpty();
-      boolean secretBad = needsSecret && p.isBlank();
-
-      // Even if the fields are disabled (e.g. EXTERNAL), we clear outlines.
-      if (!saslUserField.isEnabled()) userBad = false;
-      if (!saslPassField.isEnabled()) secretBad = false;
-
-      setError(saslUserField, userBad);
-      setError(saslPassField, secretBad);
-
-      ok &= !userBad;
-      ok &= !secretBad;
-    }
-
-    // NickServ validation
-    if (quasselBackend || matrixBackend || authMode != AuthMode.NICKSERV) {
-      clearOutline(nickservServiceField);
-      clearOutline(nickservPassField);
-    } else {
-      String pass = new String(nickservPassField.getPassword());
-      boolean passBad = pass.isBlank();
-
-      setError(nickservServiceField, false);
-      setError(nickservPassField, passBad);
-      ok &= !passBad;
-    }
-
-    // Proxy override validation
-    if (!proxyOverrideBox.isSelected()) {
-      clearOutline(proxyHostField);
-      clearOutline(proxyPortField);
-      clearOutline(proxyUserField);
-      clearOutline(proxyPassField);
-      clearOutline(proxyConnectTimeoutMsField);
-      clearOutline(proxyReadTimeoutMsField);
-    } else {
-      // Timeouts: optional (blank falls back), but warn if user typed something invalid.
-      String cto = trim(proxyConnectTimeoutMsField.getText());
-      String rto = trim(proxyReadTimeoutMsField.getText());
-      boolean ctoWarn = !cto.isEmpty() && !isPositiveLong(cto);
-      boolean rtoWarn = !rto.isEmpty() && !isPositiveLong(rto);
-      setWarning(proxyConnectTimeoutMsField, ctoWarn);
-      setWarning(proxyReadTimeoutMsField, rtoWarn);
-
-      if (!proxyEnabledBox.isSelected()) {
-        clearOutline(proxyHostField);
-        clearOutline(proxyPortField);
-        clearOutline(proxyUserField);
-        clearOutline(proxyPassField);
-      } else {
-        boolean pHostBad = trim(proxyHostField.getText()).isEmpty();
-        boolean pPortBad = !isValidPort(proxyPortField.getText());
-
-        setError(proxyHostField, pHostBad);
-        setError(proxyPortField, pPortBad);
-
-        ok &= !pHostBad;
-        ok &= !pPortBad;
-
-        // Auth mismatch warning (user XOR pass).
-        String user = trim(proxyUserField.getText());
-        String pass = new String(proxyPassField.getPassword()).trim();
-        boolean hasUser = !user.isEmpty();
-        boolean hasPass = !pass.isEmpty();
-        boolean mismatch = hasUser ^ hasPass;
-
-        setWarning(proxyUserField, mismatch);
-        setWarning(proxyPassField, mismatch);
-      }
-    }
+    ServerEditorValidationUiApplier.apply(
+        state,
+        new ServerEditorValidationUiApplier.ValidationWidgets(
+            idField,
+            hostField,
+            portField,
+            serverPassField,
+            matrixAuthUserField,
+            loginField,
+            nickField,
+            saslUserField,
+            saslPassField,
+            nickservServiceField,
+            nickservPassField,
+            proxyHostField,
+            proxyPortField,
+            proxyUserField,
+            proxyPassField,
+            proxyConnectTimeoutMsField,
+            proxyReadTimeoutMsField,
+            saveBtn));
 
     // If a proxy test previously succeeded, keep success outlines only while inputs remain
     // unchanged.
     applyProxyTestSuccessDecoration();
-
-    saveBtn.setEnabled(ok);
-    saveBtn.setToolTipText(ok ? null : "Fix highlighted fields to enable Save.");
   }
 
   private void applyProxyTestSuccessDecoration() {
     // Clear success outlines by default.
-    setSuccess(proxyHostField, false);
-    setSuccess(proxyPortField, false);
-    setSuccess(proxyConnectTimeoutMsField, false);
-    setSuccess(proxyReadTimeoutMsField, false);
+    ServerEditorValidationUiApplier.setSuccess(proxyHostField, false);
+    ServerEditorValidationUiApplier.setSuccess(proxyPortField, false);
+    ServerEditorValidationUiApplier.setSuccess(proxyConnectTimeoutMsField, false);
+    ServerEditorValidationUiApplier.setSuccess(proxyReadTimeoutMsField, false);
 
-    if (lastProxyTestOk == null) return;
-
-    ProxyTestSnapshot now = ProxyTestSnapshot.capture(this);
-    if (!lastProxyTestOk.equals(now)) {
+    ServerEditorProxyTestDecorationPolicy.ProxyTestDecorationState state =
+        ServerEditorProxyTestDecorationPolicy.decorationState(
+            lastProxyTestOk != null,
+            lastProxyTestOk != null && lastProxyTestOk.equals(ProxyTestSnapshot.capture(this)),
+            proxyHostField.isEnabled() && proxyPortField.isEnabled(),
+            proxyConnectTimeoutMsField.getText(),
+            proxyReadTimeoutMsField.getText());
+    if (!state.retainLastSuccessfulSnapshot()) {
       lastProxyTestOk = null;
-      return;
     }
-
-    // Only paint success when the relevant proxy fields are enabled (per-server override + proxy
-    // enabled).
-    if (!proxyHostField.isEnabled() || !proxyPortField.isEnabled()) return;
-
-    // If the proxy fields have an error/warning outline, don't overwrite it.
-    setSuccess(proxyHostField, true);
-    setSuccess(proxyPortField, true);
-
-    // Timeouts are part of the test config too; mark them success if user entered valid values or
-    // left blank.
-    boolean ctoOk =
-        trim(proxyConnectTimeoutMsField.getText()).isEmpty()
-            || isPositiveLong(proxyConnectTimeoutMsField.getText());
-    boolean rtoOk =
-        trim(proxyReadTimeoutMsField.getText()).isEmpty()
-            || isPositiveLong(proxyReadTimeoutMsField.getText());
-    setSuccess(proxyConnectTimeoutMsField, ctoOk);
-    setSuccess(proxyReadTimeoutMsField, rtoOk);
+    ServerEditorValidationUiApplier.setSuccess(proxyHostField, state.hostSuccess());
+    ServerEditorValidationUiApplier.setSuccess(proxyPortField, state.portSuccess());
+    ServerEditorValidationUiApplier.setSuccess(
+        proxyConnectTimeoutMsField, state.connectTimeoutSuccess());
+    ServerEditorValidationUiApplier.setSuccess(proxyReadTimeoutMsField, state.readTimeoutSuccess());
   }
 
   private static final class SimpleDocListener implements javax.swing.event.DocumentListener {
@@ -1515,14 +1011,7 @@ public class ServerEditorDialog extends JDialog {
 
   private void maybeAdjustPortForBackendAndTls() {
     if (!portAuto) return;
-    String nextPort;
-    if (isQuasselBackendSelected()) {
-      nextPort = tlsBox.isSelected() ? "4243" : "4242";
-    } else if (isMatrixBackendSelected()) {
-      nextPort = tlsBox.isSelected() ? "443" : "80";
-    } else {
-      nextPort = tlsBox.isSelected() ? "6697" : "6667";
-    }
+    String nextPort = Integer.toString(selectedBackendProfile().defaultPort(tlsBox.isSelected()));
     updatingPortProgrammatically = true;
     try {
       portField.setText(nextPort);
@@ -1543,181 +1032,41 @@ public class ServerEditorDialog extends JDialog {
   }
 
   private IrcProperties.Server buildServer() {
-    String id = trim(idField.getText());
-    if (id.isEmpty()) throw new IllegalArgumentException("Server ID is required");
-
-    String host = trim(hostField.getText());
-    if (host.isEmpty()) throw new IllegalArgumentException("Host is required");
-
-    int port;
-    try {
-      port = Integer.parseInt(trim(portField.getText()));
-    } catch (Exception e) {
-      throw new IllegalArgumentException("Port must be a number");
-    }
-    if (port <= 0 || port > 65535) throw new IllegalArgumentException("Port must be 1-65535");
-
-    Object backendSelection = backendCombo.getSelectedItem();
-    IrcProperties.Server.Backend backend =
-        backendSelection instanceof IrcProperties.Server.Backend selected ? selected : seedBackend;
-    boolean quasselBackend = backend == IrcProperties.Server.Backend.QUASSEL_CORE;
-    boolean matrixBackend = backend == IrcProperties.Server.Backend.MATRIX;
-    boolean ircBackend = backend == IrcProperties.Server.Backend.IRC;
-
-    boolean tls = tlsBox.isSelected();
-    String serverPassword = serverPasswordValue();
-    MatrixAuthMode matrixAuthMode = selectedMatrixAuthMode();
-    boolean matrixPasswordMode =
-        matrixBackend && matrixAuthMode == MatrixAuthMode.USERNAME_PASSWORD;
-    String matrixAuthUser = trim(matrixAuthUserField.getText());
-    if (matrixBackend && trim(serverPassword).isEmpty()) {
-      throw new IllegalArgumentException(
-          matrixPasswordMode ? "Matrix password is required" : "Matrix access token is required");
-    }
-    if (matrixPasswordMode && matrixAuthUser.isEmpty()) {
-      throw new IllegalArgumentException("Matrix username is required");
-    }
-    if (containsCrlf(serverPassword)) {
-      throw new IllegalArgumentException("Server/Core password must not contain newlines");
-    }
-
-    String nick = trim(nickField.getText());
-    if (ircBackend && nick.isEmpty()) {
-      throw new IllegalArgumentException("Nick is required");
-    }
-
-    String login = trim(loginField.getText());
-    if (login.isEmpty() && matrixPasswordMode) login = matrixAuthUser;
-    if (login.isEmpty() && !matrixBackend) login = nick;
-    if (login.isEmpty() && quasselBackend) login = "quassel-user";
-
-    String realName = trim(realNameField.getText());
-    if (realName.isEmpty()) realName = nick.isEmpty() ? login : nick;
-
-    if (nick.isEmpty() && !login.isEmpty()) {
-      nick = login;
-    }
-
-    AuthMode authMode = selectedAuthMode();
-    if (quasselBackend || matrixBackend) {
-      authMode = AuthMode.DISABLED;
-    }
-
-    IrcProperties.Server.Sasl sasl;
-    if (matrixPasswordMode) {
-      sasl =
-          new IrcProperties.Server.Sasl(
-              true, matrixAuthUser, serverPassword, MATRIX_PASSWORD_AUTH_MECHANISM, true);
-      serverPassword = "";
-    } else if (authMode == AuthMode.SASL) {
-      String u = trim(saslUserField.getText());
-      // JPasswordField stores secret as a char[]. Convert only when building the immutable config
-      // object.
-      String p = new String(saslPassField.getPassword());
-      String mech = Objects.toString(saslMechanism.getSelectedItem(), "PLAIN").trim();
-
-      String mechUpper = mech.toUpperCase(java.util.Locale.ROOT);
-      boolean hasSecret = !p.isBlank();
-      boolean needsUser =
-          switch (mechUpper) {
-            case "EXTERNAL" -> false;
-            case "AUTO" -> hasSecret;
-            default -> true;
-          };
-      boolean needsSecret =
-          switch (mechUpper) {
-            case "EXTERNAL" -> false;
-            case "AUTO" -> false;
-            default -> true;
-          };
-
-      if (needsUser && u.isEmpty()) {
-        throw new IllegalArgumentException("SASL username is required for mechanism " + mechUpper);
-      }
-      if (needsSecret && p.isBlank()) {
-        throw new IllegalArgumentException("SASL secret is required for mechanism " + mechUpper);
-      }
-      sasl =
-          new IrcProperties.Server.Sasl(true, u, p, mech, !saslContinueOnFailureBox.isSelected());
-    } else {
-      sasl = new IrcProperties.Server.Sasl(false, "", "", "PLAIN", null);
-    }
-
-    IrcProperties.Server.Nickserv nickserv;
-    if (authMode == AuthMode.NICKSERV) {
-      String service = trim(nickservServiceField.getText());
-      if (service.isEmpty()) service = "NickServ";
-      String pass = new String(nickservPassField.getPassword());
-      if (pass.isBlank()) {
-        throw new IllegalArgumentException(
-            "NickServ password is required when NickServ is enabled");
-      }
-      nickserv =
-          new IrcProperties.Server.Nickserv(true, pass, service, nickservDelayJoinBox.isSelected());
-    } else {
-      nickserv = new IrcProperties.Server.Nickserv(false, "", "NickServ", true);
-    }
-
-    List<String> autoJoin = new ArrayList<>();
-    for (String line : Objects.toString(autoJoinArea.getText(), "").split("\\R")) {
-      String ch = trim(line);
-      if (ch.isEmpty()) continue;
-      autoJoin.add(ch);
-    }
-    for (String line : Objects.toString(autoJoinPmArea.getText(), "").split("\\R")) {
-      String pmNick = trim(line);
-      if (pmNick.isEmpty()) continue;
-      String encoded = AutoJoinEntryCodec.encodePrivateMessageNick(pmNick);
-      if (encoded.isEmpty()) continue;
-      autoJoin.add(encoded);
-    }
-
-    List<String> perform = new ArrayList<>();
-    for (String line : Objects.toString(performArea.getText(), "").split("\\R")) {
-      String cmd = trim(line);
-      if (cmd.isEmpty()) continue;
-      perform.add(cmd);
-    }
-
-    IrcProperties.Proxy proxyOverride = null;
-    if (proxyOverrideBox.isSelected()) {
-      // Build a per-server override (including the ability to explicitly disable proxying).
-      long connectMs = parseLongOrDefault(proxyConnectTimeoutMsField.getText(), 20_000);
-      long readMs = parseLongOrDefault(proxyReadTimeoutMsField.getText(), 30_000);
-
-      if (!proxyEnabledBox.isSelected()) {
-        proxyOverride = new IrcProperties.Proxy(false, "", 0, "", "", true, connectMs, readMs);
-      } else {
-        String pHost = trim(proxyHostField.getText());
-        int pPort;
-        try {
-          pPort = Integer.parseInt(trim(proxyPortField.getText()));
-        } catch (Exception e) {
-          throw new IllegalArgumentException("Proxy port must be a number");
-        }
-        boolean remoteDns = proxyRemoteDnsBox.isSelected();
-        String user = trim(proxyUserField.getText());
-        String pass = new String(proxyPassField.getPassword());
-        proxyOverride =
-            new IrcProperties.Proxy(true, pHost, pPort, user, pass, remoteDns, connectMs, readMs);
-      }
-    }
-
-    return new IrcProperties.Server(
-        id,
-        host,
-        port,
-        tls,
-        serverPassword,
-        nick,
-        login,
-        realName,
-        sasl,
-        nickserv,
-        autoJoin,
-        perform,
-        proxyOverride,
-        backend);
+    String backendId = selectedBackendId();
+    return ServerEditorServerBuildPolicy.build(
+        new ServerEditorServerBuildPolicy.ServerBuildRequest(
+            backendProfile(backendId),
+            backendId,
+            idField.getText(),
+            hostField.getText(),
+            portField.getText(),
+            tlsBox.isSelected(),
+            serverPasswordValue(),
+            selectedMatrixAuthMode(),
+            matrixAuthUserField.getText(),
+            nickField.getText(),
+            loginField.getText(),
+            realNameField.getText(),
+            selectedAuthMode(),
+            saslUserField.getText(),
+            new String(saslPassField.getPassword()),
+            Objects.toString(saslMechanism.getSelectedItem(), "PLAIN"),
+            saslContinueOnFailureBox.isSelected(),
+            nickservServiceField.getText(),
+            new String(nickservPassField.getPassword()),
+            nickservDelayJoinBox.isSelected(),
+            autoJoinArea.getText(),
+            autoJoinPmArea.getText(),
+            performArea.getText(),
+            proxyOverrideBox.isSelected(),
+            proxyEnabledBox.isSelected(),
+            proxyHostField.getText(),
+            proxyPortField.getText(),
+            proxyUserField.getText(),
+            new String(proxyPassField.getPassword()),
+            proxyRemoteDnsBox.isSelected(),
+            proxyConnectTimeoutMsField.getText(),
+            proxyReadTimeoutMsField.getText()));
   }
 
   private String serverPasswordValue() {
@@ -1725,12 +1074,8 @@ public class ServerEditorDialog extends JDialog {
     return new String(serverPassField.getPassword());
   }
 
-  private static String backendLabel(IrcProperties.Server.Backend backend) {
-    return switch (backend) {
-      case IRC -> "IRC";
-      case QUASSEL_CORE -> "Quassel Core";
-      case MATRIX -> "Matrix";
-    };
+  private String backendLabel(String backendId) {
+    return backendProfile(backendId).displayName();
   }
 
   private static void applyFieldStyle(JTextField f, String placeholder) {
@@ -1788,21 +1133,7 @@ public class ServerEditorDialog extends JDialog {
     return l;
   }
 
-  private static String asHtml(String text) {
-    return "<html>" + escapeHtml(text) + "</html>";
-  }
-
-  private static String escapeHtml(String text) {
-    if (text == null || text.isEmpty()) return "";
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-  }
-
   private static String trim(String s) {
     return s == null ? "" : s.trim();
-  }
-
-  private static boolean containsCrlf(String s) {
-    String v = Objects.toString(s, "");
-    return v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0;
   }
 }

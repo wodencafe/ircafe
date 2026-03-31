@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.notify.sound;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.model.BuiltInSound;
 import jakarta.annotation.PreDestroy;
 import java.beans.PropertyChangeListener;
@@ -37,7 +37,7 @@ public class NotificationSoundService {
   private final ExecutorService executor;
 
   private final NotificationSoundSettingsBus settingsBus;
-  private final RuntimeConfigStore runtimeConfig;
+  private final RuntimeConfigPathPort runtimeConfig;
   private final PropertyChangeListener settingsListener;
 
   private final AtomicReference<Instant> lastPlayed = new AtomicReference<>(Instant.EPOCH);
@@ -57,7 +57,7 @@ public class NotificationSoundService {
 
   public NotificationSoundService(
       NotificationSoundSettingsBus settingsBus,
-      RuntimeConfigStore runtimeConfig,
+      RuntimeConfigPathPort runtimeConfig,
       @Qualifier(ExecutorConfig.NOTIFICATION_SOUND_EXECUTOR) ExecutorService executor) {
     this.settingsBus = settingsBus;
     this.runtimeConfig = runtimeConfig;

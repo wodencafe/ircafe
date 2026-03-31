@@ -6,12 +6,14 @@ import cafe.woden.ircclient.irc.port.*;
 import io.reactivex.rxjava3.core.Completable;
 import java.util.Optional;
 import java.util.OptionalLong;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Spring adapter exposing lag probe operations via a narrow port. */
 @Component("ircLagProbePort")
+@SecondaryAdapter
 @InfrastructureLayer
 public class IrcLagProbePortAdapter implements IrcLagProbePort {
 

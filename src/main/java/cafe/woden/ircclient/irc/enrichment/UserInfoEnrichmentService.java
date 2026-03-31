@@ -436,43 +436,45 @@ public class UserInfoEnrichmentService {
     if (cmd.kind() == UserInfoEnrichmentPlanner.ProbeKind.WHO_CHANNEL) {
       String channel = cmd.nicks().isEmpty() ? "" : cmd.nicks().getFirst();
       if (channel.isBlank()) return;
-      String line = cmd.rawLine();
+
+      String line = "WHO " + channel;
       if (shouldUseWhoxForChannelScan(serverId)) {
         line = "WHO " + channel + " " + IRCafe_WHOX_FIELDS;
       }
+
       log.debug("[{}] WHO channel enrichment: {}", serverId, channel);
-      Disposable d =
+      var unused =
           irc.sendRaw(serverId, line)
               .subscribe(
                   () -> {},
                   err ->
                       log.debug(
                           "WHO channel enrichment failed for {}: {}", serverId, err.toString()));
-      if (d.isDisposed()) {}
+
       return;
     }
 
     if (cmd.kind() == UserInfoEnrichmentPlanner.ProbeKind.USERHOST) {
       String line = cmd.rawLine();
+
       log.debug("[{}] USERHOST enrichment: {}", serverId, String.join(", ", cmd.nicks()));
-      Disposable d =
+      var unused =
           irc.sendRaw(serverId, line)
               .subscribe(
                   () -> {},
                   err ->
                       log.debug("USERHOST enrichment failed for {}: {}", serverId, err.toString()));
-      if (d.isDisposed()) {}
+
       return;
     }
     String nick = cmd.nicks().isEmpty() ? "" : cmd.nicks().getFirst();
     if (nick.isBlank()) return;
     log.debug("[{}] WHOIS enrichment: {}", serverId, nick);
-    Disposable d =
+    var unused =
         irc.whois(serverId, nick)
             .subscribe(
                 () -> {},
                 err -> log.debug("WHOIS enrichment failed for {}: {}", serverId, err.toString()));
-    if (d.isDisposed()) {}
   }
 
   private boolean isConnected(String serverId) {

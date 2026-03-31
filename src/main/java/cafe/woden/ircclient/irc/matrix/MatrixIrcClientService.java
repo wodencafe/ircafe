@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc.matrix;
 
+import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
@@ -35,6 +36,8 @@ import org.springframework.stereotype.Service;
 @Service
 @InfrastructureLayer
 public class MatrixIrcClientService implements IrcBackendClientService {
+  private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
+      BackendDescriptorCatalog.builtIns();
 
   private static final String DEFAULT_UNAVAILABLE_REASON = "not connected";
   private static final String CONNECTING_REASON = "Matrix transport is connecting";
@@ -155,8 +158,8 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   }
 
   @Override
-  public IrcProperties.Server.Backend backend() {
-    return IrcProperties.Server.Backend.MATRIX;
+  public String backendId() {
+    return BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.MATRIX);
   }
 
   @Override

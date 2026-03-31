@@ -60,6 +60,7 @@ class ServerTreeStateInteractionCollaboratorsFactoryTest {
                 tree,
                 model,
                 null,
+                null,
                 channelStateStore,
                 null,
                 runtimeState,

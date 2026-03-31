@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.chat;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
 import cafe.woden.ircclient.logging.history.LoadOlderControlState;
 import cafe.woden.ircclient.model.TargetRef;
@@ -22,12 +22,12 @@ public class ChatHistoryTranscriptPortAdapter implements ChatHistoryTranscriptPo
 
   private final ChatTranscriptStore transcripts;
   private final UiSettingsBus settingsBus;
-  private final RuntimeConfigStore runtimeConfig;
+  private final UiSettingsRuntimeConfigPort runtimeConfig;
 
   public ChatHistoryTranscriptPortAdapter(
       ChatTranscriptStore transcripts,
       UiSettingsBus settingsBus,
-      RuntimeConfigStore runtimeConfig) {
+      UiSettingsRuntimeConfigPort runtimeConfig) {
     this.transcripts = transcripts;
     this.settingsBus = settingsBus;
     this.runtimeConfig = runtimeConfig;

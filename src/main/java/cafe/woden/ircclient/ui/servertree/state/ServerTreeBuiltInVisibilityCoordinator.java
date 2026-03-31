@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.state;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort.ServerTreeBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,13 +47,14 @@ public final class ServerTreeBuiltInVisibilityCoordinator {
     };
   }
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final ServerTreeBuiltInVisibilityConfigPort runtimeConfig;
   private final Context context;
 
   private ServerBuiltInNodesVisibility defaultVisibility = ServerBuiltInNodesVisibility.defaults();
   private final Map<String, ServerBuiltInNodesVisibility> visibilityByServer = new HashMap<>();
 
-  public ServerTreeBuiltInVisibilityCoordinator(RuntimeConfigStore runtimeConfig, Context context) {
+  public ServerTreeBuiltInVisibilityCoordinator(
+      ServerTreeBuiltInVisibilityConfigPort runtimeConfig, Context context) {
     this.runtimeConfig = runtimeConfig;
     this.context = Objects.requireNonNull(context, "context");
   }
@@ -60,14 +62,13 @@ public final class ServerTreeBuiltInVisibilityCoordinator {
   public void loadPersistedBuiltInNodesVisibility() {
     if (runtimeConfig == null) return;
     try {
-      Map<String, RuntimeConfigStore.ServerTreeBuiltInNodesVisibility> persisted =
+      Map<String, ServerTreeBuiltInNodesVisibility> persisted =
           runtimeConfig.readServerTreeBuiltInNodesVisibility();
       if (persisted == null || persisted.isEmpty()) return;
-      for (Map.Entry<String, RuntimeConfigStore.ServerTreeBuiltInNodesVisibility> entry :
-          persisted.entrySet()) {
+      for (Map.Entry<String, ServerTreeBuiltInNodesVisibility> entry : persisted.entrySet()) {
         String sid = context.normalizeServerId(entry.getKey());
         if (sid.isEmpty()) continue;
-        RuntimeConfigStore.ServerTreeBuiltInNodesVisibility raw = entry.getValue();
+        ServerTreeBuiltInNodesVisibility raw = entry.getValue();
         ServerBuiltInNodesVisibility parsed =
             raw == null
                 ? defaultVisibility

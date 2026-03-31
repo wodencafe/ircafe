@@ -18,11 +18,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
+import javax.swing.JMenuItem;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -85,6 +87,7 @@ class ChannelListPanelManagedOrderTest {
     onEdt(() -> assertTrue(nextPageButton.isEnabled()));
 
     onEdt(nextPageButton::doClick);
+    waitFor(() -> "/list rust since nxt-42 limit 30".equals(command.get()), Duration.ofSeconds(3));
     assertEquals("/list rust since nxt-42 limit 30", command.get());
     onEdt(() -> assertFalse(nextPageButton.isEnabled()));
   }
@@ -233,6 +236,68 @@ class ChannelListPanelManagedOrderTest {
   }
 
   @Test
+  void clearListButtonClearsCurrentServerRows() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ChannelListPanel panel = new ChannelListPanel();
+            panel.setServerId("libera");
+            panel.beginList("libera", "Loaded channel list.");
+            panel.appendEntries(
+                "libera",
+                List.of(
+                    new ChannelListPanel.ListEntryRow("#alpha", 12, "Alpha topic"),
+                    new ChannelListPanel.ListEntryRow("#beta", 4, "Beta topic")));
+            panel.endList("libera", "Loaded channel list.");
+
+            JButton clearListButton = field(panel, "clearListButton", JButton.class);
+            JTable listTable = field(panel, "listTable", JTable.class);
+            assertTrue(clearListButton.getToolTipText().toLowerCase(Locale.ROOT).contains("clear"));
+            assertEquals(2, listTable.getRowCount());
+
+            clearListButton.doClick();
+
+            assertEquals(0, listTable.getRowCount());
+            assertFalse(clearListButton.isEnabled());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
+  void listContextMenuUsesSelectReconnectAndJoinLabelsByManagedState() throws Exception {
+    onEdt(
+        () -> {
+          try {
+            ChannelListPanel panel = new ChannelListPanel();
+            panel.setServerId("libera");
+            JMenuItem joinItem = field(panel, "listJoinSelectMenuItem", JMenuItem.class);
+
+            panel.setManagedChannels(
+                "libera",
+                List.of(new ChannelListPanel.ManagedChannelRow("#alpha", false, true)),
+                ChannelListPanel.ManagedSortMode.CUSTOM);
+            invokeOneArg(panel, "prepareListContextMenuForChannel", String.class, "#alpha");
+            assertEquals("Select Channel", joinItem.getText());
+
+            panel.setManagedChannels(
+                "libera",
+                List.of(new ChannelListPanel.ManagedChannelRow("#beta", true, true)),
+                ChannelListPanel.ManagedSortMode.CUSTOM);
+            invokeOneArg(panel, "prepareListContextMenuForChannel", String.class, "#beta");
+            assertEquals("Reconnect Channel", joinItem.getText());
+
+            panel.setManagedChannels("libera", List.of(), ChannelListPanel.ManagedSortMode.CUSTOM);
+            invokeOneArg(panel, "prepareListContextMenuForChannel", String.class, "#gamma");
+            assertEquals("Join Channel", joinItem.getText());
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
+  @Test
   void managedModesFallbackUsesUnknownLabel() throws Exception {
     onEdt(
         () -> {
@@ -342,6 +407,27 @@ class ChannelListPanelManagedOrderTest {
     onEdt(() -> assertSame(defaultAlisIcon, runAlisButton.getIcon()));
   }
 
+  @Test
+  void repaintIfSizedSkipsZeroSizedButtons() throws Exception {
+    TrackingButton button = new TrackingButton();
+
+    onEdt(
+        () -> {
+          try {
+            int initialRepaintCount = button.repaintCount;
+            invokeStaticRepaintIfSized(button);
+            assertEquals(initialRepaintCount, button.repaintCount);
+
+            button.setSize(28, 28);
+            int sizedRepaintCount = button.repaintCount;
+            invokeStaticRepaintIfSized(button);
+            assertEquals(sizedRepaintCount + 1, button.repaintCount);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        });
+  }
+
   private static <T> T field(Object target, String name, Class<T> type) throws Exception {
     Field f = target.getClass().getDeclaredField(name);
     f.setAccessible(true);
@@ -415,6 +501,20 @@ class ChannelListPanelManagedOrderTest {
     method.invoke(target);
   }
 
+  private static void invokeOneArg(
+      Object target, String methodName, Class<?> parameterType, Object argument) throws Exception {
+    Method method = target.getClass().getDeclaredMethod(methodName, parameterType);
+    method.setAccessible(true);
+    method.invoke(target, argument);
+  }
+
+  private static void invokeStaticRepaintIfSized(JButton button) throws Exception {
+    Method method =
+        ChannelListPanel.class.getDeclaredMethod("repaintIfSized", javax.swing.JComponent.class);
+    method.setAccessible(true);
+    method.invoke(null, button);
+  }
+
   private static Object newChannelDetailsDialogState(
       JDialog dialog, String serverId, String channel, ChannelListPanel.ChannelDetailsSource source)
       throws Exception {
@@ -435,7 +535,12 @@ class ChannelListPanelManagedOrderTest {
             JButton.class,
             JTextField.class,
             JTextArea.class,
-            JTextArea.class);
+            JTable.class,
+            JTextArea.class,
+            JButton.class,
+            JButton.class,
+            JButton.class,
+            AtomicBoolean.class);
     constructor.setAccessible(true);
     return constructor.newInstance(
         dialog,
@@ -450,7 +555,12 @@ class ChannelListPanelManagedOrderTest {
         new JButton(),
         new JTextField(),
         new JTextArea(),
-        new JTextArea());
+        new JTable(),
+        new JTextArea(),
+        new JButton(),
+        new JButton(),
+        new JButton(),
+        new AtomicBoolean(false));
   }
 
   @FunctionalInterface
@@ -461,5 +571,14 @@ class ChannelListPanelManagedOrderTest {
   @FunctionalInterface
   private interface ThrowingSupplier<T> {
     T get() throws Exception;
+  }
+
+  private static final class TrackingButton extends JButton {
+    private int repaintCount;
+
+    @Override
+    public void repaint() {
+      repaintCount++;
+    }
   }
 }

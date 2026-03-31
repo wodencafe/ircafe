@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.coordinator;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
@@ -49,15 +50,14 @@ public final class ServerTreeServerRootLifecycleManager {
 
     void putLeaves(Map<TargetRef, DefaultMutableTreeNode> leavesByTarget);
 
-    RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout(String serverId);
+    ServerTreeBuiltInLayout builtInLayout(String serverId);
 
-    RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder(String serverId);
+    ServerTreeRootSiblingOrder rootSiblingOrder(String serverId);
 
-    void applyBuiltInLayoutToTree(
-        ServerNodes serverNodes, RuntimeConfigStore.ServerTreeBuiltInLayout requestedLayout);
+    void applyBuiltInLayoutToTree(ServerNodes serverNodes, ServerTreeBuiltInLayout requestedLayout);
 
     void applyRootSiblingOrderToTree(
-        ServerNodes serverNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder requestedOrder);
+        ServerNodes serverNodes, ServerTreeRootSiblingOrder requestedOrder);
 
     void reloadRootModel();
 
@@ -76,14 +76,12 @@ public final class ServerTreeServerRootLifecycleManager {
 
   @FunctionalInterface
   public interface BiLayoutConsumer {
-    void accept(
-        ServerNodes serverNodes, RuntimeConfigStore.ServerTreeBuiltInLayout requestedLayout);
+    void accept(ServerNodes serverNodes, ServerTreeBuiltInLayout requestedLayout);
   }
 
   @FunctionalInterface
   public interface BiRootOrderConsumer {
-    void accept(
-        ServerNodes serverNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder requestedOrder);
+    void accept(ServerNodes serverNodes, ServerTreeRootSiblingOrder requestedOrder);
   }
 
   public static Context context(
@@ -99,8 +97,8 @@ public final class ServerTreeServerRootLifecycleManager {
       Function<String, Integer> interceptorHitCount,
       Function<String, List<InterceptorDefinition>> interceptorDefinitions,
       Map<TargetRef, DefaultMutableTreeNode> leaves,
-      Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayout,
-      Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> rootSiblingOrder,
+      Function<String, ServerTreeBuiltInLayout> builtInLayout,
+      Function<String, ServerTreeRootSiblingOrder> rootSiblingOrder,
       BiLayoutConsumer applyBuiltInLayoutToTree,
       BiRootOrderConsumer applyRootSiblingOrderToTree,
       DefaultTreeModel model,
@@ -205,24 +203,24 @@ public final class ServerTreeServerRootLifecycleManager {
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout(String serverId) {
+      public ServerTreeBuiltInLayout builtInLayout(String serverId) {
         return builtInLayout.apply(serverId);
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
+      public ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
         return rootSiblingOrder.apply(serverId);
       }
 
       @Override
       public void applyBuiltInLayoutToTree(
-          ServerNodes serverNodes, RuntimeConfigStore.ServerTreeBuiltInLayout requestedLayout) {
+          ServerNodes serverNodes, ServerTreeBuiltInLayout requestedLayout) {
         applyBuiltInLayoutToTree.accept(serverNodes, requestedLayout);
       }
 
       @Override
       public void applyRootSiblingOrderToTree(
-          ServerNodes serverNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder requestedOrder) {
+          ServerNodes serverNodes, ServerTreeRootSiblingOrder requestedOrder) {
         applyRootSiblingOrderToTree.accept(serverNodes, requestedOrder);
       }
 

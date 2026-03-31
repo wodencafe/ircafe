@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.core;
 
 import cafe.woden.ircclient.app.AppSchedulers;
+import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.config.ServerRegistry;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
@@ -13,23 +14,27 @@ import org.springframework.stereotype.Component;
 public class MediatorConnectionSubscriptionBinder {
 
   public void bind(
+      UiEventPort uiEvents,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       ServerRegistry serverRegistry,
       CompositeDisposable disposables) {
     disposables.add(
-        ui.connectClicks()
+        uiEvents
+            .connectClicks()
             .observeOn(AppSchedulers.edt())
             .subscribe(ignored -> connectionCoordinator.connectAll()));
 
     disposables.add(
-        ui.disconnectClicks()
+        uiEvents
+            .disconnectClicks()
             .observeOn(AppSchedulers.edt())
             .subscribe(ignored -> connectionCoordinator.disconnectAll()));
 
     disposables.add(
-        ui.connectServerRequests()
+        uiEvents
+            .connectServerRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 connectionCoordinator::connectOne,
@@ -38,7 +43,8 @@ public class MediatorConnectionSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
 
     disposables.add(
-        ui.disconnectServerRequests()
+        uiEvents
+            .disconnectServerRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 connectionCoordinator::disconnectOne,

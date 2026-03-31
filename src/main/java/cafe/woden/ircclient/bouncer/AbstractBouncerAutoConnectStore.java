@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.bouncer;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.BouncerDiscoveryConfigPort;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.BehaviorProcessor;
 import java.util.LinkedHashMap;
@@ -12,7 +12,7 @@ import org.jmolecules.architecture.layered.ApplicationLayer;
 @ApplicationLayer
 public abstract class AbstractBouncerAutoConnectStore implements BouncerAutoConnectStore {
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final BouncerDiscoveryConfigPort runtimeConfig;
 
   // bouncerId -> (networkKey -> true)
   private final LinkedHashMap<String, LinkedHashMap<String, Boolean>> enabled =
@@ -21,7 +21,7 @@ public abstract class AbstractBouncerAutoConnectStore implements BouncerAutoConn
   private final BehaviorProcessor<Map<String, Map<String, Boolean>>> updates =
       BehaviorProcessor.create();
 
-  protected AbstractBouncerAutoConnectStore(RuntimeConfigStore runtimeConfig) {
+  protected AbstractBouncerAutoConnectStore(BouncerDiscoveryConfigPort runtimeConfig) {
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
   }
 
@@ -110,7 +110,7 @@ public abstract class AbstractBouncerAutoConnectStore implements BouncerAutoConn
     emit();
   }
 
-  protected RuntimeConfigStore runtimeConfig() {
+  protected BouncerDiscoveryConfigPort runtimeConfig() {
     return runtimeConfig;
   }
 

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
@@ -133,11 +134,41 @@ class PerformOnConnectServiceTest {
     verify(irc, never()).sendRaw("libera", "RAW NEXT");
   }
 
+  @Test
+  void skipsPerformWhenGenericPluginBackendReasonUsesDisplayName() {
+    service.shutdown();
+
+    AvailableBackendIdsPort backendMetadata = Mockito.mock(AvailableBackendIdsPort.class);
+    when(backendMetadata.backendDisplayName("plugin-backend")).thenReturn("Fancy Plugin");
+    service =
+        new PerformOnConnectService(irc, irc, backendMetadata, serverCatalog, commandParser, ui);
+
+    doReturn(Optional.of(serverWithPerform("libera", List.of("RAW NEXT"), "plugin-backend")))
+        .when(serverCatalog)
+        .find("libera");
+    when(irc.backendAvailabilityReason("libera")).thenReturn("not connected");
+
+    fireReady();
+
+    TargetRef status = new TargetRef("libera", "status");
+    verify(ui, timeout(1_000))
+        .appendStatus(
+            status,
+            "(perform)",
+            "Skipping perform list: backend unavailable (Fancy Plugin backend: not connected)");
+    verify(irc, never()).sendRaw("libera", "RAW NEXT");
+  }
+
   private void fireReady() {
     events.onNext(new ServerIrcEvent("libera", new IrcEvent.ConnectionReady(Instant.now())));
   }
 
   private static IrcProperties.Server serverWithPerform(String id, List<String> perform) {
+    return serverWithPerform(id, perform, "irc");
+  }
+
+  private static IrcProperties.Server serverWithPerform(
+      String id, List<String> perform, String backendId) {
     return new IrcProperties.Server(
         id,
         "irc.example.net",
@@ -148,8 +179,10 @@ class PerformOnConnectServiceTest {
         "tester",
         "Tester",
         null,
+        null,
         List.of(),
         perform,
-        null);
+        null,
+        backendId);
   }
 }

@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.servertree.composition;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutCoordinator;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeBuiltInLayoutOrchestrator;
 import cafe.woden.ircclient.ui.servertree.layout.ServerTreeLayoutApplier;
@@ -15,13 +16,14 @@ public final class ServerTreeLayoutCollaboratorsFactory {
   private ServerTreeLayoutCollaboratorsFactory() {}
 
   public static ServerTreeLayoutCollaborators create(
-      RuntimeConfigStore runtimeConfig,
+      ServerTreeBuiltInVisibilityConfigPort builtInVisibilityConfig,
+      ServerTreeLayoutConfigPort layoutConfig,
       ServerTreeBuiltInVisibilityCoordinator.Context builtInVisibilityContext,
       ServerTreeLayoutPersistenceCoordinator.Context layoutPersistenceContext,
       ServerTreeBuiltInLayoutOrchestrator.Context builtInLayoutOrchestratorContext) {
     ServerTreeBuiltInVisibilityCoordinator builtInVisibilityCoordinator =
         new ServerTreeBuiltInVisibilityCoordinator(
-            runtimeConfig,
+            builtInVisibilityConfig,
             Objects.requireNonNull(builtInVisibilityContext, "builtInVisibilityContext"));
     ServerTreeLayoutApplier layoutApplier = new ServerTreeLayoutApplier();
     ServerTreeLayoutPersistenceCoordinator layoutPersistenceCoordinator =
@@ -34,9 +36,9 @@ public final class ServerTreeLayoutCollaboratorsFactory {
             Objects.requireNonNull(
                 builtInLayoutOrchestratorContext, "builtInLayoutOrchestratorContext"));
     ServerTreeBuiltInLayoutCoordinator builtInLayoutCoordinator =
-        new ServerTreeBuiltInLayoutCoordinator(runtimeConfig);
+        new ServerTreeBuiltInLayoutCoordinator(layoutConfig);
     ServerTreeRootSiblingOrderCoordinator rootSiblingOrderCoordinator =
-        new ServerTreeRootSiblingOrderCoordinator(runtimeConfig);
+        new ServerTreeRootSiblingOrderCoordinator(layoutConfig);
 
     return new ServerTreeLayoutCollaborators(
         builtInVisibilityCoordinator,

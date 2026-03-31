@@ -1,8 +1,37 @@
 package cafe.woden.ircclient.config;
 
+import cafe.woden.ircclient.config.api.BouncerDiscoveryConfigPort;
 import cafe.woden.ircclient.config.api.ChatCommandRuntimeConfigPort;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.CtcpReplyRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicyScope;
+import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
+import cafe.woden.ircclient.config.api.FilterSettingsConfigPort;
+import cafe.woden.ircclient.config.api.IgnoreRulesConfigPort;
+import cafe.woden.ircclient.config.api.InterceptorConfigPort;
 import cafe.woden.ircclient.config.api.InviteAutoJoinConfigPort;
+import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.Ircv3StsPolicyConfigPort;
+import cafe.woden.ircclient.config.api.MonitorRosterConfigPort;
+import cafe.woden.ircclient.config.api.NickColorOverridesConfigPort;
+import cafe.woden.ircclient.config.api.ServerAutoConnectRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeBuiltInVisibilityConfigPort.ServerTreeBuiltInNodesVisibility;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelPreference;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelSortMode;
+import cafe.woden.ircclient.config.api.ServerTreeChannelStateConfigPort.ServerTreeChannelState;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
+import cafe.woden.ircclient.config.api.ServerTreeRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.UserCommandAliasesConfigPort;
 import cafe.woden.ircclient.model.FilterRule;
 import cafe.woden.ircclient.model.FilterScopeOverride;
 import cafe.woden.ircclient.model.InterceptorDefinition;
@@ -26,6 +55,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,9 +65,31 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 @Component
+@SecondaryAdapter
 @ApplicationLayer
 public class RuntimeConfigStore
-    implements ChatCommandRuntimeConfigPort, InviteAutoJoinConfigPort, ConnectionRuntimeConfigPort {
+    implements BouncerDiscoveryConfigPort,
+        ChatCommandRuntimeConfigPort,
+        InviteAutoJoinConfigPort,
+        ConnectionRuntimeConfigPort,
+        CtcpReplyRuntimeConfigPort,
+        DiagnosticsRuntimeConfigPort,
+        EmbedLoadPolicyConfigPort,
+        FilterSettingsConfigPort,
+        IgnoreRulesConfigPort,
+        InterceptorConfigPort,
+        Ircv3StsPolicyConfigPort,
+        IrcSessionRuntimeConfigPort,
+        MonitorRosterConfigPort,
+        NickColorOverridesConfigPort,
+        ServerTreeBuiltInVisibilityConfigPort,
+        ServerTreeChannelStateConfigPort,
+        ServerTreeLayoutConfigPort,
+        ServerTreeRuntimeConfigPort,
+        ServerAutoConnectRuntimeConfigPort,
+        UiShellRuntimeConfigPort,
+        UiSettingsRuntimeConfigPort,
+        UserCommandAliasesConfigPort {
 
   private static final Logger log = LoggerFactory.getLogger(RuntimeConfigStore.class);
   private static final java.util.Set<String> KNOWN_IGNORE_LEVELS =
@@ -67,273 +119,6 @@ public class RuntimeConfigStore
   private static final String DEFAULT_GENERIC_BOUNCER_LOGIN_TEMPLATE = "{base}/{network}";
   public static final String DEFAULT_QUIT_MESSAGE =
       ChatCommandRuntimeConfigPort.DEFAULT_QUIT_MESSAGE;
-
-  public record ServerTreeBuiltInNodesVisibility(
-      boolean server,
-      boolean notifications,
-      boolean logViewer,
-      boolean monitor,
-      boolean interceptors) {
-    public static ServerTreeBuiltInNodesVisibility defaults() {
-      return new ServerTreeBuiltInNodesVisibility(true, true, true, true, true);
-    }
-
-    public boolean isDefaultVisible() {
-      return server && notifications && logViewer && monitor && interceptors;
-    }
-  }
-
-  public enum ServerTreeBuiltInLayoutNode {
-    SERVER("server"),
-    NOTIFICATIONS("notifications"),
-    LOG_VIEWER("logViewer"),
-    FILTERS("filters"),
-    IGNORES("ignores"),
-    MONITOR("monitor"),
-    INTERCEPTORS("interceptors");
-
-    private final String token;
-
-    ServerTreeBuiltInLayoutNode(String token) {
-      this.token = token;
-    }
-
-    public String token() {
-      return token;
-    }
-
-    public static ServerTreeBuiltInLayoutNode fromToken(String token) {
-      String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
-      return switch (raw) {
-        case "server", "status" -> SERVER;
-        case "notifications", "notification" -> NOTIFICATIONS;
-        case "logviewer", "log-viewer", "log_viewer", "logviewernode", "log_viewer_node" ->
-            LOG_VIEWER;
-        case "filters", "weechatfilters", "weechat-filters", "weechat_filters" -> FILTERS;
-        case "ignores", "ignore" -> IGNORES;
-        case "monitor" -> MONITOR;
-        case "interceptors", "interceptor" -> INTERCEPTORS;
-        default -> null;
-      };
-    }
-  }
-
-  public record ServerTreeBuiltInLayout(
-      List<ServerTreeBuiltInLayoutNode> rootOrder, List<ServerTreeBuiltInLayoutNode> otherOrder) {
-    public static ServerTreeBuiltInLayout defaults() {
-      return new ServerTreeBuiltInLayout(
-          List.of(),
-          List.of(
-              ServerTreeBuiltInLayoutNode.SERVER,
-              ServerTreeBuiltInLayoutNode.NOTIFICATIONS,
-              ServerTreeBuiltInLayoutNode.LOG_VIEWER,
-              ServerTreeBuiltInLayoutNode.FILTERS,
-              ServerTreeBuiltInLayoutNode.IGNORES,
-              ServerTreeBuiltInLayoutNode.MONITOR,
-              ServerTreeBuiltInLayoutNode.INTERCEPTORS));
-    }
-
-    public boolean isDefaultLayout() {
-      return this.equals(defaults());
-    }
-  }
-
-  public enum ServerTreeRootSiblingNode {
-    CHANNEL_LIST("channelList"),
-    NOTIFICATIONS("notifications"),
-    OTHER("other"),
-    PRIVATE_MESSAGES("privateMessages");
-
-    private final String token;
-
-    ServerTreeRootSiblingNode(String token) {
-      this.token = token;
-    }
-
-    public String token() {
-      return token;
-    }
-
-    public static ServerTreeRootSiblingNode fromToken(String token) {
-      String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
-      return switch (raw) {
-        case "channellist", "channel-list", "channel_list" -> CHANNEL_LIST;
-        case "notifications", "notification" -> NOTIFICATIONS;
-        case "other" -> OTHER;
-        case "privatemessages", "private-messages", "private_messages", "pm" -> PRIVATE_MESSAGES;
-        default -> null;
-      };
-    }
-  }
-
-  public record ServerTreeRootSiblingOrder(List<ServerTreeRootSiblingNode> order) {
-    public static ServerTreeRootSiblingOrder defaults() {
-      return new ServerTreeRootSiblingOrder(
-          List.of(
-              ServerTreeRootSiblingNode.CHANNEL_LIST,
-              ServerTreeRootSiblingNode.NOTIFICATIONS,
-              ServerTreeRootSiblingNode.OTHER,
-              ServerTreeRootSiblingNode.PRIVATE_MESSAGES));
-    }
-
-    public boolean isDefaultOrder() {
-      return this.equals(defaults());
-    }
-  }
-
-  public enum ServerTreeChannelSortMode {
-    ALPHABETICAL("alphabetical"),
-    MOST_RECENT_ACTIVITY("most-recent-activity"),
-    MOST_UNREAD_MESSAGES("most-unread-messages"),
-    MOST_UNREAD_NOTIFICATIONS("most-unread-notifications"),
-    CUSTOM("custom");
-
-    private final String token;
-
-    ServerTreeChannelSortMode(String token) {
-      this.token = token;
-    }
-
-    public String token() {
-      return token;
-    }
-
-    public static ServerTreeChannelSortMode fromToken(String token) {
-      String raw = Objects.toString(token, "").trim().toLowerCase(Locale.ROOT);
-      if ("alphabetical".equals(raw) || "alpha".equals(raw) || "a-z".equals(raw)) {
-        return ALPHABETICAL;
-      }
-      if ("most-recent-activity".equals(raw)
-          || "recent-activity".equals(raw)
-          || "recent".equals(raw)
-          || "activity".equals(raw)) {
-        return MOST_RECENT_ACTIVITY;
-      }
-      if ("most-unread-messages".equals(raw)
-          || "most-unread-message".equals(raw)
-          || "unread-messages".equals(raw)
-          || "unread-message".equals(raw)
-          || "unread".equals(raw)) {
-        return MOST_UNREAD_MESSAGES;
-      }
-      if ("most-unread-notifications".equals(raw)
-          || "most-unread-notification".equals(raw)
-          || "unread-notifications".equals(raw)
-          || "unread-notification".equals(raw)
-          || "mentions".equals(raw)
-          || "highlights".equals(raw)) {
-        return MOST_UNREAD_NOTIFICATIONS;
-      }
-      return CUSTOM;
-    }
-  }
-
-  public record ServerTreeChannelPreference(
-      String channel, boolean autoReattach, boolean pinned, boolean muted) {
-    public ServerTreeChannelPreference(String channel, boolean autoReattach) {
-      this(channel, autoReattach, false, false);
-    }
-
-    public ServerTreeChannelPreference(String channel, boolean autoReattach, boolean pinned) {
-      this(channel, autoReattach, pinned, false);
-    }
-  }
-
-  public record ServerTreeChannelState(
-      ServerTreeChannelSortMode sortMode,
-      List<String> customOrder,
-      List<ServerTreeChannelPreference> channels) {
-    public static ServerTreeChannelState defaults() {
-      return new ServerTreeChannelState(ServerTreeChannelSortMode.CUSTOM, List.of(), List.of());
-    }
-  }
-
-  public record LastSelectedTarget(String serverId, String target) {
-    public LastSelectedTarget {
-      serverId = Objects.toString(serverId, "").trim();
-      target = Objects.toString(target, "").trim();
-    }
-
-    public boolean isValid() {
-      return !serverId.isEmpty() && !target.isEmpty();
-    }
-  }
-
-  public record EmbedLoadPolicyScope(
-      List<String> userWhitelist,
-      List<String> userBlacklist,
-      List<String> channelWhitelist,
-      List<String> channelBlacklist,
-      boolean requireVoiceOrOp,
-      boolean requireLoggedIn,
-      int minAccountAgeDays,
-      List<String> linkWhitelist,
-      List<String> linkBlacklist,
-      List<String> domainWhitelist,
-      List<String> domainBlacklist) {
-    public EmbedLoadPolicyScope {
-      userWhitelist = sanitizePolicyPatternList(userWhitelist);
-      userBlacklist = sanitizePolicyPatternList(userBlacklist);
-      channelWhitelist = sanitizePolicyPatternList(channelWhitelist);
-      channelBlacklist = sanitizePolicyPatternList(channelBlacklist);
-      linkWhitelist = sanitizePolicyPatternList(linkWhitelist);
-      linkBlacklist = sanitizePolicyPatternList(linkBlacklist);
-      domainWhitelist = sanitizePolicyPatternList(domainWhitelist);
-      domainBlacklist = sanitizePolicyPatternList(domainBlacklist);
-      if (minAccountAgeDays < 0) minAccountAgeDays = 0;
-    }
-
-    public static EmbedLoadPolicyScope defaults() {
-      return new EmbedLoadPolicyScope(
-          List.of(), List.of(), List.of(), List.of(), false, false, 0, List.of(), List.of(),
-          List.of(), List.of());
-    }
-
-    public boolean isDefaultScope() {
-      return this.equals(defaults());
-    }
-  }
-
-  public record EmbedLoadPolicySnapshot(
-      EmbedLoadPolicyScope global, Map<String, EmbedLoadPolicyScope> byServer) {
-    public EmbedLoadPolicySnapshot {
-      if (global == null) global = EmbedLoadPolicyScope.defaults();
-
-      LinkedHashMap<String, EmbedLoadPolicyScope> normalized = new LinkedHashMap<>();
-      if (byServer != null) {
-        for (Map.Entry<String, EmbedLoadPolicyScope> entry : byServer.entrySet()) {
-          String serverId = Objects.toString(entry.getKey(), "").trim();
-          if (serverId.isEmpty()) continue;
-          EmbedLoadPolicyScope scope =
-              entry.getValue() == null ? EmbedLoadPolicyScope.defaults() : entry.getValue();
-          if (scope.isDefaultScope()) continue;
-          normalized.put(serverId, scope);
-        }
-      }
-      byServer = normalized.isEmpty() ? Map.of() : Map.copyOf(normalized);
-    }
-
-    public static EmbedLoadPolicySnapshot defaults() {
-      return new EmbedLoadPolicySnapshot(EmbedLoadPolicyScope.defaults(), Map.of());
-    }
-
-    public boolean isDefaultPolicy() {
-      return this.equals(defaults());
-    }
-
-    public EmbedLoadPolicyScope scopeForServer(String serverId) {
-      String sid = Objects.toString(serverId, "").trim();
-      if (sid.isEmpty() || byServer == null || byServer.isEmpty()) return global;
-      EmbedLoadPolicyScope exact = byServer.get(sid);
-      if (exact != null) return exact;
-      for (Map.Entry<String, EmbedLoadPolicyScope> entry : byServer.entrySet()) {
-        if (sid.equalsIgnoreCase(Objects.toString(entry.getKey(), "").trim())) {
-          return entry.getValue();
-        }
-      }
-      return global;
-    }
-  }
 
   private final Path file;
   private final IrcProperties defaults;
@@ -397,19 +182,11 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return Optional.empty();
 
       Map<String, Object> doc = loadFile();
+      Optional<Object> value =
+          RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "ui", "tray", "closeToTray");
+      if (value.isEmpty()) return Optional.empty();
 
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Optional.empty();
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return Optional.empty();
-
-      Object trayObj = ui.get("tray");
-      if (!(trayObj instanceof Map<?, ?> tray)) return Optional.empty();
-
-      if (!tray.containsKey("closeToTray")) return Optional.empty();
-
-      Object v = tray.get("closeToTray");
+      Object v = value.get();
       if (v == null) return Optional.empty();
 
       if (v instanceof Boolean b) return Optional.of(b);
@@ -437,17 +214,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object trayObj = ui.get("tray");
-      if (!(trayObj instanceof Map<?, ?> tray)) return defaultValue;
-
-      if (!tray.containsKey("closeToTrayHintShown")) return defaultValue;
-      return asBoolean(tray.get("closeToTrayHintShown")).orElse(defaultValue);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "tray", "closeToTrayHintShown")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read tray.closeToTrayHintShown from '{}'", file, e);
       return defaultValue;
@@ -466,17 +236,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object invitesObj = ui.get("invites");
-      if (!(invitesObj instanceof Map<?, ?> invites)) return defaultValue;
-
-      if (!invites.containsKey("autoJoinOnInvite")) return defaultValue;
-      return asBoolean(invites.get("autoJoinOnInvite")).orElse(defaultValue);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "invites", "autoJoinOnInvite")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read invites.autoJoinOnInvite from '{}'", file, e);
       return defaultValue;
@@ -494,17 +257,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object updateNotifierObj = ui.get("updateNotifier");
-      if (!(updateNotifierObj instanceof Map<?, ?> updateNotifier)) return defaultValue;
-
-      if (!updateNotifier.containsKey("enabled")) return defaultValue;
-      return asBoolean(updateNotifier.get("enabled")).orElse(defaultValue);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "updateNotifier", "enabled")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.updateNotifier.enabled from '{}'", file, e);
       return defaultValue;
@@ -522,17 +278,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object lagIndicatorObj = ui.get("lagIndicator");
-      if (!(lagIndicatorObj instanceof Map<?, ?> lagIndicator)) return defaultValue;
-
-      if (!lagIndicator.containsKey("enabled")) return defaultValue;
-      return asBoolean(lagIndicator.get("enabled")).orElse(defaultValue);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "lagIndicator", "enabled")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.lagIndicator.enabled from '{}'", file, e);
       return defaultValue;
@@ -713,10 +462,12 @@ public class RuntimeConfigStore
     rememberServerTreeChannel(serverId, channel);
   }
 
+  @Override
   public synchronized void forgetJoinedChannel(String serverId, String channel) {
     forgetServerTreeChannel(serverId, channel);
   }
 
+  @Override
   public synchronized List<String> readJoinedChannels(String serverId) {
     return readServerAutoJoinChannels(serverId);
   }
@@ -739,6 +490,7 @@ public class RuntimeConfigStore
     return out.isEmpty() ? List.of() : List.copyOf(out);
   }
 
+  @Override
   public synchronized boolean readServerTreeChannelAutoReattach(
       String serverId, String channel, boolean defaultValue) {
     String sid = Objects.toString(serverId, "").trim();
@@ -1423,6 +1175,7 @@ public class RuntimeConfigStore
         });
   }
 
+  @Override
   public synchronized void replaceMonitorNicks(String serverId, List<String> nicks) {
     updateServer(
         serverId,
@@ -1436,6 +1189,7 @@ public class RuntimeConfigStore
         });
   }
 
+  @Override
   public synchronized List<String> readMonitorNicks(String serverId) {
     try {
       if (file.toString().isBlank()) return List.of();
@@ -1498,13 +1252,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return Optional.empty();
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return Optional.empty();
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return Optional.empty();
-
-      String theme = Objects.toString(ui.get("startupThemePending"), "").trim();
+      String theme =
+          RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "ui", "startupThemePending")
+              .map(raw -> Objects.toString(raw, "").trim())
+              .orElse("");
       if (theme.isEmpty()) return Optional.empty();
       return Optional.of(theme);
     } catch (Exception e) {
@@ -1518,7 +1269,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
 
@@ -1572,16 +1323,11 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return fallback;
-
-      Object raw = ui.get("memoryUsageRefreshIntervalMs");
-      if (raw == null) return fallback;
-
-      return asInt(raw).map(this::clampMemoryUsageRefreshIntervalMs).orElse(fallback);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "memoryUsageRefreshIntervalMs")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(this::clampMemoryUsageRefreshIntervalMs)
+          .orElse(fallback);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.memoryUsageRefreshIntervalMs from '{}'", file, e);
       return fallback;
@@ -1593,7 +1339,7 @@ public class RuntimeConfigStore
       if (file.toString().isBlank()) return;
 
       int normalized = clampMemoryUsageRefreshIntervalMs(intervalMs);
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       ui.put("memoryUsageRefreshIntervalMs", normalized);
@@ -1660,20 +1406,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object appDiagObj = ui.get("appDiagnostics");
-      if (!(appDiagObj instanceof Map<?, ?> appDiag)) return defaultValue;
-
-      Object jfrObj = appDiag.get("jfr");
-      if (!(jfrObj instanceof Map<?, ?> jfr)) return defaultValue;
-
-      if (!jfr.containsKey("enabled")) return defaultValue;
-      return asBoolean(jfr.get("enabled")).orElse(defaultValue);
+      return RuntimeConfigDocumentPathReader.readValue(
+              doc, "ircafe", "ui", "appDiagnostics", "jfr", "enabled")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.appDiagnostics.jfr.enabled from '{}'", file, e);
       return defaultValue;
@@ -1689,11 +1425,8 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiag = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> jfr = getOrCreateMap(appDiag, "jfr");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> jfr = getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "jfr");
       jfr.put("enabled", enabled);
 
       writeFile(doc);
@@ -2551,7 +2284,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       Map<String, Object> invites = getOrCreateMap(ui, "invites");
@@ -2568,7 +2301,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       Map<String, Object> updateNotifier = getOrCreateMap(ui, "updateNotifier");
@@ -2585,7 +2318,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       Map<String, Object> lagIndicator = getOrCreateMap(ui, "lagIndicator");
@@ -2619,7 +2352,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       Map<String, Object> tray = getOrCreateMap(ui, "tray");
@@ -2636,7 +2369,7 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> doc = loadFileOrEmpty();
       Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
       Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
       Map<String, Object> tray = getOrCreateMap(ui, "tray");
@@ -3019,6 +2752,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized List<UserCommandAlias> readUserCommandAliases() {
     try {
       if (file.toString().isBlank()) return List.of();
@@ -3056,6 +2790,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized boolean readUnknownCommandAsRawEnabled(boolean defaultValue) {
     try {
       if (file.toString().isBlank()) return defaultValue;
@@ -3112,25 +2847,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return clampAssertjFreezeThresholdMs(defaultValue);
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe))
-        return clampAssertjFreezeThresholdMs(defaultValue);
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return clampAssertjFreezeThresholdMs(defaultValue);
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics))
-        return clampAssertjFreezeThresholdMs(defaultValue);
-
-      Object assertjObj = appDiagnostics.get("assertjSwing");
-      if (!(assertjObj instanceof Map<?, ?> assertjSwing))
-        return clampAssertjFreezeThresholdMs(defaultValue);
-
-      if (!assertjSwing.containsKey("edtFreezeThresholdMs"))
-        return clampAssertjFreezeThresholdMs(defaultValue);
-      return clampAssertjFreezeThresholdMs(
-          asInt(assertjSwing.get("edtFreezeThresholdMs")).orElse(defaultValue));
+      return readAssertjSwingValue(doc, "edtFreezeThresholdMs")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(RuntimeConfigStore::clampAssertjFreezeThresholdMs)
+          .orElse(clampAssertjFreezeThresholdMs(defaultValue));
     } catch (Exception e) {
       log.warn(
           "[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtFreezeThresholdMs from '{}'",
@@ -3146,24 +2866,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return clampAssertjWatchdogPollMs(defaultValue);
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return clampAssertjWatchdogPollMs(defaultValue);
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return clampAssertjWatchdogPollMs(defaultValue);
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics))
-        return clampAssertjWatchdogPollMs(defaultValue);
-
-      Object assertjObj = appDiagnostics.get("assertjSwing");
-      if (!(assertjObj instanceof Map<?, ?> assertjSwing))
-        return clampAssertjWatchdogPollMs(defaultValue);
-
-      if (!assertjSwing.containsKey("edtWatchdogPollMs"))
-        return clampAssertjWatchdogPollMs(defaultValue);
-      return clampAssertjWatchdogPollMs(
-          asInt(assertjSwing.get("edtWatchdogPollMs")).orElse(defaultValue));
+      return readAssertjSwingValue(doc, "edtWatchdogPollMs")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(RuntimeConfigStore::clampAssertjWatchdogPollMs)
+          .orElse(clampAssertjWatchdogPollMs(defaultValue));
     } catch (Exception e) {
       log.warn(
           "[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtWatchdogPollMs from '{}'",
@@ -3180,28 +2886,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return clampAssertjFallbackViolationReportMs(defaultValue);
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe))
-        return clampAssertjFallbackViolationReportMs(defaultValue);
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui))
-        return clampAssertjFallbackViolationReportMs(defaultValue);
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics))
-        return clampAssertjFallbackViolationReportMs(defaultValue);
-
-      Object assertjObj = appDiagnostics.get("assertjSwing");
-      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) {
-        return clampAssertjFallbackViolationReportMs(defaultValue);
-      }
-
-      if (!assertjSwing.containsKey("edtFallbackViolationReportMs")) {
-        return clampAssertjFallbackViolationReportMs(defaultValue);
-      }
-      return clampAssertjFallbackViolationReportMs(
-          asInt(assertjSwing.get("edtFallbackViolationReportMs")).orElse(defaultValue));
+      return readAssertjSwingValue(doc, "edtFallbackViolationReportMs")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(RuntimeConfigStore::clampAssertjFallbackViolationReportMs)
+          .orElse(clampAssertjFallbackViolationReportMs(defaultValue));
     } catch (Exception e) {
       log.warn(
           "[ircafe] Could not read ui.appDiagnostics.assertjSwing.edtFallbackViolationReportMs from '{}'",
@@ -3226,20 +2914,9 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return defaultValue;
-
-      Object jhiccupObj = appDiagnostics.get("jhiccup");
-      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return defaultValue;
-
-      if (!jhiccup.containsKey("enabled")) return defaultValue;
-      return asBoolean(jhiccup.get("enabled")).orElse(defaultValue);
+      return readJhiccupValue(doc, "enabled")
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.enabled from '{}'", file, e);
       return defaultValue;
@@ -3248,28 +2925,16 @@ public class RuntimeConfigStore
 
   public synchronized String readAppDiagnosticsJhiccupJarPath(String defaultValue) {
     try {
-      if (file.toString().isBlank()) return Objects.toString(defaultValue, "").trim();
-      if (!Files.exists(file)) return Objects.toString(defaultValue, "").trim();
+      String fallback = Objects.toString(defaultValue, "").trim();
+      if (file.toString().isBlank()) return fallback;
+      if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe))
-        return Objects.toString(defaultValue, "").trim();
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return Objects.toString(defaultValue, "").trim();
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics))
-        return Objects.toString(defaultValue, "").trim();
-
-      Object jhiccupObj = appDiagnostics.get("jhiccup");
-      if (!(jhiccupObj instanceof Map<?, ?> jhiccup))
-        return Objects.toString(defaultValue, "").trim();
-
-      if (!jhiccup.containsKey("jarPath")) return Objects.toString(defaultValue, "").trim();
-      String raw = Objects.toString(jhiccup.get("jarPath"), "").trim();
-      return raw.isEmpty() ? Objects.toString(defaultValue, "").trim() : raw;
+      String raw =
+          readJhiccupValue(doc, "jarPath")
+              .map(value -> Objects.toString(value, "").trim())
+              .orElse("");
+      return raw.isEmpty() ? fallback : raw;
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.jarPath from '{}'", file, e);
       return Objects.toString(defaultValue, "").trim();
@@ -3284,20 +2949,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return fallback;
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return fallback;
-
-      Object jhiccupObj = appDiagnostics.get("jhiccup");
-      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return fallback;
-
-      if (!jhiccup.containsKey("javaCommand")) return fallback;
-      String raw = Objects.toString(jhiccup.get("javaCommand"), "").trim();
+      String raw =
+          readJhiccupValue(doc, "javaCommand")
+              .map(value -> Objects.toString(value, "").trim())
+              .orElse("");
       return raw.isEmpty() ? fallback : raw;
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.appDiagnostics.jhiccup.javaCommand from '{}'", file, e);
@@ -3312,20 +2967,7 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return sanitizeArgs(defaultValue);
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return sanitizeArgs(defaultValue);
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return sanitizeArgs(defaultValue);
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return sanitizeArgs(defaultValue);
-
-      Object jhiccupObj = appDiagnostics.get("jhiccup");
-      if (!(jhiccupObj instanceof Map<?, ?> jhiccup)) return sanitizeArgs(defaultValue);
-
-      if (!jhiccup.containsKey("args")) return sanitizeArgs(defaultValue);
-      Object argsObj = jhiccup.get("args");
+      Object argsObj = readJhiccupValue(doc, "args").orElse(null);
       if (!(argsObj instanceof List<?> raw)) return sanitizeArgs(defaultValue);
 
       List<String> out = new ArrayList<>();
@@ -3346,24 +2988,30 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return defaultValue;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return defaultValue;
-
-      Object uiObj = ircafe.get("ui");
-      if (!(uiObj instanceof Map<?, ?> ui)) return defaultValue;
-
-      Object appObj = ui.get("appDiagnostics");
-      if (!(appObj instanceof Map<?, ?> appDiagnostics)) return defaultValue;
-
-      Object assertjObj = appDiagnostics.get("assertjSwing");
-      if (!(assertjObj instanceof Map<?, ?> assertjSwing)) return defaultValue;
-
-      if (!assertjSwing.containsKey(key)) return defaultValue;
-      return asBoolean(assertjSwing.get(key)).orElse(defaultValue);
+      return readAssertjSwingValue(doc, key)
+          .flatMap(RuntimeConfigStore::asBoolean)
+          .orElse(defaultValue);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read ui.appDiagnostics.assertjSwing.{} from '{}'", key, file, e);
       return defaultValue;
     }
+  }
+
+  private Optional<Object> readAssertjSwingValue(Map<String, Object> doc, String key) {
+    return readAppDiagnosticsValue(doc, "assertjSwing", key);
+  }
+
+  private Optional<Object> readJhiccupValue(Map<String, Object> doc, String key) {
+    return readAppDiagnosticsValue(doc, "jhiccup", key);
+  }
+
+  private Optional<Object> readAppDiagnosticsValue(Map<String, Object> doc, String... path) {
+    String[] fullPath = new String[path.length + 3];
+    fullPath[0] = "ircafe";
+    fullPath[1] = "ui";
+    fullPath[2] = "appDiagnostics";
+    System.arraycopy(path, 0, fullPath, 3, path.length);
+    return RuntimeConfigDocumentPathReader.readValue(doc, fullPath);
   }
 
   private static int clampAssertjFreezeThresholdMs(int value) {
@@ -3402,17 +3050,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object launchObj = ircafe.get("launch");
-      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
-
-      Object jvmObj = launch.get("jvm");
-      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
-
-      if (!jvm.containsKey("javaCommand")) return fallback;
-      String raw = Objects.toString(jvm.get("javaCommand"), "").trim();
+      String raw =
+          RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "launch", "jvm", "javaCommand")
+              .map(value -> Objects.toString(value, "").trim())
+              .orElse("");
       return raw.isEmpty() ? fallback : raw;
     } catch (Exception e) {
       log.warn("[ircafe] Could not read launch.jvm.javaCommand from '{}'", file, e);
@@ -3427,17 +3068,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object launchObj = ircafe.get("launch");
-      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
-
-      Object jvmObj = launch.get("jvm");
-      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
-
-      if (!jvm.containsKey("xmsMiB")) return fallback;
-      return clampLaunchJvmHeapMiB(asInt(jvm.get("xmsMiB")).orElse(fallback));
+      return RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "launch", "jvm", "xmsMiB")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(RuntimeConfigStore::clampLaunchJvmHeapMiB)
+          .orElse(fallback);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read launch.jvm.xmsMiB from '{}'", file, e);
       return fallback;
@@ -3451,17 +3085,10 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object launchObj = ircafe.get("launch");
-      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
-
-      Object jvmObj = launch.get("jvm");
-      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
-
-      if (!jvm.containsKey("xmxMiB")) return fallback;
-      return clampLaunchJvmHeapMiB(asInt(jvm.get("xmxMiB")).orElse(fallback));
+      return RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "launch", "jvm", "xmxMiB")
+          .flatMap(RuntimeConfigStore::asInt)
+          .map(RuntimeConfigStore::clampLaunchJvmHeapMiB)
+          .orElse(fallback);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read launch.jvm.xmxMiB from '{}'", file, e);
       return fallback;
@@ -3475,17 +3102,9 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return fallback;
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return fallback;
-
-      Object launchObj = ircafe.get("launch");
-      if (!(launchObj instanceof Map<?, ?> launch)) return fallback;
-
-      Object jvmObj = launch.get("jvm");
-      if (!(jvmObj instanceof Map<?, ?> jvm)) return fallback;
-
-      if (!jvm.containsKey("gc")) return fallback;
-      return normalizeLaunchJvmGc(jvm.get("gc"));
+      return RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "launch", "jvm", "gc")
+          .map(RuntimeConfigStore::normalizeLaunchJvmGc)
+          .orElse(fallback);
     } catch (Exception e) {
       log.warn("[ircafe] Could not read launch.jvm.gc from '{}'", file, e);
       return fallback;
@@ -3498,17 +3117,9 @@ public class RuntimeConfigStore
       if (!Files.exists(file)) return sanitizeArgs(defaultValue);
 
       Map<String, Object> doc = loadFile();
-      Object ircafeObj = doc.get("ircafe");
-      if (!(ircafeObj instanceof Map<?, ?> ircafe)) return sanitizeArgs(defaultValue);
-
-      Object launchObj = ircafe.get("launch");
-      if (!(launchObj instanceof Map<?, ?> launch)) return sanitizeArgs(defaultValue);
-
-      Object jvmObj = launch.get("jvm");
-      if (!(jvmObj instanceof Map<?, ?> jvm)) return sanitizeArgs(defaultValue);
-
-      if (!jvm.containsKey("args")) return sanitizeArgs(defaultValue);
-      Object argsObj = jvm.get("args");
+      Object argsObj =
+          RuntimeConfigDocumentPathReader.readValue(doc, "ircafe", "launch", "jvm", "args")
+              .orElse(null);
       if (!(argsObj instanceof List<?> raw)) return sanitizeArgs(defaultValue);
 
       List<String> out = new ArrayList<>();
@@ -3530,10 +3141,9 @@ public class RuntimeConfigStore
       String cmd = Objects.toString(javaCommand, "").trim();
       if (cmd.isEmpty() || cmd.equalsIgnoreCase("java")) cmd = "";
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
-      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+      Map<String, Object> doc = loadFileOrEmpty();
+      LaunchJvmWritePath path = getOrCreateLaunchJvmWritePath(doc);
+      Map<String, Object> jvm = path.jvm();
 
       if (cmd.isEmpty()) {
         jvm.remove("javaCommand");
@@ -3541,7 +3151,7 @@ public class RuntimeConfigStore
         jvm.put("javaCommand", cmd);
       }
 
-      cleanupLaunchJvm(ircafe, launch, jvm);
+      cleanupLaunchJvm(path);
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist launch.jvm.javaCommand to '{}'", file, e);
@@ -3554,10 +3164,9 @@ public class RuntimeConfigStore
 
       int v = clampLaunchJvmHeapMiB(xmsMiB);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
-      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+      Map<String, Object> doc = loadFileOrEmpty();
+      LaunchJvmWritePath path = getOrCreateLaunchJvmWritePath(doc);
+      Map<String, Object> jvm = path.jvm();
 
       if (v <= 0) {
         jvm.remove("xmsMiB");
@@ -3565,7 +3174,7 @@ public class RuntimeConfigStore
         jvm.put("xmsMiB", v);
       }
 
-      cleanupLaunchJvm(ircafe, launch, jvm);
+      cleanupLaunchJvm(path);
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist launch.jvm.xmsMiB to '{}'", file, e);
@@ -3578,10 +3187,9 @@ public class RuntimeConfigStore
 
       int v = clampLaunchJvmHeapMiB(xmxMiB);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
-      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+      Map<String, Object> doc = loadFileOrEmpty();
+      LaunchJvmWritePath path = getOrCreateLaunchJvmWritePath(doc);
+      Map<String, Object> jvm = path.jvm();
 
       if (v <= 0) {
         jvm.remove("xmxMiB");
@@ -3589,7 +3197,7 @@ public class RuntimeConfigStore
         jvm.put("xmxMiB", v);
       }
 
-      cleanupLaunchJvm(ircafe, launch, jvm);
+      cleanupLaunchJvm(path);
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist launch.jvm.xmxMiB to '{}'", file, e);
@@ -3602,10 +3210,9 @@ public class RuntimeConfigStore
 
       String normalized = normalizeLaunchJvmGc(gc);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
-      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+      Map<String, Object> doc = loadFileOrEmpty();
+      LaunchJvmWritePath path = getOrCreateLaunchJvmWritePath(doc);
+      Map<String, Object> jvm = path.jvm();
 
       if (normalized.isEmpty()) {
         jvm.remove("gc");
@@ -3613,7 +3220,7 @@ public class RuntimeConfigStore
         jvm.put("gc", normalized);
       }
 
-      cleanupLaunchJvm(ircafe, launch, jvm);
+      cleanupLaunchJvm(path);
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist launch.jvm.gc to '{}'", file, e);
@@ -3626,10 +3233,9 @@ public class RuntimeConfigStore
 
       List<String> sanitized = sanitizeArgs(args);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
-      Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+      Map<String, Object> doc = loadFileOrEmpty();
+      LaunchJvmWritePath path = getOrCreateLaunchJvmWritePath(doc);
+      Map<String, Object> jvm = path.jvm();
 
       if (sanitized.isEmpty()) {
         jvm.remove("args");
@@ -3637,7 +3243,7 @@ public class RuntimeConfigStore
         jvm.put("args", sanitized);
       }
 
-      cleanupLaunchJvm(ircafe, launch, jvm);
+      cleanupLaunchJvm(path);
       writeFile(doc);
     } catch (Exception e) {
       log.warn("[ircafe] Could not persist launch.jvm.args to '{}'", file, e);
@@ -3674,18 +3280,36 @@ public class RuntimeConfigStore
     }
   }
 
+  private static void cleanupLaunchJvm(LaunchJvmWritePath path) {
+    cleanupLaunchJvm(path.ircafe(), path.launch(), path.jvm());
+  }
+
+  private static LaunchJvmWritePath getOrCreateLaunchJvmWritePath(Map<String, Object> doc) {
+    Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+    Map<String, Object> launch = getOrCreateMap(ircafe, "launch");
+    Map<String, Object> jvm = getOrCreateMap(launch, "jvm");
+    return new LaunchJvmWritePath(ircafe, launch, jvm);
+  }
+
+  private record LaunchJvmWritePath(
+      Map<String, Object> ircafe, Map<String, Object> launch, Map<String, Object> jvm) {}
+
+  @Override
   public synchronized boolean readCtcpAutoRepliesEnabled(boolean defaultValue) {
     return readCtcpAutoReplyValue("enabled", defaultValue);
   }
 
+  @Override
   public synchronized boolean readCtcpAutoReplyVersionEnabled(boolean defaultValue) {
     return readCtcpAutoReplyValue("version", defaultValue);
   }
 
+  @Override
   public synchronized boolean readCtcpAutoReplyPingEnabled(boolean defaultValue) {
     return readCtcpAutoReplyValue("ping", defaultValue);
   }
 
+  @Override
   public synchronized boolean readCtcpAutoReplyTimeEnabled(boolean defaultValue) {
     return readCtcpAutoReplyValue("time", defaultValue);
   }
@@ -3771,11 +3395,9 @@ public class RuntimeConfigStore
 
       int v = clampAssertjFreezeThresholdMs(ms);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> assertjSwing =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "assertjSwing");
 
       assertjSwing.put("edtFreezeThresholdMs", v);
 
@@ -3794,11 +3416,9 @@ public class RuntimeConfigStore
 
       int v = clampAssertjWatchdogPollMs(ms);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> assertjSwing =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "assertjSwing");
 
       assertjSwing.put("edtWatchdogPollMs", v);
 
@@ -3817,11 +3437,9 @@ public class RuntimeConfigStore
 
       int v = clampAssertjFallbackViolationReportMs(ms);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> assertjSwing =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "assertjSwing");
 
       assertjSwing.put("edtFallbackViolationReportMs", v);
 
@@ -3848,11 +3466,9 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> jhiccup =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "jhiccup");
 
       jhiccup.put("enabled", enabled);
 
@@ -3868,11 +3484,9 @@ public class RuntimeConfigStore
 
       String v = Objects.toString(jarPath, "").trim();
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> jhiccup =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "jhiccup");
 
       if (v.isEmpty()) {
         jhiccup.remove("jarPath");
@@ -3892,11 +3506,9 @@ public class RuntimeConfigStore
 
       String v = Objects.toString(javaCommand, "").trim();
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> jhiccup =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "jhiccup");
 
       if (v.isEmpty()) {
         jhiccup.remove("javaCommand");
@@ -3916,11 +3528,9 @@ public class RuntimeConfigStore
 
       List<String> sanitized = sanitizeArgs(args);
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> jhiccup = getOrCreateMap(appDiagnostics, "jhiccup");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> jhiccup =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "jhiccup");
 
       if (sanitized.isEmpty()) {
         jhiccup.remove("args");
@@ -3938,11 +3548,9 @@ public class RuntimeConfigStore
     try {
       if (file.toString().isBlank()) return;
 
-      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
-      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
-      Map<String, Object> ui = getOrCreateMap(ircafe, "ui");
-      Map<String, Object> appDiagnostics = getOrCreateMap(ui, "appDiagnostics");
-      Map<String, Object> assertjSwing = getOrCreateMap(appDiagnostics, "assertjSwing");
+      Map<String, Object> doc = loadFileOrEmpty();
+      Map<String, Object> assertjSwing =
+          getOrCreateMapPath(doc, "ircafe", "ui", "appDiagnostics", "assertjSwing");
 
       assertjSwing.put(key, value);
 
@@ -4966,20 +4574,14 @@ public class RuntimeConfigStore
     }
   }
 
-  /** Persisted IRCv3 STS policy snapshot under {@code ircafe.ircv3.stsPolicies.<host>}. */
-  public record Ircv3StsPolicySnapshot(
-      long expiresAtEpochMs,
-      Integer port,
-      boolean preload,
-      long durationSeconds,
-      String rawValue) {}
-
   /**
    * Reads persisted IRCv3 STS policy snapshots under {@code ircafe.ircv3.stsPolicies}.
    *
    * <p>Entries with invalid hosts or missing/invalid expiry are ignored.
    */
-  public synchronized Map<String, Ircv3StsPolicySnapshot> readIrcv3StsPolicies() {
+  @Override
+  public synchronized Map<String, Ircv3StsPolicyConfigPort.StsPolicySnapshot>
+      readIrcv3StsPolicies() {
     try {
       if (file.toString().isBlank()) return Map.of();
       if (!Files.exists(file)) return Map.of();
@@ -4994,7 +4596,7 @@ public class RuntimeConfigStore
       Object policiesObj = ircv3.get("stsPolicies");
       if (!(policiesObj instanceof Map<?, ?> policies)) return Map.of();
 
-      Map<String, Ircv3StsPolicySnapshot> out = new LinkedHashMap<>();
+      Map<String, Ircv3StsPolicyConfigPort.StsPolicySnapshot> out = new LinkedHashMap<>();
       for (Map.Entry<?, ?> entry : policies.entrySet()) {
         String host = normalizeHostKey(Objects.toString(entry.getKey(), ""));
         if (host == null) continue;
@@ -5013,7 +4615,8 @@ public class RuntimeConfigStore
 
         out.put(
             host,
-            new Ircv3StsPolicySnapshot(expiresAtEpochMs, port, preload, durationSeconds, rawValue));
+            new Ircv3StsPolicyConfigPort.StsPolicySnapshot(
+                expiresAtEpochMs, port, preload, durationSeconds, rawValue));
       }
       return out;
     } catch (Exception e) {
@@ -5023,6 +4626,7 @@ public class RuntimeConfigStore
   }
 
   /** Persists one IRCv3 STS policy snapshot under {@code ircafe.ircv3.stsPolicies.<host>}. */
+  @Override
   public synchronized void rememberIrcv3StsPolicy(
       String host,
       long expiresAtEpochMs,
@@ -5072,6 +4676,7 @@ public class RuntimeConfigStore
   }
 
   /** Removes a persisted IRCv3 STS policy snapshot from {@code ircafe.ircv3.stsPolicies}. */
+  @Override
   public synchronized void forgetIrcv3StsPolicy(String host) {
     try {
       if (file.toString().isBlank()) return;
@@ -5158,6 +4763,7 @@ public class RuntimeConfigStore
    * Returns whether a given IRCv3 capability should be requested, falling back to {@code
    * defaultEnabled} when no explicit override is present.
    */
+  @Override
   public synchronized boolean isIrcv3CapabilityEnabled(String capability, boolean defaultEnabled) {
     String key = normalizeCapabilityKey(capability);
     if (key == null) return defaultEnabled;
@@ -5170,6 +4776,7 @@ public class RuntimeConfigStore
    *
    * <p>Default behavior is "enabled", so enabled values are removed to keep YAML concise.
    */
+  @Override
   public synchronized void rememberIrcv3CapabilityEnabled(String capability, boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -6346,6 +5953,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -6377,6 +5985,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMaskLevels(
       String serverId, String mask, List<String> levels) {
     try {
@@ -6427,6 +6036,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMaskChannels(
       String serverId, String mask, List<String> channels) {
     try {
@@ -6475,6 +6085,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMaskExpiresAt(
       String serverId, String mask, Long expiresAtEpochMs) {
     try {
@@ -6521,6 +6132,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMaskPattern(
       String serverId, String mask, String pattern, String modeToken) {
     try {
@@ -6583,6 +6195,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberIgnoreMaskReplies(
       String serverId, String mask, boolean repliesEnabled) {
     try {
@@ -6677,6 +6290,7 @@ public class RuntimeConfigStore
     };
   }
 
+  @Override
   public synchronized void forgetIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -6783,6 +6397,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberSoftIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -6814,6 +6429,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void forgetSoftIgnoreMask(String serverId, String mask) {
     try {
       if (file.toString().isBlank()) return;
@@ -6859,6 +6475,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberHardIgnoreIncludesCtcp(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -6875,6 +6492,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberSoftIgnoreIncludesCtcp(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;
@@ -6918,16 +6536,19 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberSojuAutoConnectNetwork(
       String bouncerServerId, String networkName, boolean enabled) {
     rememberBouncerAutoConnectNetwork("soju", bouncerServerId, networkName, enabled);
   }
 
+  @Override
   public synchronized void rememberZncAutoConnectNetwork(
       String bouncerServerId, String networkName, boolean enabled) {
     rememberBouncerAutoConnectNetwork("znc", bouncerServerId, networkName, enabled);
   }
 
+  @Override
   public synchronized Map<String, Map<String, Boolean>> readGenericBouncerAutoConnectRules() {
     try {
       if (file.toString().isBlank()) return Map.of();
@@ -6968,11 +6589,13 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized void rememberGenericBouncerAutoConnectNetwork(
       String bouncerServerId, String networkName, boolean enabled) {
     rememberBouncerAutoConnectNetwork("bouncer", bouncerServerId, networkName, enabled);
   }
 
+  @Override
   public synchronized String readGenericBouncerLoginTemplate(String defaultValue) {
     String fallback = normalizeGenericBouncerLoginTemplate(defaultValue);
     try {
@@ -6997,6 +6620,7 @@ public class RuntimeConfigStore
     }
   }
 
+  @Override
   public synchronized boolean readGenericBouncerPreferLoginHint(boolean defaultValue) {
     try {
       if (file.toString().isBlank()) return defaultValue;
@@ -7212,6 +6836,10 @@ public class RuntimeConfigStore
     }
   }
 
+  private Map<String, Object> loadFileOrEmpty() throws IOException {
+    return Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+  }
+
   private void writeFile(Map<String, Object> doc) throws IOException {
     if (mutationBatchDepth > 0) {
       mutationBatchDoc = (doc == null) ? new LinkedHashMap<>() : doc;
@@ -7240,6 +6868,14 @@ public class RuntimeConfigStore
     return created;
   }
 
+  private static Map<String, Object> getOrCreateMapPath(Map<String, Object> root, String... path) {
+    Map<String, Object> current = root;
+    for (String segment : path) {
+      current = getOrCreateMap(current, segment);
+    }
+    return current;
+  }
+
   @SuppressWarnings("unchecked")
   private static Optional<List<Map<String, Object>>> readServerList(Map<String, Object> irc) {
     Object o = irc.get("servers");
@@ -7256,8 +6892,10 @@ public class RuntimeConfigStore
     m.put("host", s.host());
     m.put("port", s.port());
     m.put("tls", s.tls());
-    if (s.backend() != null && s.backend() != IrcProperties.Server.Backend.IRC) {
-      m.put("backend", s.backend().token());
+    String backendId = BackendDescriptorCatalog.builtIns().normalizeIdOrDefault(s.backendId());
+    if (!backendId.equals(
+        BackendDescriptorCatalog.builtIns().idFor(IrcProperties.Server.Backend.IRC))) {
+      m.put("backend", backendId);
     }
     if (s.serverPassword() != null && !s.serverPassword().isBlank()) {
       m.put("serverPassword", s.serverPassword());

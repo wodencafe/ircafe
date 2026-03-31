@@ -1,7 +1,6 @@
 package cafe.woden.ircclient.ui.coordinator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -9,7 +8,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import java.time.Instant;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ChatBanListCoordinatorTest {
@@ -24,13 +22,14 @@ class ChatBanListCoordinatorTest {
         "libera", "#ircafe", "*!*@example.org", "ChanServ", 1_700_000_000L);
     coordinator.endBanList("libera", "#ircafe", "End of channel ban list");
 
-    List<String> snapshot = coordinator.snapshot("libera", "#ircafe");
+    ChannelListPanel.BanListSnapshot snapshot = coordinator.snapshot("libera", "#ircafe");
 
-    assertEquals(2, snapshot.size());
-    assertTrue(snapshot.getFirst().contains("*!*@example.org"));
-    assertTrue(snapshot.getFirst().contains("set by ChanServ"));
-    assertTrue(snapshot.getFirst().contains(Instant.ofEpochSecond(1_700_000_000L).toString()));
-    assertEquals("End of channel ban list", snapshot.get(1));
+    assertEquals(1, snapshot.entries().size());
+    ChannelListPanel.BanListEntryRow row = snapshot.entries().getFirst();
+    assertEquals("*!*@example.org", row.mask());
+    assertEquals("ChanServ", row.setBy());
+    assertEquals(Instant.ofEpochSecond(1_700_000_000L).toString(), row.setAt());
+    assertEquals("End of channel ban list", snapshot.summary());
     verify(channelListPanel, times(3)).refreshOpenChannelDetails("libera", "#ircafe");
   }
 
@@ -46,11 +45,11 @@ class ChatBanListCoordinatorTest {
     coordinator.beginBanList("libera", "#ircafe");
     coordinator.appendBanListEntry("libera", "#ircafe", "*!*@new.example", "Oper", null);
 
-    List<String> snapshot = coordinator.snapshot("libera", "#ircafe");
+    ChannelListPanel.BanListSnapshot snapshot = coordinator.snapshot("libera", "#ircafe");
 
-    assertEquals(1, snapshot.size());
-    assertTrue(snapshot.getFirst().contains("*!*@new.example"));
-    assertTrue(snapshot.stream().noneMatch("Old summary"::equals));
+    assertEquals(1, snapshot.entries().size());
+    assertEquals("*!*@new.example", snapshot.entries().getFirst().mask());
+    assertEquals("", snapshot.summary());
   }
 
   @Test
@@ -63,7 +62,8 @@ class ChatBanListCoordinatorTest {
     coordinator.appendBanListEntry("libera", "#ircafe", "", "Oper", 1L);
     coordinator.endBanList("libera", "ircafe", "ignored");
 
-    assertEquals(List.of(), coordinator.snapshot("libera", "#ircafe"));
+    assertEquals(
+        ChannelListPanel.BanListSnapshot.empty(), coordinator.snapshot("libera", "#ircafe"));
     verifyNoInteractions(channelListPanel);
   }
 }

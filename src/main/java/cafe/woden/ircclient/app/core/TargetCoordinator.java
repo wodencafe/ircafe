@@ -5,10 +5,11 @@ import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.TargetChatHistoryPort;
 import cafe.woden.ircclient.app.api.TargetLogMaintenancePort;
 import cafe.woden.ircclient.app.api.UiPort;
+import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.IrcProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
+import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.ignore.api.IgnoreListQueryPort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.enrichment.UserInfoEnrichmentService;
@@ -30,11 +31,11 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.hexagonal.Application;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -43,7 +44,6 @@ import org.springframework.stereotype.Component;
 @Lazy
 @Application
 @ApplicationLayer
-@RequiredArgsConstructor
 public class TargetCoordinator implements ActiveTargetPort {
   private static final Logger log = LoggerFactory.getLogger(TargetCoordinator.class);
 
@@ -59,9 +59,10 @@ public class TargetCoordinator implements ActiveTargetPort {
   private final IrcBouncerPlaybackPort bouncerPlayback;
 
   @NonNull private final ServerRegistry serverRegistry;
-  @NonNull private final RuntimeConfigStore runtimeConfig;
+  @NonNull private final IrcSessionRuntimeConfigPort runtimeConfig;
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final IgnoreListQueryPort ignoreList;
+  private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
   @NonNull private final UserhostQueryService userhostQueryService;
   @NonNull private final UserInfoEnrichmentService userInfoEnrichmentService;
   @NonNull private final TargetChatHistoryPort targetChatHistoryPort;
@@ -89,6 +90,80 @@ public class TargetCoordinator implements ActiveTargetPort {
   private final Set<TargetRef> channelsClosedByUser = ConcurrentHashMap.newKeySet();
 
   private TargetRef activeTarget;
+
+  public TargetCoordinator(
+      UiPort ui,
+      UserListStore userListStore,
+      IrcTargetMembershipPort targetMembership,
+      IrcBouncerPlaybackPort bouncerPlayback,
+      ServerRegistry serverRegistry,
+      IrcSessionRuntimeConfigPort runtimeConfig,
+      ConnectionCoordinator connectionCoordinator,
+      IgnoreListQueryPort ignoreList,
+      UserhostQueryService userhostQueryService,
+      UserInfoEnrichmentService userInfoEnrichmentService,
+      TargetChatHistoryPort targetChatHistoryPort,
+      TargetLogMaintenancePort targetLogMaintenancePort,
+      ExecutorService maintenanceExec,
+      ScheduledExecutorService usersRefreshExec) {
+    this(
+        ui,
+        userListStore,
+        targetMembership,
+        bouncerPlayback,
+        serverRegistry,
+        runtimeConfig,
+        connectionCoordinator,
+        ignoreList,
+        userhostQueryService,
+        userInfoEnrichmentService,
+        targetChatHistoryPort,
+        targetLogMaintenancePort,
+        maintenanceExec,
+        usersRefreshExec,
+        null);
+  }
+
+  @Autowired
+  public TargetCoordinator(
+      UiPort ui,
+      UserListStore userListStore,
+      @Qualifier("ircTargetMembershipPort") IrcTargetMembershipPort targetMembership,
+      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
+      ServerRegistry serverRegistry,
+      IrcSessionRuntimeConfigPort runtimeConfig,
+      ConnectionCoordinator connectionCoordinator,
+      IgnoreListQueryPort ignoreList,
+      UserhostQueryService userhostQueryService,
+      UserInfoEnrichmentService userInfoEnrichmentService,
+      TargetChatHistoryPort targetChatHistoryPort,
+      TargetLogMaintenancePort targetLogMaintenancePort,
+      @Qualifier(ExecutorConfig.TARGET_COORDINATOR_MAINTENANCE_EXECUTOR)
+          ExecutorService maintenanceExec,
+      @Qualifier(ExecutorConfig.TARGET_COORDINATOR_USERS_REFRESH_SCHEDULER)
+          ScheduledExecutorService usersRefreshExec,
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy) {
+    this.ui = Objects.requireNonNull(ui, "ui");
+    this.userListStore = Objects.requireNonNull(userListStore, "userListStore");
+    this.targetMembership = Objects.requireNonNull(targetMembership, "targetMembership");
+    this.bouncerPlayback = Objects.requireNonNull(bouncerPlayback, "bouncerPlayback");
+    this.serverRegistry = Objects.requireNonNull(serverRegistry, "serverRegistry");
+    this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
+    this.connectionCoordinator =
+        Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
+    this.ignoreList = Objects.requireNonNull(ignoreList, "ignoreList");
+    this.userhostQueryService =
+        Objects.requireNonNull(userhostQueryService, "userhostQueryService");
+    this.userInfoEnrichmentService =
+        Objects.requireNonNull(userInfoEnrichmentService, "userInfoEnrichmentService");
+    this.targetChatHistoryPort =
+        Objects.requireNonNull(targetChatHistoryPort, "targetChatHistoryPort");
+    this.targetLogMaintenancePort =
+        Objects.requireNonNull(targetLogMaintenancePort, "targetLogMaintenancePort");
+    this.maintenanceExec = Objects.requireNonNull(maintenanceExec, "maintenanceExec");
+    this.usersRefreshExec = Objects.requireNonNull(usersRefreshExec, "usersRefreshExec");
+    this.backendCapabilityPolicy = backendCapabilityPolicy;
+  }
 
   @PreDestroy
   void shutdown() {
@@ -572,6 +647,19 @@ public class TargetCoordinator implements ActiveTargetPort {
 
     String sid = Objects.toString(target.serverId(), "").trim();
     if (sid.isEmpty()) return;
+    boolean connected = connectionCoordinator.isConnected(sid);
+
+    if (connected && ui.hasTarget(target) && !ui.isChannelDisconnected(target)) {
+      channelsClosedByUser.remove(target);
+      if (!isQuasselCoreServer(sid)) {
+        runtimeConfig.rememberJoinedChannel(sid, target.target());
+        syncRuntimeAutoJoinForReconnect(sid);
+      }
+      applyTargetContext(target);
+      ui.setChatActiveTarget(target);
+      ui.selectTarget(target);
+      return;
+    }
 
     TargetRef status = new TargetRef(sid, "status");
     ensureTargetExists(status);
@@ -587,7 +675,7 @@ public class TargetCoordinator implements ActiveTargetPort {
     // Keep detached until JOIN is confirmed by the server.
     ui.setChannelDisconnected(target, true);
 
-    if (!connectionCoordinator.isConnected(sid)) {
+    if (!connected) {
       ui.appendStatus(status, "(conn)", "Not connected (join queued in config only)");
       return;
     }
@@ -727,10 +815,15 @@ public class TargetCoordinator implements ActiveTargetPort {
   private boolean isQuasselCoreServer(String serverId) {
     String sid = Objects.toString(serverId, "").trim();
     if (sid.isEmpty()) return false;
+    if (backendCapabilityPolicy != null) {
+      return backendCapabilityPolicy.supportsQuasselCoreCommands(sid);
+    }
     try {
       var configured = serverRegistry.find(sid);
       if (configured == null || configured.isEmpty()) return false;
-      return configured.orElseThrow().backend() == IrcProperties.Server.Backend.QUASSEL_CORE;
+      return IrcProperties.Server.Backend.QUASSEL_CORE
+          .token()
+          .equals(configured.orElseThrow().backendId());
     } catch (Exception ignored) {
       return false;
     }

@@ -223,7 +223,7 @@ final class MessageInputHintPopupSupport {
       if (DEBUG_HINT_POPUP) {
         log.info(
             "[HintPopupDebug] show popup class={} at ({},{}) pref={} panel.bg={} label.fg={} panel.opaque={}",
-            hintPopup != null ? hintPopup.getClass().getName() : "null",
+            hintPopup.getClass().getName(),
             x,
             y,
             pref,

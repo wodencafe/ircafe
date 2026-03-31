@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.diagnostics;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
 import cafe.woden.ircclient.util.VirtualThreads;
 import com.sun.management.HotSpotDiagnosticMXBean;
 import jakarta.annotation.PostConstruct;
@@ -80,7 +80,7 @@ public class JfrRuntimeEventsService {
           .withLocale(Locale.ROOT)
           .withZone(ZoneId.systemDefault());
 
-  private final RuntimeConfigStore runtimeConfigStore;
+  private final DiagnosticsRuntimeConfigPort runtimeConfig;
   private final Deque<RuntimeDiagnosticEvent> events = new ArrayDeque<>();
   private final Deque<Instant> gcEventsInWindow = new ArrayDeque<>();
   private final PropertyChangeSupport stateChanges = new PropertyChangeSupport(this);
@@ -101,20 +101,19 @@ public class JfrRuntimeEventsService {
   private volatile int runtimeHeapPercent;
   private volatile Instant lastGcEventAt;
 
-  public JfrRuntimeEventsService(RuntimeConfigStore runtimeConfigStore) {
+  public JfrRuntimeEventsService(DiagnosticsRuntimeConfigPort runtimeConfig) {
     this(
-        runtimeConfigStore,
-        VirtualThreads.newSingleThreadScheduledExecutor("ircafe-jfr-event-sampler"));
+        runtimeConfig, VirtualThreads.newSingleThreadScheduledExecutor("ircafe-jfr-event-sampler"));
   }
 
   @Autowired
   public JfrRuntimeEventsService(
-      RuntimeConfigStore runtimeConfigStore,
+      DiagnosticsRuntimeConfigPort runtimeConfig,
       @Qualifier(ExecutorConfig.JFR_RUNTIME_EVENTS_SAMPLER_SCHEDULER)
           ScheduledExecutorService samplerExec) {
-    this.runtimeConfigStore = runtimeConfigStore;
+    this.runtimeConfig = runtimeConfig;
     this.samplerExec = Objects.requireNonNull(samplerExec, "samplerExec");
-    this.enabled = runtimeConfigStore == null || runtimeConfigStore.readApplicationJfrEnabled(true);
+    this.enabled = runtimeConfig == null || runtimeConfig.readApplicationJfrEnabled(true);
   }
 
   @PostConstruct
@@ -194,8 +193,8 @@ public class JfrRuntimeEventsService {
   public synchronized void setEnabled(boolean enabled) {
     if (this.enabled == enabled) return;
     this.enabled = enabled;
-    if (runtimeConfigStore != null) {
-      runtimeConfigStore.rememberApplicationJfrEnabled(enabled);
+    if (runtimeConfig != null) {
+      runtimeConfig.rememberApplicationJfrEnabled(enabled);
     }
     if (enabled) {
       appendEventAtLocked(
@@ -866,7 +865,7 @@ public class JfrRuntimeEventsService {
   }
 
   private Path diagnosticsExportDirectory() {
-    Path runtimePath = runtimeConfigStore != null ? runtimeConfigStore.runtimeConfigPath() : null;
+    Path runtimePath = runtimeConfig != null ? runtimeConfig.runtimeConfigPath() : null;
     Path base = runtimePath != null ? runtimePath.getParent() : null;
     if (base == null) {
       String userHome = Objects.toString(System.getProperty("user.home"), "").trim();

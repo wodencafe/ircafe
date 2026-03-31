@@ -7,7 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -16,7 +16,7 @@ class JfrRuntimeEventsServiceTest {
 
   @Test
   void startsWithPersistedEnabledState() {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    DiagnosticsRuntimeConfigPort runtimeConfig = mock(DiagnosticsRuntimeConfigPort.class);
     when(runtimeConfig.readApplicationJfrEnabled(true)).thenReturn(false);
 
     JfrRuntimeEventsService service = new JfrRuntimeEventsService(runtimeConfig);
@@ -26,7 +26,7 @@ class JfrRuntimeEventsServiceTest {
 
   @Test
   void togglingEnabledPersistsPreference() {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    DiagnosticsRuntimeConfigPort runtimeConfig = mock(DiagnosticsRuntimeConfigPort.class);
     when(runtimeConfig.readApplicationJfrEnabled(true)).thenReturn(true);
     JfrRuntimeEventsService service = new JfrRuntimeEventsService(runtimeConfig);
 
@@ -41,7 +41,7 @@ class JfrRuntimeEventsServiceTest {
 
   @Test
   void pauseFlagCanBeToggledIndependently() {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    DiagnosticsRuntimeConfigPort runtimeConfig = mock(DiagnosticsRuntimeConfigPort.class);
     when(runtimeConfig.readApplicationJfrEnabled(true)).thenReturn(true);
     JfrRuntimeEventsService service = new JfrRuntimeEventsService(runtimeConfig);
 
@@ -54,7 +54,7 @@ class JfrRuntimeEventsServiceTest {
 
   @Test
   void canExportLightweightMemoryDiagnosticsBundle() throws Exception {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    DiagnosticsRuntimeConfigPort runtimeConfig = mock(DiagnosticsRuntimeConfigPort.class);
     Path runtimePath = Files.createTempDirectory("ircafe-jfr-export-test").resolve("ircafe.yml");
     when(runtimeConfig.readApplicationJfrEnabled(true)).thenReturn(true);
     when(runtimeConfig.runtimeConfigPath()).thenReturn(runtimePath);

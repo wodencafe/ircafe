@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
+import cafe.woden.ircclient.ui.settings.theme.ChatThemeSettings;
+import cafe.woden.ircclient.ui.settings.theme.ThemeAccentSettings;
+import cafe.woden.ircclient.ui.settings.theme.ThemeTweakSettings;
 import org.junit.jupiter.api.Test;
 
 class PreferencesDialogAppearanceRollbackPlanTest {

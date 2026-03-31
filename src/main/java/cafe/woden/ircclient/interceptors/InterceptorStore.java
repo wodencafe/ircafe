@@ -4,7 +4,7 @@ import cafe.woden.ircclient.app.api.InterceptorEventType;
 import cafe.woden.ircclient.app.api.InterceptorIngestPort;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.config.ExecutorConfig;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.InterceptorConfigPort;
 import cafe.woden.ircclient.model.BuiltInSound;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;
@@ -59,7 +59,7 @@ public class InterceptorStore implements InterceptorIngestPort {
 
   public record ScopedInterceptorRef(String serverId, String interceptorId) {}
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final InterceptorConfigPort runtimeConfig;
   private final NotificationSoundService notificationSoundService;
   private final TrayNotificationsPort trayNotificationService;
   private final ExecutorService actionScriptExecutor;
@@ -84,7 +84,7 @@ public class InterceptorStore implements InterceptorIngestPort {
 
   @Autowired
   public InterceptorStore(
-      RuntimeConfigStore runtimeConfig,
+      InterceptorConfigPort runtimeConfig,
       NotificationSoundService notificationSoundService,
       @Lazy TrayNotificationsPort trayNotificationService,
       @Qualifier(ExecutorConfig.IRC_EVENT_SCRIPT_EXECUTOR) ExecutorService actionScriptExecutor,
@@ -115,7 +115,7 @@ public class InterceptorStore implements InterceptorIngestPort {
   }
 
   private InterceptorStore(
-      RuntimeConfigStore runtimeConfig,
+      InterceptorConfigPort runtimeConfig,
       NotificationSoundService notificationSoundService,
       TrayNotificationsPort trayNotificationService,
       ExecutorService actionScriptExecutor,

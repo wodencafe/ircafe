@@ -1,1149 +1,130 @@
-import org.panteleyev.jpackage.ImageType
-import org.gradle.internal.os.OperatingSystem
-
 plugins {
     id 'java'
     id 'checkstyle'
-    id 'org.springframework.boot' version '4.0.1'
-    id 'io.spring.dependency-management' version '1.1.7'
-    id 'org.panteleyev.jpackageplugin' version '1.7.6'
+    alias(libs.plugins.springBoot)
+    alias(libs.plugins.springDependencyManagement)
+    alias(libs.plugins.jpackage)
 
     // Clean + consistent
-    id "com.diffplug.spotless" version "8.2.1"
+    alias(libs.plugins.spotless)
 
     // Supply-chain / security
-    id "org.owasp.dependencycheck" version "12.2.0"
-    id "org.cyclonedx.bom" version "3.2.0"
+    alias(libs.plugins.dependencyCheck)
+    alias(libs.plugins.cyclonedx)
 
     // Keep deps tidy
-    id "com.autonomousapps.dependency-analysis" version "3.5.1"
-    id "com.github.ben-manes.versions" version "0.53.0"
+    alias(libs.plugins.dependencyAnalysis)
+    alias(libs.plugins.benManesVersions)
+    alias(libs.plugins.openRewrite)
 
-    id "com.github.spotbugs" version "6.4.8"
-    id "net.ltgt.errorprone" version "5.0.0"
-    id "de.thetaphi.forbiddenapis" version "3.10"
-    id "com.github.jk1.dependency-license-report" version "3.1.1"
+    alias(libs.plugins.spotbugs)
+    alias(libs.plugins.errorprone)
+    alias(libs.plugins.forbiddenapis)
+    alias(libs.plugins.dependencyLicenseReport)
 }
-
 
 group = 'cafe.woden'
-
-String runGitCommand(List<String> args) {
-    if (args == null || args.isEmpty()) return null
-    if (!file(".git").exists()) return null
-    try {
-        List<String> cmd = ["git"] + args
-        Process process = new ProcessBuilder(cmd)
-            .directory(rootDir)
-            .redirectErrorStream(true)
-            .start()
-        String output = process.inputStream.getText("UTF-8")
-        int exitCode = process.waitFor()
-        if (exitCode != 0) return null
-        String text = (output == null) ? "" : output.trim()
-        return text.isEmpty() ? null : text
-    } catch (Exception ignored) {
-        return null
-    }
-}
-
-String sanitizeVersionLabel(String raw, String fallback) {
-    String text = (raw == null) ? "" : raw.trim()
-    if (text.isEmpty()) return fallback
-    text = text.replaceAll(/[^0-9A-Za-z._-]+/, "-")
-    text = text.replaceAll(/^-+/, "")
-    text = text.replaceAll(/-+$/, "")
-    return text.isEmpty() ? fallback : text
-}
-
-String nextSnapshotBaseFromLatestTag() {
-    String tags = runGitCommand(["tag", "--sort=-v:refname"])
-    if (tags == null || tags.isBlank()) return "0.0.1"
-    String latest = tags.readLines().find { line ->
-        String tag = (line == null) ? "" : line.trim()
-        tag ==~ /^v?\d+\.\d+\.\d+$/
-    }
-    if (latest == null || latest.isBlank()) return "0.0.1"
-    def matcher = (latest =~ /^v?(\d+)\.(\d+)\.(\d+)$/)
-    if (!matcher.matches()) return "0.0.1"
-    int major = Integer.parseInt(matcher.group(1))
-    int minor = Integer.parseInt(matcher.group(2))
-    int patch = Integer.parseInt(matcher.group(3)) + 1
-    return "${major}.${minor}.${patch}"
-}
-
-String deriveLocalSnapshotVersion() {
-    String base = nextSnapshotBaseFromLatestTag()
-    String describe =
-        runGitCommand(["describe", "--tags", "--long", "--dirty", "--abbrev=8", "--match", "v[0-9]*.[0-9]*.[0-9]*"])
-    if (describe == null || describe.isBlank()) {
-        describe =
-            runGitCommand(["describe", "--tags", "--long", "--dirty", "--abbrev=8", "--match", "[0-9]*.[0-9]*.[0-9]*"])
-    }
-    def describeMatcher = (describe == null) ? null : (describe =~ /^v?\d+\.\d+\.\d+-(\d+)-g([0-9a-fA-F]+)(-dirty)?$/)
-
-    String distance = "0"
-    if (describeMatcher != null && describeMatcher.matches()) {
-        distance = sanitizeVersionLabel(describeMatcher.group(1), "0")
-    } else {
-        distance = sanitizeVersionLabel(runGitCommand(["rev-list", "--count", "HEAD"]), "0")
-    }
-
-    String branch = sanitizeVersionLabel(runGitCommand(["rev-parse", "--abbrev-ref", "HEAD"]), "local")
-    if ("HEAD".equalsIgnoreCase(branch)) {
-        branch = sanitizeVersionLabel(System.getenv("GITHUB_REF_NAME"), "detached")
-    }
-
-    String hash =
-        (describeMatcher != null && describeMatcher.matches())
-            ? sanitizeVersionLabel(describeMatcher.group(2), "nogit")
-            : sanitizeVersionLabel(runGitCommand(["rev-parse", "--short=8", "HEAD"]), "nogit")
-    String dirtyFlag =
-        (describeMatcher != null && describeMatcher.matches())
-            ? (describeMatcher.group(3) != null ? ".dirty" : "")
-            : (runGitCommand(["status", "--porcelain"]) ? ".dirty" : "")
-
-    return "${base}-SNAPSHOT+${branch}.${distance}.g${hash}${dirtyFlag}"
-}
-
-String explicitVersion = providers.gradleProperty("version").orNull
-if (explicitVersion != null && !explicitVersion.isBlank()) {
-    version = explicitVersion.trim()
-} else {
-    version = deriveLocalSnapshotVersion()
-}
-
 description = 'IRC Client in modern Java, utilizing PircBotX, Spring Boot, and RXJava.'
+ext.javaRelease = 25
 
-def javaRelease = 25
+def libsCatalog = extensions.getByType(org.gradle.api.artifacts.VersionCatalogsExtension).named("libs")
+def lib = { String alias -> libsCatalog.findLibrary(alias).get() }
+def catalogVersion = { String alias -> libsCatalog.findVersion(alias).get().requiredVersion }
+def springModulithVersion = providers.gradleProperty('springModulithVersion').getOrElse(catalogVersion('springModulith'))
+def flatlafVersion = providers.gradleProperty('flatlafVersion').getOrElse(catalogVersion('flatlaf'))
+def darklafVersion = providers.gradleProperty('darklafVersion').getOrElse(catalogVersion('darklaf'))
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(javaRelease)
-    }
-}
+// Keep the root build declarative; move behavior-heavy logic into concern-based scripts.
+apply from: rootProject.file('gradle/versioning.gradle')
+apply from: rootProject.file('gradle/java-conventions.gradle')
+apply from: rootProject.file('gradle/quality.gradle')
+apply from: rootProject.file('gradle/testing.gradle')
+apply from: rootProject.file('gradle/packaging.gradle')
 
-def javaLauncher25 = javaToolchains.launcherFor {
-    languageVersion = JavaLanguageVersion.of(javaRelease)
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.release = javaRelease
-    options.warnings = false
-    // Keep CI output clean: suppress javac lint warnings for normal compile/test tasks.
-    options.compilerArgs.removeAll { it.startsWith("-Xlint") }
-    options.compilerArgs += ["-Xlint:none"]
-
-    // Disable Error Prone during normal compile/test to avoid warning noise.
-    // The dedicated `errorProneApplyMain` task remains enabled for manual autofix runs.
-    if (name != 'errorProneApplyMain') {
-        options.errorprone.enabled = false
-    }
-}
-
-def errorPronePatchChecks =
-    (findProperty('errorPronePatchChecks')
-            ?: 'CheckReturnValue,ReturnValueIgnored,SelfAssignment,MisleadingEscapedSpace,DuplicateBranches,UnnecessaryParentheses,DeprecatedVariable,UnusedVariable')
-        .toString()
-
-tasks.withType(Test).configureEach {
-    javaLauncher = javaLauncher25
-    systemProperty 'java.awt.headless', 'true'
-    // Reduce per-test scheduler teardown latency while preserving graceful shutdown behavior.
-    systemProperty 'ircafe.rx.shutdown.grace.ms', (findProperty('testRxShutdownGraceMs') ?: '200').toString()
-
-    // Opt-in parallel test JVMs: ./gradlew test -PtestMaxParallelForks=4
-    String maxParallelForksValue = (findProperty('testMaxParallelForks') ?: '').toString().trim()
-    if (!maxParallelForksValue.isEmpty()) {
-        maxParallelForks = Math.max(1, Integer.parseInt(maxParallelForksValue))
-    }
-    // Allow opt-in integration tests to be controlled from Gradle CLI:
-    //   ./gradlew integrationTest -Dquassel.it.enabled=true ...
-    //   ./gradlew integrationTest -Dirc.it.container.e2e.enabled=true ...
-    //   ./gradlew integrationTest -Dmatrix.it.container.enabled=true ...
-    // Forward only the scoped test-control properties.
-    System.getProperties().each { key, value ->
-        String k = key == null ? '' : key.toString()
-        if (!k.startsWith('quassel.it.') && !k.startsWith('irc.it.') && !k.startsWith('matrix.it.')) {
-            return
-        }
-        systemProperty k, value
-    }
-
-    // Long Swing-heavy test runs can accumulate heap/metaspace pressure in one JVM.
-    // Use a larger heap and periodic process recycling for stability.
-    maxHeapSize = (findProperty('testMaxHeap') ?: '1536m').toString()
-    long forkEveryValue = Long.parseLong((findProperty('testForkEvery') ?: '200').toString())
-    if (forkEveryValue > 0L) {
-        forkEvery = forkEveryValue
-    }
-}
-
-tasks.withType(JavaExec).configureEach {
-    javaLauncher = javaLauncher25
-}
-
-springBoot {
-    mainClass = 'cafe.woden.ircclient.IrcSwingApp'
-
-    // Generate META-INF/build-info.properties (build.version, build.time, ...)
-    // so the UI can display version + build date.
-    buildInfo()
-}
-
-// Ensure build-info exists for bootRun/IDE runs too.
-tasks.matching { it.name == 'bootRun' }.configureEach {
-    dependsOn tasks.matching { it.name == 'bootBuildInfo' }
-}
-tasks.matching { it.name == 'processResources' }.configureEach {
-    dependsOn tasks.matching { it.name == 'bootBuildInfo' }
-}
-
-configurations {
-    compileOnly {
-        extendsFrom annotationProcessor
-    }
-    mutationTestTool
-}
-
-sourceSets {
-    functionalTest {
-        java.srcDir('src/functionalTest/java')
-        resources.srcDir('src/functionalTest/resources')
-        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
-        runtimeClasspath += output + compileClasspath
-    }
-}
-
-configurations.named('functionalTestImplementation') {
-    extendsFrom(configurations.testImplementation)
-}
-configurations.named('functionalTestRuntimeOnly') {
-    extendsFrom(configurations.testRuntimeOnly)
-}
-
-spotless {
-    java {
-        target "src/**/*.java"
-        googleJavaFormat("1.34.1")
-        removeUnusedImports()
-        trimTrailingWhitespace()
-        endWithNewline()
-    }
-    format("misc") {
-        target "*.md", ".gitignore", "gradle.properties", "settings.gradle", "build.gradle"
-        trimTrailingWhitespace()
-        endWithNewline()
-    }
-}
-
-checkstyle {
-    toolVersion = (findProperty("checkstyleVersion") ?: "10.26.1").toString()
-}
-
-def googleCheckstyleArchive = providers.provider {
-    configurations.checkstyle
-        .resolve()
-        .find { it.name.startsWith("checkstyle-") && it.name.endsWith(".jar") }
-}
-tasks.withType(Checkstyle).configureEach {
-    enabled = false
-    config = resources.text.fromArchiveEntry(googleCheckstyleArchive.get(), "google_checks.xml")
-    reports {
-        html.required = true
-        xml.required = false
-    }
-}
-
-tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
-    enabled = false
-    reports {
-        html.required = true
-        xml.required = false
-    }
-}
-
-tasks.register('errorProneApplyMain', JavaCompile) {
-    group = 'formatting'
-    description = 'Applies Error Prone auto-fixes in-place for main Java sources.'
-    javaCompiler = javaToolchains.compilerFor {
-        languageVersion = JavaLanguageVersion.of(javaRelease)
-    }
-    source = sourceSets.main.java
-    classpath = sourceSets.main.compileClasspath
-    destinationDirectory = layout.buildDirectory.dir('tmp/errorproneApplyMain')
-    options.annotationProcessorPath = configurations.annotationProcessor
-    options.generatedSourceOutputDirectory =
-        layout.buildDirectory.dir('generated/sources/annotationProcessor/java/errorProneApplyMain')
-    options.errorprone.enabled = true
-    options.errorprone.errorproneArgs.addAll([
-        "-XepPatchChecks:${errorPronePatchChecks}",
-        '-XepPatchLocation:IN_PLACE'
-    ])
-}
-
-tasks.register('errorProneApply') {
-    group = 'formatting'
-    description =
-        'Runs Error Prone in-place auto-fixes. Override checks with -PerrorPronePatchChecks=Check1,Check2.'
-    dependsOn('errorProneApplyMain')
-}
-
-tasks.named('spotlessApply') {
-    dependsOn('errorProneApply')
-}
-
-tasks.named('spotlessCheck') {
-    mustRunAfter('errorProneApply')
-}
-
-tasks.register('spotlessLint') {
-    group = 'formatting'
-    description = 'Runs Error Prone auto-fixes first, then Spotless lint checks.'
-    dependsOn('errorProneApply', 'spotlessCheck')
-}
-
-tasks.register("lint") {
-    group = "verification"
-    description = "Runs formatting, style, and static analysis checks."
-    dependsOn(
-        "spotlessCheck",
-        "checkstyleMain",
-        "checkstyleTest",
-        "spotbugsMain",
-        "forbiddenApisMain",
-        "forbiddenApisTest"
-    )
-}
-tasks.named("check") { dependsOn("lint") }
-
-dependencyCheck {
-    failBuildOnCVSS = 8.0
-    formats = ["HTML", "JSON"]
-    suppressionFile = "config/dependency-check-suppressions.xml"
-}
-
-dependencyAnalysis {
-    issues {
-        all {
-            onAny {
-                severity("fail")
-            }
-        }
-    }
-}
-
-tasks.named("cyclonedxDirectBom") {
-    includeConfigs = ["runtimeClasspath"]
-
-    jsonOutput = file("$buildDir/reports/ircafe-sbom.json")
-
-}
-
-tasks.named("cyclonedxBom") {
-    jsonOutput = file("$buildDir/reports/ircafe-sbom-aggregate.json")
-}
-
-if (System.getenv("CI") == "true") {
-    tasks.named("check") { dependsOn("dependencyCheckAnalyze") }
+rewrite {
+    // Keep recipes opt-in and export datatables for review when refactors run.
+    exportDatatables = true
 }
 
 dependencies {
-    def lombokVersion = '1.18.42'
+    compileOnly lib('lombok')
+    compileOnly lib('autoServiceAnnotations')
+    annotationProcessor lib('lombok')
+    annotationProcessor lib('autoService')
+    testCompileOnly lib('lombok')
+    testAnnotationProcessor lib('lombok')
+    functionalTestCompileOnly lib('lombok')
+    functionalTestAnnotationProcessor lib('lombok')
 
-    compileOnly "org.projectlombok:lombok:${lombokVersion}"
-    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
-    testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
-    testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
-    functionalTestCompileOnly "org.projectlombok:lombok:${lombokVersion}"
-    functionalTestAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
-
-    implementation 'org.jmolecules:jmolecules-ddd:2.0.1'
-    implementation 'org.jmolecules:jmolecules-layered-architecture:2.0.1'
-    implementation 'org.jmolecules:jmolecules-hexagonal-architecture:2.0.1'
-    def springModulithVersion = (project.findProperty('springModulithVersion') ?: '2.0.3').toString()
+    implementation lib('jmoleculesDdd')
+    implementation lib('jmoleculesLayeredArchitecture')
+    implementation lib('jmoleculesHexagonalArchitecture')
     implementation platform("org.springframework.modulith:spring-modulith-bom:${springModulithVersion}")
-    implementation 'org.springframework.modulith:spring-modulith-starter-core'
+    implementation lib('springModulithStarterCore')
 
-    errorprone 'com.google.errorprone:error_prone_core:2.46.0'
-    implementation 'com.googlecode.soundlibs:mp3spi:1.9.5.4'
-    implementation 'com.googlecode.soundlibs:jlayer:1.0.1.4'
-    implementation 'com.googlecode.soundlibs:tritonus-share:0.3.7.4'
-    implementation 'com.sshtools:two-slices:0.9.4'
-    implementation 'org.springframework.boot:spring-boot-starter'
+    errorprone lib('errorproneCore')
+    implementation lib('soundlibsMp3spi')
+    implementation lib('soundlibsJlayer')
+    implementation lib('soundlibsTritonusShare')
+    implementation lib('twoSlices')
+    implementation lib('springBootStarter')
 
-    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
-    implementation 'org.flywaydb:flyway-core'
-    runtimeOnly 'org.flywaydb:flyway-database-hsqldb'
-    runtimeOnly 'org.hsqldb:hsqldb'
+    implementation lib('springBootStarterJdbc')
+    implementation lib('flywayCore')
+    runtimeOnly lib('flywayDatabaseHsqldb')
+    runtimeOnly lib('hsqldb')
 
-    developmentOnly 'org.springframework.boot:spring-boot-devtools'
-    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+    developmentOnly lib('springBootDevtools')
+    annotationProcessor lib('springBootConfigurationProcessor')
 
-    implementation 'org.yaml:snakeyaml'
-    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation lib('snakeyaml')
+    implementation lib('jacksonDatabind')
 
-    implementation 'io.reactivex.rxjava3:rxjava:3.1.12'
-    implementation 'com.github.pircbotx:pircbotx:b1b48bf'
-    implementation 'com.github.ben-manes.caffeine:caffeine'
-    implementation 'it.unimi.dsi:fastutil:8.5.18'
+    implementation lib('rxjava')
+    implementation lib('pircbotx')
+    implementation lib('caffeine')
+    implementation lib('fastutil')
 
-    implementation "io.github.andrewauclair:modern-docking-api:1.4.1"
-    implementation "io.github.andrewauclair:modern-docking-single-app:1.4.1"
-    implementation "io.github.andrewauclair:modern-docking-ui:1.4.1"
-
-    def flatlafVersion = (project.findProperty('flatlafVersion') ?: '3.7').toString()
-    def darklafVersion = (project.findProperty('darklafVersion') ?: '3.1.1').toString()
+    implementation lib('modernDockingApi')
+    implementation lib('modernDockingSingleApp')
+    implementation lib('modernDockingUi')
 
     implementation "com.formdev:flatlaf:${flatlafVersion}"
     implementation "com.formdev:flatlaf-extras:${flatlafVersion}"
     implementation "com.formdev:flatlaf-intellij-themes:${flatlafVersion}"
     implementation "com.github.weisj:darklaf-core:${darklafVersion}"
 
-    implementation "com.fifesoft:autocomplete:3.3.3"
-    implementation("org.languagetool:language-en:6.7") {
+    implementation lib('autocomplete')
+    implementation(lib('languageToolEn')) {
         exclude group: "com.sun.xml.bind", module: "jaxb-core"
         exclude group: "com.sun.xml.bind", module: "jaxb-impl"
     }
 
-    implementation "org.sejda.imageio:webp-imageio:0.1.6"
-    implementation "com.madgag:animated-gif-lib:1.4"
+    implementation lib('webpImageio')
+    implementation lib('animatedGifLib')
 
-    implementation "com.miglayout:miglayout-swing:11.4.2"
+    implementation lib('miglayoutSwing')
 
-    implementation "org.jsoup:jsoup:1.22.1"
+    implementation lib('jsoup')
 
     // Better tray support on Linux/GNOME (AppIndicator/GtkStatusIcon fallback) + native menus.
     // NOTE: Maven Central currently publishes 4.4 (README mentions 4.5, but it is not on Central).
-    implementation "com.dorkbox:SystemTray:4.4"
+    implementation lib('systemTray')
 
     // Cross-platform desktop notification popups (toast-like). Used for Windows notifications.
-    implementation "com.dorkbox:Notify:4.5"
+    implementation lib('notify')
 
     // DBus (Linux/GNOME) - used to implement clickable desktop notifications via org.freedesktop.Notifications.
-    implementation "com.github.hypfvieh:dbus-java-core:5.2.0"
-    implementation "com.github.hypfvieh:dbus-java-transport-native-unixsocket:5.2.0"
+    implementation lib('dbusJavaCore')
+    implementation lib('dbusJavaTransportNativeUnixsocket')
 
-    testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.modulith:spring-modulith-starter-test'
-    testImplementation 'org.testcontainers:testcontainers:1.20.4'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation lib('archunitJunit5')
+    testImplementation lib('springBootStarterTest')
+    testImplementation lib('springModulithStarterTest')
+    testImplementation lib('testcontainers')
+    testRuntimeOnly lib('junitPlatformLauncher')
 
     // Focused mutation testing for ignore normalization + irssi option parsing compatibility.
-    mutationTestTool 'org.pitest:pitest-command-line:1.22.1'
-    mutationTestTool 'org.pitest:pitest-junit5-plugin:1.2.3'
-}
-
-tasks.named('test') {
-    useJUnitPlatform()
-    filter {
-        // Functional Swing coverage lives in src/functionalTest and runs via the dedicated task.
-        excludeTestsMatching '*FunctionalTest'
-        // Integration coverage runs via the dedicated integrationTest task.
-        excludeTestsMatching '*IntegrationTest'
-    }
-}
-
-tasks.register('integrationTest', Test) {
-    group = 'verification'
-    description = 'Runs test-source-set integration tests (classes ending with IntegrationTest).'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform()
-    filter {
-        includeTestsMatching '*IntegrationTest'
-    }
-    shouldRunAfter(tasks.named('test'))
-}
-
-tasks.register('architectureTest', Test) {
-    group = 'verification'
-    description = 'Runs architecture and modulith guardrail tests.'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform()
-    filter {
-        includeTestsMatching 'cafe.woden.ircclient.architecture.*'
-        includeTestsMatching 'cafe.woden.ircclient.modulith.*'
-    }
-    shouldRunAfter(tasks.named('test'))
-}
-
-tasks.register('functionalTest', Test) {
-    group = 'verification'
-    description = 'Runs Swing functional smoke tests.'
-    testClassesDirs = sourceSets.functionalTest.output.classesDirs
-    classpath = sourceSets.functionalTest.runtimeClasspath
-    useJUnitPlatform()
-    filter {
-        includeTestsMatching '*FunctionalTest'
-    }
-    shouldRunAfter(tasks.named('test'))
-}
-
-tasks.register('pitestIgnoreCompatibility', JavaExec) {
-    group = 'verification'
-    description = 'Runs PIT mutation checks for ignore normalization and irssi parsing paths.'
-    dependsOn(tasks.named('testClasses'))
-    classpath = configurations.mutationTestTool
-    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
-
-    def reportDirProvider = layout.buildDirectory.dir('reports/pitest/ignore-compatibility')
-    inputs.files(sourceSets.main.output, sourceSets.test.output, configurations.testRuntimeClasspath)
-    outputs.dir(reportDirProvider)
-
-    doFirst {
-        String testClasspath =
-            files(
-                sourceSets.main.output,
-                sourceSets.test.output,
-                sourceSets.main.runtimeClasspath,
-                sourceSets.test.runtimeClasspath
-            ).files.collect { it.absolutePath }.join(',')
-        String mutableCodePaths =
-            sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
-        args = [
-            "--reportDir=${reportDirProvider.get().asFile.absolutePath}",
-            '--outputFormats=HTML,XML',
-            '--targetClasses=cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizer*',
-            '--targetClasses=cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandService*',
-            '--targetTests=cafe.woden.ircclient.ignore.api.IgnoreMaskNormalizerTest*',
-            '--targetTests=cafe.woden.ircclient.app.outbound.OutboundIgnoreCommandServiceTest*',
-            "--sourceDirs=${file('src/main/java').absolutePath}",
-            "--mutableCodePaths=${mutableCodePaths}",
-            "--classPath=${testClasspath}",
-            '--threads=4',
-            '--testPlugin',
-            'junit5',
-            '--verbose=true',
-            '--failWhenNoMutations=false'
-        ]
-    }
-}
-
-tasks.register('pitestExecutorLifecycle', JavaExec) {
-    group = 'verification'
-    description = 'Runs PIT mutation checks for executor ownership and lifecycle shutdown paths.'
-    dependsOn(tasks.named('testClasses'))
-    classpath = configurations.mutationTestTool
-    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
-
-    def reportDirProvider = layout.buildDirectory.dir('reports/pitest/executor-lifecycle')
-    inputs.files(sourceSets.main.output, sourceSets.test.output, configurations.testRuntimeClasspath)
-    outputs.dir(reportDirProvider)
-
-    doFirst {
-        String testClasspath =
-            files(
-                sourceSets.main.output,
-                sourceSets.test.output,
-                sourceSets.main.runtimeClasspath,
-                sourceSets.test.runtimeClasspath
-            ).files.collect { it.absolutePath }.join(',')
-        String mutableCodePaths =
-            sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
-        args = [
-            "--reportDir=${reportDirProvider.get().asFile.absolutePath}",
-            '--outputFormats=HTML,XML',
-            '--targetClasses=cafe.woden.ircclient.config.ExecutorConfig*',
-            '--targetClasses=cafe.woden.ircclient.util.VirtualThreads*',
-            '--targetClasses=cafe.woden.ircclient.util.RxVirtualSchedulers*',
-            '--targetClasses=cafe.woden.ircclient.ui.logviewer.LogViewerPanel',
-            '--targetClasses=cafe.woden.ircclient.ui.interceptors.InterceptorPanel',
-            '--targetClasses=cafe.woden.ircclient.ui.settings.PreferencesDialog',
-            '--targetClasses=cafe.woden.ircclient.ui.MessageInputSpellcheckLifecycle',
-            '--targetClasses=cafe.woden.ircclient.irc.ZncPlaybackCaptureCoordinator',
-            '--targetClasses=cafe.woden.ircclient.irc.ZncPlaybackCaptureLifecycle',
-            '--targetTests=cafe.woden.ircclient.config.ExecutorConfigTest*',
-            '--targetTests=cafe.woden.ircclient.config.ExecutorConfigIntegrationTest*',
-            '--targetTests=cafe.woden.ircclient.util.VirtualThreadsLifecycleTest*',
-            '--targetTests=cafe.woden.ircclient.util.VirtualThreadsLifecycleIntegrationTest*',
-            '--targetTests=cafe.woden.ircclient.util.RxVirtualSchedulersLifecycleIntegrationTest*',
-            '--targetTests=cafe.woden.ircclient.ui.logviewer.LogViewerPanelExecutorLifecycleTest*',
-            '--targetTests=cafe.woden.ircclient.ui.interceptors.InterceptorPanelExecutorLifecycleTest*',
-            '--targetTests=cafe.woden.ircclient.ui.settings.PreferencesDialogConstructorTest*',
-            '--targetTests=cafe.woden.ircclient.ui.MessageInputSpellcheckLifecycleIntegrationTest*',
-            '--targetTests=cafe.woden.ircclient.irc.ZncPlaybackCaptureLifecycleIntegrationTest*',
-            "--sourceDirs=${file('src/main/java').absolutePath}",
-            "--mutableCodePaths=${mutableCodePaths}",
-            "--classPath=${testClasspath}",
-            '--threads=4',
-            '--testPlugin',
-            'junit5',
-            '--verbose=true',
-            '--failWhenNoMutations=false'
-        ]
-    }
-}
-
-tasks.register('pitestQuasselBackend', JavaExec) {
-    group = 'verification'
-    description = 'Runs PIT mutation checks for Quassel backend routing and command orchestration.'
-    dependsOn(tasks.named('testClasses'))
-    classpath = configurations.mutationTestTool
-    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
-
-    def reportDirProvider = layout.buildDirectory.dir('reports/pitest/quassel-backend')
-    inputs.files(sourceSets.main.output, sourceSets.test.output, configurations.testRuntimeClasspath)
-    outputs.dir(reportDirProvider)
-
-    doFirst {
-        String testClasspath =
-            files(
-                sourceSets.main.output,
-                sourceSets.test.output,
-                sourceSets.main.runtimeClasspath,
-                sourceSets.test.runtimeClasspath
-            ).files.collect { it.absolutePath }.join(',')
-        String mutableCodePaths =
-            sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
-        args = [
-            "--reportDir=${reportDirProvider.get().asFile.absolutePath}",
-            '--outputFormats=HTML,XML',
-            '--targetClasses=cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder*',
-            '--targetClasses=cafe.woden.ircclient.app.outbound.DefaultOutboundCommandDispatcher*',
-            '--targetClasses=cafe.woden.ircclient.app.commands.CommandParser*',
-            '--targetClasses=cafe.woden.ircclient.irc.BackendRoutingIrcClientService*',
-            '--targetTests=cafe.woden.ircclient.app.MediatorUiSubscriptionBinderTest*',
-            '--targetTests=cafe.woden.ircclient.app.outbound.DefaultOutboundCommandDispatcherTest*',
-            '--targetTests=cafe.woden.ircclient.app.commands.CommandParserTest*',
-            '--targetTests=cafe.woden.ircclient.irc.BackendRoutingIrcClientServiceTest*',
-            "--sourceDirs=${file('src/main/java').absolutePath}",
-            "--mutableCodePaths=${mutableCodePaths}",
-            "--classPath=${testClasspath}",
-            '--threads=4',
-            '--testPlugin',
-            'junit5',
-            '--verbose=true',
-            '--failWhenNoMutations=false'
-        ]
-    }
-}
-
-tasks.register('pitestMatrixBackend', JavaExec) {
-    group = 'verification'
-    description = 'Runs PIT mutation checks for Matrix backend command translation and routing.'
-    dependsOn(tasks.named('testClasses'))
-    classpath = configurations.mutationTestTool
-    mainClass = 'org.pitest.mutationtest.commandline.MutationCoverageReport'
-
-    def reportDirProvider = layout.buildDirectory.dir('reports/pitest/matrix-backend')
-    inputs.files(sourceSets.main.output, sourceSets.test.output, configurations.testRuntimeClasspath)
-    outputs.dir(reportDirProvider)
-
-    doFirst {
-        String testClasspath =
-            files(
-                sourceSets.main.output,
-                sourceSets.test.output,
-                sourceSets.main.runtimeClasspath,
-                sourceSets.test.runtimeClasspath
-            ).files.collect { it.absolutePath }.join(',')
-        String mutableCodePaths =
-            sourceSets.main.output.classesDirs.files.collect { it.absolutePath }.join(',')
-        args = [
-            "--reportDir=${reportDirProvider.get().asFile.absolutePath}",
-            '--outputFormats=HTML,XML',
-            '--targetClasses=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupport*',
-            '--targetClasses=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandService*',
-            '--targetClasses=cafe.woden.ircclient.app.outbound.MatrixUploadCommandTranslationHandler*',
-            '--targetClasses=cafe.woden.ircclient.ui.backend.BackendUiProfileProvider*',
-            '--targetClasses=cafe.woden.ircclient.irc.BackendRoutingIrcClientService*',
-            '--targetTests=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandSupportTest*',
-            '--targetTests=cafe.woden.ircclient.app.outbound.MatrixOutboundCommandServiceTest*',
-            '--targetTests=cafe.woden.ircclient.app.outbound.OutboundUploadCommandServiceTest*',
-            '--targetTests=cafe.woden.ircclient.ui.backend.BackendUiProfileProviderTest*',
-            '--targetTests=cafe.woden.ircclient.irc.BackendRoutingIrcClientServiceTest*',
-            "--sourceDirs=${file('src/main/java').absolutePath}",
-            "--mutableCodePaths=${mutableCodePaths}",
-            "--classPath=${testClasspath}",
-            '--threads=4',
-            '--testPlugin',
-            'junit5',
-            '--verbose=true',
-            '--failWhenNoMutations=false'
-        ]
-    }
-}
-
-tasks.register('mutationTest') {
-    group = 'verification'
-    description = 'Alias for focused PIT mutation checks.'
-    dependsOn(
-        tasks.named('pitestIgnoreCompatibility'),
-        tasks.named('pitestExecutorLifecycle'),
-        tasks.named('pitestQuasselBackend'),
-        tasks.named('pitestMatrixBackend')
-    )
-}
-
-tasks.register('themeValidate', Test) {
-    group = 'verification'
-    description = 'Runs Swing theme validation smoke tests.'
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = sourceSets.test.runtimeClasspath
-    useJUnitPlatform()
-    filter {
-        includeTestsMatching 'cafe.woden.ircclient.ui.settings.ThemeValidatorTest'
-    }
-}
-
-tasks.named('bootJar') {
-    archiveFileName = "ircafe-${project.version}.jar"
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-tasks.named('jar') {
-    archiveClassifier = "plain"
-}
-
-/**
- * ---------------------------
- * jpackage input preparation
- * ---------------------------
- *
- * We copy:
- *  - the plain jar (task 'jar' output)
- *  - runtime dependencies
- * into build/jpackage/input
- */
-def jpackageInputDir = layout.buildDirectory.dir("jpackage/input")
-
-def packagingRuntimeClasspath = configurations.findByName("productionRuntimeClasspath") ?: configurations.runtimeClasspath
-
-tasks.register("copyJpackageDependencies", Copy) {
-    from(packagingRuntimeClasspath)
-    into(jpackageInputDir)
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-    exclude { details ->
-        details.file.name.contains("spring-boot-devtools")
-    }
-}
-
-tasks.register("copyJpackageJar", Copy) {
-    dependsOn tasks.named("jar")
-    from(tasks.named("jar").map { it.archiveFile })
-    into(jpackageInputDir)
-}
-
-tasks.named("jpackage") {
-    dependsOn("assemble", "copyJpackageDependencies", "copyJpackageJar")
-}
-
-String sanitizeAppVersion(String v) {
-    if (v == null) return "0.0.0"
-    v = v.replaceFirst(/^v/, "")
-         .replace("-SNAPSHOT", "")
-         .trim()
-
-    v = v.replaceAll(/[^0-9.].*$/, "")
-
-    if (v.isEmpty()) return "0.0.0"
-    if (!(v ==~ /\d+(\.\d+){0,2}/)) return "0.0.0"
-    return v
-}
-
-String jpackageAppVersionForCurrentOs(String rawVersion) {
-    String sanitized = sanitizeAppVersion(rawVersion)
-    if (!OperatingSystem.current().isMacOsX()) return sanitized
-
-    List<String> parts = sanitized.tokenize(".")
-    if (parts.isEmpty()) return "1.0.0"
-
-    int major = Integer.parseInt(parts[0])
-    if (major > 0) return sanitized
-
-    // JDK 25 jpackage on macOS rejects app versions that start with zero.
-    int minor = parts.size() > 1 ? Integer.parseInt(parts[1]) : 0
-    int patch = parts.size() > 2 ? Integer.parseInt(parts[2]) : 0
-    return "1.${minor}.${patch}"
-}
-
-jpackage {
-    input = jpackageInputDir
-    destination = layout.buildDirectory.dir("dist")
-
-    appName = "IRCafe"
-    vendor = "WodenCafe"
-    appDescription = project.description
-
-    appVersion = jpackageAppVersionForCurrentOs(project.version.toString())
-
-    mainJar = tasks.named("jar").get().archiveFileName.get()
-    mainClass = springBoot.mainClass.get()
-
-    type = ImageType.APP_IMAGE
-
-    verbose = true
-    temp = "${buildDir}/jpackage/tmp"
-
-    javaOptions = [
-        "-Dfile.encoding=UTF-8"
-    ]
-
-    windows {
-        winConsole = false
-    }
-
-    mac {
-        macPackageIdentifier = "cafe.woden.ircafe"
-        macPackageName = "IRCafe"
-        macAppCategory = "public.app-category.utilities"
-    }
-}
-
-// Best-effort packaging icon.
-// Windows prefers .ico; Linux prefers .png; macOS generally prefers .icns (not included by default).
-tasks.named("jpackage").configure {
-    def os = OperatingSystem.current()
-    // Prefer the source-controlled PNG in resources for Linux.
-    // (packaging/ is optional and may not exist in this repo.)
-    def iconFile = (os.isWindows())
-        ? file("packaging/ircafe.ico")
-        : (os.isLinux() ? file("src/main/resources/icons/ircafe_512.png") : null)
-    if (iconFile != null && iconFile.exists()) {
-        icon.set(iconFile)
-    }
-}
-
-def isLinux = OperatingSystem.current().isLinux()
-def isMac = OperatingSystem.current().isMacOsX()
-def appName = "IRCafe"
-def appImageDir = layout.buildDirectory.dir("dist/${appName}")
-def desktopFileName = "${appName}.desktop"
-def flatpakMetainfoTemplate = file("packaging/flatpak/cafe.woden.IRCafe.metainfo.xml.in")
-def flatpakMetainfoOutput = layout.buildDirectory.file("flatpak/cafe.woden.IRCafe.metainfo.xml")
-
-tasks.register("generateFlatpakMetainfo") {
-    description = "Generates Flatpak AppStream metadata with release version."
-    inputs.file(flatpakMetainfoTemplate)
-    inputs.property("flatpakVersion", sanitizeAppVersion(project.version.toString()))
-    outputs.file(flatpakMetainfoOutput)
-
-    doLast {
-        def flatpakVersion = sanitizeAppVersion(project.version.toString())
-        def template = flatpakMetainfoTemplate.getText("UTF-8")
-        def releaseDate = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString()
-        def rendered = template
-            .replace("@@VERSION@@", flatpakVersion)
-            .replace("@@RELEASE_DATE@@", releaseDate)
-        def outputFile = flatpakMetainfoOutput.get().asFile
-        outputFile.parentFile.mkdirs()
-        outputFile.setText(rendered, "UTF-8")
-    }
-}
-
-// Where the user plans to install the app image (used to embed absolute Exec/Icon paths).
-// Override with: -PappInstallDir=/opt/IRCafe (default) or any other prefix.
-def appInstallDir = (findProperty("appInstallDir") ?: "/opt/${appName}").toString()
-
-tasks.register("copyLinuxAppImageIconToLib", Copy) {
-    onlyIf { isLinux }
-    from("src/main/resources/icons/ircafe_512.png")
-    into(appImageDir.map { new File(it.asFile, "lib") })
-    rename { "${appName}.png" }
-}
-
-tasks.register("generateLinuxDesktopEntry") {
-    onlyIf { isLinux }
-    doLast {
-        def outDir = appImageDir.get().asFile
-        outDir.mkdirs()
-
-        def desktopFile = new File(outDir, desktopFileName)
-        desktopFile.setText("""[Desktop Entry]
-Version=1.0
-Type=Application
-Name=${appName}
-Comment=${project.description}
-Exec=${appInstallDir}/bin/${appName}
-Icon=${appInstallDir}/lib/${appName}.png
-Categories=Network;
-Terminal=false
-StartupWMClass=${appName}
-""".stripIndent(), "UTF-8")
-    }
-}
-
-tasks.register("generateLinuxInstallScript") {
-    onlyIf { isLinux }
-    doLast {
-        def outDir = appImageDir.get().asFile
-        outDir.mkdirs()
-
-        def installScript = new File(outDir, "install.sh")
-        def script = '''#!/usr/bin/env bash
-set -euo pipefail
-
-APP_NAME="@@APP_NAME@@"
-APP_DESC="@@APP_DESC@@"
-
-usage() {
-  cat <<USAGE
-Usage: ./install.sh [INSTALL_DIR]
-
-Installs the @@APP_NAME@@ app-image and a .desktop launcher.
-
-If INSTALL_DIR is omitted:
-  - when run as root:   /opt/@@APP_NAME@@
-  - when run as a user: $HOME/.local/opt/@@APP_NAME@@
-
-Examples:
-  sudo ./install.sh              # installs to /opt/@@APP_NAME@@, desktop entry system-wide
-  sudo ./install.sh /opt/@@APP_NAME@@
-  ./install.sh                   # installs to ~/.local/opt/@@APP_NAME@@, desktop entry for current user
-  ./install.sh ~/.local/opt/@@APP_NAME@@
-USAGE
-}
-
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-fi
-
-SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-DEST_DIR="${1:-}"
-if [[ -z "$DEST_DIR" ]]; then
-  if [[ "${EUID}" -eq 0 ]]; then
-    DEST_DIR="/opt/@@APP_NAME@@"
-  else
-    DEST_DIR="${HOME}/.local/opt/@@APP_NAME@@"
-  fi
-fi
-
-if [[ "${EUID}" -ne 0 && "$DEST_DIR" == /opt/* ]]; then
-  echo "Refusing to install to $DEST_DIR without root privileges. Try: sudo ./install.sh $DEST_DIR" >&2
-  exit 1
-fi
-
-if [[ "$SRC_DIR" == "$DEST_DIR" ]]; then
-  echo "Already installed at $DEST_DIR"
-else
-  mkdir -p "$(dirname "$DEST_DIR")"
-
-  if command -v rsync >/dev/null 2>&1; then
-    rsync -a --delete "$SRC_DIR/" "$DEST_DIR/"
-  else
-    rm -rf "$DEST_DIR"
-    mkdir -p "$DEST_DIR"
-    cp -a "$SRC_DIR/." "$DEST_DIR/"
-  fi
-fi
-
-if [[ "${EUID}" -eq 0 ]]; then
-  DESKTOP_DIR="/usr/share/applications"
-else
-  DESKTOP_DIR="${HOME}/.local/share/applications"
-fi
-mkdir -p "$DESKTOP_DIR"
-
-DESKTOP_FILE="$DESKTOP_DIR/@@APP_NAME@@.desktop"
-cat > "$DESKTOP_FILE" <<EOF
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=@@APP_NAME@@
-Comment=$APP_DESC
-Exec=$DEST_DIR/bin/@@APP_NAME@@
-Icon=$DEST_DIR/lib/@@APP_NAME@@.png
-Categories=Network;
-Terminal=false
-StartupWMClass=@@APP_NAME@@
-EOF
-chmod 0644 "$DESKTOP_FILE"
-
-if command -v update-desktop-database >/dev/null 2>&1; then
-  update-desktop-database "$DESKTOP_DIR" || true
-fi
-
-echo "Installed @@APP_NAME@@ to: $DEST_DIR"
-echo "Desktop entry:       $DESKTOP_FILE"
-echo "You may need to log out/in (or restart your shell) for the launcher to appear."
-'''
-
-        def appDesc = project.description.toString().replace('"', '\\"')
-        def rendered = script
-            .replace('@@APP_NAME@@', appName)
-            .replace('@@APP_DESC@@', appDesc)
-
-        installScript.setText(rendered.stripIndent(), "UTF-8")
-
-        // Ensure script is executable in the build output.
-        installScript.setExecutable(true)
-    }
-}
-
-tasks.register("generateLinuxUninstallScript") {
-    onlyIf { isLinux }
-    doLast {
-        def outDir = appImageDir.get().asFile
-        outDir.mkdirs()
-
-        def uninstallScript = new File(outDir, "uninstall.sh")
-        def script = '''#!/usr/bin/env bash
-set -euo pipefail
-
-APP_NAME="@@APP_NAME@@"
-
-usage() {
-  cat <<USAGE
-Usage: ./uninstall.sh [INSTALL_DIR]
-
-Removes the @@APP_NAME@@ app-image installation and its .desktop launcher.
-
-If INSTALL_DIR is omitted:
-  - when run as root:   /opt/@@APP_NAME@@
-  - when run as a user: $HOME/.local/opt/@@APP_NAME@@
-
-Examples:
-  sudo ./uninstall.sh              # removes /opt/@@APP_NAME@@ and /usr/share/applications/@@APP_NAME@@.desktop
-  sudo ./uninstall.sh /opt/@@APP_NAME@@
-  ./uninstall.sh                   # removes ~/.local/opt/@@APP_NAME@@ and ~/.local/share/applications/@@APP_NAME@@.desktop
-  ./uninstall.sh ~/.local/opt/@@APP_NAME@@
-
-Note:
-  This does NOT remove your user data/config (logs, history DB, preferences).
-USAGE
-}
-
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  usage
-  exit 0
-fi
-
-DEST_DIR="${1:-}"
-if [[ -z "$DEST_DIR" ]]; then
-  if [[ "${EUID}" -eq 0 ]]; then
-    DEST_DIR="/opt/@@APP_NAME@@"
-  else
-    DEST_DIR="${HOME}/.local/opt/@@APP_NAME@@"
-  fi
-fi
-
-if [[ "${EUID}" -ne 0 && "$DEST_DIR" == /opt/* ]]; then
-  echo "Refusing to remove $DEST_DIR without root privileges. Try: sudo ./uninstall.sh $DEST_DIR" >&2
-  exit 1
-fi
-
-if [[ "${EUID}" -eq 0 ]]; then
-  DESKTOP_DIR="/usr/share/applications"
-else
-  DESKTOP_DIR="${HOME}/.local/share/applications"
-fi
-
-DESKTOP_FILE="$DESKTOP_DIR/@@APP_NAME@@.desktop"
-rm -f "$DESKTOP_FILE" || true
-
-if command -v update-desktop-database >/dev/null 2>&1; then
-  update-desktop-database "$DESKTOP_DIR" || true
-fi
-
-rm -rf "$DEST_DIR" || true
-
-echo "Uninstalled @@APP_NAME@@ from: $DEST_DIR"
-echo "Removed desktop entry: $DESKTOP_FILE"
-'''
-
-        def rendered = script.replace('@@APP_NAME@@', appName)
-        uninstallScript.setText(rendered.stripIndent(), "UTF-8")
-        uninstallScript.setExecutable(true)
-    }
-}
-
-tasks.register("installLinuxDesktopEntry") {
-    onlyIf { isLinux }
-    dependsOn("jpackage")
-
-    doLast {
-        def outDir = appImageDir.get().asFile
-        def desktopFile = new File(outDir, desktopFileName)
-        if (!desktopFile.exists()) {
-            throw new GradleException("Desktop entry was not generated: ${desktopFile}")
-        }
-
-        def home = System.getProperty("user.home")
-        def applicationsDir = new File(home, ".local/share/applications")
-        applicationsDir.mkdirs()
-
-        copy {
-            from(desktopFile)
-            into(applicationsDir)
-            fileMode = 0644
-        }
-
-        // Best-effort cache refresh. These tools may not exist on all distros.
-        exec {
-            ignoreExitValue = true
-            commandLine("bash", "-lc", "command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database ${applicationsDir.absolutePath} || true")
-        }
-    }
-}
-
-// When building a Linux app image, always include icon + .desktop alongside the output.
-tasks.named("jpackage").configure {
-    finalizedBy(
-        "copyLinuxAppImageIconToLib",
-        "generateLinuxDesktopEntry",
-        "generateLinuxInstallScript",
-        "generateLinuxUninstallScript",
-        "bundleTerminalNotifier"
-    )
-}
-tasks.register("bundleTerminalNotifier") {
-    onlyIf { isMac }
-
-    doLast {
-        def notifierSrc = file("packaging/macos/terminal-notifier.app")
-        if (!notifierSrc.exists()) {
-            logger.warn("[ircafe] Skipping terminal-notifier bundle; source app not found at: ${notifierSrc}")
-            return
-        }
-
-        def primaryAppBundle = file("$buildDir/dist/${appName}.app")
-        def appBundle = primaryAppBundle
-        if (!appBundle.exists()) {
-            def bundles = fileTree("$buildDir/dist") {
-                include("**/*.app")
-            }.files.sort { it.absolutePath }
-            appBundle = bundles.find { new File(it, "Contents/Resources").exists() }
-        }
-        if (appBundle == null || !appBundle.exists()) {
-            logger.warn(
-                "[ircafe] Skipping terminal-notifier bundle; no macOS app bundle found under ${buildDir}/dist")
-            return
-        }
-
-        def resourcesDir = new File(appBundle, "Contents/Resources")
-        if (!resourcesDir.exists()) {
-            logger.warn(
-                "[ircafe] Skipping terminal-notifier bundle; Resources directory not found at: ${resourcesDir}")
-            return
-        }
-
-        copy {
-            from notifierSrc.parentFile
-            include "${notifierSrc.name}/**"
-            into resourcesDir
-        }
-
-        def notifierDest = new File(resourcesDir, "terminal-notifier.app/Contents/MacOS/terminal-notifier")
-        if (!notifierDest.exists()) {
-            logger.warn(
-                "[ircafe] terminal-notifier bundle copy finished, but binary not found at: ${notifierDest}")
-            return
-        }
-        notifierDest.setExecutable(true, false)
-
-        println "Bundled terminal-notifier into app: $notifierDest"
-    }
-}
-
-forbiddenApis {
-    // Keep this task configured so it fails on accidental shell execution shortcuts.
-    signatures = [
-        "java.lang.Runtime#exec(java.lang.String)",
-        "java.lang.Runtime#exec(java.lang.String[])"
-    ]
+    mutationTestTool lib('pitestCommandLine')
+    mutationTestTool lib('pitestJunit5Plugin')
 }

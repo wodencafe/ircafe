@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.BackendMetadataPort;
 import cafe.woden.ircclient.irc.backend.BackendRoutingIrcClientService;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
@@ -81,6 +82,33 @@ class BackendRoutingIrcClientServiceTest {
   }
 
   @Test
+  void routesCallsByConfiguredCustomBackendId() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+    IrcBackendClientService pluginBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(pluginBackend.backend()).thenReturn(null);
+    when(pluginBackend.backendId()).thenReturn("plugin-backend");
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(pluginBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("plugin")).thenReturn(Optional.of(server("plugin", "plugin-backend")));
+    when(pluginBackend.connect("plugin")).thenReturn(Completable.complete());
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, pluginBackend));
+
+    assertEquals("plugin-backend", service.backendIdForServer("plugin"));
+
+    service.connect("plugin").blockingAwait();
+
+    verify(pluginBackend).connect("plugin");
+    verify(ircBackend, never()).connect("plugin");
+  }
+
+  @Test
   void reportsMatrixBackendServerFromConfiguration() {
     ServerCatalog serverCatalog = mock(ServerCatalog.class);
     IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
@@ -100,8 +128,8 @@ class BackendRoutingIrcClientServiceTest {
     BackendRoutingIrcClientService service =
         new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend, matrixBackend));
 
-    assertTrue(service.isMatrixBackendServer("matrix"));
-    assertFalse(service.isMatrixBackendServer("irc"));
+    assertEquals("matrix", service.backendIdForServer("matrix"));
+    assertEquals("irc", service.backendIdForServer("irc"));
   }
 
   @Test
@@ -232,7 +260,33 @@ class BackendRoutingIrcClientServiceTest {
     BackendRoutingIrcClientService service =
         new BackendRoutingIrcClientService(serverCatalog, List.of(ircBackend));
 
-    assertThrows(IllegalStateException.class, () -> service.connect("quassel"));
+    IllegalStateException err =
+        assertThrows(IllegalStateException.class, () -> service.connect("quassel"));
+
+    assertTrue(err.getMessage().contains("Quassel Core"));
+    assertTrue(err.getMessage().contains("quassel-core"));
+  }
+
+  @Test
+  void throwsWhenConfiguredPluginBackendIsMissingUsingPluginDisplayName() {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    BackendMetadataPort backendMetadata = mock(BackendMetadataPort.class);
+    IrcBackendClientService ircBackend = mock(IrcBackendClientService.class);
+
+    when(ircBackend.backend()).thenReturn(IrcProperties.Server.Backend.IRC);
+    when(ircBackend.events())
+        .thenReturn(PublishProcessor.<ServerIrcEvent>create().onBackpressureBuffer());
+    when(serverCatalog.find("plugin")).thenReturn(Optional.of(server("plugin", "plugin-backend")));
+    when(backendMetadata.backendDisplayName("plugin-backend")).thenReturn("Fancy Plugin");
+
+    BackendRoutingIrcClientService service =
+        new BackendRoutingIrcClientService(serverCatalog, backendMetadata, List.of(ircBackend));
+
+    IllegalStateException err =
+        assertThrows(IllegalStateException.class, () -> service.connect("plugin"));
+
+    assertTrue(err.getMessage().contains("Fancy Plugin"));
+    assertTrue(err.getMessage().contains("plugin-backend"));
   }
 
   @Test
@@ -439,5 +493,23 @@ class BackendRoutingIrcClientServiceTest {
         List.of(),
         null,
         backend);
+  }
+
+  private static IrcProperties.Server server(String id, String backendId) {
+    return new IrcProperties.Server(
+        id,
+        "irc.example.net",
+        6697,
+        true,
+        "",
+        "tester",
+        "tester",
+        "IRCafe Test",
+        null,
+        null,
+        List.of(),
+        List.of(),
+        null,
+        backendId);
   }
 }

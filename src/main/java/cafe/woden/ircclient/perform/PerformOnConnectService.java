@@ -1,11 +1,15 @@
 package cafe.woden.ircclient.perform;
 
+import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
+import cafe.woden.ircclient.app.api.BackendAvailabilityReasonFormatter;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.CommandParser;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.irc.DisconnectRequestSource;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.IrcDisconnectWithSourcePort;
 import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.backend.IrcBackendAvailabilityPort;
@@ -23,6 +27,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -48,6 +54,7 @@ public class PerformOnConnectService {
 
   private final IrcClientService irc;
   private final IrcBackendAvailabilityPort backendAvailability;
+  private final AvailableBackendIdsPort backendMetadata;
   private final ServerCatalog serverCatalog;
   private final CommandParser commandParser;
   private final UiPort ui;
@@ -58,14 +65,35 @@ public class PerformOnConnectService {
   private final AtomicLong runIdSequence = new AtomicLong();
   private final Disposable eventsSub;
 
+  @Autowired
   public PerformOnConnectService(
       IrcClientService irc,
       @Qualifier("ircClientService") IrcBackendAvailabilityPort backendAvailability,
+      ObjectProvider<AvailableBackendIdsPort> backendMetadataProvider,
+      ServerCatalog serverCatalog,
+      CommandParser commandParser,
+      UiPort ui) {
+    this(
+        irc,
+        backendAvailability,
+        backendMetadataProvider.getIfAvailable(),
+        serverCatalog,
+        commandParser,
+        ui);
+  }
+
+  public PerformOnConnectService(
+      IrcClientService irc,
+      IrcBackendAvailabilityPort backendAvailability,
+      AvailableBackendIdsPort backendMetadata,
       ServerCatalog serverCatalog,
       CommandParser commandParser,
       UiPort ui) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.backendAvailability = Objects.requireNonNull(backendAvailability, "backendAvailability");
+    this.backendMetadata =
+        Objects.requireNonNullElseGet(
+            backendMetadata, BackendAvailabilityReasonFormatter::builtInsBackendMetadata);
     this.serverCatalog = Objects.requireNonNull(serverCatalog, "serverCatalog");
     this.commandParser = Objects.requireNonNull(commandParser, "commandParser");
     this.ui = Objects.requireNonNull(ui, "ui");
@@ -75,6 +103,22 @@ public class PerformOnConnectService {
             .subscribe(
                 this::onEvent,
                 err -> log.debug("PerformOnConnectService event handler failed", err));
+  }
+
+  @Deprecated(forRemoval = false)
+  public PerformOnConnectService(
+      IrcClientService irc,
+      IrcBackendAvailabilityPort backendAvailability,
+      ServerCatalog serverCatalog,
+      CommandParser commandParser,
+      UiPort ui) {
+    this(
+        irc,
+        backendAvailability,
+        BackendAvailabilityReasonFormatter.builtInsBackendMetadata(),
+        serverCatalog,
+        commandParser,
+        ui);
   }
 
   @jakarta.annotation.PreDestroy
@@ -270,6 +314,9 @@ public class PerformOnConnectService {
 
       case ParsedInput.Quit cmd -> {
         String reason = Objects.toString(cmd.reason(), "").trim();
+        if (irc instanceof IrcDisconnectWithSourcePort sourceAware) {
+          yield sourceAware.disconnect(serverId, reason, DisconnectRequestSource.AUTOMATION);
+        }
         yield irc.disconnect(serverId, reason);
       }
 
@@ -574,10 +621,24 @@ public class PerformOnConnectService {
 
   private String normalizeBackendAvailabilityReason(String serverId) {
     String reason =
-        Objects.toString(backendAvailability.backendAvailabilityReason(serverId), "").trim();
+        BackendAvailabilityReasonFormatter.decorate(
+            configuredBackendId(serverId),
+            Objects.toString(backendAvailability.backendAvailabilityReason(serverId), "").trim(),
+            backendMetadata);
     if (reason.endsWith(".")) {
       reason = reason.substring(0, reason.length() - 1).trim();
     }
     return reason;
+  }
+
+  private String configuredBackendId(String serverId) {
+    try {
+      return Objects.requireNonNullElse(
+              serverCatalog.find(serverId), Optional.<IrcProperties.Server>empty())
+          .map(IrcProperties.Server::backendId)
+          .orElse("");
+    } catch (Exception ignored) {
+      return "";
+    }
   }
 }

@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui.settings;
 
 import cafe.woden.ircclient.config.NotificationRule;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.util.List;
@@ -22,7 +22,7 @@ public class UiSettingsBus {
   private volatile UiSettings current;
   private volatile boolean chatSmoothWheelScrollingEnabled;
 
-  public UiSettingsBus(UiProperties props, RuntimeConfigStore runtimeConfig) {
+  public UiSettingsBus(UiProperties props, UiSettingsRuntimeConfigPort runtimeConfig) {
     UiProperties.HostmaskDiscovery hm = props.hostmaskDiscovery();
     UiProperties.UserInfoEnrichment ue = props.userInfoEnrichment();
     UiProperties.MonitorFallback mf = props.monitorFallback();

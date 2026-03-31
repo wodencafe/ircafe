@@ -7,7 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.ActiveTargetPort;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.irc.port.IrcLagProbePort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.core.Completable;
@@ -20,7 +20,7 @@ class LagIndicatorServiceTest {
 
   @Test
   void passiveLagBackendsDoNotTriggerActiveProbeRequests() throws Exception {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    UiShellRuntimeConfigPort runtimeConfig = mock(UiShellRuntimeConfigPort.class);
     StatusBar statusBar = mock(StatusBar.class);
     ActiveTargetPort activeTargetPort = mock(ActiveTargetPort.class);
     IrcLagProbePort lagProbePort = mock(IrcLagProbePort.class);
@@ -44,7 +44,7 @@ class LagIndicatorServiceTest {
 
   @Test
   void passiveLagBackendsRequestInitialProbeBeforeAnyLagSampleExists() throws Exception {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    UiShellRuntimeConfigPort runtimeConfig = mock(UiShellRuntimeConfigPort.class);
     StatusBar statusBar = mock(StatusBar.class);
     ActiveTargetPort activeTargetPort = mock(ActiveTargetPort.class);
     IrcLagProbePort lagProbePort = mock(IrcLagProbePort.class);
@@ -70,7 +70,7 @@ class LagIndicatorServiceTest {
 
   @Test
   void passiveLagBackendsRequestFallbackProbeWhenFreshLagTurnsStale() throws Exception {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    UiShellRuntimeConfigPort runtimeConfig = mock(UiShellRuntimeConfigPort.class);
     StatusBar statusBar = mock(StatusBar.class);
     ActiveTargetPort activeTargetPort = mock(ActiveTargetPort.class);
     IrcLagProbePort lagProbePort = mock(IrcLagProbePort.class);
@@ -98,7 +98,7 @@ class LagIndicatorServiceTest {
 
   @Test
   void passiveLagBackendsRateLimitInitialProbeRetriesWhenLagStillMissing() throws Exception {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    UiShellRuntimeConfigPort runtimeConfig = mock(UiShellRuntimeConfigPort.class);
     StatusBar statusBar = mock(StatusBar.class);
     ActiveTargetPort activeTargetPort = mock(ActiveTargetPort.class);
     IrcLagProbePort lagProbePort = mock(IrcLagProbePort.class);
@@ -123,7 +123,7 @@ class LagIndicatorServiceTest {
 
   @Test
   void waitsForLagProbeReadinessBeforeSendingInitialProbe() throws Exception {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    UiShellRuntimeConfigPort runtimeConfig = mock(UiShellRuntimeConfigPort.class);
     StatusBar statusBar = mock(StatusBar.class);
     ActiveTargetPort activeTargetPort = mock(ActiveTargetPort.class);
     IrcLagProbePort lagProbePort = mock(IrcLagProbePort.class);
@@ -146,7 +146,7 @@ class LagIndicatorServiceTest {
 
   @Test
   void passiveLagBackendsRetryWhenProbeRequestFailsBeforeSend() throws Exception {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    UiShellRuntimeConfigPort runtimeConfig = mock(UiShellRuntimeConfigPort.class);
     StatusBar statusBar = mock(StatusBar.class);
     ActiveTargetPort activeTargetPort = mock(ActiveTargetPort.class);
     IrcLagProbePort lagProbePort = mock(IrcLagProbePort.class);
@@ -172,7 +172,7 @@ class LagIndicatorServiceTest {
 
   @Test
   void activeLagBackendsStillRequestExplicitProbes() throws Exception {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    UiShellRuntimeConfigPort runtimeConfig = mock(UiShellRuntimeConfigPort.class);
     StatusBar statusBar = mock(StatusBar.class);
     ActiveTargetPort activeTargetPort = mock(ActiveTargetPort.class);
     IrcLagProbePort lagProbePort = mock(IrcLagProbePort.class);

@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.bouncer;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.BouncerDiscoveryConfigPort;
 import java.util.Locale;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.ApplicationLayer;
@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 @ApplicationLayer
 public class GenericBouncerAutoConnectStore extends AbstractBouncerAutoConnectStore {
 
-  public GenericBouncerAutoConnectStore(RuntimeConfigStore runtimeConfig) {
+  public GenericBouncerAutoConnectStore(BouncerDiscoveryConfigPort runtimeConfig) {
     super(runtimeConfig);
     initialize(runtimeConfig.readGenericBouncerAutoConnectRules());
   }

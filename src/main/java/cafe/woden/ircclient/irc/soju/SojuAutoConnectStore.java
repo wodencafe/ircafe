@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.irc.soju;
 
 import cafe.woden.ircclient.bouncer.AbstractBouncerAutoConnectStore;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.SojuProperties;
+import cafe.woden.ircclient.config.api.BouncerDiscoveryConfigPort;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 @ApplicationLayer
 public class SojuAutoConnectStore extends AbstractBouncerAutoConnectStore {
 
-  public SojuAutoConnectStore(SojuProperties props, RuntimeConfigStore runtimeConfig) {
+  public SojuAutoConnectStore(SojuProperties props, BouncerDiscoveryConfigPort runtimeConfig) {
     super(runtimeConfig);
     initialize(props == null ? Map.of() : props.autoConnectCopy());
   }

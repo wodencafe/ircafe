@@ -3,6 +3,8 @@ package cafe.woden.ircclient.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -23,22 +25,21 @@ class RuntimeConfigStoreServerTreeRootSiblingOrderTest {
 
     assertEquals(Map.of(), store.readServerTreeRootSiblingOrderByServer());
 
-    RuntimeConfigStore.ServerTreeRootSiblingOrder order =
-        new RuntimeConfigStore.ServerTreeRootSiblingOrder(
+    ServerTreeRootSiblingOrder order =
+        new ServerTreeRootSiblingOrder(
             List.of(
-                RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER,
-                RuntimeConfigStore.ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
-                RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST,
-                RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS));
+                ServerTreeRootSiblingNode.OTHER,
+                ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
+                ServerTreeRootSiblingNode.CHANNEL_LIST,
+                ServerTreeRootSiblingNode.NOTIFICATIONS));
     store.rememberServerTreeRootSiblingOrder("libera", order);
 
-    Map<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> persisted =
+    Map<String, ServerTreeRootSiblingOrder> persisted =
         store.readServerTreeRootSiblingOrderByServer();
     assertEquals(1, persisted.size());
     assertEquals(order, persisted.get("libera"));
 
-    store.rememberServerTreeRootSiblingOrder(
-        "libera", RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults());
+    store.rememberServerTreeRootSiblingOrder("libera", ServerTreeRootSiblingOrder.defaults());
     assertEquals(Map.of(), store.readServerTreeRootSiblingOrderByServer());
 
     String yaml = Files.readString(cfg);
@@ -63,16 +64,16 @@ class RuntimeConfigStoreServerTreeRootSiblingOrderTest {
     RuntimeConfigStore store =
         new RuntimeConfigStore(cfg.toString(), new IrcProperties(null, List.of()));
 
-    Map<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> persisted =
+    Map<String, ServerTreeRootSiblingOrder> persisted =
         store.readServerTreeRootSiblingOrderByServer();
 
-    RuntimeConfigStore.ServerTreeRootSiblingOrder expected =
-        new RuntimeConfigStore.ServerTreeRootSiblingOrder(
+    ServerTreeRootSiblingOrder expected =
+        new ServerTreeRootSiblingOrder(
             List.of(
-                RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER,
-                RuntimeConfigStore.ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
-                RuntimeConfigStore.ServerTreeRootSiblingNode.CHANNEL_LIST,
-                RuntimeConfigStore.ServerTreeRootSiblingNode.NOTIFICATIONS));
+                ServerTreeRootSiblingNode.OTHER,
+                ServerTreeRootSiblingNode.PRIVATE_MESSAGES,
+                ServerTreeRootSiblingNode.CHANNEL_LIST,
+                ServerTreeRootSiblingNode.NOTIFICATIONS));
     assertEquals(expected, persisted.get("libera"));
   }
 

@@ -57,6 +57,8 @@ public final class ServerTreeTooltipProvider {
 
     String connectionDiagnosticsTipForServer(String serverId);
 
+    String backendDisplayNameForServer(String serverId);
+
     String backendIdForEphemeralServer(String serverId);
 
     String originByServerId(String backendId, String serverId);
@@ -87,6 +89,7 @@ public final class ServerTreeTooltipProvider {
       Function<String, ConnectionState> connectionStateForServer,
       Function<String, Boolean> desiredOnlineForServer,
       Function<String, String> connectionDiagnosticsTipForServer,
+      Function<String, String> backendDisplayNameForServer,
       Function<String, String> backendIdForEphemeralServer,
       BiFunction<String, String, String> originByServerId,
       Function<String, String> serverDisplayName,
@@ -108,6 +111,7 @@ public final class ServerTreeTooltipProvider {
     Objects.requireNonNull(connectionStateForServer, "connectionStateForServer");
     Objects.requireNonNull(desiredOnlineForServer, "desiredOnlineForServer");
     Objects.requireNonNull(connectionDiagnosticsTipForServer, "connectionDiagnosticsTipForServer");
+    Objects.requireNonNull(backendDisplayNameForServer, "backendDisplayNameForServer");
     Objects.requireNonNull(backendIdForEphemeralServer, "backendIdForEphemeralServer");
     Objects.requireNonNull(originByServerId, "originByServerId");
     Objects.requireNonNull(serverDisplayName, "serverDisplayName");
@@ -184,6 +188,11 @@ public final class ServerTreeTooltipProvider {
       @Override
       public String connectionDiagnosticsTipForServer(String serverId) {
         return connectionDiagnosticsTipForServer.apply(serverId);
+      }
+
+      @Override
+      public String backendDisplayNameForServer(String serverId) {
+        return backendDisplayNameForServer.apply(serverId);
       }
 
       @Override
@@ -387,12 +396,17 @@ public final class ServerTreeTooltipProvider {
     String queueTip = ServerTreeConnectionStateViewModel.intentQueueTip(state, desired);
     String diagnostics = context.connectionDiagnosticsTipForServer(serverId);
     String action = ServerTreeConnectionStateViewModel.actionHint(state);
+    String backendDisplayName =
+        Objects.toString(context.backendDisplayNameForServer(serverId), "").trim();
     String base =
         "State: "
             + ServerTreeConnectionStateViewModel.stateLabel(state)
             + ". Intent: "
             + ServerTreeConnectionStateViewModel.desiredIntentLabel(desired)
             + ".";
+    if (!backendDisplayName.isEmpty()) {
+      base += " Backend: " + backendDisplayName + ".";
+    }
     if (!queueTip.isBlank() && !diagnostics.isBlank())
       return base + " " + queueTip + diagnostics + " " + action;
     if (!queueTip.isBlank()) return base + " " + queueTip + " " + action;

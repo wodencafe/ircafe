@@ -7,6 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
+import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
@@ -25,6 +27,7 @@ import io.github.andrewauclair.moderndocking.Dockable;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.swing.SwingUtilities;
@@ -50,6 +53,8 @@ class ChatDockManagerTest {
     ActiveInputRouter activeInputRouter = mock(ActiveInputRouter.class);
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
+    SlashCommandPresentationCatalog slashCommandPresentationCatalog =
+        new SlashCommandPresentationCatalog(List.of(), new BackendNamedCommandCatalog(List.of()));
     ChatDockManager manager =
         new ChatDockManager(
             serverTree,
@@ -64,6 +69,7 @@ class ChatDockManagerTest {
             backendUiProfileProvider,
             messageActionCapabilityPolicy,
             activeInputRouter,
+            slashCommandPresentationCatalog,
             chatHistoryService,
             commandHistoryStore);
 
@@ -116,6 +122,8 @@ class ChatDockManagerTest {
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
             mock(ActiveInputRouter.class),
+            new SlashCommandPresentationCatalog(
+                List.of(), new BackendNamedCommandCatalog(List.of())),
             mock(ChatHistoryService.class),
             mock(CommandHistoryStore.class));
     openPinned(manager).put(target, pinnedDock);
@@ -146,6 +154,8 @@ class ChatDockManagerTest {
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
             mock(ActiveInputRouter.class),
+            new SlashCommandPresentationCatalog(
+                List.of(), new BackendNamedCommandCatalog(List.of())),
             mock(ChatHistoryService.class),
             mock(CommandHistoryStore.class));
     openPinned(manager).put(target, pinnedDock);
@@ -171,6 +181,8 @@ class ChatDockManagerTest {
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
             mock(ActiveInputRouter.class),
+            new SlashCommandPresentationCatalog(
+                List.of(), new BackendNamedCommandCatalog(List.of())),
             mock(ChatHistoryService.class),
             mock(CommandHistoryStore.class));
 

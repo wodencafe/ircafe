@@ -3,7 +3,7 @@ package cafe.woden.ircclient.ui.servertree.layout;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
@@ -29,7 +29,7 @@ class ServerTreeBuiltInLayoutOrchestratorContextTest {
             id -> serverId.equals(id) ? nodes : null,
             leaves::get,
             id -> visibility,
-            node -> RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER,
+            node -> ServerTreeRootSiblingNode.OTHER,
             structureChanged::set);
 
     assertEquals(serverId, context.normalizeServerId(" libera "));
@@ -37,8 +37,7 @@ class ServerTreeBuiltInLayoutOrchestratorContextTest {
     assertSame(statusNode, context.leafNode(nodes.statusRef));
     assertSame(visibility, context.builtInNodesVisibility(serverId));
     assertEquals(
-        RuntimeConfigStore.ServerTreeRootSiblingNode.OTHER,
-        context.rootSiblingNodeKindForNode(nodes.otherNode));
+        ServerTreeRootSiblingNode.OTHER, context.rootSiblingNodeKindForNode(nodes.otherNode));
 
     context.nodeStructureChanged(nodes.serverNode);
     assertSame(nodes.serverNode, structureChanged.get());

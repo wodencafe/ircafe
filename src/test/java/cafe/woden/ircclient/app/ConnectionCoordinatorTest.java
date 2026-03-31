@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -13,6 +14,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import cafe.woden.ircclient.app.api.AvailableBackendIdsPort;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
@@ -166,7 +168,7 @@ class ConnectionCoordinatorTest {
                 server("hybrid", "irc.example.net", 6697, true, IrcProperties.Server.Backend.IRC)));
     when(serverCatalog.containsId("hybrid")).thenReturn(true);
     when(irc.connect("hybrid")).thenReturn(Completable.complete());
-    when(irc.disconnect("hybrid")).thenReturn(Completable.complete());
+    when(irc.disconnect("hybrid", null)).thenReturn(Completable.complete());
     when(runtimeConfig.readPrivateMessageTargets("hybrid")).thenReturn(List.of());
     when(runtimeConfig.readKnownChannels("hybrid")).thenReturn(List.of());
 
@@ -194,7 +196,7 @@ class ConnectionCoordinatorTest {
                 IrcProperties.Server.Backend.QUASSEL_CORE)),
         null);
 
-    verify(irc, times(1)).disconnect("hybrid");
+    verify(irc, times(1)).disconnect("hybrid", null);
     verify(irc, times(1)).connect("hybrid");
   }
 
@@ -517,6 +519,51 @@ class ConnectionCoordinatorTest {
 
     verify(ui).setChatCurrentNick("quassel", "readyNick");
     verify(ui, timeout(2_000).atLeastOnce()).ensureTargetExists(new TargetRef("quassel", "Alice"));
+  }
+
+  @Test
+  void connectedEventFormatsGenericPluginBackendReasonWithDisplayName() {
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+    AvailableBackendIdsPort backendMetadata = mock(AvailableBackendIdsPort.class);
+
+    when(serverRegistry.serverIds()).thenReturn(Set.of("plugin"));
+    when(serverRegistry.servers())
+        .thenReturn(List.of(server("plugin", "plugin.example.net", 6697, true, "plugin-backend")));
+    when(serverCatalog.containsId("plugin")).thenReturn(true);
+    when(runtimeConfig.readPrivateMessageTargets("plugin")).thenReturn(List.of());
+    when(runtimeConfig.readKnownChannels("plugin")).thenReturn(List.of());
+    when(irc.backendAvailabilityReason("plugin")).thenReturn("not connected");
+    when(backendMetadata.backendDisplayName("plugin-backend")).thenReturn("Fancy Plugin");
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            IrcConnectionLifecyclePort.from(irc),
+            irc,
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService,
+            null,
+            backendMetadata);
+
+    coordinator.handleConnectivityEvent(
+        "plugin",
+        new IrcEvent.Connected(Instant.now(), "plugin.example.net", 6697, "transportNick"),
+        null);
+
+    verify(ui)
+        .appendStatus(
+            new TargetRef("plugin", "status"),
+            "(conn)",
+            "Connected transport; waiting for backend readiness (Fancy Plugin backend: not connected)");
   }
 
   @Test
@@ -1011,10 +1058,66 @@ class ConnectionCoordinatorTest {
     verify(runtimeConfig, never()).readKnownChannels("quassel");
   }
 
+  @Test
+  void controlledReconnectTriggersWhenCustomBackendIdChanges() throws Exception {
+    var method =
+        ConnectionCoordinator.class.getDeclaredMethod(
+            "requiresControlledReconnect", IrcProperties.Server.class, IrcProperties.Server.class);
+    method.setAccessible(true);
+
+    Object changed =
+        method.invoke(
+            null,
+            server("plugin-a", "irc.example.net", 6697, true, "plugin-a"),
+            server("plugin-a", "irc.example.net", 6697, true, "plugin-b"));
+
+    assertTrue(Boolean.TRUE.equals(changed));
+  }
+
+  @Test
+  void reconnectChangeSummaryUsesCustomBackendIds() throws Exception {
+    IrcBackendClientService irc = mock(IrcBackendClientService.class);
+    UiPort ui = mock(UiPort.class);
+    ServerRegistry serverRegistry = mock(ServerRegistry.class);
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    ConnectionRuntimeConfigPort runtimeConfig = mock(ConnectionRuntimeConfigPort.class);
+    TrayNotificationsPort trayNotificationService = mock(TrayNotificationsPort.class);
+
+    ConnectionCoordinator coordinator =
+        new ConnectionCoordinator(
+            IrcConnectionLifecyclePort.from(irc),
+            irc,
+            ui,
+            serverRegistry,
+            serverCatalog,
+            runtimeConfig,
+            LOG_PROPS,
+            trayNotificationService);
+    var method =
+        ConnectionCoordinator.class.getDeclaredMethod(
+            "summarizeReconnectChange", IrcProperties.Server.class, IrcProperties.Server.class);
+    method.setAccessible(true);
+
+    Object summary =
+        method.invoke(
+            coordinator,
+            server("plugin-a", "irc.example.net", 6697, true, "plugin-a"),
+            server("plugin-a", "irc.example.net", 6697, true, "plugin-b"));
+
+    assertEquals("backend plugin-a → plugin-b", summary);
+  }
+
   private static IrcProperties.Server server(
       String id, String host, int port, boolean tls, IrcProperties.Server.Backend backend) {
     return new IrcProperties.Server(
         id, host, port, tls, "", "tester", "tester", "Tester", null, null, List.of(), List.of(),
         null, backend);
+  }
+
+  private static IrcProperties.Server server(
+      String id, String host, int port, boolean tls, String backendId) {
+    return new IrcProperties.Server(
+        id, host, port, tls, "", "tester", "tester", "Tester", null, null, List.of(), List.of(),
+        null, backendId);
   }
 }

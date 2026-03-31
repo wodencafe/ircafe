@@ -2,7 +2,7 @@ package cafe.woden.ircclient.logging;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.config.LogProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.logging.history.ChatHistoryIngestBus;
@@ -52,8 +52,8 @@ public class ChatLogDatabaseConfig {
 
   @Bean(name = "chatLogDataSource", destroyMethod = "close")
   public DataSource chatLogDataSource(
-      LogProperties logProps, RuntimeConfigStore runtimeConfigStore) {
-    Path basePath = resolveDbBasePath(logProps, runtimeConfigStore);
+      LogProperties logProps, RuntimeConfigPathPort runtimeConfigPathPort) {
+    Path basePath = resolveDbBasePath(logProps, runtimeConfigPathPort);
     Path lockPath = lockFilePath(basePath);
 
     // Keep the DB open for the life of the app by reusing pooled connections.
@@ -149,12 +149,12 @@ public class ChatLogDatabaseConfig {
   }
 
   private static Path resolveDbBasePath(
-      LogProperties props, RuntimeConfigStore runtimeConfigStore) {
+      LogProperties props, RuntimeConfigPathPort runtimeConfigPathPort) {
     String baseName = props.hsqldb() != null ? props.hsqldb().fileBaseName() : "ircafe-chatlog";
 
     Path dir;
     if (props.hsqldb() != null && Boolean.TRUE.equals(props.hsqldb().nextToRuntimeConfig())) {
-      Path runtimeCfg = runtimeConfigStore.runtimeConfigPath();
+      Path runtimeCfg = runtimeConfigPathPort.runtimeConfigPath();
       Path parent = runtimeCfg != null ? runtimeCfg.getParent() : null;
       dir = parent != null ? parent : defaultIrcafeDir();
     } else {

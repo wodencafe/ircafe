@@ -1,6 +1,14 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
+import cafe.woden.ircclient.app.outbound.chathistory.OutboundChatHistoryCommandService;
+import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistrar;
+import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistry;
+import cafe.woden.ircclient.app.outbound.help.OutboundHelpCommandService;
+import cafe.woden.ircclient.app.outbound.messaging.OutboundSayQuoteCommandService;
+import cafe.woden.ircclient.app.outbound.mutation.OutboundMessageMutationCommandService;
+import cafe.woden.ircclient.app.outbound.readmarker.OutboundReadMarkerCommandService;
+import cafe.woden.ircclient.app.outbound.upload.OutboundUploadCommandService;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;

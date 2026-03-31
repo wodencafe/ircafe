@@ -33,6 +33,13 @@ import cafe.woden.ircclient.ui.filter.FilterSettings;
 import cafe.woden.ircclient.ui.filter.FilterSettingsBus;
 import cafe.woden.ircclient.ui.nickcolors.NickColorOverridesDialog;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
+import cafe.woden.ircclient.ui.settings.theme.ChatThemeSettings;
+import cafe.woden.ircclient.ui.settings.theme.ChatThemeSettingsBus;
+import cafe.woden.ircclient.ui.settings.theme.ThemeAccentSettings;
+import cafe.woden.ircclient.ui.settings.theme.ThemeAccentSettingsBus;
+import cafe.woden.ircclient.ui.settings.theme.ThemeManager;
+import cafe.woden.ircclient.ui.settings.theme.ThemeTweakSettings;
+import cafe.woden.ircclient.ui.settings.theme.ThemeTweakSettingsBus;
 import cafe.woden.ircclient.ui.shell.LagIndicatorService;
 import cafe.woden.ircclient.ui.shell.UpdateNotifierService;
 import cafe.woden.ircclient.ui.tray.TrayNotificationService;
@@ -167,8 +174,9 @@ class PreferencesDialogFunctionalTest {
     PreferencesDialog dialog = newPreferencesDialog();
     List<AutoCloseable> closeables = new ArrayList<>();
 
-    Object notifications =
-        invoke(dialog, "buildNotificationRulesControls", testUiSettings(), closeables);
+    NotificationRulesControls notifications =
+        NotificationRulesControlsSupport.buildControls(
+            testUiSettings(), closeables, mock(ExecutorService.class));
     Object ircEvents =
         invoke(dialog, "buildIrcEventNotificationControls", IrcEventNotificationRule.defaults());
 
@@ -182,12 +190,14 @@ class PreferencesDialogFunctionalTest {
 
   @Test
   void historyStoragePanelUsesFocusedSubTabs() throws Exception {
-    PreferencesDialog dialog = newPreferencesDialog();
     List<AutoCloseable> closeables = new ArrayList<>();
 
-    Object history = invoke(dialog, "buildHistoryControls", testUiSettings(), closeables);
-    Object logging = invoke(dialog, "buildLoggingControls", (LogProperties) null, closeables);
-    JPanel panel = (JPanel) invoke(dialog, "buildHistoryAndStoragePanel", logging, history);
+    HistoryControls history =
+        HistoryControlsSupport.buildControls(testUiSettings(), closeables, false, false);
+    LoggingControls logging =
+        LoggingControlsSupport.buildControls(
+            (LogProperties) null, closeables, mock(ServerDialogs.class), null);
+    JPanel panel = HistoryStoragePanelSupport.buildPanel(logging, history);
 
     assertNotNull(findTabbedPaneWithTab(panel, "Logging"));
     assertNotNull(findTabbedPaneWithTab(panel, "Scrolling & Loading"));
@@ -218,15 +228,18 @@ class PreferencesDialogFunctionalTest {
   @Test
   void trayPanelSoundsTabExposesCustomSoundPathControls() throws Exception {
     PreferencesDialog dialog = newPreferencesDialog();
-    List<AutoCloseable> closeables = new ArrayList<>();
-
-    Object trayControls =
-        invoke(
-            dialog,
-            "buildTrayControls",
+    TrayControls trayControls =
+        TrayControlsSupport.buildControls(
             testUiSettings(),
             new NotificationSoundSettings(true, "NOTIF_1", true, "sounds/custom.wav"),
-            new PushyProperties(false, null, null, null, null, null, null, null));
+            new PushyProperties(false, null, null, null, null, null, null, null),
+            mock(RuntimeConfigStore.class),
+            mock(GnomeDbusNotificationBackend.class),
+            mock(TrayNotificationService.class),
+            mock(NotificationSoundService.class),
+            mock(PushyNotificationService.class),
+            mock(ExecutorService.class),
+            source -> "");
     JPanel trayPanel = (JPanel) invoke(dialog, "buildTrayNotificationsPanel", trayControls);
     assertNotNull(findTabbedPaneWithTab(trayPanel, "Sounds"));
 
@@ -249,8 +262,6 @@ class PreferencesDialogFunctionalTest {
     assertTrue(browse.isEnabled());
     clear.doClick();
     assertEquals("", customPath.getText());
-
-    closeAll(closeables);
   }
 
   @Test
@@ -268,46 +279,44 @@ class PreferencesDialogFunctionalTest {
 
   @Test
   void ircv3PanelIncludesUnreadBadgeSizeControl() throws Exception {
-    PreferencesDialog dialog = newPreferencesDialog();
     UiSettings current = testUiSettings();
+    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    when(runtimeConfig.readIrcv3Capabilities()).thenReturn(Map.of());
+    when(runtimeConfig.readServerTreeUnreadBadgeScalePercent(100)).thenReturn(100);
 
-    JCheckBox send = (JCheckBox) invoke(dialog, "buildTypingIndicatorsSendCheckbox", current);
-    JCheckBox receive = (JCheckBox) invoke(dialog, "buildTypingIndicatorsReceiveCheckbox", current);
+    JCheckBox send = ChatBehaviorControlsSupport.buildTypingIndicatorsSendCheckbox(current);
+    JCheckBox receive = ChatBehaviorControlsSupport.buildTypingIndicatorsReceiveCheckbox(current);
     JCheckBox treeDisplay =
-        (JCheckBox) invoke(dialog, "buildTypingIndicatorsTreeDisplayCheckbox", current);
+        ChatBehaviorControlsSupport.buildTypingIndicatorsTreeDisplayCheckbox(current);
     JCheckBox usersDisplay =
-        (JCheckBox) invoke(dialog, "buildTypingIndicatorsUsersListDisplayCheckbox", current);
+        ChatBehaviorControlsSupport.buildTypingIndicatorsUsersListDisplayCheckbox(current);
     JCheckBox transcriptDisplay =
-        (JCheckBox) invoke(dialog, "buildTypingIndicatorsTranscriptDisplayCheckbox", current);
+        ChatBehaviorControlsSupport.buildTypingIndicatorsTranscriptDisplayCheckbox(current);
     JCheckBox sendSignalDisplay =
-        (JCheckBox) invoke(dialog, "buildTypingIndicatorsSendSignalDisplayCheckbox", current);
-    @SuppressWarnings("unchecked")
-    JComboBox<Object> style =
-        (JComboBox<Object>) invoke(dialog, "buildTypingTreeIndicatorStyleCombo", current);
-    @SuppressWarnings("unchecked")
-    JComboBox<Object> matrixUserListNameDisplayMode =
-        (JComboBox<Object>) invoke(dialog, "buildMatrixUserListNameDisplayModeCombo", current);
+        ChatBehaviorControlsSupport.buildTypingIndicatorsSendSignalDisplayCheckbox(current);
+    JComboBox<?> style = ChatBehaviorControlsSupport.buildTypingTreeIndicatorStyleCombo(current);
+    JComboBox<?> matrixUserListNameDisplayMode =
+        ChatBehaviorControlsSupport.buildMatrixUserListNameDisplayModeCombo(current);
     JCheckBox badgesEnabled =
-        (JCheckBox) invoke(dialog, "buildServerTreeNotificationBadgesCheckbox", current);
-    JSpinner badgeScale = new JSpinner(new javax.swing.SpinnerNumberModel(100, 50, 150, 5));
-    Object capabilities = invoke(dialog, "buildIrcv3CapabilitiesControls");
+        ChatBehaviorControlsSupport.buildServerTreeNotificationBadgesCheckbox(current);
+    JSpinner badgeScale =
+        ChatBehaviorControlsSupport.buildServerTreeUnreadBadgeScalePercentSpinner(runtimeConfig);
+    Ircv3CapabilitiesControls capabilities =
+        Ircv3PanelSupport.buildCapabilitiesControls(runtimeConfig);
 
     JPanel panel =
-        (JPanel)
-            invoke(
-                dialog,
-                "buildIrcv3CapabilitiesPanel",
-                send,
-                receive,
-                treeDisplay,
-                usersDisplay,
-                transcriptDisplay,
-                sendSignalDisplay,
-                style,
-                matrixUserListNameDisplayMode,
-                badgesEnabled,
-                badgeScale,
-                capabilities);
+        Ircv3PanelSupport.buildPanel(
+            send,
+            receive,
+            treeDisplay,
+            usersDisplay,
+            transcriptDisplay,
+            sendSignalDisplay,
+            style,
+            matrixUserListNameDisplayMode,
+            badgesEnabled,
+            badgeScale,
+            capabilities);
     assertNotNull(findLabel(panel, "Unread badge size"));
   }
 
@@ -317,10 +326,9 @@ class PreferencesDialogFunctionalTest {
     ExecutorService rulesExec = mock(ExecutorService.class);
     when(pushyExec.isShutdown()).thenReturn(false);
     when(rulesExec.isShutdown()).thenReturn(false);
-    PreferencesDialog dialog = newPreferencesDialog(pushyExec, rulesExec);
     List<AutoCloseable> closeables = new ArrayList<>();
 
-    invoke(dialog, "buildNotificationRulesControls", testUiSettings(), closeables);
+    NotificationRulesControlsSupport.buildControls(testUiSettings(), closeables, rulesExec);
     closeAll(closeables);
 
     verify(rulesExec, never()).shutdownNow();
@@ -329,42 +337,35 @@ class PreferencesDialogFunctionalTest {
 
   private static AppearanceFixture buildAppearanceFixture(ChatThemeSettings chatTheme)
       throws Exception {
-    PreferencesDialog dialog = newPreferencesDialog();
     UiSettings current = testUiSettings();
     List<AutoCloseable> closeables = new ArrayList<>();
     Map<String, String> themeLabelById = new LinkedHashMap<>();
     themeLabelById.put("darcula", "Darcula");
 
-    Object themeControls = invoke(dialog, "buildThemeControls", current, themeLabelById);
-    Object accentControls =
-        invoke(
-            dialog,
-            "buildAccentControls",
+    ThemeControls themeControls =
+        AppearanceControlsSupport.buildThemeControls(current, themeLabelById);
+    AccentControls accentControls =
+        AppearanceControlsSupport.buildAccentControls(
             new ThemeAccentSettings(
                 cafe.woden.ircclient.config.UiProperties.DEFAULT_ACCENT_COLOR,
                 cafe.woden.ircclient.config.UiProperties.DEFAULT_ACCENT_STRENGTH));
-    Object chatThemeControls = invoke(dialog, "buildChatThemeControls", chatTheme);
-    Object fontControls = invoke(dialog, "buildFontControls", current, closeables);
-    Object tweakControls =
-        invoke(
-            dialog,
-            "buildTweakControls",
-            new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10),
-            closeables);
-    Object appearanceServerTreeControls =
-        invoke(dialog, "buildAppearanceServerTreeControls", current);
+    ChatThemeControls chatThemeControls =
+        AppearanceControlsSupport.buildChatThemeControls(chatTheme);
+    FontControls fontControls = AppearanceControlsSupport.buildFontControls(current, closeables);
+    TweakControls tweakControls =
+        AppearanceControlsSupport.buildTweakControls(
+            new ThemeTweakSettings(ThemeTweakSettings.ThemeDensity.AUTO, 10), closeables);
+    AppearanceServerTreeControls appearanceServerTreeControls =
+        AppearanceControlsSupport.buildServerTreeControls(current);
 
     JPanel appearancePanel =
-        (JPanel)
-            invoke(
-                dialog,
-                "buildAppearancePanel",
-                themeControls,
-                accentControls,
-                chatThemeControls,
-                fontControls,
-                tweakControls,
-                appearanceServerTreeControls);
+        AppearancePanelSupport.buildPanel(
+            themeControls,
+            accentControls,
+            chatThemeControls,
+            fontControls,
+            tweakControls,
+            appearanceServerTreeControls);
     return new AppearanceFixture(appearancePanel, chatThemeControls);
   }
 

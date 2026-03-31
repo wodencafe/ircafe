@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.layout;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
@@ -21,8 +24,7 @@ public final class ServerTreeBuiltInLayoutOrchestrator {
 
     ServerBuiltInNodesVisibility builtInNodesVisibility(String serverId);
 
-    RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
-        DefaultMutableTreeNode node);
+    ServerTreeRootSiblingNode rootSiblingNodeKindForNode(DefaultMutableTreeNode node);
 
     void nodeStructureChanged(DefaultMutableTreeNode node);
   }
@@ -32,8 +34,7 @@ public final class ServerTreeBuiltInLayoutOrchestrator {
       Function<String, ServerNodes> serverNodes,
       Function<TargetRef, DefaultMutableTreeNode> leafNode,
       Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility,
-      Function<DefaultMutableTreeNode, RuntimeConfigStore.ServerTreeRootSiblingNode>
-          rootSiblingNodeKindForNode,
+      Function<DefaultMutableTreeNode, ServerTreeRootSiblingNode> rootSiblingNodeKindForNode,
       Consumer<DefaultMutableTreeNode> nodeStructureChanged) {
     Objects.requireNonNull(normalizeServerId, "normalizeServerId");
     Objects.requireNonNull(serverNodes, "serverNodes");
@@ -63,8 +64,7 @@ public final class ServerTreeBuiltInLayoutOrchestrator {
       }
 
       @Override
-      public RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
-          DefaultMutableTreeNode node) {
+      public ServerTreeRootSiblingNode rootSiblingNodeKindForNode(DefaultMutableTreeNode node) {
         return rootSiblingNodeKindForNode.apply(node);
       }
 
@@ -101,7 +101,7 @@ public final class ServerTreeBuiltInLayoutOrchestrator {
   }
 
   public void applyBuiltInLayoutToTree(
-      ServerNodes serverNodes, RuntimeConfigStore.ServerTreeBuiltInLayout requestedLayout) {
+      ServerNodes serverNodes, ServerTreeBuiltInLayout requestedLayout) {
     if (serverNodes == null) return;
     layoutApplier.applyBuiltInLayout(
         serverNodes.serverNode,
@@ -115,7 +115,7 @@ public final class ServerTreeBuiltInLayoutOrchestrator {
   }
 
   public void applyRootSiblingOrderToTree(
-      ServerNodes serverNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder requestedOrder) {
+      ServerNodes serverNodes, ServerTreeRootSiblingOrder requestedOrder) {
     if (serverNodes == null) return;
     layoutApplier.applyRootSiblingOrder(
         serverNodes.serverNode,
@@ -145,7 +145,7 @@ public final class ServerTreeBuiltInLayoutOrchestrator {
   }
 
   private DefaultMutableTreeNode treeNodeForRootSiblingKind(
-      ServerNodes serverNodes, RuntimeConfigStore.ServerTreeRootSiblingNode nodeKind) {
+      ServerNodes serverNodes, ServerTreeRootSiblingNode nodeKind) {
     if (serverNodes == null || serverNodes.serverNode == null || nodeKind == null) return null;
     return switch (nodeKind) {
       case CHANNEL_LIST -> context.leafNode(serverNodes.channelListRef);
@@ -156,7 +156,7 @@ public final class ServerTreeBuiltInLayoutOrchestrator {
   }
 
   private DefaultMutableTreeNode treeNodeForBuiltInLayoutKind(
-      ServerNodes serverNodes, RuntimeConfigStore.ServerTreeBuiltInLayoutNode nodeKind) {
+      ServerNodes serverNodes, ServerTreeBuiltInLayoutNode nodeKind) {
     if (serverNodes == null || nodeKind == null) return null;
     String sid = context.normalizeServerId(serverNodes.statusRef.serverId());
     ServerBuiltInNodesVisibility visibility = context.builtInNodesVisibility(sid);

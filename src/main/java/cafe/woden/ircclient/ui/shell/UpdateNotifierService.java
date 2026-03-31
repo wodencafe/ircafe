@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.ui.shell;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.net.HttpLite;
 import cafe.woden.ircclient.net.NetProxyContext;
 import cafe.woden.ircclient.util.AppVersion;
@@ -59,7 +59,7 @@ public class UpdateNotifierService {
   private static final Pattern VERSION_PREFIX_PATTERN =
       Pattern.compile("(?i)^v?(\\d+)(?:\\.(\\d+))?(?:\\.(\\d+))?(?:\\.(\\d+))?.*");
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final UiShellRuntimeConfigPort runtimeConfig;
   private final StatusBar statusBar;
   private final ScheduledExecutorService scheduler;
 
@@ -70,7 +70,7 @@ public class UpdateNotifierService {
 
   private volatile String lastAlertedTag;
 
-  public UpdateNotifierService(RuntimeConfigStore runtimeConfig, StatusBar statusBar) {
+  public UpdateNotifierService(UiShellRuntimeConfigPort runtimeConfig, StatusBar statusBar) {
     this.runtimeConfig = Objects.requireNonNull(runtimeConfig, "runtimeConfig");
     this.statusBar = Objects.requireNonNull(statusBar, "statusBar");
     this.scheduler = VirtualThreads.newSingleThreadScheduledExecutor("ircafe-update-notifier");

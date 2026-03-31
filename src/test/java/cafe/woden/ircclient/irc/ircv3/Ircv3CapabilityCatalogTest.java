@@ -1,0 +1,40 @@
+package cafe.woden.ircclient.irc.ircv3;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+class Ircv3CapabilityCatalogTest {
+
+  @Test
+  void requestableCapabilitiesIncludeModernIrcv3NegotiationSet() {
+    List<String> caps = Ircv3CapabilityCatalog.requestableCapabilities();
+    assertTrue(caps.contains("echo-message"));
+    assertTrue(caps.contains("cap-notify"));
+    assertTrue(caps.contains("invite-notify"));
+    assertTrue(caps.contains("labeled-response"));
+    assertTrue(caps.contains("standard-replies"));
+    assertTrue(caps.contains("monitor"));
+    assertTrue(caps.contains("extended-monitor"));
+    assertTrue(caps.contains("setname"));
+    assertTrue(caps.contains("chghost"));
+    assertTrue(caps.contains("sts"));
+    assertTrue(caps.contains("draft/channel-context"));
+    assertTrue(caps.contains("draft/reply"));
+    assertTrue(caps.contains("draft/react"));
+    assertTrue(caps.contains("draft/unreact"));
+    assertTrue(caps.contains("draft/message-edit"));
+    assertTrue(caps.contains("message-edit"));
+    assertTrue(caps.contains("draft/message-redaction"));
+    assertTrue(caps.contains("message-redaction"));
+    assertTrue(caps.contains("draft/typing"));
+    assertTrue(caps.contains("typing"));
+    assertTrue(caps.contains("read-marker"));
+    assertTrue(caps.contains("draft/read-marker"));
+    assertTrue(caps.contains("multiline"));
+    assertTrue(caps.contains("draft/multiline"));
+    assertTrue(caps.contains("chathistory"));
+    assertTrue(caps.contains("draft/chathistory"));
+  }
+}

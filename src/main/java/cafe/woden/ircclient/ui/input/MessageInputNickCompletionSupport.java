@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.input;
 
+import cafe.woden.ircclient.app.commands.SlashCommandDescriptor;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.HierarchyEvent;
@@ -12,6 +13,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -46,83 +48,12 @@ final class MessageInputNickCompletionSupport {
   private static final int RELEVANCE_SLASH = 280;
   private static final int RELEVANCE_WORD_PREFIX = 220;
   private static final int MAX_WORD_SUGGESTIONS = 8;
-  private static final List<SlashCommand> SLASH_COMMANDS =
-      List.of(
-          new SlashCommand("/join", "Join channel"),
-          new SlashCommand("/j", "Alias: /join"),
-          new SlashCommand("/part", "Leave channel"),
-          new SlashCommand("/leave", "Alias: /part"),
-          new SlashCommand("/connect", "Connect server/all"),
-          new SlashCommand("/disconnect", "Disconnect server/all"),
-          new SlashCommand("/reconnect", "Reconnect server/all"),
-          new SlashCommand("/quit", "Disconnect all and quit"),
-          new SlashCommand("/nick", "Change nickname"),
-          new SlashCommand("/away", "Set/remove away status"),
-          new SlashCommand("/query", "Open private message"),
-          new SlashCommand("/whois", "WHOIS lookup"),
-          new SlashCommand("/wi", "Alias: /whois"),
-          new SlashCommand("/whowas", "WHOWAS lookup"),
-          new SlashCommand("/msg", "Send private message"),
-          new SlashCommand("/notice", "Send notice"),
-          new SlashCommand("/me", "Send action"),
-          new SlashCommand("/topic", "View/change topic"),
-          new SlashCommand("/kick", "Kick user"),
-          new SlashCommand("/invite", "Invite user"),
-          new SlashCommand("/invites", "List pending invites"),
-          new SlashCommand("/invjoin", "Join pending invite"),
-          new SlashCommand("/invitejoin", "Alias: /invjoin"),
-          new SlashCommand("/invignore", "Ignore pending invite"),
-          new SlashCommand("/inviteignore", "Alias: /invignore"),
-          new SlashCommand("/invwhois", "WHOIS inviter from invite"),
-          new SlashCommand("/invitewhois", "Alias: /invwhois"),
-          new SlashCommand("/invblock", "Block inviter nick"),
-          new SlashCommand("/inviteblock", "Alias: /invblock"),
-          new SlashCommand("/inviteautojoin", "Toggle invite auto-join"),
-          new SlashCommand("/invautojoin", "Alias: /inviteautojoin"),
-          new SlashCommand("/ajinvite", "Alias: /inviteautojoin (toggle)"),
-          new SlashCommand("/names", "Request NAMES"),
-          new SlashCommand("/who", "Request WHO"),
-          new SlashCommand("/list", "Request LIST"),
-          new SlashCommand("/mode", "Set/query mode"),
-          new SlashCommand("/op", "Grant op"),
-          new SlashCommand("/deop", "Remove op"),
-          new SlashCommand("/voice", "Grant voice"),
-          new SlashCommand("/devoice", "Remove voice"),
-          new SlashCommand("/ban", "Set ban"),
-          new SlashCommand("/unban", "Remove ban"),
-          new SlashCommand("/ignore", "Add hard ignore"),
-          new SlashCommand("/unignore", "Remove hard ignore"),
-          new SlashCommand("/ignorelist", "Show hard ignores"),
-          new SlashCommand("/ignores", "Alias: /ignorelist"),
-          new SlashCommand("/softignore", "Add soft ignore"),
-          new SlashCommand("/unsoftignore", "Remove soft ignore"),
-          new SlashCommand("/softignorelist", "Show soft ignores"),
-          new SlashCommand("/softignores", "Alias: /softignorelist"),
-          new SlashCommand("/version", "CTCP VERSION"),
-          new SlashCommand("/ping", "CTCP PING"),
-          new SlashCommand("/time", "CTCP TIME"),
-          new SlashCommand("/ctcp", "Send CTCP"),
-          new SlashCommand("/dcc", "DCC command"),
-          new SlashCommand("/dccmsg", "DCC message"),
-          new SlashCommand("/chathistory", "IRCv3 CHATHISTORY"),
-          new SlashCommand("/history", "Alias: /chathistory"),
-          new SlashCommand("/markread", "Set read marker for current target"),
-          new SlashCommand("/help", "Show command help"),
-          new SlashCommand("/commands", "Alias: /help"),
-          new SlashCommand("/reply", "Reply to message-id"),
-          new SlashCommand("/react", "React to message-id"),
-          new SlashCommand("/unreact", "Remove reaction from message-id"),
-          new SlashCommand("/edit", "Edit message-id"),
-          new SlashCommand("/redact", "Redact message-id"),
-          new SlashCommand("/delete", "Alias: /redact"),
-          new SlashCommand("/filter", "Local filtering controls"),
-          new SlashCommand("/quote", "Send raw IRC line"),
-          new SlashCommand("/raw", "Alias: /quote"));
 
   private final JComponent owner;
   private final JTextComponent input;
   private final MessageInputUndoSupport undoSupport;
   private final MessageInputWordSuggestionProvider wordSuggestionProvider;
+  private final List<SlashCommand> slashCommands;
 
   /**
    * NOTE: DefaultCompletionProvider sorts its list on every addCompletion(), which becomes
@@ -171,10 +102,20 @@ final class MessageInputNickCompletionSupport {
       JTextComponent input,
       MessageInputUndoSupport undoSupport,
       MessageInputWordSuggestionProvider wordSuggestionProvider) {
+    this(owner, input, undoSupport, wordSuggestionProvider, List.of());
+  }
+
+  MessageInputNickCompletionSupport(
+      JComponent owner,
+      JTextComponent input,
+      MessageInputUndoSupport undoSupport,
+      MessageInputWordSuggestionProvider wordSuggestionProvider,
+      List<SlashCommandDescriptor> slashCommandDescriptors) {
     this.owner = owner;
     this.input = input;
     this.undoSupport = undoSupport;
     this.wordSuggestionProvider = wordSuggestionProvider;
+    this.slashCommands = mergeSlashCommands(slashCommandDescriptors);
     this.completionProvider = new FastCompletionProvider(this::dynamicWordCompletions);
     this.autoCompletion = new AutoCompletion(completionProvider);
     this.slashCommandCompletions = buildSlashCommandCompletions();
@@ -267,8 +208,8 @@ final class MessageInputNickCompletionSupport {
   }
 
   private List<Completion> buildSlashCommandCompletions() {
-    ArrayList<Completion> completions = new ArrayList<>(SLASH_COMMANDS.size());
-    for (SlashCommand cmd : SLASH_COMMANDS) {
+    ArrayList<Completion> completions = new ArrayList<>(slashCommands.size());
+    for (SlashCommand cmd : slashCommands) {
       BasicCompletion completion =
           new BasicCompletion(completionProvider, cmd.command(), cmd.summary());
       completion.setRelevance(RELEVANCE_SLASH);
@@ -296,6 +237,19 @@ final class MessageInputNickCompletionSupport {
       }
     }
     return Collections.unmodifiableList(deduped);
+  }
+
+  private static List<SlashCommand> mergeSlashCommands(
+      List<SlashCommandDescriptor> slashCommandDescriptors) {
+    LinkedHashMap<String, SlashCommand> merged = new LinkedHashMap<>();
+    if (slashCommandDescriptors != null) {
+      for (SlashCommandDescriptor command : slashCommandDescriptors) {
+        if (command == null) continue;
+        SlashCommand slashCommand = new SlashCommand(command.command(), command.summary());
+        merged.putIfAbsent(slashCommand.command().toLowerCase(Locale.ROOT), slashCommand);
+      }
+    }
+    return List.copyOf(merged.values());
   }
 
   private List<Completion> dynamicWordCompletions(JTextComponent component, String token) {

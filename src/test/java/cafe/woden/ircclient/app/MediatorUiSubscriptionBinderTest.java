@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
+import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandNames;
@@ -31,6 +32,7 @@ class MediatorUiSubscriptionBinderTest {
 
   @Test
   void joinDetachAndCloseChannelRequestsRouteToTargetCoordinator() {
+    UiEventPort uiEvents = Mockito.mock(UiEventPort.class);
     UiPort ui = Mockito.mock(UiPort.class);
     TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
 
@@ -39,21 +41,14 @@ class MediatorUiSubscriptionBinderTest {
     PublishProcessor<TargetRef> bouncerDetachRequests = PublishProcessor.create();
     PublishProcessor<TargetRef> closeChannelRequests = PublishProcessor.create();
 
-    when(ui.targetSelections()).thenReturn(Flowable.never());
-    when(ui.targetActivations()).thenReturn(Flowable.never());
-    when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
-    when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
-    when(ui.outboundLines()).thenReturn(Flowable.never());
-    when(ui.backendNamedCommandRequests()).thenReturn(Flowable.never());
-    when(ui.closeTargetRequests()).thenReturn(Flowable.never());
-    when(ui.joinChannelRequests()).thenReturn(joinRequests);
-    when(ui.disconnectChannelRequests()).thenReturn(detachRequests);
-    when(ui.bouncerDetachChannelRequests()).thenReturn(bouncerDetachRequests);
-    when(ui.closeChannelRequests()).thenReturn(closeChannelRequests);
-    when(ui.clearLogRequests()).thenReturn(Flowable.never());
+    stubIdleUiEvents(uiEvents);
+    when(uiEvents.joinChannelRequests()).thenReturn(joinRequests);
+    when(uiEvents.disconnectChannelRequests()).thenReturn(detachRequests);
+    when(uiEvents.bouncerDetachChannelRequests()).thenReturn(bouncerDetachRequests);
+    when(uiEvents.closeChannelRequests()).thenReturn(closeChannelRequests);
 
     MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
-    binder.bind(ui, targetCoordinator, disposables, req -> {}, line -> {}, cmd -> {});
+    binder.bind(uiEvents, ui, targetCoordinator, disposables, req -> {}, line -> {}, cmd -> {});
 
     TargetRef channel = new TargetRef("libera", "#ircafe");
     joinRequests.onNext(channel);
@@ -69,6 +64,7 @@ class MediatorUiSubscriptionBinderTest {
 
   @Test
   void quasselNetworkManagerRequestsRouteToProvidedHandler() {
+    UiEventPort uiEvents = Mockito.mock(UiEventPort.class);
     UiPort ui = Mockito.mock(UiPort.class);
     TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
     @SuppressWarnings("unchecked")
@@ -76,22 +72,18 @@ class MediatorUiSubscriptionBinderTest {
 
     PublishProcessor<ParsedInput.BackendNamed> backendNamedRequests = PublishProcessor.create();
 
-    when(ui.targetSelections()).thenReturn(Flowable.never());
-    when(ui.targetActivations()).thenReturn(Flowable.never());
-    when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
-    when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
-    when(ui.outboundLines()).thenReturn(Flowable.never());
-    when(ui.backendNamedCommandRequests()).thenReturn(backendNamedRequests);
-    when(ui.closeTargetRequests()).thenReturn(Flowable.never());
-    when(ui.joinChannelRequests()).thenReturn(Flowable.never());
-    when(ui.disconnectChannelRequests()).thenReturn(Flowable.never());
-    when(ui.bouncerDetachChannelRequests()).thenReturn(Flowable.never());
-    when(ui.closeChannelRequests()).thenReturn(Flowable.never());
-    when(ui.clearLogRequests()).thenReturn(Flowable.never());
+    stubIdleUiEvents(uiEvents);
+    when(uiEvents.backendNamedCommandRequests()).thenReturn(backendNamedRequests);
 
     MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
     binder.bind(
-        ui, targetCoordinator, disposables, req -> {}, line -> {}, onBackendNamedCommandRequest);
+        uiEvents,
+        ui,
+        targetCoordinator,
+        disposables,
+        req -> {},
+        line -> {},
+        onBackendNamedCommandRequest);
 
     backendNamedRequests.onNext(
         new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER, "quassel"));
@@ -104,27 +96,18 @@ class MediatorUiSubscriptionBinderTest {
 
   @Test
   void quasselNetworkManagerRequestErrorsAreReportedToUi() {
+    UiEventPort uiEvents = Mockito.mock(UiEventPort.class);
     UiPort ui = Mockito.mock(UiPort.class);
     TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
     TargetRef status = new TargetRef("quassel", "status");
 
-    when(ui.targetSelections()).thenReturn(Flowable.never());
-    when(ui.targetActivations()).thenReturn(Flowable.never());
-    when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
-    when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
-    when(ui.outboundLines()).thenReturn(Flowable.never());
-    when(ui.backendNamedCommandRequests())
+    stubIdleUiEvents(uiEvents);
+    when(uiEvents.backendNamedCommandRequests())
         .thenReturn(Flowable.error(new IllegalStateException("boom")));
-    when(ui.closeTargetRequests()).thenReturn(Flowable.never());
-    when(ui.joinChannelRequests()).thenReturn(Flowable.never());
-    when(ui.disconnectChannelRequests()).thenReturn(Flowable.never());
-    when(ui.bouncerDetachChannelRequests()).thenReturn(Flowable.never());
-    when(ui.closeChannelRequests()).thenReturn(Flowable.never());
-    when(ui.clearLogRequests()).thenReturn(Flowable.never());
     when(targetCoordinator.safeStatusTarget()).thenReturn(status);
 
     MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
-    binder.bind(ui, targetCoordinator, disposables, req -> {}, line -> {}, cmd -> {});
+    binder.bind(uiEvents, ui, targetCoordinator, disposables, req -> {}, line -> {}, cmd -> {});
 
     verify(ui, timeout(1_000))
         .appendError(status, "(ui-error)", "java.lang.IllegalStateException: boom");
@@ -132,6 +115,7 @@ class MediatorUiSubscriptionBinderTest {
 
   @Test
   void quasselSetupRequestsRouteToProvidedHandler() {
+    UiEventPort uiEvents = Mockito.mock(UiEventPort.class);
     UiPort ui = Mockito.mock(UiPort.class);
     TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
     @SuppressWarnings("unchecked")
@@ -139,27 +123,43 @@ class MediatorUiSubscriptionBinderTest {
 
     PublishProcessor<ParsedInput.BackendNamed> backendNamedRequests = PublishProcessor.create();
 
-    when(ui.targetSelections()).thenReturn(Flowable.never());
-    when(ui.targetActivations()).thenReturn(Flowable.never());
-    when(ui.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
-    when(ui.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
-    when(ui.outboundLines()).thenReturn(Flowable.never());
-    when(ui.backendNamedCommandRequests()).thenReturn(backendNamedRequests);
-    when(ui.closeTargetRequests()).thenReturn(Flowable.never());
-    when(ui.joinChannelRequests()).thenReturn(Flowable.never());
-    when(ui.disconnectChannelRequests()).thenReturn(Flowable.never());
-    when(ui.bouncerDetachChannelRequests()).thenReturn(Flowable.never());
-    when(ui.closeChannelRequests()).thenReturn(Flowable.never());
-    when(ui.clearLogRequests()).thenReturn(Flowable.never());
+    stubIdleUiEvents(uiEvents);
+    when(uiEvents.backendNamedCommandRequests()).thenReturn(backendNamedRequests);
 
     MediatorUiSubscriptionBinder binder = new MediatorUiSubscriptionBinder();
     binder.bind(
-        ui, targetCoordinator, disposables, req -> {}, line -> {}, onBackendNamedCommandRequest);
+        uiEvents,
+        ui,
+        targetCoordinator,
+        disposables,
+        req -> {},
+        line -> {},
+        onBackendNamedCommandRequest);
 
     backendNamedRequests.onNext(
         new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel"));
 
     verify(onBackendNamedCommandRequest, timeout(1_000))
         .accept(new ParsedInput.BackendNamed(BackendNamedCommandNames.QUASSEL_SETUP, "quassel"));
+  }
+
+  private static void stubIdleUiEvents(UiEventPort uiEvents) {
+    when(uiEvents.targetSelections()).thenReturn(Flowable.never());
+    when(uiEvents.targetActivations()).thenReturn(Flowable.never());
+    when(uiEvents.privateMessageRequests()).thenReturn(Flowable.<PrivateMessageRequest>never());
+    when(uiEvents.userActionRequests()).thenReturn(Flowable.<UserActionRequest>never());
+    when(uiEvents.outboundLines()).thenReturn(Flowable.never());
+    when(uiEvents.connectClicks()).thenReturn(Flowable.never());
+    when(uiEvents.disconnectClicks()).thenReturn(Flowable.never());
+    when(uiEvents.connectServerRequests()).thenReturn(Flowable.never());
+    when(uiEvents.disconnectServerRequests()).thenReturn(Flowable.never());
+    when(uiEvents.backendNamedCommandRequests()).thenReturn(Flowable.never());
+    when(uiEvents.closeTargetRequests()).thenReturn(Flowable.never());
+    when(uiEvents.joinChannelRequests()).thenReturn(Flowable.never());
+    when(uiEvents.disconnectChannelRequests()).thenReturn(Flowable.never());
+    when(uiEvents.bouncerDetachChannelRequests()).thenReturn(Flowable.never());
+    when(uiEvents.closeChannelRequests()).thenReturn(Flowable.never());
+    when(uiEvents.clearLogRequests()).thenReturn(Flowable.never());
+    when(uiEvents.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
   }
 }

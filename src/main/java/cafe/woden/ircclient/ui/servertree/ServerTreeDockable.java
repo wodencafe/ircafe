@@ -6,8 +6,13 @@ import cafe.woden.ircclient.bouncer.BouncerAutoConnectStore;
 import cafe.woden.ircclient.bouncer.GenericBouncerAutoConnectStore;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.ServerEntry;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
+import cafe.woden.ircclient.config.api.ServerTreeRuntimeConfigPort;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
@@ -16,6 +21,7 @@ import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.notifications.NotificationStore;
+import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servers.ServerDialogs;
@@ -271,7 +277,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private static final int CAPABILITY_TRANSITION_LOG_LIMIT = 200;
 
-  private final RuntimeConfigStore runtimeConfig;
+  private final ServerTreeRuntimeConfigPort runtimeConfig;
   private final LogProperties logProps;
 
   private final Map<String, String> serverDisplayNames = new HashMap<>();
@@ -340,6 +346,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private final ServerTreeSettingsSynchronizer settingsSynchronizer;
   private final ServerCatalog serverCatalog;
+  private final BackendUiProfileProvider backendUiProfileProvider;
   private volatile ServerTreeTypingIndicatorStyle typingIndicatorStyle =
       ServerTreeTypingIndicatorStyle.DOTS;
   private volatile boolean typingIndicatorsTreeEnabled = true;
@@ -353,7 +360,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
-      RuntimeConfigStore runtimeConfig,
+      ServerTreeRuntimeConfigPort runtimeConfig,
       LogProperties logProps,
       SojuAutoConnectStore sojuAutoConnect,
       ZncAutoConnectStore zncAutoConnect,
@@ -376,12 +383,13 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         interceptorStore,
         settingsBus,
         serverDialogs,
+        null,
         null);
   }
 
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
-      RuntimeConfigStore runtimeConfig,
+      ServerTreeRuntimeConfigPort runtimeConfig,
       LogProperties logProps,
       GenericBouncerAutoConnectStore genericAutoConnect,
       SojuAutoConnectStore sojuAutoConnect,
@@ -405,13 +413,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         interceptorStore,
         settingsBus,
         serverDialogs,
+        null,
         null);
   }
 
   @org.springframework.beans.factory.annotation.Autowired
   public ServerTreeDockable(
       ServerCatalog serverCatalog,
-      RuntimeConfigStore runtimeConfig,
+      ServerTreeRuntimeConfigPort runtimeConfig,
       LogProperties logProps,
       GenericBouncerAutoConnectStore genericAutoConnect,
       SojuAutoConnectStore sojuAutoConnect,
@@ -422,12 +431,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       InterceptorStore interceptorStore,
       UiSettingsBus settingsBus,
       ServerDialogs serverDialogs,
+      BackendUiProfileProvider backendUiProfileProvider,
       JfrRuntimeEventsService jfrRuntimeEventsService) {
     super(new BorderLayout());
 
     this.runtimeConfig = runtimeConfig;
     this.logProps = logProps;
     this.serverCatalog = serverCatalog;
+    this.backendUiProfileProvider = backendUiProfileProvider;
 
     this.interceptorStore = interceptorStore;
     this.jfrRuntimeEventsService = jfrRuntimeEventsService;
@@ -457,6 +468,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             uiHooks::isServerNode);
     ServerTreeLayoutCollaborators layoutCollaborators =
         ServerTreeLayoutCollaboratorsFactory.create(
+            runtimeConfig,
             runtimeConfig,
             ServerTreeBuiltInVisibilityCoordinator.context(
                 ServerTreeDockable::normalizeServerId, servers::keySet, this::syncUiLeafVisibility),
@@ -558,6 +570,14 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             ServerTreeNetworkInfoDialogBuilder.context(
                 uiHooks::connectionStateForServer,
                 runtimeState::desiredOnlineForServer,
+                serverId ->
+                    backendUiProfileProvider == null
+                        ? ""
+                        : backendUiProfileProvider.backendIdForServer(serverId),
+                serverId ->
+                    backendUiProfileProvider == null
+                        ? ""
+                        : backendUiProfileProvider.backendDisplayNameForServer(serverId),
                 serverLabelPolicy::prettyServerLabel,
                 runtimeState::connectionDiagnosticsTipForServer,
                 (serverId, capability, enable) ->
@@ -629,6 +649,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
             new ServerTreeStateInteractionCollaboratorsFactory.Inputs(
                 tree,
                 model,
+                runtimeConfig,
                 runtimeConfig,
                 channelStateStore,
                 interceptorStore,
@@ -852,6 +873,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 runtimeState,
                 serverLabelPolicy,
                 serverDisplayNames,
+                serverId ->
+                    backendUiProfileProvider == null
+                        ? ""
+                        : backendUiProfileProvider.backendDisplayNameForServer(serverId),
                 bouncerControlServerIdsByBackendId,
                 originByServerIdByBackendId,
                 autoConnectStoreByBackendId,
@@ -878,6 +903,7 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 this::setChannelMuted,
                 requestStreams,
                 channelTargetOperations::canEditChannelModesForTarget,
+                this::isQuasselServer,
                 quasselNetworkParentResolver::isQuasselNetworkNode,
                 quasselNetworkParentResolver::isQuasselEmptyStateNode,
                 this::quasselNetworkTooltip));
@@ -1187,21 +1213,19 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return builtInLayoutVisibilityFacade.builtInNodesVisibility(serverId);
   }
 
-  private RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout(String serverId) {
+  private ServerTreeBuiltInLayout builtInLayout(String serverId) {
     return builtInLayoutVisibilityFacade.builtInLayout(serverId);
   }
 
-  private void persistBuiltInLayoutForServer(
-      String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
+  private void persistBuiltInLayoutForServer(String serverId, ServerTreeBuiltInLayout layout) {
     builtInLayoutVisibilityFacade.rememberBuiltInLayout(serverId, layout);
   }
 
-  private RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
+  private ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
     return builtInLayoutVisibilityFacade.rootSiblingOrder(serverId);
   }
 
-  private void persistRootSiblingOrderForServer(
-      String serverId, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
+  private void persistRootSiblingOrderForServer(String serverId, ServerTreeRootSiblingOrder order) {
     builtInLayoutVisibilityFacade.rememberRootSiblingOrder(serverId, order);
   }
 
@@ -1228,18 +1252,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     return serverNodeResolver.firstServerIdOrEmpty(startupSelectionRestorer::rememberedSelection);
   }
 
-  private RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(
-      TargetRef ref) {
+  private ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(TargetRef ref) {
     return builtInLayoutVisibilityFacade.builtInLayoutNodeKindForRef(ref);
   }
 
-  private RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
-      DefaultMutableTreeNode node) {
+  private ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(DefaultMutableTreeNode node) {
     return builtInLayoutVisibilityFacade.builtInLayoutNodeKindForNode(node);
   }
 
-  private RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
-      DefaultMutableTreeNode node) {
+  private ServerTreeRootSiblingNode rootSiblingNodeKindForNode(DefaultMutableTreeNode node) {
     return builtInLayoutVisibilityFacade.rootSiblingNodeKindForNode(node);
   }
 
@@ -1717,13 +1738,12 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
     selectionFallbackPolicy.selectStartupDefaultForServer(serverId);
   }
 
-  private void applyBuiltInLayoutToTree(
-      ServerNodes sn, RuntimeConfigStore.ServerTreeBuiltInLayout requestedLayout) {
+  private void applyBuiltInLayoutToTree(ServerNodes sn, ServerTreeBuiltInLayout requestedLayout) {
     builtInLayoutVisibilityFacade.applyBuiltInLayoutToTree(sn, requestedLayout);
   }
 
   private void applyRootSiblingOrderToTree(
-      ServerNodes sn, RuntimeConfigStore.ServerTreeRootSiblingOrder requestedOrder) {
+      ServerNodes sn, ServerTreeRootSiblingOrder requestedOrder) {
     builtInLayoutVisibilityFacade.applyRootSiblingOrderToTree(sn, requestedOrder);
   }
 
@@ -1742,6 +1762,10 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
   public void ensureNode(TargetRef ref) {
     targetLifecycleCoordinator.ensureNode(ref);
     startupSelectionRestorer.tryRestoreAfterEnsure(ref);
+  }
+
+  public boolean hasTarget(TargetRef ref) {
+    return ref != null && leaves.containsKey(ref);
   }
 
   private DefaultMutableTreeNode ensureChannelListNodeForEnsureNode(ServerNodes sn) {
@@ -1978,10 +2002,15 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
 
   private boolean isQuasselServer(String serverId) {
     String sid = normalizeServerId(serverId);
-    if (sid.isEmpty() || serverCatalog == null) return false;
+    if (sid.isEmpty()) return false;
+    if (backendUiProfileProvider != null) {
+      return backendUiProfileProvider.supportsQuasselCoreCommands(sid);
+    }
+    if (serverCatalog == null) return false;
     return serverCatalog
-        .find(sid)
-        .map(server -> server.backend() == IrcProperties.Server.Backend.QUASSEL_CORE)
+        .findEntry(sid)
+        .map(ServerEntry::server)
+        .map(server -> IrcProperties.Server.Backend.QUASSEL_CORE.token().equals(server.backendId()))
         .orElse(false);
   }
 

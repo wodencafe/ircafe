@@ -2581,31 +2581,99 @@ class QuasselCoreIrcClientServiceTest {
             "2displayMsg(Message)",
             List.of(message(8, 0x20000, 0, "ops!u@h", "invited you to #other", 11, ""))));
 
-    events.awaitCount(12);
+    events.awaitCount(14);
 
     assertInstanceOf(IrcEvent.JoinedChannel.class, events.values().get(3).event());
-    assertInstanceOf(IrcEvent.UserJoinedChannel.class, events.values().get(4).event());
-    assertInstanceOf(IrcEvent.UserPartedChannel.class, events.values().get(5).event());
-    assertInstanceOf(IrcEvent.UserNickChangedChannel.class, events.values().get(6).event());
+    IrcEvent.UserHostmaskObserved hostmaskObserved =
+        assertInstanceOf(IrcEvent.UserHostmaskObserved.class, events.values().get(4).event());
+    assertEquals("#ircafe", hostmaskObserved.channel());
+    assertEquals("alice", hostmaskObserved.nick());
+    assertEquals("alice!u@h", hostmaskObserved.hostmask());
+    assertInstanceOf(IrcEvent.UserJoinedChannel.class, events.values().get(5).event());
+    IrcEvent.UserHostmaskObserved partHostmaskObserved =
+        assertInstanceOf(IrcEvent.UserHostmaskObserved.class, events.values().get(6).event());
+    assertEquals("#ircafe", partHostmaskObserved.channel());
+    assertEquals("alice", partHostmaskObserved.nick());
+    assertEquals("alice!u@h", partHostmaskObserved.hostmask());
+    assertInstanceOf(IrcEvent.UserPartedChannel.class, events.values().get(7).event());
+    assertInstanceOf(IrcEvent.UserNickChangedChannel.class, events.values().get(8).event());
     IrcEvent.NickChanged nickChanged =
-        assertInstanceOf(IrcEvent.NickChanged.class, events.values().get(7).event());
+        assertInstanceOf(IrcEvent.NickChanged.class, events.values().get(9).event());
     assertEquals("quassel", nickChanged.oldNick());
     assertEquals("quassel2", nickChanged.newNick());
     IrcEvent.ChannelTopicUpdated topic =
-        assertInstanceOf(IrcEvent.ChannelTopicUpdated.class, events.values().get(8).event());
+        assertInstanceOf(IrcEvent.ChannelTopicUpdated.class, events.values().get(10).event());
     assertEquals("new topic", topic.topic());
     IrcEvent.ChannelModeObserved mode =
-        assertInstanceOf(IrcEvent.ChannelModeObserved.class, events.values().get(9).event());
+        assertInstanceOf(IrcEvent.ChannelModeObserved.class, events.values().get(11).event());
     assertEquals("+o alice", mode.details());
     assertEquals(IrcEvent.ChannelModeKind.DELTA, mode.kind());
     assertEquals(IrcEvent.ChannelModeProvenance.QUASSEL_DISPLAY_MESSAGE, mode.provenance());
     IrcEvent.KickedFromChannel kicked =
-        assertInstanceOf(IrcEvent.KickedFromChannel.class, events.values().get(10).event());
+        assertInstanceOf(IrcEvent.KickedFromChannel.class, events.values().get(12).event());
     assertEquals("gone", kicked.reason());
     IrcEvent.InvitedToChannel invite =
-        assertInstanceOf(IrcEvent.InvitedToChannel.class, events.values().get(11).event());
+        assertInstanceOf(IrcEvent.InvitedToChannel.class, events.values().get(13).event());
     assertEquals("#other", invite.channel());
     assertEquals("quassel2", service.currentNick("quassel").orElseThrow());
+  }
+
+  @Test
+  void quitDisplayMessageEmitsHostmaskObservationBeforeQuitEvent() throws Exception {
+    ServerCatalog serverCatalog = mock(ServerCatalog.class);
+    QuasselCoreSocketConnector connector = mock(QuasselCoreSocketConnector.class);
+    QuasselCoreProtocolProbe protocolProbe = mock(QuasselCoreProtocolProbe.class);
+    QuasselCoreAuthHandshake authHandshake = mock(QuasselCoreAuthHandshake.class);
+    QuasselCoreDatastreamCodec datastreamCodec = new QuasselCoreDatastreamCodec();
+    IrcProperties.Server server = server();
+    BlockingSocket socket = new BlockingSocket();
+    QuasselCoreProtocolProbe.ProbeSelection probeSelection =
+        new QuasselCoreProtocolProbe.ProbeSelection(
+            0x00000002, QuasselCoreProtocolProbe.PROTOCOL_DATASTREAM, 0, 0);
+    QuasselCoreDatastreamCodec.BufferInfoValue chan =
+        new QuasselCoreDatastreamCodec.BufferInfoValue(11, 1, 0x02, -1, "#ircafe");
+
+    when(serverCatalog.require("quassel")).thenReturn(server);
+    when(connector.connect(server)).thenReturn(socket);
+    when(protocolProbe.negotiate(socket)).thenReturn(probeSelection);
+    when(authHandshake.authenticate(socket, server))
+        .thenReturn(
+            new QuasselCoreAuthHandshake.AuthResult("quassel", 1, List.of(1), Map.of(11, chan)));
+
+    QuasselCoreIrcClientService service =
+        new QuasselCoreIrcClientService(
+            serverCatalog, connector, protocolProbe, authHandshake, datastreamCodec);
+    TestSubscriber<ServerIrcEvent> events = service.events().test();
+
+    service.connect("quassel").blockingAwait();
+    events.awaitCount(3);
+
+    socket.writeInbound(
+        encodeRpcCall(
+            datastreamCodec,
+            "2displayMsg(Message)",
+            List.of(message(1, 0x0080, 0, "alice!u@h", "Quit: Ping timeout", 11, ""))));
+
+    awaitEvent(events, ev -> ev instanceof IrcEvent.UserQuitChannel);
+
+    assertTrue(
+        events.values().stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                ev ->
+                    ev instanceof IrcEvent.UserHostmaskObserved hostmask
+                        && "#ircafe".equals(hostmask.channel())
+                        && "alice".equals(hostmask.nick())
+                        && "alice!u@h".equals(hostmask.hostmask())));
+    assertTrue(
+        events.values().stream()
+            .map(ServerIrcEvent::event)
+            .anyMatch(
+                ev ->
+                    ev instanceof IrcEvent.UserQuitChannel quit
+                        && "#ircafe".equals(quit.channel())
+                        && "alice".equals(quit.nick())
+                        && "Quit: Ping timeout".equals(quit.reason())));
   }
 
   @Test

@@ -15,6 +15,7 @@ import java.awt.Dialog;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
 import java.awt.RenderingHints;
 import java.awt.Window;
 import java.awt.datatransfer.DataFlavor;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -42,8 +44,10 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
@@ -119,6 +123,39 @@ public final class ChannelListPanel extends JPanel {
       int notifications,
       boolean autoReattach) {}
 
+  public record BanListEntryRow(String mask, String setBy, String setAt) {
+    public BanListEntryRow {
+      mask = Objects.toString(mask, "").trim();
+      setBy = Objects.toString(setBy, "").trim();
+      setAt = Objects.toString(setAt, "").trim();
+    }
+  }
+
+  public record BanListSnapshot(List<BanListEntryRow> entries, String summary) {
+    public static BanListSnapshot empty() {
+      return new BanListSnapshot(List.of(), "");
+    }
+
+    public BanListSnapshot {
+      ArrayList<BanListEntryRow> normalizedEntries = new ArrayList<>();
+      if (entries != null) {
+        for (BanListEntryRow entry : entries) {
+          if (entry != null) normalizedEntries.add(entry);
+        }
+      }
+      entries = List.copyOf(normalizedEntries);
+      summary = Objects.toString(summary, "").trim();
+    }
+
+    public boolean hasEntries() {
+      return !entries.isEmpty();
+    }
+
+    public boolean hasSummary() {
+      return !summary.isEmpty();
+    }
+  }
+
   public record ListEntryRow(String channel, int visibleUsers, String topic) {}
 
   enum AlisRegistrationFilter {
@@ -189,6 +226,10 @@ public final class ChannelListPanel extends JPanel {
   private final JButton runAlisButton = new JButton();
   private final JButton runMatrixNextButton = new JButton();
   private final JButton listDetailsButton = new JButton();
+  private final JButton clearListButton = new JButton();
+  private final JPopupMenu listContextMenu = new JPopupMenu();
+  private final JMenuItem listJoinSelectMenuItem = new JMenuItem();
+  private final JMenuItem listShowDetailsMenuItem = new JMenuItem("Channel Details...");
 
   private final ManagedChannelTableModel managedModel = new ManagedChannelTableModel();
   private final JTable managedTable = new JTable(managedModel);
@@ -233,7 +274,7 @@ public final class ChannelListPanel extends JPanel {
   private volatile Consumer<List<String>> onManagedCustomOrderChanged;
   private volatile Consumer<String> onManagedChannelSelected;
   private volatile BiFunction<String, String, String> onChannelTopicRequest;
-  private volatile BiFunction<String, String, List<String>> onChannelBanListSnapshotRequest;
+  private volatile BiFunction<String, String, BanListSnapshot> onChannelBanListSnapshotRequest;
   private volatile BiConsumer<String, String> onChannelBanListRefreshRequest;
   private volatile BiConsumer<String, String> onChannelModeRefreshRequest;
   private volatile ChannelModeCommandHandler onChannelModeSetRequest;
@@ -262,7 +303,7 @@ public final class ChannelListPanel extends JPanel {
     root.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
     JPanel controls =
-        new JPanel(new MigLayout("insets 0, fillx", "[][][][]push[][grow,fill]", "[]"));
+        new JPanel(new MigLayout("insets 0, fillx", "[][][][][]push[][grow,fill]", "[]"));
     configureActionButton(
         runListButton,
         "refresh",
@@ -289,13 +330,21 @@ public final class ChannelListPanel extends JPanel {
     runMatrixNextButton.setVisible(false);
 
     configureActionButton(
-        listDetailsButton, "eye", "Show details for selected channel", "Show details");
+        listDetailsButton,
+        "eye",
+        "Open channel details for the selected channel, including topic, modes, and ban list",
+        "Channel details");
     listDetailsButton.addActionListener(e -> showServerListDetailsForSelection());
+
+    configureActionButton(
+        clearListButton, "trash", "Clear the current /LIST rows for this server", "Clear /list");
+    clearListButton.addActionListener(e -> clearCurrentServerListData());
 
     controls.add(runListButton);
     controls.add(runAlisButton);
     controls.add(runMatrixNextButton);
     controls.add(listDetailsButton);
+    controls.add(clearListButton);
     controls.add(new JLabel("Filter:"), "gapleft 12");
     controls.add(filterField, "pushx,growx");
 
@@ -349,16 +398,22 @@ public final class ChannelListPanel extends JPanel {
     listTable.addMouseListener(
         new MouseAdapter() {
           @Override
+          public void mousePressed(MouseEvent e) {
+            maybeShowListContextMenu(e);
+          }
+
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            maybeShowListContextMenu(e);
+          }
+
+          @Override
           public void mouseClicked(MouseEvent e) {
             if (!SwingUtilities.isLeftMouseButton(e)) return;
             int viewRow = listTable.rowAtPoint(e.getPoint());
             if (viewRow < 0) return;
             if (e.getClickCount() < 2) return;
-            int modelRow = listTable.convertRowIndexToModel(viewRow);
-            String channel = listModel.channelAt(modelRow);
-            if (channel == null || channel.isBlank()) return;
-            Consumer<String> cb = onJoinChannel;
-            if (cb != null) cb.accept(channel);
+            joinServerListChannelAtViewRow(viewRow);
           }
         });
 
@@ -381,6 +436,7 @@ public final class ChannelListPanel extends JPanel {
     JScrollPane scroll = new JScrollPane(listTable);
     scroll.setBorder(null);
     root.add(scroll, BorderLayout.CENTER);
+    configureListContextMenu();
     updateListActionPresentation();
     updateListButtons();
     return root;
@@ -403,7 +459,10 @@ public final class ChannelListPanel extends JPanel {
     configureActionButton(
         closeChannelButton, "close", "Close selected channel and remove it from the list", "Close");
     configureActionButton(
-        managedDetailsButton, "eye", "Show details for selected managed channel", "Show details");
+        managedDetailsButton,
+        "eye",
+        "Open channel details for the selected managed channel, including topic, modes, and ban list",
+        "Channel details");
     configureActionButton(moveUpButton, "arrow-up", "Move selected channel up", "Move up");
     configureActionButton(moveDownButton, "arrow-down", "Move selected channel down", "Move down");
 
@@ -651,7 +710,7 @@ public final class ChannelListPanel extends JPanel {
   }
 
   public void setOnChannelBanListSnapshotRequest(
-      BiFunction<String, String, List<String>> onChannelBanListSnapshotRequest) {
+      BiFunction<String, String, BanListSnapshot> onChannelBanListSnapshotRequest) {
     this.onChannelBanListSnapshotRequest = onChannelBanListSnapshotRequest;
   }
 
@@ -731,6 +790,16 @@ public final class ChannelListPanel extends JPanel {
     String ch = normalizeChannel(channel);
     if (sid.isEmpty() || ch.isEmpty()) return;
 
+    ChannelDetails details = channelDetailsFor(sid, ch);
+    if (details == null) return;
+    showChannelDetailsDialog(details);
+  }
+
+  private ChannelDetails channelDetailsFor(String serverId, String channel) {
+    String sid = normalizeServerId(serverId);
+    String ch = normalizeChannel(channel);
+    if (sid.isEmpty() || ch.isEmpty()) return null;
+
     ManagedChannelRow managed = findManagedRowByChannel(sid, ch);
     Row list = findListRowByChannel(sid, ch);
 
@@ -748,9 +817,8 @@ public final class ChannelListPanel extends JPanel {
     ChannelDetailsSource source =
         managed != null ? ChannelDetailsSource.MANAGED : ChannelDetailsSource.SERVER_LIST;
 
-    showChannelDetailsDialog(
-        new ChannelDetails(
-            sid, source, ch, state, topic, modes, modeSummary, users, notifications, autoReattach));
+    return new ChannelDetails(
+        sid, source, ch, state, topic, modes, modeSummary, users, notifications, autoReattach);
   }
 
   public void beginList(String serverId, String banner) {
@@ -1056,6 +1124,18 @@ public final class ChannelListPanel extends JPanel {
     }
   }
 
+  private void clearCurrentServerListData() {
+    String sid = normalizeServerId(this.serverId);
+    if (sid.isEmpty()) return;
+    rowsByServer.remove(sid);
+    statusByServer.remove(sid);
+    loadingByServer.remove(sid);
+    requestTypeByServer.remove(sid);
+    listTable.clearSelection();
+    refreshListRows();
+    refreshOpenDetailsDialog();
+  }
+
   private void emitRunListRequest() {
     Runnable cb = onRunListRequest;
     if (cb != null) SwingUtilities.invokeLater(cb);
@@ -1213,9 +1293,11 @@ public final class ChannelListPanel extends JPanel {
     boolean hasServer = !this.serverId.isBlank();
     boolean busy = isCurrentServerListLoading();
     ChannelListUxMode mode = uxModeForServer(this.serverId);
+    String sid = normalizeServerId(this.serverId);
 
     applyListActionPresentation(mode.actionPresentation());
     listDetailsButton.setEnabled(row >= 0 && hasServer);
+    clearListButton.setEnabled(hasServer && !busy && hasClearableListData(sid));
     runListButton.setEnabled(hasServer && !busy);
     runAlisButton.setEnabled(hasServer && !busy);
     runMatrixNextButton.setEnabled(hasServer && !busy && mode.isPagingActionEnabled(this.serverId));
@@ -1379,10 +1461,7 @@ public final class ChannelListPanel extends JPanel {
   }
 
   private void showServerListDetailsForSelection() {
-    int viewRow = listTable.getSelectedRow();
-    if (viewRow < 0) return;
-    int modelRow = listTable.convertRowIndexToModel(viewRow);
-    Row selected = listModel.rowAt(modelRow);
+    Row selected = selectedServerListRow();
     if (selected == null) return;
 
     String sid = this.serverId;
@@ -1427,28 +1506,44 @@ public final class ChannelListPanel extends JPanel {
     return Objects.toString(fallbackTopic, "").trim();
   }
 
-  private String banListDisplayTextForChannel(String sid, String channel) {
-    BiFunction<String, String, List<String>> cb = onChannelBanListSnapshotRequest;
+  private BanListViewState banListViewStateForChannel(String sid, String channel) {
+    BiFunction<String, String, BanListSnapshot> cb = onChannelBanListSnapshotRequest;
     if (cb == null) {
-      return "Ban-list integration is not available.";
+      return new BanListViewState(
+          BanListSnapshot.empty(), "Ban-list integration is not available.", false);
     }
     try {
-      List<String> rows = cb.apply(sid, channel);
-      if (rows == null || rows.isEmpty()) {
-        return "No ban entries cached.\nUse Refresh Ban List to request MODE +b.";
-      }
-      return String.join("\n", rows);
+      BanListSnapshot snapshot = cb.apply(sid, channel);
+      if (snapshot == null) snapshot = BanListSnapshot.empty();
+      return new BanListViewState(
+          snapshot, banListStatusText(snapshot), snapshot.hasEntries() || snapshot.hasSummary());
     } catch (Exception ignored) {
-      return "Ban list unavailable.";
+      return new BanListViewState(BanListSnapshot.empty(), "Ban list unavailable.", false);
     }
   }
 
-  private void requestBanListRefresh(String sid, String channel) {
+  private static String banListStatusText(BanListSnapshot snapshot) {
+    if (snapshot == null) return "Ban list unavailable.";
+    if (snapshot.hasSummary()) return snapshot.summary();
+    if (snapshot.hasEntries()) {
+      int count = snapshot.entries().size();
+      return count == 1 ? "Loaded 1 cached ban entry." : "Loaded " + count + " cached ban entries.";
+    }
+    return "No ban entries cached.\nUse Refresh Ban List to request MODE +b.";
+  }
+
+  private boolean hasCachedBanListRows(String sid, String channel) {
+    return banListViewStateForChannel(sid, channel).snapshot().hasEntries();
+  }
+
+  private boolean requestBanListRefresh(String sid, String channel) {
     BiConsumer<String, String> cb = onChannelBanListRefreshRequest;
-    if (cb == null) return;
+    if (cb == null) return false;
     try {
       cb.accept(sid, channel);
+      return true;
     } catch (Exception ignored) {
+      return false;
     }
   }
 
@@ -1588,7 +1683,7 @@ public final class ChannelListPanel extends JPanel {
       usersText = "Not available";
     }
     String topicText = topicSnapshotForChannel(sid, channel, list == null ? "" : list.topic());
-    String banListText = banListDisplayTextForChannel(sid, channel);
+    BanListViewState banListView = banListViewStateForChannel(sid, channel);
 
     setFieldText(state.stateField(), statusText);
     setFieldText(state.usersField(), usersText);
@@ -1597,7 +1692,17 @@ public final class ChannelListPanel extends JPanel {
     setAreaText(state.modeSummaryArea(), modeSummaryText);
     setFieldText(state.autoReattachField(), autoReattachText);
     setAreaText(state.topicArea(), fallback(topicText, "(none)"));
-    setAreaText(state.banListArea(), banListText);
+    if (banListView.hasResolvedSnapshot()) {
+      state.pendingBanListRefresh().set(false);
+      setBanListRows(state.banListTable(), banListView.snapshot().entries());
+    } else if (!state.pendingBanListRefresh().get()) {
+      setBanListRows(state.banListTable(), banListView.snapshot().entries());
+    }
+    String banListStatusText =
+        state.pendingBanListRefresh().get() && !banListView.hasResolvedSnapshot()
+            ? "Requested MODE +b...\nWaiting for server response."
+            : banListView.statusText();
+    setAreaText(state.banListStatusArea(), banListStatusText);
 
     boolean canEditModes = canEditChannelModes(sid, channel);
     state.setModesButton().setEnabled(canEditModes);
@@ -1607,6 +1712,13 @@ public final class ChannelListPanel extends JPanel {
             canEditModes
                 ? "Set channel modes (sends /mode command)"
                 : "Requires owner/admin/op privileges for this channel");
+    updateBanManagementButtons(
+        sid,
+        channel,
+        state.banListTable(),
+        state.addBanButton(),
+        state.editBanButton(),
+        state.deleteBanButton());
   }
 
   private void showChannelDetailsDialog(ChannelDetails details) {
@@ -1634,14 +1746,28 @@ public final class ChannelListPanel extends JPanel {
         readOnlyArea(
             fallback(details.modeSummary(), friendlyModeSummaryFromRaw(sid, details.modes())), 4);
     JTextArea topicArea = readOnlyArea(fallback(details.topic(), "(none)"), 4);
-    JTextArea banListArea = readOnlyArea(banListDisplayTextForChannel(sid, channel), 6);
+    BanListViewState initialBanListView = banListViewStateForChannel(sid, channel);
+    BanListTableModel banListTableModel = new BanListTableModel();
+    banListTableModel.setRows(initialBanListView.snapshot().entries());
+    JTable banListTable = new JTable(banListTableModel);
+    banListTable.setFillsViewportHeight(true);
+    banListTable.setRowSelectionAllowed(true);
+    banListTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    banListTable.setAutoCreateRowSorter(true);
+    banListTable.setShowHorizontalLines(false);
+    banListTable.setShowVerticalLines(false);
+    banListTable.getTableHeader().setReorderingAllowed(false);
+    banListTable.getColumnModel().getColumn(0).setPreferredWidth(280);
+    banListTable.getColumnModel().getColumn(1).setPreferredWidth(140);
+    banListTable.getColumnModel().getColumn(2).setPreferredWidth(170);
+    JTextArea banListStatusArea = readOnlyArea(initialBanListView.statusText(), 2);
 
     JScrollPane modeSummaryScroll = new JScrollPane(modeSummaryArea);
     JScrollPane topicScroll = new JScrollPane(topicArea);
-    JScrollPane banListScroll = new JScrollPane(banListArea);
+    JScrollPane banListScroll = new JScrollPane(banListTable);
     modeSummaryScroll.setMinimumSize(new Dimension(180, 110));
     topicScroll.setMinimumSize(new Dimension(180, 120));
-    banListScroll.setMinimumSize(new Dimension(180, 120));
+    banListScroll.setMinimumSize(new Dimension(180, 180));
 
     JButton refreshModesButton = new JButton("Refresh Modes");
     refreshModesButton.setFocusable(false);
@@ -1681,67 +1807,111 @@ public final class ChannelListPanel extends JPanel {
             ? "Set channel modes (sends /mode command)"
             : "Requires owner/admin/op privileges for this channel");
 
-    JButton refreshBanListButton = new JButton("Refresh Ban List");
-    refreshBanListButton.setFocusable(false);
+    JButton refreshBanListButton = new JButton();
+    configureActionButton(
+        refreshBanListButton,
+        "refresh",
+        "Refresh the channel ban list (requests MODE +b)",
+        "Refresh ban list");
     refreshBanListButton.addActionListener(
-        e -> {
-          requestBanListRefresh(sid, channel);
-          setAreaText(banListArea, "Requested MODE +b...\nWaiting for server response.");
-        });
+        e -> requestBanListRefreshWithStatus(sid, channel, banListStatusArea));
 
-    JPanel content =
+    JButton addBanButton = new JButton();
+    configureActionButton(addBanButton, "plus", "Add a ban mask", "Add ban");
+    addBanButton.addActionListener(e -> promptAndAddBan(sid, channel, banListStatusArea));
+
+    JButton editBanButton = new JButton();
+    configureActionButton(editBanButton, "edit", "Edit the selected ban mask", "Edit ban");
+    editBanButton.addActionListener(
+        e -> promptAndEditBan(sid, channel, banListTable, banListStatusArea));
+
+    JButton deleteBanButton = new JButton();
+    configureActionButton(deleteBanButton, "trash", "Remove the selected ban mask", "Delete ban");
+    deleteBanButton.addActionListener(
+        e -> confirmAndDeleteBan(sid, channel, banListTable, banListStatusArea));
+
+    banListTable
+        .getSelectionModel()
+        .addListSelectionListener(
+            e -> {
+              if (e.getValueIsAdjusting()) return;
+              updateBanManagementButtons(
+                  sid, channel, banListTable, addBanButton, editBanButton, deleteBanButton);
+            });
+
+    JPanel detailsTab =
         new JPanel(
             new MigLayout(
                 "insets 12, fill, wrap 6",
                 "[right][grow,fill][right][grow,fill][right][grow,fill]",
-                "[]8[]8[]8[grow,fill]8[]"));
-    content.add(new JLabel("Server"));
-    content.add(readOnlyField(details.serverId()), "growx");
-    content.add(new JLabel("Channel"));
-    content.add(readOnlyField(details.channel()), "span 3,growx");
+                "[]8[]8[]8[]8[grow,fill]"));
+    detailsTab.add(new JLabel("Server"));
+    detailsTab.add(readOnlyField(details.serverId()), "growx");
+    detailsTab.add(new JLabel("Channel"));
+    detailsTab.add(readOnlyField(details.channel()), "span 3,growx");
 
-    content.add(new JLabel("Source"));
-    content.add(
+    detailsTab.add(new JLabel("Source"));
+    detailsTab.add(
         readOnlyField(
             details.source() == ChannelDetailsSource.MANAGED ? "Managed" : "Server /LIST"),
         "growx");
-    content.add(new JLabel("State"));
-    content.add(stateField, "growx");
-    content.add(new JLabel("Auto-join"));
-    content.add(autoReattachField, "growx");
+    detailsTab.add(new JLabel("State"));
+    detailsTab.add(stateField, "growx");
+    detailsTab.add(new JLabel("Auto-join"));
+    detailsTab.add(autoReattachField, "growx");
 
-    content.add(new JLabel("Users"));
-    content.add(usersField, "growx");
-    content.add(new JLabel("Notifications"));
-    content.add(notificationsField, "growx");
-    content.add(new JLabel("Modes"));
-    content.add(modesField, "growx");
+    detailsTab.add(new JLabel("Users"));
+    detailsTab.add(usersField, "growx");
+    detailsTab.add(new JLabel("Notifications"));
+    detailsTab.add(notificationsField, "growx");
+    detailsTab.add(new JLabel("Modes"));
+    detailsTab.add(modesField, "growx");
 
-    content.add(new JLabel("Mode Summary"), "top");
     JPanel modeSummaryPanel = new JPanel(new BorderLayout(0, 6));
+    modeSummaryPanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
     JPanel modeActions = new JPanel(new MigLayout("insets 0, fillx", "[][]push", "[]"));
     modeActions.add(refreshModesButton);
     modeActions.add(setModesButton);
     modeSummaryPanel.add(modeActions, BorderLayout.NORTH);
     modeSummaryPanel.add(modeSummaryScroll, BorderLayout.CENTER);
-    content.add(modeSummaryPanel, "span 5,growx,hmin 120");
 
-    content.add(new JLabel("Topic"), "top");
-    content.add(topicScroll, "span 5,grow,pushy");
+    JPanel topicPanel = new JPanel(new BorderLayout());
+    topicPanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+    topicPanel.add(topicScroll, BorderLayout.CENTER);
 
-    content.add(new JLabel("Ban List"), "top");
     JPanel banPanel = new JPanel(new BorderLayout(0, 6));
-    banPanel.add(refreshBanListButton, BorderLayout.NORTH);
+    banPanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+    JPanel banActions = new JPanel(new MigLayout("insets 0, fillx", "[][][][]push", "[]"));
+    banActions.add(addBanButton);
+    banActions.add(editBanButton);
+    banActions.add(deleteBanButton);
+    banActions.add(refreshBanListButton);
+    banPanel.add(banActions, BorderLayout.NORTH);
     banPanel.add(banListScroll, BorderLayout.CENTER);
-    content.add(banPanel, "span 5,growx,hmin 120");
+    JPanel banStatusPanel = new JPanel(new BorderLayout(0, 4));
+    banStatusPanel.add(new JLabel("Status"), BorderLayout.NORTH);
+    banStatusPanel.add(new JScrollPane(banListStatusArea), BorderLayout.CENTER);
+    banPanel.add(banStatusPanel, BorderLayout.SOUTH);
+
+    detailsTab.add(new JLabel("Mode Summary"), "top");
+    detailsTab.add(modeSummaryPanel, "span 5,growx,hmin 140");
+
+    detailsTab.add(new JLabel("Topic"), "top");
+    detailsTab.add(topicPanel, "span 5,grow,pushy,hmin 160");
+
+    JTabbedPane detailsTabs = new JTabbedPane();
+    detailsTabs.addTab("Details", detailsTab);
+    detailsTabs.addTab("Ban List", banPanel);
+    detailsTabs.setSelectedIndex(0);
 
     JButton closeButton = new JButton("Close");
     JPanel south = new JPanel(new MigLayout("insets 0 12 12 12, fillx", "[grow, right]", "[]"));
     south.add(closeButton);
 
-    JPanel root = new JPanel(new BorderLayout(0, 8));
-    root.add(content, BorderLayout.CENTER);
-    root.add(south, BorderLayout.SOUTH);
+    JPanel root =
+        new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[grow,fill][]"));
+    root.add(detailsTabs, "grow,push");
+    root.add(south, "growx");
 
     Window owner = SwingUtilities.getWindowAncestor(this);
     JDialog dialog =
@@ -1769,7 +1939,12 @@ public final class ChannelListPanel extends JPanel {
             setModesButton,
             autoReattachField,
             topicArea,
-            banListArea);
+            banListTable,
+            banListStatusArea,
+            addBanButton,
+            editBanButton,
+            deleteBanButton,
+            new AtomicBoolean(false));
     dialog.addWindowListener(
         new WindowAdapter() {
           @Override
@@ -1846,8 +2021,90 @@ public final class ChannelListPanel extends JPanel {
     button.getAccessibleContext().setAccessibleName(accessibleName);
   }
 
+  private static void repaintIfSized(JComponent component) {
+    if (component == null) return;
+    if (component.getWidth() <= 0 || component.getHeight() <= 0) return;
+    component.repaint();
+  }
+
   private static String normalizeServerId(String serverId) {
     return Objects.toString(serverId, "").trim();
+  }
+
+  private void configureListContextMenu() {
+    listJoinSelectMenuItem.addActionListener(e -> joinSelectedServerListChannel());
+    listShowDetailsMenuItem.setIcon(SvgIcons.action("eye", ACTION_ICON_SIZE));
+    listShowDetailsMenuItem.addActionListener(e -> showServerListDetailsForSelection());
+    listContextMenu.add(listJoinSelectMenuItem);
+    listContextMenu.add(listShowDetailsMenuItem);
+  }
+
+  private void maybeShowListContextMenu(MouseEvent event) {
+    if (event == null || !event.isPopupTrigger()) return;
+    int viewRow = listTable.rowAtPoint(event.getPoint());
+    if (viewRow < 0) return;
+    listTable.getSelectionModel().setSelectionInterval(viewRow, viewRow);
+    Row selected = selectedServerListRow();
+    if (selected == null) return;
+    prepareListContextMenuForChannel(selected.channel());
+    listContextMenu.show(listTable, event.getX(), event.getY());
+  }
+
+  private void joinSelectedServerListChannel() {
+    Row selected = selectedServerListRow();
+    if (selected == null) return;
+    triggerServerListChannelAction(selected.channel());
+  }
+
+  private void joinServerListChannelAtViewRow(int viewRow) {
+    if (viewRow < 0) return;
+    int modelRow = listTable.convertRowIndexToModel(viewRow);
+    String channel = listModel.channelAt(modelRow);
+    triggerServerListChannelAction(channel);
+  }
+
+  private void triggerServerListChannelAction(String channel) {
+    String ch = normalizeChannel(channel);
+    if (ch.isEmpty()) return;
+    Consumer<String> cb = onJoinChannel;
+    if (cb != null) cb.accept(ch);
+  }
+
+  private void prepareListContextMenuForChannel(String channel) {
+    String ch = normalizeChannel(channel);
+    ManagedChannelRow managed = findManagedRowByChannel(this.serverId, ch);
+    if (managed != null && !managed.detached()) {
+      listJoinSelectMenuItem.setText("Select Channel");
+      listJoinSelectMenuItem.setIcon(SvgIcons.action("channel", ACTION_ICON_SIZE));
+      listJoinSelectMenuItem.setToolTipText("Select this channel without sending JOIN again");
+      listJoinSelectMenuItem.getAccessibleContext().setAccessibleName("Select channel");
+      return;
+    }
+    if (managed != null) {
+      listJoinSelectMenuItem.setText("Reconnect Channel");
+      listJoinSelectMenuItem.setIcon(SvgIcons.action("play", ACTION_ICON_SIZE));
+      listJoinSelectMenuItem.setToolTipText("Reconnect and select this channel");
+      listJoinSelectMenuItem.getAccessibleContext().setAccessibleName("Reconnect channel");
+      return;
+    }
+    listJoinSelectMenuItem.setText("Join Channel");
+    listJoinSelectMenuItem.setIcon(SvgIcons.action("play", ACTION_ICON_SIZE));
+    listJoinSelectMenuItem.setToolTipText("Join and select this channel");
+    listJoinSelectMenuItem.getAccessibleContext().setAccessibleName("Join channel");
+  }
+
+  private Row selectedServerListRow() {
+    int viewRow = listTable.getSelectedRow();
+    if (viewRow < 0) return null;
+    int modelRow = listTable.convertRowIndexToModel(viewRow);
+    return listModel.rowAt(modelRow);
+  }
+
+  private boolean hasClearableListData(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+    if (!rowsByServer.getOrDefault(sid, new ArrayList<>()).isEmpty()) return true;
+    return !Objects.toString(statusByServer.get(sid), "").trim().isEmpty();
   }
 
   private boolean isCurrentServerListLoading() {
@@ -1915,7 +2172,7 @@ public final class ChannelListPanel extends JPanel {
   private void applyAlisActivityIcon() {
     runAlisButton.setIcon(runAlisActivityIcon);
     runAlisButton.setDisabledIcon(runAlisActivityIcon);
-    runAlisButton.repaint();
+    repaintIfSized(runAlisButton);
   }
 
   private void onAlisActivityTick() {
@@ -1924,7 +2181,7 @@ public final class ChannelListPanel extends JPanel {
       if (alisSpinnerAngleDeg >= 360) {
         alisSpinnerAngleDeg -= 360;
       }
-      runAlisButton.repaint();
+      repaintIfSized(runAlisButton);
       return;
     }
 
@@ -1940,7 +2197,7 @@ public final class ChannelListPanel extends JPanel {
           return;
         }
       }
-      runAlisButton.repaint();
+      repaintIfSized(runAlisButton);
       return;
     }
 
@@ -1959,7 +2216,7 @@ public final class ChannelListPanel extends JPanel {
     }
     runAlisButton.setIcon(runAlisDefaultIcon);
     runAlisButton.setDisabledIcon(runAlisDefaultDisabledIcon);
-    runAlisButton.repaint();
+    repaintIfSized(runAlisButton);
   }
 
   @Override
@@ -2283,6 +2540,51 @@ public final class ChannelListPanel extends JPanel {
     }
   }
 
+  private static final class BanListTableModel extends AbstractTableModel {
+    private static final String[] COLS = {"Mask", "Set By", "Set At"};
+
+    private final ArrayList<BanListEntryRow> rows = new ArrayList<>();
+
+    void setRows(List<BanListEntryRow> rows) {
+      this.rows.clear();
+      if (rows != null && !rows.isEmpty()) this.rows.addAll(rows);
+      fireTableDataChanged();
+    }
+
+    @Override
+    public int getRowCount() {
+      return rows.size();
+    }
+
+    @Override
+    public int getColumnCount() {
+      return COLS.length;
+    }
+
+    @Override
+    public String getColumnName(int column) {
+      return (column >= 0 && column < COLS.length) ? COLS[column] : "";
+    }
+
+    BanListEntryRow rowAt(int rowIndex) {
+      if (rowIndex < 0 || rowIndex >= rows.size()) return null;
+      return rows.get(rowIndex);
+    }
+
+    @Override
+    public Object getValueAt(int rowIndex, int columnIndex) {
+      if (rowIndex < 0 || rowIndex >= rows.size()) return "";
+      BanListEntryRow row = rows.get(rowIndex);
+      if (row == null) return "";
+      return switch (columnIndex) {
+        case 0 -> row.mask();
+        case 1 -> row.setBy();
+        case 2 -> row.setAt();
+        default -> "";
+      };
+    }
+  }
+
   private final class ManagedChannelTableModel extends AbstractTableModel {
     private static final String[] COLS = {
       "Channel", "State", "Users", "Notifications", "Modes", "Auto-join"
@@ -2418,9 +2720,133 @@ public final class ChannelListPanel extends JPanel {
       JButton setModesButton,
       JTextField autoReattachField,
       JTextArea topicArea,
-      JTextArea banListArea) {}
+      JTable banListTable,
+      JTextArea banListStatusArea,
+      JButton addBanButton,
+      JButton editBanButton,
+      JButton deleteBanButton,
+      AtomicBoolean pendingBanListRefresh) {}
+
+  private record BanListViewState(
+      BanListSnapshot snapshot, String statusText, boolean hasResolvedSnapshot) {}
 
   private record ChannelModeSnapshot(String rawModes, String friendlySummary) {}
 
   private record Row(String channel, int visibleUsers, String topic) {}
+
+  private static void setBanListRows(JTable table, List<BanListEntryRow> rows) {
+    if (table == null) return;
+    if (table.getModel() instanceof BanListTableModel model) {
+      model.setRows(rows);
+    }
+  }
+
+  private void updateBanManagementButtons(
+      String sid,
+      String channel,
+      JTable banListTable,
+      JButton addBanButton,
+      JButton editBanButton,
+      JButton deleteBanButton) {
+    boolean canManageBans = canEditChannelModes(sid, channel);
+    BanListEntryRow selected = selectedBanListEntry(banListTable);
+    boolean hasSelection = selected != null;
+    String denied = "Requires owner/admin/op privileges for this channel";
+
+    if (addBanButton != null) {
+      addBanButton.setEnabled(canManageBans);
+      addBanButton.setToolTipText(canManageBans ? "Add a ban mask" : denied);
+    }
+    if (editBanButton != null) {
+      editBanButton.setEnabled(canManageBans && hasSelection);
+      editBanButton.setToolTipText(
+          !canManageBans
+              ? denied
+              : (hasSelection ? "Edit the selected ban mask" : "Select a ban entry to edit"));
+    }
+    if (deleteBanButton != null) {
+      deleteBanButton.setEnabled(canManageBans && hasSelection);
+      deleteBanButton.setToolTipText(
+          !canManageBans
+              ? denied
+              : (hasSelection ? "Remove the selected ban mask" : "Select a ban entry to delete"));
+    }
+  }
+
+  private BanListEntryRow selectedBanListEntry(JTable banListTable) {
+    if (banListTable == null) return null;
+    int viewRow = banListTable.getSelectedRow();
+    if (viewRow < 0) return null;
+    int modelRow = banListTable.convertRowIndexToModel(viewRow);
+    if (banListTable.getModel() instanceof BanListTableModel model) {
+      return model.rowAt(modelRow);
+    }
+    return null;
+  }
+
+  private void requestBanListRefreshWithStatus(String sid, String channel, JTextArea statusArea) {
+    setPendingBanListRefresh(sid, channel, true);
+    if (requestBanListRefresh(sid, channel)) {
+      setAreaText(statusArea, "Requested MODE +b...\nWaiting for server response.");
+      return;
+    }
+    setPendingBanListRefresh(sid, channel, false);
+    setAreaText(statusArea, "Ban-list refresh is not available.");
+  }
+
+  private void promptAndAddBan(String sid, String channel, JTextArea statusArea) {
+    if (!canEditChannelModes(sid, channel) || GraphicsEnvironment.isHeadless()) return;
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    String mask =
+        Objects.toString(
+                JOptionPane.showInputDialog(owner, "Enter ban mask for " + channel + ":", ""), "")
+            .trim();
+    if (mask.isEmpty()) return;
+    requestModeSet(sid, channel, "+b " + mask);
+    requestBanListRefreshWithStatus(sid, channel, statusArea);
+  }
+
+  private void promptAndEditBan(
+      String sid, String channel, JTable banListTable, JTextArea statusArea) {
+    if (!canEditChannelModes(sid, channel) || GraphicsEnvironment.isHeadless()) return;
+    BanListEntryRow selected = selectedBanListEntry(banListTable);
+    if (selected == null) return;
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    String nextMask =
+        Objects.toString(
+                JOptionPane.showInputDialog(
+                    owner, "Edit ban mask for " + channel + ":", selected.mask()),
+                "")
+            .trim();
+    if (nextMask.isEmpty() || nextMask.equals(selected.mask())) return;
+    requestModeSet(sid, channel, "-b " + selected.mask());
+    requestModeSet(sid, channel, "+b " + nextMask);
+    requestBanListRefreshWithStatus(sid, channel, statusArea);
+  }
+
+  private void confirmAndDeleteBan(
+      String sid, String channel, JTable banListTable, JTextArea statusArea) {
+    if (!canEditChannelModes(sid, channel) || GraphicsEnvironment.isHeadless()) return;
+    BanListEntryRow selected = selectedBanListEntry(banListTable);
+    if (selected == null) return;
+    Window owner = SwingUtilities.getWindowAncestor(this);
+    int choice =
+        JOptionPane.showConfirmDialog(
+            owner,
+            "Remove ban \"" + selected.mask() + "\" from " + channel + "?",
+            "Delete Ban",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.WARNING_MESSAGE);
+    if (choice != JOptionPane.OK_OPTION) return;
+    requestModeSet(sid, channel, "-b " + selected.mask());
+    requestBanListRefreshWithStatus(sid, channel, statusArea);
+  }
+
+  private void setPendingBanListRefresh(String sid, String channel, boolean pending) {
+    ChannelDetailsDialogState state = channelDetailsDialog;
+    if (state == null) return;
+    if (!Objects.equals(state.serverId(), sid)) return;
+    if (!Objects.equals(normalizeChannel(state.channel()), normalizeChannel(channel))) return;
+    state.pendingBanListRefresh().set(pending);
+  }
 }

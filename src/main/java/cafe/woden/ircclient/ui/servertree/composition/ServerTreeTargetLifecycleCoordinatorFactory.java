@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.composition;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerCatalog;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetLifecycleCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
@@ -94,16 +96,14 @@ public final class ServerTreeTargetLifecycleCoordinatorFactory {
       Consumer<Boolean> setDccTransfersNodesVisible,
       Function<String, ServerBuiltInNodesVisibility> builtInNodesVisibility,
       Function<String, ServerNodes> addServerRoot,
-      Function<TargetRef, RuntimeConfigStore.ServerTreeBuiltInLayoutNode>
-          builtInLayoutNodeKindForRef,
-      Function<String, RuntimeConfigStore.ServerTreeBuiltInLayout> builtInLayout,
-      Function<String, RuntimeConfigStore.ServerTreeRootSiblingOrder> rootSiblingOrder,
+      Function<TargetRef, ServerTreeBuiltInLayoutNode> builtInLayoutNodeKindForRef,
+      Function<String, ServerTreeBuiltInLayout> builtInLayout,
+      Function<String, ServerTreeRootSiblingOrder> rootSiblingOrder,
       java.util.function.BiFunction<TargetRef, ServerNodes, DefaultMutableTreeNode>
           backendSpecificParent,
       Function<ServerNodes, DefaultMutableTreeNode> ensureChannelListNode,
-      BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeBuiltInLayout> applyBuiltInLayoutToTree,
-      BiConsumer<ServerNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder>
-          applyRootSiblingOrderToTree,
+      BiConsumer<ServerNodes, ServerTreeBuiltInLayout> applyBuiltInLayoutToTree,
+      BiConsumer<ServerNodes, ServerTreeRootSiblingOrder> applyRootSiblingOrderToTree,
       Consumer<String> persistBuiltInLayoutFromTree,
       Predicate<TargetRef> isPrivateMessageTarget,
       Supplier<Boolean> shouldPersistPrivateMessageList,

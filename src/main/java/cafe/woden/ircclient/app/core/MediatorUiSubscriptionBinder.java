@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.app.core;
 
 import cafe.woden.ircclient.app.AppSchedulers;
+import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.commands.ParsedInput;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 public class MediatorUiSubscriptionBinder {
 
   public void bind(
+      UiEventPort uiEvents,
       UiPort ui,
       TargetCoordinator targetCoordinator,
       CompositeDisposable disposables,
@@ -22,7 +24,8 @@ public class MediatorUiSubscriptionBinder {
       Consumer<String> onOutboundLine,
       Consumer<ParsedInput.BackendNamed> onBackendNamedRequest) {
     disposables.add(
-        ui.targetSelections()
+        uiEvents
+            .targetSelections()
             // Some UI refresh paths (e.g. LAF/theme updates) can cause the current selection
             // to be re-emitted even when it has not actually changed. De-dupe to avoid
             // re-running expensive side effects (history prefill, WHO refresh, etc.).
@@ -35,7 +38,8 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
 
     disposables.add(
-        ui.targetActivations()
+        uiEvents
+            .targetActivations()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::onTargetActivated,
@@ -44,7 +48,8 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
 
     disposables.add(
-        ui.privateMessageRequests()
+        uiEvents
+            .privateMessageRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::openPrivateConversation,
@@ -53,7 +58,8 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
 
     disposables.add(
-        ui.userActionRequests()
+        uiEvents
+            .userActionRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 onUserActionRequest::accept,
@@ -62,7 +68,8 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
 
     disposables.add(
-        ui.outboundLines()
+        uiEvents
+            .outboundLines()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 onOutboundLine::accept,
@@ -71,7 +78,8 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
 
     disposables.add(
-        ui.backendNamedCommandRequests()
+        uiEvents
+            .backendNamedCommandRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 onBackendNamedRequest::accept,
@@ -80,7 +88,8 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", err.toString())));
 
     disposables.add(
-        ui.closeTargetRequests()
+        uiEvents
+            .closeTargetRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::closeTarget,
@@ -89,7 +98,8 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
 
     disposables.add(
-        ui.joinChannelRequests()
+        uiEvents
+            .joinChannelRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::joinChannel,
@@ -98,7 +108,8 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
 
     disposables.add(
-        ui.disconnectChannelRequests()
+        uiEvents
+            .disconnectChannelRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::disconnectChannel,
@@ -107,7 +118,8 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
 
     disposables.add(
-        ui.bouncerDetachChannelRequests()
+        uiEvents
+            .bouncerDetachChannelRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::bouncerDetachChannel,
@@ -116,7 +128,8 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
 
     disposables.add(
-        ui.closeChannelRequests()
+        uiEvents
+            .closeChannelRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::closeChannel,
@@ -125,7 +138,8 @@ public class MediatorUiSubscriptionBinder {
                         targetCoordinator.safeStatusTarget(), "(ui-error)", String.valueOf(err))));
 
     disposables.add(
-        ui.clearLogRequests()
+        uiEvents
+            .clearLogRequests()
             .observeOn(AppSchedulers.edt())
             .subscribe(
                 targetCoordinator::clearLog,

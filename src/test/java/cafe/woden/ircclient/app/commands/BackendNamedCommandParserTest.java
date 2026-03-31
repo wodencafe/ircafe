@@ -100,4 +100,35 @@ class BackendNamedCommandParserTest {
     assertThrows(
         IllegalStateException.class, () -> new BackendNamedCommandParser(List.of(first, second)));
   }
+
+  @Test
+  void installedCatalogLoadsAutoServiceProviders() {
+    BackendNamedCommandParser parser =
+        new BackendNamedCommandParser(BackendNamedCommandCatalog.installed());
+
+    ParsedInput parsed = parser.parse("/qsetup core");
+
+    assertTrue(parsed instanceof ParsedInput.BackendNamed);
+    assertEquals(
+        BackendNamedCommandNames.QUASSEL_SETUP, ((ParsedInput.BackendNamed) parsed).command());
+    assertEquals("core", ((ParsedInput.BackendNamed) parsed).args());
+  }
+
+  @Test
+  void reservedBuiltInCommandNamesAreRejected() {
+    BackendNamedCommandHandler custom =
+        new BackendNamedCommandHandler() {
+          @Override
+          public Set<String> supportedCommandNames() {
+            return Set.of("help");
+          }
+
+          @Override
+          public ParsedInput parse(String line, String matchedCommandName) {
+            return null;
+          }
+        };
+
+    assertThrows(IllegalStateException.class, () -> new BackendNamedCommandParser(List.of(custom)));
+  }
 }

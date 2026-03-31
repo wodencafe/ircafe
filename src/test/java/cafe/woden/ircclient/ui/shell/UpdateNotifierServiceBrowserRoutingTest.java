@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -70,7 +70,7 @@ class UpdateNotifierServiceBrowserRoutingTest {
     private int openedCommandCount;
 
     private TestableService(StatusBar statusBar, String osLower) {
-      super(mock(RuntimeConfigStore.class), statusBar);
+      super(mock(UiShellRuntimeConfigPort.class), statusBar);
       this.osLower = osLower;
     }
 

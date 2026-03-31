@@ -4,7 +4,6 @@ import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.net.NetTlsContext;
 import cafe.woden.ircclient.net.ProxyPlan;
 import cafe.woden.ircclient.net.ServerProxyResolver;

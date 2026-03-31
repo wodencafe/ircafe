@@ -3,8 +3,11 @@ package cafe.woden.ircclient.irc.pircbotx.parse;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxIrcClientService;
+import cafe.woden.ircclient.irc.pircbotx.client.*;
+import cafe.woden.ircclient.irc.pircbotx.client.PircbotxIrcClientService;
 import cafe.woden.ircclient.irc.playback.*;
+import java.util.List;
+import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
@@ -51,5 +54,34 @@ public final class PircbotxChannelModeParsers {
     }
 
     return new ParsedRpl324(channel, details.toString());
+  }
+
+  /**
+   * Recover RPL_CHANNELMODEIS (324) details when PircBotX tokenization succeeded but the normal
+   * parser path failed.
+   */
+  public static ParsedRpl324 parseRpl324Fallback(String line, List<String> parsedLine) {
+    ParsedRpl324 fromLine = parseRpl324(line);
+    if (fromLine != null) return fromLine;
+
+    if (parsedLine == null || parsedLine.size() < 3) return null;
+    String channel = stripLeadingColon(parsedLine.get(1));
+    if (channel.isBlank()) return null;
+
+    StringBuilder details = new StringBuilder();
+    for (int i = 2; i < parsedLine.size(); i++) {
+      String token = stripLeadingColon(parsedLine.get(i));
+      if (token.isBlank()) continue;
+      if (details.length() > 0) details.append(' ');
+      details.append(token);
+    }
+    if (details.length() == 0) return null;
+    return new ParsedRpl324(channel, details.toString());
+  }
+
+  private static String stripLeadingColon(String raw) {
+    String value = Objects.toString(raw, "").trim();
+    if (value.startsWith(":")) value = value.substring(1).trim();
+    return value;
   }
 }

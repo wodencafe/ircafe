@@ -288,15 +288,15 @@ public class NickColorService {
     float min = Math.min(r, Math.min(g, b));
     float h, s, l = (max + min) / 2f;
 
-    if (max == min) {
+    if (Float.compare(max, min) == 0) {
       h = s = 0f;
     } else {
       float d = max - min;
       s = l > 0.5f ? d / (2f - max - min) : d / (max + min);
 
-      if (max == r) {
+      if (Float.compare(max, r) == 0) {
         h = (g - b) / d + (g < b ? 6f : 0f);
-      } else if (max == g) {
+      } else if (Float.compare(max, g) == 0) {
         h = (b - r) / d + 2f;
       } else {
         h = (r - g) / d + 4f;

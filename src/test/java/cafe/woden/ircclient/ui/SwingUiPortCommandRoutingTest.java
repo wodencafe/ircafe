@@ -42,8 +42,8 @@ class SwingUiPortCommandRoutingTest {
     when(serverTree.quasselSetupRequests()).thenReturn(setupRequests);
     when(serverTree.quasselNetworkManagerRequests()).thenReturn(networkManagerRequests);
 
-    SwingUiPort ui =
-        new SwingUiPort(
+    SwingUiPortDelegates delegates =
+        new SwingUiPortDelegates(
             serverTree,
             mock(ChatDockable.class),
             mock(ChatTranscriptStore.class),
@@ -56,9 +56,12 @@ class SwingUiPortCommandRoutingTest {
             new TargetActivationBus(),
             new OutboundLineBus(),
             mock(ChatDockManager.class),
-            new ActiveInputRouter());
+            new ActiveInputRouter(),
+            new SwingUiBackendCommandBridge());
+    SwingUiPort ui = new SwingUiPort(delegates);
+    SwingUiEventAdapter uiEvents = new SwingUiEventAdapter(delegates);
 
-    var subscriber = ui.backendNamedCommandRequests().test();
+    var subscriber = uiEvents.backendNamedCommandRequests().test();
     setupRequests.onNext(" quassel ");
     networkManagerRequests.onNext(" core ");
     ui.openQuasselNetworkManager(" app ");
@@ -389,8 +392,8 @@ class SwingUiPortCommandRoutingTest {
     when(serverTree.quasselSetupRequests()).thenReturn(setupRequests);
     when(serverTree.quasselNetworkManagerRequests()).thenReturn(PublishProcessor.create());
 
-    SwingUiPort ui =
-        new SwingUiPort(
+    SwingUiPortDelegates delegates =
+        new SwingUiPortDelegates(
             serverTree,
             mock(ChatDockable.class),
             transcripts,
@@ -403,9 +406,11 @@ class SwingUiPortCommandRoutingTest {
             new TargetActivationBus(),
             new OutboundLineBus(),
             mock(ChatDockManager.class),
-            new ActiveInputRouter());
+            new ActiveInputRouter(),
+            new SwingUiBackendCommandBridge());
+    SwingUiEventAdapter uiEvents = new SwingUiEventAdapter(delegates);
 
-    var subscriber = ui.backendNamedCommandRequests().test();
+    var subscriber = uiEvents.backendNamedCommandRequests().test();
     setupRequests.onNext(" testlocal ");
     flushEdt();
 

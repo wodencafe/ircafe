@@ -3,7 +3,8 @@ package cafe.woden.ircclient.ui.servertree.composition;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.ui.servertree.builder.ServerTreeServerNodeBuilder;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeChannelStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeNetworkGroupManager;
@@ -51,8 +52,8 @@ class ServerTreeLifecycleSettingsCollaboratorsFactoryTest {
                 null,
                 null,
                 new HashMap<>(),
-                __ -> RuntimeConfigStore.ServerTreeBuiltInLayout.defaults(),
-                __ -> RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults(),
+                __ -> ServerTreeBuiltInLayout.defaults(),
+                __ -> ServerTreeRootSiblingOrder.defaults(),
                 (__1, __2) -> {},
                 (__1, __2) -> {},
                 model,

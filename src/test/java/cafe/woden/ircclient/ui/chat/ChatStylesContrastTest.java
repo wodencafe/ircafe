@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cafe.woden.ircclient.ui.settings.ChatThemeSettings;
-import cafe.woden.ircclient.ui.settings.ChatThemeSettingsBus;
+import cafe.woden.ircclient.ui.settings.theme.ChatThemeSettings;
+import cafe.woden.ircclient.ui.settings.theme.ChatThemeSettingsBus;
 import java.awt.Color;
 import java.util.LinkedHashMap;
 import java.util.Map;

@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.logging.channelmeta;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.nio.channels.FileChannel;
@@ -28,8 +28,8 @@ public class ChannelMetadataDatabaseConfig {
   private static final String DEFAULT_DB_BASE_NAME = "ircafe-channelmeta";
 
   @Bean(name = "channelMetadataDataSource", destroyMethod = "close")
-  public DataSource channelMetadataDataSource(RuntimeConfigStore runtimeConfigStore) {
-    Path basePath = resolveDbBasePath(runtimeConfigStore);
+  public DataSource channelMetadataDataSource(RuntimeConfigPathPort runtimeConfigPathPort) {
+    Path basePath = resolveDbBasePath(runtimeConfigPathPort);
     Path lockPath = lockFilePath(basePath);
     String url = "jdbc:hsqldb:file:" + basePath.toAbsolutePath() + ";hsqldb.tx=mvcc";
     try {
@@ -71,8 +71,8 @@ public class ChannelMetadataDatabaseConfig {
     return new ChannelMetadataRepository(jdbc);
   }
 
-  private static Path resolveDbBasePath(RuntimeConfigStore runtimeConfigStore) {
-    Path runtimeCfg = runtimeConfigStore.runtimeConfigPath();
+  private static Path resolveDbBasePath(RuntimeConfigPathPort runtimeConfigPathPort) {
+    Path runtimeCfg = runtimeConfigPathPort.runtimeConfigPath();
     Path parent = runtimeCfg != null ? runtimeCfg.getParent() : null;
     Path dir = (parent != null) ? parent : defaultIrcafeDir();
     try {

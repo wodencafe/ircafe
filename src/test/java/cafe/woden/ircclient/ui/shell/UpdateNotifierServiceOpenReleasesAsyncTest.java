@@ -5,14 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import org.junit.jupiter.api.Test;
 
 class UpdateNotifierServiceOpenReleasesAsyncTest {
 
   @Test
   void openReleasesPageSchedulesDesktopBrowseOnWorker() {
-    RuntimeConfigStore runtimeConfig = mock(RuntimeConfigStore.class);
+    UiShellRuntimeConfigPort runtimeConfig = mock(UiShellRuntimeConfigPort.class);
     StatusBar statusBar = mock(StatusBar.class);
     TestableUpdateNotifierService service =
         new TestableUpdateNotifierService(runtimeConfig, statusBar);
@@ -39,7 +39,8 @@ class UpdateNotifierServiceOpenReleasesAsyncTest {
     private int executeBackgroundCalls;
     private int openOnWorkerCalls;
 
-    private TestableUpdateNotifierService(RuntimeConfigStore runtimeConfig, StatusBar statusBar) {
+    private TestableUpdateNotifierService(
+        UiShellRuntimeConfigPort runtimeConfig, StatusBar statusBar) {
       super(runtimeConfig, statusBar);
     }
 

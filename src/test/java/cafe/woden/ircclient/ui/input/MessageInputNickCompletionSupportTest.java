@@ -6,6 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
+import cafe.woden.ircclient.app.commands.QuasselBackendNamedCommandHandler;
+import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -201,6 +204,32 @@ class MessageInputNickCompletionSupportTest {
 
     assertDoesNotThrow(support::shutdown);
     assertDoesNotThrow(support::shutdown);
+  }
+
+  @Test
+  void installedBackendNamedCommandsAppearInSlashCommandCompletions() throws Exception {
+    JTextField input = new JTextField();
+    MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
+    BackendNamedCommandCatalog catalog =
+        new BackendNamedCommandCatalog(List.of(new QuasselBackendNamedCommandHandler()));
+    SlashCommandPresentationCatalog slashCommandPresentationCatalog =
+        new SlashCommandPresentationCatalog(List.of(), catalog);
+    MessageInputNickCompletionSupport support =
+        new MessageInputNickCompletionSupport(
+            new JPanel(),
+            input,
+            undoSupport,
+            null,
+            slashCommandPresentationCatalog.autocompleteCommands());
+
+    input.setText("/q");
+    input.setCaretPosition(2);
+
+    List<String> replacements = replacementTextsForCurrentToken(support, input);
+    assertTrue(replacements.contains("/qsetup"));
+    assertTrue(replacements.contains("/quasselsetup"));
+    assertTrue(replacements.contains("/qnet"));
+    assertTrue(replacements.contains("/quasselnet"));
   }
 
   private static MessageInputNickCompletionSupport newSupport(List<String> nicks) {

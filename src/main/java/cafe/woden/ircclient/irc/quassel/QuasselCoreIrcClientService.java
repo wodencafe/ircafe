@@ -1,12 +1,12 @@
 package cafe.woden.ircclient.irc.quassel;
 
+import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.mode.*;
-import cafe.woden.ircclient.irc.pircbotx.*;
 import cafe.woden.ircclient.irc.pircbotx.parse.*;
 import cafe.woden.ircclient.irc.pircbotx.support.PircbotxUtil;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
@@ -63,6 +63,8 @@ import org.springframework.stereotype.Service;
 @InfrastructureLayer
 public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private static final Logger log = LoggerFactory.getLogger(QuasselCoreIrcClientService.class);
+  private static final BackendDescriptorCatalog BACKEND_DESCRIPTORS =
+      BackendDescriptorCatalog.builtIns();
 
   private static final int BUFFER_STATUS = 0x01;
   private static final int BUFFER_CHANNEL = 0x02;
@@ -205,8 +207,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   @Override
-  public IrcProperties.Server.Backend backend() {
-    return IrcProperties.Server.Backend.QUASSEL_CORE;
+  public String backendId() {
+    return BACKEND_DESCRIPTORS.idFor(IrcProperties.Server.Backend.QUASSEL_CORE);
   }
 
   @Override
@@ -3271,7 +3273,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     String payloadText = payloadTextFromEnvelope(ircEnvelope, content);
     String target = targetForBuffer(session, bufferInfo, fromDisplay);
     String historyTarget = historyTargetForBuffer(session, bufferInfo, fromDisplay);
-    int historyNetworkId = bufferInfo == null ? -1 : bufferInfo.networkId();
+    int historyNetworkId = networkId;
     noteTargetNetworkHint(session, historyTarget, historyNetworkId, true);
     noteHistoryObservation(session, historyTarget, message.messageId(), at);
     int typeBits = message.typeBits();
@@ -3307,17 +3309,18 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     }
 
     if (isJoinMessage(typeBits)) {
-      handleJoinMessage(session, at, target, fromDisplay, networkId);
+      handleJoinMessage(session, at, target, fromDisplay, senderHostmask, networkId);
       return;
     }
 
     if (isPartMessage(typeBits)) {
-      handlePartMessage(session, at, target, fromDisplay, payloadText, networkId);
+      handlePartMessage(session, at, target, fromDisplay, senderHostmask, payloadText, networkId);
       return;
     }
 
     if (isQuitMessage(typeBits)) {
       if (!target.isEmpty()) {
+        emitObservedHostmask(session, at, target, fromDisplay, senderHostmask);
         bus.onNext(
             new ServerIrcEvent(
                 session.serverId,
@@ -4030,7 +4033,12 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   private void handleJoinMessage(
-      QuasselSession session, Instant at, String channel, String fromDisplay, int networkId) {
+      QuasselSession session,
+      Instant at,
+      String channel,
+      String fromDisplay,
+      String senderHostmask,
+      int networkId) {
     if (channel.isEmpty()) return;
     if (isSelfNick(session, fromDisplay, networkId)) {
       if (markChannelMembershipJoined(session, channel, networkId)) {
@@ -4038,6 +4046,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       }
       return;
     }
+    emitObservedHostmask(session, at, channel, fromDisplay, senderHostmask);
     bus.onNext(
         new ServerIrcEvent(
             session.serverId, new IrcEvent.UserJoinedChannel(at, channel, fromDisplay)));
@@ -4048,6 +4057,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       Instant at,
       String channel,
       String fromDisplay,
+      String senderHostmask,
       String content,
       int networkId) {
     if (channel.isEmpty()) return;
@@ -4058,6 +4068,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
           new ServerIrcEvent(session.serverId, new IrcEvent.LeftChannel(at, channel, reason)));
       return;
     }
+    emitObservedHostmask(session, at, channel, fromDisplay, senderHostmask);
     bus.onNext(
         new ServerIrcEvent(
             session.serverId, new IrcEvent.UserPartedChannel(at, channel, fromDisplay, reason)));
@@ -5211,6 +5222,20 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     int bang = hostmask.indexOf('!');
     if (bang <= 0) return hostmask;
     return hostmask.substring(0, bang);
+  }
+
+  private void emitObservedHostmask(
+      QuasselSession session, Instant at, String channel, String nick, String hostmask) {
+    if (session == null) return;
+    String normalizedNick = Objects.toString(nick, "").trim();
+    String normalizedHostmask = Objects.toString(hostmask, "").trim();
+    if (normalizedNick.isEmpty() || !PircbotxUtil.isUsefulHostmask(normalizedHostmask)) {
+      return;
+    }
+    bus.onNext(
+        new ServerIrcEvent(
+            session.serverId,
+            new IrcEvent.UserHostmaskObserved(at, channel, normalizedNick, normalizedHostmask)));
   }
 
   private static String renderUnknownMessageType(

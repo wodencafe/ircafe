@@ -1,6 +1,9 @@
 package cafe.woden.ircclient.ui.servertree.layout;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
 import cafe.woden.ircclient.ui.servertree.model.ServerNodes;
@@ -59,21 +62,19 @@ public final class ServerTreeBuiltInLayoutVisibilityFacade {
     return builtInVisibilityCoordinator.builtInNodesVisibility(serverId);
   }
 
-  public RuntimeConfigStore.ServerTreeBuiltInLayout builtInLayout(String serverId) {
+  public ServerTreeBuiltInLayout builtInLayout(String serverId) {
     return builtInLayoutCoordinator.layoutForServer(serverId);
   }
 
-  public void rememberBuiltInLayout(
-      String serverId, RuntimeConfigStore.ServerTreeBuiltInLayout layout) {
+  public void rememberBuiltInLayout(String serverId, ServerTreeBuiltInLayout layout) {
     builtInLayoutCoordinator.rememberLayout(serverId, layout);
   }
 
-  public RuntimeConfigStore.ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
+  public ServerTreeRootSiblingOrder rootSiblingOrder(String serverId) {
     return rootSiblingOrderCoordinator.orderForServer(serverId);
   }
 
-  public void rememberRootSiblingOrder(
-      String serverId, RuntimeConfigStore.ServerTreeRootSiblingOrder order) {
+  public void rememberRootSiblingOrder(String serverId, ServerTreeRootSiblingOrder order) {
     rootSiblingOrderCoordinator.rememberOrder(serverId, order);
   }
 
@@ -96,18 +97,16 @@ public final class ServerTreeBuiltInLayoutVisibilityFacade {
     builtInVisibilityCoordinator.setDefaultVisibility(next);
   }
 
-  public RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(TargetRef ref) {
+  public ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForRef(TargetRef ref) {
     return ServerTreeBuiltInLayoutCoordinator.nodeKindForRef(ref);
   }
 
-  public RuntimeConfigStore.ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(
-      DefaultMutableTreeNode node) {
+  public ServerTreeBuiltInLayoutNode builtInLayoutNodeKindForNode(DefaultMutableTreeNode node) {
     return builtInLayoutCoordinator.nodeKindForNode(
         node, isMonitorGroupNode, isInterceptorsGroupNode, targetRefForNode);
   }
 
-  public RuntimeConfigStore.ServerTreeRootSiblingNode rootSiblingNodeKindForNode(
-      DefaultMutableTreeNode node) {
+  public ServerTreeRootSiblingNode rootSiblingNodeKindForNode(DefaultMutableTreeNode node) {
     return rootSiblingOrderCoordinator.nodeKindForNode(
         node, isOtherGroupNode, isPrivateMessagesGroupNode, targetRefForNode);
   }
@@ -117,12 +116,12 @@ public final class ServerTreeBuiltInLayoutVisibilityFacade {
   }
 
   public void applyBuiltInLayoutToTree(
-      ServerNodes serverNodes, RuntimeConfigStore.ServerTreeBuiltInLayout requestedLayout) {
+      ServerNodes serverNodes, ServerTreeBuiltInLayout requestedLayout) {
     builtInLayoutOrchestrator.applyBuiltInLayoutToTree(serverNodes, requestedLayout);
   }
 
   public void applyRootSiblingOrderToTree(
-      ServerNodes serverNodes, RuntimeConfigStore.ServerTreeRootSiblingOrder requestedOrder) {
+      ServerNodes serverNodes, ServerTreeRootSiblingOrder requestedOrder) {
     builtInLayoutOrchestrator.applyRootSiblingOrderToTree(serverNodes, requestedOrder);
   }
 

@@ -8,6 +8,7 @@ import cafe.woden.ircclient.app.api.TrayNotificationsPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiPortDecorator;
 import cafe.woden.ircclient.app.api.UiTranscriptPort;
+import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
@@ -67,6 +68,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import org.mockito.Mockito;
 
 /** Compatibility constructors for functional tests while wiring evolves during refactors. */
 public final class FunctionalTestWiringSupport {
@@ -329,6 +331,7 @@ public final class FunctionalTestWiringSupport {
               ApplicationDiagnosticsService.class,
               JfrRuntimeEventsService.class,
               SpringRuntimeEventsService.class,
+              SlashCommandPresentationCatalog.class,
               UiSettingsBus.class,
               SpellcheckSettingsBus.class,
               CommandHistoryStore.class,
@@ -363,6 +366,7 @@ public final class FunctionalTestWiringSupport {
           applicationDiagnosticsService,
           jfrRuntimeEventsService,
           springRuntimeEventsService,
+          Mockito.mock(SlashCommandPresentationCatalog.class),
           settingsBus,
           spellcheckSettingsBus,
           commandHistoryStore,
@@ -378,6 +382,8 @@ public final class FunctionalTestWiringSupport {
                 TargetActivationBus.class,
                 OutboundLineBus.class,
                 IrcClientService.class,
+                ModeRoutingPort.class,
+                ServerIsupportStatePort.class,
                 BackendUiProfileProvider.class,
                 MessageActionCapabilityPolicy.class,
                 ActiveInputRouter.class,
@@ -410,6 +416,8 @@ public final class FunctionalTestWiringSupport {
             activationBus,
             outboundBus,
             irc,
+            modeRoutingState,
+            serverIsupportState,
             backendUiProfileProvider,
             messageActionCapabilityPolicy,
             activeInputRouter,
@@ -435,6 +443,76 @@ public final class FunctionalTestWiringSupport {
             commandHistoryStore,
             logViewerExecutor,
             interceptorRefreshExecutor);
+      } catch (NoSuchMethodException ignoredAgain) {
+        try {
+          Constructor<ChatDockable> ctor =
+              ChatDockable.class.getConstructor(
+                  ChatTranscriptStore.class,
+                  ServerTreeDockable.class,
+                  NotificationStore.class,
+                  TargetActivationBus.class,
+                  OutboundLineBus.class,
+                  IrcClientService.class,
+                  BackendUiProfileProvider.class,
+                  MessageActionCapabilityPolicy.class,
+                  ActiveInputRouter.class,
+                  IgnoreListService.class,
+                  IgnoreStatusService.class,
+                  IgnoreListDialog.class,
+                  MonitorListService.class,
+                  UserListStore.class,
+                  UserListDockable.class,
+                  NickContextMenuFactory.class,
+                  ServerProxyResolver.class,
+                  ChatHistoryService.class,
+                  ChannelMetadataPort.class,
+                  ChatLogViewerService.class,
+                  InterceptorStore.class,
+                  DccTransferStore.class,
+                  TerminalDockable.class,
+                  ApplicationDiagnosticsService.class,
+                  JfrRuntimeEventsService.class,
+                  SpringRuntimeEventsService.class,
+                  UiSettingsBus.class,
+                  SpellcheckSettingsBus.class,
+                  CommandHistoryStore.class,
+                  ExecutorService.class,
+                  ExecutorService.class);
+          return ctor.newInstance(
+              transcripts,
+              serverTree,
+              notificationStore,
+              activationBus,
+              outboundBus,
+              irc,
+              backendUiProfileProvider,
+              messageActionCapabilityPolicy,
+              activeInputRouter,
+              ignoreListService,
+              ignoreStatusService,
+              ignoreListDialog,
+              monitorListService,
+              userListStore,
+              usersDock,
+              nickContextMenuFactory,
+              proxyResolver,
+              chatHistoryService,
+              channelMetadata,
+              chatLogViewerService,
+              interceptorStore,
+              dccTransferStore,
+              terminalDockable,
+              applicationDiagnosticsService,
+              jfrRuntimeEventsService,
+              springRuntimeEventsService,
+              settingsBus,
+              spellcheckSettingsBus,
+              commandHistoryStore,
+              logViewerExecutor,
+              interceptorRefreshExecutor);
+        } catch (Exception e) {
+          throw new IllegalStateException("Unable to construct ChatDockable", e);
+        }
       } catch (Exception e) {
         throw new IllegalStateException("Unable to construct ChatDockable", e);
       }

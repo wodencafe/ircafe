@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
-import cafe.woden.ircclient.ui.settings.ChatThemeSettings;
-import cafe.woden.ircclient.ui.settings.ChatThemeSettingsBus;
+import cafe.woden.ircclient.ui.settings.theme.ChatThemeSettings;
+import cafe.woden.ircclient.ui.settings.theme.ChatThemeSettingsBus;
 import java.awt.Color;
 import java.util.LinkedHashMap;
 import java.util.Map;

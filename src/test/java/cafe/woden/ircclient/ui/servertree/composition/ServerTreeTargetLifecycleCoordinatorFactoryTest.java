@@ -3,7 +3,9 @@ package cafe.woden.ircclient.ui.servertree.composition;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 
-import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayout;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeBuiltInLayoutNode;
+import cafe.woden.ircclient.config.api.ServerTreeLayoutConfigPort.ServerTreeRootSiblingOrder;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetLifecycleCoordinator;
 import cafe.woden.ircclient.ui.servertree.coordinator.ServerTreeTargetRemovalStateCoordinator;
 import cafe.woden.ircclient.ui.servertree.model.ServerBuiltInNodesVisibility;
@@ -41,13 +43,13 @@ class ServerTreeTargetLifecycleCoordinatorFactoryTest {
                 __ -> {},
                 __ -> ServerBuiltInNodesVisibility.defaults(),
                 __ -> null,
-                __ -> RuntimeConfigStore.ServerTreeBuiltInLayoutNode.SERVER,
-                __ -> RuntimeConfigStore.ServerTreeBuiltInLayout.defaults(),
-                __ -> RuntimeConfigStore.ServerTreeRootSiblingOrder.defaults(),
+                __ -> ServerTreeBuiltInLayoutNode.SERVER,
+                __ -> ServerTreeBuiltInLayout.defaults(),
+                __ -> ServerTreeRootSiblingOrder.defaults(),
                 (__1, __2) -> null,
                 __ -> null,
-                (ServerNodes __1, RuntimeConfigStore.ServerTreeBuiltInLayout __2) -> {},
-                (ServerNodes __1, RuntimeConfigStore.ServerTreeRootSiblingOrder __2) -> {},
+                (ServerNodes __1, ServerTreeBuiltInLayout __2) -> {},
+                (ServerNodes __1, ServerTreeRootSiblingOrder __2) -> {},
                 __ -> {},
                 __ -> false,
                 () -> false,

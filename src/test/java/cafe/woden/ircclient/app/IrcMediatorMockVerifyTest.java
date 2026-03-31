@@ -3,6 +3,8 @@ package cafe.woden.ircclient.app;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -19,6 +21,7 @@ import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatch;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.app.api.UiSettingsSnapshot;
@@ -28,12 +31,27 @@ import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.IrcMediator;
+import cafe.woden.ircclient.app.core.MediatorAlertNotificationHandler;
+import cafe.woden.ircclient.app.core.MediatorChannelMembershipEventHandler;
+import cafe.woden.ircclient.app.core.MediatorChannelStateEventHandler;
 import cafe.woden.ircclient.app.core.MediatorConnectionSubscriptionBinder;
+import cafe.woden.ircclient.app.core.MediatorConnectivityLifecycleOrchestrator;
 import cafe.woden.ircclient.app.core.MediatorHistoryIngestOrchestrator;
+import cafe.woden.ircclient.app.core.MediatorInboundEventPreparationService;
+import cafe.woden.ircclient.app.core.MediatorInboundTextEventHandler;
+import cafe.woden.ircclient.app.core.MediatorInviteEventHandler;
+import cafe.woden.ircclient.app.core.MediatorIrcv3EventHandler;
+import cafe.woden.ircclient.app.core.MediatorIrcv3PresenceEventHandler;
+import cafe.woden.ircclient.app.core.MediatorNotificationSupport;
+import cafe.woden.ircclient.app.core.MediatorOutboundUiActionHandler;
+import cafe.woden.ircclient.app.core.MediatorPendingEchoFailureHandler;
+import cafe.woden.ircclient.app.core.MediatorRosterStatusEventHandler;
+import cafe.woden.ircclient.app.core.MediatorServerStatusEventHandler;
+import cafe.woden.ircclient.app.core.MediatorTargetUiSupport;
 import cafe.woden.ircclient.app.core.MediatorUiSubscriptionBinder;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
-import cafe.woden.ircclient.app.outbound.OutboundDccCommandService;
+import cafe.woden.ircclient.app.outbound.dcc.OutboundDccCommandService;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.ServerRegistry;
@@ -79,6 +97,7 @@ class IrcMediatorMockVerifyTest {
   private final IrcReadMarkerPort readMarkerPort = mock(IrcReadMarkerPort.class);
   private final IrcNegotiatedFeaturePort negotiatedFeaturePort =
       mock(IrcNegotiatedFeaturePort.class);
+  private final UiEventPort uiEvents = mock(UiEventPort.class);
   private final UiPort ui = mock(UiPort.class);
   private final CommandParser commandParser = mock(CommandParser.class);
   private final UserCommandAliasEngine userCommandAliasEngine = mock(UserCommandAliasEngine.class);
@@ -117,72 +136,166 @@ class IrcMediatorMockVerifyTest {
   private final ServerIsupportStatePort serverIsupportState = mock(ServerIsupportStatePort.class);
   private final InboundModeEventHandler inboundModeEventHandler =
       mock(InboundModeEventHandler.class);
+  private final MediatorConnectivityLifecycleOrchestrator
+      mediatorConnectivityLifecycleOrchestrator =
+          new MediatorConnectivityLifecycleOrchestrator(
+              ui,
+              connectionCoordinator,
+              targetCoordinator,
+              whoisRoutingState,
+              ctcpRoutingState,
+              modeRoutingState,
+              awayRoutingState,
+              chatHistoryRequestRoutingState,
+              joinRoutingState,
+              labeledResponseRoutingState,
+              pendingInviteState,
+              serverIsupportState,
+              inboundModeEventHandler);
+  private final MonitorFallbackPort monitorFallbackPort = mock(MonitorFallbackPort.class);
+  private final MediatorServerStatusEventHandler mediatorServerStatusEventHandler =
+      new MediatorServerStatusEventHandler(
+          irc,
+          ui,
+          awayRoutingState,
+          whoisRoutingState,
+          monitorFallbackPort,
+          labeledResponseRoutingState,
+          pendingEchoMessageState,
+          serverIsupportState,
+          connectionCoordinator);
   private final IrcEventNotifierPort ircEventNotifierPort = mock(IrcEventNotifierPort.class);
+  private final MediatorInviteEventHandler mediatorInviteEventHandler =
+      new MediatorInviteEventHandler(
+          irc,
+          ui,
+          pendingInviteState,
+          trayNotificationsPort,
+          connectionCoordinator,
+          ircEventNotifierPort);
+  private final MediatorChannelMembershipEventHandler mediatorChannelMembershipEventHandler =
+      new MediatorChannelMembershipEventHandler(
+          ui,
+          connectionCoordinator,
+          targetCoordinator,
+          inboundModeEventHandler,
+          userInfoEnrichmentService,
+          joinRoutingState,
+          runtimeConfig,
+          serverRegistry);
+  private final MediatorRosterStatusEventHandler mediatorRosterStatusEventHandler =
+      new MediatorRosterStatusEventHandler(ui, targetCoordinator);
+  private final MediatorIrcv3PresenceEventHandler mediatorIrcv3PresenceEventHandler =
+      new MediatorIrcv3PresenceEventHandler(irc, typingPort, readMarkerPort, ui, uiSettingsPort);
+  private final MediatorIrcv3EventHandler mediatorIrcv3EventHandler =
+      new MediatorIrcv3EventHandler(negotiatedFeaturePort, ui, targetCoordinator);
+  private final MediatorAlertNotificationHandler mediatorAlertNotificationHandler =
+      new MediatorAlertNotificationHandler(irc, serverIsupportState);
+  private final MediatorChannelStateEventHandler mediatorChannelStateEventHandler =
+      new MediatorChannelStateEventHandler(
+          ui,
+          targetCoordinator,
+          inboundModeEventHandler,
+          mediatorHistoryIngestOrchestrator,
+          mediatorAlertNotificationHandler);
+  private final MediatorOutboundUiActionHandler mediatorOutboundUiActionHandler =
+      new MediatorOutboundUiActionHandler(
+          irc,
+          ui,
+          commandParser,
+          userCommandAliasEngine,
+          runtimeConfig,
+          connectionCoordinator,
+          outboundCommandDispatcher,
+          targetCoordinator,
+          whoisRoutingState,
+          ctcpRoutingState);
   private final cafe.woden.ircclient.app.api.InterceptorIngestPort interceptorIngestPort =
       mock(cafe.woden.ircclient.app.api.InterceptorIngestPort.class);
   private final InboundIgnorePolicyPort inboundIgnorePolicy = mock(InboundIgnorePolicyPort.class);
-  private final MonitorFallbackPort monitorFallbackPort = mock(MonitorFallbackPort.class);
   private final ApplicationEventPublisher applicationEventPublisher =
       mock(ApplicationEventPublisher.class);
+  private final MediatorInboundEventPreparationService eventPreparationService =
+      new MediatorInboundEventPreparationService(
+          irc, notificationRuleMatcherPort, inboundIgnorePolicy);
+  private final MediatorTargetUiSupport mediatorTargetUiSupport =
+      new MediatorTargetUiSupport(ui, targetCoordinator, eventPreparationService);
+  private final MediatorNotificationSupport mediatorNotificationSupport =
+      new MediatorNotificationSupport(
+          ircEventNotifierPort,
+          interceptorIngestPort,
+          userListStore,
+          targetCoordinator,
+          mediatorTargetUiSupport);
+  private final MediatorPendingEchoFailureHandler mediatorPendingEchoFailureHandler =
+      new MediatorPendingEchoFailureHandler(ui, pendingEchoMessageState);
+  private final MediatorInboundTextEventHandler mediatorInboundTextEventHandler =
+      new MediatorInboundTextEventHandler(
+          negotiatedFeaturePort,
+          ui,
+          targetCoordinator,
+          userInfoEnrichmentService,
+          pendingEchoMessageState,
+          outboundDccCommandService,
+          trayNotificationsPort,
+          uiSettingsPort,
+          ircEventNotifierPort,
+          applicationEventPublisher,
+          ctcpRoutingState,
+          eventPreparationService);
 
   private final IrcMediator mediator =
       new IrcMediator(
           irc,
-          typingPort,
-          readMarkerPort,
-          negotiatedFeaturePort,
+          uiEvents,
           ui,
-          commandParser,
-          userCommandAliasEngine,
           serverRegistry,
-          runtimeConfig,
           connectionCoordinator,
+          mediatorConnectivityLifecycleOrchestrator,
+          mediatorServerStatusEventHandler,
+          mediatorInviteEventHandler,
+          mediatorChannelMembershipEventHandler,
+          mediatorRosterStatusEventHandler,
+          mediatorIrcv3PresenceEventHandler,
+          mediatorIrcv3EventHandler,
+          mediatorAlertNotificationHandler,
+          mediatorChannelStateEventHandler,
+          mediatorOutboundUiActionHandler,
+          mediatorNotificationSupport,
+          mediatorPendingEchoFailureHandler,
+          mediatorTargetUiSupport,
           mediatorConnectionSubscriptionBinder,
           mediatorUiSubscriptionBinder,
-          mediatorHistoryIngestOrchestrator,
-          outboundCommandDispatcher,
-          outboundDccCommandService,
           targetCoordinator,
-          uiSettingsPort,
-          trayNotificationsPort,
-          notificationRuleMatcherPort,
-          userInfoEnrichmentService,
-          userListStore,
-          whoisRoutingState,
-          ctcpRoutingState,
-          modeRoutingState,
-          awayRoutingState,
-          chatHistoryRequestRoutingState,
-          joinRoutingState,
-          labeledResponseRoutingState,
-          pendingEchoMessageState,
-          pendingInviteState,
-          serverIsupportState,
-          inboundModeEventHandler,
-          ircEventNotifierPort,
-          interceptorIngestPort,
-          inboundIgnorePolicy,
-          monitorFallbackPort,
-          applicationEventPublisher);
+          eventPreparationService,
+          mediatorInboundTextEventHandler);
 
   @Test
   void startBindsUiIrcAndConnectionCollaboratorsInOrderOnce() {
     when(irc.events()).thenReturn(Flowable.never());
-    when(ui.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
+    when(uiEvents.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
 
     mediator.start();
     mediator.start();
 
     InOrder inOrder =
-        inOrder(mediatorUiSubscriptionBinder, irc, ui, mediatorConnectionSubscriptionBinder);
+        inOrder(mediatorUiSubscriptionBinder, irc, uiEvents, mediatorConnectionSubscriptionBinder);
     inOrder
         .verify(mediatorUiSubscriptionBinder)
-        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
+        .bind(
+            eq(uiEvents),
+            eq(ui),
+            eq(targetCoordinator),
+            any(CompositeDisposable.class),
+            any(),
+            any(),
+            any());
     inOrder.verify(irc).events();
-    inOrder.verify(ui).ircv3CapabilityToggleRequests();
+    inOrder.verify(uiEvents).ircv3CapabilityToggleRequests();
     inOrder
         .verify(mediatorConnectionSubscriptionBinder)
         .bind(
+            eq(uiEvents),
             eq(ui),
             eq(connectionCoordinator),
             eq(targetCoordinator),
@@ -190,9 +303,17 @@ class IrcMediatorMockVerifyTest {
             any(CompositeDisposable.class));
 
     verify(mediatorUiSubscriptionBinder, times(1))
-        .bind(eq(ui), eq(targetCoordinator), any(CompositeDisposable.class), any(), any(), any());
+        .bind(
+            eq(uiEvents),
+            eq(ui),
+            eq(targetCoordinator),
+            any(CompositeDisposable.class),
+            any(),
+            any(),
+            any());
     verify(mediatorConnectionSubscriptionBinder, times(1))
         .bind(
+            eq(uiEvents),
             eq(ui),
             eq(connectionCoordinator),
             eq(targetCoordinator),
@@ -231,7 +352,7 @@ class IrcMediatorMockVerifyTest {
   @Test
   void quasselNetworkManagerRequestFromUiBinderOpensNetworkManager() {
     when(irc.events()).thenReturn(Flowable.never());
-    when(ui.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
+    when(uiEvents.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
 
     mediator.start();
 
@@ -241,6 +362,7 @@ class IrcMediatorMockVerifyTest {
             (Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
     verify(mediatorUiSubscriptionBinder)
         .bind(
+            eq(uiEvents),
             eq(ui),
             eq(targetCoordinator),
             any(CompositeDisposable.class),
@@ -265,7 +387,7 @@ class IrcMediatorMockVerifyTest {
   @Test
   void quasselSetupRequestFromUiBinderOpensSetupFlow() {
     when(irc.events()).thenReturn(Flowable.never());
-    when(ui.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
+    when(uiEvents.ircv3CapabilityToggleRequests()).thenReturn(Flowable.never());
 
     mediator.start();
 
@@ -275,6 +397,7 @@ class IrcMediatorMockVerifyTest {
             (Class<Consumer<ParsedInput.BackendNamed>>) (Class<?>) Consumer.class);
     verify(mediatorUiSubscriptionBinder)
         .bind(
+            eq(uiEvents),
             eq(ui),
             eq(targetCoordinator),
             any(CompositeDisposable.class),
@@ -421,6 +544,29 @@ class IrcMediatorMockVerifyTest {
   }
 
   @Test
+  void selfAuthoredPrivateMessageUsesTaggedPeerTargetAfterPreparation() throws Exception {
+    TargetRef pm = new TargetRef("libera", "bob");
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(targetCoordinator.allowPrivateAutoOpenFromInbound(eq(pm), eq(true))).thenReturn(false);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.PrivateMessage(
+                Instant.now(), "me", "hello bob", "", Map.of("ircafe/pm-target", "bob"))));
+
+    verify(ui)
+        .appendChatAt(
+            eq(pm),
+            any(),
+            eq("me"),
+            eq("hello bob"),
+            eq(true),
+            eq(""),
+            eq(Map.of("ircafe/pm-target", "bob")));
+  }
+
+  @Test
   void connectionReadyEventIsForwardedToConnectivityCoordinator() throws Exception {
     TargetRef active = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(active);
@@ -445,6 +591,172 @@ class IrcMediatorMockVerifyTest {
 
     verify(connectionCoordinator).handleConnectivityEvent("quassel", updated, active);
     verify(targetCoordinator).refreshInputEnabledForActiveTarget();
+  }
+
+  @Test
+  void disconnectedEventClearsServerScopedMediatorState() throws Exception {
+    TargetRef active = new TargetRef("libera", "#ircafe");
+    Instant now = Instant.parse("2026-03-21T18:30:00Z");
+    PendingEchoMessagePort.PendingOutboundChat pending =
+        new PendingEchoMessagePort.PendingOutboundChat("pending-1", active, "me", "hello", now);
+    IrcEvent.Disconnected disconnected = new IrcEvent.Disconnected(now, "server closed");
+
+    when(targetCoordinator.getActiveTarget()).thenReturn(active);
+    when(pendingEchoMessageState.drainServer("libera")).thenReturn(List.of(pending));
+
+    invokeOnServerIrcEvent(new ServerIrcEvent("libera", disconnected));
+
+    verify(connectionCoordinator).handleConnectivityEvent("libera", disconnected, active);
+    verify(pendingEchoMessageState).drainServer("libera");
+    verify(ui)
+        .failPendingOutgoingChat(
+            eq(active),
+            eq("pending-1"),
+            any(),
+            eq("me"),
+            eq("hello"),
+            eq("disconnected before echo"));
+    verify(ui).clearPrivateMessageOnlineStates("libera");
+    verify(targetCoordinator).onServerDisconnected("libera");
+    verify(whoisRoutingState).clearServer("libera");
+    verify(ctcpRoutingState).clearServer("libera");
+    verify(modeRoutingState).clearServer("libera");
+    verify(awayRoutingState).clearServer("libera");
+    verify(chatHistoryRequestRoutingState).clearServer("libera");
+    verify(joinRoutingState).clearServer("libera");
+    verify(labeledResponseRoutingState).clearServer("libera");
+    verify(pendingInviteState).clearServer("libera");
+    verify(serverIsupportState).clearServer("libera");
+    verify(inboundModeEventHandler).clearServer("libera");
+    verify(targetCoordinator).refreshInputEnabledForActiveTarget();
+  }
+
+  @Test
+  void inviteNotifyForAnotherUserDoesNotRecordPendingInvite() throws Exception {
+    Instant at = Instant.parse("2026-03-21T19:00:00Z");
+
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera", new IrcEvent.InvitedToChannel(at, "#other", "alice", "bob", "", true)));
+
+    verify(ui)
+        .appendStatusAt(
+            eq(new TargetRef("libera", "status")),
+            eq(at),
+            eq("(invite-notify)"),
+            eq("alice invited bob to #other"));
+    verify(pendingInviteState, never())
+        .record(
+            any(), anyString(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+    verify(trayNotificationsPort, never())
+        .notifyInvite(anyString(), anyString(), anyString(), anyString());
+  }
+
+  @Test
+  void selfInviteRecordsPendingInviteAndShowsActions() throws Exception {
+    Instant at = Instant.parse("2026-03-21T19:05:00Z");
+    PendingInvitePort.PendingInvite invite =
+        new PendingInvitePort.PendingInvite(
+            42L, at, at, "libera", "#ircafe", "alice", "me", "because", false, 1);
+
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(pendingInviteState.record(at, "libera", "#ircafe", "alice", "me", "because", false))
+        .thenReturn(new PendingInvitePort.RecordResult(invite, false));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.InvitedToChannel(at, "#ircafe", "alice", "me", "because", false)));
+
+    verify(ui)
+        .appendStatusAt(
+            eq(new TargetRef("libera", "status")),
+            eq(at),
+            eq("(invite)"),
+            eq("alice invited you to #ircafe on libera (because)"));
+    verify(ui)
+        .appendStatus(
+            eq(new TargetRef("libera", "status")),
+            eq("(invite)"),
+            eq(
+                "Actions: /invjoin 42 | /join -i | /invignore 42 | /invwhois 42 | /invblock 42 | /invites"));
+    verify(trayNotificationsPort).notifyInvite("libera", "#ircafe", "alice", "because");
+    verify(irc, never()).joinChannel(anyString(), anyString());
+  }
+
+  @Test
+  void kickedFromChannelAppendsErrorsAndClearsMembership() throws Exception {
+    Instant at = Instant.parse("2026-03-21T19:15:00Z");
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera", new IrcEvent.KickedFromChannel(at, "#ircafe", "ops", "cleanup")));
+
+    verify(ui)
+        .appendErrorAt(
+            eq(new TargetRef("libera", "#ircafe")),
+            eq(at),
+            eq("(kick)"),
+            eq("You were kicked from #ircafe by ops (cleanup)"));
+    verify(ui)
+        .appendErrorAt(
+            eq(new TargetRef("libera", "status")),
+            eq(at),
+            eq("(kick)"),
+            eq("You were kicked from #ircafe by ops (cleanup)"));
+    verify(inboundModeEventHandler).onLeftChannel("libera", "#ircafe");
+    verify(targetCoordinator)
+        .onChannelMembershipLost("libera", "#ircafe", true, "Kicked by ops (cleanup)");
+  }
+
+  @Test
+  void monitorOnlineMarksPeersOnlineAndAppendsMonitorStatus() throws Exception {
+    Instant at = Instant.parse("2026-03-21T19:20:00Z");
+    TargetRef monitor = TargetRef.monitorGroup("libera");
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera", new IrcEvent.MonitorOnlineObserved(at, List.of("alice", "bob"))));
+
+    verify(ui).ensureTargetExists(monitor);
+    verify(ui).setPrivateMessageOnlineState("libera", "alice", true);
+    verify(ui).setPrivateMessageOnlineState("libera", "bob", true);
+    verify(ui).appendStatusAt(monitor, at, "(monitor)", "Online: alice, bob");
+  }
+
+  @Test
+  void typingObservedShowsIndicatorsWhenEnabled() throws Exception {
+    Instant at = Instant.parse("2026-03-21T19:25:00Z");
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
+    when(uiSettingsPort.get()).thenReturn(UiSettingsSnapshot.defaults());
+    when(typingPort.isTypingAvailable("libera")).thenReturn(true);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera", new IrcEvent.UserTypingObserved(at, "alice", "#ircafe", "active")));
+
+    verify(ui).setPrivateMessageOnlineState("libera", "alice", true);
+    verify(ui).showTypingIndicator(channel, "alice", "active");
+    verify(ui).showTypingActivity(channel, "active");
+    verify(ui).showUsersTypingIndicator(channel, "alice", "active");
+  }
+
+  @Test
+  void reactionObservedAppliesReactionWhenFeatureIsAvailable() throws Exception {
+    Instant at = Instant.parse("2026-03-21T19:30:00Z");
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    when(negotiatedFeaturePort.isDraftReactAvailable("libera")).thenReturn(true);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.MessageReactObserved(at, "alice", "#ircafe", ":wave:", "msg-1")));
+
+    verify(ui).applyMessageReaction(channel, at, "alice", "msg-1", ":wave:");
   }
 
   @Test
@@ -678,6 +990,33 @@ class IrcMediatorMockVerifyTest {
             eq("status"),
             eq("VERSION"),
             eq("HexChat 2.16.2"));
+  }
+
+  @Test
+  void ctcpReceiveHardDropIgnoreDecisionSuppressesOutput() throws Exception {
+    TargetRef status = new TargetRef("libera", "status");
+    when(targetCoordinator.safeStatusTarget()).thenReturn(status);
+    when(targetCoordinator.getActiveTarget()).thenReturn(status);
+    when(uiSettingsPort.get()).thenReturn(UiSettingsSnapshot.defaults());
+    when(inboundIgnorePolicy.decide(
+            eq("libera"), eq("alice"), eq(null), eq(true), anyList(), eq(""), eq("VERSION")))
+        .thenReturn(InboundIgnorePolicyPort.Decision.HARD_DROP);
+
+    invokeOnServerIrcEvent(
+        new ServerIrcEvent(
+            "libera",
+            new IrcEvent.CtcpRequestReceived(Instant.now(), "alice", "VERSION", "", null)));
+
+    verify(ui, never()).appendStatusAt(eq(status), any(), eq("(ctcp)"), anyString());
+    verify(ui, never()).appendSpoilerChatAt(eq(status), any(), eq("(ctcp)"), anyString());
+    verify(interceptorIngestPort, never())
+        .ingestEvent(
+            eq("libera"),
+            anyString(),
+            eq("alice"),
+            anyString(),
+            anyString(),
+            eq(InterceptorEventType.CTCP));
   }
 
   @Test

@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui;
 import cafe.woden.ircclient.app.api.ChannelMetadataPort;
 import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.UserActionRequest;
+import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
@@ -222,6 +223,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       @Lazy ApplicationDiagnosticsService applicationDiagnosticsService,
       JfrRuntimeEventsService jfrRuntimeEventsService,
       SpringRuntimeEventsService springRuntimeEventsService,
+      SlashCommandPresentationCatalog slashCommandPresentationCatalog,
       UiSettingsBus settingsBus,
       SpellcheckSettingsBus spellcheckSettingsBus,
       CommandHistoryStore commandHistoryStore,
@@ -300,7 +302,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
     // Input panel is embedded in the main chat dock so input is always coupled with the transcript.
     this.inputPanel =
-        new MessageInputPanel(settingsBus, commandHistoryStore, spellcheckSettingsBus);
+        new MessageInputPanel(
+            settingsBus,
+            commandHistoryStore,
+            spellcheckSettingsBus,
+            slashCommandPresentationCatalog);
     this.inputPanel.setBackendUiProfile(backendUiProfileProvider.profileForServer(""));
     add(inputPanel, BorderLayout.SOUTH);
     MessageActionCapabilityPolicy capabilityPolicy =

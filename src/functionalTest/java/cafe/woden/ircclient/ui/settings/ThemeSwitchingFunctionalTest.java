@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.ui.chat.ChatStyles;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.settings.theme.ThemeManager;
 import java.awt.Color;
 import java.lang.reflect.InvocationTargetException;
 import javax.swing.JTextField;

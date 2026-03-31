@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.ui.shell;
 
 import cafe.woden.ircclient.app.ApplicationShutdownCoordinator;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
+import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.UserListDockable;
@@ -50,7 +50,7 @@ public class MainFrame extends JFrame {
   private static final int DEFAULT_SERVER_DOCK_WIDTH_PX = 280;
   private static final int DEFAULT_USERS_DOCK_WIDTH_PX = 240;
 
-  private final RuntimeConfigStore runtimeConfigStore;
+  private final UiShellRuntimeConfigPort runtimeConfigStore;
   private final ServerTreeDockable serverTree;
   private final LagIndicatorService lagIndicatorService;
   private final AtomicBoolean selectedTargetPersistedOnShutdown = new AtomicBoolean(false);
@@ -60,7 +60,7 @@ public class MainFrame extends JFrame {
   public MainFrame(
       AppMenuBar menuBar,
       UiProperties uiProps,
-      RuntimeConfigStore runtimeConfigStore,
+      UiShellRuntimeConfigPort runtimeConfigStore,
       TrayService trayService,
       ServerTreeDockable serverTree,
       ChatDockable chat,
@@ -461,7 +461,7 @@ public class MainFrame extends JFrame {
     }
   }
 
-  private static File resolveDockLayoutPersistFile(RuntimeConfigStore runtimeConfigStore) {
+  private static File resolveDockLayoutPersistFile(UiShellRuntimeConfigPort runtimeConfigStore) {
     Path configPath = runtimeConfigStore != null ? runtimeConfigStore.runtimeConfigPath() : null;
     Path configDir = configPath != null ? configPath.getParent() : null;
     if (configDir == null) {

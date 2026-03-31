@@ -5,8 +5,12 @@ import io.reactivex.rxjava3.core.Completable;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Lag probe operations used by UI lag indicator surfaces. */
+@SecondaryPort
+@ApplicationLayer
 public interface IrcLagProbePort {
 
   default Optional<String> currentNick(String serverId) {

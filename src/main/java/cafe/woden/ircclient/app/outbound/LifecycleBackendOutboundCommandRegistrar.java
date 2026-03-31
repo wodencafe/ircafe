@@ -1,6 +1,10 @@
 package cafe.woden.ircclient.app.outbound;
 
 import cafe.woden.ircclient.app.commands.ParsedInput;
+import cafe.woden.ircclient.app.outbound.backend.BackendNamedOutboundCommandRouter;
+import cafe.woden.ircclient.app.outbound.channel.OutboundJoinPartCommandService;
+import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistrar;
+import cafe.woden.ircclient.app.outbound.dispatch.OutboundCommandRegistry;
 import lombok.AccessLevel;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;

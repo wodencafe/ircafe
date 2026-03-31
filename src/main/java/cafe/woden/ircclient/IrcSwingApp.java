@@ -6,14 +6,14 @@ import cafe.woden.ircclient.config.IgnoreProperties;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.PushyProperties;
-import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.SojuProperties;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.ZncProperties;
+import cafe.woden.ircclient.config.api.UiSettingsRuntimeConfigPort;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.ui.settings.ThemeIdUtils;
-import cafe.woden.ircclient.ui.settings.ThemeManager;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.settings.theme.ThemeIdUtils;
+import cafe.woden.ircclient.ui.settings.theme.ThemeManager;
 import cafe.woden.ircclient.ui.shell.MainFrame;
 import cafe.woden.ircclient.ui.terminal.ConsoleTeeHub;
 import cafe.woden.ircclient.ui.tray.TrayService;
@@ -71,7 +71,7 @@ public class IrcSwingApp {
       ObjectProvider<MediatorControlPort> mediatorProvider,
       ThemeManager themeManager,
       UiSettingsBus settingsBus,
-      RuntimeConfigStore runtimeConfig,
+      UiSettingsRuntimeConfigPort runtimeConfig,
       TrayService trayService,
       UiPort ui) {
     return args -> {
@@ -143,7 +143,7 @@ public class IrcSwingApp {
   }
 
   private static String determineStartupTheme(
-      UiSettingsBus settingsBus, RuntimeConfigStore runtimeConfig) {
+      UiSettingsBus settingsBus, UiSettingsRuntimeConfigPort runtimeConfig) {
     var current = settingsBus != null ? settingsBus.get() : null;
     String configuredTheme =
         ThemeIdUtils.normalizeThemeId(current != null ? current.theme() : null);
@@ -166,7 +166,7 @@ public class IrcSwingApp {
   }
 
   private static void reconcileThemeSettingIfNeeded(
-      String startupTheme, UiSettingsBus settingsBus, RuntimeConfigStore runtimeConfig) {
+      String startupTheme, UiSettingsBus settingsBus, UiSettingsRuntimeConfigPort runtimeConfig) {
     if (settingsBus == null) return;
     var current = settingsBus.get();
     if (current == null) return;

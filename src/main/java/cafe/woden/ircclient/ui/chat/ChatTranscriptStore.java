@@ -1,5 +1,13 @@
 package cafe.woden.ircclient.ui.chat;
 
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.firstIrcv3TagValue;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.formatIrcv3Tags;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.mergeIrcv3Tags;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.normalizeIrcv3Tags;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.normalizeMessageId;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.normalizePendingId;
+import static cafe.woden.ircclient.ui.chat.ChatTranscriptMessageMetadataSupport.parseIrcv3TagsDisplay;
+
 import cafe.woden.ircclient.app.api.ChatTranscriptHistoryPort;
 import cafe.woden.ircclient.app.api.PresenceEvent;
 import cafe.woden.ircclient.app.api.PresenceKind;
@@ -183,7 +191,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       Map<String, String> ircv3Tags) {
     String msgId = normalizeMessageId(messageId);
     Map<String, String> tagsMap = normalizeIrcv3Tags(ircv3Tags);
-    Set<String> tags = computeTags(kind, dir, fromNick, presenceEvent, msgId, tagsMap);
+    Set<String> tags =
+        ChatTranscriptLineTagSupport.computeTags(
+            kind, dir, fromNick, presenceEvent, msgId, tagsMap);
     return new LineMeta(
         bufferKey(ref),
         kind,
@@ -194,92 +204,6 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         msgId,
         formatIrcv3Tags(tagsMap),
         tagsMap);
-  }
-
-  private Set<String> computeTags(
-      LogKind kind, LogDirection dir, String fromNick, PresenceEvent presenceEvent) {
-    return computeTags(kind, dir, fromNick, presenceEvent, "", Map.of());
-  }
-
-  private Set<String> computeTags(
-      LogKind kind,
-      LogDirection dir,
-      String fromNick,
-      PresenceEvent presenceEvent,
-      String messageId,
-      Map<String, String> ircv3Tags) {
-    java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
-
-    if (kind != null) {
-      switch (kind) {
-        case CHAT -> out.add("irc_privmsg");
-        case ACTION -> out.add("irc_action");
-        case NOTICE -> out.add("irc_notice");
-        case PRESENCE -> out.add("irc_presence");
-        case STATUS -> out.add("irc_status");
-        case ERROR -> out.add("irc_error");
-        case SPOILER -> {
-          out.add("irc_privmsg");
-          out.add("irc_spoiler");
-        }
-        default -> out.add("irc_misc");
-      }
-    }
-
-    if (dir != null) {
-      switch (dir) {
-        case IN -> out.add("irc_in");
-        case OUT -> out.add("irc_out");
-        case SYSTEM -> out.add("irc_system");
-      }
-    }
-
-    String fn = java.util.Objects.toString(fromNick, "").trim();
-    if (!fn.isEmpty()) {
-      out.add("nick_" + fn.toLowerCase(java.util.Locale.ROOT));
-    }
-
-    if (presenceEvent != null) {
-      try {
-        String nick = java.util.Objects.toString(presenceEvent.nick(), "").trim();
-        String oldNick = java.util.Objects.toString(presenceEvent.oldNick(), "").trim();
-        String newNick = java.util.Objects.toString(presenceEvent.newNick(), "").trim();
-        switch (presenceEvent.kind()) {
-          case JOIN -> {
-            out.add("irc_join");
-            if (!nick.isEmpty()) out.add("nick_" + nick.toLowerCase(java.util.Locale.ROOT));
-          }
-          case PART -> {
-            out.add("irc_part");
-            if (!nick.isEmpty()) out.add("nick_" + nick.toLowerCase(java.util.Locale.ROOT));
-          }
-          case QUIT -> {
-            out.add("irc_quit");
-            if (!nick.isEmpty()) out.add("nick_" + nick.toLowerCase(java.util.Locale.ROOT));
-          }
-          case NICK -> {
-            out.add("irc_nick");
-            if (!oldNick.isEmpty()) out.add("nick_" + oldNick.toLowerCase(java.util.Locale.ROOT));
-            if (!newNick.isEmpty()) out.add("nick_" + newNick.toLowerCase(java.util.Locale.ROOT));
-          }
-        }
-      } catch (Exception ignored) {
-      }
-    }
-
-    if (messageId != null && !messageId.isBlank()) {
-      out.add("ircv3_msgid");
-    }
-
-    if (ircv3Tags != null && !ircv3Tags.isEmpty()) {
-      out.add("ircv3_tagged");
-      for (String rawKey : ircv3Tags.keySet()) {
-        String key = sanitizeTagForMeta(rawKey);
-        if (!key.isEmpty()) out.add("ircv3_tag_" + key);
-      }
-    }
-
-    return java.util.Set.copyOf(out);
   }
 
   private SimpleAttributeSet withLineMeta(AttributeSet base, LineMeta meta) {
@@ -343,82 +267,6 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       }
     } catch (Exception ignored) {
     }
-  }
-
-  private static String normalizeMessageId(String raw) {
-    String s = (raw == null) ? "" : raw.trim();
-    return s;
-  }
-
-  private static String normalizePendingId(String raw) {
-    String s = (raw == null) ? "" : raw.trim();
-    return s;
-  }
-
-  private static Map<String, String> normalizeIrcv3Tags(Map<String, String> raw) {
-    if (raw == null || raw.isEmpty()) return Map.of();
-    java.util.LinkedHashMap<String, String> out = new java.util.LinkedHashMap<>();
-    for (Map.Entry<String, String> e : raw.entrySet()) {
-      String key = normalizeIrcv3TagKey(e.getKey());
-      if (key.isEmpty()) continue;
-      String val = (e.getValue() == null) ? "" : e.getValue();
-      out.put(key, val);
-    }
-    if (out.isEmpty()) return Map.of();
-    return java.util.Collections.unmodifiableMap(out);
-  }
-
-  private static String normalizeIrcv3TagKey(String rawKey) {
-    String k = (rawKey == null) ? "" : rawKey.trim();
-    if (k.startsWith("@")) k = k.substring(1).trim();
-    if (k.startsWith("+")) k = k.substring(1).trim();
-    if (k.isEmpty()) return "";
-    return k.toLowerCase(Locale.ROOT);
-  }
-
-  private static String firstIrcv3TagValue(Map<String, String> tags, String... keys) {
-    if (tags == null || tags.isEmpty() || keys == null) return "";
-    for (String key : keys) {
-      String want = normalizeIrcv3TagKey(key);
-      if (want.isEmpty()) continue;
-      for (Map.Entry<String, String> e : tags.entrySet()) {
-        String got = normalizeIrcv3TagKey(e.getKey());
-        if (!want.equals(got)) continue;
-        String raw = (e.getValue() == null) ? "" : e.getValue().trim();
-        if (raw.isEmpty()) continue;
-        return raw;
-      }
-    }
-    return "";
-  }
-
-  private static String sanitizeTagForMeta(String rawKey) {
-    String key = normalizeIrcv3TagKey(rawKey);
-    if (key.isEmpty()) return "";
-    StringBuilder sb = new StringBuilder(key.length());
-    for (int i = 0; i < key.length(); i++) {
-      char c = key.charAt(i);
-      if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
-        sb.append(c);
-      } else {
-        sb.append('_');
-      }
-    }
-    return sb.toString();
-  }
-
-  private static String formatIrcv3Tags(Map<String, String> tags) {
-    if (tags == null || tags.isEmpty()) return "";
-    StringBuilder sb = new StringBuilder();
-    for (Map.Entry<String, String> e : tags.entrySet()) {
-      String key = normalizeIrcv3TagKey(e.getKey());
-      if (key.isEmpty()) continue;
-      if (sb.length() > 0) sb.append(';');
-      sb.append(key);
-      String val = (e.getValue() == null) ? "" : e.getValue();
-      if (!val.isEmpty()) sb.append('=').append(val);
-    }
-    return sb.toString();
   }
 
   private boolean shouldHideLine(
@@ -1347,65 +1195,16 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       return;
     }
 
-    String preview = formatReplyPreviewSnippet(kind, from, text);
+    String preview =
+        ChatTranscriptReplyPreviewSupport.formatReplyPreviewSnippet(
+            kind, from, text, REPLY_PREVIEW_TEXT_MAX_CHARS);
     if (preview.isBlank()) return;
     st.messagePreviewByMsgId.put(msgId, preview);
   }
 
-  private String formatReplyPreviewSnippet(LogKind kind, String from, String text) {
-    String body = normalizeReplyPreviewText(text);
-    if (body.isEmpty()) return "";
-    String nick = Objects.toString(from, "").trim();
-    return switch (kind) {
-      case ACTION -> nick.isEmpty() ? ("* " + body) : ("* " + nick + " " + body);
-      case NOTICE -> nick.isEmpty() ? ("[notice] " + body) : ("[notice] " + nick + ": " + body);
-      default -> nick.isEmpty() ? body : (nick + ": " + body);
-    };
-  }
-
   private String previewForMessageId(TranscriptState st, String messageId) {
-    if (st == null) return "";
-    String msgId = normalizeMessageId(messageId);
-    if (msgId.isEmpty()) return "";
-    return Objects.toString(st.messagePreviewByMsgId.get(msgId), "").trim();
-  }
-
-  private static String normalizeReplyPreviewText(String rawText) {
-    String raw = Objects.toString(rawText, "");
-    if (raw.isEmpty()) return "";
-
-    StringBuilder out = new StringBuilder(Math.min(REPLY_PREVIEW_TEXT_MAX_CHARS, raw.length()));
-    boolean pendingSpace = false;
-    for (int i = 0; i < raw.length(); i++) {
-      char c = raw.charAt(i);
-      if (Character.isWhitespace(c)) {
-        pendingSpace = out.length() > 0;
-        continue;
-      }
-      if (c < 0x20 && c != '\t') continue;
-      if (pendingSpace && out.length() > 0) {
-        out.append(' ');
-        pendingSpace = false;
-      }
-      out.append(c);
-      if (out.length() >= REPLY_PREVIEW_TEXT_MAX_CHARS) break;
-    }
-
-    String normalized = out.toString().trim();
-    if (normalized.length() >= REPLY_PREVIEW_TEXT_MAX_CHARS && raw.length() > normalized.length()) {
-      int max = Math.max(1, REPLY_PREVIEW_TEXT_MAX_CHARS - 3);
-      normalized = normalized.substring(0, Math.min(max, normalized.length())).trim() + "...";
-    }
-    return normalized;
-  }
-
-  private static LinkedHashMap<String, String> createBoundedReplyPreviewCache() {
-    return new LinkedHashMap<>() {
-      @Override
-      protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
-        return size() > REPLY_PREVIEW_CACHE_LIMIT_PER_TARGET;
-      }
-    };
+    return ChatTranscriptReplyPreviewSupport.previewForMessageId(
+        (st == null) ? null : st.messagePreviewByMsgId, messageId);
   }
 
   private Font safeTranscriptFont() {
@@ -3584,38 +3383,6 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
   }
 
-  private static Map<String, String> parseIrcv3TagsDisplay(String raw) {
-    String s = Objects.toString(raw, "").trim();
-    if (s.isEmpty()) return Map.of();
-    LinkedHashMap<String, String> out = new LinkedHashMap<>();
-    String[] parts = s.split(";");
-    for (String part : parts) {
-      String p = Objects.toString(part, "").trim();
-      if (p.isEmpty()) continue;
-      int eq = p.indexOf('=');
-      if (eq < 0) {
-        out.put(p, "");
-      } else {
-        String k = p.substring(0, eq).trim();
-        String v = p.substring(eq + 1).trim();
-        if (!k.isEmpty()) out.put(k, v);
-      }
-    }
-    if (out.isEmpty()) return Map.of();
-    return out;
-  }
-
-  private static Map<String, String> mergeIrcv3Tags(
-      Map<String, String> base, Map<String, String> overlay) {
-    Map<String, String> left = normalizeIrcv3Tags(base);
-    Map<String, String> right = normalizeIrcv3Tags(overlay);
-    if (left.isEmpty()) return right;
-    if (right.isEmpty()) return left;
-    LinkedHashMap<String, String> out = new LinkedHashMap<>(left);
-    out.putAll(right);
-    return out;
-  }
-
   private static String renderEditedText(String text) {
     String t = Objects.toString(text, "");
     if (t.isBlank()) {
@@ -4994,8 +4761,6 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     TranscriptState st = stateByTarget.get(ref);
     if (st == null) return;
 
-    Long readMarkerEpochMs = st.readMarkerEpochMs;
-
     st.earliestEpochMsSeen = null;
     st.currentPresenceBlock = null;
     st.currentFilteredRun = null;
@@ -5011,7 +4776,6 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     st.historyDivider = null;
     st.pendingHistoryDividerLabel = null;
     st.readMarker = null;
-    st.readMarkerEpochMs = readMarkerEpochMs;
     st.reactionsByTargetMsgId.clear();
   }
 
@@ -5096,7 +4860,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     ReadMarkerControl readMarker;
     Long readMarkerEpochMs;
     Map<String, ReactionState> reactionsByTargetMsgId = new HashMap<>();
-    Map<String, String> messagePreviewByMsgId = createBoundedReplyPreviewCache();
+    Map<String, String> messagePreviewByMsgId =
+        ChatTranscriptReplyPreviewSupport.createBoundedReplyPreviewCache(
+            REPLY_PREVIEW_CACHE_LIMIT_PER_TARGET);
   }
 
   /** Tracks a contiguous run of filtered lines (represented by a single placeholder component). */

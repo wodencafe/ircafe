@@ -44,7 +44,7 @@ import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.controls.ConnectButton;
 import cafe.woden.ircclient.ui.controls.DisconnectButton;
 import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
-import cafe.woden.ircclient.ui.settings.ChatThemeSettingsBus;
+import cafe.woden.ircclient.ui.settings.theme.ChatThemeSettingsBus;
 import cafe.woden.ircclient.ui.shell.StatusBar;
 import io.reactivex.rxjava3.core.Completable;
 import java.time.Clock;

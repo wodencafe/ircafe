@@ -9,9 +9,10 @@ import cafe.woden.ircclient.app.api.MonitorFallbackPort;
 import cafe.woden.ircclient.app.api.MonitorRosterPort;
 import cafe.woden.ircclient.app.api.NotificationRuleMatcherPort;
 import cafe.woden.ircclient.app.api.TrayNotificationsPort;
+import cafe.woden.ircclient.app.api.UiEventPort;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
-import cafe.woden.ircclient.app.outbound.LocalFilterCommandHandler;
+import cafe.woden.ircclient.app.outbound.spi.LocalFilterCommandHandler;
 import cafe.woden.ircclient.bouncer.BouncerBackendRegistry;
 import cafe.woden.ircclient.diagnostics.JfrSnapshotSummarizer;
 import cafe.woden.ircclient.ignore.api.IgnoreListCommandPort;
@@ -96,6 +97,23 @@ public abstract class AbstractApplicationModuleIntegrationTest {
         .thenReturn(Optional.empty());
     when(ircClientService.backendAvailabilityReason(org.mockito.ArgumentMatchers.anyString()))
         .thenReturn("");
+    when(swingUiEventPort.targetSelections()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.targetActivations()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.privateMessageRequests()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.userActionRequests()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.outboundLines()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.connectClicks()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.disconnectClicks()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.connectServerRequests()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.disconnectServerRequests()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.backendNamedCommandRequests()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.closeTargetRequests()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.joinChannelRequests()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.disconnectChannelRequests()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.bouncerDetachChannelRequests()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.closeChannelRequests()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.clearLogRequests()).thenReturn(Flowable.empty());
+    when(swingUiEventPort.ircv3CapabilityToggleRequests()).thenReturn(Flowable.empty());
   }
 
   @MockitoBean(name = "ircShutdownPort")
@@ -129,6 +147,9 @@ public abstract class AbstractApplicationModuleIntegrationTest {
 
   @MockitoBean(name = "swingUiPort", answers = Answers.RETURNS_DEEP_STUBS)
   UiPort swingUiPort;
+
+  @MockitoBean(name = "swingUiEventPort", answers = Answers.RETURNS_DEEP_STUBS)
+  UiEventPort swingUiEventPort;
 
   @MockitoBean UiSettingsPort uiSettingsPort;
 

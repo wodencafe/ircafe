@@ -4,7 +4,6 @@ import cafe.woden.ircclient.irc.*;
 import cafe.woden.ircclient.irc.backend.*;
 import cafe.woden.ircclient.irc.ircv3.*;
 import cafe.woden.ircclient.irc.mode.*;
-import cafe.woden.ircclient.irc.pircbotx.PircbotxRosterEmitter;
 import cafe.woden.ircclient.irc.playback.*;
 import java.time.Instant;
 import java.util.function.BiFunction;
