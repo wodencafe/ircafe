@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+  <Match>
+    <Class name="cafe.woden.ircclient.ui.shell.AppMenuBar" />
+    <Bug pattern="DM_GC" />
+  </Match>
+  <Match>
+    <Class name="cafe.woden.ircclient.util.RxVirtualSchedulers" />
+    <Bug pattern="LI_LAZY_INIT_UPDATE_STATIC" />
+  </Match>
+</FindBugsFilter>

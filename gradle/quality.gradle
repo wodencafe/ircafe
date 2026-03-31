@@ -40,11 +40,10 @@ tasks.withType(Checkstyle).configureEach {
     }
 }
 
-tasks.configureEach {
-    if (it.class.name != 'com.github.spotbugs.snom.SpotBugsTask') {
-        return
-    }
-    enabled = false
+tasks.matching { it.name.toLowerCase().startsWith('spotbugs') }.configureEach {
+    def confidenceClass = it.class.classLoader.loadClass('com.github.spotbugs.snom.Confidence')
+    reportLevel.set(Enum.valueOf(confidenceClass, 'HIGH'))
+    excludeFilter.set(rootProject.layout.projectDirectory.file('config/spotbugs/exclude.xml'))
     reports {
         html.required = true
         xml.required = false

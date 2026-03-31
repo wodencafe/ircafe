@@ -41,20 +41,21 @@ public final class PircbotxMembershipEventEmitter {
   @NonNull private final Function<PircBotX, String> resolveBotNick;
 
   public void onJoin(JoinEvent event) {
+    if (event == null) return;
+
     Channel channel = event.getChannel();
-    if (channel != null)
-      rosterEmitter.maybeEmitHostmaskObserved(channel.getName(), event.getUser());
+    if (channel == null) return;
+    rosterEmitter.maybeEmitHostmaskObserved(channel.getName(), event.getUser());
 
     String nick = event.getUser() == null ? null : event.getUser().getNick();
     boolean selfJoin = isSelfNick.test(event.getBot(), nick);
     if (log.isDebugEnabled()) {
       String hint = Objects.toString(conn.selfNickHint(), "");
       String botNick = resolveBotNick.apply(event.getBot());
-      String channelName = (channel == null) ? "" : channel.getName();
       log.debug(
           "[{}] JOIN route chan={} nick={} selfJoin={} selfHint={} botNick={}",
           serverId,
-          channelName,
+          channel.getName(),
           nick,
           selfJoin,
           hint,

@@ -4761,8 +4761,6 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     TranscriptState st = stateByTarget.get(ref);
     if (st == null) return;
 
-    Long readMarkerEpochMs = st.readMarkerEpochMs;
-
     st.earliestEpochMsSeen = null;
     st.currentPresenceBlock = null;
     st.currentFilteredRun = null;
@@ -4778,7 +4776,6 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     st.historyDivider = null;
     st.pendingHistoryDividerLabel = null;
     st.readMarker = null;
-    st.readMarkerEpochMs = readMarkerEpochMs;
     st.reactionsByTargetMsgId.clear();
   }
 

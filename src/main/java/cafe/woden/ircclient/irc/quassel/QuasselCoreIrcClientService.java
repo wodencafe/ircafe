@@ -3273,7 +3273,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     String payloadText = payloadTextFromEnvelope(ircEnvelope, content);
     String target = targetForBuffer(session, bufferInfo, fromDisplay);
     String historyTarget = historyTargetForBuffer(session, bufferInfo, fromDisplay);
-    int historyNetworkId = bufferInfo == null ? -1 : bufferInfo.networkId();
+    int historyNetworkId = networkId;
     noteTargetNetworkHint(session, historyTarget, historyNetworkId, true);
     noteHistoryObservation(session, historyTarget, message.messageId(), at);
     int typeBits = message.typeBits();

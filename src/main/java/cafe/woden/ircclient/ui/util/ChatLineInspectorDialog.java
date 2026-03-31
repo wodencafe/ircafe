@@ -100,7 +100,7 @@ public final class ChatLineInspectorDialog {
 
     JScrollPane scroll = new JScrollPane(area);
     Component anchor = owner != null ? owner : transcript;
-    Window ownerWindow = anchor != null ? SwingUtilities.getWindowAncestor(anchor) : null;
+    Window ownerWindow = SwingUtilities.getWindowAncestor(anchor);
     Component dialogAnchor = ownerWindow != null ? ownerWindow : anchor;
 
     Dimension preferred = preferredDialogSize(dialogAnchor);

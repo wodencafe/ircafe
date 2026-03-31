@@ -63,7 +63,9 @@ public final class PircbotxPrivateMessageEmitter {
   }
 
   public void onPrivateMessage(PrivateMessageEvent event) {
-    String botNick = selfNickResolver.apply(event != null ? event.getBot() : null);
+    if (event == null) return;
+
+    String botNick = selfNickResolver.apply(event.getBot());
     String pmDest = privateTargetFromEvent.apply(event);
 
     Optional<String> batchId = Ircv3BatchTag.fromEvent(event);

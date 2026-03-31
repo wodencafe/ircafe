@@ -112,14 +112,14 @@ public final class PircbotxWhoUserhostParsers {
     if (!"354".equals(toks[0])) return null;
 
     String token = toks[2];
-    if (token == null || token.isBlank()) return null;
+    if (token.isBlank()) return null;
     if (expectedToken != null && !expectedToken.isBlank() && !expectedToken.equals(token))
       return null;
 
-    String channel = toks.length > 3 ? toks[3] : null;
-    String user = toks.length > 4 ? toks[4] : null;
-    String host = toks.length > 5 ? toks[5] : null;
-    String nick = toks.length > 6 ? toks[6] : null;
+    String channel = toks[3];
+    String user = toks[4];
+    String host = toks[5];
+    String nick = toks[6];
 
     String f1 = toks.length > 7 ? toks[7] : null;
     String f2 = toks.length > 8 ? toks[8] : null;
