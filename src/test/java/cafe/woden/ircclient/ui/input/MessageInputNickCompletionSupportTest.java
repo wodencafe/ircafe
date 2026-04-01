@@ -211,7 +211,7 @@ class MessageInputNickCompletionSupportTest {
     JTextField input = new JTextField();
     MessageInputUndoSupport undoSupport = new MessageInputUndoSupport(input, () -> false);
     BackendNamedCommandCatalog catalog =
-        new BackendNamedCommandCatalog(List.of(new QuasselBackendNamedCommandHandler()));
+        BackendNamedCommandCatalog.fromHandlers(List.of(new QuasselBackendNamedCommandHandler()));
     SlashCommandPresentationCatalog slashCommandPresentationCatalog =
         new SlashCommandPresentationCatalog(List.of(), catalog);
     MessageInputNickCompletionSupport support =

@@ -54,7 +54,7 @@ class ChatDockManagerTest {
     ChatHistoryService chatHistoryService = mock(ChatHistoryService.class);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
     SlashCommandPresentationCatalog slashCommandPresentationCatalog =
-        new SlashCommandPresentationCatalog(List.of(), new BackendNamedCommandCatalog(List.of()));
+        new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty());
     ChatDockManager manager =
         new ChatDockManager(
             serverTree,
@@ -122,8 +122,7 @@ class ChatDockManagerTest {
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
             mock(ActiveInputRouter.class),
-            new SlashCommandPresentationCatalog(
-                List.of(), new BackendNamedCommandCatalog(List.of())),
+            new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty()),
             mock(ChatHistoryService.class),
             mock(CommandHistoryStore.class));
     openPinned(manager).put(target, pinnedDock);
@@ -154,8 +153,7 @@ class ChatDockManagerTest {
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
             mock(ActiveInputRouter.class),
-            new SlashCommandPresentationCatalog(
-                List.of(), new BackendNamedCommandCatalog(List.of())),
+            new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty()),
             mock(ChatHistoryService.class),
             mock(CommandHistoryStore.class));
     openPinned(manager).put(target, pinnedDock);
@@ -181,8 +179,7 @@ class ChatDockManagerTest {
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
             mock(ActiveInputRouter.class),
-            new SlashCommandPresentationCatalog(
-                List.of(), new BackendNamedCommandCatalog(List.of())),
+            new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty()),
             mock(ChatHistoryService.class),
             mock(CommandHistoryStore.class));
 

@@ -21,7 +21,7 @@ class BackendExtensionCatalogTest {
   @Test
   void resolvesBuiltInBackendStrategiesFromExtensions() {
     BackendExtensionCatalog catalog =
-        new BackendExtensionCatalog(
+        BackendExtensionCatalog.fromExtensions(
             java.util.List.of(
                 new IrcBackendExtension(),
                 new MatrixBackendExtension(),
@@ -50,7 +50,7 @@ class BackendExtensionCatalogTest {
     assertThrows(
         IllegalStateException.class,
         () ->
-            new BackendExtensionCatalog(
+            BackendExtensionCatalog.fromExtensions(
                 java.util.List.of(new IrcBackendExtension(), new DuplicateIrcBackendExtension())));
   }
 
@@ -58,13 +58,15 @@ class BackendExtensionCatalogTest {
   void rejectsContributionBackendMismatch() {
     assertThrows(
         IllegalStateException.class,
-        () -> new BackendExtensionCatalog(java.util.List.of(new MismatchedBackendExtension())));
+        () ->
+            BackendExtensionCatalog.fromExtensions(
+                java.util.List.of(new MismatchedBackendExtension())));
   }
 
   @Test
   void resolvesCustomBackendIdExtensions() {
     BackendExtensionCatalog catalog =
-        new BackendExtensionCatalog(java.util.List.of(new PluginBackendExtension()));
+        BackendExtensionCatalog.fromExtensions(java.util.List.of(new PluginBackendExtension()));
 
     assertTrue(catalog.featureAdapterFor("plugin-backend").supportsSemanticUpload());
     assertTrue(catalog.availableBackendIds().contains("plugin-backend"));
@@ -76,7 +78,8 @@ class BackendExtensionCatalogTest {
   @Test
   void acceptsLegacyEnumOnlyExtensions() {
     BackendExtensionCatalog catalog =
-        new BackendExtensionCatalog(java.util.List.of(new LegacyMatrixBackendExtension()));
+        BackendExtensionCatalog.fromExtensions(
+            java.util.List.of(new LegacyMatrixBackendExtension()));
 
     assertTrue(catalog.featureAdapterFor("matrix").supportsSemanticUpload());
     assertInstanceOf(

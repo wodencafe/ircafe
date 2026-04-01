@@ -26,7 +26,7 @@ class BackendNamedCommandCatalogTest {
     writePluginJar(pluginDir.resolve("backendping.jar"));
 
     BackendNamedCommandCatalog catalog =
-        new BackendNamedCommandCatalog(
+        BackendNamedCommandCatalog.installed(
             pluginDir, BackendNamedCommandCatalogTest.class.getClassLoader());
 
     ParsedInput parsed = catalog.parse("/backendping hello");
@@ -45,7 +45,7 @@ class BackendNamedCommandCatalogTest {
         () -> runtimeConfigDirectory.resolve("ircafe.yml");
 
     BackendNamedCommandCatalog catalog =
-        new BackendNamedCommandCatalog(
+        BackendNamedCommandCatalog.installed(
             runtimeConfigPathPort, BackendNamedCommandCatalogTest.class.getClassLoader());
 
     ParsedInput parsed = catalog.parse("/backendping hello");
@@ -96,7 +96,8 @@ class BackendNamedCommandCatalogTest {
         };
 
     assertThrows(
-        IllegalStateException.class, () -> new BackendNamedCommandCatalog(List.of(first, second)));
+        IllegalStateException.class,
+        () -> BackendNamedCommandCatalog.fromHandlers(List.of(first, second)));
   }
 
   private static void writePluginJar(Path jarPath) throws IOException {

@@ -59,30 +59,28 @@ public final class BackendExtensionCatalog implements AvailableBackendIdsPort {
                 BackendExtensionCatalog.class)));
   }
 
-  public BackendExtensionCatalog() {
-    this(
-        loadInstalledCatalogState(
-            List.of(),
-            PluginServiceLoaderSupport.resolvePluginDirectory(null, log),
-            PluginServiceLoaderSupport.defaultApplicationClassLoader(
-                BackendExtensionCatalog.class)));
+  public static BackendExtensionCatalog installed() {
+    return installed(
+        PluginServiceLoaderSupport.resolvePluginDirectory(null, log),
+        PluginServiceLoaderSupport.defaultApplicationClassLoader(BackendExtensionCatalog.class));
   }
 
-  BackendExtensionCatalog(List<BackendExtension> extensions) {
-    this(List.copyOf(Objects.requireNonNull(extensions, "extensions")), List.of());
+  public static BackendExtensionCatalog fromExtensions(List<BackendExtension> extensions) {
+    return new BackendExtensionCatalog(
+        List.copyOf(Objects.requireNonNull(extensions, "extensions")), List.of());
   }
 
-  BackendExtensionCatalog(Path pluginDirectory) {
-    this(
-        loadInstalledCatalogState(
-            List.of(),
-            pluginDirectory,
-            PluginServiceLoaderSupport.defaultApplicationClassLoader(
-                BackendExtensionCatalog.class)));
+  static BackendExtensionCatalog installed(
+      RuntimeConfigPathPort runtimeConfigPathPort, ClassLoader applicationClassLoader) {
+    return installed(
+        PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log),
+        applicationClassLoader);
   }
 
-  BackendExtensionCatalog(Path pluginDirectory, ClassLoader applicationClassLoader) {
-    this(loadInstalledCatalogState(List.of(), pluginDirectory, applicationClassLoader));
+  static BackendExtensionCatalog installed(
+      Path pluginDirectory, ClassLoader applicationClassLoader) {
+    return new BackendExtensionCatalog(
+        loadInstalledCatalogState(List.of(), pluginDirectory, applicationClassLoader));
   }
 
   private BackendExtensionCatalog(LoadedCatalogState state) {

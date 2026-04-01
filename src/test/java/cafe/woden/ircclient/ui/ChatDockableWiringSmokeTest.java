@@ -242,7 +242,7 @@ class ChatDockableWiringSmokeTest {
     SpellcheckSettingsBus spellcheckSettingsBus = mock(SpellcheckSettingsBus.class);
     CommandHistoryStore commandHistoryStore = mock(CommandHistoryStore.class);
     SlashCommandPresentationCatalog slashCommandPresentationCatalog =
-        new SlashCommandPresentationCatalog(List.of(), new BackendNamedCommandCatalog(List.of()));
+        new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty());
 
     AtomicReference<ChatDockable> holder = new AtomicReference<>();
     onEdt(

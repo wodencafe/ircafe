@@ -121,46 +121,32 @@ public class BackendNamedCommandCatalog {
                 BackendNamedCommandCatalog.class)));
   }
 
-  public BackendNamedCommandCatalog() {
-    this(
-        loadInstalledCatalogState(
-            List.of(),
-            PluginServiceLoaderSupport.resolvePluginDirectory(null, log),
-            PluginServiceLoaderSupport.defaultApplicationClassLoader(
-                BackendNamedCommandCatalog.class)));
+  public static BackendNamedCommandCatalog empty() {
+    return fromHandlers(List.of());
   }
 
-  public BackendNamedCommandCatalog(List<BackendNamedCommandHandler> handlers) {
-    this(List.copyOf(Objects.requireNonNull(handlers, "handlers")), List.of());
+  public static BackendNamedCommandCatalog installed() {
+    return installed(
+        PluginServiceLoaderSupport.resolvePluginDirectory(null, log),
+        PluginServiceLoaderSupport.defaultApplicationClassLoader(BackendNamedCommandCatalog.class));
   }
 
-  BackendNamedCommandCatalog(Path pluginDirectory) {
-    this(
-        loadInstalledCatalogState(
-            List.of(),
-            pluginDirectory,
-            PluginServiceLoaderSupport.defaultApplicationClassLoader(
-                BackendNamedCommandCatalog.class)));
+  public static BackendNamedCommandCatalog fromHandlers(List<BackendNamedCommandHandler> handlers) {
+    return new BackendNamedCommandCatalog(
+        List.copyOf(Objects.requireNonNull(handlers, "handlers")), List.of());
   }
 
-  BackendNamedCommandCatalog(Path pluginDirectory, ClassLoader applicationClassLoader) {
-    this(loadInstalledCatalogState(List.of(), pluginDirectory, applicationClassLoader));
-  }
-
-  BackendNamedCommandCatalog(
-      List<BackendNamedCommandHandler> builtInHandlers,
-      Path pluginDirectory,
-      ClassLoader applicationClassLoader) {
-    this(loadInstalledCatalogState(builtInHandlers, pluginDirectory, applicationClassLoader));
-  }
-
-  BackendNamedCommandCatalog(
+  static BackendNamedCommandCatalog installed(
       RuntimeConfigPathPort runtimeConfigPathPort, ClassLoader applicationClassLoader) {
-    this(
-        loadInstalledCatalogState(
-            List.of(),
-            PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log),
-            applicationClassLoader));
+    return installed(
+        PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log),
+        applicationClassLoader);
+  }
+
+  static BackendNamedCommandCatalog installed(
+      Path pluginDirectory, ClassLoader applicationClassLoader) {
+    return new BackendNamedCommandCatalog(
+        loadInstalledCatalogState(List.of(), pluginDirectory, applicationClassLoader));
   }
 
   private BackendNamedCommandCatalog(LoadedCatalogState state) {
@@ -178,10 +164,6 @@ public class BackendNamedCommandCatalog {
     this.topicHelpLines = buildTopicHelpLines(safeHandlers);
     this.pluginClassLoaders =
         List.copyOf(Objects.requireNonNull(pluginClassLoaders, "pluginClassLoaders"));
-  }
-
-  public static BackendNamedCommandCatalog installed() {
-    return new BackendNamedCommandCatalog();
   }
 
   @PreDestroy

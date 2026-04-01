@@ -22,7 +22,7 @@ import org.mockito.Mockito;
 
 class BackendNamedOutboundCommandRouterTest {
 
-  private final BackendNamedCommandCatalog emptyCatalog = new BackendNamedCommandCatalog(List.of());
+  private final BackendNamedCommandCatalog emptyCatalog = BackendNamedCommandCatalog.empty();
   private final TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
   private final ConnectionCoordinator connectionCoordinator =
       Mockito.mock(ConnectionCoordinator.class);
@@ -68,7 +68,7 @@ class BackendNamedOutboundCommandRouterTest {
         };
     BackendNamedOutboundCommandRouter router =
         new BackendNamedOutboundCommandRouter(
-            new BackendNamedCommandCatalog(List.of(handler)),
+            BackendNamedCommandCatalog.fromHandlers(List.of(handler)),
             targetCoordinator,
             connectionCoordinator,
             mediatorIrc,
@@ -141,7 +141,7 @@ class BackendNamedOutboundCommandRouterTest {
         };
     BackendNamedOutboundCommandRouter router =
         new BackendNamedOutboundCommandRouter(
-            new BackendNamedCommandCatalog(List.of(handler)),
+            BackendNamedCommandCatalog.fromHandlers(List.of(handler)),
             targetCoordinator,
             connectionCoordinator,
             mediatorIrc,

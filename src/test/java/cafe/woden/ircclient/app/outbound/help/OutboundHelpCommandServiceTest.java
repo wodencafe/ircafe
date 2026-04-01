@@ -99,7 +99,7 @@ class OutboundHelpCommandServiceTest {
           ui,
           targetCoordinator);
   private final SlashCommandPresentationCatalog slashCommandPresentationCatalog =
-      new SlashCommandPresentationCatalog(List.of(), new BackendNamedCommandCatalog(List.of()));
+      new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty());
   private final OutboundHelpCommandService service =
       new OutboundHelpCommandService(
           ui,
