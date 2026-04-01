@@ -87,7 +87,7 @@ public final class BackendNamedCommandExecutorCatalog {
     if (context == null || disposables == null || command == null) return false;
     BackendNamedCommandExecutor executor =
         executionHandlersByCommandName.get(
-            BackendNamedCommandCatalog.normalizeCommandName(command.command()));
+            BackendNamedCommandRegistrationSupport.normalizeCommandName(command.command()));
     if (executor == null) return false;
     return executor.handle(context, disposables, command);
   }
@@ -101,9 +101,10 @@ public final class BackendNamedCommandExecutorCatalog {
       Set<String> commandNames =
           Objects.requireNonNullElse(executor.handledCommandNames(), Set.<String>of());
       for (String commandName : commandNames) {
-        String normalized = BackendNamedCommandCatalog.normalizeCommandName(commandName);
+        String normalized =
+            BackendNamedCommandRegistrationSupport.normalizeCommandName(commandName);
         if (normalized.isEmpty()) continue;
-        if (BackendNamedCommandCatalog.isReservedCommandName(normalized)) {
+        if (BackendNamedCommandRegistrationSupport.isReservedCommandName(normalized)) {
           throw new IllegalStateException(
               "Backend named execution command '"
                   + normalized

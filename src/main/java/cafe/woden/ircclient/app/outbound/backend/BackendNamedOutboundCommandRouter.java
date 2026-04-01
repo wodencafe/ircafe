@@ -3,13 +3,13 @@ package cafe.woden.ircclient.app.outbound.backend;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandExecutionContext;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandExecutorCatalog;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandRegistrationSupport;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import java.util.Locale;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -43,7 +43,7 @@ public final class BackendNamedOutboundCommandRouter {
   }
 
   public void handle(CompositeDisposable disposables, ParsedInput.BackendNamed command) {
-    String name = normalizeCommandName(command.command());
+    String name = BackendNamedCommandRegistrationSupport.normalizeCommandName(command.command());
     if (commandExecutors.handle(pluginExecutionContext, disposables, command)) {
       return;
     }
@@ -101,11 +101,5 @@ public final class BackendNamedOutboundCommandRouter {
     public io.reactivex.rxjava3.core.Completable sendRaw(String serverId, String line) {
       return mediatorIrc.sendRaw(serverId, line);
     }
-  }
-
-  private static String normalizeCommandName(String commandName) {
-    String name = Objects.toString(commandName, "").trim().toLowerCase(Locale.ROOT);
-    if (name.startsWith("/")) name = name.substring(1).trim();
-    return name;
   }
 }

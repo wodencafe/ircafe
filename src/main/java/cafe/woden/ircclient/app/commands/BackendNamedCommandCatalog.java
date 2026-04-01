@@ -25,82 +25,6 @@ public class BackendNamedCommandCatalog {
 
   private static final Logger log = LoggerFactory.getLogger(BackendNamedCommandCatalog.class);
 
-  private static final Set<String> RESERVED_COMMAND_NAMES =
-      Set.of(
-          "join",
-          "j",
-          "part",
-          "leave",
-          "connect",
-          "disconnect",
-          "reconnect",
-          "quit",
-          "nick",
-          "away",
-          "query",
-          "whois",
-          "whowas",
-          "wi",
-          "msg",
-          "notice",
-          "me",
-          "topic",
-          "kick",
-          "invite",
-          "invites",
-          "invjoin",
-          "invitejoin",
-          "invignore",
-          "inviteignore",
-          "invwhois",
-          "invitewhois",
-          "invblock",
-          "inviteblock",
-          "inviteautojoin",
-          "invautojoin",
-          "ajinvite",
-          "names",
-          "who",
-          "list",
-          "monitor",
-          "mon",
-          "mode",
-          "op",
-          "deop",
-          "voice",
-          "devoice",
-          "ban",
-          "unban",
-          "ignore",
-          "unignore",
-          "ignorelist",
-          "ignores",
-          "softignore",
-          "unsoftignore",
-          "softignorelist",
-          "softignores",
-          "version",
-          "ping",
-          "time",
-          "ctcp",
-          "dcc",
-          "dccmsg",
-          "chathistory",
-          "history",
-          "markread",
-          "help",
-          "commands",
-          "upload",
-          "reply",
-          "react",
-          "unreact",
-          "edit",
-          "redact",
-          "delete",
-          "filter",
-          "quote",
-          "raw");
-
   private final Map<String, BackendNamedCommandHandler> parseHandlersByCommandName;
   private final List<SlashCommandDescriptor> autocompleteCommands;
   private final List<String> generalHelpLines;
@@ -200,9 +124,10 @@ public class BackendNamedCommandCatalog {
       Set<String> commandNames =
           Objects.requireNonNullElse(handler.supportedCommandNames(), Set.<String>of());
       for (String commandName : commandNames) {
-        String normalized = normalizeCommandName(commandName);
+        String normalized =
+            BackendNamedCommandRegistrationSupport.normalizeCommandName(commandName);
         if (normalized.isEmpty()) continue;
-        if (RESERVED_COMMAND_NAMES.contains(normalized)) {
+        if (BackendNamedCommandRegistrationSupport.isReservedCommandName(normalized)) {
           throw new IllegalStateException(
               "Backend named command '"
                   + normalized
@@ -292,17 +217,7 @@ public class BackendNamedCommandCatalog {
   private static String extractCommandName(String line) {
     int end = line.indexOf(' ');
     String token = end < 0 ? line : line.substring(0, end);
-    return normalizeCommandName(token);
-  }
-
-  static String normalizeCommandName(String commandName) {
-    String name = Objects.toString(commandName, "").trim().toLowerCase(Locale.ROOT);
-    if (name.startsWith("/")) name = name.substring(1).trim();
-    return name;
-  }
-
-  static boolean isReservedCommandName(String commandName) {
-    return RESERVED_COMMAND_NAMES.contains(commandName);
+    return BackendNamedCommandRegistrationSupport.normalizeCommandName(token);
   }
 
   private static String normalizeHelpTopic(String raw) {
