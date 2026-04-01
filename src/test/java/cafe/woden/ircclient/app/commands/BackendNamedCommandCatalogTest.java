@@ -59,7 +59,7 @@ class BackendNamedCommandCatalogTest {
   }
 
   @Test
-  void duplicateExecutionCommandRegistrationsFailFast() {
+  void duplicateParserCommandRegistrationsFailFast() {
     BackendNamedCommandHandler first =
         new BackendNamedCommandHandler() {
           @Override
@@ -71,27 +71,17 @@ class BackendNamedCommandCatalogTest {
           public ParsedInput parse(String line, String matchedCommandName) {
             return null;
           }
-
-          @Override
-          public Set<String> handledCommandNames() {
-            return Set.of("backendexec");
-          }
         };
     BackendNamedCommandHandler second =
         new BackendNamedCommandHandler() {
           @Override
           public Set<String> supportedCommandNames() {
-            return Set.of("backendpong");
+            return Set.of("backendping");
           }
 
           @Override
           public ParsedInput parse(String line, String matchedCommandName) {
             return null;
-          }
-
-          @Override
-          public Set<String> handledCommandNames() {
-            return Set.of("backendexec");
           }
         };
 

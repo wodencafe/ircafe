@@ -2,7 +2,6 @@ package cafe.woden.ircclient.app.commands;
 
 import cafe.woden.ircclient.app.plugins.PluginServiceLoaderSupport;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
-import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
@@ -103,7 +102,6 @@ public class BackendNamedCommandCatalog {
           "raw");
 
   private final Map<String, BackendNamedCommandHandler> parseHandlersByCommandName;
-  private final Map<String, BackendNamedCommandHandler> executionHandlersByCommandName;
   private final List<SlashCommandDescriptor> autocompleteCommands;
   private final List<String> generalHelpLines;
   private final Map<String, List<String>> topicHelpLines;
@@ -158,7 +156,6 @@ public class BackendNamedCommandCatalog {
     List<BackendNamedCommandHandler> safeHandlers =
         List.copyOf(Objects.requireNonNull(handlers, "handlers"));
     this.parseHandlersByCommandName = indexParseHandlersByCommandName(safeHandlers);
-    this.executionHandlersByCommandName = indexExecutionHandlersByCommandName(safeHandlers);
     this.autocompleteCommands = buildAutocompleteCommands(safeHandlers);
     this.generalHelpLines = buildGeneralHelpLines(safeHandlers);
     this.topicHelpLines = buildTopicHelpLines(safeHandlers);
@@ -182,17 +179,6 @@ public class BackendNamedCommandCatalog {
     BackendNamedCommandHandler handler = parseHandlersByCommandName.get(commandName);
     if (handler == null) return null;
     return handler.parse(raw, commandName);
-  }
-
-  public boolean handle(
-      BackendNamedCommandExecutionContext context,
-      CompositeDisposable disposables,
-      ParsedInput.BackendNamed command) {
-    if (context == null || disposables == null || command == null) return false;
-    BackendNamedCommandHandler handler =
-        executionHandlersByCommandName.get(normalizeCommandName(command.command()));
-    if (handler == null) return false;
-    return handler.handle(context, disposables, command);
   }
 
   public List<SlashCommandDescriptor> autocompleteCommands() {
@@ -226,33 +212,6 @@ public class BackendNamedCommandCatalog {
         if (previous != null && previous != handler) {
           throw new IllegalStateException(
               "Duplicate backend named parser handler registered for command '" + normalized + "'");
-        }
-      }
-    }
-    return Map.copyOf(index);
-  }
-
-  private static Map<String, BackendNamedCommandHandler> indexExecutionHandlersByCommandName(
-      List<BackendNamedCommandHandler> handlers) {
-    LinkedHashMap<String, BackendNamedCommandHandler> index = new LinkedHashMap<>();
-    for (BackendNamedCommandHandler handler : handlers) {
-      Set<String> commandNames =
-          Objects.requireNonNullElse(handler.handledCommandNames(), Set.<String>of());
-      for (String commandName : commandNames) {
-        String normalized = normalizeCommandName(commandName);
-        if (normalized.isEmpty()) continue;
-        if (RESERVED_COMMAND_NAMES.contains(normalized)) {
-          throw new IllegalStateException(
-              "Backend named execution command '"
-                  + normalized
-                  + "' collides with a reserved built-in command");
-        }
-        BackendNamedCommandHandler previous = index.putIfAbsent(normalized, handler);
-        if (previous != null && previous != handler) {
-          throw new IllegalStateException(
-              "Duplicate backend named execution handler registered for command '"
-                  + normalized
-                  + "'");
         }
       }
     }
@@ -336,10 +295,14 @@ public class BackendNamedCommandCatalog {
     return normalizeCommandName(token);
   }
 
-  private static String normalizeCommandName(String commandName) {
+  static String normalizeCommandName(String commandName) {
     String name = Objects.toString(commandName, "").trim().toLowerCase(Locale.ROOT);
     if (name.startsWith("/")) name = name.substring(1).trim();
     return name;
+  }
+
+  static boolean isReservedCommandName(String commandName) {
+    return RESERVED_COMMAND_NAMES.contains(commandName);
   }
 
   private static String normalizeHelpTopic(String raw) {

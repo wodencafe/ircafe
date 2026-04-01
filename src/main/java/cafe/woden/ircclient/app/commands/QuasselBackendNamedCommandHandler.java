@@ -1,59 +1,22 @@
 package cafe.woden.ircclient.app.commands;
 
-import cafe.woden.ircclient.app.outbound.backend.QuasselOutboundCommandService;
 import com.google.auto.service.AutoService;
-import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
-import java.util.function.Supplier;
 import org.jmolecules.architecture.hexagonal.SecondaryAdapter;
 import org.jmolecules.architecture.layered.ApplicationLayer;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-/** Handles Quassel backend command parsing, help, autocomplete, and execution wiring. */
+/** Handles Quassel backend command parsing and startup-safe presentation metadata. */
 @Component
 @SecondaryAdapter
 @ApplicationLayer
 @AutoService(BackendNamedCommandHandler.class)
 public final class QuasselBackendNamedCommandHandler implements BackendNamedCommandHandler {
 
-  private final Supplier<QuasselOutboundCommandService> quasselOutboundCommandServiceSupplier;
-
-  public QuasselBackendNamedCommandHandler() {
-    this(() -> null);
-  }
-
-  public QuasselBackendNamedCommandHandler(
-      QuasselOutboundCommandService quasselOutboundCommandService) {
-    this(() -> quasselOutboundCommandService);
-  }
-
-  @Autowired
-  public QuasselBackendNamedCommandHandler(
-      ObjectProvider<QuasselOutboundCommandService> quasselOutboundCommandServiceProvider) {
-    this(quasselOutboundCommandServiceProvider::getIfAvailable);
-  }
-
-  private QuasselBackendNamedCommandHandler(
-      Supplier<QuasselOutboundCommandService> quasselOutboundCommandServiceSupplier) {
-    this.quasselOutboundCommandServiceSupplier =
-        Objects.requireNonNull(quasselOutboundCommandServiceSupplier, "serviceSupplier");
-  }
-
   @Override
   public Set<String> supportedCommandNames() {
     return Set.of("quasselsetup", "qsetup", "quasselnet", "qnet");
-  }
-
-  @Override
-  public Set<String> handledCommandNames() {
-    return Set.of(
-        BackendNamedCommandNames.QUASSEL_SETUP,
-        BackendNamedCommandNames.QUASSEL_NETWORK,
-        BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER);
   }
 
   @Override
@@ -86,32 +49,5 @@ public final class QuasselBackendNamedCommandHandler implements BackendNamedComm
     return List.of(
         "/quasselsetup [serverId] (complete pending Quassel Core setup)",
         "/quasselnet [serverId] list|connect|disconnect|remove|add|edit ... (manage Quassel networks)");
-  }
-
-  @Override
-  public boolean handle(
-      BackendNamedCommandExecutionContext context,
-      CompositeDisposable disposables,
-      ParsedInput.BackendNamed command) {
-    QuasselOutboundCommandService quasselOutboundCommandService =
-        quasselOutboundCommandServiceSupplier.get();
-    if (quasselOutboundCommandService == null || disposables == null || command == null) {
-      return false;
-    }
-    return switch (Objects.toString(command.command(), "")) {
-      case BackendNamedCommandNames.QUASSEL_SETUP -> {
-        quasselOutboundCommandService.handleQuasselSetup(disposables, command.args());
-        yield true;
-      }
-      case BackendNamedCommandNames.QUASSEL_NETWORK -> {
-        quasselOutboundCommandService.handleQuasselNetwork(disposables, command.args());
-        yield true;
-      }
-      case BackendNamedCommandNames.QUASSEL_NETWORK_MANAGER -> {
-        quasselOutboundCommandService.handleQuasselNetworkManager(disposables, command.args());
-        yield true;
-      }
-      default -> false;
-    };
   }
 }

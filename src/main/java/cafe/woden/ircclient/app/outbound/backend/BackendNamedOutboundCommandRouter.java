@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.app.outbound.backend;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandExecutionContext;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandExecutorCatalog;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 @ApplicationLayer
 public final class BackendNamedOutboundCommandRouter {
 
-  private final BackendNamedCommandCatalog commandCatalog;
+  private final BackendNamedCommandExecutorCatalog commandExecutors;
   private final TargetCoordinator targetCoordinator;
   private final ConnectionCoordinator connectionCoordinator;
   private final IrcMediatorInteractionPort mediatorIrc;
@@ -29,12 +29,12 @@ public final class BackendNamedOutboundCommandRouter {
       new RouterCommandExecutionContext();
 
   BackendNamedOutboundCommandRouter(
-      BackendNamedCommandCatalog commandCatalog,
+      BackendNamedCommandExecutorCatalog commandExecutors,
       TargetCoordinator targetCoordinator,
       ConnectionCoordinator connectionCoordinator,
       @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort mediatorIrc,
       UiPort ui) {
-    this.commandCatalog = Objects.requireNonNull(commandCatalog, "commandCatalog");
+    this.commandExecutors = Objects.requireNonNull(commandExecutors, "commandExecutors");
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
     this.connectionCoordinator =
         Objects.requireNonNull(connectionCoordinator, "connectionCoordinator");
@@ -44,7 +44,7 @@ public final class BackendNamedOutboundCommandRouter {
 
   public void handle(CompositeDisposable disposables, ParsedInput.BackendNamed command) {
     String name = normalizeCommandName(command.command());
-    if (commandCatalog.handle(pluginExecutionContext, disposables, command)) {
+    if (commandExecutors.handle(pluginExecutionContext, disposables, command)) {
       return;
     }
     TargetRef active = targetCoordinator.getActiveTarget();

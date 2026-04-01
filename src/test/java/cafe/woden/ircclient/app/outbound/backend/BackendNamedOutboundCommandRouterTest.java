@@ -5,9 +5,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.UiPort;
-import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
 import cafe.woden.ircclient.app.commands.BackendNamedCommandExecutionContext;
-import cafe.woden.ircclient.app.commands.BackendNamedCommandHandler;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandExecutor;
+import cafe.woden.ircclient.app.commands.BackendNamedCommandExecutorCatalog;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
@@ -22,7 +22,8 @@ import org.mockito.Mockito;
 
 class BackendNamedOutboundCommandRouterTest {
 
-  private final BackendNamedCommandCatalog emptyCatalog = BackendNamedCommandCatalog.empty();
+  private final BackendNamedCommandExecutorCatalog emptyCatalog =
+      BackendNamedCommandExecutorCatalog.empty();
   private final TargetCoordinator targetCoordinator = Mockito.mock(TargetCoordinator.class);
   private final ConnectionCoordinator connectionCoordinator =
       Mockito.mock(ConnectionCoordinator.class);
@@ -40,18 +41,8 @@ class BackendNamedOutboundCommandRouterTest {
   void routesToCatalogHandler() {
     TargetRef active = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(active);
-    BackendNamedCommandHandler handler =
-        new BackendNamedCommandHandler() {
-          @Override
-          public Set<String> supportedCommandNames() {
-            return Set.of("backendping");
-          }
-
-          @Override
-          public ParsedInput parse(String line, String matchedCommandName) {
-            return new ParsedInput.BackendNamed("backendping", "");
-          }
-
+    BackendNamedCommandExecutor handler =
+        new BackendNamedCommandExecutor() {
           @Override
           public Set<String> handledCommandNames() {
             return Set.of("backendping");
@@ -68,7 +59,7 @@ class BackendNamedOutboundCommandRouterTest {
         };
     BackendNamedOutboundCommandRouter router =
         new BackendNamedOutboundCommandRouter(
-            BackendNamedCommandCatalog.fromHandlers(List.of(handler)),
+            BackendNamedCommandExecutorCatalog.fromExecutors(List.of(handler)),
             targetCoordinator,
             connectionCoordinator,
             mediatorIrc,
@@ -113,18 +104,8 @@ class BackendNamedOutboundCommandRouterTest {
   void statusTargetContextUsesRequestedServerId() {
     TargetRef safe = new TargetRef("fallback", "status");
     when(targetCoordinator.safeStatusTarget()).thenReturn(safe);
-    BackendNamedCommandHandler handler =
-        new BackendNamedCommandHandler() {
-          @Override
-          public Set<String> supportedCommandNames() {
-            return Set.of("backendstatus");
-          }
-
-          @Override
-          public ParsedInput parse(String line, String matchedCommandName) {
-            return new ParsedInput.BackendNamed("backendstatus", "");
-          }
-
+    BackendNamedCommandExecutor handler =
+        new BackendNamedCommandExecutor() {
           @Override
           public Set<String> handledCommandNames() {
             return Set.of("backendstatus");
@@ -141,7 +122,7 @@ class BackendNamedOutboundCommandRouterTest {
         };
     BackendNamedOutboundCommandRouter router =
         new BackendNamedOutboundCommandRouter(
-            BackendNamedCommandCatalog.fromHandlers(List.of(handler)),
+            BackendNamedCommandExecutorCatalog.fromExecutors(List.of(handler)),
             targetCoordinator,
             connectionCoordinator,
             mediatorIrc,
