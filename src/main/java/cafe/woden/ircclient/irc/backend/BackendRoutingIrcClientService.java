@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc.backend;
 
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
+import cafe.woden.ircclient.config.InstalledPluginServices;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.BackendMetadataPort;
@@ -68,6 +69,19 @@ public class BackendRoutingIrcClientService
   private final Flowable<QuasselCoreNetworkSnapshotEvent> mergedQuasselNetworkEvents;
 
   @Autowired
+  public BackendRoutingIrcClientService(
+      ServerCatalog serverCatalog,
+      InstalledPluginServices installedPluginServices,
+      ObjectProvider<BackendMetadataPort> backendMetadataProvider,
+      List<IrcBackendClientService> backendServices) {
+    this(
+        serverCatalog,
+        backendMetadataProvider.getIfAvailable(),
+        loadInstalledBackendServices(
+            List.copyOf(Objects.requireNonNullElse(backendServices, List.of())),
+            installedPluginServices));
+  }
+
   public BackendRoutingIrcClientService(
       ServerCatalog serverCatalog,
       RuntimeConfigPathPort runtimeConfigPathPort,
@@ -726,6 +740,16 @@ public class BackendRoutingIrcClientService
             log);
     return new LoadedBackendServices(
         loadedServices.services(), loadedServices.pluginClassLoaders());
+  }
+
+  private static LoadedBackendServices loadInstalledBackendServices(
+      List<IrcBackendClientService> builtInBackendServices,
+      InstalledPluginServices installedPluginServices) {
+    InstalledPluginServices pluginServices =
+        Objects.requireNonNull(installedPluginServices, "installedPluginServices");
+    return new LoadedBackendServices(
+        pluginServices.loadInstalledServices(IrcBackendClientService.class, builtInBackendServices),
+        List.of());
   }
 
   private record LoadedBackendServices(

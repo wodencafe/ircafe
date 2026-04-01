@@ -27,36 +27,50 @@ public final class PluginServiceLoaderSupport {
       Path pluginDirectory,
       ClassLoader applicationClassLoader,
       Logger log) {
+    URLClassLoader pluginClassLoader =
+        openPluginClassLoader(pluginDirectory, applicationClassLoader, log);
+    return new LoadedServices<>(
+        loadInstalledServices(
+            serviceType, builtInServices, applicationClassLoader, pluginClassLoader),
+        pluginClassLoader == null ? List.of() : List.of(pluginClassLoader));
+  }
+
+  public static <T> List<T> loadInstalledServices(
+      Class<T> serviceType,
+      List<T> builtInServices,
+      ClassLoader applicationClassLoader,
+      ClassLoader pluginClassLoader) {
     Objects.requireNonNull(serviceType, "serviceType");
 
     ArrayList<T> loadedServices = new ArrayList<>();
     LinkedHashSet<String> providerClassNames = new LinkedHashSet<>();
-    ArrayList<URLClassLoader> pluginClassLoaders = new ArrayList<>();
 
     loadServices(
         Objects.requireNonNullElse(builtInServices, List.of()), loadedServices, providerClassNames);
     loadServicesFromClassLoader(
         serviceType, applicationClassLoader, loadedServices, providerClassNames);
+    loadServicesFromClassLoader(serviceType, pluginClassLoader, loadedServices, providerClassNames);
 
+    return List.copyOf(loadedServices);
+  }
+
+  public static URLClassLoader openPluginClassLoader(
+      Path pluginDirectory, ClassLoader applicationClassLoader, Logger log) {
     Path directory = pluginDirectory != null ? pluginDirectory.toAbsolutePath().normalize() : null;
-    if (directory != null && Files.exists(directory)) {
-      if (!Files.isDirectory(directory)) {
-        if (log != null) {
-          log.warn("[ircafe] plugin path is not a directory: {}", directory);
-        }
-      } else {
-        List<URL> jarUrls = pluginJarUrls(directory, log);
-        if (!jarUrls.isEmpty()) {
-          URLClassLoader pluginClassLoader =
-              URLClassLoader.newInstance(jarUrls.toArray(URL[]::new), applicationClassLoader);
-          pluginClassLoaders.add(pluginClassLoader);
-          loadServicesFromClassLoader(
-              serviceType, pluginClassLoader, loadedServices, providerClassNames);
-        }
-      }
+    if (directory == null || !Files.exists(directory)) {
+      return null;
     }
-
-    return new LoadedServices<>(List.copyOf(loadedServices), List.copyOf(pluginClassLoaders));
+    if (!Files.isDirectory(directory)) {
+      if (log != null) {
+        log.warn("[ircafe] plugin path is not a directory: {}", directory);
+      }
+      return null;
+    }
+    List<URL> jarUrls = pluginJarUrls(directory, log);
+    if (jarUrls.isEmpty()) {
+      return null;
+    }
+    return URLClassLoader.newInstance(jarUrls.toArray(URL[]::new), applicationClassLoader);
   }
 
   public static void closePluginClassLoaders(
@@ -74,6 +88,12 @@ public final class PluginServiceLoaderSupport {
         }
       }
     }
+  }
+
+  public static void closePluginClassLoader(
+      URLClassLoader pluginClassLoader, Logger log, String failureMessage) {
+    closePluginClassLoaders(
+        pluginClassLoader == null ? List.of() : List.of(pluginClassLoader), log, failureMessage);
   }
 
   public static Path resolvePluginDirectory(Supplier<Path> runtimeConfigPathSupplier, Logger log) {

@@ -7,6 +7,7 @@ import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapt
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
 import cafe.woden.ircclient.app.outbound.upload.spi.UploadCommandTranslationHandler;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
+import cafe.woden.ircclient.config.InstalledPluginServices;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.util.PluginServiceLoaderSupport;
@@ -49,6 +50,14 @@ public final class BackendExtensionCatalog implements AvailableBackendIdsPort {
   private final List<URLClassLoader> pluginClassLoaders;
 
   @Autowired
+  public BackendExtensionCatalog(
+      InstalledPluginServices installedPluginServices, List<BackendExtension> builtInExtensions) {
+    this(
+        loadInstalledCatalogState(
+            List.copyOf(Objects.requireNonNullElse(builtInExtensions, List.of())),
+            installedPluginServices));
+  }
+
   public BackendExtensionCatalog(
       RuntimeConfigPathPort runtimeConfigPathPort, List<BackendExtension> builtInExtensions) {
     this(
@@ -192,6 +201,14 @@ public final class BackendExtensionCatalog implements AvailableBackendIdsPort {
             applicationClassLoader,
             log);
     return new LoadedCatalogState(loadedServices.services(), loadedServices.pluginClassLoaders());
+  }
+
+  private static LoadedCatalogState loadInstalledCatalogState(
+      List<BackendExtension> builtInExtensions, InstalledPluginServices installedPluginServices) {
+    InstalledPluginServices pluginServices =
+        Objects.requireNonNull(installedPluginServices, "installedPluginServices");
+    return new LoadedCatalogState(
+        pluginServices.loadInstalledServices(BackendExtension.class, builtInExtensions), List.of());
   }
 
   private static Map<String, BackendExtension> indexExtensionsByBackendId(

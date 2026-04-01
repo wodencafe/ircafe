@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.commands;
 
+import cafe.woden.ircclient.config.InstalledPluginServices;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.util.PluginServiceLoaderSupport;
 import jakarta.annotation.PreDestroy;
@@ -32,6 +33,15 @@ public class BackendNamedCommandCatalog {
   private final List<URLClassLoader> pluginClassLoaders;
 
   @Autowired
+  public BackendNamedCommandCatalog(
+      InstalledPluginServices installedPluginServices,
+      List<BackendNamedCommandHandler> builtInHandlers) {
+    this(
+        loadInstalledCatalogState(
+            List.copyOf(Objects.requireNonNullElse(builtInHandlers, List.of())),
+            installedPluginServices));
+  }
+
   public BackendNamedCommandCatalog(
       RuntimeConfigPathPort runtimeConfigPathPort,
       List<BackendNamedCommandHandler> builtInHandlers) {
@@ -211,6 +221,16 @@ public class BackendNamedCommandCatalog {
             applicationClassLoader,
             log);
     return new LoadedCatalogState(loadedServices.services(), loadedServices.pluginClassLoaders());
+  }
+
+  private static LoadedCatalogState loadInstalledCatalogState(
+      List<BackendNamedCommandHandler> builtInHandlers,
+      InstalledPluginServices installedPluginServices) {
+    InstalledPluginServices pluginServices =
+        Objects.requireNonNull(installedPluginServices, "installedPluginServices");
+    return new LoadedCatalogState(
+        pluginServices.loadInstalledServices(BackendNamedCommandHandler.class, builtInHandlers),
+        List.of());
   }
 
   static Path resolvePluginDirectory(RuntimeConfigPathPort runtimeConfigPathPort) {
