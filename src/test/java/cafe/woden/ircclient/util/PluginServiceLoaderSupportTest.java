@@ -162,6 +162,25 @@ class PluginServiceLoaderSupportTest {
     assertTrue(error.getMessage().contains("duplicate plugin id 'duplicate-plugin'"));
   }
 
+  @Test
+  void discoversDeclaredPluginDescriptorsAndSkipsDependencyJars() throws Exception {
+    Path pluginDir = Files.createDirectories(tempDir.resolve("plugins"));
+    CompiledPluginJarSupport.writePluginJar(
+        pluginDir.resolve("discoverable-plugin.jar"),
+        REAL_PLUGIN_PROVIDER_CLASS,
+        pluginProviderSource(REAL_PLUGIN_PROVIDER_CLASS),
+        BackendNamedCommandHandler.class.getName(),
+        CompiledPluginJarSupport.compatibleManifest("discoverable-plugin", "2.0.0"));
+    writeDependencyJar(pluginDir.resolve("helper-library.jar"));
+
+    List<InstalledPluginDescriptor> plugins =
+        PluginServiceLoaderSupport.discoverInstalledPlugins(pluginDir, null);
+
+    assertTrue(plugins.size() == 1);
+    assertTrue("discoverable-plugin".equals(plugins.getFirst().pluginId()));
+    assertTrue("2.0.0".equals(plugins.getFirst().pluginVersion()));
+  }
+
   private static void writePluginJar(Path jarPath) throws IOException {
     try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath))) {
       out.putNextEntry(
@@ -169,6 +188,14 @@ class PluginServiceLoaderSupportTest {
       out.write(
           (PrivateBackendNamedCommandHandler.class.getName() + System.lineSeparator())
               .getBytes(StandardCharsets.UTF_8));
+      out.closeEntry();
+    }
+  }
+
+  private static void writeDependencyJar(Path jarPath) throws IOException {
+    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath))) {
+      out.putNextEntry(new JarEntry("plugin/helper.txt"));
+      out.write("helper".getBytes(StandardCharsets.UTF_8));
       out.closeEntry();
     }
   }

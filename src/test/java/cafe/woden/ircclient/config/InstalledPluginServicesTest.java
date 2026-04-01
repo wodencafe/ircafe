@@ -38,6 +38,8 @@ class InstalledPluginServicesTest {
           installedPlugins.loadInstalledServices(BackendNamedCommandHandler.class, List.of());
 
       assertEquals(runtimeConfigDirectory.resolve("plugins"), installedPlugins.pluginDirectory());
+      assertEquals(1, installedPlugins.installedPlugins().size());
+      assertEquals("installed-plugin", installedPlugins.installedPlugins().getFirst().pluginId());
       assertTrue(
           services.stream()
               .anyMatch(

@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.Set;
@@ -54,7 +55,7 @@ public final class PluginServiceLoaderSupport {
 
     ArrayList<T> loadedServices = new ArrayList<>();
     LinkedHashSet<String> providerClassNames = new LinkedHashSet<>();
-    LinkedHashMap<Path, PluginDescriptor> descriptorsByJar = new LinkedHashMap<>();
+    LinkedHashMap<Path, InstalledPluginDescriptor> descriptorsByJar = new LinkedHashMap<>();
     LinkedHashMap<String, Path> pluginIdsByJar = new LinkedHashMap<>();
 
     loadServices(
@@ -96,6 +97,33 @@ public final class PluginServiceLoaderSupport {
       return null;
     }
     return URLClassLoader.newInstance(jarUrls.toArray(URL[]::new), applicationClassLoader);
+  }
+
+  public static List<InstalledPluginDescriptor> discoverInstalledPlugins(
+      Path pluginDirectory, Logger log) {
+    Path directory = pluginDirectory != null ? pluginDirectory.toAbsolutePath().normalize() : null;
+    if (directory == null || !Files.exists(directory) || !Files.isDirectory(directory)) {
+      return List.of();
+    }
+    LinkedHashMap<String, InstalledPluginDescriptor> pluginsById = new LinkedHashMap<>();
+    for (Path jarPath : pluginJarPaths(directory, log)) {
+      Optional<InstalledPluginDescriptor> descriptor = declaredPluginDescriptor(jarPath);
+      if (descriptor.isEmpty()) {
+        continue;
+      }
+      InstalledPluginDescriptor plugin = descriptor.get();
+      InstalledPluginDescriptor previous = pluginsById.putIfAbsent(plugin.pluginId(), plugin);
+      if (previous != null && !previous.sourceJar().equals(plugin.sourceJar())) {
+        throw new IllegalStateException(
+            "[ircafe] duplicate plugin id '"
+                + plugin.pluginId()
+                + "' declared by "
+                + previous.sourceJar()
+                + " and "
+                + plugin.sourceJar());
+      }
+    }
+    return List.copyOf(pluginsById.values());
   }
 
   public static void closePluginClassLoaders(
@@ -166,7 +194,7 @@ public final class PluginServiceLoaderSupport {
       ClassLoader classLoader,
       List<T> targetServices,
       Set<String> providerClassNames,
-      Map<Path, PluginDescriptor> descriptorsByJar,
+      Map<Path, InstalledPluginDescriptor> descriptorsByJar,
       Map<String, Path> pluginIdsByJar,
       boolean validatePluginMetadata) {
     if (serviceType == null
@@ -210,7 +238,7 @@ public final class PluginServiceLoaderSupport {
       Class<?> serviceType,
       ClassLoader requestedClassLoader,
       Object service,
-      Map<Path, PluginDescriptor> descriptorsByJar,
+      Map<Path, InstalledPluginDescriptor> descriptorsByJar,
       Map<String, Path> pluginIdsByJar) {
     if (serviceType == null
         || requestedClassLoader == null
@@ -224,7 +252,7 @@ public final class PluginServiceLoaderSupport {
       return;
     }
     Path sourceJar = providerSourceJar(serviceType, providerType);
-    PluginDescriptor descriptor =
+    InstalledPluginDescriptor descriptor =
         descriptorsByJar.computeIfAbsent(
             sourceJar, path -> readPluginDescriptor(path, serviceType, providerType));
     Path previousJar = pluginIdsByJar.putIfAbsent(descriptor.pluginId(), sourceJar);
@@ -287,7 +315,7 @@ public final class PluginServiceLoaderSupport {
     }
   }
 
-  private static PluginDescriptor readPluginDescriptor(
+  private static InstalledPluginDescriptor readPluginDescriptor(
       Path jarPath, Class<?> serviceType, Class<?> providerType) {
     try (JarFile jarFile = new JarFile(jarPath.toFile())) {
       Manifest manifest = jarFile.getManifest();
@@ -327,7 +355,7 @@ public final class PluginServiceLoaderSupport {
                 + SUPPORTED_PLUGIN_API_VERSION
                 + ".");
       }
-      return new PluginDescriptor(pluginId, pluginVersion, pluginApiVersion, jarPath);
+      return new InstalledPluginDescriptor(pluginId, pluginVersion, pluginApiVersion, jarPath);
     } catch (IllegalStateException e) {
       throw e;
     } catch (IOException e) {
@@ -399,29 +427,103 @@ public final class PluginServiceLoaderSupport {
     return "";
   }
 
+  private static Optional<InstalledPluginDescriptor> declaredPluginDescriptor(Path jarPath) {
+    try (JarFile jarFile = new JarFile(jarPath.toFile())) {
+      Manifest manifest = jarFile.getManifest();
+      if (manifest == null) {
+        return Optional.empty();
+      }
+      Attributes attributes = manifest.getMainAttributes();
+      String pluginId = firstNonBlank(attributes.getValue(PLUGIN_ID_ATTRIBUTE));
+      if (pluginId.isEmpty()) {
+        return Optional.empty();
+      }
+      String pluginVersion =
+          firstNonBlank(
+              attributes.getValue(PLUGIN_VERSION_ATTRIBUTE),
+              attributes.getValue(Attributes.Name.IMPLEMENTATION_VERSION));
+      if (pluginVersion.isEmpty()) {
+        throw new IllegalStateException(
+            "[ircafe] plugin jar "
+                + jarPath
+                + " declares "
+                + PLUGIN_ID_ATTRIBUTE
+                + " but is missing "
+                + PLUGIN_VERSION_ATTRIBUTE
+                + " (or "
+                + Attributes.Name.IMPLEMENTATION_VERSION
+                + ").");
+      }
+      String rawApiVersion = firstNonBlank(attributes.getValue(PLUGIN_API_VERSION_ATTRIBUTE));
+      if (rawApiVersion.isEmpty()) {
+        throw new IllegalStateException(
+            "[ircafe] plugin jar "
+                + jarPath
+                + " declares "
+                + PLUGIN_ID_ATTRIBUTE
+                + " but is missing "
+                + PLUGIN_API_VERSION_ATTRIBUTE
+                + ".");
+      }
+      int pluginApiVersion;
+      try {
+        pluginApiVersion = Integer.parseInt(rawApiVersion);
+      } catch (NumberFormatException e) {
+        throw new IllegalStateException(
+            "[ircafe] plugin jar "
+                + jarPath
+                + " declares non-numeric "
+                + PLUGIN_API_VERSION_ATTRIBUTE
+                + ".",
+            e);
+      }
+      if (pluginApiVersion != SUPPORTED_PLUGIN_API_VERSION) {
+        throw new IllegalStateException(
+            "[ircafe] plugin jar "
+                + jarPath
+                + " declares unsupported plugin API version "
+                + pluginApiVersion
+                + ". This build supports plugin API version "
+                + SUPPORTED_PLUGIN_API_VERSION
+                + ".");
+      }
+      return Optional.of(
+          new InstalledPluginDescriptor(pluginId, pluginVersion, pluginApiVersion, jarPath));
+    } catch (IllegalStateException e) {
+      throw e;
+    } catch (IOException e) {
+      throw new IllegalStateException("[ircafe] failed to read plugin manifest for " + jarPath, e);
+    }
+  }
+
   private static List<URL> pluginJarUrls(Path pluginDirectory, Logger log) {
     ArrayList<URL> jarUrls = new ArrayList<>();
+    for (Path jarPath : pluginJarPaths(pluginDirectory, log)) {
+      try {
+        jarUrls.add(jarPath.toUri().toURL());
+      } catch (Exception e) {
+        if (log != null) {
+          log.warn("[ircafe] failed to resolve plugin jar URL for {}", jarPath, e);
+        }
+      }
+    }
+    return List.copyOf(jarUrls);
+  }
+
+  private static List<Path> pluginJarPaths(Path pluginDirectory, Logger log) {
+    ArrayList<Path> jarPaths = new ArrayList<>();
     try (var stream = Files.list(pluginDirectory)) {
       stream
           .filter(Files::isRegularFile)
           .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
           .sorted()
-          .forEach(
-              path -> {
-                try {
-                  jarUrls.add(path.toUri().toURL());
-                } catch (Exception e) {
-                  if (log != null) {
-                    log.warn("[ircafe] failed to resolve plugin jar URL for {}", path, e);
-                  }
-                }
-              });
+          .forEach(jarPaths::add);
     } catch (IOException e) {
       if (log != null) {
         log.warn("[ircafe] failed to scan plugin directory {}", pluginDirectory, e);
       }
     }
-    return List.copyOf(jarUrls);
+    return List.copyOf(jarPaths);
   }
 
   private static Path defaultPluginDirectory() {
@@ -435,9 +537,6 @@ public final class PluginServiceLoaderSupport {
     }
     return Path.of(System.getProperty("java.io.tmpdir"), "ircafe", "plugins");
   }
-
-  private record PluginDescriptor(
-      String pluginId, String pluginVersion, int pluginApiVersion, Path sourceJar) {}
 
   public record LoadedServices<T>(List<T> services, List<URLClassLoader> pluginClassLoaders) {}
 }

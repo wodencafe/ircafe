@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.config;
 
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
+import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import cafe.woden.ircclient.util.PluginServiceLoaderSupport;
 import jakarta.annotation.PreDestroy;
 import java.net.URLClassLoader;
@@ -23,6 +24,7 @@ public final class InstalledPluginServices {
   private final Path pluginDirectory;
   private final ClassLoader applicationClassLoader;
   private final URLClassLoader pluginClassLoader;
+  private final List<InstalledPluginDescriptor> installedPlugins;
 
   @Autowired
   public InstalledPluginServices(RuntimeConfigPathPort runtimeConfigPathPort) {
@@ -48,6 +50,8 @@ public final class InstalledPluginServices {
     this.pluginClassLoader =
         PluginServiceLoaderSupport.openPluginClassLoader(
             pluginDirectory, this.applicationClassLoader, log);
+    this.installedPlugins =
+        PluginServiceLoaderSupport.discoverInstalledPlugins(pluginDirectory, log);
   }
 
   public Path pluginDirectory() {
@@ -56,6 +60,10 @@ public final class InstalledPluginServices {
 
   public ClassLoader applicationClassLoader() {
     return applicationClassLoader;
+  }
+
+  public List<InstalledPluginDescriptor> installedPlugins() {
+    return installedPlugins;
   }
 
   public <T> List<T> loadInstalledServices(Class<T> serviceType, List<T> builtInServices) {
