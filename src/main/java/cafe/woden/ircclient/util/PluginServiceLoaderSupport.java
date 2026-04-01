@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
@@ -38,50 +39,29 @@ public final class PluginServiceLoaderSupport {
       Path pluginDirectory,
       ClassLoader applicationClassLoader,
       Logger log) {
-    ArrayList<T> loadedServices =
-        new ArrayList<>(
-            loadInstalledServices(serviceType, builtInServices, applicationClassLoader, null));
     List<PluginClassLoaderHandle> pluginClassLoaderHandles =
         openInstalledPluginClassLoaders(
             pluginDirectory,
             discoverInstalledPlugins(pluginDirectory, log),
             applicationClassLoader,
             log);
-    if (pluginClassLoaderHandles.isEmpty()) {
-      return new LoadedServices<>(List.copyOf(loadedServices), List.of());
-    }
-
-    LinkedHashSet<String> providerClassNames = new LinkedHashSet<>();
-    for (T loadedService : loadedServices) {
-      if (loadedService == null) {
-        continue;
-      }
-      providerClassNames.add(loadedService.getClass().getName());
-    }
-
-    ArrayList<URLClassLoader> pluginClassLoaders = new ArrayList<>(pluginClassLoaderHandles.size());
-    for (PluginClassLoaderHandle handle : pluginClassLoaderHandles) {
-      if (handle == null || handle.classLoader() == null) {
-        continue;
-      }
-      pluginClassLoaders.add(handle.classLoader());
-      try {
-        loadServices(
-            loadInstalledServices(serviceType, List.of(), null, handle.classLoader()),
-            loadedServices,
-            providerClassNames);
-      } catch (RuntimeException e) {
-        if (log != null) {
-          log.warn(
-              "[ircafe] failed to load plugin providers for {} from plugin '{}' ({})",
-              serviceType.getName(),
-              handle.descriptor().pluginId(),
-              handle.descriptor().sourceJar(),
-              e);
-        }
-      }
-    }
-    return new LoadedServices<>(List.copyOf(loadedServices), List.copyOf(pluginClassLoaders));
+    return new LoadedServices<>(
+        loadInstalledServices(
+            serviceType,
+            builtInServices,
+            applicationClassLoader,
+            pluginClassLoaderHandles,
+            (handle, error) -> {
+              if (log != null) {
+                log.warn(
+                    "[ircafe] failed to load plugin providers for {} from plugin '{}' ({})",
+                    serviceType.getName(),
+                    handle.descriptor().pluginId(),
+                    handle.descriptor().sourceJar(),
+                    error);
+              }
+            }),
+        pluginClassLoaderHandles.stream().map(PluginClassLoaderHandle::classLoader).toList());
   }
 
   public static <T> List<T> loadInstalledServices(
@@ -115,6 +95,47 @@ public final class PluginServiceLoaderSupport {
         pluginIdsByJar,
         true);
 
+    return List.copyOf(loadedServices);
+  }
+
+  public static <T> List<T> loadInstalledServices(
+      Class<T> serviceType,
+      List<T> builtInServices,
+      ClassLoader applicationClassLoader,
+      List<PluginClassLoaderHandle> pluginClassLoaderHandles,
+      BiConsumer<PluginClassLoaderHandle, RuntimeException> failureHandler) {
+    ArrayList<T> loadedServices =
+        new ArrayList<>(
+            loadInstalledServices(serviceType, builtInServices, applicationClassLoader, null));
+    List<PluginClassLoaderHandle> handles =
+        List.copyOf(Objects.requireNonNullElse(pluginClassLoaderHandles, List.of()));
+    if (handles.isEmpty()) {
+      return List.copyOf(loadedServices);
+    }
+
+    LinkedHashSet<String> providerClassNames = new LinkedHashSet<>();
+    for (T loadedService : loadedServices) {
+      if (loadedService == null) {
+        continue;
+      }
+      providerClassNames.add(loadedService.getClass().getName());
+    }
+
+    for (PluginClassLoaderHandle handle : handles) {
+      if (handle == null || handle.classLoader() == null) {
+        continue;
+      }
+      try {
+        loadServices(
+            loadInstalledServices(serviceType, List.of(), null, handle.classLoader()),
+            loadedServices,
+            providerClassNames);
+      } catch (RuntimeException e) {
+        if (failureHandler != null) {
+          failureHandler.accept(handle, e);
+        }
+      }
+    }
     return List.copyOf(loadedServices);
   }
 

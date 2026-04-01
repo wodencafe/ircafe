@@ -7,8 +7,6 @@ import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import cafe.woden.ircclient.util.PluginServiceLoaderSupport;
 import jakarta.annotation.PreDestroy;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -80,41 +78,20 @@ public final class InstalledPluginServices implements InstalledPluginsPort {
   }
 
   public <T> List<T> loadInstalledServices(Class<T> serviceType, List<T> builtInServices) {
-    List<T> loadedServices =
-        new ArrayList<>(
-            PluginServiceLoaderSupport.loadInstalledServices(
-                serviceType, builtInServices, applicationClassLoader, null));
-    if (pluginClassLoaderHandles.isEmpty()) {
-      return List.copyOf(loadedServices);
-    }
-
-    LinkedHashSet<String> providerClassNames = new LinkedHashSet<>();
-    for (T loadedService : loadedServices) {
-      if (loadedService == null) {
-        continue;
-      }
-      providerClassNames.add(loadedService.getClass().getName());
-    }
-
-    for (PluginServiceLoaderSupport.PluginClassLoaderHandle handle : pluginClassLoaderHandles) {
-      try {
-        mergeLoadedServices(
-            loadedServices,
-            providerClassNames,
-            PluginServiceLoaderSupport.loadInstalledServices(
-                serviceType, List.of(), null, handle.classLoader()));
-      } catch (RuntimeException e) {
-        recordPluginProblem(
-            handle.descriptor(),
-            "Failed to load plugin providers for "
-                + Objects.requireNonNull(serviceType).getName()
-                + " from plugin '"
-                + handle.descriptor().pluginId()
-                + "'",
-            e);
-      }
-    }
-    return List.copyOf(loadedServices);
+    return PluginServiceLoaderSupport.loadInstalledServices(
+        serviceType,
+        builtInServices,
+        applicationClassLoader,
+        pluginClassLoaderHandles,
+        (handle, error) ->
+            recordPluginProblem(
+                handle.descriptor(),
+                "Failed to load plugin providers for "
+                    + Objects.requireNonNull(serviceType).getName()
+                    + " from plugin '"
+                    + handle.descriptor().pluginId()
+                    + "'",
+                error));
   }
 
   @PreDestroy
@@ -143,23 +120,6 @@ public final class InstalledPluginServices implements InstalledPluginsPort {
           List.of(
               new InstalledPluginProblem(
                   "ERROR", "Failed to discover declared plugin jars.", details.toString())));
-    }
-  }
-
-  private static <T> void mergeLoadedServices(
-      List<T> targetServices, LinkedHashSet<String> providerClassNames, List<T> loadedServices) {
-    if (targetServices == null || providerClassNames == null || loadedServices == null) {
-      return;
-    }
-    for (T loadedService : loadedServices) {
-      if (loadedService == null) {
-        continue;
-      }
-      String providerClassName = loadedService.getClass().getName();
-      if (!providerClassNames.add(providerClassName)) {
-        continue;
-      }
-      targetServices.add(loadedService);
     }
   }
 
