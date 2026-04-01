@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -128,12 +129,51 @@ public final class PluginServiceLoaderSupport {
       return;
     }
     ServiceLoader<T> loader = ServiceLoader.load(serviceType, classLoader);
-    for (T service : loader) {
+    var iterator = loader.iterator();
+    while (true) {
+      final boolean hasNext;
+      try {
+        hasNext = iterator.hasNext();
+      } catch (ServiceConfigurationError e) {
+        throw invalidProviderConfiguration(serviceType, classLoader, e);
+      }
+      if (!hasNext) {
+        return;
+      }
+      final T service;
+      try {
+        service = iterator.next();
+      } catch (ServiceConfigurationError e) {
+        throw invalidProviderConfiguration(serviceType, classLoader, e);
+      }
       if (service == null) continue;
       String className = service.getClass().getName();
       if (!providerClassNames.add(className)) continue;
       targetServices.add(service);
     }
+  }
+
+  private static IllegalStateException invalidProviderConfiguration(
+      Class<?> serviceType, ClassLoader classLoader, ServiceConfigurationError cause) {
+    String reason = Objects.toString(cause.getMessage(), "").trim();
+    String message =
+        "[ircafe] failed to load ServiceLoader provider for "
+            + serviceType.getName()
+            + " from "
+            + classLoaderDescription(classLoader);
+    if (!reason.isEmpty()) {
+      message += ": " + reason;
+    }
+    message +=
+        ". Providers loaded via ServiceLoader must be public and expose a public no-arg constructor.";
+    return new IllegalStateException(message, cause);
+  }
+
+  private static String classLoaderDescription(ClassLoader classLoader) {
+    if (classLoader == null) {
+      return "<null classloader>";
+    }
+    return classLoader.getClass().getName();
   }
 
   private static List<URL> pluginJarUrls(Path pluginDirectory, Logger log) {
