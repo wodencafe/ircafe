@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.app.commands;
 
-import cafe.woden.ircclient.app.plugins.PluginServiceLoaderSupport;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
+import cafe.woden.ircclient.util.PluginServiceLoaderSupport;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import jakarta.annotation.PreDestroy;
 import java.net.URLClassLoader;
@@ -35,7 +35,9 @@ public final class BackendNamedCommandExecutorCatalog {
     this(
         loadInstalledCatalogState(
             List.copyOf(Objects.requireNonNullElse(builtInExecutors, List.of())),
-            PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log),
+            PluginServiceLoaderSupport.resolvePluginDirectory(
+                runtimeConfigPathPort == null ? null : runtimeConfigPathPort::runtimeConfigPath,
+                log),
             PluginServiceLoaderSupport.defaultApplicationClassLoader(
                 BackendNamedCommandExecutorCatalog.class)));
   }

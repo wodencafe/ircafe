@@ -1,7 +1,7 @@
 package cafe.woden.ircclient.app.commands;
 
-import cafe.woden.ircclient.app.plugins.PluginServiceLoaderSupport;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
+import cafe.woden.ircclient.util.PluginServiceLoaderSupport;
 import jakarta.annotation.PreDestroy;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
@@ -38,7 +38,9 @@ public class BackendNamedCommandCatalog {
     this(
         loadInstalledCatalogState(
             List.copyOf(Objects.requireNonNullElse(builtInHandlers, List.of())),
-            PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log),
+            PluginServiceLoaderSupport.resolvePluginDirectory(
+                runtimeConfigPathPort == null ? null : runtimeConfigPathPort::runtimeConfigPath,
+                log),
             PluginServiceLoaderSupport.defaultApplicationClassLoader(
                 BackendNamedCommandCatalog.class)));
   }
@@ -61,7 +63,8 @@ public class BackendNamedCommandCatalog {
   static BackendNamedCommandCatalog installed(
       RuntimeConfigPathPort runtimeConfigPathPort, ClassLoader applicationClassLoader) {
     return installed(
-        PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log),
+        PluginServiceLoaderSupport.resolvePluginDirectory(
+            runtimeConfigPathPort == null ? null : runtimeConfigPathPort::runtimeConfigPath, log),
         applicationClassLoader);
   }
 
@@ -211,7 +214,8 @@ public class BackendNamedCommandCatalog {
   }
 
   static Path resolvePluginDirectory(RuntimeConfigPathPort runtimeConfigPathPort) {
-    return PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log);
+    return PluginServiceLoaderSupport.resolvePluginDirectory(
+        runtimeConfigPathPort == null ? null : runtimeConfigPathPort::runtimeConfigPath, log);
   }
 
   private static String extractCommandName(String line) {

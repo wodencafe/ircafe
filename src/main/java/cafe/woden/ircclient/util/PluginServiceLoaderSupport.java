@@ -1,6 +1,5 @@
-package cafe.woden.ircclient.app.plugins;
+package cafe.woden.ircclient.util;
 
-import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -14,6 +13,7 @@ import java.util.Objects;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 
 /** Shared ServiceLoader support for built-in and plugin-provided SPI implementations. */
@@ -76,11 +76,10 @@ public final class PluginServiceLoaderSupport {
     }
   }
 
-  public static Path resolvePluginDirectory(
-      RuntimeConfigPathPort runtimeConfigPathPort, Logger log) {
+  public static Path resolvePluginDirectory(Supplier<Path> runtimeConfigPathSupplier, Logger log) {
     try {
       Path runtimeConfigPath =
-          runtimeConfigPathPort != null ? runtimeConfigPathPort.runtimeConfigPath() : null;
+          runtimeConfigPathSupplier != null ? runtimeConfigPathSupplier.get() : null;
       Path runtimeConfigDirectory =
           runtimeConfigPath != null ? runtimeConfigPath.getParent() : null;
       if (runtimeConfigDirectory != null) {

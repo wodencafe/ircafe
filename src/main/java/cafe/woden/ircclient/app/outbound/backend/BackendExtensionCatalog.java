@@ -6,10 +6,10 @@ import cafe.woden.ircclient.app.outbound.backend.spi.BackendExtension;
 import cafe.woden.ircclient.app.outbound.backend.spi.OutboundBackendFeatureAdapter;
 import cafe.woden.ircclient.app.outbound.mutation.MessageMutationOutboundCommands;
 import cafe.woden.ircclient.app.outbound.upload.spi.UploadCommandTranslationHandler;
-import cafe.woden.ircclient.app.plugins.PluginServiceLoaderSupport;
 import cafe.woden.ircclient.config.BackendDescriptorCatalog;
 import cafe.woden.ircclient.config.IrcProperties;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
+import cafe.woden.ircclient.util.PluginServiceLoaderSupport;
 import jakarta.annotation.PreDestroy;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
@@ -54,7 +54,9 @@ public final class BackendExtensionCatalog implements AvailableBackendIdsPort {
     this(
         loadInstalledCatalogState(
             List.copyOf(Objects.requireNonNullElse(builtInExtensions, List.of())),
-            PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log),
+            PluginServiceLoaderSupport.resolvePluginDirectory(
+                runtimeConfigPathPort == null ? null : runtimeConfigPathPort::runtimeConfigPath,
+                log),
             PluginServiceLoaderSupport.defaultApplicationClassLoader(
                 BackendExtensionCatalog.class)));
   }
@@ -73,7 +75,8 @@ public final class BackendExtensionCatalog implements AvailableBackendIdsPort {
   static BackendExtensionCatalog installed(
       RuntimeConfigPathPort runtimeConfigPathPort, ClassLoader applicationClassLoader) {
     return installed(
-        PluginServiceLoaderSupport.resolvePluginDirectory(runtimeConfigPathPort, log),
+        PluginServiceLoaderSupport.resolvePluginDirectory(
+            runtimeConfigPathPort == null ? null : runtimeConfigPathPort::runtimeConfigPath, log),
         applicationClassLoader);
   }
 
