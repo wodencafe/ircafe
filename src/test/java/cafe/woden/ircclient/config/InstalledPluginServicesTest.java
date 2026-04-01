@@ -4,20 +4,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.commands.BackendNamedCommandHandler;
-import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import cafe.woden.ircclient.util.CompiledPluginJarSupport;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Set;
-import java.util.jar.JarEntry;
-import java.util.jar.JarOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class InstalledPluginServicesTest {
+
+  private static final String REAL_PLUGIN_PROVIDER_CLASS =
+      "plugin.installed.RuntimeBackendNamedCommandHandler";
 
   @TempDir Path tempDir;
 
@@ -25,7 +23,12 @@ class InstalledPluginServicesTest {
   void loadsServicesFromPluginsNextToRuntimeConfig() throws Exception {
     Path runtimeConfigDirectory = Files.createDirectories(tempDir.resolve("config-home/ircafe"));
     Path pluginDir = Files.createDirectories(runtimeConfigDirectory.resolve("plugins"));
-    writePluginJar(pluginDir.resolve("backendping.jar"));
+    CompiledPluginJarSupport.writePluginJar(
+        pluginDir.resolve("backendping.jar"),
+        REAL_PLUGIN_PROVIDER_CLASS,
+        pluginProviderSource(),
+        BackendNamedCommandHandler.class.getName(),
+        CompiledPluginJarSupport.compatibleManifest("installed-plugin", "1.0.0"));
     RuntimeConfigPathPort runtimeConfigPathPort =
         () -> runtimeConfigDirectory.resolve("ircafe.yml");
 
@@ -36,34 +39,33 @@ class InstalledPluginServicesTest {
 
       assertEquals(runtimeConfigDirectory.resolve("plugins"), installedPlugins.pluginDirectory());
       assertTrue(
-          services.stream().anyMatch(PluginProvidedBackendNamedCommandHandler.class::isInstance));
+          services.stream()
+              .anyMatch(
+                  service -> REAL_PLUGIN_PROVIDER_CLASS.equals(service.getClass().getName())));
     } finally {
       installedPlugins.shutdown();
     }
   }
 
-  private static void writePluginJar(Path jarPath) throws IOException {
-    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath))) {
-      out.putNextEntry(
-          new JarEntry("META-INF/services/" + BackendNamedCommandHandler.class.getName()));
-      out.write(
-          (PluginProvidedBackendNamedCommandHandler.class.getName() + System.lineSeparator())
-              .getBytes(StandardCharsets.UTF_8));
-      out.closeEntry();
-    }
-  }
+  private static String pluginProviderSource() {
+    return """
+        package plugin.installed;
 
-  public static final class PluginProvidedBackendNamedCommandHandler
-      implements BackendNamedCommandHandler {
+        import cafe.woden.ircclient.app.commands.BackendNamedCommandHandler;
+        import cafe.woden.ircclient.app.commands.ParsedInput;
+        import java.util.Set;
 
-    @Override
-    public Set<String> supportedCommandNames() {
-      return Set.of("backendping");
-    }
+        public final class RuntimeBackendNamedCommandHandler implements BackendNamedCommandHandler {
+          @Override
+          public Set<String> supportedCommandNames() {
+            return Set.of("backendping");
+          }
 
-    @Override
-    public ParsedInput parse(String line, String matchedCommandName) {
-      return new ParsedInput.BackendNamed(matchedCommandName, "");
-    }
+          @Override
+          public ParsedInput parse(String line, String matchedCommandName) {
+            return new ParsedInput.BackendNamed(matchedCommandName, "");
+          }
+        }
+        """;
   }
 }

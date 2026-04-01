@@ -6,18 +6,28 @@ import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.jar.Attributes;
+import java.util.jar.JarFile;
+import java.util.jar.Manifest;
 import org.slf4j.Logger;
 
 /** Shared ServiceLoader support for built-in and plugin-provided SPI implementations. */
 public final class PluginServiceLoaderSupport {
+
+  public static final String PLUGIN_ID_ATTRIBUTE = "Ircafe-Plugin-Id";
+  public static final String PLUGIN_VERSION_ATTRIBUTE = "Ircafe-Plugin-Version";
+  public static final String PLUGIN_API_VERSION_ATTRIBUTE = "Ircafe-Plugin-Api-Version";
+  public static final int SUPPORTED_PLUGIN_API_VERSION = 1;
 
   private PluginServiceLoaderSupport() {}
 
@@ -44,12 +54,27 @@ public final class PluginServiceLoaderSupport {
 
     ArrayList<T> loadedServices = new ArrayList<>();
     LinkedHashSet<String> providerClassNames = new LinkedHashSet<>();
+    LinkedHashMap<Path, PluginDescriptor> descriptorsByJar = new LinkedHashMap<>();
+    LinkedHashMap<String, Path> pluginIdsByJar = new LinkedHashMap<>();
 
     loadServices(
         Objects.requireNonNullElse(builtInServices, List.of()), loadedServices, providerClassNames);
     loadServicesFromClassLoader(
-        serviceType, applicationClassLoader, loadedServices, providerClassNames);
-    loadServicesFromClassLoader(serviceType, pluginClassLoader, loadedServices, providerClassNames);
+        serviceType,
+        applicationClassLoader,
+        loadedServices,
+        providerClassNames,
+        descriptorsByJar,
+        pluginIdsByJar,
+        false);
+    loadServicesFromClassLoader(
+        serviceType,
+        pluginClassLoader,
+        loadedServices,
+        providerClassNames,
+        descriptorsByJar,
+        pluginIdsByJar,
+        true);
 
     return List.copyOf(loadedServices);
   }
@@ -140,11 +165,16 @@ public final class PluginServiceLoaderSupport {
       Class<T> serviceType,
       ClassLoader classLoader,
       List<T> targetServices,
-      Set<String> providerClassNames) {
+      Set<String> providerClassNames,
+      Map<Path, PluginDescriptor> descriptorsByJar,
+      Map<String, Path> pluginIdsByJar,
+      boolean validatePluginMetadata) {
     if (serviceType == null
         || classLoader == null
         || targetServices == null
-        || providerClassNames == null) {
+        || providerClassNames == null
+        || descriptorsByJar == null
+        || pluginIdsByJar == null) {
       return;
     }
     ServiceLoader<T> loader = ServiceLoader.load(serviceType, classLoader);
@@ -166,9 +196,48 @@ public final class PluginServiceLoaderSupport {
         throw invalidProviderConfiguration(serviceType, classLoader, e);
       }
       if (service == null) continue;
+      if (validatePluginMetadata) {
+        validatePluginProviderMetadata(
+            serviceType, classLoader, service, descriptorsByJar, pluginIdsByJar);
+      }
       String className = service.getClass().getName();
       if (!providerClassNames.add(className)) continue;
       targetServices.add(service);
+    }
+  }
+
+  private static void validatePluginProviderMetadata(
+      Class<?> serviceType,
+      ClassLoader requestedClassLoader,
+      Object service,
+      Map<Path, PluginDescriptor> descriptorsByJar,
+      Map<String, Path> pluginIdsByJar) {
+    if (serviceType == null
+        || requestedClassLoader == null
+        || service == null
+        || descriptorsByJar == null
+        || pluginIdsByJar == null) {
+      return;
+    }
+    Class<?> providerType = service.getClass();
+    if (providerType.getClassLoader() != requestedClassLoader) {
+      return;
+    }
+    Path sourceJar = providerSourceJar(serviceType, providerType);
+    PluginDescriptor descriptor =
+        descriptorsByJar.computeIfAbsent(
+            sourceJar, path -> readPluginDescriptor(path, serviceType, providerType));
+    Path previousJar = pluginIdsByJar.putIfAbsent(descriptor.pluginId(), sourceJar);
+    if (previousJar != null && !previousJar.equals(sourceJar)) {
+      throw new IllegalStateException(
+          "[ircafe] duplicate plugin id '"
+              + descriptor.pluginId()
+              + "' for service "
+              + serviceType.getName()
+              + ": "
+              + previousJar
+              + " and "
+              + sourceJar);
     }
   }
 
@@ -193,6 +262,141 @@ public final class PluginServiceLoaderSupport {
       return "<null classloader>";
     }
     return classLoader.getClass().getName();
+  }
+
+  private static Path providerSourceJar(Class<?> serviceType, Class<?> providerType) {
+    try {
+      URL location = providerType.getProtectionDomain().getCodeSource().getLocation();
+      if (location == null) {
+        throw new IllegalStateException("missing code source");
+      }
+      Path sourcePath = Path.of(location.toURI()).toAbsolutePath().normalize();
+      if (!Files.isRegularFile(sourcePath)
+          || !sourcePath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar")) {
+        throw new IllegalStateException("provider does not originate from a jar file");
+      }
+      return sourcePath;
+    } catch (Exception e) {
+      throw new IllegalStateException(
+          "[ircafe] plugin provider "
+              + providerType.getName()
+              + " for service "
+              + serviceType.getName()
+              + " could not resolve its source jar",
+          e);
+    }
+  }
+
+  private static PluginDescriptor readPluginDescriptor(
+      Path jarPath, Class<?> serviceType, Class<?> providerType) {
+    try (JarFile jarFile = new JarFile(jarPath.toFile())) {
+      Manifest manifest = jarFile.getManifest();
+      Attributes attributes = manifest == null ? new Attributes() : manifest.getMainAttributes();
+      String pluginId =
+          requiredManifestValue(
+              attributes, PLUGIN_ID_ATTRIBUTE, jarPath, serviceType, providerType);
+      String pluginVersion =
+          firstNonBlank(
+              attributes.getValue(PLUGIN_VERSION_ATTRIBUTE),
+              attributes.getValue(Attributes.Name.IMPLEMENTATION_VERSION));
+      if (pluginVersion.isEmpty()) {
+        throw missingManifestAttribute(
+            PLUGIN_VERSION_ATTRIBUTE + " (or " + Attributes.Name.IMPLEMENTATION_VERSION + ")",
+            jarPath,
+            serviceType,
+            providerType);
+      }
+      int pluginApiVersion =
+          parsePluginApiVersion(
+              requiredManifestValue(
+                  attributes, PLUGIN_API_VERSION_ATTRIBUTE, jarPath, serviceType, providerType),
+              jarPath,
+              serviceType,
+              providerType);
+      if (pluginApiVersion != SUPPORTED_PLUGIN_API_VERSION) {
+        throw new IllegalStateException(
+            "[ircafe] plugin provider "
+                + providerType.getName()
+                + " for service "
+                + serviceType.getName()
+                + " declares unsupported plugin API version "
+                + pluginApiVersion
+                + " in "
+                + jarPath
+                + ". This build supports plugin API version "
+                + SUPPORTED_PLUGIN_API_VERSION
+                + ".");
+      }
+      return new PluginDescriptor(pluginId, pluginVersion, pluginApiVersion, jarPath);
+    } catch (IllegalStateException e) {
+      throw e;
+    } catch (IOException e) {
+      throw new IllegalStateException(
+          "[ircafe] failed to read plugin manifest for provider "
+              + providerType.getName()
+              + " in "
+              + jarPath,
+          e);
+    }
+  }
+
+  private static String requiredManifestValue(
+      Attributes attributes,
+      String attributeName,
+      Path jarPath,
+      Class<?> serviceType,
+      Class<?> providerType) {
+    String value = firstNonBlank(attributes == null ? null : attributes.getValue(attributeName));
+    if (!value.isEmpty()) {
+      return value;
+    }
+    throw missingManifestAttribute(attributeName, jarPath, serviceType, providerType);
+  }
+
+  private static IllegalStateException missingManifestAttribute(
+      String attributeName, Path jarPath, Class<?> serviceType, Class<?> providerType) {
+    return new IllegalStateException(
+        "[ircafe] plugin provider "
+            + providerType.getName()
+            + " for service "
+            + serviceType.getName()
+            + " was loaded from "
+            + jarPath
+            + " but the jar manifest is missing "
+            + attributeName
+            + ".");
+  }
+
+  private static int parsePluginApiVersion(
+      String rawVersion, Path jarPath, Class<?> serviceType, Class<?> providerType) {
+    try {
+      return Integer.parseInt(rawVersion);
+    } catch (NumberFormatException e) {
+      throw new IllegalStateException(
+          "[ircafe] plugin provider "
+              + providerType.getName()
+              + " for service "
+              + serviceType.getName()
+              + " declares non-numeric plugin API version '"
+              + rawVersion
+              + "' in "
+              + jarPath
+              + ".",
+          e);
+    }
+  }
+
+  private static String firstNonBlank(String... values) {
+    if (values == null) {
+      return "";
+    }
+    for (String value : values) {
+      String normalized = Objects.toString(value, "").trim();
+      if (!normalized.isEmpty()) {
+        return normalized;
+      }
+    }
+    return "";
   }
 
   private static List<URL> pluginJarUrls(Path pluginDirectory, Logger log) {
@@ -231,6 +435,9 @@ public final class PluginServiceLoaderSupport {
     }
     return Path.of(System.getProperty("java.io.tmpdir"), "ircafe", "plugins");
   }
+
+  private record PluginDescriptor(
+      String pluginId, String pluginVersion, int pluginApiVersion, Path sourceJar) {}
 
   public record LoadedServices<T>(List<T> services, List<URLClassLoader> pluginClassLoaders) {}
 }
