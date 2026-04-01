@@ -1,9 +1,12 @@
 package cafe.woden.ircclient.diagnostics;
 
+import cafe.woden.ircclient.config.InstalledPluginServices;
+import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import jakarta.annotation.PostConstruct;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -15,6 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.availability.AvailabilityChangeEvent;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEvent;
@@ -37,7 +41,26 @@ public class SpringRuntimeEventsService implements ApplicationListener<Applicati
   private final Deque<RuntimeDiagnosticEvent> events = new ArrayDeque<>();
   private final FlowableProcessor<Long> changeSignals =
       PublishProcessor.<Long>create().toSerialized();
+  private final Path pluginDirectory;
+  private final List<InstalledPluginDescriptor> installedPlugins;
   private long changeSeq = 0L;
+
+  public SpringRuntimeEventsService() {
+    this(null, List.of());
+  }
+
+  @Autowired
+  public SpringRuntimeEventsService(InstalledPluginServices installedPluginServices) {
+    this(
+        installedPluginServices == null ? null : installedPluginServices.pluginDirectory(),
+        installedPluginServices == null ? List.of() : installedPluginServices.installedPlugins());
+  }
+
+  SpringRuntimeEventsService(
+      Path pluginDirectory, List<InstalledPluginDescriptor> installedPlugins) {
+    this.pluginDirectory = pluginDirectory;
+    this.installedPlugins = List.copyOf(Objects.requireNonNullElse(installedPlugins, List.of()));
+  }
 
   @PostConstruct
   public void onStart() {
@@ -47,6 +70,14 @@ public class SpringRuntimeEventsService implements ApplicationListener<Applicati
         "SpringRuntimeEventsService",
         "Spring runtime event capture initialized.",
         "Listening for ApplicationEvent emissions from the Spring context.");
+    if (!installedPlugins.isEmpty()) {
+      appendEvent(
+          Instant.now(),
+          "INFO",
+          "InstalledPlugins",
+          "Discovered " + installedPlugins.size() + " declared plugin(s).",
+          describeInstalledPlugins());
+    }
   }
 
   @Override
@@ -222,5 +253,25 @@ public class SpringRuntimeEventsService implements ApplicationListener<Applicati
       if (!hex) return false;
     }
     return true;
+  }
+
+  private String describeInstalledPlugins() {
+    StringBuilder out = new StringBuilder(512);
+    if (pluginDirectory != null) {
+      out.append("pluginDirectory=").append(pluginDirectory.toAbsolutePath()).append('\n');
+    }
+    for (InstalledPluginDescriptor plugin : installedPlugins) {
+      if (plugin == null) continue;
+      out.append("pluginId=").append(Objects.toString(plugin.pluginId(), "")).append('\n');
+      out.append("pluginVersion=")
+          .append(Objects.toString(plugin.pluginVersion(), ""))
+          .append('\n');
+      out.append("pluginApiVersion=").append(plugin.pluginApiVersion()).append('\n');
+      if (plugin.sourceJar() != null) {
+        out.append("sourceJar=").append(plugin.sourceJar().toAbsolutePath()).append('\n');
+      }
+      out.append('\n');
+    }
+    return out.toString().trim();
   }
 }

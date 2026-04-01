@@ -3,7 +3,9 @@ package cafe.woden.ircclient.diagnostics;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
+import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEvent;
@@ -87,6 +89,29 @@ class SpringRuntimeEventsServiceTest {
     service.clearEvents();
 
     ts.assertValueCount(3);
+  }
+
+  @Test
+  void onStartAddsInstalledPluginSummaryWhenPluginsAreDeclared() {
+    SpringRuntimeEventsService service =
+        new SpringRuntimeEventsService(
+            Path.of("/tmp/ircafe/plugins"),
+            List.of(
+                new InstalledPluginDescriptor(
+                    "sample-plugin", "1.2.0", 1, Path.of("/tmp/ircafe/plugins/sample.jar"))));
+
+    service.onStart();
+
+    List<RuntimeDiagnosticEvent> events = service.recentEvents(10);
+    assertEquals(2, events.size());
+    RuntimeDiagnosticEvent pluginEvent = events.getFirst();
+    assertEquals("INFO", pluginEvent.level());
+    assertEquals("InstalledPlugins", pluginEvent.type());
+    assertEquals("Discovered 1 declared plugin(s).", pluginEvent.summary());
+    assertTrue(pluginEvent.details().contains("pluginDirectory=/tmp/ircafe/plugins"));
+    assertTrue(pluginEvent.details().contains("pluginId=sample-plugin"));
+    assertTrue(pluginEvent.details().contains("pluginVersion=1.2.0"));
+    assertTrue(pluginEvent.details().contains("sourceJar=/tmp/ircafe/plugins/sample.jar"));
   }
 
   private static final class WarnSignalEvent extends ApplicationEvent {
