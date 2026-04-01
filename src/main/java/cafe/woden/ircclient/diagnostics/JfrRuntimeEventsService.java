@@ -1,7 +1,9 @@
 package cafe.woden.ircclient.diagnostics;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.config.InstalledPluginServices;
 import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import cafe.woden.ircclient.util.VirtualThreads;
 import com.sun.management.HotSpotDiagnosticMXBean;
 import jakarta.annotation.PostConstruct;
@@ -81,6 +83,8 @@ public class JfrRuntimeEventsService {
           .withZone(ZoneId.systemDefault());
 
   private final DiagnosticsRuntimeConfigPort runtimeConfig;
+  private final List<InstalledPluginDescriptor> installedPlugins;
+  private final Path pluginDirectory;
   private final Deque<RuntimeDiagnosticEvent> events = new ArrayDeque<>();
   private final Deque<Instant> gcEventsInWindow = new ArrayDeque<>();
   private final PropertyChangeSupport stateChanges = new PropertyChangeSupport(this);
@@ -103,17 +107,35 @@ public class JfrRuntimeEventsService {
 
   public JfrRuntimeEventsService(DiagnosticsRuntimeConfigPort runtimeConfig) {
     this(
-        runtimeConfig, VirtualThreads.newSingleThreadScheduledExecutor("ircafe-jfr-event-sampler"));
+        runtimeConfig,
+        VirtualThreads.newSingleThreadScheduledExecutor("ircafe-jfr-event-sampler"),
+        null,
+        List.of());
   }
 
   @Autowired
   public JfrRuntimeEventsService(
       DiagnosticsRuntimeConfigPort runtimeConfig,
       @Qualifier(ExecutorConfig.JFR_RUNTIME_EVENTS_SAMPLER_SCHEDULER)
-          ScheduledExecutorService samplerExec) {
+          ScheduledExecutorService samplerExec,
+      InstalledPluginServices installedPluginServices) {
+    this(
+        runtimeConfig,
+        samplerExec,
+        installedPluginServices == null ? null : installedPluginServices.pluginDirectory(),
+        installedPluginServices == null ? List.of() : installedPluginServices.installedPlugins());
+  }
+
+  JfrRuntimeEventsService(
+      DiagnosticsRuntimeConfigPort runtimeConfig,
+      ScheduledExecutorService samplerExec,
+      Path pluginDirectory,
+      List<InstalledPluginDescriptor> installedPlugins) {
     this.runtimeConfig = runtimeConfig;
     this.samplerExec = Objects.requireNonNull(samplerExec, "samplerExec");
     this.enabled = runtimeConfig == null || runtimeConfig.readApplicationJfrEnabled(true);
+    this.pluginDirectory = pluginDirectory;
+    this.installedPlugins = List.copyOf(Objects.requireNonNullElse(installedPlugins, List.of()));
   }
 
   @PostConstruct
@@ -588,6 +610,31 @@ public class JfrRuntimeEventsService {
     out.append("- Peak: ").append(threads.getPeakThreadCount()).append('\n');
     out.append("- Daemon: ").append(threads.getDaemonThreadCount()).append('\n');
     out.append("- Total Started: ").append(threads.getTotalStartedThreadCount()).append('\n');
+    out.append('\n');
+
+    out.append("Plugins:\n");
+    if (pluginDirectory != null) {
+      out.append("- Directory: ").append(pluginDirectory.toAbsolutePath()).append('\n');
+    }
+    out.append("- Installed: ").append(installedPlugins.size()).append('\n');
+    if (installedPlugins.isEmpty()) {
+      out.append("- None declared\n");
+    } else {
+      for (InstalledPluginDescriptor plugin : installedPlugins) {
+        if (plugin == null) continue;
+        out.append("- ")
+            .append(Objects.toString(plugin.pluginId(), ""))
+            .append(" v")
+            .append(Objects.toString(plugin.pluginVersion(), ""))
+            .append(" (api ")
+            .append(plugin.pluginApiVersion())
+            .append(")");
+        if (plugin.sourceJar() != null) {
+          out.append(" -> ").append(plugin.sourceJar().toAbsolutePath());
+        }
+        out.append('\n');
+      }
+    }
     return out.toString();
   }
 
