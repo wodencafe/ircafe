@@ -6,8 +6,9 @@ import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import cafe.woden.ircclient.util.PluginServiceLoaderSupport;
 import jakarta.annotation.PreDestroy;
-import java.net.URLClassLoader;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -17,7 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-/** Shared runtime plugin classloader used by Spring-managed SPI catalogs. */
+/** Shared runtime plugin service registry used by Spring-managed SPI catalogs. */
 @Component
 @ApplicationLayer
 public final class InstalledPluginServices implements InstalledPluginsPort {
@@ -26,7 +27,7 @@ public final class InstalledPluginServices implements InstalledPluginsPort {
 
   private final Path pluginDirectory;
   private final ClassLoader applicationClassLoader;
-  private final URLClassLoader pluginClassLoader;
+  private final List<PluginServiceLoaderSupport.PluginClassLoaderHandle> pluginClassLoaderHandles;
   private final List<InstalledPluginDescriptor> installedPlugins;
   private final CopyOnWriteArrayList<InstalledPluginProblem> pluginProblems;
 
@@ -51,12 +52,12 @@ public final class InstalledPluginServices implements InstalledPluginsPort {
             () ->
                 PluginServiceLoaderSupport.defaultApplicationClassLoader(
                     InstalledPluginServices.class));
-    this.pluginClassLoader =
-        PluginServiceLoaderSupport.openPluginClassLoader(
-            pluginDirectory, this.applicationClassLoader, log);
     InstalledPluginDiscovery discovery = discoverInstalledPlugins(pluginDirectory);
     this.installedPlugins = discovery.installedPlugins();
     this.pluginProblems = new CopyOnWriteArrayList<>(discovery.pluginProblems());
+    this.pluginClassLoaderHandles =
+        PluginServiceLoaderSupport.openInstalledPluginClassLoaders(
+            pluginDirectory, this.installedPlugins, this.applicationClassLoader, log);
   }
 
   @Override
@@ -79,25 +80,51 @@ public final class InstalledPluginServices implements InstalledPluginsPort {
   }
 
   public <T> List<T> loadInstalledServices(Class<T> serviceType, List<T> builtInServices) {
-    try {
-      return PluginServiceLoaderSupport.loadInstalledServices(
-          serviceType, builtInServices, applicationClassLoader, pluginClassLoader);
-    } catch (RuntimeException e) {
-      if (pluginClassLoader == null) {
-        throw e;
-      }
-      recordPluginProblem(
-          "Failed to load plugin providers for " + Objects.requireNonNull(serviceType).getName(),
-          e);
-      return PluginServiceLoaderSupport.loadInstalledServices(
-          serviceType, builtInServices, applicationClassLoader, null);
+    List<T> loadedServices =
+        new ArrayList<>(
+            PluginServiceLoaderSupport.loadInstalledServices(
+                serviceType, builtInServices, applicationClassLoader, null));
+    if (pluginClassLoaderHandles.isEmpty()) {
+      return List.copyOf(loadedServices);
     }
+
+    LinkedHashSet<String> providerClassNames = new LinkedHashSet<>();
+    for (T loadedService : loadedServices) {
+      if (loadedService == null) {
+        continue;
+      }
+      providerClassNames.add(loadedService.getClass().getName());
+    }
+
+    for (PluginServiceLoaderSupport.PluginClassLoaderHandle handle : pluginClassLoaderHandles) {
+      try {
+        mergeLoadedServices(
+            loadedServices,
+            providerClassNames,
+            PluginServiceLoaderSupport.loadInstalledServices(
+                serviceType, List.of(), null, handle.classLoader()));
+      } catch (RuntimeException e) {
+        recordPluginProblem(
+            handle.descriptor(),
+            "Failed to load plugin providers for "
+                + Objects.requireNonNull(serviceType).getName()
+                + " from plugin '"
+                + handle.descriptor().pluginId()
+                + "'",
+            e);
+      }
+    }
+    return List.copyOf(loadedServices);
   }
 
   @PreDestroy
   void shutdown() {
-    PluginServiceLoaderSupport.closePluginClassLoader(
-        pluginClassLoader, log, "[ircafe] failed to close shared plugin classloader");
+    PluginServiceLoaderSupport.closePluginClassLoaders(
+        pluginClassLoaderHandles.stream()
+            .map(PluginServiceLoaderSupport.PluginClassLoaderHandle::classLoader)
+            .toList(),
+        log,
+        "[ircafe] failed to close shared plugin classloader");
   }
 
   private InstalledPluginDiscovery discoverInstalledPlugins(Path pluginDirectory) {
@@ -119,13 +146,49 @@ public final class InstalledPluginServices implements InstalledPluginsPort {
     }
   }
 
-  private void recordPluginProblem(String summary, RuntimeException error) {
-    String details = Objects.toString(error == null ? null : error.getMessage(), "").trim();
+  private static <T> void mergeLoadedServices(
+      List<T> targetServices, LinkedHashSet<String> providerClassNames, List<T> loadedServices) {
+    if (targetServices == null || providerClassNames == null || loadedServices == null) {
+      return;
+    }
+    for (T loadedService : loadedServices) {
+      if (loadedService == null) {
+        continue;
+      }
+      String providerClassName = loadedService.getClass().getName();
+      if (!providerClassNames.add(providerClassName)) {
+        continue;
+      }
+      targetServices.add(loadedService);
+    }
+  }
+
+  private void recordPluginProblem(
+      InstalledPluginDescriptor descriptor, String summary, RuntimeException error) {
+    StringBuilder details = new StringBuilder();
+    if (descriptor != null) {
+      details
+          .append("Plugin id: ")
+          .append(descriptor.pluginId())
+          .append('\n')
+          .append("Plugin version: ")
+          .append(descriptor.pluginVersion())
+          .append('\n')
+          .append("Plugin jar: ")
+          .append(descriptor.sourceJar())
+          .append('\n');
+    }
+    String errorMessage = Objects.toString(error == null ? null : error.getMessage(), "").trim();
+    if (!errorMessage.isEmpty()) {
+      details.append(errorMessage);
+    }
     InstalledPluginProblem problem =
         new InstalledPluginProblem(
             "ERROR",
             summary,
-            details.isEmpty() ? "See application logs for the full plugin loader error." : details);
+            details.isEmpty()
+                ? "See application logs for the full plugin loader error."
+                : details.toString().trim());
     if (!pluginProblems.contains(problem)) {
       pluginProblems.add(problem);
     }

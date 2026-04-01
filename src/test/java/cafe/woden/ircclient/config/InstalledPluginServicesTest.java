@@ -56,10 +56,16 @@ class InstalledPluginServicesTest {
   }
 
   @Test
-  void fallsBackToBuiltInServicesAndRecordsProblemWhenPluginProviderIsInvalid() throws Exception {
+  void keepsHealthyPluginProvidersWhenAnotherPluginProviderIsInvalid() throws Exception {
     Path runtimeConfigDirectory = Files.createDirectories(tempDir.resolve("broken-plugins/ircafe"));
     Path pluginDir = Files.createDirectories(runtimeConfigDirectory.resolve("plugins"));
-    writeBrokenProviderJar(pluginDir.resolve("broken-provider.jar"));
+    CompiledPluginJarSupport.writePluginJar(
+        pluginDir.resolve("healthy-provider.jar"),
+        REAL_PLUGIN_PROVIDER_CLASS,
+        pluginProviderSource(),
+        BackendNamedCommandHandler.class.getName(),
+        CompiledPluginJarSupport.compatibleManifest("healthy-plugin", "1.0.0"));
+    writeBrokenProviderJar(pluginDir.resolve("broken-provider.jar"), "broken-plugin");
     RuntimeConfigPathPort runtimeConfigPathPort =
         () -> runtimeConfigDirectory.resolve("ircafe.yml");
 
@@ -72,6 +78,11 @@ class InstalledPluginServicesTest {
               BackendNamedCommandHandler.class, List.of(builtInHandler));
 
       assertTrue(services.contains(builtInHandler));
+      assertEquals(2, installedPlugins.installedPlugins().size());
+      assertTrue(
+          services.stream()
+              .anyMatch(
+                  service -> REAL_PLUGIN_PROVIDER_CLASS.equals(service.getClass().getName())));
       assertTrue(
           services.stream()
               .noneMatch(
@@ -79,18 +90,9 @@ class InstalledPluginServicesTest {
                       "plugin.installed.MissingBackendNamedCommandHandler"
                           .equals(service.getClass().getName())));
       assertEquals(1, installedPlugins.pluginProblems().size());
+      assertTrue(installedPlugins.pluginProblems().getFirst().summary().contains("broken-plugin"));
       assertTrue(
-          installedPlugins
-              .pluginProblems()
-              .getFirst()
-              .summary()
-              .contains("Failed to load plugin providers for"));
-      assertTrue(
-          installedPlugins
-              .pluginProblems()
-              .getFirst()
-              .details()
-              .contains(BackendNamedCommandHandler.class.getName()));
+          installedPlugins.pluginProblems().getFirst().details().contains("broken-provider.jar"));
     } finally {
       installedPlugins.shutdown();
     }
@@ -118,8 +120,14 @@ class InstalledPluginServicesTest {
         """;
   }
 
-  private static void writeBrokenProviderJar(Path jarPath) throws IOException {
-    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath))) {
+  private static void writeBrokenProviderJar(Path jarPath, String pluginId) throws IOException {
+    var manifest = new java.util.jar.Manifest();
+    var attributes = manifest.getMainAttributes();
+    attributes.put(java.util.jar.Attributes.Name.MANIFEST_VERSION, "1.0");
+    for (var entry : CompiledPluginJarSupport.compatibleManifest(pluginId, "1.0.0").entrySet()) {
+      attributes.putValue(entry.getKey(), entry.getValue());
+    }
+    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath), manifest)) {
       out.putNextEntry(
           new JarEntry("META-INF/services/" + BackendNamedCommandHandler.class.getName()));
       out.write(

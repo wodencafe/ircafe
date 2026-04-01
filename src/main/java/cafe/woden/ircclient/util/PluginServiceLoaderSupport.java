@@ -99,6 +99,39 @@ public final class PluginServiceLoaderSupport {
     return URLClassLoader.newInstance(jarUrls.toArray(URL[]::new), applicationClassLoader);
   }
 
+  public static List<PluginClassLoaderHandle> openInstalledPluginClassLoaders(
+      Path pluginDirectory,
+      List<InstalledPluginDescriptor> installedPlugins,
+      ClassLoader applicationClassLoader,
+      Logger log) {
+    Path directory = pluginDirectory != null ? pluginDirectory.toAbsolutePath().normalize() : null;
+    List<InstalledPluginDescriptor> declaredPlugins =
+        List.copyOf(Objects.requireNonNullElse(installedPlugins, List.of()));
+    if (directory == null
+        || declaredPlugins.isEmpty()
+        || !Files.exists(directory)
+        || !Files.isDirectory(directory)) {
+      return List.of();
+    }
+
+    List<Path> helperJarPaths = pluginDependencyJarPaths(directory, declaredPlugins, log);
+    ArrayList<PluginClassLoaderHandle> handles = new ArrayList<>(declaredPlugins.size());
+    for (InstalledPluginDescriptor descriptor : declaredPlugins) {
+      if (descriptor == null || descriptor.sourceJar() == null) continue;
+      List<URL> jarUrls =
+          pluginRuntimeJarUrls(
+              descriptor.sourceJar().toAbsolutePath().normalize(), helperJarPaths, log);
+      if (jarUrls.isEmpty()) {
+        continue;
+      }
+      handles.add(
+          new PluginClassLoaderHandle(
+              descriptor,
+              URLClassLoader.newInstance(jarUrls.toArray(URL[]::new), applicationClassLoader)));
+    }
+    return List.copyOf(handles);
+  }
+
   public static List<InstalledPluginDescriptor> discoverInstalledPlugins(
       Path pluginDirectory, Logger log) {
     Path directory = pluginDirectory != null ? pluginDirectory.toAbsolutePath().normalize() : null;
@@ -510,6 +543,30 @@ public final class PluginServiceLoaderSupport {
     return List.copyOf(jarUrls);
   }
 
+  private static List<URL> pluginRuntimeJarUrls(
+      Path pluginJarPath, List<Path> helperJarPaths, Logger log) {
+    ArrayList<URL> jarUrls = new ArrayList<>();
+    try {
+      jarUrls.add(pluginJarPath.toUri().toURL());
+    } catch (Exception e) {
+      if (log != null) {
+        log.warn("[ircafe] failed to resolve plugin jar URL for {}", pluginJarPath, e);
+      }
+      return List.of();
+    }
+    for (Path helperJarPath : Objects.requireNonNullElse(helperJarPaths, List.<Path>of())) {
+      if (helperJarPath == null) continue;
+      try {
+        jarUrls.add(helperJarPath.toUri().toURL());
+      } catch (Exception e) {
+        if (log != null) {
+          log.warn("[ircafe] failed to resolve helper plugin jar URL for {}", helperJarPath, e);
+        }
+      }
+    }
+    return List.copyOf(jarUrls);
+  }
+
   private static List<Path> pluginJarPaths(Path pluginDirectory, Logger log) {
     ArrayList<Path> jarPaths = new ArrayList<>();
     try (var stream = Files.list(pluginDirectory)) {
@@ -526,6 +583,26 @@ public final class PluginServiceLoaderSupport {
     return List.copyOf(jarPaths);
   }
 
+  private static List<Path> pluginDependencyJarPaths(
+      Path pluginDirectory, List<InstalledPluginDescriptor> installedPlugins, Logger log) {
+    LinkedHashSet<Path> declaredPluginJars = new LinkedHashSet<>();
+    for (InstalledPluginDescriptor descriptor :
+        Objects.requireNonNullElse(installedPlugins, List.<InstalledPluginDescriptor>of())) {
+      if (descriptor == null || descriptor.sourceJar() == null) continue;
+      declaredPluginJars.add(descriptor.sourceJar().toAbsolutePath().normalize());
+    }
+
+    ArrayList<Path> helperJarPaths = new ArrayList<>();
+    for (Path jarPath : pluginJarPaths(pluginDirectory, log)) {
+      Path normalizedJarPath = jarPath.toAbsolutePath().normalize();
+      if (declaredPluginJars.contains(normalizedJarPath)) {
+        continue;
+      }
+      helperJarPaths.add(normalizedJarPath);
+    }
+    return List.copyOf(helperJarPaths);
+  }
+
   private static Path defaultPluginDirectory() {
     String xdgConfigHome = Objects.toString(System.getenv("XDG_CONFIG_HOME"), "").trim();
     if (!xdgConfigHome.isEmpty()) {
@@ -539,4 +616,7 @@ public final class PluginServiceLoaderSupport {
   }
 
   public record LoadedServices<T>(List<T> services, List<URLClassLoader> pluginClassLoaders) {}
+
+  public record PluginClassLoaderHandle(
+      InstalledPluginDescriptor descriptor, URLClassLoader classLoader) {}
 }
