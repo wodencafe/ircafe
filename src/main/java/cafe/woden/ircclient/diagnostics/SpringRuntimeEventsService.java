@@ -1,6 +1,6 @@
 package cafe.woden.ircclient.diagnostics;
 
-import cafe.woden.ircclient.config.InstalledPluginServices;
+import cafe.woden.ircclient.config.api.InstalledPluginsPort;
 import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.FlowableProcessor;
@@ -50,10 +50,10 @@ public class SpringRuntimeEventsService implements ApplicationListener<Applicati
   }
 
   @Autowired
-  public SpringRuntimeEventsService(InstalledPluginServices installedPluginServices) {
+  public SpringRuntimeEventsService(InstalledPluginsPort installedPluginsPort) {
     this(
-        installedPluginServices == null ? null : installedPluginServices.pluginDirectory(),
-        installedPluginServices == null ? List.of() : installedPluginServices.installedPlugins());
+        installedPluginsPort == null ? null : installedPluginsPort.pluginDirectory(),
+        installedPluginsPort == null ? List.of() : installedPluginsPort.installedPlugins());
   }
 
   SpringRuntimeEventsService(

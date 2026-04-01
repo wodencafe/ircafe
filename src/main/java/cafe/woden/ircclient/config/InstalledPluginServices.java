@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.config;
 
+import cafe.woden.ircclient.config.api.InstalledPluginsPort;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import cafe.woden.ircclient.util.PluginServiceLoaderSupport;
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
 /** Shared runtime plugin classloader used by Spring-managed SPI catalogs. */
 @Component
 @ApplicationLayer
-public final class InstalledPluginServices {
+public final class InstalledPluginServices implements InstalledPluginsPort {
 
   private static final Logger log = LoggerFactory.getLogger(InstalledPluginServices.class);
 
@@ -54,6 +55,7 @@ public final class InstalledPluginServices {
         PluginServiceLoaderSupport.discoverInstalledPlugins(pluginDirectory, log);
   }
 
+  @Override
   public Path pluginDirectory() {
     return pluginDirectory;
   }
@@ -62,6 +64,7 @@ public final class InstalledPluginServices {
     return applicationClassLoader;
   }
 
+  @Override
   public List<InstalledPluginDescriptor> installedPlugins() {
     return installedPlugins;
   }

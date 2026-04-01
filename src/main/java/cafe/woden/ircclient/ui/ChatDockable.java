@@ -5,7 +5,7 @@ import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.config.ExecutorConfig;
-import cafe.woden.ircclient.config.InstalledPluginServices;
+import cafe.woden.ircclient.config.api.InstalledPluginsPort;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
@@ -226,7 +226,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       @Lazy ApplicationDiagnosticsService applicationDiagnosticsService,
       JfrRuntimeEventsService jfrRuntimeEventsService,
       SpringRuntimeEventsService springRuntimeEventsService,
-      InstalledPluginServices installedPluginServices,
+      InstalledPluginsPort installedPluginsPort,
       SlashCommandPresentationCatalog slashCommandPresentationCatalog,
       UiSettingsBus settingsBus,
       SpellcheckSettingsBus spellcheckSettingsBus,
@@ -260,7 +260,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.appAssertjPanel = createAssertjEventsPanel(applicationDiagnosticsService);
     this.appJhiccupPanel = createJhiccupEventsPanel(applicationDiagnosticsService);
     this.appInboundDedupPanel = createInboundDedupPanel(springRuntimeEventsService);
-    this.appPluginsPanel = createPluginsPanel(installedPluginServices);
+    this.appPluginsPanel = createPluginsPanel(installedPluginsPort);
     this.appJfrPanel = new JfrDiagnosticsPanel(jfrRuntimeEventsService);
     this.appSpringPanel = createSpringEventsPanel(springRuntimeEventsService);
 
@@ -429,8 +429,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         springRuntimeEventsService != null ? springRuntimeEventsService.changeStream() : null);
   }
 
-  private RuntimeEventsPanel createPluginsPanel(InstalledPluginServices installedPluginServices) {
-    List<RuntimeDiagnosticEvent> rows = buildInstalledPluginEvents(installedPluginServices);
+  private RuntimeEventsPanel createPluginsPanel(InstalledPluginsPort installedPluginsPort) {
+    List<RuntimeDiagnosticEvent> rows = buildInstalledPluginEvents(installedPluginsPort);
     return new RuntimeEventsPanel(
         "Plugins",
         "Declared external plugin jars discovered from the plugin directory.",
@@ -468,13 +468,13 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   private static List<RuntimeDiagnosticEvent> buildInstalledPluginEvents(
-      InstalledPluginServices installedPluginServices) {
+      InstalledPluginsPort installedPluginsPort) {
     String pluginDirectory =
-        installedPluginServices != null && installedPluginServices.pluginDirectory() != null
-            ? installedPluginServices.pluginDirectory().toString()
+        installedPluginsPort != null && installedPluginsPort.pluginDirectory() != null
+            ? installedPluginsPort.pluginDirectory().toString()
             : "";
     java.time.Instant recordedAt = java.time.Instant.now();
-    if (installedPluginServices == null) {
+    if (installedPluginsPort == null) {
       return List.of(
           new RuntimeDiagnosticEvent(
               recordedAt,
@@ -483,7 +483,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
               "Plugin runtime is not available in this context.",
               pluginDirectory.isBlank() ? "" : "Plugin directory: " + pluginDirectory));
     }
-    List<InstalledPluginDescriptor> installedPlugins = installedPluginServices.installedPlugins();
+    List<InstalledPluginDescriptor> installedPlugins = installedPluginsPort.installedPlugins();
     if (installedPlugins == null || installedPlugins.isEmpty()) {
       return List.of(
           new RuntimeDiagnosticEvent(

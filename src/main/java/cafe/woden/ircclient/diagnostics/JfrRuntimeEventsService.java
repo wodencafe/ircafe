@@ -1,8 +1,8 @@
 package cafe.woden.ircclient.diagnostics;
 
 import cafe.woden.ircclient.config.ExecutorConfig;
-import cafe.woden.ircclient.config.InstalledPluginServices;
 import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.InstalledPluginsPort;
 import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import cafe.woden.ircclient.util.VirtualThreads;
 import com.sun.management.HotSpotDiagnosticMXBean;
@@ -118,12 +118,12 @@ public class JfrRuntimeEventsService {
       DiagnosticsRuntimeConfigPort runtimeConfig,
       @Qualifier(ExecutorConfig.JFR_RUNTIME_EVENTS_SAMPLER_SCHEDULER)
           ScheduledExecutorService samplerExec,
-      InstalledPluginServices installedPluginServices) {
+      InstalledPluginsPort installedPluginsPort) {
     this(
         runtimeConfig,
         samplerExec,
-        installedPluginServices == null ? null : installedPluginServices.pluginDirectory(),
-        installedPluginServices == null ? List.of() : installedPluginServices.installedPlugins());
+        installedPluginsPort == null ? null : installedPluginsPort.pluginDirectory(),
+        installedPluginsPort == null ? List.of() : installedPluginsPort.installedPlugins());
   }
 
   JfrRuntimeEventsService(
