@@ -38,12 +38,50 @@ public final class PluginServiceLoaderSupport {
       Path pluginDirectory,
       ClassLoader applicationClassLoader,
       Logger log) {
-    URLClassLoader pluginClassLoader =
-        openPluginClassLoader(pluginDirectory, applicationClassLoader, log);
-    return new LoadedServices<>(
-        loadInstalledServices(
-            serviceType, builtInServices, applicationClassLoader, pluginClassLoader),
-        pluginClassLoader == null ? List.of() : List.of(pluginClassLoader));
+    ArrayList<T> loadedServices =
+        new ArrayList<>(
+            loadInstalledServices(serviceType, builtInServices, applicationClassLoader, null));
+    List<PluginClassLoaderHandle> pluginClassLoaderHandles =
+        openInstalledPluginClassLoaders(
+            pluginDirectory,
+            discoverInstalledPlugins(pluginDirectory, log),
+            applicationClassLoader,
+            log);
+    if (pluginClassLoaderHandles.isEmpty()) {
+      return new LoadedServices<>(List.copyOf(loadedServices), List.of());
+    }
+
+    LinkedHashSet<String> providerClassNames = new LinkedHashSet<>();
+    for (T loadedService : loadedServices) {
+      if (loadedService == null) {
+        continue;
+      }
+      providerClassNames.add(loadedService.getClass().getName());
+    }
+
+    ArrayList<URLClassLoader> pluginClassLoaders = new ArrayList<>(pluginClassLoaderHandles.size());
+    for (PluginClassLoaderHandle handle : pluginClassLoaderHandles) {
+      if (handle == null || handle.classLoader() == null) {
+        continue;
+      }
+      pluginClassLoaders.add(handle.classLoader());
+      try {
+        loadServices(
+            loadInstalledServices(serviceType, List.of(), null, handle.classLoader()),
+            loadedServices,
+            providerClassNames);
+      } catch (RuntimeException e) {
+        if (log != null) {
+          log.warn(
+              "[ircafe] failed to load plugin providers for {} from plugin '{}' ({})",
+              serviceType.getName(),
+              handle.descriptor().pluginId(),
+              handle.descriptor().sourceJar(),
+              e);
+        }
+      }
+    }
+    return new LoadedServices<>(List.copyOf(loadedServices), List.copyOf(pluginClassLoaders));
   }
 
   public static <T> List<T> loadInstalledServices(

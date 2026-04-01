@@ -1,11 +1,14 @@
 package cafe.woden.ircclient.util;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.app.commands.BackendNamedCommandHandler;
 import cafe.woden.ircclient.app.commands.ParsedInput;
 import java.io.IOException;
+import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,16 +34,7 @@ class PluginServiceLoaderSupportTest {
     Path pluginDir = Files.createDirectories(tempDir.resolve("plugins"));
     writePluginJar(pluginDir.resolve("broken-provider.jar"));
 
-    IllegalStateException error =
-        assertThrows(
-            IllegalStateException.class,
-            () ->
-                PluginServiceLoaderSupport.loadInstalledServices(
-                    BackendNamedCommandHandler.class,
-                    List.of(),
-                    pluginDir,
-                    PluginServiceLoaderSupportTest.class.getClassLoader(),
-                    null));
+    IllegalStateException error = loadFailureFromSharedPluginClassLoader(pluginDir);
 
     assertTrue(error.getMessage().contains(BackendNamedCommandHandler.class.getName()));
     assertTrue(error.getMessage().contains(PrivateBackendNamedCommandHandler.class.getName()));
@@ -81,16 +75,7 @@ class PluginServiceLoaderSupportTest {
         BackendNamedCommandHandler.class.getName(),
         Map.of());
 
-    IllegalStateException error =
-        assertThrows(
-            IllegalStateException.class,
-            () ->
-                PluginServiceLoaderSupport.loadInstalledServices(
-                    BackendNamedCommandHandler.class,
-                    List.of(),
-                    pluginDir,
-                    PluginServiceLoaderSupportTest.class.getClassLoader(),
-                    null));
+    IllegalStateException error = loadFailureFromSharedPluginClassLoader(pluginDir);
 
     assertTrue(error.getMessage().contains(REAL_PLUGIN_PROVIDER_CLASS));
     assertTrue(error.getMessage().contains(PluginServiceLoaderSupport.PLUGIN_ID_ATTRIBUTE));
@@ -112,16 +97,7 @@ class PluginServiceLoaderSupportTest {
             PluginServiceLoaderSupport.PLUGIN_API_VERSION_ATTRIBUTE,
             "99"));
 
-    IllegalStateException error =
-        assertThrows(
-            IllegalStateException.class,
-            () ->
-                PluginServiceLoaderSupport.loadInstalledServices(
-                    BackendNamedCommandHandler.class,
-                    List.of(),
-                    pluginDir,
-                    PluginServiceLoaderSupportTest.class.getClassLoader(),
-                    null));
+    IllegalStateException error = loadFailureFromSharedPluginClassLoader(pluginDir);
 
     assertTrue(error.getMessage().contains("unsupported plugin API version 99"));
     assertTrue(
@@ -148,16 +124,7 @@ class PluginServiceLoaderSupportTest {
         BackendNamedCommandHandler.class.getName(),
         duplicateManifest);
 
-    IllegalStateException error =
-        assertThrows(
-            IllegalStateException.class,
-            () ->
-                PluginServiceLoaderSupport.loadInstalledServices(
-                    BackendNamedCommandHandler.class,
-                    List.of(),
-                    pluginDir,
-                    PluginServiceLoaderSupportTest.class.getClassLoader(),
-                    null));
+    IllegalStateException error = loadFailureFromSharedPluginClassLoader(pluginDir);
 
     assertTrue(error.getMessage().contains("duplicate plugin id 'duplicate-plugin'"));
   }
@@ -181,6 +148,42 @@ class PluginServiceLoaderSupportTest {
     assertTrue("2.0.0".equals(plugins.getFirst().pluginVersion()));
   }
 
+  @Test
+  void pathBasedLoadingKeepsHealthyPluginProvidersWhenAnotherPluginIsInvalid() throws Exception {
+    Path pluginDir = Files.createDirectories(tempDir.resolve("plugins"));
+    CompiledPluginJarSupport.writePluginJar(
+        pluginDir.resolve("healthy-provider.jar"),
+        REAL_PLUGIN_PROVIDER_CLASS,
+        pluginProviderSource(REAL_PLUGIN_PROVIDER_CLASS),
+        BackendNamedCommandHandler.class.getName(),
+        CompiledPluginJarSupport.compatibleManifest("healthy-plugin", "1.2.3"));
+    writeBrokenManifestProviderJar(pluginDir.resolve("broken-provider.jar"), "broken-plugin");
+
+    PluginServiceLoaderSupport.LoadedServices<BackendNamedCommandHandler> loadedServices =
+        PluginServiceLoaderSupport.loadInstalledServices(
+            BackendNamedCommandHandler.class,
+            List.of(),
+            pluginDir,
+            PluginServiceLoaderSupportTest.class.getClassLoader(),
+            null);
+    try {
+      assertEquals(2, loadedServices.pluginClassLoaders().size());
+      assertTrue(
+          loadedServices.services().stream()
+              .anyMatch(
+                  service -> REAL_PLUGIN_PROVIDER_CLASS.equals(service.getClass().getName())));
+      assertTrue(
+          loadedServices.services().stream()
+              .noneMatch(
+                  service ->
+                      "plugin.installed.MissingBackendNamedCommandHandler"
+                          .equals(service.getClass().getName())));
+    } finally {
+      PluginServiceLoaderSupport.closePluginClassLoaders(
+          loadedServices.pluginClassLoaders(), null, "ignored");
+    }
+  }
+
   private static void writePluginJar(Path jarPath) throws IOException {
     try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath))) {
       out.putNextEntry(
@@ -188,6 +191,23 @@ class PluginServiceLoaderSupportTest {
       out.write(
           (PrivateBackendNamedCommandHandler.class.getName() + System.lineSeparator())
               .getBytes(StandardCharsets.UTF_8));
+      out.closeEntry();
+    }
+  }
+
+  private static void writeBrokenManifestProviderJar(Path jarPath, String pluginId)
+      throws IOException {
+    var manifest = new java.util.jar.Manifest();
+    var attributes = manifest.getMainAttributes();
+    attributes.put(java.util.jar.Attributes.Name.MANIFEST_VERSION, "1.0");
+    for (var entry : CompiledPluginJarSupport.compatibleManifest(pluginId, "1.0.0").entrySet()) {
+      attributes.putValue(entry.getKey(), entry.getValue());
+    }
+    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath), manifest)) {
+      out.putNextEntry(
+          new JarEntry("META-INF/services/" + BackendNamedCommandHandler.class.getName()));
+      out.write(
+          "plugin.installed.MissingBackendNamedCommandHandler\n".getBytes(StandardCharsets.UTF_8));
       out.closeEntry();
     }
   }
@@ -224,6 +244,22 @@ class PluginServiceLoaderSupportTest {
         }
         """
         .formatted(packageName, simpleName);
+  }
+
+  private static IllegalStateException loadFailureFromSharedPluginClassLoader(Path pluginDir) {
+    URLClassLoader pluginClassLoader =
+        PluginServiceLoaderSupport.openPluginClassLoader(
+            pluginDir, PluginServiceLoaderSupportTest.class.getClassLoader(), null);
+    assertNotNull(pluginClassLoader);
+    try {
+      return assertThrows(
+          IllegalStateException.class,
+          () ->
+              PluginServiceLoaderSupport.loadInstalledServices(
+                  BackendNamedCommandHandler.class, List.of(), null, pluginClassLoader));
+    } finally {
+      PluginServiceLoaderSupport.closePluginClassLoader(pluginClassLoader, null, "ignored");
+    }
   }
 
   private static final class PrivateBackendNamedCommandHandler

@@ -5,14 +5,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
+import cafe.woden.ircclient.util.CompiledPluginJarSupport;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
+import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -91,7 +94,15 @@ class BackendNamedCommandCatalogTest {
   }
 
   private static void writePluginJar(Path jarPath) throws IOException {
-    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath))) {
+    Manifest manifest = new Manifest();
+    Attributes attributes = manifest.getMainAttributes();
+    attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
+    for (var entry :
+        CompiledPluginJarSupport.compatibleManifest("backend-named-command-test", "1.0.0")
+            .entrySet()) {
+      attributes.putValue(entry.getKey(), entry.getValue());
+    }
+    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath), manifest)) {
       out.putNextEntry(
           new JarEntry("META-INF/services/" + BackendNamedCommandHandler.class.getName()));
       out.write(

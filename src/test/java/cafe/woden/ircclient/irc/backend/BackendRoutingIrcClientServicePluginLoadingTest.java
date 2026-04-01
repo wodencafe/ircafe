@@ -12,6 +12,7 @@ import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.api.BackendMetadataPort;
 import cafe.woden.ircclient.config.api.RuntimeConfigPathPort;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
+import cafe.woden.ircclient.util.CompiledPluginJarSupport;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
@@ -23,8 +24,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -102,7 +105,15 @@ class BackendRoutingIrcClientServicePluginLoadingTest {
   }
 
   private static void writePluginJar(Path jarPath) throws IOException {
-    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath))) {
+    Manifest manifest = new Manifest();
+    Attributes attributes = manifest.getMainAttributes();
+    attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
+    for (var entry :
+        CompiledPluginJarSupport.compatibleManifest("plugin-backend-transport", "1.0.0")
+            .entrySet()) {
+      attributes.putValue(entry.getKey(), entry.getValue());
+    }
+    try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jarPath), manifest)) {
       out.putNextEntry(
           new JarEntry("META-INF/services/" + IrcBackendClientService.class.getName()));
       out.write(
