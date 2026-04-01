@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.diagnostics;
 
+import cafe.woden.ircclient.config.api.InstalledPluginProblem;
 import cafe.woden.ircclient.config.api.InstalledPluginsPort;
 import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import io.reactivex.rxjava3.core.Flowable;
@@ -43,23 +44,33 @@ public class SpringRuntimeEventsService implements ApplicationListener<Applicati
       PublishProcessor.<Long>create().toSerialized();
   private final Path pluginDirectory;
   private final List<InstalledPluginDescriptor> installedPlugins;
+  private final List<InstalledPluginProblem> pluginProblems;
   private long changeSeq = 0L;
 
   public SpringRuntimeEventsService() {
-    this(null, List.of());
+    this(null, List.of(), List.of());
   }
 
   @Autowired
   public SpringRuntimeEventsService(InstalledPluginsPort installedPluginsPort) {
     this(
         installedPluginsPort == null ? null : installedPluginsPort.pluginDirectory(),
-        installedPluginsPort == null ? List.of() : installedPluginsPort.installedPlugins());
+        installedPluginsPort == null ? List.of() : installedPluginsPort.installedPlugins(),
+        installedPluginsPort == null ? List.of() : installedPluginsPort.pluginProblems());
   }
 
   SpringRuntimeEventsService(
       Path pluginDirectory, List<InstalledPluginDescriptor> installedPlugins) {
+    this(pluginDirectory, installedPlugins, List.of());
+  }
+
+  SpringRuntimeEventsService(
+      Path pluginDirectory,
+      List<InstalledPluginDescriptor> installedPlugins,
+      List<InstalledPluginProblem> pluginProblems) {
     this.pluginDirectory = pluginDirectory;
     this.installedPlugins = List.copyOf(Objects.requireNonNullElse(installedPlugins, List.of()));
+    this.pluginProblems = List.copyOf(Objects.requireNonNullElse(pluginProblems, List.of()));
   }
 
   @PostConstruct
@@ -77,6 +88,14 @@ public class SpringRuntimeEventsService implements ApplicationListener<Applicati
           "InstalledPlugins",
           "Discovered " + installedPlugins.size() + " declared plugin(s).",
           describeInstalledPlugins());
+    }
+    if (!pluginProblems.isEmpty()) {
+      appendEvent(
+          Instant.now(),
+          "ERROR",
+          "PluginProblems",
+          "Detected " + pluginProblems.size() + " plugin problem(s).",
+          describePluginProblems());
     }
   }
 
@@ -269,6 +288,24 @@ public class SpringRuntimeEventsService implements ApplicationListener<Applicati
       out.append("pluginApiVersion=").append(plugin.pluginApiVersion()).append('\n');
       if (plugin.sourceJar() != null) {
         out.append("sourceJar=").append(plugin.sourceJar().toAbsolutePath()).append('\n');
+      }
+      out.append('\n');
+    }
+    return out.toString().trim();
+  }
+
+  private String describePluginProblems() {
+    StringBuilder out = new StringBuilder(512);
+    if (pluginDirectory != null) {
+      out.append("pluginDirectory=").append(pluginDirectory.toAbsolutePath()).append('\n');
+    }
+    for (InstalledPluginProblem problem : pluginProblems) {
+      if (problem == null) continue;
+      out.append("level=").append(problem.level()).append('\n');
+      out.append("summary=").append(problem.summary()).append('\n');
+      String details = Objects.toString(problem.details(), "");
+      if (!details.isBlank()) {
+        out.append(details).append('\n');
       }
       out.append('\n');
     }

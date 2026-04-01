@@ -5,6 +5,7 @@ import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.config.api.InstalledPluginProblem;
 import cafe.woden.ircclient.config.api.InstalledPluginsPort;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
@@ -484,7 +485,10 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
               pluginDirectory.isBlank() ? "" : "Plugin directory: " + pluginDirectory));
     }
     List<InstalledPluginDescriptor> installedPlugins = installedPluginsPort.installedPlugins();
-    if (installedPlugins == null || installedPlugins.isEmpty()) {
+    List<InstalledPluginProblem> pluginProblems = installedPluginsPort.pluginProblems();
+    boolean hasInstalledPlugins = installedPlugins != null && !installedPlugins.isEmpty();
+    boolean hasPluginProblems = pluginProblems != null && !pluginProblems.isEmpty();
+    if (!hasInstalledPlugins && !hasPluginProblems) {
       return List.of(
           new RuntimeDiagnosticEvent(
               recordedAt,
@@ -494,36 +498,62 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
               pluginDirectory.isBlank() ? "" : "Plugin directory: " + pluginDirectory));
     }
 
-    ArrayList<RuntimeDiagnosticEvent> rows = new ArrayList<>(installedPlugins.size());
-    for (InstalledPluginDescriptor descriptor : installedPlugins) {
-      if (descriptor == null) continue;
-      String pluginId = Objects.toString(descriptor.pluginId(), "").trim();
-      String pluginVersion = Objects.toString(descriptor.pluginVersion(), "").trim();
-      String versionLabel = pluginVersion.isBlank() ? "unknown" : pluginVersion;
-      String sourceJar = Objects.toString(descriptor.sourceJar(), "").trim();
-      StringBuilder details = new StringBuilder();
-      details
-          .append("Plugin ID: ")
-          .append(pluginId.isBlank() ? "(unknown)" : pluginId)
-          .append('\n')
-          .append("Version: ")
-          .append(versionLabel)
-          .append('\n')
-          .append("API Version: ")
-          .append(descriptor.pluginApiVersion());
-      if (!sourceJar.isBlank()) {
-        details.append('\n').append("Source Jar: ").append(sourceJar);
+    ArrayList<RuntimeDiagnosticEvent> rows =
+        new ArrayList<>(
+            (hasInstalledPlugins ? installedPlugins.size() : 0)
+                + (hasPluginProblems ? pluginProblems.size() : 0));
+    if (hasInstalledPlugins) {
+      for (InstalledPluginDescriptor descriptor : installedPlugins) {
+        if (descriptor == null) continue;
+        String pluginId = Objects.toString(descriptor.pluginId(), "").trim();
+        String pluginVersion = Objects.toString(descriptor.pluginVersion(), "").trim();
+        String versionLabel = pluginVersion.isBlank() ? "unknown" : pluginVersion;
+        String sourceJar = Objects.toString(descriptor.sourceJar(), "").trim();
+        StringBuilder details = new StringBuilder();
+        details
+            .append("Plugin ID: ")
+            .append(pluginId.isBlank() ? "(unknown)" : pluginId)
+            .append('\n')
+            .append("Version: ")
+            .append(versionLabel)
+            .append('\n')
+            .append("API Version: ")
+            .append(descriptor.pluginApiVersion());
+        if (!sourceJar.isBlank()) {
+          details.append('\n').append("Source Jar: ").append(sourceJar);
+        }
+        if (!pluginDirectory.isBlank()) {
+          details.append('\n').append("Plugin Directory: ").append(pluginDirectory);
+        }
+        rows.add(
+            new RuntimeDiagnosticEvent(
+                recordedAt,
+                "INFO",
+                "Plugin",
+                (pluginId.isBlank() ? "(unknown)" : pluginId) + " " + versionLabel,
+                details.toString()));
       }
-      if (!pluginDirectory.isBlank()) {
-        details.append('\n').append("Plugin Directory: ").append(pluginDirectory);
+    }
+    if (hasPluginProblems) {
+      for (InstalledPluginProblem problem : pluginProblems) {
+        if (problem == null) continue;
+        StringBuilder details = new StringBuilder(Objects.toString(problem.details(), ""));
+        if (!pluginDirectory.isBlank()
+            && !details.toString().contains("Plugin directory:")
+            && !details.toString().contains("Plugin Directory:")) {
+          if (!details.isEmpty()) {
+            details.append('\n');
+          }
+          details.append("Plugin directory: ").append(pluginDirectory);
+        }
+        rows.add(
+            new RuntimeDiagnosticEvent(
+                recordedAt,
+                problem.level(),
+                "Plugin Problem",
+                problem.summary(),
+                details.toString()));
       }
-      rows.add(
-          new RuntimeDiagnosticEvent(
-              recordedAt,
-              "INFO",
-              "Plugin",
-              (pluginId.isBlank() ? "(unknown)" : pluginId) + " " + versionLabel,
-              details.toString()));
     }
     return List.copyOf(rows);
   }

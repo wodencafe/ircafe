@@ -18,4 +18,8 @@ public interface InstalledPluginsPort {
   default List<InstalledPluginDescriptor> installedPlugins() {
     return List.of();
   }
+
+  default List<InstalledPluginProblem> pluginProblems() {
+    return List.of();
+  }
 }

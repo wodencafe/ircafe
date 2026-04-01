@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.api.DiagnosticsRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.InstalledPluginProblem;
 import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -90,7 +91,12 @@ class JfrRuntimeEventsServiceTest {
             runtimeConfig,
             java.util.concurrent.Executors.newSingleThreadScheduledExecutor(),
             runtimeConfigDirectory.resolve("plugins"),
-            List.of(new InstalledPluginDescriptor("sample-plugin", "1.4.0", 1, pluginJar)));
+            List.of(new InstalledPluginDescriptor("sample-plugin", "1.4.0", 1, pluginJar)),
+            List.of(
+                new InstalledPluginProblem(
+                    "ERROR",
+                    "Failed to load plugin providers for backend commands",
+                    "Provider class could not be loaded")));
     try {
       JfrRuntimeEventsService.MemoryDiagnosticsExportReport report =
           service.captureMemoryDiagnosticsBundle(false);
@@ -104,8 +110,13 @@ class JfrRuntimeEventsServiceTest {
 
         assertTrue(runtimeSummary.contains("Plugins:"));
         assertTrue(runtimeSummary.contains("Installed: 1"));
+        assertTrue(runtimeSummary.contains("Problems: 1"));
         assertTrue(runtimeSummary.contains("sample-plugin v1.4.0 (api 1)"));
         assertTrue(runtimeSummary.contains(pluginJar.toAbsolutePath().toString()));
+        assertTrue(
+            runtimeSummary.contains(
+                "[ERROR] Failed to load plugin providers for backend commands"));
+        assertTrue(runtimeSummary.contains("Provider class could not be loaded"));
       }
     } finally {
       service.stop();

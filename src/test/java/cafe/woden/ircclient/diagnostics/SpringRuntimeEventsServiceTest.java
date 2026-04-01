@@ -3,6 +3,7 @@ package cafe.woden.ircclient.diagnostics;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.api.InstalledPluginProblem;
 import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.nio.file.Path;
@@ -112,6 +113,30 @@ class SpringRuntimeEventsServiceTest {
     assertTrue(pluginEvent.details().contains("pluginId=sample-plugin"));
     assertTrue(pluginEvent.details().contains("pluginVersion=1.2.0"));
     assertTrue(pluginEvent.details().contains("sourceJar=/tmp/ircafe/plugins/sample.jar"));
+  }
+
+  @Test
+  void onStartAddsPluginProblemsWhenPluginIssuesArePresent() {
+    SpringRuntimeEventsService service =
+        new SpringRuntimeEventsService(
+            Path.of("/tmp/ircafe/plugins"),
+            List.of(),
+            List.of(
+                new InstalledPluginProblem(
+                    "ERROR",
+                    "Failed to load plugin providers for backend commands",
+                    "Provider class could not be loaded")));
+
+    service.onStart();
+
+    List<RuntimeDiagnosticEvent> events = service.recentEvents(10);
+    assertEquals(2, events.size());
+    RuntimeDiagnosticEvent pluginProblemEvent = events.getFirst();
+    assertEquals("ERROR", pluginProblemEvent.level());
+    assertEquals("PluginProblems", pluginProblemEvent.type());
+    assertEquals("Detected 1 plugin problem(s).", pluginProblemEvent.summary());
+    assertTrue(pluginProblemEvent.details().contains("summary=Failed to load plugin providers"));
+    assertTrue(pluginProblemEvent.details().contains("Provider class could not be loaded"));
   }
 
   private static final class WarnSignalEvent extends ApplicationEvent {
