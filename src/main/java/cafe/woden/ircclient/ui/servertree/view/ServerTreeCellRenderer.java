@@ -386,6 +386,8 @@ public final class ServerTreeCellRenderer extends DefaultTreeCellRenderer {
           setTreeIcon("refresh");
         } else if (nodeData.ref != null && nodeData.ref.isApplicationInboundDedup()) {
           setTreeIcon("copy");
+        } else if (nodeData.ref != null && nodeData.ref.isApplicationPlugins()) {
+          setTreeIcon("info");
         } else if (nodeData.ref != null && nodeData.ref.isApplicationJfr()) {
           boolean active = context.isApplicationJfrActive();
           String iconName = active ? "play" : "pause";

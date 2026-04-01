@@ -340,6 +340,9 @@ public final class ServerTreeTooltipProvider {
     if (nodeData.ref.isApplicationInboundDedup()) {
       return "Inbound duplicate message suppression diagnostics (msgid replay / resend telemetry).";
     }
+    if (nodeData.ref.isApplicationPlugins()) {
+      return "Declared external plugin jars discovered from the plugin directory.";
+    }
     if (nodeData.ref.isApplicationJfr()) {
       return context.isApplicationJfrActive()
           ? "Runtime JFR diagnostics are active (status gauges + JFR event stream)."

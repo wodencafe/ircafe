@@ -76,6 +76,11 @@ class ChatDockableWiringSmokeTest {
 
       assertEquals("Ignores", onEdtCall(fixture.chat::getTabText));
 
+      onEdt(() -> fixture.chat.setActiveTarget(TargetRef.applicationPlugins()));
+      flushEdt();
+
+      assertEquals("Plugins", onEdtCall(fixture.chat::getTabText));
+
       onEdt(() -> fixture.chat.setActiveTarget(channelTarget));
       flushEdt();
 
@@ -274,6 +279,7 @@ class ChatDockableWiringSmokeTest {
                     interceptorStore,
                     dccTransferStore,
                     terminalDockable,
+                    null,
                     null,
                     null,
                     null,

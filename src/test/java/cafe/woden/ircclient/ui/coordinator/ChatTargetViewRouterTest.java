@@ -37,6 +37,7 @@ class ChatTargetViewRouterTest {
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    RuntimeEventsPanel appPluginsPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
     RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
 
@@ -56,6 +57,7 @@ class ChatTargetViewRouterTest {
             appAssertjPanel,
             appJhiccupPanel,
             appInboundDedupPanel,
+            appPluginsPanel,
             appJfrPanel,
             appSpringPanel,
             refreshedServerId::set,
@@ -88,6 +90,7 @@ class ChatTargetViewRouterTest {
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    RuntimeEventsPanel appPluginsPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
     RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
 
@@ -107,6 +110,7 @@ class ChatTargetViewRouterTest {
             appAssertjPanel,
             appJhiccupPanel,
             appInboundDedupPanel,
+            appPluginsPanel,
             appJfrPanel,
             appSpringPanel,
             refreshedServerId::set,
@@ -134,6 +138,7 @@ class ChatTargetViewRouterTest {
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    RuntimeEventsPanel appPluginsPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
     RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
 
@@ -151,6 +156,7 @@ class ChatTargetViewRouterTest {
             appAssertjPanel,
             appJhiccupPanel,
             appInboundDedupPanel,
+            appPluginsPanel,
             appJfrPanel,
             appSpringPanel,
             sid -> {},
@@ -176,6 +182,7 @@ class ChatTargetViewRouterTest {
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    RuntimeEventsPanel appPluginsPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
     RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
 
@@ -193,6 +200,7 @@ class ChatTargetViewRouterTest {
             appAssertjPanel,
             appJhiccupPanel,
             appInboundDedupPanel,
+            appPluginsPanel,
             appJfrPanel,
             appSpringPanel,
             sid -> {},
@@ -218,6 +226,7 @@ class ChatTargetViewRouterTest {
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    RuntimeEventsPanel appPluginsPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
     RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
 
@@ -235,6 +244,7 @@ class ChatTargetViewRouterTest {
             appAssertjPanel,
             appJhiccupPanel,
             appInboundDedupPanel,
+            appPluginsPanel,
             appJfrPanel,
             appSpringPanel,
             sid -> {},
@@ -256,7 +266,8 @@ class ChatTargetViewRouterTest {
         appJhiccupPanel,
         appInboundDedupPanel,
         appJfrPanel,
-        appSpringPanel);
+        appSpringPanel,
+        appPluginsPanel);
   }
 
   @Test
@@ -272,6 +283,7 @@ class ChatTargetViewRouterTest {
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    RuntimeEventsPanel appPluginsPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
     RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
 
@@ -289,6 +301,7 @@ class ChatTargetViewRouterTest {
             appAssertjPanel,
             appJhiccupPanel,
             appInboundDedupPanel,
+            appPluginsPanel,
             appJfrPanel,
             appSpringPanel,
             sid -> {},
@@ -313,6 +326,7 @@ class ChatTargetViewRouterTest {
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    RuntimeEventsPanel appPluginsPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
     RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
 
@@ -330,6 +344,7 @@ class ChatTargetViewRouterTest {
             appAssertjPanel,
             appJhiccupPanel,
             appInboundDedupPanel,
+            appPluginsPanel,
             appJfrPanel,
             appSpringPanel,
             sid -> {},
@@ -355,6 +370,7 @@ class ChatTargetViewRouterTest {
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    RuntimeEventsPanel appPluginsPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
     RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
 
@@ -372,6 +388,7 @@ class ChatTargetViewRouterTest {
             appAssertjPanel,
             appJhiccupPanel,
             appInboundDedupPanel,
+            appPluginsPanel,
             appJfrPanel,
             appSpringPanel,
             sid -> {},
@@ -382,6 +399,49 @@ class ChatTargetViewRouterTest {
 
     assertEquals(ChatTargetViewRouter.TargetViewType.UI_ONLY, viewType);
     verify(appInboundDedupPanel).refreshNow();
+  }
+
+  @Test
+  void routeApplicationPluginsRefreshesPanelAndUsesUiOnlyView() {
+    NotificationsPanel notificationsPanel = mock(NotificationsPanel.class);
+    ChannelListPanel channelListPanel = mock(ChannelListPanel.class);
+    IgnoresPanel ignoresPanel = mock(IgnoresPanel.class);
+    DccTransfersPanel dccTransfersPanel = mock(DccTransfersPanel.class);
+    MonitorPanel monitorPanel = mock(MonitorPanel.class);
+    LogViewerPanel logViewerPanel = mock(LogViewerPanel.class);
+    InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    RuntimeEventsPanel appUnhandledErrorsPanel = mock(RuntimeEventsPanel.class);
+    RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
+    RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
+    InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    RuntimeEventsPanel appPluginsPanel = mock(RuntimeEventsPanel.class);
+    JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
+    RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
+
+    ChatTargetViewRouter router =
+        new ChatTargetViewRouter(
+            createCardDeck(),
+            notificationsPanel,
+            channelListPanel,
+            ignoresPanel,
+            dccTransfersPanel,
+            monitorPanel,
+            logViewerPanel,
+            interceptorPanel,
+            appUnhandledErrorsPanel,
+            appAssertjPanel,
+            appJhiccupPanel,
+            appInboundDedupPanel,
+            appPluginsPanel,
+            appJfrPanel,
+            appSpringPanel,
+            sid -> {},
+            sid -> {});
+
+    ChatTargetViewRouter.TargetViewType viewType = router.route(TargetRef.applicationPlugins());
+
+    assertEquals(ChatTargetViewRouter.TargetViewType.UI_ONLY, viewType);
+    verify(appPluginsPanel).refreshNow();
   }
 
   @Test
@@ -397,6 +457,7 @@ class ChatTargetViewRouterTest {
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    RuntimeEventsPanel appPluginsPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
     RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
 
@@ -414,6 +475,7 @@ class ChatTargetViewRouterTest {
             appAssertjPanel,
             appJhiccupPanel,
             appInboundDedupPanel,
+            appPluginsPanel,
             appJfrPanel,
             appSpringPanel,
             sid -> {},
@@ -438,6 +500,7 @@ class ChatTargetViewRouterTest {
     RuntimeEventsPanel appAssertjPanel = mock(RuntimeEventsPanel.class);
     RuntimeEventsPanel appJhiccupPanel = mock(RuntimeEventsPanel.class);
     InboundDedupDiagnosticsPanel appInboundDedupPanel = mock(InboundDedupDiagnosticsPanel.class);
+    RuntimeEventsPanel appPluginsPanel = mock(RuntimeEventsPanel.class);
     JfrDiagnosticsPanel appJfrPanel = mock(JfrDiagnosticsPanel.class);
     RuntimeEventsPanel appSpringPanel = mock(RuntimeEventsPanel.class);
 
@@ -455,6 +518,7 @@ class ChatTargetViewRouterTest {
             appAssertjPanel,
             appJhiccupPanel,
             appInboundDedupPanel,
+            appPluginsPanel,
             appJfrPanel,
             appSpringPanel,
             sid -> {},
@@ -480,6 +544,7 @@ class ChatTargetViewRouterTest {
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_APP_ASSERTJ);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_APP_JHICCUP);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_APP_INBOUND_DEDUP);
+    deck.add(new JPanel(), ChatTargetViewRouter.CARD_APP_PLUGINS);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_APP_JFR);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_APP_SPRING);
     deck.add(new JPanel(), ChatTargetViewRouter.CARD_TERMINAL);

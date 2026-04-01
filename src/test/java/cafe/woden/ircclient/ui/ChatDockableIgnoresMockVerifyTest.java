@@ -153,6 +153,7 @@ class ChatDockableIgnoresMockVerifyTest {
                     null,
                     null,
                     null,
+                    null,
                     slashCommandPresentationCatalog,
                     settingsBus,
                     spellcheckSettingsBus,

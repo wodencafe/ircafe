@@ -117,4 +117,16 @@ class TargetRefUiOnlyTest {
         ref,
         new TargetRef(TargetRef.APPLICATION_SERVER_ID, TargetRef.APPLICATION_INBOUND_DEDUP_TARGET));
   }
+
+  @Test
+  void applicationPluginsTargetIsUiOnly() {
+    TargetRef ref = TargetRef.applicationPlugins();
+    assertTrue(ref.isApplicationPlugins());
+    assertTrue(ref.isApplicationUi());
+    assertTrue(ref.isUiOnly());
+    assertFalse(ref.isStatus());
+    assertFalse(ref.isChannel());
+    assertEquals(
+        ref, new TargetRef(TargetRef.APPLICATION_SERVER_ID, TargetRef.APPLICATION_PLUGINS_TARGET));
+  }
 }

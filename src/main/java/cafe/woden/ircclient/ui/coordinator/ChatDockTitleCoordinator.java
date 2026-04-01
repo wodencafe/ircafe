@@ -74,6 +74,7 @@ public final class ChatDockTitleCoordinator {
     if (target.isApplicationAssertjSwing()) return "AssertJ Swing";
     if (target.isApplicationJhiccup()) return "jHiccup";
     if (target.isApplicationInboundDedup()) return "Inbound Dedup";
+    if (target.isApplicationPlugins()) return "Plugins";
     if (target.isApplicationJfr()) return "JFR";
     if (target.isApplicationSpring()) return "Spring";
     if (target.isApplicationTerminal()) return "Terminal";

@@ -5,6 +5,7 @@ import cafe.woden.ircclient.app.api.PrivateMessageRequest;
 import cafe.woden.ircclient.app.api.UserActionRequest;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.config.ExecutorConfig;
+import cafe.woden.ircclient.config.InstalledPluginServices;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
@@ -64,6 +65,7 @@ import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.app.Docking;
 import io.reactivex.rxjava3.core.Flowable;
@@ -150,6 +152,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final RuntimeEventsPanel appAssertjPanel;
   private final RuntimeEventsPanel appJhiccupPanel;
   private final InboundDedupDiagnosticsPanel appInboundDedupPanel;
+  private final RuntimeEventsPanel appPluginsPanel;
   private final JfrDiagnosticsPanel appJfrPanel;
   private final RuntimeEventsPanel appSpringPanel;
   private final TerminalDockable terminalPanel;
@@ -223,6 +226,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       @Lazy ApplicationDiagnosticsService applicationDiagnosticsService,
       JfrRuntimeEventsService jfrRuntimeEventsService,
       SpringRuntimeEventsService springRuntimeEventsService,
+      InstalledPluginServices installedPluginServices,
       SlashCommandPresentationCatalog slashCommandPresentationCatalog,
       UiSettingsBus settingsBus,
       SpellcheckSettingsBus spellcheckSettingsBus,
@@ -256,6 +260,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.appAssertjPanel = createAssertjEventsPanel(applicationDiagnosticsService);
     this.appJhiccupPanel = createJhiccupEventsPanel(applicationDiagnosticsService);
     this.appInboundDedupPanel = createInboundDedupPanel(springRuntimeEventsService);
+    this.appPluginsPanel = createPluginsPanel(installedPluginServices);
     this.appJfrPanel = new JfrDiagnosticsPanel(jfrRuntimeEventsService);
     this.appSpringPanel = createSpringEventsPanel(springRuntimeEventsService);
 
@@ -424,6 +429,17 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         springRuntimeEventsService != null ? springRuntimeEventsService.changeStream() : null);
   }
 
+  private RuntimeEventsPanel createPluginsPanel(InstalledPluginServices installedPluginServices) {
+    List<RuntimeDiagnosticEvent> rows = buildInstalledPluginEvents(installedPluginServices);
+    return new RuntimeEventsPanel(
+        "Plugins",
+        "Declared external plugin jars discovered from the plugin directory.",
+        () -> rows,
+        null,
+        "plugins",
+        Flowable.never());
+  }
+
   private InboundDedupDiagnosticsPanel createInboundDedupPanel(
       SpringRuntimeEventsService springRuntimeEventsService) {
     return new InboundDedupDiagnosticsPanel(
@@ -449,6 +465,67 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       }
     }
     return List.copyOf(out);
+  }
+
+  private static List<RuntimeDiagnosticEvent> buildInstalledPluginEvents(
+      InstalledPluginServices installedPluginServices) {
+    String pluginDirectory =
+        installedPluginServices != null && installedPluginServices.pluginDirectory() != null
+            ? installedPluginServices.pluginDirectory().toString()
+            : "";
+    java.time.Instant recordedAt = java.time.Instant.now();
+    if (installedPluginServices == null) {
+      return List.of(
+          new RuntimeDiagnosticEvent(
+              recordedAt,
+              "INFO",
+              "Plugins",
+              "Plugin runtime is not available in this context.",
+              pluginDirectory.isBlank() ? "" : "Plugin directory: " + pluginDirectory));
+    }
+    List<InstalledPluginDescriptor> installedPlugins = installedPluginServices.installedPlugins();
+    if (installedPlugins == null || installedPlugins.isEmpty()) {
+      return List.of(
+          new RuntimeDiagnosticEvent(
+              recordedAt,
+              "INFO",
+              "Plugins",
+              "No declared plugins were found.",
+              pluginDirectory.isBlank() ? "" : "Plugin directory: " + pluginDirectory));
+    }
+
+    ArrayList<RuntimeDiagnosticEvent> rows = new ArrayList<>(installedPlugins.size());
+    for (InstalledPluginDescriptor descriptor : installedPlugins) {
+      if (descriptor == null) continue;
+      String pluginId = Objects.toString(descriptor.pluginId(), "").trim();
+      String pluginVersion = Objects.toString(descriptor.pluginVersion(), "").trim();
+      String versionLabel = pluginVersion.isBlank() ? "unknown" : pluginVersion;
+      String sourceJar = Objects.toString(descriptor.sourceJar(), "").trim();
+      StringBuilder details = new StringBuilder();
+      details
+          .append("Plugin ID: ")
+          .append(pluginId.isBlank() ? "(unknown)" : pluginId)
+          .append('\n')
+          .append("Version: ")
+          .append(versionLabel)
+          .append('\n')
+          .append("API Version: ")
+          .append(descriptor.pluginApiVersion());
+      if (!sourceJar.isBlank()) {
+        details.append('\n').append("Source Jar: ").append(sourceJar);
+      }
+      if (!pluginDirectory.isBlank()) {
+        details.append('\n').append("Plugin Directory: ").append(pluginDirectory);
+      }
+      rows.add(
+          new RuntimeDiagnosticEvent(
+              recordedAt,
+              "INFO",
+              "Plugin",
+              (pluginId.isBlank() ? "(unknown)" : pluginId) + " " + versionLabel,
+              details.toString()));
+    }
+    return List.copyOf(rows);
   }
 
   private TopicCoordinatorBundle createTopicCoordinatorBundle(
@@ -620,6 +697,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
         appAssertjPanel,
         appJhiccupPanel,
         appInboundDedupPanel,
+        appPluginsPanel,
         appJfrPanel,
         appSpringPanel,
         channelListCoordinator::refreshManagedChannelsCard,
@@ -937,6 +1015,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     centerCards.add(appAssertjPanel, ChatTargetViewRouter.CARD_APP_ASSERTJ);
     centerCards.add(appJhiccupPanel, ChatTargetViewRouter.CARD_APP_JHICCUP);
     centerCards.add(appInboundDedupPanel, ChatTargetViewRouter.CARD_APP_INBOUND_DEDUP);
+    centerCards.add(appPluginsPanel, ChatTargetViewRouter.CARD_APP_PLUGINS);
     centerCards.add(appJfrPanel, ChatTargetViewRouter.CARD_APP_JFR);
     centerCards.add(appSpringPanel, ChatTargetViewRouter.CARD_APP_SPRING);
     centerCards.add(terminalPanel, ChatTargetViewRouter.CARD_TERMINAL);
