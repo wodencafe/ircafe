@@ -8,6 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record LogProperties(
     Boolean enabled,
     Boolean logSoftIgnoredLines,
+    Boolean redactionAuditEnabled,
 
     /** Whether PM/query messages are persisted in the local chat log DB. */
     Boolean logPrivateMessages,
@@ -41,6 +42,7 @@ public record LogProperties(
   public LogProperties {
     if (enabled == null) enabled = Boolean.FALSE;
     if (logSoftIgnoredLines == null) logSoftIgnoredLines = Boolean.TRUE;
+    if (redactionAuditEnabled == null) redactionAuditEnabled = Boolean.FALSE;
     if (logPrivateMessages == null) logPrivateMessages = Boolean.TRUE;
     if (savePrivateMessageList == null) savePrivateMessageList = Boolean.TRUE;
     if (keepForever == null) keepForever = Boolean.TRUE;

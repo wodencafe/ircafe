@@ -188,7 +188,7 @@ class IrcMediatorMockVerifyTest {
   private final MediatorIrcv3PresenceEventHandler mediatorIrcv3PresenceEventHandler =
       new MediatorIrcv3PresenceEventHandler(irc, typingPort, readMarkerPort, ui, uiSettingsPort);
   private final MediatorIrcv3EventHandler mediatorIrcv3EventHandler =
-      new MediatorIrcv3EventHandler(negotiatedFeaturePort, ui, targetCoordinator);
+      new MediatorIrcv3EventHandler(ui, targetCoordinator);
   private final MediatorAlertNotificationHandler mediatorAlertNotificationHandler =
       new MediatorAlertNotificationHandler(irc, serverIsupportState);
   private final MediatorChannelStateEventHandler mediatorChannelStateEventHandler =

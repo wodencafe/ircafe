@@ -25,8 +25,11 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
   private static final long DEDUP_TTL_MS = 10L * 60L * 1000L;
   private static final long TEXT_FINGERPRINT_SEED = 0xcbf29ce484222325L;
   private static final long TEXT_FINGERPRINT_PRIME = 0x100000001b3L;
+  private static final String REDACTED_MESSAGE_PLACEHOLDER = "[message redacted]";
 
   private final ChatLogWriter writer;
+  private final ChatLogRepository repo;
+  private final ChatRedactionAuditService redactionAuditService;
   private final LogLineFactory factory;
   private final LogProperties props;
   private final Cache<LogDedupKey, Boolean> recentDedup =
@@ -34,14 +37,24 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
           .maximumSize(DEDUP_MAX_ENTRIES)
           .expireAfterAccess(Duration.ofMillis(DEDUP_TTL_MS))
           .build();
+  private final Cache<LoggedMessageKey, LoggedMessageSnapshot> recentMessageSnapshots =
+      Caffeine.newBuilder()
+          .maximumSize(DEDUP_MAX_ENTRIES)
+          .expireAfterAccess(Duration.ofHours(24))
+          .build();
 
   public LoggingUiPortDecorator(
       UiTranscriptPort delegate,
       ChatLogWriter writer,
+      ChatLogRepository repo,
+      ChatRedactionAuditService redactionAuditService,
       LogLineFactory factory,
       LogProperties props) {
     super(delegate);
     this.writer = Objects.requireNonNull(writer, "writer");
+    this.repo = Objects.requireNonNull(repo, "repo");
+    this.redactionAuditService =
+        Objects.requireNonNull(redactionAuditService, "redactionAuditService");
     this.factory = Objects.requireNonNull(factory, "factory");
     this.props = Objects.requireNonNull(props, "props");
   }
@@ -73,6 +86,7 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
     tryLog(
         target,
         () -> factory.chatAt(target, from, text, outgoingLocalEcho, ts, messageId, ircv3Tags));
+    rememberMessageSnapshot(target, LogKind.CHAT, from, text, ts, messageId);
     super.appendChatAt(target, at, from, text, outgoingLocalEcho, messageId, ircv3Tags);
   }
 
@@ -90,6 +104,7 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
     tryLog(
         target,
         () -> factory.chatAt(target, from, text, outgoingLocalEcho, ts, messageId, ircv3Tags));
+    rememberMessageSnapshot(target, LogKind.CHAT, from, text, ts, messageId);
     super.appendChatAt(
         target,
         at,
@@ -119,6 +134,7 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
           () ->
               factory.resolvedOutgoingChatAt(
                   target, from, text, ts, pendingId, messageId, ircv3Tags));
+      rememberMessageSnapshot(target, LogKind.CHAT, from, text, ts, messageId);
     }
     return resolved;
   }
@@ -152,6 +168,7 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
       long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
       tryLog(
           target, () -> factory.softIgnoredSpoilerAt(target, from, text, ts, messageId, ircv3Tags));
+      rememberMessageSnapshot(target, LogKind.SPOILER, from, text, ts, messageId);
     }
     super.appendSpoilerChatAt(target, at, from, text, messageId, ircv3Tags);
   }
@@ -184,6 +201,7 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
     tryLog(
         target,
         () -> factory.actionAt(target, from, action, outgoingLocalEcho, ts, messageId, ircv3Tags));
+    rememberMessageSnapshot(target, LogKind.ACTION, from, action, ts, messageId);
     super.appendActionAt(target, at, from, action, outgoingLocalEcho, messageId, ircv3Tags);
   }
 
@@ -201,6 +219,7 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
     tryLog(
         target,
         () -> factory.actionAt(target, from, action, outgoingLocalEcho, ts, messageId, ircv3Tags));
+    rememberMessageSnapshot(target, LogKind.ACTION, from, action, ts, messageId);
     super.appendActionAt(
         target,
         at,
@@ -241,6 +260,7 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
       Map<String, String> ircv3Tags) {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     tryLog(target, () -> factory.noticeAt(target, from, text, ts, messageId, ircv3Tags));
+    rememberMessageSnapshot(target, LogKind.NOTICE, from, text, ts, messageId);
     super.appendNoticeAt(target, at, from, text, messageId, ircv3Tags);
   }
 
@@ -281,6 +301,172 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
     long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
     tryLog(target, () -> factory.errorAt(target, from, text, ts));
     super.appendErrorAt(target, at, from, text);
+  }
+
+  @Override
+  public boolean applyMessageEdit(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String editedText,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags) {
+    boolean applied =
+        super.applyMessageEdit(
+            target,
+            at,
+            fromNick,
+            targetMessageId,
+            editedText,
+            replacementMessageId,
+            replacementIrcv3Tags);
+    if (!applied) return false;
+
+    String msgId = normalizeMessageId(targetMessageId);
+    if (msgId.isEmpty()) return true;
+
+    long ts = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    String renderedEditedText = renderEditedText(editedText);
+    updateMessageSnapshot(target, msgId, renderedEditedText, ts);
+    tryMutatePersistedLog(
+        target,
+        () ->
+            repo.updateTextByMessageId(
+                target.serverId(), target.target(), msgId, renderedEditedText));
+    return true;
+  }
+
+  @Override
+  public boolean applyMessageRedaction(
+      TargetRef target,
+      Instant at,
+      String fromNick,
+      String targetMessageId,
+      String replacementMessageId,
+      Map<String, String> replacementIrcv3Tags) {
+    boolean applied =
+        super.applyMessageRedaction(
+            target, at, fromNick, targetMessageId, replacementMessageId, replacementIrcv3Tags);
+    if (!applied) return false;
+
+    String msgId = normalizeMessageId(targetMessageId);
+    if (msgId.isEmpty()) return true;
+
+    long redactedAtEpochMs = (at != null) ? at.toEpochMilli() : System.currentTimeMillis();
+    persistRedactionAudit(target, msgId, fromNick, redactedAtEpochMs);
+    removeMessageSnapshot(target, msgId);
+    tryMutatePersistedLog(
+        target,
+        () ->
+            repo.updateTextByMessageId(
+                target.serverId(), target.target(), msgId, REDACTED_MESSAGE_PLACEHOLDER));
+    return true;
+  }
+
+  private void rememberMessageSnapshot(
+      TargetRef target,
+      LogKind kind,
+      String fromNick,
+      String text,
+      long tsEpochMs,
+      String messageId) {
+    if (!shouldPersistTarget(target)) return;
+    String msgId = normalizeMessageId(messageId);
+    if (msgId.isEmpty()) return;
+    recentMessageSnapshots.put(
+        LoggedMessageKey.from(target, msgId),
+        new LoggedMessageSnapshot(
+            kind, Objects.toString(fromNick, "").trim(), Objects.toString(text, ""), tsEpochMs));
+  }
+
+  private void updateMessageSnapshot(
+      TargetRef target, String messageId, String updatedText, long tsEpochMs) {
+    if (!shouldPersistTarget(target)) return;
+    String msgId = normalizeMessageId(messageId);
+    if (msgId.isEmpty()) return;
+    LoggedMessageKey key = LoggedMessageKey.from(target, msgId);
+    LoggedMessageSnapshot existing = recentMessageSnapshots.getIfPresent(key);
+    if (existing == null) return;
+    recentMessageSnapshots.put(
+        key,
+        new LoggedMessageSnapshot(
+            existing.kind(), existing.fromNick(), Objects.toString(updatedText, ""), tsEpochMs));
+  }
+
+  private void removeMessageSnapshot(TargetRef target, String messageId) {
+    if (!shouldPersistTarget(target)) return;
+    String msgId = normalizeMessageId(messageId);
+    if (msgId.isEmpty()) return;
+    recentMessageSnapshots.invalidate(LoggedMessageKey.from(target, msgId));
+  }
+
+  private void persistRedactionAudit(
+      TargetRef target, String messageId, String redactedBy, long redactedAtEpochMs) {
+    if (!redactionAuditService.enabled() || !shouldPersistTarget(target)) return;
+
+    ChatRedactionAuditRecord record =
+        buildRedactionAuditRecord(target, messageId, redactedBy, redactedAtEpochMs);
+    if (record == null) return;
+    try {
+      redactionAuditService.record(record);
+    } catch (Throwable t) {
+      log.warn("[ircafe] Failed to persist redaction audit entry", t);
+    }
+  }
+
+  private ChatRedactionAuditRecord buildRedactionAuditRecord(
+      TargetRef target, String messageId, String redactedBy, long redactedAtEpochMs) {
+    String msgId = normalizeMessageId(messageId);
+    if (target == null || msgId.isEmpty()) return null;
+
+    LoggedMessageSnapshot snapshot =
+        recentMessageSnapshots.getIfPresent(LoggedMessageKey.from(target, msgId));
+    if (snapshot != null
+        && !snapshot.text().isBlank()
+        && !REDACTED_MESSAGE_PLACEHOLDER.equals(snapshot.text())) {
+      return new ChatRedactionAuditRecord(
+          target.serverId(),
+          target.target(),
+          msgId,
+          redactedAtEpochMs,
+          Objects.toString(redactedBy, "").trim(),
+          snapshot.kind(),
+          snapshot.fromNick(),
+          snapshot.text(),
+          snapshot.tsEpochMs());
+    }
+
+    try {
+      return repo.findLatestByMessageId(target.serverId(), target.target(), msgId)
+          .filter(line -> !Objects.toString(line.text(), "").isBlank())
+          .filter(line -> !REDACTED_MESSAGE_PLACEHOLDER.equals(line.text()))
+          .map(
+              line ->
+                  new ChatRedactionAuditRecord(
+                      line.serverId(),
+                      line.target(),
+                      msgId,
+                      redactedAtEpochMs,
+                      Objects.toString(redactedBy, "").trim(),
+                      line.kind(),
+                      line.fromNick(),
+                      line.text(),
+                      line.tsEpochMs()))
+          .orElse(null);
+    } catch (Throwable t) {
+      log.warn("[ircafe] Failed to load persisted row for redaction audit", t);
+      return null;
+    }
+  }
+
+  private void tryMutatePersistedLog(TargetRef target, Runnable mutation) {
+    if (!shouldPersistTarget(target)) return;
+    try {
+      mutation.run();
+    } catch (Throwable t) {
+      log.warn("[ircafe] Failed to update persisted chat log row", t);
+    }
   }
 
   private void tryLog(TargetRef target, Supplier<LogLine> supplier) {
@@ -338,6 +524,27 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
     return out.toString().trim();
   }
 
+  private static String normalizeMessageId(String messageId) {
+    return Objects.toString(messageId, "").trim();
+  }
+
+  private static String renderEditedText(String text) {
+    String value = Objects.toString(text, "");
+    return value.isBlank() ? "(edited)" : value + " (edited)";
+  }
+
+  private record LoggedMessageKey(String serverId, String target, String messageId) {
+    static LoggedMessageKey from(TargetRef target, String messageId) {
+      return new LoggedMessageKey(
+          Objects.toString(target == null ? null : target.serverId(), "").trim(),
+          Objects.toString(target == null ? null : target.target(), "").trim(),
+          normalizeMessageId(messageId));
+    }
+  }
+
+  private record LoggedMessageSnapshot(
+      LogKind kind, String fromNick, String text, long tsEpochMs) {}
+
   private record LogDedupKey(
       String serverId,
       String target,
@@ -387,5 +594,9 @@ public final class LoggingUiPortDecorator extends UiTranscriptPortDecorator {
     if (target == null) return true;
     if (Boolean.TRUE.equals(props.logPrivateMessages())) return true;
     return target.isStatus() || target.isChannel() || target.isUiOnly();
+  }
+
+  private boolean shouldPersistTarget(TargetRef target) {
+    return target != null && Boolean.TRUE.equals(props.enabled()) && shouldLogTarget(target);
   }
 }

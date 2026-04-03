@@ -178,6 +178,59 @@ class ChatTranscriptStoreTest {
   }
 
   @Test
+  void applyMessageRedactionPreservesRevealableOriginalWithoutLeakingIntoTranscript()
+      throws Exception {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "before", false, 6_000L, "m-1", Map.of("msgid", "m-1"));
+
+    assertTrue(store.applyMessageRedaction(ref, "m-1", "alice", 6_050L, "", Map.of()));
+
+    String text = transcriptText(store.document(ref));
+    assertTrue(text.contains("[message redacted]"));
+    assertFalse(text.contains("alice: before"));
+
+    ChatTranscriptStore.RedactedMessageContent reveal = store.redactedOriginalById(ref, "m-1");
+    assertNotNull(reveal);
+    assertEquals("before", reveal.originalText());
+    assertEquals("alice", reveal.originalFromNick());
+    assertEquals("alice", reveal.redactedBy());
+    assertEquals(6_050L, reveal.redactedAtEpochMs());
+  }
+
+  @Test
+  void applyMessageRedactionKeepsEditedTextForRevealAfterEdit() {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "before", false, 6_000L, "m-1", Map.of("msgid", "m-1"));
+    assertTrue(store.applyMessageEdit(ref, "m-1", "after", "alice", 6_020L, "", Map.of()));
+    assertTrue(store.applyMessageRedaction(ref, "m-1", "alice", 6_050L, "", Map.of()));
+
+    ChatTranscriptStore.RedactedMessageContent reveal = store.redactedOriginalById(ref, "m-1");
+    assertNotNull(reveal);
+    assertEquals("after (edited)", reveal.originalText());
+    assertEquals("alice: [message redacted]", store.messagePreviewById(ref, "m-1"));
+  }
+
+  @Test
+  void redactedMessageMetadataSurvivesTranscriptRestyle() {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "before", false, 6_000L, "m-1", Map.of("msgid", "m-1"));
+    assertTrue(store.applyMessageRedaction(ref, "m-1", "alice", 6_050L, "", Map.of()));
+
+    assertTrue(store.messageOffsetById(ref, "m-1") >= 0);
+
+    store.restyleAllDocuments();
+
+    assertTrue(store.messageOffsetById(ref, "m-1") >= 0);
+    assertNotNull(store.redactedOriginalById(ref, "m-1"));
+  }
+
+  @Test
   void messagePreviewByIdReturnsCachedReplySnippet() {
     ChatTranscriptStore store = newStore();
     TargetRef ref = new TargetRef("srv", "#chan");

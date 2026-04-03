@@ -19,6 +19,7 @@ import cafe.woden.ircclient.ignore.IgnoreStatusService;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.roster.UserListStore;
+import cafe.woden.ircclient.logging.NoOpChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -147,6 +148,7 @@ class ChatDockableIgnoresMockVerifyTest {
                     chatHistoryService,
                     channelMetadataStore,
                     chatLogViewerService,
+                    new NoOpChatRedactionAuditService(),
                     interceptorStore,
                     dccTransferStore,
                     terminalDockable,

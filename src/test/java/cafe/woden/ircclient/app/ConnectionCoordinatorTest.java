@@ -41,7 +41,7 @@ import org.mockito.ArgumentCaptor;
 class ConnectionCoordinatorTest {
 
   private static final LogProperties LOG_PROPS =
-      new LogProperties(false, true, true, true, true, 0, 50_000, 250, null);
+      new LogProperties(false, true, false, true, true, true, 0, 50_000, 250, null);
 
   @Test
   void queuedConnectDuringDisconnectReconnectsAfterDisconnectedEvent() {

@@ -85,6 +85,7 @@ class ChatLogServiceMockVerifyTest {
     return new LogProperties(
         Boolean.TRUE,
         Boolean.TRUE,
+        Boolean.FALSE,
         Boolean.TRUE,
         Boolean.TRUE,
         Boolean.TRUE,

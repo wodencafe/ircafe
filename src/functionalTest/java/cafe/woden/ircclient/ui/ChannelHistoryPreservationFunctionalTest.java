@@ -166,7 +166,7 @@ class ChannelHistoryPreservationFunctionalTest {
                 new ServerTreeDockable(
                     serverCatalog,
                     runtimeConfig,
-                    new LogProperties(true, true, true, true, true, 0, null, null, null),
+                    new LogProperties(true, true, false, true, true, true, 0, null, null, null),
                     null,
                     null,
                     new ConnectButton(),
@@ -228,7 +228,7 @@ class ChannelHistoryPreservationFunctionalTest {
     DbChatHistoryService historyService =
         new DbChatHistoryService(
             repo,
-            new LogProperties(true, true, true, true, true, 0, null, null, null),
+            new LogProperties(true, true, false, true, true, true, 0, null, null, null),
             new FixedHistoryTranscriptPort(transcripts, 100, 200),
             irc,
             bouncerPlayback,

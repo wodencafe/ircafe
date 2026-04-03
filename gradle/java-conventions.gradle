@@ -39,10 +39,14 @@ tasks.withType(Test).configureEach {
     //   ./gradlew integrationTest -Dquassel.it.enabled=true ...
     //   ./gradlew integrationTest -Dirc.it.container.e2e.enabled=true ...
     //   ./gradlew integrationTest -Dmatrix.it.container.enabled=true ...
+    //   ./gradlew functionalTest -Dircv3.it.container.functional.enabled=true ...
     // Forward only the scoped test-control properties.
     System.getProperties().each { key, value ->
         String k = key == null ? '' : key.toString()
-        if (!k.startsWith('quassel.it.') && !k.startsWith('irc.it.') && !k.startsWith('matrix.it.')) {
+        if (!k.startsWith('quassel.it.')
+                && !k.startsWith('irc.it.')
+                && !k.startsWith('ircv3.it.')
+                && !k.startsWith('matrix.it.')) {
             return
         }
         systemProperty k, value

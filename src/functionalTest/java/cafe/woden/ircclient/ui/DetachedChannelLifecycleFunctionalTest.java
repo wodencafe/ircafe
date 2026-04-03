@@ -245,7 +245,7 @@ class DetachedChannelLifecycleFunctionalTest {
     ServerRegistry serverRegistry = new ServerRegistry(props, runtimeConfig);
     ServerCatalog serverCatalog = new ServerCatalog(serverRegistry, new EphemeralServerRegistry());
     LogProperties logProps =
-        new LogProperties(null, null, null, null, null, null, null, null, null);
+        new LogProperties(null, null, null, null, null, null, null, null, null, null);
 
     ServerTreeDockable serverTree =
         onEdtCall(

@@ -3845,6 +3845,22 @@ public class RuntimeConfigStore
     }
   }
 
+  public synchronized void rememberChatLoggingRedactionAuditEnabled(boolean enabled) {
+    try {
+      if (file.toString().isBlank()) return;
+
+      Map<String, Object> doc = Files.exists(file) ? loadFile() : new LinkedHashMap<>();
+      Map<String, Object> ircafe = getOrCreateMap(doc, "ircafe");
+      Map<String, Object> logging = getOrCreateMap(ircafe, "logging");
+
+      logging.put("redactionAuditEnabled", enabled);
+
+      writeFile(doc);
+    } catch (Exception e) {
+      log.warn("[ircafe] Could not persist chat logging redaction-audit setting to '{}'", file, e);
+    }
+  }
+
   public synchronized void rememberChatLoggingLogPrivateMessages(boolean enabled) {
     try {
       if (file.toString().isBlank()) return;

@@ -15,6 +15,7 @@ import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.config.ServerCatalog;
 import cafe.woden.ircclient.config.ServerRegistry;
 import cafe.woden.ircclient.config.api.ConnectionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.InstalledPluginsPort;
 import cafe.woden.ircclient.dcc.DccTransferStore;
 import cafe.woden.ircclient.diagnostics.ApplicationDiagnosticsService;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
@@ -31,6 +32,7 @@ import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.logging.ChatLogWriter;
 import cafe.woden.ircclient.logging.LogLineFactory;
 import cafe.woden.ircclient.logging.LoggingUiPortDecorator;
+import cafe.woden.ircclient.logging.NoOpChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.monitor.MonitorListService;
@@ -325,12 +327,14 @@ public final class FunctionalTestWiringSupport {
               ChatHistoryService.class,
               ChannelMetadataPort.class,
               ChatLogViewerService.class,
+              cafe.woden.ircclient.logging.ChatRedactionAuditService.class,
               InterceptorStore.class,
               DccTransferStore.class,
               TerminalDockable.class,
               ApplicationDiagnosticsService.class,
               JfrRuntimeEventsService.class,
               SpringRuntimeEventsService.class,
+              InstalledPluginsPort.class,
               SlashCommandPresentationCatalog.class,
               UiSettingsBus.class,
               SpellcheckSettingsBus.class,
@@ -360,12 +364,14 @@ public final class FunctionalTestWiringSupport {
           chatHistoryService,
           channelMetadata,
           chatLogViewerService,
+          new NoOpChatRedactionAuditService(),
           interceptorStore,
           dccTransferStore,
           terminalDockable,
           applicationDiagnosticsService,
           jfrRuntimeEventsService,
           springRuntimeEventsService,
+          Mockito.mock(InstalledPluginsPort.class),
           Mockito.mock(SlashCommandPresentationCatalog.class),
           settingsBus,
           spellcheckSettingsBus,
@@ -432,6 +438,7 @@ public final class FunctionalTestWiringSupport {
             chatHistoryService,
             channelMetadata,
             chatLogViewerService,
+            new NoOpChatRedactionAuditService(),
             interceptorStore,
             dccTransferStore,
             terminalDockable,
@@ -467,6 +474,7 @@ public final class FunctionalTestWiringSupport {
                   ChatHistoryService.class,
                   ChannelMetadataPort.class,
                   ChatLogViewerService.class,
+                  cafe.woden.ircclient.logging.ChatRedactionAuditService.class,
                   InterceptorStore.class,
                   DccTransferStore.class,
                   TerminalDockable.class,
@@ -499,6 +507,7 @@ public final class FunctionalTestWiringSupport {
               chatHistoryService,
               channelMetadata,
               chatLogViewerService,
+              new NoOpChatRedactionAuditService(),
               interceptorStore,
               dccTransferStore,
               terminalDockable,
@@ -524,7 +533,13 @@ public final class FunctionalTestWiringSupport {
   public static UiPort newLoggingUiPort(
       UiPort swingUiPort, ChatLogWriter writer, LogLineFactory factory, LogProperties props) {
     UiTranscriptPort loggingTranscriptUiPort =
-        new LoggingUiPortDecorator(swingUiPort, writer, factory, props);
+        new LoggingUiPortDecorator(
+            swingUiPort,
+            writer,
+            org.mockito.Mockito.mock(cafe.woden.ircclient.logging.ChatLogRepository.class),
+            new NoOpChatRedactionAuditService(),
+            factory,
+            props);
     try {
       Class<?> decoratorClass =
           Class.forName("cafe.woden.ircclient.logging.TranscriptDecoratingUiPort");

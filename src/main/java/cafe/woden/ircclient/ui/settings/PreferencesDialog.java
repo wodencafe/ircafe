@@ -1988,6 +1988,8 @@ public class PreferencesDialog {
             runtimeConfig.rememberChatLoggingEnabled(logging.enabled.isSelected());
             runtimeConfig.rememberChatLoggingLogSoftIgnoredLines(
                 logging.logSoftIgnored.isSelected());
+            runtimeConfig.rememberChatLoggingRedactionAuditEnabled(
+                logging.redactionAuditEnabled.isSelected());
             runtimeConfig.rememberChatLoggingLogPrivateMessages(
                 logging.logPrivateMessages.isSelected());
             runtimeConfig.rememberChatLoggingSavePrivateMessageList(

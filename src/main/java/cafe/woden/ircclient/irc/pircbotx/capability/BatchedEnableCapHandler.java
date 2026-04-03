@@ -87,6 +87,14 @@ public final class BatchedEnableCapHandler implements CapHandler {
     return false;
   }
 
+  public boolean isPending(String capability) {
+    String normalized = normalizeCap(capability);
+    if (normalized == null || normalized.isEmpty()) {
+      return false;
+    }
+    return pendingCapsLower.contains(normalized.toLowerCase(Locale.ROOT));
+  }
+
   private void resolve(ImmutableList<String> caps) {
     if (caps == null || caps.isEmpty() || pendingCapsLower.isEmpty()) return;
     for (String cap : caps) {

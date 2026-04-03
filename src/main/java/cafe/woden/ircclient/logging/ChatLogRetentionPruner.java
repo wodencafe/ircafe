@@ -40,6 +40,7 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
   private final ChatLogRepository repo;
+  private final ChatRedactionAuditRepository redactionAuditRepository;
   private final TransactionTemplate tx;
   private final LogProperties props;
   private final Flyway flyway;
@@ -49,11 +50,14 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
 
   public ChatLogRetentionPruner(
       ChatLogRepository repo,
+      ChatRedactionAuditRepository redactionAuditRepository,
       TransactionTemplate tx,
       LogProperties props,
       Flyway flyway,
       ScheduledExecutorService exec) {
     this.repo = Objects.requireNonNull(repo, "repo");
+    this.redactionAuditRepository =
+        Objects.requireNonNull(redactionAuditRepository, "redactionAuditRepository");
     this.tx = Objects.requireNonNull(tx, "tx");
     this.props = Objects.requireNonNull(props, "props");
     this.flyway = Objects.requireNonNull(flyway, "flyway");
@@ -89,7 +93,10 @@ public final class ChatLogRetentionPruner implements AutoCloseable {
     int days = Math.max(0, Objects.requireNonNullElse(props.retentionDays(), 0));
     long cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(days);
 
-    Integer deleted = tx.execute(status -> repo.deleteOlderThan(cutoff));
+    Integer deleted =
+        tx.execute(
+            status ->
+                repo.deleteOlderThan(cutoff) + redactionAuditRepository.deleteOlderThan(cutoff));
     int n = deleted == null ? 0 : deleted;
 
     if (n > 0) {

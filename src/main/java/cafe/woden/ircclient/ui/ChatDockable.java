@@ -19,6 +19,7 @@ import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.irc.roster.UserListStore;
+import cafe.woden.ircclient.logging.ChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.model.TargetRef;
@@ -66,6 +67,7 @@ import cafe.woden.ircclient.ui.servertree.ServerTreeDockable;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.terminal.TerminalDockable;
+import cafe.woden.ircclient.ui.util.ChatRedactedMessageRevealSupport;
 import cafe.woden.ircclient.util.InstalledPluginDescriptor;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.github.andrewauclair.moderndocking.app.Docking;
@@ -171,6 +173,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   private final ChatDockTitleCoordinator dockTitleCoordinator;
   private final ChatTranscriptInteractionCoordinator transcriptInteractionCoordinator;
   private final DccActionCoordinator dccActionCoordinator;
+  private final ChatRedactionAuditService redactionAuditService;
 
   private TargetRef activeTarget;
 
@@ -221,6 +224,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
       ChatHistoryService chatHistoryService,
       ChannelMetadataPort channelMetadata,
       ChatLogViewerService chatLogViewerService,
+      ChatRedactionAuditService redactionAuditService,
       InterceptorStore interceptorStore,
       DccTransferStore dccTransferStore,
       TerminalDockable terminalDockable,
@@ -239,6 +243,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
     this.transcripts = transcripts;
     this.serverTree = serverTree;
+    this.redactionAuditService =
+        java.util.Objects.requireNonNull(redactionAuditService, "redactionAuditService");
 
     this.activeInputRouter = activeInputRouter;
     this.proxyResolver = proxyResolver;
@@ -1292,6 +1298,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   }
 
   @Override
+  protected boolean revealRedactedMessageContextActionVisible() {
+    return transcripts != null;
+  }
+
+  @Override
   protected boolean loadNewerHistoryContextActionVisible() {
     return historyActionCoordinator.loadNewerHistoryContextActionVisible();
   }
@@ -1334,6 +1345,14 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
   @Override
   protected void onRedactMessageRequested(String messageId) {
     historyActionCoordinator.onRedactMessageRequested(messageId);
+  }
+
+  @Override
+  protected void onRevealRedactedMessageRequested(String messageId) {
+    TargetRef target = activeTarget;
+    if (target == null || target.isUiOnly()) return;
+    ChatRedactedMessageRevealSupport.reveal(
+        this, target, messageId, transcripts, redactionAuditService);
   }
 
   @Override

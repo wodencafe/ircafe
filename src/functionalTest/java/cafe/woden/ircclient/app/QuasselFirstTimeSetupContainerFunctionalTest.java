@@ -182,7 +182,7 @@ class QuasselFirstTimeSetupContainerFunctionalTest {
 
       SwingUiPort ui = newUi(transcripts);
       LogProperties logProps =
-          new LogProperties(false, true, true, true, true, 0, 50_000, 250, null);
+          new LogProperties(false, true, false, true, true, true, 0, 50_000, 250, null);
       TrayNotificationsPort trayNotifications = mock(TrayNotificationsPort.class);
 
       ConnectionCoordinator coordinator =
@@ -348,7 +348,7 @@ class QuasselFirstTimeSetupContainerFunctionalTest {
 
       SwingUiPort ui = newUi(transcripts);
       LogProperties logProps =
-          new LogProperties(false, true, true, true, true, 0, 50_000, 250, null);
+          new LogProperties(false, true, false, true, true, true, 0, 50_000, 250, null);
       TrayNotificationsPort trayNotifications = mock(TrayNotificationsPort.class);
 
       ConnectionCoordinator coordinator =

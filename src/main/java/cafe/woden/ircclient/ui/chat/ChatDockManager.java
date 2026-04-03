@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.chat;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
+import cafe.woden.ircclient.logging.ChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
@@ -54,6 +55,7 @@ public class ChatDockManager {
   private final IrcReadMarkerPort readMarkerPort;
   private final BackendUiProfileProvider backendUiProfileProvider;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
+  private final ChatRedactionAuditService redactionAuditService;
   private final ActiveInputRouter activeInputRouter;
   private final CommandHistoryStore commandHistoryStore;
   private final ChatHistoryService chatHistoryService;
@@ -89,6 +91,7 @@ public class ChatDockManager {
       IrcReadMarkerPort readMarkerPort,
       BackendUiProfileProvider backendUiProfileProvider,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
+      ChatRedactionAuditService redactionAuditService,
       ActiveInputRouter activeInputRouter,
       SlashCommandPresentationCatalog slashCommandPresentationCatalog,
       ChatHistoryService chatHistoryService,
@@ -106,6 +109,8 @@ public class ChatDockManager {
     this.messageActionCapabilityPolicy =
         java.util.Objects.requireNonNull(
             messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
+    this.redactionAuditService =
+        java.util.Objects.requireNonNull(redactionAuditService, "redactionAuditService");
     this.activeInputRouter = activeInputRouter;
     this.slashCommandPresentationCatalog =
         java.util.Objects.requireNonNull(
@@ -385,6 +390,7 @@ public class ChatDockManager {
             typingPort,
             readMarkerPort,
             messageActionCapabilityPolicy,
+            redactionAuditService,
             backendUiProfileProvider::profileForServer,
             activeInputRouter,
             slashCommandPresentationCatalog,

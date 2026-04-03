@@ -29,6 +29,7 @@ class ChatTranscriptContextMenuDecoratorTest {
     assertEquals("abc123", id.messageId());
     assertEquals("msgid=abc123;typing=active", id.ircv3Tags());
     assertFalse(id.outgoingOwnMessage());
+    assertFalse(id.redactedMessage());
   }
 
   @Test
@@ -55,6 +56,17 @@ class ChatTranscriptContextMenuDecoratorTest {
   }
 
   @Test
+  void lineIdentityFromAttributesReadsRedactedFlag() {
+    SimpleAttributeSet attrs = new SimpleAttributeSet();
+    attrs.addAttribute(ChatStyles.ATTR_META_REDACTED, Boolean.TRUE);
+
+    ChatTranscriptContextMenuDecorator.LineIdentity id =
+        ChatTranscriptContextMenuDecorator.lineIdentityFromAttributes(attrs);
+
+    assertTrue(id.redactedMessage());
+  }
+
+  @Test
   void lineIdentityFromAttributesReturnsEmptyForMissingMetadata() {
     ChatTranscriptContextMenuDecorator.LineIdentity id =
         ChatTranscriptContextMenuDecorator.lineIdentityFromAttributes(new SimpleAttributeSet());
@@ -67,7 +79,7 @@ class ChatTranscriptContextMenuDecoratorTest {
     JTextPane transcript = new JTextPane();
     ChatTranscriptContextMenuDecorator decorator = buildDecorator(transcript, false, false, false);
 
-    setPopupLineIdentity(decorator, "", false);
+    setPopupLineIdentity(decorator, "", false, false);
     invokePrivate(decorator, "rebuildMenu", new Class<?>[] {String.class}, "");
     invokePrivate(decorator, "updateEnabledState", new Class<?>[] {String.class}, "");
 
@@ -79,6 +91,8 @@ class ChatTranscriptContextMenuDecoratorTest {
     JMenuItem unreactToMessageItem = (JMenuItem) readField(decorator, "unreactToMessageItem");
     JMenuItem editMessageItem = (JMenuItem) readField(decorator, "editMessageItem");
     JMenuItem redactMessageItem = (JMenuItem) readField(decorator, "redactMessageItem");
+    JMenuItem revealRedactedMessageItem =
+        (JMenuItem) readField(decorator, "revealRedactedMessageItem");
 
     assertSame(menu, loadNewerHistoryItem.getParent());
     assertSame(menu, loadAroundMessageItem.getParent());
@@ -87,6 +101,7 @@ class ChatTranscriptContextMenuDecoratorTest {
     assertSame(menu, unreactToMessageItem.getParent());
     assertSame(menu, editMessageItem.getParent());
     assertSame(menu, redactMessageItem.getParent());
+    assertFalse(menuContains(menu, revealRedactedMessageItem));
 
     assertFalse(loadNewerHistoryItem.isEnabled());
     assertEquals(
@@ -116,6 +131,8 @@ class ChatTranscriptContextMenuDecoratorTest {
     assertFalse(redactMessageItem.isEnabled());
     assertEquals(
         "Unavailable: this line has no IRCv3 message ID.", redactMessageItem.getToolTipText());
+
+    assertEquals("Display Redacted Message…", revealRedactedMessageItem.getText());
   }
 
   @Test
@@ -123,7 +140,7 @@ class ChatTranscriptContextMenuDecoratorTest {
     JTextPane transcript = new JTextPane();
     ChatTranscriptContextMenuDecorator decorator = buildDecorator(transcript, true, true, true);
 
-    setPopupLineIdentity(decorator, "abc123", true);
+    setPopupLineIdentity(decorator, "abc123", true, false);
     invokePrivate(decorator, "rebuildMenu", new Class<?>[] {String.class}, "");
     invokePrivate(decorator, "updateEnabledState", new Class<?>[] {String.class}, "");
 
@@ -134,6 +151,8 @@ class ChatTranscriptContextMenuDecoratorTest {
     JMenuItem unreactToMessageItem = (JMenuItem) readField(decorator, "unreactToMessageItem");
     JMenuItem editMessageItem = (JMenuItem) readField(decorator, "editMessageItem");
     JMenuItem redactMessageItem = (JMenuItem) readField(decorator, "redactMessageItem");
+    JMenuItem revealRedactedMessageItem =
+        (JMenuItem) readField(decorator, "revealRedactedMessageItem");
 
     assertTrue(loadNewerHistoryItem.isEnabled());
     assertTrue(loadAroundMessageItem.isEnabled());
@@ -142,6 +161,7 @@ class ChatTranscriptContextMenuDecoratorTest {
     assertTrue(unreactToMessageItem.isEnabled());
     assertTrue(editMessageItem.isEnabled());
     assertTrue(redactMessageItem.isEnabled());
+    assertFalse(menuContains(menuFor(decorator), revealRedactedMessageItem));
   }
 
   @Test
@@ -149,7 +169,7 @@ class ChatTranscriptContextMenuDecoratorTest {
     JTextPane transcript = new JTextPane();
     ChatTranscriptContextMenuDecorator decorator = buildDecorator(transcript, true, true, true);
 
-    setPopupLineIdentity(decorator, "abc123", false);
+    setPopupLineIdentity(decorator, "abc123", false, false);
     invokePrivate(decorator, "rebuildMenu", new Class<?>[] {String.class}, "");
     invokePrivate(decorator, "updateEnabledState", new Class<?>[] {String.class}, "");
 
@@ -158,16 +178,36 @@ class ChatTranscriptContextMenuDecoratorTest {
     JMenuItem unreactToMessageItem = (JMenuItem) readField(decorator, "unreactToMessageItem");
     JMenuItem editMessageItem = (JMenuItem) readField(decorator, "editMessageItem");
     JMenuItem redactMessageItem = (JMenuItem) readField(decorator, "redactMessageItem");
+    JMenuItem revealRedactedMessageItem =
+        (JMenuItem) readField(decorator, "revealRedactedMessageItem");
 
     assertTrue(replyToMessageItem.isEnabled());
     assertTrue(reactToMessageItem.isEnabled());
     assertTrue(unreactToMessageItem.isEnabled());
     assertFalse(editMessageItem.isEnabled());
     assertFalse(redactMessageItem.isEnabled());
+    assertFalse(menuContains(menuFor(decorator), revealRedactedMessageItem));
     assertEquals(
         "Unavailable: only your own messages can be edited.", editMessageItem.getToolTipText());
     assertEquals(
         "Unavailable: only your own messages can be redacted.", redactMessageItem.getToolTipText());
+  }
+
+  @Test
+  void contextMenuEnablesRevealForRedactedMessages() throws Exception {
+    JTextPane transcript = new JTextPane();
+    ChatTranscriptContextMenuDecorator decorator = buildDecorator(transcript, true, true, true);
+
+    setPopupLineIdentity(decorator, "abc123", false, true);
+    invokePrivate(decorator, "rebuildMenu", new Class<?>[] {String.class}, "");
+    invokePrivate(decorator, "updateEnabledState", new Class<?>[] {String.class}, "");
+
+    JMenuItem revealRedactedMessageItem =
+        (JMenuItem) readField(decorator, "revealRedactedMessageItem");
+
+    assertTrue(menuContains(menuFor(decorator), revealRedactedMessageItem));
+    assertTrue(revealRedactedMessageItem.isEnabled());
+    assertEquals("Display Redacted Message…", revealRedactedMessageItem.getText());
   }
 
   private static ChatTranscriptContextMenuDecorator buildDecorator(
@@ -196,15 +236,29 @@ class ChatTranscriptContextMenuDecoratorTest {
         () -> editRedactVisible,
         () -> editRedactVisible,
         msgId -> {},
+        msgId -> {},
+        () -> true,
         msgId -> {});
   }
 
   private static void setPopupLineIdentity(
-      ChatTranscriptContextMenuDecorator decorator, String messageId, boolean ownMessage)
+      ChatTranscriptContextMenuDecorator decorator,
+      String messageId,
+      boolean ownMessage,
+      boolean redactedMessage)
       throws Exception {
     writeField(decorator, "currentPopupMessageId", messageId);
     writeField(decorator, "currentPopupIrcv3Tags", "");
     writeField(decorator, "currentPopupOwnMessage", ownMessage);
+    writeField(decorator, "currentPopupRedactedMessage", redactedMessage);
+  }
+
+  private static JPopupMenu menuFor(ChatTranscriptContextMenuDecorator decorator) throws Exception {
+    return (JPopupMenu) readField(decorator, "menu");
+  }
+
+  private static boolean menuContains(JPopupMenu menu, JMenuItem item) {
+    return menu.getComponentZOrder(item) >= 0;
   }
 
   private static Object readField(Object target, String fieldName) throws Exception {

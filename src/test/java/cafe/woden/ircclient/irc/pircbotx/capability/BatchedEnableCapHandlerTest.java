@@ -120,4 +120,26 @@ class BatchedEnableCapHandlerTest {
     assertFalse(handler.handleACK(bot, ImmutableList.of("=typing")));
     assertTrue(handler.handleACK(bot, ImmutableList.of("batch=max-bytes=4096")));
   }
+
+  @Test
+  void reportsPendingCapabilitiesUsingCanonicalNames() throws Exception {
+    BatchedEnableCapHandler handler =
+        new BatchedEnableCapHandler(List.of("message-tags", "batch", "draft/chathistory"));
+    PircBotX bot = mock(PircBotX.class);
+    OutputCAP outputCap = mock(OutputCAP.class);
+    when(bot.sendCAP()).thenReturn(outputCap);
+
+    boolean finished =
+        handler.handleLS(
+            bot, ImmutableList.of("message-tags", "batch=max-bytes=4096", "draft/chathistory"));
+
+    assertFalse(finished);
+    assertTrue(handler.isPending("message-tags"));
+    assertTrue(handler.isPending("batch"));
+    assertTrue(handler.isPending("draft/chathistory"));
+
+    assertFalse(handler.handleACK(bot, ImmutableList.of(":message-tags")));
+    assertFalse(handler.isPending("message-tags"));
+    assertTrue(handler.isPending("batch"));
+  }
 }

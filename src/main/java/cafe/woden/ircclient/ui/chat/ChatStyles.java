@@ -49,6 +49,7 @@ public class ChatStyles {
   public static final String ATTR_META_EPOCH_MS = "chat.meta.epochMs";
   public static final String ATTR_META_MSGID = "chat.meta.msgid";
   public static final String ATTR_META_IRCV3_TAGS = "chat.meta.ircv3.tags";
+  public static final String ATTR_META_REDACTED = "chat.meta.redacted";
   public static final String ATTR_META_PENDING_ID = "chat.meta.pending.id";
   public static final String ATTR_META_PENDING_STATE = "chat.meta.pending.state";
   public static final String ATTR_META_FILTER_RULE_ID = "chat.meta.filter.ruleId";

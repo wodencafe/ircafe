@@ -88,7 +88,12 @@ public final class ChatLineInspectorDialog {
 
     String info = format(attrs, text);
 
-    JTextArea area = new JTextArea(info);
+    Component anchor = owner != null ? owner : transcript;
+    showReadOnlyTextDialog(anchor, "Line Inspector", info);
+  }
+
+  public static void showReadOnlyTextDialog(Component owner, String title, String text) {
+    JTextArea area = new JTextArea(Objects.toString(text, ""));
     area.setEditable(false);
     area.setLineWrap(true);
     area.setWrapStyleWord(true);
@@ -99,7 +104,7 @@ public final class ChatLineInspectorDialog {
     }
 
     JScrollPane scroll = new JScrollPane(area);
-    Component anchor = owner != null ? owner : transcript;
+    Component anchor = owner;
     Window ownerWindow = SwingUtilities.getWindowAncestor(anchor);
     Component dialogAnchor = ownerWindow != null ? ownerWindow : anchor;
 
@@ -108,7 +113,7 @@ public final class ChatLineInspectorDialog {
 
     JOptionPane pane =
         new JOptionPane(scroll, JOptionPane.INFORMATION_MESSAGE, JOptionPane.DEFAULT_OPTION);
-    JDialog dialog = pane.createDialog(dialogAnchor, "Line Inspector");
+    JDialog dialog = pane.createDialog(dialogAnchor, Objects.toString(title, "Information"));
     dialog.setResizable(true);
     dialog.setMinimumSize(
         new Dimension(Math.min(520, preferred.width), Math.min(300, preferred.height)));
@@ -189,6 +194,7 @@ public final class ChatLineInspectorDialog {
     String tags = getString(attrs, ChatStyles.ATTR_META_TAGS);
     String msgId = getString(attrs, ChatStyles.ATTR_META_MSGID);
     String ircv3Tags = getString(attrs, ChatStyles.ATTR_META_IRCV3_TAGS);
+    Boolean redacted = getBoolean(attrs, ChatStyles.ATTR_META_REDACTED);
 
     String filterName = getString(attrs, ChatStyles.ATTR_META_FILTER_RULE_NAME);
     String filterId = getString(attrs, ChatStyles.ATTR_META_FILTER_RULE_ID);
@@ -207,6 +213,7 @@ public final class ChatLineInspectorDialog {
     if (!tags.isBlank()) sb.append("Tags: ").append(tags).append('\n');
     if (!msgId.isBlank()) sb.append("Message ID: ").append(msgId).append('\n');
     if (!ircv3Tags.isBlank()) sb.append("IRCv3 tags: ").append(ircv3Tags).append('\n');
+    if (Boolean.TRUE.equals(redacted)) sb.append("Redacted: true\n");
 
     if (!filterName.isBlank()) {
       sb.append("Matched filter: ").append(filterName);

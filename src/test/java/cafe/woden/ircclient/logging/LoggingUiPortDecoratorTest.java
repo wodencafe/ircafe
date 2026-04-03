@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -28,9 +29,9 @@ class LoggingUiPortDecoratorTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final LogProperties LOGGING_ON =
-      new LogProperties(true, true, true, true, true, 0, 50_000, 250, null);
+      new LogProperties(true, true, false, true, true, true, 0, 50_000, 250, null);
   private static final LogProperties LOGGING_PM_OFF =
-      new LogProperties(true, true, false, true, true, 0, 50_000, 250, null);
+      new LogProperties(true, true, false, false, true, true, 0, 50_000, 250, null);
 
   @Test
   void appendChatAtWithMetadataPersistsMessageIdentity() throws Exception {
@@ -205,7 +206,13 @@ class LoggingUiPortDecoratorTest {
           captured.set(line);
         };
     LoggingUiPortDecorator d =
-        new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), LOGGING_ON);
+        new LoggingUiPortDecorator(
+            delegate,
+            writer,
+            mock(ChatLogRepository.class),
+            new NoOpChatRedactionAuditService(),
+            new LogLineFactory(),
+            LOGGING_ON);
 
     TargetRef target = new TargetRef("srv", "#chan");
     Instant at = Instant.ofEpochMilli(1_732_000_100_000L);
@@ -227,7 +234,13 @@ class LoggingUiPortDecoratorTest {
     AtomicInteger writes = new AtomicInteger();
     ChatLogWriter writer = line -> writes.incrementAndGet();
     LoggingUiPortDecorator d =
-        new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), LOGGING_ON);
+        new LoggingUiPortDecorator(
+            delegate,
+            writer,
+            mock(ChatLogRepository.class),
+            new NoOpChatRedactionAuditService(),
+            new LogLineFactory(),
+            LOGGING_ON);
 
     TargetRef target = new TargetRef("srv", "#chan");
     Instant at = Instant.ofEpochMilli(1_732_000_200_000L);
@@ -240,6 +253,49 @@ class LoggingUiPortDecoratorTest {
   }
 
   @Test
+  void redactionPersistsPlaceholderAndStoresEditedTextInAuditLog() {
+    UiTranscriptPort delegate = mock(UiTranscriptPort.class);
+    ChatLogRepository repo = mock(ChatLogRepository.class);
+    ChatRedactionAuditService auditService = mock(ChatRedactionAuditService.class);
+    LogProperties props =
+        new LogProperties(true, true, true, true, true, true, 0, 50_000, 250, null);
+    LoggingUiPortDecorator d =
+        new LoggingUiPortDecorator(
+            delegate, line -> {}, repo, auditService, new LogLineFactory(), props);
+
+    TargetRef target = new TargetRef("srv", "#chan");
+    Instant originalAt = Instant.ofEpochMilli(1_732_000_300_000L);
+    Instant editedAt = originalAt.plusMillis(50);
+    Instant redactedAt = editedAt.plusMillis(50);
+    Map<String, String> tags = Map.of("msgid", "msg-7");
+
+    when(delegate.applyMessageEdit(target, editedAt, "alice", "msg-7", "edited body", "", Map.of()))
+        .thenReturn(true);
+    when(delegate.applyMessageRedaction(target, redactedAt, "alice", "msg-7", "", Map.of()))
+        .thenReturn(true);
+    when(auditService.enabled()).thenReturn(true);
+
+    d.appendChatAt(target, originalAt, "alice", "before", false, "msg-7", tags);
+    assertTrue(d.applyMessageEdit(target, editedAt, "alice", "msg-7", "edited body", "", Map.of()));
+    assertTrue(d.applyMessageRedaction(target, redactedAt, "alice", "msg-7", "", Map.of()));
+
+    verify(repo).updateTextByMessageId("srv", "#chan", "msg-7", "edited body (edited)");
+    verify(repo).updateTextByMessageId("srv", "#chan", "msg-7", "[message redacted]");
+    verify(auditService)
+        .record(
+            new ChatRedactionAuditRecord(
+                "srv",
+                "#chan",
+                "msg-7",
+                redactedAt.toEpochMilli(),
+                "alice",
+                LogKind.CHAT,
+                "alice",
+                "edited body (edited)",
+                editedAt.toEpochMilli()));
+    verify(repo, times(0)).findLatestByMessageId(any(), any(), any());
+  }
+
   private static LoggingUiPortDecorator newDecorator(
       UiTranscriptPort delegate, AtomicReference<LogLine> captured) {
     return newDecorator(delegate, captured, LOGGING_ON);
@@ -248,7 +304,13 @@ class LoggingUiPortDecoratorTest {
   private static LoggingUiPortDecorator newDecorator(
       UiTranscriptPort delegate, AtomicReference<LogLine> captured, LogProperties props) {
     ChatLogWriter writer = captured::set;
-    return new LoggingUiPortDecorator(delegate, writer, new LogLineFactory(), props);
+    return new LoggingUiPortDecorator(
+        delegate,
+        writer,
+        mock(ChatLogRepository.class),
+        new NoOpChatRedactionAuditService(),
+        new LogLineFactory(),
+        props);
   }
 
   private static Map<String, Object> meta(LogLine line) throws Exception {

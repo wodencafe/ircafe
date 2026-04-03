@@ -9,6 +9,7 @@ import javax.swing.JTextField;
 final class LoggingControls {
   final JCheckBox enabled;
   final JCheckBox logSoftIgnored;
+  final JCheckBox redactionAuditEnabled;
   final JCheckBox logPrivateMessages;
   final JCheckBox savePrivateMessageList;
   final JButton managePrivateMessageList;
@@ -23,6 +24,7 @@ final class LoggingControls {
   LoggingControls(
       JCheckBox enabled,
       JCheckBox logSoftIgnored,
+      JCheckBox redactionAuditEnabled,
       JCheckBox logPrivateMessages,
       JCheckBox savePrivateMessageList,
       JButton managePrivateMessageList,
@@ -35,6 +37,7 @@ final class LoggingControls {
       JTextArea info) {
     this.enabled = enabled;
     this.logSoftIgnored = logSoftIgnored;
+    this.redactionAuditEnabled = redactionAuditEnabled;
     this.logPrivateMessages = logPrivateMessages;
     this.savePrivateMessageList = savePrivateMessageList;
     this.managePrivateMessageList = managePrivateMessageList;

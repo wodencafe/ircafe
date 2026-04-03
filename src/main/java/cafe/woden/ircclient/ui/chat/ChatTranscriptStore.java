@@ -71,8 +71,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private static final int DEFAULT_TRANSCRIPT_MAX_LINES_PER_TARGET = 4000;
   private static final int MAX_TRANSCRIPT_LINES_PER_TARGET = 200_000;
   private static final int REPLY_PREVIEW_CACHE_LIMIT_PER_TARGET = 512;
+  private static final int REDACTED_MESSAGE_CACHE_LIMIT_PER_TARGET = 512;
   private static final int REPLY_PREVIEW_TEXT_MAX_CHARS = 120;
   private static final String MANUAL_PREVIEW_MARKER = " \uD83D\uDC41";
+  private static final String REDACTED_MESSAGE_PLACEHOLDER = "[message redacted]";
 
   /**
    * Step 5.2: Safety cap for history/backfill. After this many filtered placeholder/hint runs are
@@ -170,6 +172,18 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private record FromRunReplacement(
       int startOffset, int endOffset, String replacementText, AttributeSet attrs) {}
 
+  public record RedactedMessageContent(
+      String messageId,
+      LogKind originalKind,
+      String originalFromNick,
+      String originalText,
+      Long originalEpochMs,
+      String redactedBy,
+      Long redactedAtEpochMs) {}
+
+  private record MessageContentSnapshot(
+      LogKind kind, String fromNick, String renderedText, Long epochMs) {}
+
   private LineMeta buildLineMeta(
       TargetRef ref,
       LogKind kind,
@@ -249,6 +263,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_EPOCH_MS);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_MSGID);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_IRCV3_TAGS);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_REDACTED);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_PENDING_ID);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_PENDING_STATE);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_RULE_ID);
@@ -1202,6 +1217,36 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     st.messagePreviewByMsgId.put(msgId, preview);
   }
 
+  private void rememberCurrentMessageContent(
+      TranscriptState st, LineMeta meta, String from, String renderedText) {
+    if (st == null || meta == null) return;
+    String msgId = normalizeMessageId(meta.messageId());
+    if (msgId.isEmpty()) return;
+    LogKind kind = meta.kind();
+    if (kind != LogKind.CHAT
+        && kind != LogKind.ACTION
+        && kind != LogKind.NOTICE
+        && kind != LogKind.SPOILER) {
+      return;
+    }
+    st.currentMessageContentByMsgId.put(
+        msgId,
+        new MessageContentSnapshot(
+            kind,
+            Objects.toString(from, "").trim(),
+            Objects.toString(renderedText, ""),
+            meta.epochMs()));
+  }
+
+  private static <K, V> LinkedHashMap<K, V> createBoundedCache(int maxEntries) {
+    return new LinkedHashMap<>() {
+      @Override
+      protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+        return size() > maxEntries;
+      }
+    };
+  }
+
   private String previewForMessageId(TranscriptState st, String messageId) {
     return ChatTranscriptReplyPreviewSupport.previewForMessageId(
         (st == null) ? null : st.messagePreviewByMsgId, messageId);
@@ -1588,6 +1633,15 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     return previewForMessageId(st, msgId);
   }
 
+  public synchronized RedactedMessageContent redactedOriginalById(TargetRef ref, String messageId) {
+    if (ref == null) return null;
+    String msgId = normalizeMessageId(messageId);
+    if (msgId.isEmpty()) return null;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null) return null;
+    return st.redactedOriginalByMsgId.get(msgId);
+  }
+
   public synchronized void setReactionChipActionHandler(ReactionChipActionHandler handler) {
     reactionChipActionHandler =
         (handler != null) ? handler : (target, messageId, reactionToken, unreactRequested) -> {};
@@ -1661,6 +1715,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     if (ref == null) return false;
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
+    TranscriptState st = stateByTarget.get(ref);
     if (doc == null) return false;
 
     String targetMsgId = normalizeMessageId(targetMessageId);
@@ -1678,15 +1733,21 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       return false;
     }
 
-    return replaceMessageLine(
-        ref,
-        doc,
-        lineStart,
-        attrs,
-        renderEditedText(editedText),
-        tsEpochMs,
-        replacementMessageId,
-        replacementIrcv3Tags);
+    String renderedEditedText = renderEditedText(editedText);
+    boolean replaced =
+        replaceMessageLine(
+            ref,
+            doc,
+            lineStart,
+            attrs,
+            renderedEditedText,
+            tsEpochMs,
+            replacementMessageId,
+            replacementIrcv3Tags);
+    if (replaced) {
+      rememberEditedCurrentMessageContent(st, targetMsgId, attrs, renderedEditedText);
+    }
+    return replaced;
   }
 
   public synchronized boolean applyMessageRedaction(
@@ -1717,17 +1778,21 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       return false;
     }
 
+    rememberRedactedOriginal(st, targetMsgId, attrs, fromNick, tsEpochMs);
+
     boolean replaced =
         replaceMessageLine(
             ref,
             doc,
             lineStart,
             attrs,
-            "[message redacted]",
+            REDACTED_MESSAGE_PLACEHOLDER,
             tsEpochMs,
             replacementMessageId,
             replacementIrcv3Tags);
     if (replaced && st != null) {
+      markLineRangeRedacted(doc, lineStart);
+      st.currentMessageContentByMsgId.remove(targetMsgId);
       clearReactionStateForMessage(ref, doc, st, targetMsgId);
     }
     return replaced;
@@ -2034,6 +2099,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       int lineEndOffset = doc.getLength();
       doc.insertString(doc.getLength(), "\n", tsStyle);
       rememberMessagePreview(stateByTarget.get(ref), meta, renderedFrom, text);
+      rememberCurrentMessageContent(stateByTarget.get(ref), meta, renderedFrom, text);
 
       if (!allowEmbeds) {
         enforceTranscriptLineCap(ref, doc);
@@ -2555,6 +2621,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       doc.insertString(pos, "\n", tsStyle);
       pos += 1;
       rememberMessagePreview(stateByTarget.get(ref), meta, renderedFrom, a);
+      rememberCurrentMessageContent(stateByTarget.get(ref), meta, renderedFrom, a);
     } catch (Exception ignored) {
     }
 
@@ -2927,6 +2994,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       doc.insertString(pos, "\n", tsStyle);
       pos += 1;
       rememberMessagePreview(stateByTarget.get(ref), meta, renderedFrom, text);
+      rememberCurrentMessageContent(stateByTarget.get(ref), meta, renderedFrom, text);
 
       if (allowEmbeds) {
         // (Embeds are intentionally skipped here; rich inserts during history prefill can be
@@ -3389,6 +3457,102 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       return "(edited)";
     }
     return t + " (edited)";
+  }
+
+  private void rememberEditedCurrentMessageContent(
+      TranscriptState st,
+      String targetMsgId,
+      AttributeSet existingAttrs,
+      String renderedEditedText) {
+    if (st == null) return;
+    String msgId = normalizeMessageId(targetMsgId);
+    if (msgId.isEmpty()) return;
+
+    MessageContentSnapshot existing = st.currentMessageContentByMsgId.get(msgId);
+    LogKind kind =
+        (existing != null && existing.kind() != null)
+            ? existing.kind()
+            : logKindFromAttrs(existingAttrs);
+    String fromNick =
+        (existing != null && existing.fromNick() != null && !existing.fromNick().isBlank())
+            ? existing.fromNick()
+            : Objects.toString(
+                existingAttrs == null
+                    ? null
+                    : existingAttrs.getAttribute(ChatStyles.ATTR_META_FROM),
+                "");
+    Long epochMs =
+        (existing != null && existing.epochMs() != null)
+            ? existing.epochMs()
+            : lineEpochMs(existingAttrs);
+
+    st.currentMessageContentByMsgId.put(
+        msgId,
+        new MessageContentSnapshot(
+            kind, Objects.toString(fromNick, "").trim(), renderedEditedText, epochMs));
+  }
+
+  private void rememberRedactedOriginal(
+      TranscriptState st,
+      String targetMsgId,
+      AttributeSet existingAttrs,
+      String redactedBy,
+      long redactedAtEpochMs) {
+    if (st == null) return;
+    String msgId = normalizeMessageId(targetMsgId);
+    if (msgId.isEmpty()) return;
+
+    MessageContentSnapshot current = st.currentMessageContentByMsgId.get(msgId);
+    LogKind originalKind =
+        current != null && current.kind() != null
+            ? current.kind()
+            : logKindFromAttrs(existingAttrs);
+    String originalFromNick =
+        current != null && current.fromNick() != null && !current.fromNick().isBlank()
+            ? current.fromNick()
+            : Objects.toString(
+                    existingAttrs == null
+                        ? null
+                        : existingAttrs.getAttribute(ChatStyles.ATTR_META_FROM),
+                    "")
+                .trim();
+    String originalText =
+        current != null
+            ? Objects.toString(current.renderedText(), "")
+            : REDACTED_MESSAGE_PLACEHOLDER;
+    if (originalText.isBlank() || REDACTED_MESSAGE_PLACEHOLDER.equals(originalText)) {
+      return;
+    }
+    Long originalEpochMs =
+        current != null && current.epochMs() != null
+            ? current.epochMs()
+            : lineEpochMs(existingAttrs);
+    long effectiveRedactedAt =
+        redactedAtEpochMs > 0 ? redactedAtEpochMs : System.currentTimeMillis();
+
+    st.redactedOriginalByMsgId.put(
+        msgId,
+        new RedactedMessageContent(
+            msgId,
+            originalKind,
+            originalFromNick,
+            originalText,
+            originalEpochMs,
+            Objects.toString(redactedBy, "").trim(),
+            effectiveRedactedAt));
+  }
+
+  private void markLineRangeRedacted(StyledDocument doc, int lineStart) {
+    if (doc == null || lineStart < 0) return;
+    int lineEnd = lineEndOffsetForLineStart(doc, lineStart);
+    int len = Math.max(0, lineEnd - lineStart);
+    if (len <= 0) return;
+    SimpleAttributeSet attrs = new SimpleAttributeSet();
+    attrs.addAttribute(ChatStyles.ATTR_META_REDACTED, Boolean.TRUE);
+    try {
+      doc.setCharacterAttributes(lineStart, len, attrs, false);
+    } catch (Exception ignored) {
+    }
   }
 
   private void applyMessageReactionInternal(
@@ -4405,6 +4569,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       int lineEndOffset = doc.getLength();
       doc.insertString(doc.getLength(), "\n", tsStyle);
       rememberMessagePreview(stateByTarget.get(ref), meta, renderedFrom, a);
+      rememberCurrentMessageContent(stateByTarget.get(ref), meta, renderedFrom, a);
 
       if (!allowEmbeds) {
         enforceTranscriptLineCap(ref, doc);
@@ -4863,6 +5028,10 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     Map<String, String> messagePreviewByMsgId =
         ChatTranscriptReplyPreviewSupport.createBoundedReplyPreviewCache(
             REPLY_PREVIEW_CACHE_LIMIT_PER_TARGET);
+    Map<String, MessageContentSnapshot> currentMessageContentByMsgId =
+        createBoundedCache(REPLY_PREVIEW_CACHE_LIMIT_PER_TARGET);
+    Map<String, RedactedMessageContent> redactedOriginalByMsgId =
+        createBoundedCache(REDACTED_MESSAGE_CACHE_LIMIT_PER_TARGET);
   }
 
   /** Tracks a contiguous run of filtered lines (represented by a single placeholder component). */
@@ -5235,6 +5404,15 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       String styleId = styleIdObj != null ? String.valueOf(styleIdObj) : null;
 
       SimpleAttributeSet fresh = new SimpleAttributeSet(styles.byStyleId(styleId));
+      copyMetaAttr(old, fresh, ChatStyles.ATTR_META_BUFFER_KEY);
+      copyMetaAttr(old, fresh, ChatStyles.ATTR_META_KIND);
+      copyMetaAttr(old, fresh, ChatStyles.ATTR_META_DIRECTION);
+      copyMetaAttr(old, fresh, ChatStyles.ATTR_META_FROM);
+      copyMetaAttr(old, fresh, ChatStyles.ATTR_META_TAGS);
+      copyMetaAttr(old, fresh, ChatStyles.ATTR_META_EPOCH_MS);
+      copyMetaAttr(old, fresh, ChatStyles.ATTR_META_MSGID);
+      copyMetaAttr(old, fresh, ChatStyles.ATTR_META_IRCV3_TAGS);
+      copyMetaAttr(old, fresh, ChatStyles.ATTR_META_REDACTED);
       Object url = old.getAttribute(ChatStyles.ATTR_URL);
       if (url != null) {
         fresh.addAttribute(ChatStyles.ATTR_URL, url);

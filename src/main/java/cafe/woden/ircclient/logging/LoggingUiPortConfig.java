@@ -22,9 +22,12 @@ public class LoggingUiPortConfig {
   public UiTranscriptPort loggingTranscriptUiPort(
       @Qualifier("swingUiPort") UiTranscriptPort swingUiTranscriptPort,
       ChatLogWriter writer,
+      ChatLogRepository repo,
+      ChatRedactionAuditService chatRedactionAuditService,
       LogLineFactory factory,
       LogProperties props) {
-    return new LoggingUiPortDecorator(swingUiTranscriptPort, writer, factory, props);
+    return new LoggingUiPortDecorator(
+        swingUiTranscriptPort, writer, repo, chatRedactionAuditService, factory, props);
   }
 
   /** Primary {@link UiPort} when logging is enabled. */

@@ -2,6 +2,7 @@ package cafe.woden.ircclient.logging;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.model.TargetRef;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -216,6 +217,66 @@ class ChatLogRepositoryTest {
     }
   }
 
+  @Test
+  void persistedMessageRowsCanBeUpdatedByMessageId() {
+    try (Fixture fixture = openFixture(tempDir.resolve("chatlog-update-by-message-id"))) {
+      TargetRef target = new TargetRef("srv", "#chan");
+      LogLineFactory factory = new LogLineFactory(fixedClock(1_700_020_000_000L));
+
+      fixture.repo.insert(
+          factory.chatAt(
+              target,
+              "alice",
+              "before",
+              false,
+              1_700_020_000_000L,
+              "msg-1",
+              Map.of("msgid", "msg-1")));
+
+      assertEquals(
+          1, fixture.repo.updateTextByMessageId("srv", "#chan", "msg-1", "[message redacted]"));
+      assertEquals(
+          "[message redacted]",
+          fixture.repo.findLatestByMessageId("srv", "#chan", "msg-1").orElseThrow().text());
+    }
+  }
+
+  @Test
+  void redactionAuditRowsCanBeInsertedAndFetched() {
+    try (Fixture fixture = openFixture(tempDir.resolve("chatlog-redaction-audit"))) {
+      ChatRedactionAuditRecord first =
+          new ChatRedactionAuditRecord(
+              "srv",
+              "#chan",
+              "msg-1",
+              1_700_021_000_000L,
+              "alice",
+              LogKind.CHAT,
+              "alice",
+              "first",
+              1_700_020_999_000L);
+      ChatRedactionAuditRecord second =
+          new ChatRedactionAuditRecord(
+              "srv",
+              "#chan",
+              "msg-1",
+              1_700_021_001_000L,
+              "alice",
+              LogKind.CHAT,
+              "alice",
+              "second",
+              1_700_021_000_500L);
+
+      fixture.auditRepo.insert(first);
+      fixture.auditRepo.insert(second);
+
+      ChatRedactionAuditRecord latest =
+          fixture.auditRepo.findLatest("srv", "#CHAN", "msg-1").orElseThrow();
+      assertEquals("second", latest.originalText());
+      assertEquals(1_700_021_001_000L, latest.redactedAtEpochMs());
+    }
+  }
+
   private static Clock fixedClock(long epochMs) {
     return Clock.fixed(Instant.ofEpochMilli(epochMs), ZoneOffset.UTC);
   }
@@ -284,10 +345,12 @@ class ChatLogRepositoryTest {
     Flyway.configure().dataSource(ds).locations("classpath:db/migration/chatlog").load().migrate();
 
     JdbcTemplate jdbc = new JdbcTemplate(ds);
-    return new Fixture(jdbc, new ChatLogRepository(jdbc));
+    return new Fixture(jdbc, new ChatLogRepository(jdbc), new ChatRedactionAuditRepository(jdbc));
   }
 
-  private record Fixture(JdbcTemplate jdbc, ChatLogRepository repo) implements AutoCloseable {
+  private record Fixture(
+      JdbcTemplate jdbc, ChatLogRepository repo, ChatRedactionAuditRepository auditRepo)
+      implements AutoCloseable {
     @Override
     public void close() {
       try {

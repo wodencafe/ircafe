@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.chat;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
+import cafe.woden.ircclient.logging.ChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
@@ -14,6 +15,7 @@ import cafe.woden.ircclient.ui.coordinator.MessageActionCapabilityPolicy;
 import cafe.woden.ircclient.ui.input.MessageInputPanel;
 import cafe.woden.ircclient.ui.settings.SpellcheckSettingsBus;
 import cafe.woden.ircclient.ui.settings.UiSettingsBus;
+import cafe.woden.ircclient.ui.util.ChatRedactedMessageRevealSupport;
 import io.github.andrewauclair.moderndocking.Dockable;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.awt.BorderLayout;
@@ -58,6 +60,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private final TargetRef target;
   private final ChatTranscriptStore transcripts;
   private final ChatHistoryService chatHistoryService;
+  private final ChatRedactionAuditService redactionAuditService;
   private final String persistentId;
 
   private boolean followTail = true;
@@ -98,6 +101,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       IrcTypingPort typingPort,
       IrcReadMarkerPort readMarkerPort,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
+      ChatRedactionAuditService redactionAuditService,
       Function<String, BackendUiProfile> backendUiProfileProvider,
       ActiveInputRouter activeInputRouter,
       SlashCommandPresentationCatalog slashCommandPresentationCatalog,
@@ -107,6 +111,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.target = target;
     this.transcripts = transcripts;
     this.chatHistoryService = chatHistoryService;
+    this.redactionAuditService =
+        Objects.requireNonNull(redactionAuditService, "redactionAuditService");
     this.activate = activate;
     this.outboundBus = outboundBus;
     this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
@@ -475,6 +481,18 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     String msgId = Objects.toString(messageId, "").trim();
     if (msgId.isEmpty()) return;
     emitHistoryCommand("/redact " + msgId);
+  }
+
+  @Override
+  protected boolean revealRedactedMessageContextActionVisible() {
+    return transcripts != null;
+  }
+
+  @Override
+  protected void onRevealRedactedMessageRequested(String messageId) {
+    if (target == null || target.isUiOnly()) return;
+    ChatRedactedMessageRevealSupport.reveal(
+        this, target, messageId, transcripts, redactionAuditService);
   }
 
   @Override

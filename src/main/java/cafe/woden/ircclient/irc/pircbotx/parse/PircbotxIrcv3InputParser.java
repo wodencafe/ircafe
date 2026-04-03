@@ -116,7 +116,7 @@ final class PircbotxIrcv3InputParser extends InputParser {
         if (capLine.isAction("LS", "NEW", "ACK", "DEL")) {
           multilineCapStateSupport.observe(capLine, conn);
         }
-        capabilityNegotiationSupport.observe(capLine);
+        capabilityNegotiationSupport.observe(capLine, getCapHandlersRemaining());
       }
       return;
     }
@@ -204,6 +204,14 @@ final class PircbotxIrcv3InputParser extends InputParser {
             Objects.toString(line, ""));
         return;
       }
+      if (isIgnorableDuplicateUserHostmaskNumeric(code, ex)) {
+        log.debug(
+            "[{}] ignoring duplicate-user numeric {} from PircBotX DAO: line={}",
+            serverId,
+            code,
+            Objects.toString(line, ""));
+        return;
+      }
       if (code != 324) {
         throw ex;
       }
@@ -240,6 +248,14 @@ final class PircbotxIrcv3InputParser extends InputParser {
       return false;
     }
     return !channelForIgnorableMissingChannelNumeric(code, parsedLine).isBlank();
+  }
+
+  private static boolean isIgnorableDuplicateUserHostmaskNumeric(int code, RuntimeException ex) {
+    if (code != 353 || ex instanceof DaoException) {
+      return false;
+    }
+    String message = Objects.toString(ex.getMessage(), "");
+    return message.contains("Cannot create a user from hostmask that already exists");
   }
 
   private static String channelForIgnorableMissingChannelNumeric(

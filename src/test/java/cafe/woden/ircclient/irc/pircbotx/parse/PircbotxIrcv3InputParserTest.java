@@ -844,6 +844,25 @@ class PircbotxIrcv3InputParserTest {
   }
 
   @Test
+  void duplicateNamesReplyForExistingUserHostmaskDoesNotThrow() {
+    PircbotxConnectionState conn = new PircbotxConnectionState("libera");
+    List<ServerIrcEvent> out = new ArrayList<>();
+    PircBotX bot = dummyBot();
+    bot.getUserChannelDao().createChannel("#ircafe");
+    bot.getUserChannelDao().createUser(hostmask("alice", "~u", "example.test"));
+    PircbotxIrcv3InputParser parser =
+        new PircbotxIrcv3InputParser(bot, "libera", conn, out::add, new Ircv3StsPolicyService());
+
+    assertDoesNotThrow(
+        () ->
+            parser.processServerResponse(
+                353,
+                ":server 353 me = #ircafe :@alice!~u@example.test",
+                List.of("me", "=", "#ircafe", ":@alice!~u@example.test")));
+    assertTrue(out.isEmpty());
+  }
+
+  @Test
   void pongWithServerTimeTagUpdatesPassiveLagSample() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
@@ -938,6 +957,14 @@ class PircbotxIrcv3InputParserTest {
   private static UserHostmask source(String nick) {
     UserHostmask s = mock(UserHostmask.class);
     when(s.getNick()).thenReturn(nick);
+    return s;
+  }
+
+  private static UserHostmask hostmask(String nick, String login, String hostname) {
+    UserHostmask s = mock(UserHostmask.class);
+    when(s.getNick()).thenReturn(nick);
+    when(s.getLogin()).thenReturn(login);
+    when(s.getHostname()).thenReturn(hostname);
     return s;
   }
 

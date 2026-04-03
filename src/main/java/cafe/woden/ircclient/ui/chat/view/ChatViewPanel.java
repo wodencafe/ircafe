@@ -121,7 +121,9 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
                 this::editContextActionVisible,
                 this::redactContextActionVisible,
                 this::onEditMessageRequested,
-                this::onRedactMessageRequested));
+                this::onRedactMessageRequested,
+                this::revealRedactedMessageContextActionVisible,
+                this::onRevealRedactedMessageRequested));
     configureHoverActionRail();
     decorators.add(installTranscriptMouseBehavior());
     this.followTailScroll =
@@ -333,6 +335,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     return false;
   }
 
+  /** Whether the transcript context menu should show "Reveal Redacted Message…". */
+  protected boolean revealRedactedMessageContextActionVisible() {
+    return false;
+  }
+
   /** Whether the transcript context menu should show "Load Newer History". */
   protected boolean loadNewerHistoryContextActionVisible() {
     return false;
@@ -375,6 +382,11 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
 
   /** Called by transcript context menu action "Redact Message…". */
   protected void onRedactMessageRequested(String messageId) {
+    // default: no-op
+  }
+
+  /** Called by transcript context menu action "Reveal Redacted Message…". */
+  protected void onRevealRedactedMessageRequested(String messageId) {
     // default: no-op
   }
 

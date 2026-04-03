@@ -63,11 +63,13 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final Supplier<Boolean> unreactActionVisibleSupplier;
   private final Supplier<Boolean> editActionVisibleSupplier;
   private final Supplier<Boolean> redactActionVisibleSupplier;
+  private final Supplier<Boolean> revealRedactedActionVisibleSupplier;
   private final Consumer<String> onReplyToMessage;
   private final Consumer<String> onReactToMessage;
   private final Consumer<String> onUnreactToMessage;
   private final Consumer<String> onEditMessage;
   private final Consumer<String> onRedactMessage;
+  private final Consumer<String> onRevealRedactedMessage;
   private final boolean historyActionsConfigured;
   private final boolean messageActionsConfigured;
 
@@ -88,6 +90,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private final JMenuItem unreactToMessageItem = new JMenuItem("Remove Reaction…");
   private final JMenuItem editMessageItem = new JMenuItem("Edit Message…");
   private final JMenuItem redactMessageItem = new JMenuItem("Redact Message…");
+  private final JMenuItem revealRedactedMessageItem = new JMenuItem("Display Redacted Message…");
 
   private volatile Point lastPopupPoint;
 
@@ -102,6 +105,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
   private volatile String currentPopupMessageId;
   private volatile String currentPopupIrcv3Tags;
   private volatile boolean currentPopupOwnMessage;
+  private volatile boolean currentPopupRedactedMessage;
 
   // Some sites reject programmatic downloads unless the request looks like a browser.
   private static final String DEFAULT_UA =
@@ -130,7 +134,9 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Supplier<Boolean> editActionVisibleSupplier,
       Supplier<Boolean> redactActionVisibleSupplier,
       Consumer<String> onEditMessage,
-      Consumer<String> onRedactMessage) {
+      Consumer<String> onRedactMessage,
+      Supplier<Boolean> revealRedactedActionVisibleSupplier,
+      Consumer<String> onRevealRedactedMessage) {
     this.transcript = Objects.requireNonNull(transcript, "transcript");
 
     this.openUrl = openUrl;
@@ -151,7 +157,9 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
             || onReactToMessage != null
             || onUnreactToMessage != null
             || onEditMessage != null
-            || onRedactMessage != null;
+            || onRedactMessage != null
+            || revealRedactedActionVisibleSupplier != null
+            || onRevealRedactedMessage != null;
     this.loadNewerActionVisibleSupplier =
         (loadNewerActionVisibleSupplier != null) ? loadNewerActionVisibleSupplier : () -> false;
     this.loadAroundActionVisibleSupplier =
@@ -172,8 +180,14 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         (editActionVisibleSupplier != null) ? editActionVisibleSupplier : () -> false;
     this.redactActionVisibleSupplier =
         (redactActionVisibleSupplier != null) ? redactActionVisibleSupplier : () -> false;
+    this.revealRedactedActionVisibleSupplier =
+        (revealRedactedActionVisibleSupplier != null)
+            ? revealRedactedActionVisibleSupplier
+            : () -> false;
     this.onEditMessage = (onEditMessage != null) ? onEditMessage : msgId -> {};
     this.onRedactMessage = (onRedactMessage != null) ? onRedactMessage : msgId -> {};
+    this.onRevealRedactedMessage =
+        (onRevealRedactedMessage != null) ? onRevealRedactedMessage : msgId -> {};
 
     copyItem.addActionListener(this::onCopy);
     selectAllItem.addActionListener(this::onSelectAll);
@@ -190,6 +204,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     unreactToMessageItem.addActionListener(this::onUnreactToMessage);
     editMessageItem.addActionListener(this::onEditMessage);
     redactMessageItem.addActionListener(this::onRedactMessage);
+    revealRedactedMessageItem.addActionListener(this::onRevealRedactedMessage);
 
     openLinkItem.addActionListener(this::onOpenLink);
     copyLinkItem.addActionListener(this::onCopyLink);
@@ -246,6 +261,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
             currentPopupMessageId = identity.messageId();
             currentPopupIrcv3Tags = identity.ircv3Tags();
             currentPopupOwnMessage = identity.outgoingOwnMessage();
+            currentPopupRedactedMessage = identity.redactedMessage();
             rebuildMenu(url);
             updateEnabledState(url);
 
@@ -280,6 +296,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 
@@ -295,6 +313,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         null,
         openUrl,
         openFind,
+        null,
+        null,
         null,
         null,
         null,
@@ -326,6 +346,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         nickMenuFor,
         openUrl,
         openFind,
+        null,
+        null,
         null,
         null,
         null,
@@ -372,6 +394,8 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         null,
         null,
         null,
+        null,
+        null,
         null);
   }
 
@@ -396,7 +420,9 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       Supplier<Boolean> editActionVisibleSupplier,
       Supplier<Boolean> redactActionVisibleSupplier,
       Consumer<String> onEditMessage,
-      Consumer<String> onRedactMessage) {
+      Consumer<String> onRedactMessage,
+      Supplier<Boolean> revealRedactedActionVisibleSupplier,
+      Consumer<String> onRevealRedactedMessage) {
     return new ChatTranscriptContextMenuDecorator(
         transcript,
         urlAt,
@@ -418,7 +444,9 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
         editActionVisibleSupplier,
         redactActionVisibleSupplier,
         onEditMessage,
-        onRedactMessage);
+        onRedactMessage,
+        revealRedactedActionVisibleSupplier,
+        onRevealRedactedMessage);
   }
 
   public void setClearAction(Runnable clearAction) {
@@ -479,6 +507,9 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     menu.add(unreactToMessageItem);
     menu.add(editMessageItem);
     menu.add(redactMessageItem);
+    if (currentPopupRedactedMessage) {
+      menu.add(revealRedactedMessageItem);
+    }
   }
 
   private void updateEnabledState(String url) {
@@ -576,6 +607,15 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
             ? "Redact your message via IRCv3 message-redaction."
             : messageActionUnavailableReason(
                 hasMessageId, redactAvailable, currentPopupOwnMessage, "redaction"));
+
+    boolean revealAvailable = isActionVisible(revealRedactedActionVisibleSupplier);
+    boolean revealEnabled = revealAvailable && hasMessageId && currentPopupRedactedMessage;
+    revealRedactedMessageItem.setEnabled(revealEnabled);
+    revealRedactedMessageItem.setToolTipText(
+        revealEnabled
+            ? "View the stored original content for this redacted message."
+            : revealActionUnavailableReason(
+                hasMessageId, revealAvailable, currentPopupRedactedMessage));
   }
 
   private static String historyActionUnavailableReason(boolean hasMessageId, boolean available) {
@@ -596,6 +636,14 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     if (!available) {
       return "Unavailable: server did not negotiate IRCv3 " + actionNoun + " support.";
     }
+    return null;
+  }
+
+  private static String revealActionUnavailableReason(
+      boolean hasMessageId, boolean available, boolean redactedMessage) {
+    if (!hasMessageId) return "Unavailable: this line has no IRCv3 message ID.";
+    if (!redactedMessage) return "Unavailable: this line is not marked as redacted.";
+    if (!available) return "Unavailable: redacted-message reveal is not configured for this view.";
     return null;
   }
 
@@ -704,6 +752,17 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     if (msgId == null || msgId.isBlank()) return;
     try {
       onRedactMessage.accept(msgId);
+    } catch (Exception ignored) {
+    }
+  }
+
+  private void onRevealRedactedMessage(ActionEvent e) {
+    if (!isActionVisible(revealRedactedActionVisibleSupplier)) return;
+    if (!currentPopupRedactedMessage) return;
+    String msgId = currentPopupMessageId;
+    if (msgId == null || msgId.isBlank()) return;
+    try {
+      onRevealRedactedMessage.accept(msgId);
     } catch (Exception ignored) {
     }
   }
@@ -831,12 +890,13 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     String msgId = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_MSGID), "").trim();
     String tags = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_IRCV3_TAGS), "").trim();
     boolean outgoing = Boolean.TRUE.equals(attrs.getAttribute(ChatStyles.ATTR_OUTGOING));
+    boolean redacted = Boolean.TRUE.equals(attrs.getAttribute(ChatStyles.ATTR_META_REDACTED));
     if (!outgoing) {
       String dir = Objects.toString(attrs.getAttribute(ChatStyles.ATTR_META_DIRECTION), "").trim();
       outgoing = "OUT".equalsIgnoreCase(dir);
     }
-    if (msgId.isBlank() && tags.isBlank() && !outgoing) return LineIdentity.EMPTY;
-    return new LineIdentity(msgId, tags, outgoing);
+    if (msgId.isBlank() && tags.isBlank() && !outgoing && !redacted) return LineIdentity.EMPTY;
+    return new LineIdentity(msgId, tags, outgoing, redacted);
   }
 
   private LineIdentity lineIdentityAtPoint(Point p) {
@@ -850,23 +910,52 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       int safePos = Math.max(0, Math.min(pos, len - 1));
       Element el = sdoc.getCharacterElement(safePos);
       if (el == null) return LineIdentity.EMPTY;
-      return lineIdentityFromAttributes(el.getAttributes());
+      LineIdentity identity = lineIdentityFromAttributes(el.getAttributes());
+      if (identity.redactedMessage()) {
+        return identity;
+      }
+      return new LineIdentity(
+          identity.messageId(),
+          identity.ircv3Tags(),
+          identity.outgoingOwnMessage(),
+          paragraphLooksRedacted(doc, safePos));
     } catch (Exception ignored) {
       return LineIdentity.EMPTY;
     }
   }
 
+  private static boolean paragraphLooksRedacted(Document doc, int pos) {
+    if (doc == null || pos < 0) return false;
+    try {
+      Element root = doc.getDefaultRootElement();
+      int idx = root.getElementIndex(pos);
+      Element para = root.getElement(idx);
+      if (para == null) return false;
+      int start = para.getStartOffset();
+      int end = para.getEndOffset();
+      int len = Math.max(0, end - start);
+      if (len <= 0) return false;
+      String text = doc.getText(start, len);
+      return text != null && text.contains("[message redacted]");
+    } catch (Exception ignored) {
+      return false;
+    }
+  }
+
   static final class LineIdentity {
-    static final LineIdentity EMPTY = new LineIdentity("", "", false);
+    static final LineIdentity EMPTY = new LineIdentity("", "", false, false);
 
     private final String messageId;
     private final String ircv3Tags;
     private final boolean outgoingOwnMessage;
+    private final boolean redactedMessage;
 
-    LineIdentity(String messageId, String ircv3Tags, boolean outgoingOwnMessage) {
+    LineIdentity(
+        String messageId, String ircv3Tags, boolean outgoingOwnMessage, boolean redactedMessage) {
       this.messageId = Objects.toString(messageId, "").trim();
       this.ircv3Tags = Objects.toString(ircv3Tags, "").trim();
       this.outgoingOwnMessage = outgoingOwnMessage;
+      this.redactedMessage = redactedMessage;
     }
 
     String messageId() {
@@ -879,6 +968,10 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
 
     boolean outgoingOwnMessage() {
       return outgoingOwnMessage;
+    }
+
+    boolean redactedMessage() {
+      return redactedMessage;
     }
   }
 

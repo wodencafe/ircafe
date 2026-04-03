@@ -11,6 +11,7 @@ import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
+import cafe.woden.ircclient.logging.NoOpChatRedactionAuditService;
 import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
@@ -68,6 +69,7 @@ class ChatDockManagerTest {
             readMarkerPort,
             backendUiProfileProvider,
             messageActionCapabilityPolicy,
+            new NoOpChatRedactionAuditService(),
             activeInputRouter,
             slashCommandPresentationCatalog,
             chatHistoryService,
@@ -121,6 +123,7 @@ class ChatDockManagerTest {
             mock(IrcReadMarkerPort.class),
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
+            new NoOpChatRedactionAuditService(),
             mock(ActiveInputRouter.class),
             new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty()),
             mock(ChatHistoryService.class),
@@ -152,6 +155,7 @@ class ChatDockManagerTest {
             mock(IrcReadMarkerPort.class),
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
+            new NoOpChatRedactionAuditService(),
             mock(ActiveInputRouter.class),
             new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty()),
             mock(ChatHistoryService.class),
@@ -178,6 +182,7 @@ class ChatDockManagerTest {
             mock(IrcReadMarkerPort.class),
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
+            new NoOpChatRedactionAuditService(),
             mock(ActiveInputRouter.class),
             new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty()),
             mock(ChatHistoryService.class),
