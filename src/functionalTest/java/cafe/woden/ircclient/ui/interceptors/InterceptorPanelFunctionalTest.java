@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.interceptors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -14,6 +15,8 @@ import cafe.woden.ircclient.model.InterceptorDefinition;
 import cafe.woden.ircclient.model.InterceptorRule;
 import cafe.woden.ircclient.model.InterceptorRuleMode;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.processors.FlowableProcessor;
+import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -22,10 +25,16 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -33,6 +42,125 @@ import org.junit.jupiter.api.io.TempDir;
 class InterceptorPanelFunctionalTest {
 
   @TempDir Path tempDir;
+
+  @Test
+  void channelFilterFieldsTrackAllAndNoneModes() throws Exception {
+    String serverId = "libera";
+    String interceptorId = "int-2";
+
+    InterceptorStore store = mock(InterceptorStore.class);
+    when(store.changes()).thenReturn(Flowable.never());
+
+    AtomicReference<InterceptorDefinition> current =
+        new AtomicReference<>(
+            definition(interceptorId, "Rule 1", InterceptorRuleMode.ALL, InterceptorRuleMode.NONE));
+    when(store.interceptor(serverId, interceptorId)).thenAnswer(inv -> current.get());
+    when(store.listHits(serverId, interceptorId, 2_000)).thenReturn(List.of());
+    when(store.saveInterceptor(eq(serverId), any()))
+        .thenAnswer(
+            inv -> {
+              InterceptorDefinition updated = inv.getArgument(1);
+              current.set(updated);
+              return true;
+            });
+
+    InterceptorPanel panel = onEdtCall(() -> new InterceptorPanel(store));
+    JComboBox<?> includeMode = readField(panel, "includeMode", JComboBox.class);
+    JTextField includes = readField(panel, "includes", JTextField.class);
+    JComboBox<?> excludeMode = readField(panel, "excludeMode", JComboBox.class);
+    JTextField excludes = readField(panel, "excludes", JTextField.class);
+
+    try {
+      onEdt(() -> panel.setInterceptorTarget(serverId, interceptorId));
+      waitFor(
+          () ->
+              onEdtBoolean(
+                  () ->
+                      InterceptorRuleMode.ALL.equals(includeMode.getSelectedItem())
+                          && !includes.isEnabled()
+                          && InterceptorRuleMode.NONE.equals(excludeMode.getSelectedItem())
+                          && !excludes.isEnabled()),
+          Duration.ofSeconds(3));
+
+      onEdt(
+          () -> {
+            includeMode.setSelectedItem(InterceptorRuleMode.GLOB);
+            excludeMode.setSelectedItem(InterceptorRuleMode.REGEX);
+          });
+      waitFor(
+          () ->
+              onEdtBoolean(
+                  () ->
+                      includes.isEnabled()
+                          && excludes.isEnabled()
+                          && InterceptorRuleMode.GLOB.equals(current.get().channelIncludeMode())
+                          && InterceptorRuleMode.REGEX.equals(current.get().channelExcludeMode())),
+          Duration.ofSeconds(2));
+    } finally {
+      onEdt(panel::close);
+      flushEdt();
+    }
+  }
+
+  @Test
+  void localDefinitionSaveDoesNotReloadPanelFromStoreChangeFeed() throws Exception {
+    String serverId = "libera";
+    String interceptorId = "int-3";
+
+    InterceptorStore store = mock(InterceptorStore.class);
+    FlowableProcessor<InterceptorStore.Change> changes =
+        PublishProcessor.<InterceptorStore.Change>create().toSerialized();
+    when(store.changes()).thenReturn(changes);
+
+    AtomicReference<InterceptorDefinition> current =
+        new AtomicReference<>(
+            definition(interceptorId, "Rule 1", InterceptorRuleMode.ALL, InterceptorRuleMode.NONE));
+    AtomicInteger interceptorReads = new AtomicInteger();
+    AtomicInteger hitReads = new AtomicInteger();
+    when(store.interceptor(serverId, interceptorId))
+        .thenAnswer(
+            inv -> {
+              interceptorReads.incrementAndGet();
+              return current.get();
+            });
+    when(store.listHits(serverId, interceptorId, 2_000))
+        .thenAnswer(
+            inv -> {
+              hitReads.incrementAndGet();
+              return List.of();
+            });
+    when(store.saveInterceptor(eq(serverId), any()))
+        .thenAnswer(
+            inv -> {
+              InterceptorDefinition updated = inv.getArgument(1);
+              current.set(updated);
+              changes.onNext(new InterceptorStore.Change(serverId, interceptorId));
+              return true;
+            });
+
+    ImmediateExecutorService refreshExecutor = new ImmediateExecutorService();
+    InterceptorPanel panel = onEdtCall(() -> new InterceptorPanel(store, refreshExecutor));
+    JCheckBox actionStatusBarEnabled = readField(panel, "actionStatusBarEnabled", JCheckBox.class);
+
+    try {
+      onEdt(() -> panel.setInterceptorTarget(serverId, interceptorId));
+      waitFor(() -> interceptorReads.get() == 1 && hitReads.get() == 1, Duration.ofSeconds(3));
+
+      onEdt(actionStatusBarEnabled::doClick);
+      flushEdt();
+
+      assertFalse(current.get().actionStatusBarEnabled());
+      assertEquals(1, hitReads.get(), "local save should not trigger a reload of hits");
+      assertEquals(2, interceptorReads.get(), "expected initial load plus save lookup only");
+
+      changes.onNext(new InterceptorStore.Change(serverId, interceptorId));
+      waitFor(() -> interceptorReads.get() == 3 && hitReads.get() == 2, Duration.ofSeconds(2));
+    } finally {
+      onEdt(panel::close);
+      refreshExecutor.shutdownNow();
+      flushEdt();
+    }
+  }
 
   @Test
   void rulesLifecycleHitListAndCsvExportFlowWork() throws Exception {
@@ -138,14 +266,22 @@ class InterceptorPanelFunctionalTest {
   }
 
   private static InterceptorDefinition definition(String id, String ruleLabel) {
+    return definition(id, ruleLabel, InterceptorRuleMode.GLOB, InterceptorRuleMode.GLOB);
+  }
+
+  private static InterceptorDefinition definition(
+      String id,
+      String ruleLabel,
+      InterceptorRuleMode includeMode,
+      InterceptorRuleMode excludeMode) {
     return new InterceptorDefinition(
         id,
         "Interceptor",
         true,
         "libera",
-        InterceptorRuleMode.GLOB,
+        includeMode,
         "",
-        InterceptorRuleMode.GLOB,
+        excludeMode,
         "",
         false,
         true,
@@ -164,9 +300,9 @@ class InterceptorPanelFunctionalTest {
                 "",
                 InterceptorRuleMode.LIKE,
                 "",
-                InterceptorRuleMode.LIKE,
+                InterceptorRuleMode.ALL,
                 "",
-                InterceptorRuleMode.GLOB,
+                InterceptorRuleMode.ALL,
                 "")));
   }
 
@@ -315,5 +451,45 @@ class InterceptorPanelFunctionalTest {
   @FunctionalInterface
   private interface ThrowingBooleanSupplier {
     boolean getAsBoolean() throws Exception;
+  }
+
+  private static final class ImmediateExecutorService extends AbstractExecutorService {
+    private volatile boolean shutdown;
+
+    @Override
+    public void shutdown() {
+      shutdown = true;
+    }
+
+    @Override
+    public List<Runnable> shutdownNow() {
+      shutdown = true;
+      return List.of();
+    }
+
+    @Override
+    public boolean isShutdown() {
+      return shutdown;
+    }
+
+    @Override
+    public boolean isTerminated() {
+      return shutdown;
+    }
+
+    @Override
+    public boolean awaitTermination(long timeout, TimeUnit unit) {
+      return true;
+    }
+
+    @Override
+    public void execute(Runnable command) {
+      if (shutdown) {
+        throw new IllegalStateException("executor is shut down");
+      }
+      if (command != null) {
+        command.run();
+      }
+    }
   }
 }

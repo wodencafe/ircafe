@@ -15,6 +15,24 @@ import org.junit.jupiter.api.Test;
 class InterceptorStoreTest {
 
   @Test
+  void createInterceptorDefaultsToIncludeAllAndExcludeNone() {
+    InterceptorStore store = new InterceptorStore(200);
+    try {
+      InterceptorDefinition def = store.createInterceptor("srv", "Watcher");
+      assertEquals(InterceptorRuleMode.ALL, def.channelIncludeMode());
+      assertEquals("", def.channelIncludes());
+      assertEquals(InterceptorRuleMode.NONE, def.channelExcludeMode());
+      assertEquals("", def.channelExcludes());
+      assertEquals(InterceptorRuleMode.ALL, def.rules().getFirst().nickMode());
+      assertEquals("", def.rules().getFirst().nickPattern());
+      assertEquals(InterceptorRuleMode.ALL, def.rules().getFirst().hostmaskMode());
+      assertEquals("", def.rules().getFirst().hostmaskPattern());
+    } finally {
+      store.shutdown();
+    }
+  }
+
+  @Test
   void capturesMatchingEventsWithRuleDimensions() throws Exception {
     InterceptorStore store = new InterceptorStore(200);
     try {

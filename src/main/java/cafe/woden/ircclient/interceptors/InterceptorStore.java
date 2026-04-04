@@ -223,9 +223,9 @@ public class InterceptorStore implements InterceptorIngestPort {
               name,
               true,
               sid,
-              InterceptorRuleMode.GLOB,
+              InterceptorRuleMode.ALL,
               "",
-              InterceptorRuleMode.GLOB,
+              InterceptorRuleMode.NONE,
               "",
               false,
               false,
@@ -244,9 +244,9 @@ public class InterceptorStore implements InterceptorIngestPort {
                       "",
                       InterceptorRuleMode.LIKE,
                       "",
-                      InterceptorRuleMode.LIKE,
+                      InterceptorRuleMode.ALL,
                       "",
-                      InterceptorRuleMode.GLOB,
+                      InterceptorRuleMode.ALL,
                       "")));
       defs.put(def.id(), def);
     }

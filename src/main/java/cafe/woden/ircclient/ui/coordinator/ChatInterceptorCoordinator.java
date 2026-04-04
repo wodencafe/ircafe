@@ -45,6 +45,7 @@ public final class ChatInterceptorCoordinator {
           if (ref == null) return;
           targetSelectionHandler.accept(ref);
         });
+    interceptorPanel.setOnLocalDefinitionNameChanged(dockTitleRefresher);
 
     disposables.add(
         interceptorStore
@@ -59,6 +60,7 @@ public final class ChatInterceptorCoordinator {
                       InterceptorScope.scopedServerIdForTarget(activeTarget);
                   if (!Objects.equals(activeScopeServerId, change.serverId())) return;
                   if (!Objects.equals(activeTarget.interceptorId(), change.interceptorId())) return;
+                  if (interceptorPanel.consumeLocalDefinitionStoreChangeRefreshSkip()) return;
 
                   SwingUtilities.invokeLater(
                       () -> {

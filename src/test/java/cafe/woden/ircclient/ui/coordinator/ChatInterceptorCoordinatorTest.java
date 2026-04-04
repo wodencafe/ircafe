@@ -2,6 +2,7 @@ package cafe.woden.ircclient.ui.coordinator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -77,6 +78,32 @@ class ChatInterceptorCoordinatorTest {
   }
 
   @Test
+  void bindLocalNameChangeCallbackRefreshesDockTitle() {
+    InterceptorStore interceptorStore = mock(InterceptorStore.class);
+    InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    FlowableProcessor<InterceptorStore.Change> changes =
+        PublishProcessor.<InterceptorStore.Change>create().toSerialized();
+    when(interceptorStore.changes()).thenReturn(changes.onBackpressureBuffer());
+    AtomicInteger dockTitleRefreshes = new AtomicInteger();
+
+    ChatInterceptorCoordinator coordinator =
+        new ChatInterceptorCoordinator(
+            interceptorStore,
+            interceptorPanel,
+            () -> TargetRef.interceptor("libera", "audit"),
+            dockTitleRefreshes::incrementAndGet,
+            ref -> {});
+    CompositeDisposable disposables = new CompositeDisposable();
+
+    coordinator.bind(disposables);
+    Runnable callback = captureLocalNameChangedCallback(interceptorPanel);
+    callback.run();
+
+    assertEquals(1, dockTitleRefreshes.get());
+    disposables.dispose();
+  }
+
+  @Test
   void bindRefreshesActiveInterceptorViewWhenMatchingStoreChangeArrives() throws Exception {
     InterceptorStore interceptorStore = mock(InterceptorStore.class);
     InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
@@ -100,6 +127,34 @@ class ChatInterceptorCoordinatorTest {
 
     assertEquals(1, dockTitleRefreshes.get());
     verify(interceptorPanel).setInterceptorTarget("libera", "", "audit");
+    disposables.dispose();
+  }
+
+  @Test
+  void bindSkipsCoordinatorRefreshForLocalDefinitionSaveChange() throws Exception {
+    InterceptorStore interceptorStore = mock(InterceptorStore.class);
+    InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    FlowableProcessor<InterceptorStore.Change> changes =
+        PublishProcessor.<InterceptorStore.Change>create().toSerialized();
+    when(interceptorStore.changes()).thenReturn(changes.onBackpressureBuffer());
+    doReturn(true).when(interceptorPanel).consumeLocalDefinitionStoreChangeRefreshSkip();
+    AtomicInteger dockTitleRefreshes = new AtomicInteger();
+
+    ChatInterceptorCoordinator coordinator =
+        new ChatInterceptorCoordinator(
+            interceptorStore,
+            interceptorPanel,
+            () -> TargetRef.interceptor("libera", "audit"),
+            dockTitleRefreshes::incrementAndGet,
+            ref -> {});
+    CompositeDisposable disposables = new CompositeDisposable();
+
+    coordinator.bind(disposables);
+    changes.onNext(new InterceptorStore.Change("libera", "audit"));
+    flushEdt();
+
+    assertEquals(0, dockTitleRefreshes.get());
+    verify(interceptorPanel, never()).setInterceptorTarget(anyString(), anyString(), anyString());
     disposables.dispose();
   }
 
@@ -169,6 +224,12 @@ class ChatInterceptorCoordinatorTest {
   private static Consumer<TargetRef> captureSelectionCallback(InterceptorPanel interceptorPanel) {
     ArgumentCaptor<Consumer> captor = ArgumentCaptor.forClass(Consumer.class);
     verify(interceptorPanel).setOnSelectTarget(captor.capture());
+    return captor.getValue();
+  }
+
+  private static Runnable captureLocalNameChangedCallback(InterceptorPanel interceptorPanel) {
+    ArgumentCaptor<Runnable> captor = ArgumentCaptor.forClass(Runnable.class);
+    verify(interceptorPanel).setOnLocalDefinitionNameChanged(captor.capture());
     return captor.getValue();
   }
 }
