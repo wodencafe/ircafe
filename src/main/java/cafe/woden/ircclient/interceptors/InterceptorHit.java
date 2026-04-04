@@ -16,7 +16,8 @@ public record InterceptorHit(
     String fromHostmask,
     String eventType,
     String reason,
-    String message) {
+    String message,
+    String messageId) {
   public InterceptorHit {
     serverId = norm(serverId);
     interceptorId = norm(interceptorId);
@@ -27,6 +28,7 @@ public record InterceptorHit(
     eventType = norm(eventType);
     reason = norm(reason);
     message = norm(message);
+    messageId = norm(messageId);
     if (at == null) at = Instant.now();
     if (fromNick.isEmpty()) fromNick = "?";
     if (reason.isEmpty()) reason = "(rule)";

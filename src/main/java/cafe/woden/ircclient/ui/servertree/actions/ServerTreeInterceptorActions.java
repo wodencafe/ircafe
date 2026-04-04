@@ -239,15 +239,18 @@ public final class ServerTreeInterceptorActions {
 
     String nextLabel = Objects.toString(interceptorStore.interceptorName(sid, iid), "").trim();
     if (nextLabel.isEmpty()) nextLabel = "Interceptor";
+    int hitCount = Math.max(0, interceptorStore.hitCount(sid, iid));
 
     ServerTreeNodeData next = new ServerTreeNodeData(previous.ref, nextLabel);
-    next.unread = previous.unread;
-    next.highlightUnread = previous.highlightUnread;
+    next.unread = hitCount;
+    next.highlightUnread = 0;
     next.detached = previous.detached;
     next.detachedWarning = previous.detachedWarning;
     next.copyTypingFrom(previous);
 
-    if (!Objects.equals(previous.label, nextLabel)) {
+    if (!Objects.equals(previous.label, nextLabel)
+        || previous.unread != next.unread
+        || previous.highlightUnread != next.highlightUnread) {
       node.setUserObject(next);
     }
     context.nodeChanged(node);
@@ -275,10 +278,8 @@ public final class ServerTreeInterceptorActions {
       node.setUserObject(data);
     }
 
-    int total = Math.max(0, interceptorStore.totalHitCount(sid));
-    if (data.unread == total && data.highlightUnread == 0) return;
-
-    data.unread = total;
+    if (data.unread == 0 && data.highlightUnread == 0) return;
+    data.unread = 0;
     data.highlightUnread = 0;
     context.nodeChanged(node);
   }

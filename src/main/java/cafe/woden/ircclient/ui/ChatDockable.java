@@ -708,7 +708,39 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
           } else {
             ChatDockable.this.setActiveTarget(ref);
           }
-        });
+        },
+        this::navigateToInterceptorHitMessage);
+  }
+
+  private void navigateToInterceptorHitMessage(TargetRef target, String messageId) {
+    navigateToInterceptorHitMessage(target, messageId, 4);
+  }
+
+  private void navigateToInterceptorHitMessage(
+      TargetRef target, String messageId, int attemptsLeft) {
+    if (target == null) return;
+    String msgId = Objects.toString(messageId, "").trim();
+    if (msgId.isEmpty()) return;
+
+    if (!Objects.equals(activeTarget, target)) {
+      if (serverTree != null) {
+        serverTree.selectTarget(target);
+      } else {
+        setActiveTarget(target);
+      }
+      if (attemptsLeft <= 0) return;
+      SwingUtilities.invokeLater(
+          () -> navigateToInterceptorHitMessage(target, msgId, attemptsLeft - 1));
+      return;
+    }
+
+    int offset = transcripts.messageOffsetById(target, msgId);
+    if (offset >= 0) {
+      setFollowTail(false);
+      scrollToTranscriptOffset(offset);
+      return;
+    }
+    historyActionCoordinator.requestHistoryAroundMessage(msgId);
   }
 
   private ChatTargetViewRouter createTargetViewRouter(
@@ -923,6 +955,8 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
             ChatDockable.this.serverTree.selectTarget(ref);
           }
         });
+    panel.setOnJumpToMessage(
+        (target, messageId) -> navigateToInterceptorHitMessage(target, messageId));
     return panel;
   }
 

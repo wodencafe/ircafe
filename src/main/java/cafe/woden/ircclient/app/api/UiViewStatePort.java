@@ -45,7 +45,17 @@ public interface UiViewStatePort {
     recordHighlight(target, fromNick);
   }
 
+  default void recordHighlight(
+      TargetRef target, String fromNick, String snippet, String messageId) {
+    recordHighlight(target, fromNick, snippet);
+  }
+
   void recordRuleMatch(TargetRef target, String fromNick, String ruleLabel, String snippet);
+
+  default void recordRuleMatch(
+      TargetRef target, String fromNick, String ruleLabel, String snippet, String messageId) {
+    recordRuleMatch(target, fromNick, ruleLabel, snippet);
+  }
 
   void clearUnread(TargetRef target);
 

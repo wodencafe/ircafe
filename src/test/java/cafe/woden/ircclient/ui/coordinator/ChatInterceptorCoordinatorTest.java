@@ -17,6 +17,7 @@ import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,12 @@ class ChatInterceptorCoordinatorTest {
 
     ChatInterceptorCoordinator coordinator =
         new ChatInterceptorCoordinator(
-            interceptorStore, interceptorPanel, () -> null, () -> {}, selectedTarget::set);
+            interceptorStore,
+            interceptorPanel,
+            () -> null,
+            () -> {},
+            selectedTarget::set,
+            (ref, msgId) -> {});
     CompositeDisposable disposables = new CompositeDisposable();
 
     coordinator.bind(disposables);
@@ -48,13 +54,51 @@ class ChatInterceptorCoordinatorTest {
   }
 
   @Test
+  void bindJumpCallbackDelegatesToHitMessageNavigator() {
+    InterceptorStore interceptorStore = mock(InterceptorStore.class);
+    InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
+    FlowableProcessor<InterceptorStore.Change> changes =
+        PublishProcessor.<InterceptorStore.Change>create().toSerialized();
+    when(interceptorStore.changes()).thenReturn(changes.onBackpressureBuffer());
+    AtomicReference<TargetRef> selectedTarget = new AtomicReference<>();
+    AtomicReference<String> selectedMessageId = new AtomicReference<>();
+
+    ChatInterceptorCoordinator coordinator =
+        new ChatInterceptorCoordinator(
+            interceptorStore,
+            interceptorPanel,
+            () -> null,
+            () -> {},
+            ref -> {},
+            (ref, msgId) -> {
+              selectedTarget.set(ref);
+              selectedMessageId.set(msgId);
+            });
+    CompositeDisposable disposables = new CompositeDisposable();
+
+    coordinator.bind(disposables);
+    BiConsumer<TargetRef, String> callback = captureJumpCallback(interceptorPanel);
+    TargetRef hitTarget = new TargetRef("libera", "#ircafe");
+    callback.accept(hitTarget, "msg-123");
+
+    assertEquals(hitTarget, selectedTarget.get());
+    assertEquals("msg-123", selectedMessageId.get());
+    disposables.dispose();
+  }
+
+  @Test
   void onActiveTargetChangedClearsInterceptorPanelWhenLeavingInterceptor() {
     InterceptorStore interceptorStore = mock(InterceptorStore.class);
     InterceptorPanel interceptorPanel = mock(InterceptorPanel.class);
 
     ChatInterceptorCoordinator coordinator =
         new ChatInterceptorCoordinator(
-            interceptorStore, interceptorPanel, () -> null, () -> {}, ref -> {});
+            interceptorStore,
+            interceptorPanel,
+            () -> null,
+            () -> {},
+            ref -> {},
+            (ref, msgId) -> {});
 
     coordinator.onActiveTargetChanged(
         TargetRef.interceptor("libera", "audit"), new TargetRef("libera", "#ircafe"));
@@ -69,7 +113,12 @@ class ChatInterceptorCoordinatorTest {
 
     ChatInterceptorCoordinator coordinator =
         new ChatInterceptorCoordinator(
-            interceptorStore, interceptorPanel, () -> null, () -> {}, ref -> {});
+            interceptorStore,
+            interceptorPanel,
+            () -> null,
+            () -> {},
+            ref -> {},
+            (ref, msgId) -> {});
 
     coordinator.onActiveTargetChanged(
         TargetRef.interceptor("libera", "audit"), TargetRef.interceptor("libera", "other"));
@@ -92,7 +141,8 @@ class ChatInterceptorCoordinatorTest {
             interceptorPanel,
             () -> TargetRef.interceptor("libera", "audit"),
             dockTitleRefreshes::incrementAndGet,
-            ref -> {});
+            ref -> {},
+            (ref, msgId) -> {});
     CompositeDisposable disposables = new CompositeDisposable();
 
     coordinator.bind(disposables);
@@ -118,7 +168,8 @@ class ChatInterceptorCoordinatorTest {
             interceptorPanel,
             () -> TargetRef.interceptor("libera", "audit"),
             dockTitleRefreshes::incrementAndGet,
-            ref -> {});
+            ref -> {},
+            (ref, msgId) -> {});
     CompositeDisposable disposables = new CompositeDisposable();
 
     coordinator.bind(disposables);
@@ -146,7 +197,8 @@ class ChatInterceptorCoordinatorTest {
             interceptorPanel,
             () -> TargetRef.interceptor("libera", "audit"),
             dockTitleRefreshes::incrementAndGet,
-            ref -> {});
+            ref -> {},
+            (ref, msgId) -> {});
     CompositeDisposable disposables = new CompositeDisposable();
 
     coordinator.bind(disposables);
@@ -173,7 +225,8 @@ class ChatInterceptorCoordinatorTest {
             interceptorPanel,
             () -> TargetRef.interceptor("libera", "audit"),
             dockTitleRefreshes::incrementAndGet,
-            ref -> {});
+            ref -> {},
+            (ref, msgId) -> {});
     CompositeDisposable disposables = new CompositeDisposable();
 
     coordinator.bind(disposables);
@@ -201,7 +254,8 @@ class ChatInterceptorCoordinatorTest {
             interceptorPanel,
             () -> TargetRef.interceptor("quassel", "audit", "libera"),
             dockTitleRefreshes::incrementAndGet,
-            ref -> {});
+            ref -> {},
+            (ref, msgId) -> {});
     CompositeDisposable disposables = new CompositeDisposable();
 
     coordinator.bind(disposables);
@@ -224,6 +278,14 @@ class ChatInterceptorCoordinatorTest {
   private static Consumer<TargetRef> captureSelectionCallback(InterceptorPanel interceptorPanel) {
     ArgumentCaptor<Consumer> captor = ArgumentCaptor.forClass(Consumer.class);
     verify(interceptorPanel).setOnSelectTarget(captor.capture());
+    return captor.getValue();
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static BiConsumer<TargetRef, String> captureJumpCallback(
+      InterceptorPanel interceptorPanel) {
+    ArgumentCaptor<BiConsumer> captor = ArgumentCaptor.forClass(BiConsumer.class);
+    verify(interceptorPanel).setOnJumpToMessage(captor.capture());
     return captor.getValue();
   }
 

@@ -22,14 +22,18 @@ class NotificationStoreTest {
     NotificationStore store = new NotificationStore();
     TargetRef chan = new TargetRef("libera", "#ircafe");
 
-    store.recordHighlight(chan, "alice", "alice: ping");
-    store.recordRuleMatch(chan, "bob", "Rule A", "match snippet");
-    store.recordIrcEvent("libera", "#ircafe", "carol", "Topic changed", "new topic body");
+    store.recordHighlight(chan, "alice", "alice: ping", "msg-highlight");
+    store.recordRuleMatch(chan, "bob", "Rule A", "match snippet", "msg-rule");
+    store.recordIrcEvent(
+        "libera", "#ircafe", "carol", "Topic changed", "new topic body", "msg-irc");
 
     assertEquals(1, store.listAll("libera").size());
     assertEquals("alice: ping", store.listAll("libera").getFirst().snippet());
+    assertEquals("msg-highlight", store.listAll("libera").getFirst().messageId());
     assertEquals(1, store.listAllRuleMatches("libera").size());
+    assertEquals("msg-rule", store.listAllRuleMatches("libera").getFirst().messageId());
     assertEquals(1, store.listAllIrcEventRules("libera").size());
+    assertEquals("msg-irc", store.listAllIrcEventRules("libera").getFirst().messageId());
     assertEquals(3, store.count("libera"));
   }
 
@@ -102,5 +106,28 @@ class NotificationStoreTest {
 
     assertEquals(beforeEvents + 1, store.listAllRuleMatches("libera").size());
     assertTrue(cooldownMap.size() <= 2);
+  }
+
+  @Test
+  void clearSelectedRemovesOnlyChosenRowsAndClearsRuleCooldownForRemovedRule() {
+    NotificationStore store = new NotificationStore();
+    TargetRef chan = new TargetRef("libera", "#ircafe");
+
+    store.recordHighlight(chan, "alice", "alice: ping", "msg-highlight");
+    store.recordRuleMatch(chan, "bob", "Rule A", "match snippet", "msg-rule");
+    store.recordIrcEvent(
+        "libera", "#ircafe", "carol", "Topic changed", "new topic body", "msg-irc");
+
+    NotificationStore.RuleMatchEvent ruleEvent = store.listAllRuleMatches("libera").getFirst();
+    NotificationStore.IrcEventRuleEvent ircEvent = store.listAllIrcEventRules("libera").getFirst();
+
+    assertEquals(2, store.clearSelected("libera", List.of(ruleEvent, ircEvent)));
+    assertEquals(1, store.listAll("libera").size());
+    assertTrue(store.listAllRuleMatches("libera").isEmpty());
+    assertTrue(store.listAllIrcEventRules("libera").isEmpty());
+
+    store.recordRuleMatch(chan, "bob", "Rule A", "match after clear", "msg-rule-2");
+    assertEquals(1, store.listAllRuleMatches("libera").size());
+    assertEquals("msg-rule-2", store.listAllRuleMatches("libera").getFirst().messageId());
   }
 }

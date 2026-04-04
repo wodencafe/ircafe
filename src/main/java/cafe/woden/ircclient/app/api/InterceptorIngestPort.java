@@ -15,4 +15,15 @@ public interface InterceptorIngestPort {
       String fromHostmask,
       String text,
       InterceptorEventType eventType);
+
+  default void ingestEvent(
+      String serverId,
+      String channel,
+      String fromNick,
+      String fromHostmask,
+      String text,
+      InterceptorEventType eventType,
+      String messageId) {
+    ingestEvent(serverId, channel, fromNick, fromHostmask, text, eventType);
+  }
 }

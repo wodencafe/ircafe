@@ -438,7 +438,7 @@ class IrcMediatorMockVerifyTest {
         new ServerIrcEvent(
             "libera", new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "hi bob")));
 
-    verify(ui).recordHighlight(chan, "alice", "hi bob");
+    verify(ui).recordHighlight(chan, "alice", "hi bob", "");
     verify(ui, never()).markHighlight(chan);
     verify(trayNotificationsPort).notifyHighlight("libera", "#ircafe", "alice", "hi bob");
   }
@@ -455,7 +455,7 @@ class IrcMediatorMockVerifyTest {
             "libera", new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "hi bob")));
 
     verify(ui).markHighlight(chan);
-    verify(ui).recordHighlight(chan, "alice", "hi bob");
+    verify(ui).recordHighlight(chan, "alice", "hi bob", "");
     verify(trayNotificationsPort).notifyHighlight("libera", "#ircafe", "alice", "hi bob");
   }
 
@@ -804,7 +804,8 @@ class IrcMediatorMockVerifyTest {
             eq("FurBot"),
             anyString(),
             eq("+o Arca"),
-            eq(InterceptorEventType.MODE));
+            eq(InterceptorEventType.MODE),
+            eq(""));
   }
 
   @Test
@@ -839,7 +840,8 @@ class IrcMediatorMockVerifyTest {
             eq("alice"),
             anyString(),
             anyString(),
-            eq(InterceptorEventType.MESSAGE));
+            eq(InterceptorEventType.MESSAGE),
+            eq("dup-1"));
     ArgumentCaptor<Object> published = ArgumentCaptor.forClass(Object.class);
     verify(applicationEventPublisher, times(1)).publishEvent(published.capture());
     IrcMediator.InboundMessageDedupDiagnostics event =
@@ -875,7 +877,8 @@ class IrcMediatorMockVerifyTest {
             eq("alice"),
             anyString(),
             anyString(),
-            eq(InterceptorEventType.PRIVATE_MESSAGE));
+            eq(InterceptorEventType.PRIVATE_MESSAGE),
+            eq("pm-dup-1"));
     verify(trayNotificationsPort, times(1)).notifyPrivateMessage("libera", "alice", "hello");
   }
 
@@ -899,7 +902,8 @@ class IrcMediatorMockVerifyTest {
             eq("alice"),
             anyString(),
             eq("WODEN hello world"),
-            eq(InterceptorEventType.CTCP));
+            eq(InterceptorEventType.CTCP),
+            eq(""));
   }
 
   @Test
@@ -1031,7 +1035,7 @@ class IrcMediatorMockVerifyTest {
             "libera",
             new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "deploy now")));
 
-    verify(ui).recordRuleMatch(eq(chan), eq("alice"), eq("Rule A"), anyString());
+    verify(ui).recordRuleMatch(eq(chan), eq("alice"), eq("Rule A"), anyString(), eq(""));
     verify(ui, never()).markHighlight(chan);
   }
 
@@ -1048,7 +1052,7 @@ class IrcMediatorMockVerifyTest {
             "libera",
             new IrcEvent.ChannelMessage(Instant.now(), "#ircafe", "alice", "deploy now")));
 
-    verify(ui).recordRuleMatch(eq(chan), eq("alice"), eq("Rule A"), anyString());
+    verify(ui).recordRuleMatch(eq(chan), eq("alice"), eq("Rule A"), anyString(), eq(""));
     verify(ui).markHighlight(chan);
   }
 

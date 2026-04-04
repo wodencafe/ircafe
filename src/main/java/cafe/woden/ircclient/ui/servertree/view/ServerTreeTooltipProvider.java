@@ -269,7 +269,7 @@ public final class ServerTreeTooltipProvider {
     }
 
     if (context.isInterceptorsGroupNode(node)) {
-      return "Interceptors for this server. Count shows total captured hits.";
+      return "Interceptors for this server. Individual interceptor nodes show their own captured hit counts.";
     }
     if (context.isMonitorGroupNode(node)) {
       return "Monitored nick presence for this server (IRC MONITOR, with ISON fallback when unavailable).";
@@ -358,7 +358,7 @@ public final class ServerTreeTooltipProvider {
       return "Bouncer Control connection (used to discover bouncer networks).";
     }
     if (nodeData.ref.isInterceptor()) {
-      return "Custom interceptor rules, actions, and captured matches. Scope can be this server or any server.";
+      return "Custom interceptor rules, actions, and captured matches. Badge count shows stored hits for this interceptor.";
     }
     if (nodeData.ref.isWeechatFilters()) {
       return "WeeChat-style local filters for this server (rules, placeholders, and scope overrides).";

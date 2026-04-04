@@ -40,6 +40,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
@@ -134,8 +135,15 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private final JPopupMenu rulesPopupMenu = new JPopupMenu();
   private final JMenuItem rulesPopupEdit = new JMenuItem("Edit...");
   private final JMenuItem rulesPopupRemove = new JMenuItem("Delete...");
+  private final JButton clearSelectedHits = new JButton("Clear Selected");
   private final JButton clearHits = new JButton("Clear");
   private final JButton exportHitsCsv = new JButton("Export CSV");
+  private final JPopupMenu hitsPopupMenu = new JPopupMenu();
+  private final JMenuItem hitsPopupJumpToMessage = new JMenuItem("Jump to message");
+  private final JMenuItem hitsPopupClearSelected = new JMenuItem("Clear selected row(s)");
+  private final JMenuItem hitsPopupClearAll = new JMenuItem("Clear all rows");
+  private final JMenuItem hitsPopupExportSelectedCsv = new JMenuItem("Export selected to CSV");
+  private final JMenuItem hitsPopupExportAllCsv = new JMenuItem("Export all to CSV");
   private final JButton createInterceptorButton = new JButton("Create Interceptor");
 
   private final RulesTableModel rulesModel = new RulesTableModel();
@@ -158,6 +166,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private boolean loading = false;
   private boolean controlsEnabled = false;
   private Consumer<TargetRef> onSelectTarget;
+  private BiConsumer<TargetRef, String> onJumpToMessage = (ref, messageId) -> {};
   private Runnable onLocalDefinitionNameChanged = () -> {};
   private boolean hasExternalStoreChangeRefreshConsumer = false;
 
@@ -223,6 +232,10 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
   public void setOnSelectTarget(Consumer<TargetRef> onSelectTarget) {
     this.onSelectTarget = onSelectTarget;
+  }
+
+  public void setOnJumpToMessage(BiConsumer<TargetRef, String> onJumpToMessage) {
+    this.onJumpToMessage = onJumpToMessage == null ? (ref, messageId) -> {} : onJumpToMessage;
   }
 
   public void setOnLocalDefinitionNameChanged(Runnable onLocalDefinitionNameChanged) {
@@ -437,10 +450,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private JPanel buildHitsTab() {
     JPanel tab = new JPanel(new BorderLayout());
 
-    JPanel toolbar = new JPanel(new MigLayout("insets 6 0 6 0,fillx", "[grow,fill][][]", "[]"));
-    toolbar.add(new JLabel(""), "growx");
+    JPanel toolbar = new JPanel(new MigLayout("insets 6 10 6 10,fillx", "[][][][grow,fill]", "[]"));
     toolbar.add(exportHitsCsv);
+    toolbar.add(clearSelectedHits);
     toolbar.add(clearHits);
+    toolbar.add(new JLabel(""), "growx");
 
     tab.add(toolbar, BorderLayout.NORTH);
     tab.add(new JScrollPane(hitsTable), BorderLayout.CENTER);
@@ -481,7 +495,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   private void configureHitsTable() {
     hitsTable.setFillsViewportHeight(true);
     hitsTable.setRowSelectionAllowed(true);
-    hitsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    hitsTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     hitsTable.setShowHorizontalLines(false);
     hitsTable.setShowVerticalLines(false);
     hitsTable.getTableHeader().setReorderingAllowed(false);
@@ -586,16 +600,40 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
 
     rulesTable.getSelectionModel().addListSelectionListener(e -> updateRuleButtons());
 
+    hitsPopupJumpToMessage.addActionListener(e -> jumpToSelectedHitMessage());
+    hitsPopupClearSelected.addActionListener(e -> clearSelectedHitRows());
+    hitsPopupClearAll.addActionListener(e -> clearAllHitRows());
+    hitsPopupExportSelectedCsv.addActionListener(e -> exportSelectedHitsTableAsCsv());
+    hitsPopupExportAllCsv.addActionListener(e -> exportHitsTableAsCsv());
+
+    hitsPopupMenu.setLightWeightPopupEnabled(true);
+    hitsPopupMenu.add(hitsPopupJumpToMessage);
+    hitsPopupMenu.addSeparator();
+    hitsPopupMenu.add(hitsPopupClearSelected);
+    hitsPopupMenu.add(hitsPopupClearAll);
+    hitsPopupMenu.addSeparator();
+    hitsPopupMenu.add(hitsPopupExportSelectedCsv);
+    hitsPopupMenu.add(hitsPopupExportAllCsv);
+
+    hitsTable.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mousePressed(MouseEvent e) {
+            maybeShowHitsPopup(e);
+          }
+
+          @Override
+          public void mouseReleased(MouseEvent e) {
+            maybeShowHitsPopup(e);
+          }
+        });
+    hitsTable.getSelectionModel().addListSelectionListener(e -> updateHitButtons());
+
     exportHitsCsv.addActionListener(e -> exportHitsTableAsCsv());
+    clearSelectedHits.addActionListener(e -> clearSelectedHitRows());
     createInterceptorButton.addActionListener(e -> createInterceptorFromOverview());
 
-    clearHits.addActionListener(
-        e -> {
-          String sid = serverId;
-          String iid = interceptorId;
-          if (sid.isBlank() || iid.isBlank()) return;
-          store.clearHits(sid, iid);
-        });
+    clearHits.addActionListener(e -> clearAllHitRows());
   }
 
   private void editSelectedRule() {
@@ -626,6 +664,47 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     rulesPopupMenu.show(e.getComponent(), e.getX(), e.getY());
   }
 
+  private void maybeShowHitsPopup(MouseEvent e) {
+    if (e == null || !e.isPopupTrigger()) return;
+    int viewRow = hitsTable.rowAtPoint(e.getPoint());
+    if (viewRow >= 0) {
+      if (!hitsTable.isRowSelected(viewRow)) {
+        hitsTable.setRowSelectionInterval(viewRow, viewRow);
+      }
+    } else {
+      hitsTable.clearSelection();
+    }
+    updateHitButtons();
+    PopupMenuThemeSupport.prepareForDisplay(hitsPopupMenu);
+    hitsPopupMenu.show(e.getComponent(), e.getX(), e.getY());
+  }
+
+  private void clearAllHitRows() {
+    String sid = serverId;
+    String iid = interceptorId;
+    if (sid.isBlank() || iid.isBlank()) return;
+    store.clearHits(sid, iid);
+  }
+
+  private void clearSelectedHitRows() {
+    String sid = serverId;
+    String iid = interceptorId;
+    if (sid.isBlank() || iid.isBlank()) return;
+    List<InterceptorHit> selectedHits = selectedHits();
+    if (selectedHits.isEmpty()) return;
+    store.clearHits(sid, iid, selectedHits);
+  }
+
+  private void jumpToSelectedHitMessage() {
+    InterceptorHit hit = selectedSingleHit();
+    if (hit == null) return;
+    String messageId = Objects.toString(hit.messageId(), "").trim();
+    if (messageId.isEmpty()) return;
+    TargetRef target = targetRefForHit(hit);
+    if (target == null) return;
+    onJumpToMessage.accept(target, messageId);
+  }
+
   private void removeSelectedRule() {
     int row = selectedRuleModelRow();
     if (row < 0) return;
@@ -654,6 +733,81 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     int row = rulesTable.getSelectedRow();
     if (row < 0) return -1;
     return rulesTable.convertRowIndexToModel(row);
+  }
+
+  private List<Integer> allHitViewRows() {
+    int rowCount = hitsTable.getRowCount();
+    if (rowCount <= 0) return List.of();
+    ArrayList<Integer> rows = new ArrayList<>(rowCount);
+    for (int viewRow = 0; viewRow < rowCount; viewRow++) {
+      rows.add(viewRow);
+    }
+    return rows;
+  }
+
+  private List<Integer> selectedHitViewRows() {
+    int[] selectedRows = hitsTable.getSelectedRows();
+    if (selectedRows == null || selectedRows.length == 0) return List.of();
+    ArrayList<Integer> rows = new ArrayList<>(selectedRows.length);
+    for (int viewRow : selectedRows) {
+      if (viewRow >= 0) {
+        rows.add(viewRow);
+      }
+    }
+    return rows;
+  }
+
+  private List<InterceptorHit> selectedHits() {
+    List<Integer> viewRows = selectedHitViewRows();
+    if (viewRows.isEmpty()) return List.of();
+    ArrayList<InterceptorHit> rows = new ArrayList<>(viewRows.size());
+    for (int viewRow : viewRows) {
+      int modelRow = hitsTable.convertRowIndexToModel(viewRow);
+      InterceptorHit hit = hitsModel.rowAt(modelRow);
+      if (hit != null) {
+        rows.add(hit);
+      }
+    }
+    return rows;
+  }
+
+  private InterceptorHit selectedSingleHit() {
+    if (hitsTable.getSelectedRowCount() != 1) return null;
+    int viewRow = hitsTable.getSelectedRow();
+    if (viewRow < 0) return null;
+    return hitsModel.rowAt(hitsTable.convertRowIndexToModel(viewRow));
+  }
+
+  static TargetRef targetRefForHit(InterceptorHit hit) {
+    if (hit == null) return null;
+    String scopeServerId = InterceptorScope.normalizeScopeServerId(hit.serverId());
+    String serverId = InterceptorScope.baseServerId(scopeServerId);
+    if (serverId.isBlank()) {
+      serverId = Objects.toString(hit.serverId(), "").trim();
+    }
+    if (serverId.isBlank()) return null;
+
+    TargetRef.QualifiedTarget parsed = TargetRef.parseQualifiedTarget(hit.channel());
+    String target = Objects.toString(parsed.baseTarget(), "").trim();
+    if (target.regionMatches(true, 0, "pm:", 0, 3)) {
+      target = target.substring(3).trim();
+    }
+    if (target.isBlank()) {
+      target = "status";
+    }
+
+    String networkToken = parsed.networkToken();
+    if (networkToken.isBlank()) {
+      networkToken = InterceptorScope.networkToken(scopeServerId);
+    }
+
+    try {
+      return new TargetRef(
+          serverId,
+          networkToken.isBlank() ? target : TargetRef.withNetworkQualifier(target, networkToken));
+    } catch (IllegalArgumentException ignored) {
+      return null;
+    }
   }
 
   private DefaultListCellRenderer modeComboRenderer(JComboBox<?> combo) {
@@ -1125,8 +1279,14 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     configureIconButton(addRule, "plus", "Add trigger rule");
     configureIconButton(editRule, "edit", "Edit selected trigger rule");
     configureIconButton(removeRule, "trash", "Remove selected trigger rule");
-    configureIconButton(clearHits, "close", "Clear interceptor hits");
-    configureIconButton(exportHitsCsv, "copy", "Export interceptor hits to CSV");
+    configureIconButton(clearSelectedHits, "trash", "Clear selected interceptor hits");
+    configureIconButton(clearHits, "close", "Clear all interceptor hits");
+    configureIconButton(exportHitsCsv, "copy", "Export all interceptor hits to CSV");
+    configureMenuItem(hitsPopupJumpToMessage, "channel");
+    configureMenuItem(hitsPopupClearSelected, "trash");
+    configureMenuItem(hitsPopupClearAll, "close");
+    configureMenuItem(hitsPopupExportSelectedCsv, "copy");
+    configureMenuItem(hitsPopupExportAllCsv, "copy");
     createInterceptorButton.setIcon(SvgIcons.action("plus", 16));
     createInterceptorButton.setDisabledIcon(SvgIcons.actionDisabled("plus", 16));
     createInterceptorButton.setMargin(new Insets(2, 8, 2, 8));
@@ -1147,6 +1307,12 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     button.setMargin(new Insets(2, 6, 2, 6));
     button.setToolTipText(tooltip);
     button.setFocusable(false);
+  }
+
+  private static void configureMenuItem(JMenuItem item, String iconName) {
+    if (item == null) return;
+    item.setIcon(SvgIcons.action(iconName, 16));
+    item.setDisabledIcon(SvgIcons.actionDisabled(iconName, 16));
   }
 
   private void previewSelectedSound() {
@@ -1196,16 +1362,27 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
   }
 
   private void exportHitsTableAsCsv() {
-    if (hitsTable.getRowCount() <= 0) {
-      status.setText("No interceptor hits to export.");
+    exportHitsAsCsv(allHitViewRows(), "Export Interceptor Hits", false);
+  }
+
+  private void exportSelectedHitsTableAsCsv() {
+    exportHitsAsCsv(selectedHitViewRows(), "Export Selected Interceptor Hits", true);
+  }
+
+  private void exportHitsAsCsv(List<Integer> viewRows, String dialogTitle, boolean selectedOnly) {
+    if (viewRows == null || viewRows.isEmpty()) {
+      status.setText(
+          selectedOnly
+              ? "No selected interceptor hits to export."
+              : "No interceptor hits to export.");
       return;
     }
 
     JFileChooser chooser = new JFileChooser();
-    chooser.setDialogTitle("Export Interceptor Hits");
+    chooser.setDialogTitle(dialogTitle);
     chooser.setFileFilter(new FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
     chooser.setAcceptAllFileFilterUsed(true);
-    chooser.setSelectedFile(new File(defaultHitsExportFileName()));
+    chooser.setSelectedFile(new File(defaultHitsExportFileName(selectedOnly)));
 
     int result = chooser.showSaveDialog(SwingUtilities.getWindowAncestor(this));
     if (result != JFileChooser.APPROVE_OPTION) return;
@@ -1220,8 +1397,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     }
 
     try {
-      writeHitsCsv(path);
-      status.setText("Exported " + hitsTable.getRowCount() + " hit(s) to " + path.toAbsolutePath());
+      writeHitsCsv(path, viewRows);
+      status.setText("Exported " + viewRows.size() + " hit(s) to " + path.toAbsolutePath());
     } catch (Exception ex) {
       String msg = Objects.toString(ex.getMessage(), ex.getClass().getSimpleName());
       status.setText("Export failed: " + msg);
@@ -1233,8 +1410,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     }
   }
 
-  private void writeHitsCsv(Path path) throws Exception {
+  private void writeHitsCsv(Path path, List<Integer> viewRows) throws Exception {
     if (path == null) throw new IllegalArgumentException("Output path is required.");
+    if (viewRows == null || viewRows.isEmpty()) {
+      throw new IllegalArgumentException("At least one row is required.");
+    }
     if (path.getParent() != null) {
       Files.createDirectories(path.getParent());
     }
@@ -1255,7 +1435,8 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
       out.write(joinCsv(headers));
       out.newLine();
 
-      for (int viewRow = 0; viewRow < hitsTable.getRowCount(); viewRow++) {
+      for (int viewRow : viewRows) {
+        if (viewRow < 0 || viewRow >= hitsTable.getRowCount()) continue;
         int modelRow = hitsTable.convertRowIndexToModel(viewRow);
         ArrayList<String> row = new ArrayList<>(viewColumnCount);
 
@@ -1288,7 +1469,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     return "\"" + s.replace("\"", "\"\"") + "\"";
   }
 
-  private String defaultHitsExportFileName() {
+  private String defaultHitsExportFileName(boolean selectedOnly) {
     String sid = serverId.isBlank() ? "server" : serverId.replaceAll("[^A-Za-z0-9._-]+", "_");
     String iid =
         interceptorId.isBlank() ? "interceptor" : interceptorId.replaceAll("[^A-Za-z0-9._-]+", "_");
@@ -1296,7 +1477,15 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss", Locale.ROOT)
             .withZone(ZoneId.systemDefault())
             .format(Instant.now());
-    return "ircafe-interceptor-hits-" + sid + "-" + iid + "-" + ts + ".csv";
+    return "ircafe-interceptor-hits"
+        + (selectedOnly ? "-selected" : "")
+        + "-"
+        + sid
+        + "-"
+        + iid
+        + "-"
+        + ts
+        + ".csv";
   }
 
   private void browseForCustomSoundPath() {
@@ -1622,6 +1811,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     loading = false;
     setControlsEnabled(true);
     updateRuleButtons();
+    updateHitButtons();
   }
 
   private void resetControls() {
@@ -1650,6 +1840,7 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     refreshChannelFilterControlEnabledState();
     refreshActionControlEnabledState();
     updateRuleButtons();
+    updateHitButtons();
   }
 
   private void refreshActionControlEnabledState() {
@@ -1699,14 +1890,13 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     actionSoundEnabled.setEnabled(enabled);
     actionScriptEnabled.setEnabled(enabled);
 
-    clearHits.setEnabled(enabled);
-    exportHitsCsv.setEnabled(enabled && hitsModel.getRowCount() > 0);
     rulesTable.setEnabled(enabled);
     hitsTable.setEnabled(enabled);
 
     refreshChannelFilterControlEnabledState();
     refreshActionControlEnabledState();
     updateRuleButtons();
+    updateHitButtons();
   }
 
   private void updateRuleButtons() {
@@ -1714,6 +1904,28 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
     addRule.setEnabled(controlsEnabled);
     editRule.setEnabled(controlsEnabled && hasSelection);
     removeRule.setEnabled(controlsEnabled && hasSelection);
+  }
+
+  private void updateHitButtons() {
+    boolean hasRows = hitsModel.getRowCount() > 0;
+    boolean hasSelection = hitsTable.getSelectedRowCount() > 0;
+    boolean canJump = false;
+    if (controlsEnabled && hitsTable.getSelectedRowCount() == 1) {
+      InterceptorHit hit = selectedSingleHit();
+      canJump =
+          hit != null
+              && !Objects.toString(hit.messageId(), "").trim().isEmpty()
+              && targetRefForHit(hit) != null;
+    }
+
+    clearSelectedHits.setEnabled(controlsEnabled && hasSelection);
+    clearHits.setEnabled(controlsEnabled && hasRows);
+    exportHitsCsv.setEnabled(controlsEnabled && hasRows);
+    hitsPopupJumpToMessage.setEnabled(controlsEnabled && canJump);
+    hitsPopupClearSelected.setEnabled(controlsEnabled && hasSelection);
+    hitsPopupClearAll.setEnabled(controlsEnabled && hasRows);
+    hitsPopupExportSelectedCsv.setEnabled(controlsEnabled && hasSelection);
+    hitsPopupExportAllCsv.setEnabled(controlsEnabled && hasRows);
   }
 
   public boolean consumeLocalDefinitionStoreChangeRefreshSkip() {
@@ -2066,6 +2278,11 @@ public final class InterceptorPanel extends JPanel implements AutoCloseable {
         case 7 -> r.message();
         default -> "";
       };
+    }
+
+    InterceptorHit rowAt(int rowIndex) {
+      if (rowIndex < 0 || rowIndex >= rows.size()) return null;
+      return rows.get(rowIndex);
     }
 
     void setRows(List<InterceptorHit> rows) {

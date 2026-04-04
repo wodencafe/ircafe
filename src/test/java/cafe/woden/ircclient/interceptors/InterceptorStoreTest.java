@@ -112,6 +112,79 @@ class InterceptorStoreTest {
   }
 
   @Test
+  void storesMessageIdsAndCanClearSelectedHitsOnly() throws Exception {
+    InterceptorStore store = new InterceptorStore(200);
+    try {
+      InterceptorDefinition def = store.createInterceptor("srv", "Watcher");
+      InterceptorDefinition updated =
+          new InterceptorDefinition(
+              def.id(),
+              def.name(),
+              true,
+              "srv",
+              InterceptorRuleMode.ALL,
+              "",
+              InterceptorRuleMode.NONE,
+              "",
+              false,
+              false,
+              false,
+              "NOTIF_1",
+              false,
+              "",
+              false,
+              "",
+              "",
+              "",
+              List.of(
+                  new InterceptorRule(
+                      true,
+                      "Everything",
+                      "message",
+                      InterceptorRuleMode.LIKE,
+                      "line",
+                      InterceptorRuleMode.ALL,
+                      "",
+                      InterceptorRuleMode.ALL,
+                      "")));
+      store.saveInterceptor("srv", updated);
+
+      store.ingestEvent(
+          "srv",
+          "#ircafe",
+          "alice",
+          "alice!ident@host.example",
+          "first line",
+          InterceptorEventType.MESSAGE,
+          "msg-1");
+      store.ingestEvent(
+          "srv",
+          "#ircafe",
+          "alice",
+          "alice!ident@host.example",
+          "second line",
+          InterceptorEventType.MESSAGE,
+          "msg-2");
+
+      List<InterceptorHit> hits = waitForHits(store, "srv", def.id(), 2);
+      assertEquals(
+          List.of("msg-1", "msg-2"), hits.stream().map(InterceptorHit::messageId).toList());
+      assertEquals(2, store.hitCount("srv", def.id()));
+
+      int removed = store.clearHits("srv", def.id(), List.of(hits.getFirst()));
+      assertEquals(1, removed);
+
+      List<InterceptorHit> remaining = waitForHits(store, "srv", def.id(), 1);
+      assertEquals(1, remaining.size());
+      assertEquals("msg-2", remaining.getFirst().messageId());
+      assertEquals("second line", remaining.getFirst().message());
+      assertEquals(1, store.hitCount("srv", def.id()));
+    } finally {
+      store.shutdown();
+    }
+  }
+
+  @Test
   void anyServerScopeMatchesOtherServers() throws Exception {
     InterceptorStore store = new InterceptorStore(200);
     try {
