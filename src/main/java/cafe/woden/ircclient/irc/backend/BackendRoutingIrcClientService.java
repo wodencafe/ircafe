@@ -465,6 +465,11 @@ public class BackendRoutingIrcClientService
   }
 
   @Override
+  public boolean isMessageTagsAvailable(String serverId) {
+    return routeActiveOrConfigured(serverId).isMessageTagsAvailable(serverId);
+  }
+
+  @Override
   public boolean isDraftReplyAvailable(String serverId) {
     return routeActiveOrConfigured(serverId).isDraftReplyAvailable(serverId);
   }

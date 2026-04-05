@@ -1882,6 +1882,20 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     return st.redactedOriginalByMsgId.get(msgId);
   }
 
+  public synchronized boolean hasReactionFromNick(
+      TargetRef ref, String messageId, String reaction, String nick) {
+    if (ref == null) return false;
+    String msgId = normalizeMessageId(messageId);
+    String token = Objects.toString(reaction, "").trim();
+    String normalizedNick = normalizeReactionNickKey(nick);
+    if (msgId.isEmpty() || token.isEmpty() || normalizedNick.isEmpty()) return false;
+    TranscriptState st = stateByTarget.get(ref);
+    if (st == null) return false;
+    ReactionState state = st.reactionsByTargetMsgId.get(msgId);
+    if (state == null) return false;
+    return state.hasReactionFromNick(token, normalizedNick);
+  }
+
   public synchronized void setReactionChipActionHandler(ReactionChipActionHandler handler) {
     reactionChipActionHandler =
         (handler != null) ? handler : (target, messageId, reactionToken, unreactRequested) -> {};
@@ -3967,6 +3981,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
   }
 
+  private static String normalizeReactionNickKey(String rawNick) {
+    String nick = Objects.toString(rawNick, "").trim();
+    return nick.isEmpty() ? "" : nick.toLowerCase(Locale.ROOT);
+  }
+
   private int findLineStartByMessageId(StyledDocument doc, String messageId) {
     if (doc == null) return -1;
     String want = normalizeMessageId(messageId);
@@ -5485,6 +5504,20 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     boolean isEmpty() {
       return nicksByReaction.isEmpty();
+    }
+
+    boolean hasReactionFromNick(String reaction, String normalizedNick) {
+      String token = Objects.toString(reaction, "").trim();
+      String nickKey = normalizeReactionNickKey(normalizedNick);
+      if (token.isEmpty() || nickKey.isEmpty()) return false;
+      LinkedHashSet<String> nicks = nicksByReaction.get(token);
+      if (nicks == null || nicks.isEmpty()) return false;
+      for (String existingNick : nicks) {
+        if (nickKey.equals(normalizeReactionNickKey(existingNick))) {
+          return true;
+        }
+      }
+      return false;
     }
 
     Map<String, Collection<String>> reactionsSnapshot() {

@@ -72,6 +72,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private final IrcTypingPort typingPort;
   private final IrcReadMarkerPort readMarkerPort;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
+  private final Function<String, String> currentNickLookup;
   private final BiConsumer<TargetRef, String> onDraftChanged;
   private final BiConsumer<TargetRef, String> onClosed;
 
@@ -103,6 +104,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ChatRedactionAuditService redactionAuditService,
       Function<String, BackendUiProfile> backendUiProfileProvider,
+      Function<String, String> currentNickLookup,
       ActiveInputRouter activeInputRouter,
       SlashCommandPresentationCatalog slashCommandPresentationCatalog,
       BiConsumer<TargetRef, String> onDraftChanged,
@@ -119,6 +121,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
     this.messageActionCapabilityPolicy =
         Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
+    this.currentNickLookup = Objects.requireNonNullElse(currentNickLookup, serverId -> "");
     this.activeInputRouter = activeInputRouter;
     this.onDraftChanged = onDraftChanged;
     this.onClosed = onClosed;
@@ -177,6 +180,21 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
             ? BackendUiProfile.ircOnly(target.serverId())
             : backendUiProfileProvider.apply(target.serverId());
     this.inputPanel.setBackendUiProfile(initialProfile);
+    this.inputPanel.setQuickReactionCommandResolver(
+        (ircTarget, messageId, reactionToken) -> {
+          String expectedTarget = Objects.toString(ircTarget, "").trim();
+          if (!expectedTarget.isEmpty() && !Objects.equals(this.target.target(), expectedTarget)) {
+            return "";
+          }
+          return MessageReactionToggleSupport.resolveCommand(
+              this.target,
+              messageId,
+              reactionToken,
+              false,
+              transcripts,
+              this.messageActionCapabilityPolicy,
+              this.currentNickLookup);
+        });
     add(inputPanel, BorderLayout.SOUTH);
 
     // Persist draft text continuously so closing/undocking doesn't lose the latest draft.

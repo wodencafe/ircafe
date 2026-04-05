@@ -909,6 +909,12 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   @Override
+  public boolean isMessageTagsAvailable(String serverId) {
+    QuasselSession session = findEstablishedSession(serverId);
+    return capabilityEnabledOrUnknown(session, "message-tags");
+  }
+
+  @Override
   public boolean isDraftReplyAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
     return capabilityEnabledOrUnknown(session, "draft/reply");

@@ -167,7 +167,7 @@ public final class MessageReactionsComponent extends JPanel {
   }
 
   private static String tooltip(ChipState st) {
-    String actionHint = " [Left click react, right click remove]";
+    String actionHint = " [Left click toggle, right click remove]";
     if (st.nicks.isEmpty()) return st.reaction;
     List<String> sorted = new ArrayList<>(st.nicks);
     sorted.sort(String.CASE_INSENSITIVE_ORDER);

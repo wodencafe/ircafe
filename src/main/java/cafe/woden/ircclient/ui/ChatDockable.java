@@ -38,6 +38,7 @@ import cafe.woden.ircclient.ui.bus.OutboundLineBus;
 import cafe.woden.ircclient.ui.bus.TargetActivationBus;
 import cafe.woden.ircclient.ui.channellist.ChannelListPanel;
 import cafe.woden.ircclient.ui.chat.ChatTranscriptStore;
+import cafe.woden.ircclient.ui.chat.MessageReactionToggleSupport;
 import cafe.woden.ircclient.ui.chat.view.ChatViewPanel;
 import cafe.woden.ircclient.ui.coordinator.ChatActiveTargetCoordinator;
 import cafe.woden.ircclient.ui.coordinator.ChatBanListCoordinator;
@@ -83,6 +84,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
 import org.jmolecules.architecture.layered.InterfaceLayer;
@@ -323,6 +326,12 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     add(inputPanel, BorderLayout.SOUTH);
     MessageActionCapabilityPolicy capabilityPolicy =
         Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
+    configureQuickReactionToggle(
+        inputPanel,
+        () -> activeTarget,
+        transcripts,
+        capabilityPolicy,
+        sid -> irc.currentNick(sid).orElse(""));
     configureTranscriptContextMenuActions(transcripts, chatHistoryService);
     configureInputActivation(activationBus);
     InputCoordinatorBundle inputBundle =
@@ -340,7 +349,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     this.dccActionCoordinator = inputBundle.dccActionCoordinator();
     this.readMarkerCoordinator = inputBundle.readMarkerCoordinator();
     this.activeTargetCoordinator = inputBundle.activeTargetCoordinator();
-    configureReactionChipActions(transcripts, capabilityPolicy, activationBus, outboundBus);
+    configureReactionChipActions(transcripts, irc, capabilityPolicy, activationBus, outboundBus);
     inputPanel.setOnTypingStateChanged(typingCoordinator::onLocalTypingStateChanged);
     bindInputOutboundMessages(outboundBus);
 
@@ -846,6 +855,7 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
 
   private void configureReactionChipActions(
       ChatTranscriptStore transcripts,
+      IrcClientService irc,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       TargetActivationBus activationBus,
       OutboundLineBus outboundBus) {
@@ -857,15 +867,46 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
           String token = Objects.toString(reactionToken, "").trim();
           if (msgId.isEmpty() || token.isEmpty()) return;
 
-          boolean supported =
-              unreactRequested
-                  ? messageActionCapabilityPolicy.canUnreact(target.serverId())
-                  : messageActionCapabilityPolicy.canReact(target.serverId());
-          if (!supported) return;
+          String command =
+              MessageReactionToggleSupport.resolveCommand(
+                  target,
+                  msgId,
+                  token,
+                  unreactRequested,
+                  transcripts,
+                  messageActionCapabilityPolicy,
+                  sid -> irc.currentNick(sid).orElse(""));
+          if (command.isBlank()) return;
 
           activationBus.activate(target);
           armTailPinOnNextAppendIfAtBottom();
-          outboundBus.emit((unreactRequested ? "/unreact " : "/react ") + msgId + " " + token);
+          outboundBus.emit(command);
+        });
+  }
+
+  private void configureQuickReactionToggle(
+      MessageInputPanel panel,
+      Supplier<TargetRef> targetSupplier,
+      ChatTranscriptStore transcripts,
+      MessageActionCapabilityPolicy messageActionCapabilityPolicy,
+      Function<String, String> currentNickLookup) {
+    if (panel == null) return;
+    panel.setQuickReactionCommandResolver(
+        (ircTarget, messageId, reactionToken) -> {
+          TargetRef target = targetSupplier == null ? null : targetSupplier.get();
+          if (target == null) return "";
+          String expectedTarget = Objects.toString(ircTarget, "").trim();
+          if (!expectedTarget.isEmpty() && !Objects.equals(target.target(), expectedTarget)) {
+            return "";
+          }
+          return MessageReactionToggleSupport.resolveCommand(
+              target,
+              messageId,
+              reactionToken,
+              false,
+              transcripts,
+              messageActionCapabilityPolicy,
+              currentNickLookup);
         });
   }
 

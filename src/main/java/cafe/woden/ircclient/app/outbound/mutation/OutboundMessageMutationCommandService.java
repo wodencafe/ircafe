@@ -29,11 +29,9 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
 
   @Override
   public void appendGeneralHelp(TargetRef out) {
-    ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
-    ui.appendStatus(
-        out, "(help)", "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
-    ui.appendStatus(
-        out, "(help)", "/unreact <msgid> <reaction-token> (requires draft/unreact + draft/reply)");
+    ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires message-tags)");
+    ui.appendStatus(out, "(help)", "/react <msgid> <reaction-token> (requires message-tags)");
+    ui.appendStatus(out, "(help)", "/unreact <msgid> <reaction-token> (requires message-tags)");
     appendEditHelp(out);
     appendRedactHelp(out);
   }
@@ -69,12 +67,12 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
       return;
     }
 
-    if (!backendCapabilityPolicy.supportsDraftReply(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsMessageTags(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(reply)",
           featureUnavailableMessage(
-              at.serverId(), "draft/reply is not negotiated on this server."));
+              at.serverId(), "message-tags are not negotiated on this server."));
       return;
     }
 
@@ -102,13 +100,12 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
       return;
     }
 
-    if (!backendCapabilityPolicy.supportsDraftReply(at.serverId())
-        || !backendCapabilityPolicy.supportsDraftReact(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsMessageTags(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(react)",
           featureUnavailableMessage(
-              at.serverId(), "draft/react is not negotiated on this server."));
+              at.serverId(), "message-tags are not negotiated on this server."));
       return;
     }
 
@@ -136,13 +133,12 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
       return;
     }
 
-    if (!backendCapabilityPolicy.supportsDraftReply(at.serverId())
-        || !backendCapabilityPolicy.supportsDraftUnreact(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsMessageTags(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(unreact)",
           featureUnavailableMessage(
-              at.serverId(), "draft/unreact is not negotiated on this server."));
+              at.serverId(), "message-tags are not negotiated on this server."));
       return;
     }
 

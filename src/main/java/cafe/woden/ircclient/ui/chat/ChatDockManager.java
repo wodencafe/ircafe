@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.chat;
 
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.logging.ChatRedactionAuditService;
@@ -29,6 +30,7 @@ import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import javax.swing.SwingUtilities;
 import org.jmolecules.architecture.layered.InterfaceLayer;
 import org.slf4j.Logger;
@@ -53,6 +55,7 @@ public class ChatDockManager {
   private final OutboundLineBus outboundBus;
   private final IrcTypingPort typingPort;
   private final IrcReadMarkerPort readMarkerPort;
+  private final Function<String, String> currentNickLookup;
   private final BackendUiProfileProvider backendUiProfileProvider;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final ChatRedactionAuditService redactionAuditService;
@@ -89,6 +92,7 @@ public class ChatDockManager {
       OutboundLineBus outboundBus,
       IrcTypingPort typingPort,
       IrcReadMarkerPort readMarkerPort,
+      IrcCurrentNickPort currentNickPort,
       BackendUiProfileProvider backendUiProfileProvider,
       MessageActionCapabilityPolicy messageActionCapabilityPolicy,
       ChatRedactionAuditService redactionAuditService,
@@ -105,6 +109,10 @@ public class ChatDockManager {
     this.outboundBus = outboundBus;
     this.typingPort = java.util.Objects.requireNonNull(typingPort, "typingPort");
     this.readMarkerPort = java.util.Objects.requireNonNull(readMarkerPort, "readMarkerPort");
+    this.currentNickLookup =
+        currentNickPort == null
+            ? serverId -> ""
+            : serverId -> currentNickPort.currentNick(serverId).orElse("");
     this.backendUiProfileProvider = backendUiProfileProvider;
     this.messageActionCapabilityPolicy =
         java.util.Objects.requireNonNull(
@@ -190,12 +198,14 @@ public class ChatDockManager {
       return;
     }
 
-    if ("typing".equals(cap) || "message-tags".equals(cap)) {
+    boolean messageTagsChanged = "message-tags".equals(cap);
+    if ("typing".equals(cap) || messageTagsChanged) {
       clearTypingIndicatorsForServer(sid);
-      return;
     }
-    if (!"draft/reply".equals(cap) && !"draft/react".equals(cap) && !"draft/unreact".equals(cap))
-      return;
+    if (!messageTagsChanged
+        && !"draft/reply".equals(cap)
+        && !"draft/react".equals(cap)
+        && !"draft/unreact".equals(cap)) return;
 
     boolean replySupported = messageActionCapabilityPolicy.canReply(sid);
     boolean reactSupported = messageActionCapabilityPolicy.canReact(sid);
@@ -392,6 +402,7 @@ public class ChatDockManager {
             messageActionCapabilityPolicy,
             redactionAuditService,
             backendUiProfileProvider::profileForServer,
+            currentNickLookup,
             activeInputRouter,
             slashCommandPresentationCatalog,
             (t, draft) -> {

@@ -802,6 +802,12 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   }
 
   @Override
+  public boolean isMessageTagsAvailable(String serverId) {
+    String sid = normalizeServerId(serverId);
+    return !sid.isEmpty() && sessionsByServer.containsKey(sid);
+  }
+
+  @Override
   public boolean isDraftReplyAvailable(String serverId) {
     String sid = normalizeServerId(serverId);
     return !sid.isEmpty() && sessionsByServer.containsKey(sid);

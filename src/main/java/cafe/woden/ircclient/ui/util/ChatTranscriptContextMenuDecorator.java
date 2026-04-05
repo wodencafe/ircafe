@@ -634,6 +634,9 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
       return "Unavailable: only your own messages can be " + verb + ".";
     }
     if (!available) {
+      if ("reply".equals(actionNoun) || "reaction".equals(actionNoun)) {
+        return "Unavailable: server did not negotiate IRCv3 message-tags support.";
+      }
       return "Unavailable: server did not negotiate IRCv3 " + actionNoun + " support.";
     }
     return null;

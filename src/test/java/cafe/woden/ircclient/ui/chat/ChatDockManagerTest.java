@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.commands.BackendNamedCommandCatalog;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
+import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.logging.NoOpChatRedactionAuditService;
@@ -67,6 +68,7 @@ class ChatDockManagerTest {
             outboundBus,
             typingPort,
             readMarkerPort,
+            mock(IrcCurrentNickPort.class),
             backendUiProfileProvider,
             messageActionCapabilityPolicy,
             new NoOpChatRedactionAuditService(),
@@ -121,6 +123,7 @@ class ChatDockManagerTest {
             mock(OutboundLineBus.class),
             mock(IrcTypingPort.class),
             mock(IrcReadMarkerPort.class),
+            mock(IrcCurrentNickPort.class),
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
             new NoOpChatRedactionAuditService(),
@@ -153,6 +156,7 @@ class ChatDockManagerTest {
             mock(OutboundLineBus.class),
             mock(IrcTypingPort.class),
             mock(IrcReadMarkerPort.class),
+            mock(IrcCurrentNickPort.class),
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
             new NoOpChatRedactionAuditService(),
@@ -180,6 +184,7 @@ class ChatDockManagerTest {
             mock(OutboundLineBus.class),
             mock(IrcTypingPort.class),
             mock(IrcReadMarkerPort.class),
+            mock(IrcCurrentNickPort.class),
             mock(BackendUiProfileProvider.class),
             mock(MessageActionCapabilityPolicy.class),
             new NoOpChatRedactionAuditService(),

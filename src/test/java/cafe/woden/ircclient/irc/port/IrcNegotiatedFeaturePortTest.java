@@ -13,12 +13,14 @@ class IrcNegotiatedFeaturePortTest {
   @Test
   void fromDelegatesCapabilityQueriesToIrcClientService() {
     IrcClientService irc = mock(IrcClientService.class);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
     when(irc.isReadMarkerAvailable("libera")).thenReturn(true);
     when(irc.isMonitorAvailable("libera")).thenReturn(true);
 
     IrcNegotiatedFeaturePort port = IrcNegotiatedFeaturePort.from(irc);
 
+    assertTrue(port.isMessageTagsAvailable("libera"));
     assertTrue(port.isDraftReplyAvailable("libera"));
     assertTrue(port.isReadMarkerAvailable("libera"));
     assertTrue(port.isMonitorAvailable("libera"));
@@ -28,6 +30,7 @@ class IrcNegotiatedFeaturePortTest {
   void fromNullReturnsNoopPort() {
     IrcNegotiatedFeaturePort port = IrcNegotiatedFeaturePort.from(null);
 
+    assertFalse(port.isMessageTagsAvailable("libera"));
     assertFalse(port.isDraftReplyAvailable("libera"));
     assertFalse(port.isReadMarkerAvailable("libera"));
     assertFalse(port.isMonitorAvailable("libera"));

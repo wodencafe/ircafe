@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.interceptors;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -401,6 +402,25 @@ class InterceptorStoreTest {
     } finally {
       store.shutdown();
     }
+  }
+
+  @Test
+  void ingestEventAfterShutdownIsIgnored() {
+    InterceptorStore store = new InterceptorStore(200);
+    InterceptorDefinition def = store.createInterceptor("srv", "Watcher");
+    store.shutdown();
+
+    assertDoesNotThrow(
+        () ->
+            store.ingestEvent(
+                "srv",
+                "#ircafe",
+                "alice",
+                "alice!ident@host.example",
+                "late event",
+                InterceptorEventType.MESSAGE,
+                "msg-late"));
+    assertEquals(0, store.hitCount("srv", def.id()));
   }
 
   @Test

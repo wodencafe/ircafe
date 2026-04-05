@@ -22,7 +22,7 @@ class ChatHistoryActionCoordinatorTest {
   void replyContextActionVisibleUsesIrcCapabilityForActiveTarget() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
@@ -52,7 +52,7 @@ class ChatHistoryActionCoordinatorTest {
   void onReplyToMessageRequestedActivatesInputAndBeginsCompose() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     AtomicReference<TargetRef> activatedTarget = new AtomicReference<>();
     AtomicInteger activateInputCalls = new AtomicInteger();
     AtomicInteger focusInputCalls = new AtomicInteger();
@@ -96,11 +96,10 @@ class ChatHistoryActionCoordinatorTest {
   }
 
   @Test
-  void unreactContextActionVisibleRequiresReplyAndUnreactCapabilities() {
+  void unreactContextActionVisibleRequiresMessageTagsForActiveTarget() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
-    when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
 
     ChatHistoryActionCoordinator coordinator =
         new ChatHistoryActionCoordinator(
@@ -124,7 +123,7 @@ class ChatHistoryActionCoordinatorTest {
             offset -> {});
 
     assertTrue(coordinator.unreactContextActionVisible());
-    when(irc.isDraftUnreactAvailable("libera")).thenReturn(false);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(false);
     assertFalse(coordinator.unreactContextActionVisible());
   }
 
@@ -132,8 +131,7 @@ class ChatHistoryActionCoordinatorTest {
   void onUnreactToMessageRequestedPrefillsCommandAndFocusesInput() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     TargetRef channel = new TargetRef("libera", "#ircafe");
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
-    when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     AtomicReference<TargetRef> activatedTarget = new AtomicReference<>();
     AtomicInteger activateInputCalls = new AtomicInteger();
     AtomicInteger focusInputCalls = new AtomicInteger();

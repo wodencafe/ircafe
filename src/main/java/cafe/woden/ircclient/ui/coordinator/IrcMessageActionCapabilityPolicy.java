@@ -24,19 +24,17 @@ public final class IrcMessageActionCapabilityPolicy implements MessageActionCapa
 
   @Override
   public boolean canReply(String serverId) {
-    return safe(() -> irc != null && irc.isDraftReplyAvailable(normalizeServerId(serverId)));
+    return safe(() -> irc != null && irc.isMessageTagsAvailable(normalizeServerId(serverId)));
   }
 
   @Override
   public boolean canReact(String serverId) {
-    return safe(() -> irc != null && irc.isDraftReactAvailable(normalizeServerId(serverId)));
+    return safe(() -> irc != null && irc.isMessageTagsAvailable(normalizeServerId(serverId)));
   }
 
   @Override
   public boolean canUnreact(String serverId) {
-    String sid = normalizeServerId(serverId);
-    if (sid.isEmpty() || irc == null) return false;
-    return safe(() -> irc.isDraftReplyAvailable(sid) && irc.isDraftUnreactAvailable(sid));
+    return safe(() -> irc != null && irc.isMessageTagsAvailable(normalizeServerId(serverId)));
   }
 
   @Override

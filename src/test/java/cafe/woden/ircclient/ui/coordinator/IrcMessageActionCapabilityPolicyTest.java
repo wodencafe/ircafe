@@ -14,17 +14,13 @@ class IrcMessageActionCapabilityPolicyTest {
   @Test
   void delegatesCapabilitiesPerServer() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
-    when(irc.isDraftReplyAvailable("matrix")).thenReturn(true);
-    when(irc.isDraftReactAvailable("matrix")).thenReturn(true);
-    when(irc.isDraftUnreactAvailable("matrix")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("matrix")).thenReturn(true);
     when(irc.isMessageEditAvailable("matrix")).thenReturn(true);
     when(irc.isMessageRedactionAvailable("matrix")).thenReturn(true);
     when(irc.isChatHistoryAvailable("matrix")).thenReturn(true);
     when(irc.isZncPlaybackAvailable("matrix")).thenReturn(false);
 
-    when(irc.isDraftReplyAvailable("irc")).thenReturn(false);
-    when(irc.isDraftReactAvailable("irc")).thenReturn(false);
-    when(irc.isDraftUnreactAvailable("irc")).thenReturn(false);
+    when(irc.isMessageTagsAvailable("irc")).thenReturn(false);
     when(irc.isMessageEditAvailable("irc")).thenReturn(false);
     when(irc.isMessageRedactionAvailable("irc")).thenReturn(false);
     when(irc.isChatHistoryAvailable("irc")).thenReturn(false);
@@ -53,7 +49,7 @@ class IrcMessageActionCapabilityPolicyTest {
   @Test
   void returnsFalseWhenBackendCapabilityLookupThrows() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
-    when(irc.isDraftReplyAvailable("broken")).thenThrow(new RuntimeException("boom"));
+    when(irc.isMessageTagsAvailable("broken")).thenThrow(new RuntimeException("boom"));
     when(irc.isChatHistoryAvailable("broken")).thenThrow(new RuntimeException("boom"));
     when(irc.isZncPlaybackAvailable("broken")).thenThrow(new RuntimeException("boom"));
 

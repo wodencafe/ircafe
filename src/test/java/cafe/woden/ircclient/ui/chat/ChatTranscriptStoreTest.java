@@ -211,6 +211,19 @@ class ChatTranscriptStoreTest {
   }
 
   @Test
+  void hasReactionFromNickMatchesObservedReactorCaseInsensitively() {
+    ChatTranscriptStore store = newStore();
+    TargetRef ref = new TargetRef("srv", "#chan");
+
+    store.appendChatAt(ref, "alice", "hello", false, 6_000L, "m-42", Map.of("msgid", "m-42"));
+    store.applyMessageReaction(ref, "m-42", ":+1:", "Bob", 6_050L);
+
+    assertTrue(store.hasReactionFromNick(ref, "m-42", ":+1:", "bob"));
+    assertFalse(store.hasReactionFromNick(ref, "m-42", ":heart:", "bob"));
+    assertFalse(store.hasReactionFromNick(ref, "m-42", ":+1:", "carol"));
+  }
+
+  @Test
   void replyContextLineShowsCachedSnippetWhenReferencedMessageIsKnown() throws Exception {
     ChatTranscriptStore store = newStore();
     TargetRef ref = new TargetRef("srv", "#chan");

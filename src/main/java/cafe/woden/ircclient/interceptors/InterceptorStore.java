@@ -34,7 +34,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
@@ -68,6 +70,7 @@ public class InterceptorStore implements InterceptorIngestPort {
   private final int maxHitsPerInterceptor;
   private final ExecutorService ingestExecutor;
   private final ExecutorService persistExecutor;
+  private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
   private final AtomicLong persistRequestSeq = new AtomicLong(0L);
   private final AtomicReference<Map<String, List<InterceptorDefinition>>> pendingPersistSnapshot =
       new AtomicReference<>();
@@ -603,7 +606,18 @@ public class InterceptorStore implements InterceptorIngestPort {
     final String fMsg = msg;
     final String fMsgId = msgId;
     final InterceptorEventType fType = type;
-    ingestExecutor.execute(() -> ingestNow(fSid, fChan, fFrom, fHostmask, fMsg, fType, fMsgId));
+    if (shuttingDown.get() || ingestExecutor.isShutdown()) {
+      return;
+    }
+    try {
+      ingestExecutor.execute(() -> ingestNow(fSid, fChan, fFrom, fHostmask, fMsg, fType, fMsgId));
+    } catch (RejectedExecutionException ex) {
+      if (shuttingDown.get() || ingestExecutor.isShutdown()) {
+        log.debug("[ircafe] Interceptor ingest rejected during shutdown");
+        return;
+      }
+      throw ex;
+    }
   }
 
   /** Backward-compatible entrypoint used by the first interceptor implementation. */
@@ -614,6 +628,9 @@ public class InterceptorStore implements InterceptorIngestPort {
 
   @PreDestroy
   void shutdown() {
+    if (!shuttingDown.compareAndSet(false, true)) {
+      return;
+    }
     flushPersistNow();
     persistExecutor.shutdownNow();
     ingestExecutor.shutdownNow();
@@ -1122,7 +1139,18 @@ public class InterceptorStore implements InterceptorIngestPort {
     Map<String, List<InterceptorDefinition>> snapshot = snapshotDefinitionsByServer();
     pendingPersistSnapshot.set(snapshot);
     long seq = persistRequestSeq.incrementAndGet();
-    persistExecutor.execute(() -> persistDefinitionsNow(seq));
+    if (shuttingDown.get() || persistExecutor.isShutdown()) {
+      return;
+    }
+    try {
+      persistExecutor.execute(() -> persistDefinitionsNow(seq));
+    } catch (RejectedExecutionException ex) {
+      if (shuttingDown.get() || persistExecutor.isShutdown()) {
+        log.debug("[ircafe] Interceptor persist rejected during shutdown");
+        return;
+      }
+      throw ex;
+    }
   }
 
   private void persistDefinitionsNow(long requestSeq) {

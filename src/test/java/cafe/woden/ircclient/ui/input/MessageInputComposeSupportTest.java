@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.input;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -7,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import java.awt.Component;
 import java.awt.Container;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -50,7 +52,24 @@ class MessageInputComposeSupportTest {
     assertFalse(jump.isVisible());
   }
 
+  @Test
+  void emitQuickReactionUsesConfiguredResolver() {
+    AtomicReference<String> outbound = new AtomicReference<>();
+    MessageInputComposeSupport support = newComposeSupport(new AtomicInteger(), outbound);
+    support.setQuickReactionCommandResolver(
+        (target, messageId, reactionToken) -> "/unreact " + messageId + " " + reactionToken);
+
+    support.emitQuickReaction("#ircafe", "msg-123", ":+1:");
+
+    assertEquals("/unreact msg-123 :+1:", outbound.get());
+  }
+
   private static MessageInputComposeSupport newComposeSupport(AtomicInteger focusCalls) {
+    return newComposeSupport(focusCalls, new AtomicReference<>());
+  }
+
+  private static MessageInputComposeSupport newComposeSupport(
+      AtomicInteger focusCalls, AtomicReference<String> outbound) {
     return new MessageInputComposeSupport(
         new JPanel(),
         new JPanel(),
@@ -80,7 +99,9 @@ class MessageInputComposeSupportTest {
           public void fireDraftChanged() {}
 
           @Override
-          public void sendOutbound(String line) {}
+          public void sendOutbound(String line) {
+            outbound.set(line);
+          }
         });
   }
 

@@ -9,6 +9,10 @@ final class PircbotxAvailabilitySupport {
     return hasLiveBot(connection) && connection.capabilitySnapshot().echoMessageCapAcked();
   }
 
+  boolean isMessageTagsAvailable(PircbotxConnectionState connection) {
+    return hasLiveBot(connection) && connection.capabilitySnapshot().messageTagsCapAcked();
+  }
+
   boolean isDraftReplyAvailable(PircbotxConnectionState connection) {
     return hasLiveBot(connection) && connection.capabilitySnapshot().draftReplyCapAcked();
   }

@@ -13,9 +13,7 @@ class ServerTreeNetworkInfoDialogBuilderTest {
   @Test
   void computeCapabilityFeatureStatusesMarksReadyWhenRequirementsAreEnabled() {
     ServerRuntimeMetadata metadata = new ServerRuntimeMetadata();
-    metadata.ircv3Caps.put("draft/reply", ServerRuntimeMetadata.CapabilityState.ENABLED);
-    metadata.ircv3Caps.put("draft/react", ServerRuntimeMetadata.CapabilityState.ENABLED);
-    metadata.ircv3Caps.put("draft/unreact", ServerRuntimeMetadata.CapabilityState.ENABLED);
+    metadata.ircv3Caps.put("message-tags", ServerRuntimeMetadata.CapabilityState.ENABLED);
     metadata.ircv3Caps.put("chathistory", ServerRuntimeMetadata.CapabilityState.ENABLED);
 
     List<ServerTreeNetworkInfoDialogBuilder.CapabilityFeatureStatus> statuses =
@@ -30,8 +28,7 @@ class ServerTreeNetworkInfoDialogBuilderTest {
   @Test
   void computeCapabilityFeatureStatusesShowsPartialAndUnavailableStates() {
     ServerRuntimeMetadata metadata = new ServerRuntimeMetadata();
-    metadata.ircv3Caps.put("draft/reply", ServerRuntimeMetadata.CapabilityState.ENABLED);
-    metadata.ircv3Caps.put("draft/react", ServerRuntimeMetadata.CapabilityState.DISABLED);
+    metadata.ircv3Caps.put("message-tags", ServerRuntimeMetadata.CapabilityState.DISABLED);
 
     List<ServerTreeNetworkInfoDialogBuilder.CapabilityFeatureStatus> statuses =
         ServerTreeNetworkInfoDialogBuilder.computeCapabilityFeatureStatuses(metadata);
@@ -41,8 +38,8 @@ class ServerTreeNetworkInfoDialogBuilderTest {
     ServerTreeNetworkInfoDialogBuilder.CapabilityFeatureStatus history =
         statusForFeature(statuses, "History");
 
-    assertEquals("Partial", reactions.status());
-    assertTrue(reactions.detail().contains("draft/react"));
+    assertEquals("Unavailable", reactions.status());
+    assertTrue(reactions.detail().contains("message-tags"));
     assertEquals("Unavailable", history.status());
     assertTrue(
         history.detail().contains("one of: chathistory, draft/chathistory, znc.in/playback"));

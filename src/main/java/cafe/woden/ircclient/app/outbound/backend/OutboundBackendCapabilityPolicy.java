@@ -116,6 +116,14 @@ public final class OutboundBackendCapabilityPolicy {
         .supportsMultiline(irc, sid);
   }
 
+  public boolean supportsMessageTags(String serverId) {
+    String sid = normalizeServerId(serverId);
+    if (sid.isEmpty()) return false;
+    return outboundBackendFeatureRegistry
+        .adapterFor(backendIdForServer(sid))
+        .supportsMessageTags(irc, sid);
+  }
+
   public boolean supportsDraftReply(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;

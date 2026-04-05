@@ -122,11 +122,9 @@ public final class ServerTreeNetworkInfoDialogBuilder {
       DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
   private static final List<CapabilityFeatureDefinition> CAPABILITY_FEATURES =
       List.of(
-          new CapabilityFeatureDefinition("Replies", List.of("draft/reply"), List.of()),
-          new CapabilityFeatureDefinition(
-              "Reactions", List.of("draft/reply", "draft/react"), List.of()),
-          new CapabilityFeatureDefinition(
-              "Reaction removal", List.of("draft/reply", "draft/unreact"), List.of()),
+          new CapabilityFeatureDefinition("Replies", List.of("message-tags"), List.of()),
+          new CapabilityFeatureDefinition("Reactions", List.of("message-tags"), List.of()),
+          new CapabilityFeatureDefinition("Reaction removal", List.of("message-tags"), List.of()),
           new CapabilityFeatureDefinition("Message edit", List.of("draft/message-edit"), List.of()),
           new CapabilityFeatureDefinition(
               "Message redaction", List.of("draft/message-redaction"), List.of()),
@@ -447,8 +445,9 @@ public final class ServerTreeNetworkInfoDialogBuilder {
         }
       }
 
-      boolean anySatisfied = feature.requiredAny().isEmpty();
-      if (!anySatisfied) {
+      boolean hasRequiredAny = !feature.requiredAny().isEmpty();
+      boolean anySatisfied = !hasRequiredAny;
+      if (hasRequiredAny) {
         for (String candidate : feature.requiredAny()) {
           String cap = normalizeCapability(candidate);
           if (!cap.isEmpty() && enabled.contains(cap)) {
@@ -464,7 +463,7 @@ public final class ServerTreeNetworkInfoDialogBuilder {
       String status;
       if (missing.isEmpty()) {
         status = "Ready";
-      } else if (satisfiedRequired > 0 || anySatisfied) {
+      } else if (satisfiedRequired > 0 || (hasRequiredAny && anySatisfied)) {
         status = "Partial";
       } else {
         status = "Unavailable";

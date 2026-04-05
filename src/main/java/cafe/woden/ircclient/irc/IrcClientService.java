@@ -164,6 +164,14 @@ public interface IrcClientService {
   }
 
   /**
+   * @return true if IRCv3 {@code message-tags} is negotiated or otherwise available on this
+   *     connection.
+   */
+  default boolean isMessageTagsAvailable(String serverId) {
+    return false;
+  }
+
+  /**
    * @return true if IRCv3 {@code draft/reply} is negotiated on this connection.
    */
   default boolean isDraftReplyAvailable(String serverId) {

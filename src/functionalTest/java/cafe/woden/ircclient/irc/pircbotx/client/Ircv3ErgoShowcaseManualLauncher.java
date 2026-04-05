@@ -15,11 +15,13 @@ import cafe.woden.ircclient.irc.pircbotx.parse.PircbotxInputParserHookInstaller;
 import cafe.woden.ircclient.irc.playback.NoOpPlaybackCursorProvider;
 import cafe.woden.ircclient.net.ServerProxyResolver;
 import cafe.woden.ircclient.state.ServerIsupportState;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -33,6 +35,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -73,6 +76,7 @@ public final class Ircv3ErgoShowcaseManualLauncher {
   }
 
   private static void run(ManualLaunchConfig cfg) throws Exception {
+    configureHelperClientLogging();
     ensureDockerAvailable();
 
     Path runDir = createRunDirectory(cfg.baseDir());
@@ -119,8 +123,11 @@ public final class Ircv3ErgoShowcaseManualLauncher {
 
       try (ServiceFixture author = newService(authorCfg);
           ServiceFixture peer = newService(peerCfg)) {
+        CompositeDisposable helperEventLogs = new CompositeDisposable();
         TestSubscriber<ServerIrcEvent> authorEvents = author.service().events().test();
         TestSubscriber<ServerIrcEvent> peerEvents = peer.service().events().test();
+        attachHelperEventLogging("author", author.service(), helperEventLogs);
+        attachHelperEventLogging("peer", peer.service(), helperEventLogs);
 
         try {
           connectAndJoin(author.service(), authorCfg.serverId(), cfg.channel(), authorEvents);
@@ -179,6 +186,7 @@ public final class Ircv3ErgoShowcaseManualLauncher {
             stopProcess(appProcess);
           }
         } finally {
+          helperEventLogs.dispose();
           authorEvents.cancel();
           peerEvents.cancel();
         }
@@ -332,6 +340,7 @@ public final class Ircv3ErgoShowcaseManualLauncher {
     LinkedHashMap<String, Object> ircafe = new LinkedHashMap<>();
     LinkedHashMap<String, Object> ui = new LinkedHashMap<>();
     ui.put("theme", cfg.themeId());
+    ui.put("chatFontSize", cfg.chatFontSize());
     ui.put("autoConnectOnStart", true);
     ui.put("lastSelectedTarget", Map.of("serverId", appCfg.serverId(), "target", cfg.channel()));
     ui.put("layout", Map.of("preserveDockLayout", false));
@@ -648,6 +657,122 @@ public final class Ircv3ErgoShowcaseManualLauncher {
     return new ServiceFixture(service, timers, heartbeatExec, reconnectExec);
   }
 
+  private static void configureHelperClientLogging() {
+    setLoggerLevel("org.pircbotx", "WARN");
+    setLoggerLevel("org.pircbotx.InputParser", "WARN");
+    setLoggerLevel("org.pircbotx.output.OutputRaw", "WARN");
+  }
+
+  private static void setLoggerLevel(String loggerName, String levelName) {
+    try {
+      org.slf4j.Logger logger = LoggerFactory.getLogger(Objects.toString(loggerName, "").trim());
+      if (!(logger instanceof ch.qos.logback.classic.Logger classicLogger)) {
+        return;
+      }
+      ch.qos.logback.classic.Level level =
+          ch.qos.logback.classic.Level.toLevel(Objects.toString(levelName, "").trim(), null);
+      if (level != null) {
+        classicLogger.setLevel(level);
+      }
+    } catch (Exception ignored) {
+    }
+  }
+
+  private static void attachHelperEventLogging(
+      String label, PircbotxIrcClientService service, CompositeDisposable subscriptions) {
+    if (service == null || subscriptions == null) return;
+    String helperLabel = normalizeHelperLabel(label);
+    subscriptions.add(
+        service
+            .events()
+            .subscribe(
+                event -> {
+                  String rendered = renderHelperEventLog(helperLabel, event);
+                  if (!rendered.isBlank()) {
+                    System.out.println(rendered);
+                  }
+                },
+                err ->
+                    System.out.println(
+                        "[" + helperLabel + "] event-stream-error: " + String.valueOf(err))));
+  }
+
+  private static String renderHelperEventLog(String label, ServerIrcEvent serverEvent) {
+    if (serverEvent == null || serverEvent.event() == null) return "";
+    String prefix = "[" + normalizeHelperLabel(label) + "] " + helperEventTime(serverEvent.event());
+    return switch (serverEvent.event()) {
+      case IrcEvent.MessageReplyObserved ev ->
+          prefix
+              + " reply-observed from="
+              + safeToken(ev.from())
+              + " target="
+              + safeToken(ev.target())
+              + " replyTo="
+              + safeToken(ev.replyToMsgId());
+      case IrcEvent.MessageReactObserved ev ->
+          prefix
+              + " react-observed from="
+              + safeToken(ev.from())
+              + " target="
+              + safeToken(ev.target())
+              + " messageId="
+              + safeToken(ev.messageId())
+              + " reaction="
+              + safeToken(ev.reaction());
+      case IrcEvent.MessageUnreactObserved ev ->
+          prefix
+              + " unreact-observed from="
+              + safeToken(ev.from())
+              + " target="
+              + safeToken(ev.target())
+              + " messageId="
+              + safeToken(ev.messageId())
+              + " reaction="
+              + safeToken(ev.reaction());
+      case IrcEvent.MessageRedactionObserved ev ->
+          prefix
+              + " redaction-observed from="
+              + safeToken(ev.from())
+              + " target="
+              + safeToken(ev.target())
+              + " messageId="
+              + safeToken(ev.messageId());
+      case IrcEvent.UserTypingObserved ev ->
+          prefix
+              + " typing-observed from="
+              + safeToken(ev.from())
+              + " target="
+              + safeToken(ev.target())
+              + " state="
+              + safeToken(ev.state());
+      default -> "";
+    };
+  }
+
+  private static String helperEventTime(IrcEvent event) {
+    if (event == null) return "";
+    Instant at =
+        switch (event) {
+          case IrcEvent.MessageReplyObserved ev -> ev.at();
+          case IrcEvent.MessageReactObserved ev -> ev.at();
+          case IrcEvent.MessageUnreactObserved ev -> ev.at();
+          case IrcEvent.MessageRedactionObserved ev -> ev.at();
+          case IrcEvent.UserTypingObserved ev -> ev.at();
+          default -> null;
+        };
+    if (at == null) return "";
+    return at.toString();
+  }
+
+  private static String normalizeHelperLabel(String label) {
+    String normalized = Objects.toString(label, "").trim();
+    return normalized.isEmpty() ? "helper" : normalized;
+  }
+
+  private static String safeToken(String value) {
+    return Objects.toString(value, "").trim();
+  }
+
   private static ThreadFactory namedDaemonFactory(String name) {
     String threadName = Objects.toString(name, "").trim();
     if (threadName.isEmpty()) threadName = "ircv3-showcase";
@@ -699,6 +824,7 @@ public final class Ircv3ErgoShowcaseManualLauncher {
   private record ManualLaunchConfig(
       Scene scene,
       String themeId,
+      int chatFontSize,
       String ircImage,
       String channel,
       String appNick,
@@ -708,7 +834,8 @@ public final class Ircv3ErgoShowcaseManualLauncher {
 
     private static final String DEFAULT_IRC_IMAGE = "ghcr.io/ergochat/ergo:stable";
     private static final String DEFAULT_CHANNEL = "#ircv3-showcase";
-    private static final String DEFAULT_THEME = "system";
+    private static final String DEFAULT_THEME = "blue-dark";
+    private static final int DEFAULT_CHAT_FONT_SIZE = 16;
     private static final String DEFAULT_APP_NICK = "ircafe-ui";
     private static final String DEFAULT_AUTHOR_NICK = "alicebot";
     private static final String DEFAULT_PEER_NICK = "bobbot";
@@ -719,6 +846,7 @@ public final class Ircv3ErgoShowcaseManualLauncher {
       return new ManualLaunchConfig(
           Scene.parse(readString("ircv3.showcase.scene", argScene)),
           readString("ircv3.showcase.theme", DEFAULT_THEME),
+          readInt("ircv3.showcase.chat-font-size", DEFAULT_CHAT_FONT_SIZE),
           readString("ircv3.showcase.irc-image", DEFAULT_IRC_IMAGE),
           readString("ircv3.showcase.channel", DEFAULT_CHANNEL),
           readString("ircv3.showcase.app-nick", DEFAULT_APP_NICK),
@@ -806,5 +934,17 @@ public final class Ircv3ErgoShowcaseManualLauncher {
       return defaultValue;
     }
     return raw.trim();
+  }
+
+  private static int readInt(String propertyName, int defaultValue) {
+    String raw = readString(propertyName, "");
+    if (raw.isBlank()) {
+      return defaultValue;
+    }
+    try {
+      return Integer.parseInt(raw);
+    } catch (NumberFormatException ignored) {
+      return defaultValue;
+    }
   }
 }

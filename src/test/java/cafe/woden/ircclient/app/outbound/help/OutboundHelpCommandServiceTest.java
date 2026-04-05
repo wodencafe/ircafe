@@ -69,15 +69,10 @@ class OutboundHelpCommandServiceTest {
       new OutboundHelpContributor() {
         @Override
         public void appendGeneralHelp(TargetRef out) {
-          ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires draft/reply)");
+          ui.appendStatus(out, "(help)", "/reply <msgid> <message> (requires message-tags)");
+          ui.appendStatus(out, "(help)", "/react <msgid> <reaction-token> (requires message-tags)");
           ui.appendStatus(
-              out,
-              "(help)",
-              "/react <msgid> <reaction-token> (requires draft/react + draft/reply)");
-          ui.appendStatus(
-              out,
-              "(help)",
-              "/unreact <msgid> <reaction-token> (requires draft/unreact + draft/reply)");
+              out, "(help)", "/unreact <msgid> <reaction-token> (requires message-tags)");
           appendEditHelp(out);
           appendRedactHelp(out);
         }

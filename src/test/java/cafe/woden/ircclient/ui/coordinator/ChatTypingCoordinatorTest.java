@@ -145,6 +145,40 @@ class ChatTypingCoordinatorTest {
   }
 
   @Test
+  void normalizeMessageTagsCapabilityAlsoUpdatesStoredDraftsForServer() {
+    MessageInputPanel inputPanel = mock(MessageInputPanel.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    MessageActionCapabilityPolicy capabilityPolicy = mock(MessageActionCapabilityPolicy.class);
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    Map<TargetRef, String> drafts = new HashMap<>();
+    String before = "/quote @draft/reply=abc PRIVMSG #ircafe :hello";
+    drafts.put(channel, before);
+
+    when(capabilityPolicy.canReply("libera")).thenReturn(false);
+    when(capabilityPolicy.canReact("libera")).thenReturn(false);
+    when(inputPanel.clearRemoteTypingIndicator()).thenReturn(false);
+
+    ChatTypingCoordinator coordinator =
+        new ChatTypingCoordinator(
+            inputPanel,
+            IrcTypingPort.from(irc),
+            capabilityPolicy,
+            () -> channel,
+            () -> false,
+            () -> {},
+            () -> false,
+            () -> {},
+            drafts);
+
+    coordinator.normalizeIrcv3CapabilityUiState("libera", "message-tags");
+
+    String expected = MessageInputPanel.normalizeIrcv3DraftForCapabilities(before, false, false);
+    assertEquals(expected, drafts.get(channel));
+    verify(inputPanel).normalizeIrcv3DraftForCapabilities(false, false);
+    verify(inputPanel).clearRemoteTypingIndicator();
+  }
+
+  @Test
   void onLocalTypingStateChangedSendsNormalizedTypingWhenAvailable() {
     MessageInputPanel inputPanel = mock(MessageInputPanel.class);
     IrcClientService irc = mock(IrcClientService.class);

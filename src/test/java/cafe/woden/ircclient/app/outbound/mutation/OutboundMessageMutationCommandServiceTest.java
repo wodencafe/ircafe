@@ -96,7 +96,7 @@ class OutboundMessageMutationCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(irc.sendRaw("libera", "@+draft/reply=abc123 PRIVMSG #ircafe :hello there"))
@@ -117,7 +117,7 @@ class OutboundMessageMutationCommandServiceTest {
             "pending-reply", chan, "me", "hello", createdAt);
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(true);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(pendingEchoMessageState.register(eq(chan), eq("me"), eq("hello"), any(Instant.class)))
@@ -136,8 +136,7 @@ class OutboundMessageMutationCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
-    when(irc.isDraftReactAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(irc.sendRaw("libera", "@+draft/react=:+1:;+draft/reply=abc123 TAGMSG #ircafe"))
@@ -155,8 +154,7 @@ class OutboundMessageMutationCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isDraftReplyAvailable("libera")).thenReturn(true);
-    when(irc.isDraftUnreactAvailable("libera")).thenReturn(true);
+    when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(irc.sendRaw("libera", "@+draft/unreact=:+1:;+draft/reply=abc123 TAGMSG #ircafe"))

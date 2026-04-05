@@ -48,6 +48,10 @@ public interface OutboundBackendFeatureAdapter {
     return irc != null && irc.isMultilineAvailable(serverId);
   }
 
+  default boolean supportsMessageTags(IrcNegotiatedFeaturePort irc, String serverId) {
+    return irc != null && irc.isMessageTagsAvailable(serverId);
+  }
+
   default boolean supportsDraftReply(IrcNegotiatedFeaturePort irc, String serverId) {
     return irc != null && irc.isDraftReplyAvailable(serverId);
   }

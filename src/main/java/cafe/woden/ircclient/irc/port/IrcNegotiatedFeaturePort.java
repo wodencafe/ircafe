@@ -13,6 +13,10 @@ public interface IrcNegotiatedFeaturePort {
     return false;
   }
 
+  default boolean isMessageTagsAvailable(String serverId) {
+    return false;
+  }
+
   default boolean isDraftReplyAvailable(String serverId) {
     return false;
   }
@@ -68,6 +72,11 @@ public interface IrcNegotiatedFeaturePort {
       @Override
       public boolean isChatHistoryAvailable(String serverId) {
         return irc.isChatHistoryAvailable(serverId);
+      }
+
+      @Override
+      public boolean isMessageTagsAvailable(String serverId) {
+        return irc.isMessageTagsAvailable(serverId);
       }
 
       @Override
