@@ -56,6 +56,7 @@ public class ChatStyles {
   public static final String ATTR_META_FILTER_RULE_NAME = "chat.meta.filter.ruleName";
   public static final String ATTR_META_FILTER_ACTION = "chat.meta.filter.action";
   public static final String ATTR_META_FILTER_MULTIPLE = "chat.meta.filter.multiple";
+  public static final String ATTR_META_AUX_ROW_KIND = "chat.meta.auxRowKind";
 
   /** Integer background mIRC color code (0-15), or null for default. */
   public static final String ATTR_IRC_BG = "chat.irc.bg";

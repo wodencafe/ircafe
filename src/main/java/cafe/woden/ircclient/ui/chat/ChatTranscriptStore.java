@@ -38,6 +38,10 @@ import java.awt.Color;
 import java.awt.Font;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -75,6 +79,13 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   private static final int REPLY_PREVIEW_TEXT_MAX_CHARS = 120;
   private static final String MANUAL_PREVIEW_MARKER = " \uD83D\uDC41";
   private static final String REDACTED_MESSAGE_PLACEHOLDER = "[message redacted]";
+  private static final DateTimeFormatter DAY_DIVIDER_DATE_FORMAT =
+      DateTimeFormatter.ofPattern("EEE, MMM d, uuuu");
+  private static final String AUX_ROW_KIND_DAY_DIVIDER = "day-divider";
+  private static final String AUX_ROW_KIND_HISTORY_DIVIDER = "history-divider";
+  private static final String AUX_ROW_KIND_LOAD_OLDER = "load-older";
+  private static final String AUX_ROW_KIND_READ_MARKER = "read-marker";
+  private static final String AUX_ROW_KIND_REACTION_SUMMARY = "reaction-summary";
 
   /**
    * Step 5.2: Safety cap for history/backfill. After this many filtered placeholder/hint runs are
@@ -269,8 +280,18 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_RULE_ID);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_RULE_NAME);
     copyMetaAttr(existing, a, ChatStyles.ATTR_META_FILTER_ACTION);
+    copyMetaAttr(existing, a, ChatStyles.ATTR_META_AUX_ROW_KIND);
     copyMetaAttr(existing, a, ChatStyles.ATTR_NOTIFICATION_RULE_BG);
     return a;
+  }
+
+  private SimpleAttributeSet withAuxiliaryRowKind(AttributeSet base, String auxiliaryRowKind) {
+    SimpleAttributeSet attrs = new SimpleAttributeSet(base);
+    String kind = Objects.toString(auxiliaryRowKind, "").trim();
+    if (!kind.isEmpty()) {
+      attrs.addAttribute(ChatStyles.ATTR_META_AUX_ROW_KIND, kind);
+    }
+    return attrs;
   }
 
   private static void copyMetaAttr(
@@ -503,6 +524,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     FilteredRun run = st.currentFilteredRun;
     FilteredFoldComponent comp = (run != null) ? run.component : null;
+    if (run != null && crossesLocalDateBoundary(run.lastHiddenMeta, hiddenMeta)) {
+      st.currentFilteredRun = null;
+      run = null;
+      comp = null;
+    }
 
     // Safety cap: avoid a single placeholder fold representing an unbounded number of hidden lines.
     int maxRun = Math.max(0, eff.placeholderMaxLinesPerRun());
@@ -515,6 +541,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     if (comp == null) {
       // A placeholder is a visible element, so it should break any active presence fold...
       breakPresenceRun(ref);
+      maybeInsertDayDividerBeforeAppend(ref, doc, hiddenMeta != null ? hiddenMeta.epochMs() : null);
       ensureAtLineStart(doc);
 
       boolean collapsed = eff.placeholdersCollapsed();
@@ -581,9 +608,15 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     FilteredHintRun run = st.currentFilteredHintRun;
     FilteredHintComponent comp = (run != null) ? run.component : null;
+    if (run != null && crossesLocalDateBoundary(run.lastHiddenMeta, hiddenMeta)) {
+      st.currentFilteredHintRun = null;
+      run = null;
+      comp = null;
+    }
     if (comp == null) {
       // A hint is a visible element, so it should break any active presence fold...
       breakPresenceRun(ref);
+      maybeInsertDayDividerBeforeAppend(ref, doc, hiddenMeta != null ? hiddenMeta.epochMs() : null);
       ensureAtLineStart(doc);
 
       comp = new FilteredHintComponent();
@@ -670,6 +703,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     FilteredRun run = st.currentFilteredRunInsert;
     FilteredFoldComponent comp = (run != null) ? run.component : null;
+    if (run != null && crossesLocalDateBoundary(run.lastHiddenMeta, hiddenMeta)) {
+      st.currentFilteredRunInsert = null;
+      run = null;
+      comp = null;
+    }
 
     // Safety cap: avoid a single placeholder fold representing an unbounded number of hidden lines.
     int maxRun = Math.max(0, eff.placeholderMaxLinesPerRun());
@@ -689,6 +727,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         return onFilteredOverflowInsertAt(ref, insertAt, hiddenMeta, match, eff);
       }
 
+      insertAt =
+          maybeInsertDayDividerBeforeInsert(
+              ref, doc, insertAt, hiddenMeta != null ? hiddenMeta.epochMs() : null);
       int beforeLen = doc.getLength();
       int pos = normalizeInsertAtLineStart(doc, insertAt);
       pos = ensureAtLineStartForInsert(doc, pos);
@@ -784,6 +825,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     FilteredHintRun run = st.currentFilteredHintRunInsert;
     FilteredHintComponent comp = (run != null) ? run.component : null;
+    if (run != null && crossesLocalDateBoundary(run.lastHiddenMeta, hiddenMeta)) {
+      st.currentFilteredHintRunInsert = null;
+      run = null;
+      comp = null;
+    }
 
     if (comp == null) {
       // Step 5.2: Avoid creating an unbounded number of hint rows during history loads.
@@ -794,6 +840,9 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
         return onFilteredOverflowInsertAt(ref, insertAt, hiddenMeta, match, eff);
       }
 
+      insertAt =
+          maybeInsertDayDividerBeforeInsert(
+              ref, doc, insertAt, hiddenMeta != null ? hiddenMeta.epochMs() : null);
       int beforeLen = doc.getLength();
       int pos = normalizeInsertAtLineStart(doc, insertAt);
       pos = ensureAtLineStartForInsert(doc, pos);
@@ -884,8 +933,16 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
 
     FilteredOverflowRun run = st.historyInsertOverflowRun;
     FilteredOverflowComponent comp = (run != null) ? run.component : null;
+    if (run != null && crossesLocalDateBoundary(run.lastHiddenMeta, hiddenMeta)) {
+      st.historyInsertOverflowRun = null;
+      run = null;
+      comp = null;
+    }
 
     if (comp == null) {
+      insertAt =
+          maybeInsertDayDividerBeforeInsert(
+              ref, doc, insertAt, hiddenMeta != null ? hiddenMeta.epochMs() : null);
       int beforeLen = doc.getLength();
       int pos = normalizeInsertAtLineStart(doc, insertAt);
       pos = ensureAtLineStartForInsert(doc, pos);
@@ -1454,12 +1511,16 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
 
     try {
-      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+      SimpleAttributeSet attrs =
+          withAuxiliaryRowKind(withLineMeta(styles.status(), meta), AUX_ROW_KIND_LOAD_OLDER);
       attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
       StyleConstants.setComponent(attrs, comp);
       doc.insertString(insertPos, " ", attrs);
       Position pos = doc.createPosition(insertPos);
-      doc.insertString(insertPos + 1, "\n", withLineMeta(styles.timestamp(), meta));
+      doc.insertString(
+          insertPos + 1,
+          "\n",
+          withAuxiliaryRowKind(withLineMeta(styles.timestamp(), meta), AUX_ROW_KIND_LOAD_OLDER));
       if (st != null) {
         st.loadOlderControl = new LoadOlderControl(pos, comp);
       }
@@ -1498,22 +1559,19 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     pos = ensureAtLineStartForInsert(doc, pos);
     final int insertionStart = pos;
 
-    HistoryDividerComponent comp = new HistoryDividerComponent(labelText);
-    try {
-      if (uiSettings != null && uiSettings.get() != null) {
-        comp.setTranscriptFont(
-            new Font(
-                uiSettings.get().chatFontFamily(), Font.PLAIN, uiSettings.get().chatFontSize()));
-      }
-    } catch (Exception ignored) {
-    }
+    HistoryDividerComponent comp = createTranscriptDividerComponent(labelText);
 
     try {
-      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+      SimpleAttributeSet attrs =
+          withAuxiliaryRowKind(withLineMeta(styles.status(), meta), AUX_ROW_KIND_HISTORY_DIVIDER);
       attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
       StyleConstants.setComponent(attrs, comp);
       doc.insertString(pos, " ", attrs);
-      doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
+      doc.insertString(
+          pos + 1,
+          "\n",
+          withAuxiliaryRowKind(
+              withLineMeta(styles.timestamp(), meta), AUX_ROW_KIND_HISTORY_DIVIDER));
       if (st != null) {
         st.historyDivider = new HistoryDividerControl(comp);
         st.pendingHistoryDividerLabel = null;
@@ -1564,6 +1622,188 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     // this flush).
     ensureHistoryDivider(ref, doc.getLength(), label);
     st.pendingHistoryDividerLabel = null;
+  }
+
+  private HistoryDividerComponent createTranscriptDividerComponent(String text) {
+    HistoryDividerComponent comp = new HistoryDividerComponent(text);
+    Font f = safeTranscriptFont();
+    if (f != null) {
+      try {
+        comp.setTranscriptFont(f);
+      } catch (Exception ignored) {
+      }
+    }
+    return comp;
+  }
+
+  private boolean maybeInsertDayDividerBeforeAppend(
+      TargetRef ref, StyledDocument doc, Long epochMs) {
+    if (doc == null) return false;
+    int insertAt = doc.getLength();
+    int nextInsertAt = maybeInsertDayDividerBeforeInsert(ref, doc, insertAt, epochMs);
+    return nextInsertAt > insertAt;
+  }
+
+  private int maybeInsertDayDividerBeforeInsert(
+      TargetRef ref, StyledDocument doc, int insertAt, Long epochMs) {
+    if (ref == null || doc == null || epochMs == null || epochMs <= 0L) {
+      return Math.max(0, insertAt);
+    }
+
+    LocalDate currentDate = localDateForEpoch(epochMs);
+    if (currentDate == null) return Math.max(0, insertAt);
+
+    LocalDate immediateDividerDate = dayDividerDateImmediatelyBefore(doc, insertAt);
+    if (currentDate.equals(immediateDividerDate)) {
+      return Math.max(0, insertAt);
+    }
+
+    LocalDate previousActivityDate = activityDateBefore(doc, insertAt);
+    if (currentDate.equals(previousActivityDate)) {
+      return Math.max(0, insertAt);
+    }
+
+    return insertDayDividerAt(ref, doc, insertAt, epochMs);
+  }
+
+  private int insertDayDividerAt(TargetRef ref, StyledDocument doc, int insertAt, long epochMs) {
+    if (ref == null || doc == null || epochMs <= 0L) return Math.max(0, insertAt);
+
+    int beforeLen = doc.getLength();
+    int pos = normalizeInsertAtLineStart(doc, insertAt);
+    pos = ensureAtLineStartForInsert(doc, pos);
+    final int insertionStart = pos;
+
+    LineMeta meta = buildLineMeta(ref, LogKind.STATUS, LogDirection.SYSTEM, null, epochMs, null);
+    HistoryDividerComponent comp = createTranscriptDividerComponent(dayDividerLabel(epochMs));
+
+    try {
+      SimpleAttributeSet attrs =
+          withAuxiliaryRowKind(withLineMeta(styles.status(), meta), AUX_ROW_KIND_DAY_DIVIDER);
+      attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
+      StyleConstants.setComponent(attrs, comp);
+      doc.insertString(pos, " ", attrs);
+
+      SimpleAttributeSet newlineAttrs =
+          withAuxiliaryRowKind(withLineMeta(styles.timestamp(), meta), AUX_ROW_KIND_DAY_DIVIDER);
+      doc.insertString(pos + 1, "\n", newlineAttrs);
+    } catch (Exception ignored) {
+    }
+
+    int delta = doc.getLength() - beforeLen;
+    shiftCurrentPresenceBlock(ref, insertionStart, delta);
+    return insertionStart + delta;
+  }
+
+  private LocalDate activityDateBefore(StyledDocument doc, int insertAt) {
+    if (doc == null) return null;
+    try {
+      Element root = doc.getDefaultRootElement();
+      if (root == null) return null;
+
+      for (int idx = previousLineIndexBeforeOffset(doc, insertAt); idx >= 0; idx--) {
+        LocalDate lineDate = activityDateForLine(doc, root.getElement(idx));
+        if (lineDate != null) {
+          return lineDate;
+        }
+      }
+    } catch (Exception ignored) {
+    }
+    return null;
+  }
+
+  private LocalDate dayDividerDateImmediatelyBefore(StyledDocument doc, int insertAt) {
+    if (doc == null) return null;
+    try {
+      Element root = doc.getDefaultRootElement();
+      if (root == null) return null;
+
+      for (int idx = previousLineIndexBeforeOffset(doc, insertAt); idx >= 0; idx--) {
+        Element line = root.getElement(idx);
+        if (line == null) continue;
+        AttributeSet attrs = lineStartAttributes(doc, line);
+        if (attrs == null) continue;
+        if (hasAuxiliaryRowKind(attrs, AUX_ROW_KIND_DAY_DIVIDER)) {
+          return localDateForEpoch(lineEpochMs(attrs));
+        }
+        if (!isAuxiliaryRow(attrs)) {
+          return null;
+        }
+      }
+    } catch (Exception ignored) {
+    }
+    return null;
+  }
+
+  private LocalDate activityDateForLine(StyledDocument doc, Element line) {
+    AttributeSet attrs = lineStartAttributes(doc, line);
+    if (attrs == null || isAuxiliaryRow(attrs)) return null;
+    return localDateForEpoch(lineEpochMs(attrs));
+  }
+
+  private AttributeSet lineStartAttributes(StyledDocument doc, Element line) {
+    if (doc == null || line == null) return null;
+    int len = doc.getLength();
+    int start = Math.max(0, line.getStartOffset());
+    if (start >= len) return null;
+    try {
+      return doc.getCharacterElement(start).getAttributes();
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private int previousLineIndexBeforeOffset(StyledDocument doc, int offset) {
+    if (doc == null) return -1;
+    int len = doc.getLength();
+    if (len <= 0) return -1;
+    int pos = Math.max(0, Math.min(offset, len));
+    if (pos <= 0) return -1;
+    try {
+      Element root = doc.getDefaultRootElement();
+      if (root == null) return -1;
+      int probe = Math.max(0, Math.min(len - 1, pos - 1));
+      return root.getElementIndex(probe);
+    } catch (Exception ignored) {
+      return -1;
+    }
+  }
+
+  private static boolean isAuxiliaryRow(AttributeSet attrs) {
+    return !auxiliaryRowKind(attrs).isEmpty();
+  }
+
+  private static boolean hasAuxiliaryRowKind(AttributeSet attrs, String expected) {
+    String actual = auxiliaryRowKind(attrs);
+    return !actual.isEmpty() && actual.equals(Objects.toString(expected, "").trim());
+  }
+
+  private static String auxiliaryRowKind(AttributeSet attrs) {
+    return Objects.toString(
+            attrs != null ? attrs.getAttribute(ChatStyles.ATTR_META_AUX_ROW_KIND) : "", "")
+        .trim();
+  }
+
+  private static LocalDate localDateForEpoch(Long epochMs) {
+    if (epochMs == null || epochMs <= 0L) return null;
+    try {
+      return Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()).toLocalDate();
+    } catch (Exception ignored) {
+      return null;
+    }
+  }
+
+  private static boolean crossesLocalDateBoundary(LineMeta previous, LineMeta next) {
+    if (previous == null || next == null) return false;
+    LocalDate previousDate = localDateForEpoch(previous.epochMs());
+    LocalDate nextDate = localDateForEpoch(next.epochMs());
+    return previousDate != null && nextDate != null && !previousDate.equals(nextDate);
+  }
+
+  private static String dayDividerLabel(long epochMs) {
+    LocalDate localDate = localDateForEpoch(epochMs);
+    if (localDate == null) return "-- Unknown date --";
+    return "-- " + DAY_DIVIDER_DATE_FORMAT.format(localDate) + " --";
   }
 
   public synchronized void updateReadMarker(TargetRef ref, long markerEpochMs) {
@@ -1865,6 +2105,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
   public synchronized void appendPresence(TargetRef ref, PresenceEvent event) {
     if (ref == null || event == null) return;
 
+    long eventEpochMs = System.currentTimeMillis();
     String presenceFrom = null;
     try {
       presenceFrom = (event.kind() == PresenceKind.NICK) ? event.oldNick() : event.nick();
@@ -1873,12 +2114,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
     LineMeta meta =
         buildLineMeta(
-            ref,
-            LogKind.PRESENCE,
-            LogDirection.SYSTEM,
-            presenceFrom,
-            System.currentTimeMillis(),
-            event);
+            ref, LogKind.PRESENCE, LogDirection.SYSTEM, presenceFrom, eventEpochMs, event);
 
     FilterEngine.Match m =
         firstFilterMatch(
@@ -1900,11 +2136,15 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     StyledDocument doc = docs.get(ref);
     TranscriptState st = stateByTarget.get(ref);
     if (doc == null || st == null) return;
+    boolean insertedDayDivider = maybeInsertDayDividerBeforeAppend(ref, doc, eventEpochMs);
+    if (insertedDayDivider) {
+      st.currentPresenceBlock = null;
+    }
     boolean includePresenceTimestamps = shouldIncludePresenceTimestamps();
     String presenceTimestampPrefix = "";
     if (includePresenceTimestamps && ts != null && ts.enabled()) {
       try {
-        presenceTimestampPrefix = ts.prefixNow();
+        presenceTimestampPrefix = ts.prefixAt(eventEpochMs);
       } catch (Exception ignored) {
         presenceTimestampPrefix = "";
       }
@@ -2030,6 +2270,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
 
     Long epochMs = (meta != null) ? meta.epochMs() : null;
+    maybeInsertDayDividerBeforeAppend(ref, doc, epochMs);
     String renderedFrom = renderTranscriptFrom(ref, from);
     SimpleAttributeSet tsStyle = withLineMeta(styles.timestamp(), meta);
     SimpleAttributeSet fromStyle2 =
@@ -2503,6 +2744,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     SimpleAttributeSet ms = withLineMeta(styles.message(), meta);
     applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
 
+    insertAt = maybeInsertDayDividerBeforeInsert(ref, doc, insertAt, tsEpochMs);
     return insertLineInternalAt(ref, insertAt, from, text, fs, ms, false, meta);
   }
 
@@ -2558,6 +2800,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     // insert-run placeholders created by prior hidden lines.
     endFilteredInsertRun(ref);
 
+    insertAt = maybeInsertDayDividerBeforeInsert(ref, doc, insertAt, tsEpochMs);
     int beforeLen = doc.getLength();
     int pos = normalizeInsertAtLineStart(doc, insertAt);
     pos = ensureAtLineStartForInsert(doc, pos);
@@ -2676,6 +2919,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       return Math.max(0, insertAt);
     }
 
+    insertAt = maybeInsertDayDividerBeforeInsert(ref, doc, insertAt, tsEpochMs);
     return insertLineInternalAt(
         ref, insertAt, from, text, styles.noticeFrom(), styles.noticeMessage(), false, meta);
   }
@@ -2721,6 +2965,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       return Math.max(0, insertAt);
     }
 
+    insertAt = maybeInsertDayDividerBeforeInsert(ref, doc, insertAt, tsEpochMs);
     return insertLineInternalAt(
         ref, insertAt, from, text, statusFromStyleFor(ref), styles.status(), false, meta);
   }
@@ -2750,6 +2995,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       return Math.max(0, insertAt);
     }
 
+    insertAt = maybeInsertDayDividerBeforeInsert(ref, doc, insertAt, tsEpochMs);
     return insertLineInternalAt(
         ref, insertAt, from, text, errorFromStyleFor(ref), styles.error(), false, meta);
   }
@@ -2774,6 +3020,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       return onFilteredLineInsertAt(ref, insertAt, previewChatLine(null, displayText), meta, m);
     }
 
+    insertAt = maybeInsertDayDividerBeforeInsert(ref, doc, insertAt, tsEpochMs);
     return insertLineInternalAt(
         ref, insertAt, null, displayText, styles.status(), styles.status(), false, meta);
   }
@@ -2806,6 +3053,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     // Visible history insert.
     endFilteredInsertRun(ref);
 
+    insertAt = maybeInsertDayDividerBeforeInsert(ref, doc, insertAt, tsEpochMs);
     int beforeLen = doc.getLength();
     int pos = normalizeInsertAtLineStart(doc, insertAt);
     pos = ensureAtLineStartForInsert(doc, pos);
@@ -3107,22 +3355,19 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     pos = ensureAtLineStartForInsert(doc, pos);
     final int insertionStart = pos;
 
-    HistoryDividerComponent comp = new HistoryDividerComponent("Unread");
-    Font f = safeTranscriptFont();
-    if (f != null) {
-      try {
-        comp.setTranscriptFont(f);
-      } catch (Exception ignored) {
-      }
-    }
+    HistoryDividerComponent comp = createTranscriptDividerComponent("Unread");
 
     try {
-      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+      SimpleAttributeSet attrs =
+          withAuxiliaryRowKind(withLineMeta(styles.status(), meta), AUX_ROW_KIND_READ_MARKER);
       attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
       StyleConstants.setComponent(attrs, comp);
       doc.insertString(pos, " ", attrs);
       Position p = doc.createPosition(pos);
-      doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
+      doc.insertString(
+          pos + 1,
+          "\n",
+          withAuxiliaryRowKind(withLineMeta(styles.timestamp(), meta), AUX_ROW_KIND_READ_MARKER));
       st.readMarker = new ReadMarkerControl(p);
     } catch (Exception ignored) {
       st.readMarker = null;
@@ -3208,6 +3453,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     TranscriptState st = stateByTarget.get(ref);
     if (doc == null) return;
 
+    maybeInsertDayDividerBeforeAppend(ref, doc, tsEpochMs);
     ensureAtLineStart(doc);
 
     Map<String, String> tags = Map.of("draft/reply", targetMsgId);
@@ -3678,12 +3924,17 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
             Map.of("draft/react", "1"));
 
     try {
-      SimpleAttributeSet attrs = withLineMeta(styles.status(), meta);
+      SimpleAttributeSet attrs =
+          withAuxiliaryRowKind(withLineMeta(styles.status(), meta), AUX_ROW_KIND_REACTION_SUMMARY);
       attrs.addAttribute(ChatStyles.ATTR_STYLE, ChatStyles.STYLE_STATUS);
       StyleConstants.setComponent(attrs, comp);
       doc.insertString(pos, " ", attrs);
       Position p = doc.createPosition(pos);
-      doc.insertString(pos + 1, "\n", withLineMeta(styles.timestamp(), meta));
+      doc.insertString(
+          pos + 1,
+          "\n",
+          withAuxiliaryRowKind(
+              withLineMeta(styles.timestamp(), meta), AUX_ROW_KIND_REACTION_SUMMARY));
       state.control = new ReactionSummaryControl(p, comp);
     } catch (Exception ignored) {
       state.control = null;
@@ -4105,6 +4356,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     ensureTargetExists(ref);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return;
+    maybeInsertDayDividerBeforeAppend(ref, doc, meta.epochMs());
     ensureAtLineStart(doc);
 
     String msg = text == null ? "" : text;
@@ -4191,6 +4443,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     breakPresenceRun(ref);
     StyledDocument doc = docs.get(ref);
     if (doc == null) return;
+    maybeInsertDayDividerBeforeAppend(ref, doc, tsEpochMs);
     ensureAtLineStart(doc);
 
     String msg = text == null ? "" : text;
@@ -4514,6 +4767,7 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     }
 
     String a = action == null ? "" : action;
+    maybeInsertDayDividerBeforeAppend(ref, doc, tsEpochMs);
     ensureAtLineStart(doc);
 
     try {
@@ -5453,6 +5707,11 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       } else if (filterActionRaw != null) {
         fresh.addAttribute(
             ChatStyles.ATTR_META_FILTER_ACTION, Objects.toString(filterActionRaw, "").trim());
+      }
+      Object auxiliaryRowKind = old.getAttribute(ChatStyles.ATTR_META_AUX_ROW_KIND);
+      if (auxiliaryRowKind != null) {
+        fresh.addAttribute(
+            ChatStyles.ATTR_META_AUX_ROW_KIND, Objects.toString(auxiliaryRowKind, "").trim());
       }
       Color ruleBg = null;
       Object ruleBgObj = old.getAttribute(ChatStyles.ATTR_NOTIFICATION_RULE_BG);
