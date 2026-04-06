@@ -1,8 +1,10 @@
 package cafe.woden.ircclient.config.api;
 
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /** Describes a plugin discovery or loading problem observed at startup. */
+@ValueObject
 public record InstalledPluginProblem(String level, String summary, String details) {
 
   public InstalledPluginProblem {

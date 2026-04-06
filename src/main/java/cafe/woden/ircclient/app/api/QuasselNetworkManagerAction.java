@@ -2,8 +2,10 @@ package cafe.woden.ircclient.app.api;
 
 import cafe.woden.ircclient.irc.quassel.control.QuasselCoreControlPort;
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /** User-selected operation from the Quassel network manager dialog. */
+@ValueObject
 public record QuasselNetworkManagerAction(
     Operation operation,
     String networkIdOrName,

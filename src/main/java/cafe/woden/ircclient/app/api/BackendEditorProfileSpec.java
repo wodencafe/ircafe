@@ -2,8 +2,10 @@ package cafe.woden.ircclient.app.api;
 
 import java.util.Locale;
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /** Backend-specific server-editor defaults and copy exposed to the UI layer. */
+@ValueObject
 public record BackendEditorProfileSpec(
     String backendId,
     String displayName,

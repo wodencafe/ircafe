@@ -3,9 +3,11 @@ package cafe.woden.ircclient.app.api;
 import cafe.woden.ircclient.model.TargetRef;
 import java.time.Instant;
 import java.util.Map;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Transcript rendering and transcript-adjacent ephemeral state. */
+@SecondaryPort
 @ApplicationLayer
 public interface UiTranscriptPort {
 

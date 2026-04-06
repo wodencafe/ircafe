@@ -1,8 +1,12 @@
 package cafe.woden.ircclient.app.api;
 
 import cafe.woden.ircclient.model.TargetRef;
+import org.jmolecules.architecture.hexagonal.SecondaryPort;
+import org.jmolecules.architecture.layered.ApplicationLayer;
 
 /** Port for persisting and reading last-known channel metadata snapshots. */
+@SecondaryPort
+@ApplicationLayer
 public interface ChannelMetadataPort {
 
   String topicFor(TargetRef target);

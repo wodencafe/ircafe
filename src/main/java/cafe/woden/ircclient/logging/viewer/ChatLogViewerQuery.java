@@ -1,12 +1,14 @@
 package cafe.woden.ircclient.logging.viewer;
 
 import java.util.Objects;
+import org.jmolecules.ddd.annotation.ValueObject;
 
 /**
  * Query model for the log viewer.
  *
  * <p>Dates are optional epoch milliseconds (inclusive).
  */
+@ValueObject
 public record ChatLogViewerQuery(
     String serverId,
     String nickPattern,
