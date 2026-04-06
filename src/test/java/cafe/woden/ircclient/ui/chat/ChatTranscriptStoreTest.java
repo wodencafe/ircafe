@@ -18,7 +18,6 @@ import cafe.woden.ircclient.irc.roster.UserListStore;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.chat.embed.ChatImageEmbedder;
 import cafe.woden.ircclient.ui.chat.embed.ChatLinkPreviewEmbedder;
-import cafe.woden.ircclient.ui.chat.fold.HistoryDividerComponent;
 import cafe.woden.ircclient.ui.chat.fold.MessageReactionsComponent;
 import cafe.woden.ircclient.ui.chat.render.ChatRichTextRenderer;
 import cafe.woden.ircclient.ui.settings.MemoryUsageDisplayMode;
@@ -28,10 +27,6 @@ import cafe.woden.ircclient.ui.settings.UiSettingsBus;
 import cafe.woden.ircclient.ui.util.EmojiFontSupport;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -43,9 +38,6 @@ import javax.swing.text.StyledDocument;
 import org.junit.jupiter.api.Test;
 
 class ChatTranscriptStoreTest {
-
-  private static final DateTimeFormatter DAY_DIVIDER_DATE_FORMAT =
-      DateTimeFormatter.ofPattern("EEE, MMM d, uuuu");
 
   @Test
   void appendChatAtWithDuplicateMessageIdIsIgnored() throws Exception {
@@ -123,73 +115,7 @@ class ChatTranscriptStoreTest {
     store.appendChatAt(ref, "alice", "same", false, 5_000L, "", Map.of());
     store.appendChatAt(ref, "alice", "same", false, 5_010L, "", Map.of());
 
-    StyledDocument doc = store.document(ref);
-    assertEquals(2, lineCount(doc) - dividerTexts(doc).size());
-  }
-
-  @Test
-  void appendChatAtInsertsDateDividersOnlyWhenLocalDayChanges() {
-    ChatTranscriptStore store = newStore();
-    TargetRef ref = new TargetRef("srv", "#chan");
-    long dayOne = localNoonEpochMs(2026, 4, 1);
-    long dayTwo = localNoonEpochMs(2026, 4, 2);
-
-    store.appendChatAt(ref, "alice", "day one", false, dayOne, "m-1", Map.of("msgid", "m-1"));
-    store.appendChatAt(
-        ref, "bob", "same day", false, dayOne + 3_600_000L, "m-2", Map.of("msgid", "m-2"));
-    store.appendChatAt(ref, "carol", "day two", false, dayTwo, "m-3", Map.of("msgid", "m-3"));
-
-    assertEquals(
-        List.of(dayDividerLabel(dayOne), dayDividerLabel(dayTwo)),
-        dividerTexts(store.document(ref)));
-  }
-
-  @Test
-  void insertChatFromHistoryAtPrependsDateDividersForOlderDays() {
-    ChatTranscriptStore store = newStore();
-    TargetRef ref = new TargetRef("srv", "#chan");
-    long dayOne = localNoonEpochMs(2026, 4, 1);
-    long dayTwo = localNoonEpochMs(2026, 4, 2);
-    long dayThree = localNoonEpochMs(2026, 4, 3);
-
-    store.appendChatAt(ref, "carol", "day three", false, dayThree, "m-3", Map.of("msgid", "m-3"));
-
-    int pos = 0;
-    pos =
-        store.insertChatFromHistoryAt(
-            ref, pos, "alice", "day one", false, dayOne, "m-1", Map.of("msgid", "m-1"));
-    pos =
-        store.insertChatFromHistoryAt(
-            ref,
-            pos,
-            "alice",
-            "still day one",
-            false,
-            dayOne + 3_600_000L,
-            "m-1b",
-            Map.of("msgid", "m-1b"));
-    store.insertChatFromHistoryAt(
-        ref, pos, "bob", "day two", false, dayTwo, "m-2", Map.of("msgid", "m-2"));
-
-    assertEquals(
-        List.of(dayDividerLabel(dayOne), dayDividerLabel(dayTwo), dayDividerLabel(dayThree)),
-        dividerTexts(store.document(ref)));
-  }
-
-  @Test
-  void replyContextAndMessageShareOneDateDivider() {
-    ChatTranscriptStore store = newStore();
-    TargetRef ref = new TargetRef("srv", "#chan");
-    long dayOne = localNoonEpochMs(2026, 4, 1);
-    long dayTwo = localNoonEpochMs(2026, 4, 2);
-
-    store.appendChatAt(ref, "alice", "original", false, dayOne, "m-1", Map.of("msgid", "m-1"));
-    store.appendChatAt(
-        ref, "bob", "reply", false, dayTwo, "m-2", Map.of("msgid", "m-2", "draft/reply", "m-1"));
-
-    assertEquals(
-        List.of(dayDividerLabel(dayOne), dayDividerLabel(dayTwo)),
-        dividerTexts(store.document(ref)));
+    assertEquals(2, lineCount(store.document(ref)));
   }
 
   @Test
@@ -419,7 +345,7 @@ class ChatTranscriptStoreTest {
     assertTrue(text.contains("line-1"));
     assertTrue(text.contains("line-2"));
     assertTrue(text.contains("line-3"));
-    assertEquals(3, lineCount(doc) - dividerTexts(doc).size());
+    assertEquals(3, lineCount(doc));
   }
 
   @Test
@@ -569,7 +495,7 @@ class ChatTranscriptStoreTest {
     assertTrue(text.contains("Alice: hello matrix"));
     assertFalse(text.contains("@alice:matrix.example.org: hello matrix"));
 
-    Element firstLine = firstNonAuxiliaryLine(doc);
+    Element firstLine = doc.getDefaultRootElement().getElement(0);
     Object metaFrom =
         doc.getCharacterElement(firstLine.getStartOffset())
             .getAttributes()
@@ -888,58 +814,5 @@ class ChatTranscriptStoreTest {
       }
     }
     return count;
-  }
-
-  private static Element firstNonAuxiliaryLine(StyledDocument doc) {
-    Element root = doc != null ? doc.getDefaultRootElement() : null;
-    if (root == null || doc == null) {
-      throw new AssertionError("Document has no root element");
-    }
-
-    int len = doc.getLength();
-    for (int i = 0; i < root.getElementCount(); i++) {
-      Element line = root.getElement(i);
-      if (line == null) continue;
-      int start = Math.max(0, line.getStartOffset());
-      if (start >= len) continue;
-      Object aux =
-          doc.getCharacterElement(start)
-              .getAttributes()
-              .getAttribute(ChatStyles.ATTR_META_AUX_ROW_KIND);
-      if (aux == null || String.valueOf(aux).isBlank()) {
-        return line;
-      }
-    }
-
-    throw new AssertionError("Document has no non-auxiliary transcript line");
-  }
-
-  private static List<String> dividerTexts(StyledDocument doc) {
-    if (doc == null) return List.of();
-    java.util.ArrayList<String> out = new java.util.ArrayList<>();
-    int len = doc.getLength();
-    for (int i = 0; i < len; i++) {
-      Object component = StyleConstants.getComponent(doc.getCharacterElement(i).getAttributes());
-      if (component instanceof HistoryDividerComponent divider) {
-        String text = divider.getText();
-        if (text != null && !text.isBlank()) {
-          out.add(text);
-        }
-      }
-    }
-    return out;
-  }
-
-  private static long localNoonEpochMs(int year, int month, int dayOfMonth) {
-    return ZonedDateTime.of(year, month, dayOfMonth, 12, 0, 0, 0, ZoneId.systemDefault())
-        .toInstant()
-        .toEpochMilli();
-  }
-
-  private static String dayDividerLabel(long epochMs) {
-    return "-- "
-        + DAY_DIVIDER_DATE_FORMAT.format(
-            Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()).toLocalDate())
-        + " --";
   }
 }
