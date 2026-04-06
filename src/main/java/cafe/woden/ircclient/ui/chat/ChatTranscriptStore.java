@@ -2589,7 +2589,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     applyOutgoingLineColor(fs, ms, outgoingLocalEcho);
     applyNotificationRuleHighlightColor(fs, ms, notificationRuleHighlightColor);
 
-    String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
+    String replyToMsgId =
+        firstIrcv3TagValue(ircv3Tags, "reply", "+reply", "draft/reply", "+draft/reply");
     String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
     if (!replyToMsgId.isBlank()) {
       appendReplyContextLine(ref, from, replyToMsgId, tsEpochMs);
@@ -4111,7 +4112,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     StyledDocument doc = docs.get(ref);
     TranscriptState st = stateByTarget.get(ref);
     String normalizedMsgId = normalizeMessageId(messageId);
-    String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
+    String replyToMsgId =
+        firstIrcv3TagValue(ircv3Tags, "reply", "+reply", "draft/reply", "+draft/reply");
     String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
     if (doc != null && st != null && !normalizedMsgId.isBlank()) {
       materializePendingReactionsForMessage(ref, doc, st, normalizedMsgId, tsEpochMs);
@@ -4779,7 +4781,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
     StyledDocument doc = docs.get(ref);
     if (doc == null) return;
 
-    String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
+    String replyToMsgId =
+        firstIrcv3TagValue(ircv3Tags, "reply", "+reply", "draft/reply", "+draft/reply");
     String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
     if (!replyToMsgId.isBlank()) {
       appendReplyContextLine(ref, from, replyToMsgId, tsEpochMs);
@@ -5014,7 +5017,8 @@ public class ChatTranscriptStore implements ChatTranscriptHistoryPort {
       return;
     }
     breakPresenceRun(ref);
-    String replyToMsgId = firstIrcv3TagValue(ircv3Tags, "draft/reply", "+draft/reply");
+    String replyToMsgId =
+        firstIrcv3TagValue(ircv3Tags, "reply", "+reply", "draft/reply", "+draft/reply");
     String reactionToken = firstIrcv3TagValue(ircv3Tags, "draft/react", "+draft/react");
     if (!replyToMsgId.isBlank()) {
       appendReplyContextLine(ref, from, replyToMsgId, tsEpochMs);

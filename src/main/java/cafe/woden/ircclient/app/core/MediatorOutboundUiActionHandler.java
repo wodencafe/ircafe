@@ -240,6 +240,23 @@ public class MediatorOutboundUiActionHandler {
   }
 
   private static String normalizeIrcv3CapabilityKey(String capability) {
-    return Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
+    String key = Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
+    return switch (key) {
+      case "read-marker", "draft/read-marker" -> "draft/read-marker";
+      case "multiline", "draft/multiline" -> "draft/multiline";
+      case "chathistory", "draft/chathistory" -> "draft/chathistory";
+      case "message-redaction", "draft/message-redaction" -> "draft/message-redaction";
+      case "sts",
+          "draft/channel-context",
+          "draft/reply",
+          "draft/react",
+          "draft/unreact",
+          "draft/typing",
+          "typing",
+          "draft/message-edit",
+          "message-edit" ->
+          "";
+      default -> key;
+    };
   }
 }

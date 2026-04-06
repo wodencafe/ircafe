@@ -99,12 +99,12 @@ class OutboundMessageMutationCommandServiceTest {
     when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.sendRaw("libera", "@+draft/reply=abc123 PRIVMSG #ircafe :hello there"))
+    when(irc.sendRaw("libera", "@+reply=abc123 PRIVMSG #ircafe :hello there"))
         .thenReturn(Completable.complete());
 
     service.handleReplyMessage(disposables, "abc123", "hello there");
 
-    verify(irc).sendRaw("libera", "@+draft/reply=abc123 PRIVMSG #ircafe :hello there");
+    verify(irc).sendRaw("libera", "@+reply=abc123 PRIVMSG #ircafe :hello there");
     verify(ui).appendChat(chan, "(me)", "hello there", true);
   }
 
@@ -122,7 +122,7 @@ class OutboundMessageMutationCommandServiceTest {
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
     when(pendingEchoMessageState.register(eq(chan), eq("me"), eq("hello"), any(Instant.class)))
         .thenReturn(pending);
-    when(irc.sendRaw("libera", "@+draft/reply=abc123 PRIVMSG #ircafe :hello"))
+    when(irc.sendRaw("libera", "@+reply=abc123 PRIVMSG #ircafe :hello"))
         .thenReturn(Completable.complete());
 
     service.handleReplyMessage(disposables, "abc123", "hello");
@@ -139,12 +139,12 @@ class OutboundMessageMutationCommandServiceTest {
     when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.sendRaw("libera", "@+draft/react=:+1:;+draft/reply=abc123 TAGMSG #ircafe"))
+    when(irc.sendRaw("libera", "@+draft/react=:+1:;+reply=abc123 TAGMSG #ircafe"))
         .thenReturn(Completable.complete());
 
     service.handleReactMessage(disposables, "abc123", ":+1:");
 
-    verify(irc).sendRaw("libera", "@+draft/react=:+1:;+draft/reply=abc123 TAGMSG #ircafe");
+    verify(irc).sendRaw("libera", "@+draft/react=:+1:;+reply=abc123 TAGMSG #ircafe");
     verify(ui)
         .applyMessageReaction(eq(chan), any(Instant.class), eq("me"), eq("abc123"), eq(":+1:"));
   }
@@ -157,12 +157,12 @@ class OutboundMessageMutationCommandServiceTest {
     when(irc.isMessageTagsAvailable("libera")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
-    when(irc.sendRaw("libera", "@+draft/unreact=:+1:;+draft/reply=abc123 TAGMSG #ircafe"))
+    when(irc.sendRaw("libera", "@+draft/unreact=:+1:;+reply=abc123 TAGMSG #ircafe"))
         .thenReturn(Completable.complete());
 
     service.handleUnreactMessage(disposables, "abc123", ":+1:");
 
-    verify(irc).sendRaw("libera", "@+draft/unreact=:+1:;+draft/reply=abc123 TAGMSG #ircafe");
+    verify(irc).sendRaw("libera", "@+draft/unreact=:+1:;+reply=abc123 TAGMSG #ircafe");
     verify(ui)
         .removeMessageReaction(eq(chan), any(Instant.class), eq("me"), eq("abc123"), eq(":+1:"));
   }

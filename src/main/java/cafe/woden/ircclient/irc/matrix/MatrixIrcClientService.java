@@ -8,6 +8,7 @@ import cafe.woden.ircclient.irc.IrcEvent;
 import cafe.woden.ircclient.irc.ServerIrcEvent;
 import cafe.woden.ircclient.irc.backend.BackendNotAvailableException;
 import cafe.woden.ircclient.irc.backend.IrcBackendClientService;
+import cafe.woden.ircclient.irc.ircv3.Ircv3Tags;
 import cafe.woden.ircclient.util.RxVirtualSchedulers;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -1667,7 +1668,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     if (!editTarget.isEmpty()) {
       return sendRawEdit(serverId, target, editTarget, message);
     }
-    String replyTarget = normalize(tags.get("draft/reply"));
+    String replyTarget = Ircv3Tags.firstTagValue(tags, "reply", "draft/reply");
     if (!replyTarget.isEmpty()) {
       return sendRawReply(serverId, target, replyTarget, message);
     }
@@ -1697,7 +1698,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     if (!editTarget.isEmpty()) {
       return sendRawEdit(serverId, target, editTarget, message);
     }
-    String replyTarget = normalize(tags.get("draft/reply"));
+    String replyTarget = Ircv3Tags.firstTagValue(tags, "reply", "draft/reply");
     if (!replyTarget.isEmpty()) {
       return sendRawReply(serverId, target, replyTarget, message);
     }
@@ -1911,7 +1912,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   private Completable sendRawTagmsg(String serverId, String rawLine, RawCommand raw) {
     String target = argOrBlank(raw, 0, "TAGMSG requires a target");
     Map<String, String> tags = parseRawTags(rawLine);
-    String replyTarget = normalize(tags.get("draft/reply"));
+    String replyTarget = Ircv3Tags.firstTagValue(tags, "reply", "draft/reply");
     String reaction = normalize(tags.get("draft/react"));
     String unreaction = normalize(tags.get("draft/unreact"));
     if (!reaction.isEmpty() && !unreaction.isEmpty()) {
@@ -1920,7 +1921,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
     }
     if (!reaction.isEmpty() || !unreaction.isEmpty()) {
       if (replyTarget.isEmpty()) {
-        throw new IllegalArgumentException("TAGMSG draft reactions require +draft/reply=<msgid>");
+        throw new IllegalArgumentException("TAGMSG draft reactions require +reply=<msgid>");
       }
       if (!reaction.isEmpty()) {
         return sendRawReaction(serverId, target, replyTarget, reaction);

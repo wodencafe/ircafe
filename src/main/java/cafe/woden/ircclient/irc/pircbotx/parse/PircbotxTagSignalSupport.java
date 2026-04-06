@@ -47,7 +47,7 @@ public final class PircbotxTagSignalSupport {
     String convTarget = resolveSignalTarget(msgTarget, nick, channelContext);
 
     if (cmd.equals("PRIVMSG") || cmd.equals("NOTICE") || cmd.equals("TAGMSG")) {
-      String replyTo = firstTag(tags, "draft/reply", "+draft/reply");
+      String replyTo = firstTag(tags, "reply", "+reply", "draft/reply", "+draft/reply");
       if (!replyTo.isBlank()) {
         sink.accept(
             new ServerIrcEvent(
@@ -156,7 +156,7 @@ public final class PircbotxTagSignalSupport {
   }
 
   private static String observedMessageId(ImmutableMap<String, String> tags) {
-    String msgId = firstTag(tags, "draft/reply", "+draft/reply");
+    String msgId = firstTag(tags, "reply", "+reply", "draft/reply", "+draft/reply");
     if (!msgId.isBlank()) return msgId;
     return firstTag(tags, "msgid", "+msgid", "draft/msgid", "+draft/msgid");
   }

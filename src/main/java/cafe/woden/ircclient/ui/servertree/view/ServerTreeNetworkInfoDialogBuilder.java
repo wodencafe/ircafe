@@ -130,8 +130,9 @@ public final class ServerTreeNetworkInfoDialogBuilder {
               "Message redaction", List.of("draft/message-redaction"), List.of()),
           new CapabilityFeatureDefinition(
               "History", List.of(), List.of("chathistory", "draft/chathistory", "znc.in/playback")),
-          new CapabilityFeatureDefinition("Typing", List.of("typing"), List.of()),
-          new CapabilityFeatureDefinition("Read markers", List.of("draft/read-marker"), List.of()));
+          new CapabilityFeatureDefinition("Typing", List.of("message-tags"), List.of()),
+          new CapabilityFeatureDefinition(
+              "Read markers", List.of(), List.of("read-marker", "draft/read-marker")));
 
   private final IrcSessionRuntimeConfigPort runtimeConfig;
   private final Context context;
@@ -339,7 +340,11 @@ public final class ServerTreeNetworkInfoDialogBuilder {
         new DefaultTableModel(rows, new String[] {"Capability", "State", "Requested", "Last CAP"}) {
           @Override
           public boolean isCellEditable(int row, int column) {
-            return column == 2;
+            if (column != 2) {
+              return false;
+            }
+            String capability = Objects.toString(getValueAt(row, 0), "");
+            return !requestTokenForCapability(capability).isEmpty();
           }
 
           @Override
@@ -365,11 +370,12 @@ public final class ServerTreeNetworkInfoDialogBuilder {
                 Objects.toString(model.getValueAt(row, 0), "")
                     .trim()
                     .toLowerCase(java.util.Locale.ROOT);
-            if (cap.isEmpty()) {
+            String requestToken = requestTokenForCapability(cap);
+            if (requestToken.isEmpty()) {
               continue;
             }
             boolean enable = Boolean.TRUE.equals(model.getValueAt(row, 2));
-            context.requestCapabilityToggle(serverId, cap, enable);
+            context.requestCapabilityToggle(serverId, requestToken, enable);
           }
         });
 
@@ -584,19 +590,8 @@ public final class ServerTreeNetworkInfoDialogBuilder {
   }
 
   private boolean isCapabilityRequested(String capability) {
-    String cap = Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
+    String cap = requestTokenForCapability(capability);
     if (cap.isEmpty()) {
-      return false;
-    }
-
-    boolean requestable = false;
-    for (String candidate : Ircv3CapabilityCatalog.requestableCapabilities()) {
-      if (cap.equalsIgnoreCase(Objects.toString(candidate, "").trim())) {
-        requestable = true;
-        break;
-      }
-    }
-    if (!requestable) {
       return false;
     }
 
@@ -608,6 +603,38 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     } catch (Exception ignored) {
       return true;
     }
+  }
+
+  private static String requestTokenForCapability(String capability) {
+    String cap = normalizeCapability(capability);
+    if (cap.isEmpty()) {
+      return "";
+    }
+    return switch (cap) {
+      case "read-marker", "draft/read-marker" -> "draft/read-marker";
+      case "multiline", "draft/multiline" -> "draft/multiline";
+      case "chathistory", "draft/chathistory" -> "draft/chathistory";
+      case "message-redaction", "draft/message-redaction" -> "draft/message-redaction";
+      case "sts",
+          "draft/channel-context",
+          "draft/reply",
+          "draft/react",
+          "draft/unreact",
+          "draft/typing",
+          "typing",
+          "draft/message-edit",
+          "message-edit" ->
+          "";
+      default -> {
+        for (String candidate : Ircv3CapabilityCatalog.requestableCapabilities()) {
+          String normalized = normalizeCapability(candidate);
+          if (cap.equals(normalized)) {
+            yield normalized;
+          }
+        }
+        yield "";
+      }
+    };
   }
 
   private String capabilityStatusSummary(ServerRuntimeMetadata metadata) {

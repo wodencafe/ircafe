@@ -37,4 +37,17 @@ class RuntimeConfigStoreIrcv3CapabilitiesTest {
     assertTrue(store.isIrcv3CapabilityEnabled("typing", true));
     assertFalse(store.readIrcv3Capabilities().containsKey("typing"));
   }
+
+  @Test
+  void draftCapabilityOverridesReuseExistingCanonicalPreferenceKeys() {
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(
+            tempDir.resolve("ircafe.yml").toString(), new IrcProperties(null, List.of()));
+
+    store.rememberIrcv3CapabilityEnabled("chathistory", false);
+
+    assertFalse(store.isIrcv3CapabilityEnabled("draft/chathistory", true));
+    assertFalse(store.isIrcv3CapabilityEnabled("chathistory", true));
+    assertTrue(Boolean.FALSE.equals(store.readIrcv3Capabilities().get("chathistory")));
+  }
 }

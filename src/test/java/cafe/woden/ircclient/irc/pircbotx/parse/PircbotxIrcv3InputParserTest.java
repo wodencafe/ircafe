@@ -641,11 +641,11 @@ class PircbotxIrcv3InputParserTest {
         "#ircafe",
         source("bob"),
         "TAGMSG",
-        "@typing=active;+draft/reply=abc123;+draft/react=:+1;+draft/delete=abc123;+msgid=xyz :bob!u@h TAGMSG #ircafe",
+        "@typing=active;+reply=abc123;+draft/react=:+1;+draft/delete=abc123;+msgid=xyz :bob!u@h TAGMSG #ircafe",
         List.of("#ircafe"),
         ImmutableMap.of(
             "typing", "active",
-            "draft/reply", "abc123",
+            "reply", "abc123",
             "draft/react", ":+1",
             "draft/delete", "abc123",
             "msgid", "xyz"));

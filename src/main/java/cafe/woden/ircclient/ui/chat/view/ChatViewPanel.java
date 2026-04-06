@@ -392,7 +392,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     String msgId = Objects.toString(messageId, "").trim();
     if (target.isEmpty() || msgId.isEmpty()) return "";
     String escapedMsgId = escapeIrcv3TagValue(msgId);
-    return "/quote @+draft/reply=" + escapedMsgId + " PRIVMSG " + target + " :";
+    return "/quote @+reply=" + escapedMsgId + " PRIVMSG " + target + " :";
   }
 
   /**
@@ -406,7 +406,7 @@ public abstract class ChatViewPanel extends JPanel implements Scrollable {
     String msgId = Objects.toString(messageId, "").trim();
     if (target.isEmpty() || msgId.isEmpty()) return "";
     String escapedMsgId = escapeIrcv3TagValue(msgId);
-    return "/quote @+draft/react=:+1:;+draft/reply=" + escapedMsgId + " TAGMSG " + target;
+    return "/quote @+draft/react=:+1:;+reply=" + escapedMsgId + " TAGMSG " + target;
   }
 
   /**

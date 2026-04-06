@@ -14,15 +14,15 @@ final class PircbotxAvailabilitySupport {
   }
 
   boolean isDraftReplyAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.capabilitySnapshot().draftReplyCapAcked();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().messageTagsCapAcked();
   }
 
   boolean isDraftReactAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.capabilitySnapshot().draftReactCapAcked();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().messageTagsCapAcked();
   }
 
   boolean isDraftUnreactAvailable(PircbotxConnectionState connection) {
-    return hasLiveBot(connection) && connection.capabilitySnapshot().draftUnreactAvailable();
+    return hasLiveBot(connection) && connection.capabilitySnapshot().messageTagsCapAcked();
   }
 
   boolean isMultilineAvailable(PircbotxConnectionState connection) {

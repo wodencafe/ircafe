@@ -3513,7 +3513,8 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     String convTarget =
         resolveSignalTarget(session, fromDisplay, fallbackTarget, networkId, envelope, tags);
 
-    String replyTo = Ircv3Tags.firstTagValue(tags, "draft/reply", "+draft/reply");
+    String replyTo =
+        Ircv3Tags.firstTagValue(tags, "reply", "+reply", "draft/reply", "+draft/reply");
     if (!replyTo.isBlank()) {
       bus.onNext(
           new ServerIrcEvent(

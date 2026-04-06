@@ -51,7 +51,7 @@ public final class Ircv3DraftNormalizer {
       String p = Objects.toString(part, "").trim();
       if (p.isEmpty()) continue;
       String key = normalizeIrcv3TagKey(p);
-      if ("draft/reply".equals(key)) {
+      if ("reply".equals(key) || "draft/reply".equals(key)) {
         sawReplyTag = true;
         if (replySupported) kept.add(part);
         continue;
@@ -69,8 +69,7 @@ public final class Ircv3DraftNormalizer {
       kept.add(part);
     }
 
-    // React prefill depends on draft/reply target metadata; disabling either capability exits the
-    // mode.
+    // React prefill depends on reply target metadata; disabling either feature exits the mode.
     if (sawReactTag && (!reactSupported || !replySupported)) {
       return "";
     }

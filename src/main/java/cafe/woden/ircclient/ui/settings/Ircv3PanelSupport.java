@@ -289,13 +289,8 @@ final class Ircv3PanelSupport {
       case "userhost-in-names" -> "USERHOST in NAMES";
       case "multiline" -> "Multiline messages";
       case "draft/multiline" -> "Multiline messages (draft)";
-      case "draft/typing" -> "Typing transport (draft)";
-      case "typing" -> "Typing transport";
-      case "draft/read-marker", "read-marker" -> "Read markers";
-      case "draft/channel-context" -> "Channel context metadata";
-      case "draft/reply" -> "Reply metadata";
-      case "draft/react" -> "Reaction metadata";
-      case "draft/unreact" -> "Reaction removal metadata";
+      case "draft/read-marker" -> "Read markers (draft)";
+      case "read-marker" -> "Read markers";
       case "draft/message-edit" -> "Message edits (draft)";
       case "message-edit" -> "Message edits (final)";
       case "draft/message-redaction" -> "Message redaction (draft)";
@@ -421,11 +416,6 @@ final class Ircv3PanelSupport {
           "Transport for typing indicators; required to send/receive typing events.";
       case "draft/read-marker", "read-marker" ->
           "Enables read-position markers on servers that support them.";
-      case "draft/channel-context" ->
-          "Carries channel context for client-tagged metadata sent outside the channel buffer.";
-      case "draft/reply" -> "Carries reply context so quoted/reply relationships can be preserved.";
-      case "draft/react" -> "Carries reaction metadata where servers/clients support it.";
-      case "draft/unreact" -> "Carries metadata for removing previously applied reactions.";
       case "draft/message-edit", "message-edit" ->
           "Allows edit updates for previously sent messages.";
       case "draft/message-redaction", "message-redaction" ->
@@ -467,7 +457,12 @@ final class Ircv3PanelSupport {
   private static String normalizeCapabilityKey(String capability) {
     if (capability == null) return "";
     String key = capability.trim().toLowerCase(Locale.ROOT);
-    if ("draft/read-marker".equals(key)) return "read-marker";
-    return key;
+    return switch (key) {
+      case "draft/read-marker", "read-marker" -> "read-marker";
+      case "draft/multiline", "multiline" -> "multiline";
+      case "draft/chathistory", "chathistory" -> "chathistory";
+      case "draft/message-redaction", "message-redaction" -> "message-redaction";
+      default -> key;
+    };
   }
 }
