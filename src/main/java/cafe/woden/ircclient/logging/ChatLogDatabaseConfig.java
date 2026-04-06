@@ -10,6 +10,7 @@ import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.logging.history.ChatHistoryTranscriptPort;
 import cafe.woden.ircclient.logging.history.DbChatHistoryService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.logging.viewer.DbChatLogViewerService;
 import cafe.woden.ircclient.model.TargetRef;
 import com.zaxxer.hikari.HikariConfig;

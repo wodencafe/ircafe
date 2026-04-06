@@ -1,4 +1,4 @@
-package cafe.woden.ircclient.logging;
+package cafe.woden.ircclient.logging.viewer;
 
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.Optional;

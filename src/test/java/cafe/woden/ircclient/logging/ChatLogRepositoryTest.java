@@ -2,6 +2,7 @@ package cafe.woden.ircclient.logging;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditRecord;
 import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.model.TargetRef;
 import java.nio.file.Path;

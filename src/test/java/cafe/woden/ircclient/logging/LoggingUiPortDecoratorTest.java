@@ -13,6 +13,8 @@ import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.app.api.UiTranscriptPort;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditRecord;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.model.LogDirection;
 import cafe.woden.ircclient.model.LogKind;
 import cafe.woden.ircclient.model.TargetRef;

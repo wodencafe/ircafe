@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.logging;
 
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditRecord;
 import cafe.woden.ircclient.model.LogKind;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;

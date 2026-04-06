@@ -18,6 +18,8 @@ import cafe.woden.ircclient.logging.history.LogCursor;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerResult;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerService;
 import cafe.woden.ircclient.logging.viewer.ChatLogViewerServiceConfig;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditRecord;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.model.TargetRef;
 import java.util.List;
 import java.util.OptionalLong;

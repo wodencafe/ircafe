@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiTranscriptPort;
 import cafe.woden.ircclient.config.LogProperties;
+import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.ui.SwingUiPort;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
