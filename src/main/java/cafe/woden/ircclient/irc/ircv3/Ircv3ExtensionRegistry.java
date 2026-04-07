@@ -166,6 +166,24 @@ public final class Ircv3ExtensionRegistry {
     public String preferenceKeyFor(String name) {
       return find(name).map(ExtensionDefinition::preferenceKey).orElse(normalize(name));
     }
+
+    public String normalizeRequestToken(String name) {
+      String normalized = normalize(name);
+      if (normalized.isEmpty()) {
+        return "";
+      }
+      return find(normalized)
+          .map(definition -> definition.requestable() ? definition.requestToken() : "")
+          .orElse(normalized);
+    }
+
+    public String normalizePreferenceKey(String name) {
+      String normalized = normalize(name);
+      if (normalized.isEmpty()) {
+        return null;
+      }
+      return find(normalized).map(ExtensionDefinition::preferenceKey).orElse(normalized);
+    }
   }
 
   public static Snapshot snapshot() {
@@ -202,6 +220,14 @@ public final class Ircv3ExtensionRegistry {
 
   public static String preferenceKeyFor(String name) {
     return DEFAULT_SNAPSHOT.preferenceKeyFor(name);
+  }
+
+  public static String normalizeRequestToken(String name) {
+    return DEFAULT_SNAPSHOT.normalizeRequestToken(name);
+  }
+
+  public static String normalizePreferenceKey(String name) {
+    return DEFAULT_SNAPSHOT.normalizePreferenceKey(name);
   }
 
   static List<Ircv3ExtensionDefinitionProvider> builtInProviders() {

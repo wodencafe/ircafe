@@ -24,6 +24,8 @@ public interface InstalledPluginsPort {
     return List.of();
   }
 
+  default void recordPluginProblem(InstalledPluginProblem problem) {}
+
   default <T> List<T> loadInstalledServices(Class<T> serviceType, List<T> builtInServices) {
     return List.copyOf(Objects.requireNonNullElse(builtInServices, List.of()));
   }

@@ -78,6 +78,14 @@ public final class InstalledPluginServices implements InstalledPluginsPort {
   }
 
   @Override
+  public void recordPluginProblem(InstalledPluginProblem problem) {
+    if (problem == null || pluginProblems.contains(problem)) {
+      return;
+    }
+    pluginProblems.add(problem);
+  }
+
+  @Override
   public <T> List<T> loadInstalledServices(Class<T> serviceType, List<T> builtInServices) {
     return PluginServiceLoaderSupport.loadInstalledServices(
         serviceType,
@@ -150,9 +158,7 @@ public final class InstalledPluginServices implements InstalledPluginsPort {
             details.isEmpty()
                 ? "See application logs for the full plugin loader error."
                 : details.toString().trim());
-    if (!pluginProblems.contains(problem)) {
-      pluginProblems.add(problem);
-    }
+    recordPluginProblem(problem);
     log.warn("[ircafe] {}", summary, error);
   }
 

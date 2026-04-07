@@ -4,7 +4,6 @@ import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy
 import cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
-import cafe.woden.ircclient.util.Ircv3CapabilityNameSupport;
 import io.reactivex.rxjava3.core.Completable;
 import java.time.Instant;
 import java.util.Objects;
@@ -77,11 +76,7 @@ public final class Ircv3ReadMarkerFeatureSupport implements Ircv3FeatureAvailabi
   }
 
   public boolean matchesCapabilityName(String capability) {
-    String normalized = capabilityNameResolver.normalizePreferenceKey(capability);
-    if (normalized == null || normalized.isBlank()) {
-      normalized = Ircv3CapabilityNameSupport.normalizePreferenceKey(capability);
-    }
-    return FEATURE_ID.equals(normalized);
+    return FEATURE_ID.equals(capabilityNameResolver.normalizePreferenceKey(capability));
   }
 
   public Completable send(String serverId, String target, Instant markerAt) {

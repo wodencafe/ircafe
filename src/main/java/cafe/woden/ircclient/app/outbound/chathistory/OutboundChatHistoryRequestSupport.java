@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.outbound.chathistory;
 
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
@@ -24,6 +25,7 @@ final class OutboundChatHistoryRequestSupport {
   @NonNull private final ConnectionCoordinator connectionCoordinator;
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState;
+  @NonNull private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;
 
   TargetRef resolveChatHistoryTargetOrNull() {
     TargetRef active = targetCoordinator.getActiveTarget();
@@ -64,6 +66,11 @@ final class OutboundChatHistoryRequestSupport {
     TargetRef status = new TargetRef(target.serverId(), "status");
     if (!connectionCoordinator.isConnected(target.serverId())) {
       ui.appendStatus(status, "(conn)", "Not connected");
+      return;
+    }
+    if (!chatHistoryFeatureSupport.isAvailable(target.serverId())) {
+      ui.appendStatus(
+          status, "(chathistory)", chatHistoryFeatureSupport.unavailableMessage(target.serverId()));
       return;
     }
 

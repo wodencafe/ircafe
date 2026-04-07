@@ -1,10 +1,12 @@
 package cafe.woden.ircclient.app.outbound.chathistory;
 
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.ConnectionCoordinator;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.help.spi.OutboundHelpContributor;
 import cafe.woden.ircclient.irc.IrcClientService;
+import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort;
 import cafe.woden.ircclient.state.api.ChatHistoryRequestRoutingPort.QueryMode;
@@ -17,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Handles outbound /chathistory command flow and targeted /help chathistory output. */
@@ -29,23 +32,45 @@ public final class OutboundChatHistoryCommandService implements OutboundHelpCont
 
   private final IrcClientService irc;
   private final TargetCoordinator targetCoordinator;
+  private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;
   private final OutboundChatHistoryRequestSupport chatHistoryRequestSupport;
 
+  @Deprecated(forRemoval = false)
+  @Autowired
   public OutboundChatHistoryCommandService(
       IrcClientService irc,
       UiPort ui,
       ConnectionCoordinator connectionCoordinator,
       TargetCoordinator targetCoordinator,
       ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState) {
+    this(
+        irc,
+        ui,
+        connectionCoordinator,
+        targetCoordinator,
+        chatHistoryRequestRoutingState,
+        new Ircv3ChatHistoryFeatureSupport(IrcNegotiatedFeaturePort.from(irc)));
+  }
+
+  public OutboundChatHistoryCommandService(
+      IrcClientService irc,
+      UiPort ui,
+      ConnectionCoordinator connectionCoordinator,
+      TargetCoordinator targetCoordinator,
+      ChatHistoryRequestRoutingPort chatHistoryRequestRoutingState,
+      Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport) {
     this.irc = Objects.requireNonNull(irc, "irc");
     this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
+    this.chatHistoryFeatureSupport =
+        Objects.requireNonNull(chatHistoryFeatureSupport, "chatHistoryFeatureSupport");
     this.chatHistoryRequestSupport =
         new OutboundChatHistoryRequestSupport(
             Objects.requireNonNull(ui, "ui"),
             Objects.requireNonNull(connectionCoordinator, "connectionCoordinator"),
             targetCoordinator,
             Objects.requireNonNull(
-                chatHistoryRequestRoutingState, "chatHistoryRequestRoutingState"));
+                chatHistoryRequestRoutingState, "chatHistoryRequestRoutingState"),
+            this.chatHistoryFeatureSupport);
   }
 
   @Override
@@ -226,7 +251,8 @@ public final class OutboundChatHistoryCommandService implements OutboundHelpCont
 
   private void appendChatHistoryUsage(TargetRef out) {
     TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
-    chatHistoryRequestSupport.appendHelp(target, "/chathistory [limit]");
+    chatHistoryRequestSupport.appendHelp(
+        target, "/chathistory [limit]" + helpAvailabilitySuffix(target.serverId()));
     chatHistoryRequestSupport.appendHelp(
         target, "/chathistory before <msgid=...|timestamp=...> [limit]");
     chatHistoryRequestSupport.appendHelp(
@@ -234,5 +260,16 @@ public final class OutboundChatHistoryCommandService implements OutboundHelpCont
     chatHistoryRequestSupport.appendHelp(
         target, "/chathistory around <msgid=...|timestamp=...> [limit]");
     chatHistoryRequestSupport.appendHelp(target, "/chathistory between <start> <end> [limit]");
+  }
+
+  private String helpAvailabilitySuffix(String serverId) {
+    if (chatHistoryFeatureSupport.isAvailable(serverId)) {
+      return "";
+    }
+    String reason = chatHistoryFeatureSupport.unavailableReasonForHelp(serverId);
+    if (reason.isBlank()) {
+      return "";
+    }
+    return " (unavailable: " + reason + ")";
   }
 }

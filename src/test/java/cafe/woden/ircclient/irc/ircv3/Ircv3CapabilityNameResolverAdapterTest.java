@@ -21,6 +21,9 @@ class Ircv3CapabilityNameResolverAdapterTest {
     assertEquals("plugin-example-cap", resolver.normalizePreferenceKey("plugin/example-cap"));
     assertEquals(
         "draft/plugin-example-cap", resolver.normalizeRequestToken("draft/plugin-example-cap"));
+    assertEquals("custom/example-cap", resolver.normalizeRequestToken("Custom/Example-Cap"));
+    assertEquals("custom/example-cap", resolver.normalizePreferenceKey("Custom/Example-Cap"));
+    assertEquals("", resolver.normalizeRequestToken("typing"));
   }
 
   private static final class ExampleCapabilityProvider implements Ircv3ExtensionDefinitionProvider {

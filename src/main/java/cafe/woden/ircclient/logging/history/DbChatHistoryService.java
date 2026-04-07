@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.logging.history;
 
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.config.LogProperties;
 import cafe.woden.ircclient.irc.IrcClientService;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
@@ -69,6 +70,7 @@ public final class DbChatHistoryService implements ChatHistoryService {
   @NonNull private final IrcClientService irc;
   @NonNull private final IrcBouncerPlaybackPort bouncerPlayback;
   @NonNull private final ChatHistoryIngestBus ingestBus;
+  @NonNull private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;
 
   private final ConcurrentHashMap<TargetRef, LogCursor> oldestCursor = new ConcurrentHashMap<>();
 
@@ -284,12 +286,12 @@ public final class DbChatHistoryService implements ChatHistoryService {
     boolean canChatHistory = false;
     boolean canZncPlayback = false;
     try {
-      canChatHistory = irc.isChatHistoryAvailable(serverId);
+      canChatHistory = chatHistoryFeatureSupport.isAvailable(serverId);
     } catch (Exception ignored) {
       canChatHistory = false;
     }
     try {
-      canZncPlayback = bouncerPlayback.isZncPlaybackAvailable(serverId);
+      canZncPlayback = chatHistoryFeatureSupport.isZncPlaybackAvailable(serverId);
     } catch (Exception ignored) {
       canZncPlayback = false;
     }

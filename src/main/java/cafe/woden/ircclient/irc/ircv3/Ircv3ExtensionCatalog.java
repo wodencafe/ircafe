@@ -1,6 +1,8 @@
 package cafe.woden.ircclient.irc.ircv3;
 
+import cafe.woden.ircclient.config.api.InstalledPluginProblem;
 import cafe.woden.ircclient.config.api.InstalledPluginsPort;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -73,14 +75,62 @@ public final class Ircv3ExtensionCatalog {
     return snapshot.preferenceKeyFor(name);
   }
 
+  public String normalizeRequestToken(String name) {
+    return snapshot.normalizeRequestToken(name);
+  }
+
+  public String normalizePreferenceKey(String name) {
+    return snapshot.normalizePreferenceKey(name);
+  }
+
   private static Ircv3ExtensionRegistry.Snapshot buildSnapshot(
       InstalledPluginsPort installedPlugins) {
     if (installedPlugins == null) {
       return Ircv3ExtensionRegistry.snapshot();
     }
-    return Ircv3ExtensionRegistry.snapshotForProviders(
+    List<Ircv3ExtensionDefinitionProvider> providers =
         installedPlugins.loadInstalledServices(
-            Ircv3ExtensionDefinitionProvider.class, Ircv3ExtensionRegistry.builtInProviders()));
+            Ircv3ExtensionDefinitionProvider.class, Ircv3ExtensionRegistry.builtInProviders());
+    try {
+      return Ircv3ExtensionRegistry.snapshotForProviders(providers);
+    } catch (RuntimeException error) {
+      InstalledPluginProblem problem =
+          new InstalledPluginProblem(
+              "ERROR",
+              "Failed to load IRCv3 extension metadata from installed plugins.",
+              buildConflictDetails(providers, error));
+      installedPlugins.recordPluginProblem(problem);
+      log.warn("[ircafe] {}", problem.summary(), error);
+      return Ircv3ExtensionRegistry.snapshot();
+    }
+  }
+
+  private static String buildConflictDetails(
+      List<Ircv3ExtensionDefinitionProvider> providers, RuntimeException error) {
+    ArrayList<String> pluginProviderIds = new ArrayList<>();
+    List<Ircv3ExtensionDefinitionProvider> safeProviders =
+        providers != null ? providers : List.of();
+    for (Ircv3ExtensionDefinitionProvider provider : safeProviders) {
+      if (provider == null) {
+        continue;
+      }
+      String providerId = Objects.toString(provider.providerId(), "").trim();
+      if (!providerId.isEmpty() && !BUILT_IN_PROVIDER_IDS.contains(providerId)) {
+        pluginProviderIds.add(providerId);
+      }
+    }
+
+    StringBuilder details = new StringBuilder();
+    if (!pluginProviderIds.isEmpty()) {
+      details.append("Plugin IRCv3 providers: ").append(pluginProviderIds).append('\n');
+    }
+    String message = Objects.toString(error == null ? null : error.getMessage(), "").trim();
+    if (!message.isEmpty()) {
+      details.append(message);
+    } else if (error != null) {
+      details.append(error.getClass().getName());
+    }
+    return details.toString().trim();
   }
 
   private void logLoadedProviders() {

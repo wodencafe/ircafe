@@ -117,6 +117,72 @@ class Ircv3ExtensionRegistryTest {
   }
 
   @Test
+  void duplicateProviderIdsAreRejected() {
+    ArrayList<Ircv3ExtensionDefinitionProvider> providers =
+        new ArrayList<>(Ircv3ExtensionRegistry.builtInProviders());
+    providers.add(
+        new Ircv3ExtensionDefinitionProvider() {
+          @Override
+          public String providerId() {
+            return "core-transport";
+          }
+
+          @Override
+          public int sortOrder() {
+            return 950;
+          }
+        });
+
+    IllegalStateException error =
+        assertThrows(
+            IllegalStateException.class,
+            () -> Ircv3ExtensionRegistry.snapshotForProviders(providers));
+
+    assertTrue(error.getMessage().contains("Duplicate IRCv3 extension provider id registered"));
+  }
+
+  @Test
+  void duplicateRequestTokensAreRejected() {
+    ArrayList<Ircv3ExtensionDefinitionProvider> providers =
+        new ArrayList<>(Ircv3ExtensionRegistry.builtInProviders());
+    providers.add(
+        new Ircv3ExtensionDefinitionProvider() {
+          @Override
+          public String providerId() {
+            return "duplicate-request-token";
+          }
+
+          @Override
+          public int sortOrder() {
+            return 950;
+          }
+
+          @Override
+          public List<Ircv3ExtensionRegistry.ExtensionDefinition> extensions() {
+            return List.of(
+                Ircv3ExtensionProviderSupport.capability(
+                    "plugin-read-marker-copy",
+                    Ircv3ExtensionRegistry.SpecStatus.DRAFT,
+                    "echo-message",
+                    "plugin-read-marker-copy",
+                    "Read marker copy",
+                    Ircv3ExtensionRegistry.UiGroup.OTHER,
+                    950,
+                    "Conflicting request token test-only capability.",
+                    "plugin/read-marker-copy"));
+          }
+        });
+
+    IllegalStateException error =
+        assertThrows(
+            IllegalStateException.class,
+            () -> Ircv3ExtensionRegistry.snapshotForProviders(providers));
+
+    assertTrue(
+        error.getMessage().contains("Duplicate IRCv3 extension name registered: echo-message"));
+  }
+
+  @Test
   void duplicateVisibleFeatureLabelsAreRejected() {
     ArrayList<Ircv3ExtensionDefinitionProvider> providers =
         new ArrayList<>(Ircv3ExtensionRegistry.builtInProviders());

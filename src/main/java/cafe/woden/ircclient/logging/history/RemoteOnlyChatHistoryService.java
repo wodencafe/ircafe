@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.logging.history;
 
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.config.ExecutorConfig;
 import cafe.woden.ircclient.irc.ChatHistoryEntry;
 import cafe.woden.ircclient.irc.IrcClientService;
@@ -73,6 +74,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   @NonNull private final ChatHistoryBatchBus batchBus;
   private final ZncPlaybackBus zncPlaybackBus;
   @NonNull private final ChatHistoryTranscriptPort transcripts;
+  @NonNull private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;
 
   @NonNull
   @Qualifier(ExecutorConfig.REMOTE_CHAT_HISTORY_EXECUTOR)
@@ -180,8 +182,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     if (target == null) return false;
     if (!shouldOfferPaging(target)) return false;
     // Allow reload even when transcript is empty.
-    return irc.isChatHistoryAvailable(target.serverId())
-        || bouncerPlayback.isZncPlaybackAvailable(target.serverId());
+    return chatHistoryFeatureSupport.isRemoteHistoryAvailable(target.serverId());
   }
 
   @Override
@@ -277,8 +278,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
   @Override
   public boolean canLoadOlder(TargetRef target) {
     if (!shouldOfferPaging(target)) return false;
-    if (!irc.isChatHistoryAvailable(target.serverId())
-        && !bouncerPlayback.isZncPlaybackAvailable(target.serverId())) return false;
+    if (!chatHistoryFeatureSupport.isRemoteHistoryAvailable(target.serverId())) return false;
     if (Boolean.TRUE.equals(noMoreOlder.get(target))) return false;
     if (Boolean.TRUE.equals(inFlight.get(target))) return false;
 
@@ -335,8 +335,7 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
       return;
     }
 
-    if (!irc.isChatHistoryAvailable(target.serverId())
-        && !bouncerPlayback.isZncPlaybackAvailable(target.serverId())) {
+    if (!chatHistoryFeatureSupport.isRemoteHistoryAvailable(target.serverId())) {
       transcripts.setLoadOlderMessagesControlState(target, LoadOlderControlState.UNAVAILABLE);
       return;
     }
@@ -656,8 +655,8 @@ public class RemoteOnlyChatHistoryService implements ChatHistoryService {
     }
     final String myNick = myNickOpt.orElse("");
 
-    boolean useChatHistory = irc.isChatHistoryAvailable(sid);
-    boolean useZnc = !useChatHistory && bouncerPlayback.isZncPlaybackAvailable(sid);
+    boolean useChatHistory = chatHistoryFeatureSupport.isAvailable(sid);
+    boolean useZnc = !useChatHistory && chatHistoryFeatureSupport.isZncPlaybackAvailable(sid);
     Duration remoteTimeout = configuredRemoteTimeout();
     Duration remoteZncPlaybackTimeout = configuredRemoteZncPlaybackTimeout();
     Duration remoteZncPlaybackWindow = configuredRemoteZncPlaybackWindow();

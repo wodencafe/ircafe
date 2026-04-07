@@ -15,7 +15,7 @@ class Ircv3CapabilityNameSupportTest {
 
     for (String name : names) {
       assertEquals(
-          Ircv3ExtensionRegistry.requestTokenFor(name),
+          Ircv3ExtensionRegistry.normalizeRequestToken(name),
           Ircv3CapabilityNameSupport.normalizeRequestToken(name),
           () -> "request token mismatch for " + name);
     }
@@ -28,7 +28,7 @@ class Ircv3CapabilityNameSupportTest {
 
     for (String name : names) {
       assertEquals(
-          Ircv3ExtensionRegistry.preferenceKeyFor(name),
+          Ircv3ExtensionRegistry.normalizePreferenceKey(name),
           Ircv3CapabilityNameSupport.normalizePreferenceKey(name),
           () -> "preference key mismatch for " + name);
     }

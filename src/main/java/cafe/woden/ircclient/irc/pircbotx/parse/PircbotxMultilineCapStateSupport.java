@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.irc.pircbotx.parse;
 
+import cafe.woden.ircclient.irc.ircv3.Ircv3MultilineSupport;
 import cafe.woden.ircclient.irc.pircbotx.state.PircbotxConnectionState;
 import java.util.Locale;
 import java.util.Objects;
@@ -71,10 +72,7 @@ public final class PircbotxMultilineCapStateSupport {
     String capName = canonicalCapName(rawToken);
     if (capName == null) return null;
     String normalized = capName.trim().toLowerCase(Locale.ROOT);
-    return switch (normalized) {
-      case "multiline", "draft/multiline" -> normalized;
-      default -> null;
-    };
+    return Ircv3MultilineSupport.isMultilineCapability(normalized) ? normalized : null;
   }
 
   private static String canonicalCapName(String rawToken) {
@@ -141,36 +139,15 @@ public final class PircbotxMultilineCapStateSupport {
   }
 
   private static boolean isDraftMultiline(String capName) {
-    return !"multiline".equals(capName);
+    return Ircv3MultilineSupport.isDraftMultilineCapability(capName);
   }
 
   private static MultilineCapLimits parseMultilineCapLimits(String capValueRaw) {
     String raw = Objects.toString(capValueRaw, "").trim();
     if (raw.isEmpty()) return new MultilineCapLimits(0L, 0L);
-
-    long maxBytes = 0L;
-    long maxLines = 0L;
-    for (String partRaw : raw.split(",")) {
-      String part = Objects.toString(partRaw, "").trim();
-      if (part.isEmpty()) continue;
-      int eq = part.indexOf('=');
-      if (eq <= 0 || eq + 1 >= part.length()) continue;
-
-      String key = part.substring(0, eq).trim().toLowerCase(Locale.ROOT);
-      String value = part.substring(eq + 1).trim();
-      if (value.isEmpty()) continue;
-      try {
-        long parsed = Long.parseLong(value);
-        if (parsed <= 0L) continue;
-        if ("max-bytes".equals(key)) {
-          maxBytes = parsed;
-        } else if ("max-lines".equals(key)) {
-          maxLines = parsed;
-        }
-      } catch (NumberFormatException ignored) {
-        // Ignore invalid attribute values while keeping any other valid limits.
-      }
-    }
+    Ircv3MultilineSupport.LimitParams parsed = Ircv3MultilineSupport.parseLimitParams(raw);
+    long maxBytes = Math.max(0L, parsed.maxBytes());
+    long maxLines = Math.max(0L, parsed.maxLines());
     return new MultilineCapLimits(maxBytes, maxLines);
   }
 

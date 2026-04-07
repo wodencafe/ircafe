@@ -2676,7 +2676,9 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       QuasselSession session, int networkId, Map<?, ?> stateMap, Set<String> enabledCaps) {
     if (session == null || networkId < 0) return;
     Set<String> caps = enabledCaps == null ? Set.of() : enabledCaps;
-    boolean multilineEnabled = caps.contains("multiline") || caps.contains("draft/multiline");
+    boolean multilineEnabled =
+        caps.contains(Ircv3MultilineSupport.MULTILINE_CAPABILITY)
+            || caps.contains(Ircv3MultilineSupport.DRAFT_MULTILINE_CAPABILITY);
     if (!multilineEnabled) {
       session.multilineLimitsByNetworkId.remove(networkId);
       return;
@@ -2785,7 +2787,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     for (Map.Entry<?, ?> entry : map.entrySet()) {
       String capKey = canonicalCapabilityToken(entry.getKey());
       Object value = entry.getValue();
-      if (isMultilineCapability(capKey)) {
+      if (Ircv3MultilineSupport.isMultilineCapability(capKey)) {
         collectMultilineLimitsFromToken(entry.getKey(), out);
         if (!isCapabilityExplicitlyDisabled(value)) {
           collectMultilineLimitParams(value, out);
@@ -2803,7 +2805,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     if (cleaned.isEmpty()) return;
     boolean disabled = cleaned.startsWith("-");
     String cap = canonicalCapabilityToken(cleaned);
-    if (!isMultilineCapability(cap) || disabled) return;
+    if (!Ircv3MultilineSupport.isMultilineCapability(cap) || disabled) return;
 
     int eq = cleaned.indexOf('=');
     if (eq <= 0 || eq >= cleaned.length() - 1) return;
@@ -2824,8 +2826,9 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
     if (raw instanceof String text) {
       String params = Objects.toString(text, "").trim();
       if (params.isEmpty()) return;
-      long maxBytes = parseNamedLongParam(params, "max-bytes", "maxbytes", "max_bytes", "bytes");
-      long maxLines = parseNamedLongParam(params, "max-lines", "maxlines", "max_lines", "lines");
+      Ircv3MultilineSupport.LimitParams parsed = Ircv3MultilineSupport.parseLimitParams(params);
+      long maxBytes = parsed.maxBytes();
+      long maxLines = parsed.maxLines();
       if (maxBytes >= 0L) out.observeBytes(maxBytes);
       if (maxLines >= 0L) out.observeLines(maxLines);
       return;
@@ -2964,37 +2967,6 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       }
     }
     return text;
-  }
-
-  private static long parseNamedLongParam(String params, String... names) {
-    String text = Objects.toString(params, "").trim();
-    if (text.isEmpty() || names == null || names.length == 0) return -1L;
-    String lower = text.toLowerCase(Locale.ROOT);
-    for (String rawName : names) {
-      String name = Objects.toString(rawName, "").trim().toLowerCase(Locale.ROOT);
-      if (name.isEmpty()) continue;
-      String needle = name + "=";
-      int idx = lower.indexOf(needle);
-      while (idx >= 0) {
-        int start = idx + needle.length();
-        while (start < text.length() && Character.isWhitespace(text.charAt(start))) start++;
-        int end = start;
-        while (end < text.length() && Character.isDigit(text.charAt(end))) end++;
-        if (end > start) {
-          try {
-            return Long.parseLong(text.substring(start, end));
-          } catch (NumberFormatException ignored) {
-          }
-        }
-        idx = lower.indexOf(needle, idx + 1);
-      }
-    }
-    return -1L;
-  }
-
-  private static boolean isMultilineCapability(String cap) {
-    String token = Objects.toString(cap, "").trim().toLowerCase(Locale.ROOT);
-    return "multiline".equals(token) || "draft/multiline".equals(token);
   }
 
   private static void collectCapabilityTokens(Object raw, Set<String> out) {
@@ -3705,7 +3677,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
         applyCapabilityStateDelta(session, resolvedNetworkId, capName, enabled);
       }
 
-      if (isMultilineCapability(capName) && resolvedNetworkId >= 0) {
+      if (Ircv3MultilineSupport.isMultilineCapability(capName) && resolvedNetworkId >= 0) {
         if ("DEL".equals(subcommand) || disabledToken) {
           session.multilineLimitsByNetworkId.remove(resolvedNetworkId);
         } else if ("ACK".equals(subcommand)) {

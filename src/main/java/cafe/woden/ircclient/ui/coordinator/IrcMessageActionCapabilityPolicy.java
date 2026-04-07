@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.coordinator;
 
+import cafe.woden.ircclient.app.api.Ircv3ChatHistoryFeatureSupport;
 import cafe.woden.ircclient.app.api.Ircv3MessageRedactionFeatureSupport;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
@@ -15,16 +16,20 @@ import org.springframework.stereotype.Component;
 @InterfaceLayer
 public final class IrcMessageActionCapabilityPolicy implements MessageActionCapabilityPolicy {
   private final IrcNegotiatedFeaturePort irc;
-  private final IrcBouncerPlaybackPort bouncerPlayback;
+  private final Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport;
   private final Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport;
 
   @Autowired
   public IrcMessageActionCapabilityPolicy(
       @Qualifier("ircNegotiatedFeaturePort") IrcNegotiatedFeaturePort irc,
       @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
+      Ircv3ChatHistoryFeatureSupport chatHistoryFeatureSupport,
       Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport) {
     this.irc = irc;
-    this.bouncerPlayback = bouncerPlayback;
+    this.chatHistoryFeatureSupport =
+        chatHistoryFeatureSupport == null
+            ? new Ircv3ChatHistoryFeatureSupport(irc, bouncerPlayback)
+            : chatHistoryFeatureSupport;
     this.messageRedactionFeatureSupport =
         messageRedactionFeatureSupport == null
             ? new Ircv3MessageRedactionFeatureSupport(irc)
@@ -34,7 +39,11 @@ public final class IrcMessageActionCapabilityPolicy implements MessageActionCapa
   @Deprecated(forRemoval = false)
   public IrcMessageActionCapabilityPolicy(
       IrcNegotiatedFeaturePort irc, IrcBouncerPlaybackPort bouncerPlayback) {
-    this(irc, bouncerPlayback, new Ircv3MessageRedactionFeatureSupport(irc));
+    this(
+        irc,
+        bouncerPlayback,
+        new Ircv3ChatHistoryFeatureSupport(irc, bouncerPlayback),
+        new Ircv3MessageRedactionFeatureSupport(irc));
   }
 
   @Override
@@ -65,15 +74,14 @@ public final class IrcMessageActionCapabilityPolicy implements MessageActionCapa
 
   @Override
   public boolean canLoadAroundMessage(String serverId) {
-    return safe(() -> irc != null && irc.isChatHistoryAvailable(normalizeServerId(serverId)));
+    return safe(() -> chatHistoryFeatureSupport.isAvailable(normalizeServerId(serverId)));
   }
 
   @Override
   public boolean canLoadNewerHistory(String serverId) {
     String sid = normalizeServerId(serverId);
-    if (sid.isEmpty() || irc == null || bouncerPlayback == null) return false;
-    return safe(
-        () -> irc.isChatHistoryAvailable(sid) || bouncerPlayback.isZncPlaybackAvailable(sid));
+    if (sid.isEmpty()) return false;
+    return safe(() -> chatHistoryFeatureSupport.isRemoteHistoryAvailable(sid));
   }
 
   private static String normalizeServerId(String serverId) {

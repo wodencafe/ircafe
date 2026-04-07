@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.outbound.messaging;
 
+import cafe.woden.ircclient.app.api.Ircv3MultilineFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
@@ -9,19 +10,32 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Shared multiline payload planning and fallback handling for outbound message sends. */
 @Component
 @ApplicationLayer
-@RequiredArgsConstructor
 final class OutboundMultilineMessageSupport {
 
-  @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
-  @NonNull private final IrcNegotiatedFeaturePort negotiatedFeaturePort;
+  @NonNull private final Ircv3MultilineFeatureSupport multilineFeatureSupport;
   @NonNull private final UiPort ui;
+
+  @Deprecated(forRemoval = false)
+  OutboundMultilineMessageSupport(
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
+      IrcNegotiatedFeaturePort negotiatedFeaturePort,
+      UiPort ui) {
+    this(new Ircv3MultilineFeatureSupport(backendCapabilityPolicy, negotiatedFeaturePort), ui);
+  }
+
+  @Autowired
+  OutboundMultilineMessageSupport(Ircv3MultilineFeatureSupport multilineFeatureSupport, UiPort ui) {
+    this.multilineFeatureSupport =
+        Objects.requireNonNull(multilineFeatureSupport, "multilineFeatureSupport");
+    this.ui = Objects.requireNonNull(ui, "ui");
+  }
 
   MultilineSendPlan plan(TargetRef target, String message, String statusPrefix) {
     String payload = Objects.toString(message, "").trim();
@@ -33,7 +47,8 @@ final class OutboundMultilineMessageSupport {
     int lineCount = lines.size();
     long payloadUtf8Bytes = multilinePayloadUtf8Bytes(lines);
     String reason =
-        multilineUnavailableOrLimitReason(target.serverId(), lineCount, payloadUtf8Bytes);
+        multilineFeatureSupport.unavailableOrLimitReason(
+            target.serverId(), lineCount, payloadUtf8Bytes);
     if (reason.isBlank()) {
       return MultilineSendPlan.send(joinMessageLines(lines));
     }
@@ -52,39 +67,6 @@ final class OutboundMultilineMessageSupport {
 
     ui.appendStatus(target, statusPrefix, reason + " Sending as " + lineCount + " separate lines.");
     return MultilineSendPlan.split(lines);
-  }
-
-  private String multilineUnavailableOrLimitReason(
-      String serverId, int lineCount, long payloadUtf8Bytes) {
-    String backendUnavailableReason =
-        backendCapabilityPolicy.featureUnavailableMessage(serverId, "");
-    if (!backendUnavailableReason.isBlank()) {
-      return backendUnavailableReason;
-    }
-
-    if (!backendCapabilityPolicy.supportsMultiline(serverId)) {
-      return "IRCv3 multiline is not negotiated on this server.";
-    }
-
-    int maxLines = negotiatedFeaturePort.negotiatedMultilineMaxLines(serverId);
-    if (maxLines > 0 && lineCount > maxLines) {
-      return "Message has "
-          + lineCount
-          + " lines; negotiated multiline max-lines is "
-          + maxLines
-          + ".";
-    }
-
-    long maxBytes = negotiatedFeaturePort.negotiatedMultilineMaxBytes(serverId);
-    if (maxBytes > 0L && payloadUtf8Bytes > maxBytes) {
-      return "Message is "
-          + payloadUtf8Bytes
-          + " UTF-8 bytes; negotiated multiline max-bytes is "
-          + maxBytes
-          + ".";
-    }
-
-    return "";
   }
 
   private static List<String> normalizeMessageLines(String raw) {
