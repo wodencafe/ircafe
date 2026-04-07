@@ -41,6 +41,7 @@ import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.RegexSpec;
 import cafe.woden.ircclient.model.TagSpec;
 import cafe.woden.ircclient.model.UserCommandAlias;
+import cafe.woden.ircclient.util.Ircv3CapabilityNameSupport;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -7131,15 +7132,7 @@ public class RuntimeConfigStore
   }
 
   private static String normalizeCapabilityKey(String capability) {
-    String c = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
-    if (c.isEmpty()) return null;
-    return switch (c) {
-      case "draft/read-marker", "read-marker" -> "read-marker";
-      case "draft/multiline", "multiline" -> "multiline";
-      case "draft/chathistory", "chathistory" -> "chathistory";
-      case "draft/message-redaction", "message-redaction" -> "message-redaction";
-      default -> c;
-    };
+    return Ircv3CapabilityNameSupport.normalizePreferenceKey(capability);
   }
 
   private static String normalizeHostKey(String host) {

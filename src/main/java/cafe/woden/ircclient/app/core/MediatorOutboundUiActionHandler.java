@@ -13,6 +13,7 @@ import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.CtcpRoutingPort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
+import cafe.woden.ircclient.util.Ircv3CapabilityNameSupport;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
@@ -240,24 +241,6 @@ public class MediatorOutboundUiActionHandler {
   }
 
   private static String normalizeIrcv3CapabilityKey(String capability) {
-    // Keep this mapping local so the app module does not depend on irc::ircv3 internals.
-    String key = Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
-    return switch (key) {
-      case "read-marker", "draft/read-marker" -> "draft/read-marker";
-      case "multiline", "draft/multiline" -> "draft/multiline";
-      case "chathistory", "draft/chathistory" -> "draft/chathistory";
-      case "message-redaction", "draft/message-redaction" -> "draft/message-redaction";
-      case "sts",
-          "draft/channel-context",
-          "draft/reply",
-          "draft/react",
-          "draft/unreact",
-          "draft/typing",
-          "typing",
-          "draft/message-edit",
-          "message-edit" ->
-          "";
-      default -> key;
-    };
+    return Ircv3CapabilityNameSupport.normalizeRequestToken(capability);
   }
 }
