@@ -77,6 +77,7 @@ public final class InstalledPluginServices implements InstalledPluginsPort {
     return List.copyOf(pluginProblems);
   }
 
+  @Override
   public <T> List<T> loadInstalledServices(Class<T> serviceType, List<T> builtInServices) {
     return PluginServiceLoaderSupport.loadInstalledServices(
         serviceType,

@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.core;
 
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.api.UiSettingsPort;
 import cafe.woden.ircclient.irc.IrcEvent;
@@ -7,21 +8,19 @@ import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
 import cafe.woden.ircclient.model.TargetRef;
-import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /** Coordinates IRCv3 typing and read-marker side effects extracted from {@link IrcMediator}. */
 @Component
 @ApplicationLayer
-@RequiredArgsConstructor
 public class MediatorIrcv3PresenceEventHandler {
   private static final Logger log =
       LoggerFactory.getLogger(MediatorIrcv3PresenceEventHandler.class);
@@ -44,10 +43,34 @@ public class MediatorIrcv3PresenceEventHandler {
   private final IrcMediatorInteractionPort irc;
 
   private final IrcTypingPort typingPort;
-  private final IrcReadMarkerPort readMarkerPort;
+  private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport;
   private final UiPort ui;
   private final UiSettingsPort uiSettingsPort;
   private final Map<String, TypingLogState> lastTypingByKey = new ConcurrentHashMap<>();
+
+  @Deprecated(forRemoval = false)
+  public MediatorIrcv3PresenceEventHandler(
+      IrcMediatorInteractionPort irc,
+      IrcTypingPort typingPort,
+      IrcReadMarkerPort readMarkerPort,
+      UiPort ui,
+      UiSettingsPort uiSettingsPort) {
+    this(irc, typingPort, new Ircv3ReadMarkerFeatureSupport(readMarkerPort), ui, uiSettingsPort);
+  }
+
+  @Autowired
+  public MediatorIrcv3PresenceEventHandler(
+      @Qualifier("ircMediatorInteractionPort") IrcMediatorInteractionPort irc,
+      IrcTypingPort typingPort,
+      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
+      UiPort ui,
+      UiSettingsPort uiSettingsPort) {
+    this.irc = irc;
+    this.typingPort = typingPort;
+    this.readMarkerFeatureSupport = readMarkerFeatureSupport;
+    this.ui = ui;
+    this.uiSettingsPort = uiSettingsPort;
+  }
 
   public void handleUserTypingObserved(
       Callbacks callbacks, String sid, TargetRef status, IrcEvent.UserTypingObserved event) {
@@ -100,74 +123,23 @@ public class MediatorIrcv3PresenceEventHandler {
 
   public void handleReadMarkerObserved(
       Callbacks callbacks, String sid, TargetRef status, IrcEvent.ReadMarkerObserved event) {
-    if (!readMarkerPort.isReadMarkerAvailable(sid)) {
+    if (!readMarkerFeatureSupport.isAvailable(sid)) {
       return;
     }
-    if (!shouldApplyReadMarkerEvent(callbacks, sid, event.from())) {
+    if (!readMarkerFeatureSupport.shouldApplyObservedSource(
+        sid, event.from(), callbacks::isFromSelf)) {
       return;
     }
-    TargetRef dest = resolveReadMarkerTarget(callbacks, sid, event.target(), status);
-    long markerEpochMs = parseReadMarkerEpochMs(event.marker(), event.at());
+    TargetRef dest =
+        readMarkerFeatureSupport.resolveObservedTarget(
+            sid,
+            event.target(),
+            irc.currentNick(sid).orElse(""),
+            callbacks.resolveActiveOrStatus(sid, status));
+    long markerEpochMs =
+        readMarkerFeatureSupport.parseObservedMarkerEpochMs(event.marker(), event.at());
     ui.setReadMarker(dest, markerEpochMs);
     ui.clearUnread(dest);
-  }
-
-  private boolean shouldApplyReadMarkerEvent(Callbacks callbacks, String sid, String from) {
-    String source = Objects.toString(from, "").trim();
-    if (source.isEmpty() || "server".equalsIgnoreCase(source)) {
-      return true;
-    }
-    return callbacks.isFromSelf(sid, source);
-  }
-
-  private TargetRef resolveReadMarkerTarget(
-      Callbacks callbacks, String sid, String target, TargetRef status) {
-    String rawTarget = Objects.toString(target, "").trim();
-    if (!rawTarget.isEmpty()) {
-      String me = irc.currentNick(sid).orElse("");
-      if (me.isBlank() || !rawTarget.equalsIgnoreCase(me)) {
-        return new TargetRef(sid, rawTarget);
-      }
-    }
-    return callbacks.resolveActiveOrStatus(sid, status);
-  }
-
-  private static long parseReadMarkerEpochMs(String marker, Instant fallbackAt) {
-    Instant fallback = fallbackAt != null ? fallbackAt : Instant.now();
-    String raw = Objects.toString(marker, "").trim();
-    if (raw.isEmpty() || "*".equals(raw)) {
-      return 0L;
-    }
-
-    String value = raw;
-    int eq = raw.indexOf('=');
-    if (eq > 0 && eq < (raw.length() - 1)) {
-      String key = raw.substring(0, eq).trim();
-      if ("timestamp".equalsIgnoreCase(key)) {
-        value = raw.substring(eq + 1).trim();
-      }
-    }
-    if (value.isEmpty() || "*".equals(value)) {
-      return 0L;
-    }
-
-    try {
-      return Instant.parse(value).toEpochMilli();
-    } catch (Exception ignored) {
-    }
-
-    try {
-      long parsed = Long.parseLong(value);
-      if (parsed <= 0) {
-        return fallback.toEpochMilli();
-      }
-      if (value.length() <= 10) {
-        return Math.multiplyExact(parsed, 1000L);
-      }
-      return parsed;
-    } catch (Exception ignored) {
-      return fallback.toEpochMilli();
-    }
   }
 
   private void maybeLogTypingObserved(

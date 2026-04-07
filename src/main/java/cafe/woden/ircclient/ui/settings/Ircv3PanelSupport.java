@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.ui.settings;
 
 import cafe.woden.ircclient.config.RuntimeConfigStore;
+import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionCatalog;
 import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionRegistry;
 import java.awt.Dimension;
 import java.awt.Insets;
@@ -24,8 +25,13 @@ import net.miginfocom.swing.MigLayout;
 final class Ircv3PanelSupport {
   private Ircv3PanelSupport() {}
 
-  static Ircv3CapabilitiesControls buildCapabilitiesControls(RuntimeConfigStore runtimeConfig) {
+  static Ircv3CapabilitiesControls buildCapabilitiesControls(
+      RuntimeConfigStore runtimeConfig, Ircv3ExtensionCatalog ircv3ExtensionCatalog) {
     Map<String, Boolean> persisted = runtimeConfig.readIrcv3Capabilities();
+    Ircv3ExtensionCatalog catalog =
+        ircv3ExtensionCatalog == null
+            ? Ircv3ExtensionCatalog.builtInCatalog()
+            : ircv3ExtensionCatalog;
 
     LinkedHashMap<String, JCheckBox> checkboxes = new LinkedHashMap<>();
     JPanel panel =
@@ -35,7 +41,7 @@ final class Ircv3PanelSupport {
     LinkedHashMap<Ircv3ExtensionRegistry.UiGroup, List<Ircv3ExtensionRegistry.ExtensionDefinition>>
         grouped = new LinkedHashMap<>();
     for (Ircv3ExtensionRegistry.ExtensionDefinition definition :
-        Ircv3ExtensionRegistry.requestableCapabilities()) {
+        catalog.requestableCapabilities()) {
       grouped
           .computeIfAbsent(definition.uiMetadata().group(), __ -> new ArrayList<>())
           .add(definition);

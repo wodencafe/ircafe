@@ -31,7 +31,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.InfrastructureLayer;
 import org.pircbotx.Configuration;
 import org.pircbotx.PircBotX;
@@ -42,12 +41,12 @@ import org.pircbotx.hooks.events.PingEvent;
 import org.pircbotx.hooks.events.TimeEvent;
 import org.pircbotx.hooks.events.VersionEvent;
 import org.pircbotx.hooks.managers.ThreadedListenerManager;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Factory for building a configured {@link PircBotX} instance for a given server. */
 @Component
 @InfrastructureLayer
-@RequiredArgsConstructor
 public class PircbotxBotFactory {
 
   private static final long DEFAULT_MESSAGE_DELAY_MS = 200L;
@@ -57,6 +56,29 @@ public class PircbotxBotFactory {
   private final ServerProxyResolver proxyResolver;
   private final SojuProperties sojuProps;
   private final IrcSessionRuntimeConfigPort runtimeConfig;
+  private final Ircv3ExtensionCatalog ircv3ExtensionCatalog;
+
+  public PircbotxBotFactory(
+      ServerProxyResolver proxyResolver,
+      SojuProperties sojuProps,
+      IrcSessionRuntimeConfigPort runtimeConfig) {
+    this(proxyResolver, sojuProps, runtimeConfig, Ircv3ExtensionCatalog.builtInCatalog());
+  }
+
+  @Autowired
+  public PircbotxBotFactory(
+      ServerProxyResolver proxyResolver,
+      SojuProperties sojuProps,
+      IrcSessionRuntimeConfigPort runtimeConfig,
+      Ircv3ExtensionCatalog ircv3ExtensionCatalog) {
+    this.proxyResolver = proxyResolver;
+    this.sojuProps = sojuProps;
+    this.runtimeConfig = runtimeConfig;
+    this.ircv3ExtensionCatalog =
+        ircv3ExtensionCatalog == null
+            ? Ircv3ExtensionCatalog.builtInCatalog()
+            : ircv3ExtensionCatalog;
+  }
 
   public PircBotX build(IrcProperties.Server s, String version, ListenerAdapter listener) {
     ProxyPlan plan = proxyResolver.planForServer(s.id());
@@ -185,7 +207,7 @@ public class PircbotxBotFactory {
   private void configureCapHandlers(Configuration.Builder builder) {
     builder.getCapHandlers().clear();
     List<String> caps = new ArrayList<>();
-    for (String cap : Ircv3CapabilityCatalog.requestableCapabilities()) {
+    for (String cap : ircv3ExtensionCatalog.requestableCapabilityTokens()) {
       if (isCapabilityEnabled(cap)) caps.add(cap);
     }
     // Optional: soju network discovery.

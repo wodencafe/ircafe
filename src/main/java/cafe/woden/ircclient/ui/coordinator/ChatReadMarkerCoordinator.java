@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.coordinator;
 
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
@@ -21,7 +22,7 @@ public final class ChatReadMarkerCoordinator {
   private static final int MAX_TRACKED_TARGET_STATES = 1024;
 
   private final ChatTranscriptStore transcripts;
-  private final IrcReadMarkerPort readMarkerPort;
+  private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport;
   private final Supplier<TargetRef> activeTargetSupplier;
   private final IntConsumer scrollToTranscriptOffset;
   private final Runnable updateScrollStateFromBar;
@@ -62,8 +63,27 @@ public final class ChatReadMarkerCoordinator {
       Runnable updateScrollStateFromBar,
       BooleanSupplier transcriptAtBottomSupplier,
       LongSupplier currentTimeMillis) {
+    this(
+        transcripts,
+        new Ircv3ReadMarkerFeatureSupport(readMarkerPort),
+        activeTargetSupplier,
+        scrollToTranscriptOffset,
+        updateScrollStateFromBar,
+        transcriptAtBottomSupplier,
+        currentTimeMillis);
+  }
+
+  public ChatReadMarkerCoordinator(
+      ChatTranscriptStore transcripts,
+      Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport,
+      Supplier<TargetRef> activeTargetSupplier,
+      IntConsumer scrollToTranscriptOffset,
+      Runnable updateScrollStateFromBar,
+      BooleanSupplier transcriptAtBottomSupplier,
+      LongSupplier currentTimeMillis) {
     this.transcripts = Objects.requireNonNull(transcripts, "transcripts");
-    this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
+    this.readMarkerFeatureSupport =
+        Objects.requireNonNull(readMarkerFeatureSupport, "readMarkerFeatureSupport");
     this.activeTargetSupplier =
         Objects.requireNonNull(activeTargetSupplier, "activeTargetSupplier");
     this.scrollToTranscriptOffset =
@@ -137,7 +157,7 @@ public final class ChatReadMarkerCoordinator {
     String sid = Objects.toString(serverId, "").trim();
     String cap = Objects.toString(capability, "").trim().toLowerCase(Locale.ROOT);
     if (sid.isEmpty() || cap.isEmpty()) return;
-    if (!"read-marker".equals(cap) && !"draft/read-marker".equals(cap)) return;
+    if (!readMarkerFeatureSupport.matchesCapabilityName(cap)) return;
 
     clearServer(sid);
     transcripts.clearReadMarkersForServer(sid);
@@ -151,7 +171,7 @@ public final class ChatReadMarkerCoordinator {
 
   private void maybeSendReadMarker(TargetRef target) {
     if (target == null || target.isStatus() || target.isUiOnly()) return;
-    if (!readMarkerPort.isReadMarkerAvailable(target.serverId())) return;
+    if (!readMarkerFeatureSupport.isAvailable(target.serverId())) return;
 
     long now = currentTimeMillis.getAsLong();
     Long last = lastReadMarkerSentAtByTarget.get(target);
@@ -161,7 +181,7 @@ public final class ChatReadMarkerCoordinator {
     transcripts.updateReadMarker(target, now);
     try {
       var send =
-          readMarkerPort.sendReadMarker(
+          readMarkerFeatureSupport.send(
               target.serverId(), target.target(), Instant.ofEpochMilli(now));
       if (send != null) {
         var unused = send.subscribe(() -> {}, err -> {});

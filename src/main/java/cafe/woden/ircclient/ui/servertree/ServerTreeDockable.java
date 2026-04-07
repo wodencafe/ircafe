@@ -16,6 +16,7 @@ import cafe.woden.ircclient.config.api.ServerTreeRuntimeConfigPort;
 import cafe.woden.ircclient.diagnostics.JfrRuntimeEventsService;
 import cafe.woden.ircclient.interceptors.InterceptorScope;
 import cafe.woden.ircclient.interceptors.InterceptorStore;
+import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionCatalog;
 import cafe.woden.ircclient.irc.soju.SojuAutoConnectStore;
 import cafe.woden.ircclient.irc.znc.ZncAutoConnectStore;
 import cafe.woden.ircclient.model.InterceptorDefinition;
@@ -384,7 +385,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         settingsBus,
         serverDialogs,
         null,
-        null);
+        null,
+        Ircv3ExtensionCatalog.builtInCatalog());
   }
 
   public ServerTreeDockable(
@@ -414,7 +416,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
         settingsBus,
         serverDialogs,
         null,
-        null);
+        null,
+        Ircv3ExtensionCatalog.builtInCatalog());
   }
 
   @org.springframework.beans.factory.annotation.Autowired
@@ -432,7 +435,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
       UiSettingsBus settingsBus,
       ServerDialogs serverDialogs,
       BackendUiProfileProvider backendUiProfileProvider,
-      JfrRuntimeEventsService jfrRuntimeEventsService) {
+      JfrRuntimeEventsService jfrRuntimeEventsService,
+      Ircv3ExtensionCatalog ircv3ExtensionCatalog) {
     super(new BorderLayout());
 
     this.runtimeConfig = runtimeConfig;
@@ -582,7 +586,8 @@ public class ServerTreeDockable extends JPanel implements Dockable, Scrollable {
                 runtimeState::connectionDiagnosticsTipForServer,
                 (serverId, capability, enable) ->
                     requestEmitter.emitIrcv3CapabilityToggle(
-                        new Ircv3CapabilityToggleRequest(serverId, capability, enable))));
+                        new Ircv3CapabilityToggleRequest(serverId, capability, enable))),
+            ircv3ExtensionCatalog);
     this.interceptorActions =
         new ServerTreeInterceptorActions(
             this,

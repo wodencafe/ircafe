@@ -11,6 +11,7 @@ import cafe.woden.ircclient.config.RuntimeConfigStore;
 import cafe.woden.ircclient.config.UiProperties;
 import cafe.woden.ircclient.config.api.EmbedLoadPolicyConfigPort.EmbedLoadPolicySnapshot;
 import cafe.woden.ircclient.irc.backend.IrcHeartbeatMaintenanceService;
+import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionCatalog;
 import cafe.woden.ircclient.model.BuiltInSound;
 import cafe.woden.ircclient.model.IrcEventNotificationRule;
 import cafe.woden.ircclient.model.TargetRef;
@@ -113,6 +114,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.TableColumn;
 import net.miginfocom.swing.MigLayout;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -163,6 +165,7 @@ public class PreferencesDialog {
   private final ServerDialogs serverDialogs;
   private final ExecutorService pushyTestExecutor;
   private final ExecutorService notificationRuleTestExecutor;
+  private final Ircv3ExtensionCatalog ircv3ExtensionCatalog;
 
   private JDialog dialog;
 
@@ -200,6 +203,78 @@ public class PreferencesDialog {
       @Qualifier(ExecutorConfig.PREFERENCES_PUSHY_TEST_EXECUTOR) ExecutorService pushyTestExecutor,
       @Qualifier(ExecutorConfig.PREFERENCES_NOTIFICATION_RULE_TEST_EXECUTOR)
           ExecutorService notificationRuleTestExecutor) {
+    this(
+        settingsBus,
+        embedCardStyleBus,
+        themeManager,
+        accentSettingsBus,
+        tweakSettingsBus,
+        chatThemeSettingsBus,
+        spellcheckSettingsBus,
+        runtimeConfig,
+        logProps,
+        nickColorSettingsBus,
+        nickColorService,
+        nickColorOverridesDialog,
+        embedLoadPolicyDialog,
+        embedLoadPolicyBus,
+        ircHeartbeatMaintenancePort,
+        filterSettingsBus,
+        transcriptRebuildService,
+        targetCoordinator,
+        trayService,
+        trayNotificationService,
+        updateNotifierService,
+        lagIndicatorService,
+        gnomeDbusBackend,
+        notificationSoundSettingsBus,
+        pushySettingsBus,
+        pushyNotificationService,
+        ircEventNotificationRulesBus,
+        userCommandAliasesBus,
+        notificationSoundService,
+        serverDialogs,
+        pushyTestExecutor,
+        notificationRuleTestExecutor,
+        Ircv3ExtensionCatalog.builtInCatalog());
+  }
+
+  @Autowired
+  public PreferencesDialog(
+      UiSettingsBus settingsBus,
+      EmbedCardStyleBus embedCardStyleBus,
+      ThemeManager themeManager,
+      ThemeAccentSettingsBus accentSettingsBus,
+      ThemeTweakSettingsBus tweakSettingsBus,
+      ChatThemeSettingsBus chatThemeSettingsBus,
+      SpellcheckSettingsBus spellcheckSettingsBus,
+      RuntimeConfigStore runtimeConfig,
+      LogProperties logProps,
+      NickColorSettingsBus nickColorSettingsBus,
+      NickColorService nickColorService,
+      NickColorOverridesDialog nickColorOverridesDialog,
+      EmbedLoadPolicyDialog embedLoadPolicyDialog,
+      EmbedLoadPolicyBus embedLoadPolicyBus,
+      IrcHeartbeatMaintenanceService ircHeartbeatMaintenancePort,
+      FilterSettingsBus filterSettingsBus,
+      TranscriptRebuildService transcriptRebuildService,
+      ActiveTargetPort targetCoordinator,
+      TrayService trayService,
+      TrayNotificationService trayNotificationService,
+      UpdateNotifierService updateNotifierService,
+      LagIndicatorService lagIndicatorService,
+      GnomeDbusNotificationBackend gnomeDbusBackend,
+      NotificationSoundSettingsBus notificationSoundSettingsBus,
+      PushySettingsBus pushySettingsBus,
+      PushyNotificationService pushyNotificationService,
+      IrcEventNotificationRulesBus ircEventNotificationRulesBus,
+      UserCommandAliasesBus userCommandAliasesBus,
+      NotificationSoundService notificationSoundService,
+      ServerDialogs serverDialogs,
+      @Qualifier(ExecutorConfig.PREFERENCES_PUSHY_TEST_EXECUTOR) ExecutorService pushyTestExecutor,
+      @Qualifier(ExecutorConfig.PREFERENCES_NOTIFICATION_RULE_TEST_EXECUTOR)
+          ExecutorService notificationRuleTestExecutor,
+      Ircv3ExtensionCatalog ircv3ExtensionCatalog) {
     this.settingsBus = settingsBus;
     this.embedCardStyleBus = embedCardStyleBus;
     this.themeManager = themeManager;
@@ -233,6 +308,10 @@ public class PreferencesDialog {
     this.pushyTestExecutor = Objects.requireNonNull(pushyTestExecutor, "pushyTestExecutor");
     this.notificationRuleTestExecutor =
         Objects.requireNonNull(notificationRuleTestExecutor, "notificationRuleTestExecutor");
+    this.ircv3ExtensionCatalog =
+        ircv3ExtensionCatalog == null
+            ? Ircv3ExtensionCatalog.builtInCatalog()
+            : ircv3ExtensionCatalog;
     if (this.pushyTestExecutor.isShutdown()) {
       throw new IllegalArgumentException("pushyTestExecutor must be active");
     }
@@ -944,7 +1023,7 @@ public class PreferencesDialog {
     JSpinner serverTreeUnreadBadgeScalePercent =
         ChatBehaviorControlsSupport.buildServerTreeUnreadBadgeScalePercentSpinner(runtimeConfig);
     Ircv3CapabilitiesControls ircv3Capabilities =
-        Ircv3PanelSupport.buildCapabilitiesControls(runtimeConfig);
+        Ircv3PanelSupport.buildCapabilitiesControls(runtimeConfig, ircv3ExtensionCatalog);
     NickColorControls nickColors =
         NickColorControlsSupport.buildControls(
             owner,

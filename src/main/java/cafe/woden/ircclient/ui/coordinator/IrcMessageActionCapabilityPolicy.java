@@ -1,10 +1,12 @@
 package cafe.woden.ircclient.ui.coordinator;
 
+import cafe.woden.ircclient.app.api.Ircv3MessageRedactionFeatureSupport;
 import cafe.woden.ircclient.irc.playback.IrcBouncerPlaybackPort;
 import cafe.woden.ircclient.irc.port.IrcNegotiatedFeaturePort;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -14,12 +16,25 @@ import org.springframework.stereotype.Component;
 public final class IrcMessageActionCapabilityPolicy implements MessageActionCapabilityPolicy {
   private final IrcNegotiatedFeaturePort irc;
   private final IrcBouncerPlaybackPort bouncerPlayback;
+  private final Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport;
 
+  @Autowired
   public IrcMessageActionCapabilityPolicy(
       @Qualifier("ircNegotiatedFeaturePort") IrcNegotiatedFeaturePort irc,
-      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback) {
+      @Qualifier("ircClientService") IrcBouncerPlaybackPort bouncerPlayback,
+      Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport) {
     this.irc = irc;
     this.bouncerPlayback = bouncerPlayback;
+    this.messageRedactionFeatureSupport =
+        messageRedactionFeatureSupport == null
+            ? new Ircv3MessageRedactionFeatureSupport(irc)
+            : messageRedactionFeatureSupport;
+  }
+
+  @Deprecated(forRemoval = false)
+  public IrcMessageActionCapabilityPolicy(
+      IrcNegotiatedFeaturePort irc, IrcBouncerPlaybackPort bouncerPlayback) {
+    this(irc, bouncerPlayback, new Ircv3MessageRedactionFeatureSupport(irc));
   }
 
   @Override
@@ -45,7 +60,7 @@ public final class IrcMessageActionCapabilityPolicy implements MessageActionCapa
 
   @Override
   public boolean canRedact(String serverId) {
-    return safe(() -> irc != null && irc.isMessageRedactionAvailable(normalizeServerId(serverId)));
+    return safe(() -> messageRedactionFeatureSupport.isAvailable(normalizeServerId(serverId)));
   }
 
   @Override

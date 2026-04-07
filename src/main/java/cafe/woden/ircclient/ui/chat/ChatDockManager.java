@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.chat;
 
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.irc.port.IrcCurrentNickPort;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
@@ -55,6 +56,7 @@ public class ChatDockManager {
   private final OutboundLineBus outboundBus;
   private final IrcTypingPort typingPort;
   private final IrcReadMarkerPort readMarkerPort;
+  private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport;
   private final Function<String, String> currentNickLookup;
   private final BackendUiProfileProvider backendUiProfileProvider;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
@@ -109,6 +111,7 @@ public class ChatDockManager {
     this.outboundBus = outboundBus;
     this.typingPort = java.util.Objects.requireNonNull(typingPort, "typingPort");
     this.readMarkerPort = java.util.Objects.requireNonNull(readMarkerPort, "readMarkerPort");
+    this.readMarkerFeatureSupport = new Ircv3ReadMarkerFeatureSupport(this.readMarkerPort);
     this.currentNickLookup =
         currentNickPort == null
             ? serverId -> ""
@@ -193,7 +196,7 @@ public class ChatDockManager {
         java.util.Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
     if (sid.isEmpty() || cap.isEmpty()) return;
 
-    if ("read-marker".equals(cap) || "draft/read-marker".equals(cap)) {
+    if (readMarkerFeatureSupport.matchesCapabilityName(cap)) {
       transcripts.clearReadMarkersForServer(sid);
       return;
     }

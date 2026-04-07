@@ -9,11 +9,11 @@ import cafe.woden.ircclient.app.commands.ParsedInput;
 import cafe.woden.ircclient.app.commands.UserCommandAliasEngine;
 import cafe.woden.ircclient.app.outbound.OutboundCommandDispatcher;
 import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
+import cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort;
 import cafe.woden.ircclient.irc.port.IrcMediatorInteractionPort;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.state.api.CtcpRoutingPort;
 import cafe.woden.ircclient.state.api.WhoisRoutingPort;
-import cafe.woden.ircclient.util.Ircv3CapabilityNameSupport;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +36,33 @@ public class MediatorOutboundUiActionHandler {
   private final TargetCoordinator targetCoordinator;
   private final WhoisRoutingPort whoisRoutingState;
   private final CtcpRoutingPort ctcpRoutingState;
+  private final Ircv3CapabilityNameResolverPort ircv3CapabilityNameResolver;
+
+  @Deprecated(forRemoval = false)
+  public MediatorOutboundUiActionHandler(
+      IrcMediatorInteractionPort irc,
+      UiPort ui,
+      CommandParser commandParser,
+      UserCommandAliasEngine userCommandAliasEngine,
+      IrcSessionRuntimeConfigPort runtimeConfig,
+      ConnectionCoordinator connectionCoordinator,
+      OutboundCommandDispatcher outboundCommandDispatcher,
+      TargetCoordinator targetCoordinator,
+      WhoisRoutingPort whoisRoutingState,
+      CtcpRoutingPort ctcpRoutingState) {
+    this(
+        irc,
+        ui,
+        commandParser,
+        userCommandAliasEngine,
+        runtimeConfig,
+        connectionCoordinator,
+        outboundCommandDispatcher,
+        targetCoordinator,
+        whoisRoutingState,
+        ctcpRoutingState,
+        new Ircv3CapabilityNameResolverPort() {});
+  }
 
   public void handleUserActionRequest(CompositeDisposable disposables, UserActionRequest req) {
     if (req == null) {
@@ -240,7 +267,7 @@ public class MediatorOutboundUiActionHandler {
         || value.indexOf('?') >= 0;
   }
 
-  private static String normalizeIrcv3CapabilityKey(String capability) {
-    return Ircv3CapabilityNameSupport.normalizeRequestToken(capability);
+  private String normalizeIrcv3CapabilityKey(String capability) {
+    return ircv3CapabilityNameResolver.normalizeRequestToken(capability);
   }
 }

@@ -105,58 +105,111 @@ public final class Ircv3ExtensionRegistry {
           new Ircv3CoreHistoryExtensionProvider(),
           new Ircv3CoreMiscExtensionProvider());
 
-  private static final List<Ircv3ExtensionDefinitionProvider> ALL_PROVIDERS = loadProviders();
-
-  private static final List<ExtensionDefinition> REGISTERED_EXTENSIONS =
-      collectExtensions(ALL_PROVIDERS);
-
-  private static final List<ExtensionDefinition> REQUESTABLE_CAPABILITIES =
-      REGISTERED_EXTENSIONS.stream().filter(ExtensionDefinition::requestable).toList();
-
-  private static final List<String> REQUESTABLE_CAPABILITY_TOKENS =
-      REQUESTABLE_CAPABILITIES.stream().map(ExtensionDefinition::requestToken).toList();
-
-  private static final List<FeatureDefinition> VISIBLE_FEATURES =
-      collectVisibleFeatures(ALL_PROVIDERS);
-
-  private static final Map<String, ExtensionDefinition> BY_NAME =
-      indexDefinitions(REGISTERED_EXTENSIONS);
+  private static final Snapshot DEFAULT_SNAPSHOT = new Snapshot(loadProviders());
 
   private Ircv3ExtensionRegistry() {}
 
+  public static final class Snapshot {
+
+    private final List<Ircv3ExtensionDefinitionProvider> providers;
+    private final List<String> providerIds;
+    private final List<ExtensionDefinition> extensions;
+    private final List<ExtensionDefinition> requestableCapabilities;
+    private final List<String> requestableCapabilityTokens;
+    private final List<FeatureDefinition> visibleFeatures;
+    private final Map<String, ExtensionDefinition> byName;
+
+    private Snapshot(List<Ircv3ExtensionDefinitionProvider> providers) {
+      this.providers = List.copyOf(Objects.requireNonNullElse(providers, List.of()));
+      this.providerIds =
+          this.providers.stream().map(Ircv3ExtensionDefinitionProvider::providerId).toList();
+      this.extensions = collectExtensions(this.providers);
+      this.requestableCapabilities =
+          this.extensions.stream().filter(ExtensionDefinition::requestable).toList();
+      this.requestableCapabilityTokens =
+          this.requestableCapabilities.stream().map(ExtensionDefinition::requestToken).toList();
+      this.visibleFeatures = collectVisibleFeatures(this.providers);
+      this.byName = indexDefinitions(this.extensions);
+    }
+
+    public List<ExtensionDefinition> all() {
+      return extensions;
+    }
+
+    public List<String> providerIds() {
+      return providerIds;
+    }
+
+    public Optional<ExtensionDefinition> find(String name) {
+      return Optional.ofNullable(byName.get(normalize(name)));
+    }
+
+    public List<ExtensionDefinition> requestableCapabilities() {
+      return requestableCapabilities;
+    }
+
+    public List<String> requestableCapabilityTokens() {
+      return requestableCapabilityTokens;
+    }
+
+    public List<FeatureDefinition> visibleFeatures() {
+      return visibleFeatures;
+    }
+
+    public String requestTokenFor(String name) {
+      return find(name)
+          .filter(ExtensionDefinition::requestable)
+          .map(ExtensionDefinition::requestToken)
+          .orElse("");
+    }
+
+    public String preferenceKeyFor(String name) {
+      return find(name).map(ExtensionDefinition::preferenceKey).orElse(normalize(name));
+    }
+  }
+
+  public static Snapshot snapshot() {
+    return DEFAULT_SNAPSHOT;
+  }
+
   public static List<ExtensionDefinition> all() {
-    return REGISTERED_EXTENSIONS;
+    return DEFAULT_SNAPSHOT.all();
   }
 
   public static List<String> providerIds() {
-    return ALL_PROVIDERS.stream().map(Ircv3ExtensionDefinitionProvider::providerId).toList();
+    return DEFAULT_SNAPSHOT.providerIds();
   }
 
   public static Optional<ExtensionDefinition> find(String name) {
-    return Optional.ofNullable(BY_NAME.get(normalize(name)));
+    return DEFAULT_SNAPSHOT.find(name);
   }
 
   public static List<ExtensionDefinition> requestableCapabilities() {
-    return REQUESTABLE_CAPABILITIES;
+    return DEFAULT_SNAPSHOT.requestableCapabilities();
   }
 
   public static List<String> requestableCapabilityTokens() {
-    return REQUESTABLE_CAPABILITY_TOKENS;
+    return DEFAULT_SNAPSHOT.requestableCapabilityTokens();
   }
 
   public static List<FeatureDefinition> visibleFeatures() {
-    return VISIBLE_FEATURES;
+    return DEFAULT_SNAPSHOT.visibleFeatures();
   }
 
   public static String requestTokenFor(String name) {
-    return find(name)
-        .filter(ExtensionDefinition::requestable)
-        .map(ExtensionDefinition::requestToken)
-        .orElse("");
+    return DEFAULT_SNAPSHOT.requestTokenFor(name);
   }
 
   public static String preferenceKeyFor(String name) {
-    return find(name).map(ExtensionDefinition::preferenceKey).orElse(normalize(name));
+    return DEFAULT_SNAPSHOT.preferenceKeyFor(name);
+  }
+
+  static List<Ircv3ExtensionDefinitionProvider> builtInProviders() {
+    return BUILT_IN_PROVIDERS;
+  }
+
+  static Snapshot snapshotForProviders(List<Ircv3ExtensionDefinitionProvider> providers) {
+    return new Snapshot(normalizeProviders(providers));
   }
 
   private static List<Ircv3ExtensionDefinitionProvider> loadProviders() {
@@ -174,13 +227,20 @@ public final class Ircv3ExtensionRegistry {
     } catch (ServiceConfigurationError error) {
       throw new IllegalStateException("Failed to load IRCv3 extension definition providers", error);
     }
+    return normalizeProviders(providers);
+  }
 
-    providers.sort(
-        Comparator.comparingInt(Ircv3ExtensionDefinitionProvider::sortOrder)
-            .thenComparing(provider -> normalize(provider.providerId())));
+  private static List<Ircv3ExtensionDefinitionProvider> normalizeProviders(
+      List<Ircv3ExtensionDefinitionProvider> providers) {
+    ArrayList<Ircv3ExtensionDefinitionProvider> sorted =
+        new ArrayList<>(Objects.requireNonNullElse(providers, List.of()));
+    sorted.sort(
+        Comparator.<Ircv3ExtensionDefinitionProvider>comparingInt(
+                provider -> provider == null ? Integer.MAX_VALUE : provider.sortOrder())
+            .thenComparing(provider -> normalize(provider == null ? "" : provider.providerId())));
 
     LinkedHashMap<String, Ircv3ExtensionDefinitionProvider> byId = new LinkedHashMap<>();
-    for (Ircv3ExtensionDefinitionProvider provider : providers) {
+    for (Ircv3ExtensionDefinitionProvider provider : sorted) {
       String providerId = normalize(provider == null ? "" : provider.providerId());
       if (provider == null || providerId.isEmpty()) {
         throw new IllegalStateException("IRCv3 extension provider must declare a non-blank id");
@@ -218,6 +278,21 @@ public final class Ircv3ExtensionRegistry {
     features.sort(
         Comparator.comparingInt(FeatureDefinition::sortOrder)
             .thenComparing(FeatureDefinition::label, String.CASE_INSENSITIVE_ORDER));
+    LinkedHashMap<String, FeatureDefinition> byLabel = new LinkedHashMap<>();
+    for (FeatureDefinition feature : features) {
+      if (feature == null) {
+        continue;
+      }
+      String label = normalizeLabel(feature.label());
+      if (label.isEmpty()) {
+        continue;
+      }
+      FeatureDefinition previous = byLabel.putIfAbsent(label.toLowerCase(Locale.ROOT), feature);
+      if (previous != null && !previous.equals(feature)) {
+        throw new IllegalStateException(
+            "Duplicate IRCv3 visible feature label registered: " + label);
+      }
+    }
     return List.copyOf(features);
   }
 

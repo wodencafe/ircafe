@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.ui.chat;
 
+import cafe.woden.ircclient.app.api.Ircv3ReadMarkerFeatureSupport;
 import cafe.woden.ircclient.app.commands.SlashCommandPresentationCatalog;
 import cafe.woden.ircclient.irc.port.IrcReadMarkerPort;
 import cafe.woden.ircclient.irc.port.IrcTypingPort;
@@ -70,7 +71,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
   private final Consumer<TargetRef> activate;
   private final OutboundLineBus outboundBus;
   private final IrcTypingPort typingPort;
-  private final IrcReadMarkerPort readMarkerPort;
+  private final Ircv3ReadMarkerFeatureSupport readMarkerFeatureSupport;
   private final MessageActionCapabilityPolicy messageActionCapabilityPolicy;
   private final Function<String, String> currentNickLookup;
   private final BiConsumer<TargetRef, String> onDraftChanged;
@@ -118,7 +119,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
     this.activate = activate;
     this.outboundBus = outboundBus;
     this.typingPort = Objects.requireNonNull(typingPort, "typingPort");
-    this.readMarkerPort = Objects.requireNonNull(readMarkerPort, "readMarkerPort");
+    this.readMarkerFeatureSupport =
+        new Ircv3ReadMarkerFeatureSupport(Objects.requireNonNull(readMarkerPort, "readMarkerPort"));
     this.messageActionCapabilityPolicy =
         Objects.requireNonNull(messageActionCapabilityPolicy, "messageActionCapabilityPolicy");
     this.currentNickLookup = Objects.requireNonNullElse(currentNickLookup, serverId -> "");
@@ -791,7 +793,7 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
   private void maybeSendReadMarker() {
     if (target == null || target.isStatus() || target.isUiOnly()) return;
-    if (!readMarkerPort.isReadMarkerAvailable(target.serverId())) return;
+    if (!readMarkerFeatureSupport.isAvailable(target.serverId())) return;
 
     long now = System.currentTimeMillis();
     if ((now - lastReadMarkerSentAtMs) < READ_MARKER_SEND_COOLDOWN_MS) return;
@@ -799,8 +801,8 @@ public class PinnedChatDockable extends ChatViewPanel implements Dockable, AutoC
 
     transcripts.updateReadMarker(target, now);
     var unused =
-        readMarkerPort
-            .sendReadMarker(target.serverId(), target.target(), Instant.ofEpochMilli(now))
+        readMarkerFeatureSupport
+            .send(target.serverId(), target.target(), Instant.ofEpochMilli(now))
             .subscribe(() -> {}, err -> {});
   }
 }

@@ -1,5 +1,6 @@
 package cafe.woden.ircclient.app.outbound.mutation;
 
+import cafe.woden.ircclient.app.api.Ircv3MessageRedactionFeatureSupport;
 import cafe.woden.ircclient.app.api.UiPort;
 import cafe.woden.ircclient.app.core.TargetCoordinator;
 import cafe.woden.ircclient.app.outbound.backend.OutboundBackendCapabilityPolicy;
@@ -11,21 +12,59 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.jmolecules.architecture.layered.ApplicationLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Handles reply/reaction/edit/redaction outbound command flows. */
 @Component
 @ApplicationLayer
-@RequiredArgsConstructor
 public final class OutboundMessageMutationCommandService implements OutboundHelpContributor {
 
   @NonNull private final OutboundBackendCapabilityPolicy backendCapabilityPolicy;
+  @NonNull private final Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport;
   @NonNull private final OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport;
   @NonNull private final UiPort ui;
   @NonNull private final TargetCoordinator targetCoordinator;
   @NonNull private final OutboundMessageMutationSendSupport outboundMessageMutationSendSupport;
+
+  @Deprecated(forRemoval = false)
+  public OutboundMessageMutationCommandService(
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
+      OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport,
+      UiPort ui,
+      TargetCoordinator targetCoordinator,
+      OutboundMessageMutationSendSupport outboundMessageMutationSendSupport) {
+    this(
+        backendCapabilityPolicy,
+        new Ircv3MessageRedactionFeatureSupport(backendCapabilityPolicy, null),
+        outboundCommandAvailabilitySupport,
+        ui,
+        targetCoordinator,
+        outboundMessageMutationSendSupport);
+  }
+
+  @Autowired
+  public OutboundMessageMutationCommandService(
+      OutboundBackendCapabilityPolicy backendCapabilityPolicy,
+      Ircv3MessageRedactionFeatureSupport messageRedactionFeatureSupport,
+      OutboundCommandAvailabilitySupport outboundCommandAvailabilitySupport,
+      UiPort ui,
+      TargetCoordinator targetCoordinator,
+      OutboundMessageMutationSendSupport outboundMessageMutationSendSupport) {
+    this.backendCapabilityPolicy =
+        Objects.requireNonNull(backendCapabilityPolicy, "backendCapabilityPolicy");
+    this.messageRedactionFeatureSupport =
+        Objects.requireNonNull(messageRedactionFeatureSupport, "messageRedactionFeatureSupport");
+    this.outboundCommandAvailabilitySupport =
+        Objects.requireNonNull(
+            outboundCommandAvailabilitySupport, "outboundCommandAvailabilitySupport");
+    this.ui = Objects.requireNonNull(ui, "ui");
+    this.targetCoordinator = Objects.requireNonNull(targetCoordinator, "targetCoordinator");
+    this.outboundMessageMutationSendSupport =
+        Objects.requireNonNull(
+            outboundMessageMutationSendSupport, "outboundMessageMutationSendSupport");
+  }
 
   @Override
   public void appendGeneralHelp(TargetRef out) {
@@ -208,12 +247,12 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
       return;
     }
 
-    if (!backendCapabilityPolicy.supportsMessageRedaction(at.serverId())) {
+    if (!messageRedactionFeatureSupport.isAvailable(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(redact)",
           featureUnavailableMessage(
-              at.serverId(), "message-redaction is not negotiated on this server."));
+              at.serverId(), messageRedactionFeatureSupport.negotiationUnavailableMessage()));
       return;
     }
 
@@ -246,7 +285,7 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
   private void appendRedactHelp(TargetRef out) {
     TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
     String serverId = target.serverId();
-    boolean available = backendCapabilityPolicy.supportsMessageRedaction(serverId);
+    boolean available = messageRedactionFeatureSupport.isAvailable(serverId);
     ui.appendStatus(
         target,
         "(help)",
@@ -254,9 +293,7 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
             + (available
                 ? ""
                 : outboundCommandAvailabilitySupport.helpAvailabilitySuffix(
-                    serverId,
-                    false,
-                    "requires negotiated draft/message-redaction or message-redaction")));
+                    serverId, false, messageRedactionFeatureSupport.requirementHint())));
   }
 
   private String featureUnavailableMessage(String serverId, String fallback) {

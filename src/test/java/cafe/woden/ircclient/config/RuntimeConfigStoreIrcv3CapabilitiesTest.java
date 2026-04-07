@@ -3,8 +3,10 @@ package cafe.woden.ircclient.config;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cafe.woden.ircclient.config.api.Ircv3CapabilityNameResolverPort;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -49,5 +51,27 @@ class RuntimeConfigStoreIrcv3CapabilitiesTest {
     assertFalse(store.isIrcv3CapabilityEnabled("draft/chathistory", true));
     assertFalse(store.isIrcv3CapabilityEnabled("chathistory", true));
     assertTrue(Boolean.FALSE.equals(store.readIrcv3Capabilities().get("chathistory")));
+  }
+
+  @Test
+  void runtimeResolverCanCanonicalizePluginProvidedCapabilityAliases() {
+    RuntimeConfigStore store =
+        new RuntimeConfigStore(
+            tempDir.resolve("ircafe.yml").toString(), new IrcProperties(null, List.of()));
+    store.setIrcv3CapabilityNameResolver(
+        new Ircv3CapabilityNameResolverPort() {
+          @Override
+          public String normalizePreferenceKey(String capability) {
+            return switch (String.valueOf(capability).trim().toLowerCase(Locale.ROOT)) {
+              case "plugin/example-cap", "draft/plugin-example-cap" -> "plugin-example-cap";
+              default -> Ircv3CapabilityNameResolverPort.super.normalizePreferenceKey(capability);
+            };
+          }
+        });
+
+    store.rememberIrcv3CapabilityEnabled("draft/plugin-example-cap", false);
+
+    assertFalse(store.isIrcv3CapabilityEnabled("plugin/example-cap", true));
+    assertTrue(Boolean.FALSE.equals(store.readIrcv3Capabilities().get("plugin-example-cap")));
   }
 }

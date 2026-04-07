@@ -2,7 +2,7 @@ package cafe.woden.ircclient.ui.servertree.view;
 
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
-import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityCatalog;
+import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionCatalog;
 import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionRegistry;
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.state.ServerRuntimeMetadata;
@@ -121,16 +121,26 @@ public final class ServerTreeNetworkInfoDialogBuilder {
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z").withZone(ZoneId.systemDefault());
   private static final DateTimeFormatter CAP_TRANSITION_TIME_FMT =
       DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
-  private static final List<Ircv3ExtensionRegistry.FeatureDefinition> CAPABILITY_FEATURES =
-      Ircv3ExtensionRegistry.visibleFeatures();
 
   private final IrcSessionRuntimeConfigPort runtimeConfig;
   private final Context context;
+  private final Ircv3ExtensionCatalog ircv3ExtensionCatalog;
 
   public ServerTreeNetworkInfoDialogBuilder(
       IrcSessionRuntimeConfigPort runtimeConfig, Context context) {
+    this(runtimeConfig, context, Ircv3ExtensionCatalog.builtInCatalog());
+  }
+
+  public ServerTreeNetworkInfoDialogBuilder(
+      IrcSessionRuntimeConfigPort runtimeConfig,
+      Context context,
+      Ircv3ExtensionCatalog ircv3ExtensionCatalog) {
     this.runtimeConfig = runtimeConfig;
     this.context = Objects.requireNonNull(context, "context");
+    this.ircv3ExtensionCatalog =
+        ircv3ExtensionCatalog == null
+            ? Ircv3ExtensionCatalog.builtInCatalog()
+            : ircv3ExtensionCatalog;
   }
 
   public void open(Component ownerComponent, String serverId, ServerRuntimeMetadata metadata) {
@@ -301,7 +311,7 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     java.util.TreeSet<String> allCapabilities =
         new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     allCapabilities.addAll(sortedObserved.keySet());
-    for (String capability : Ircv3CapabilityCatalog.requestableCapabilities()) {
+    for (String capability : ircv3ExtensionCatalog.requestableCapabilityTokens()) {
       String normalized =
           Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
       if (!normalized.isEmpty()) {
@@ -334,7 +344,7 @@ public final class ServerTreeNetworkInfoDialogBuilder {
               return false;
             }
             String capability = Objects.toString(getValueAt(row, 0), "");
-            return !requestTokenForCapability(capability).isEmpty();
+            return !requestTokenForCapabilityFromCatalog(capability).isEmpty();
           }
 
           @Override
@@ -360,7 +370,7 @@ public final class ServerTreeNetworkInfoDialogBuilder {
                 Objects.toString(model.getValueAt(row, 0), "")
                     .trim()
                     .toLowerCase(java.util.Locale.ROOT);
-            String requestToken = requestTokenForCapability(cap);
+            String requestToken = requestTokenForCapabilityFromCatalog(cap);
             if (requestToken.isEmpty()) {
               continue;
             }
@@ -386,7 +396,8 @@ public final class ServerTreeNetworkInfoDialogBuilder {
         new JPanel(new MigLayout("insets 0, fill, wrap 1", "[grow,fill]", "[][grow,fill]"));
     panel.setBorder(BorderFactory.createTitledBorder("Feature readiness"));
 
-    List<CapabilityFeatureStatus> statuses = computeCapabilityFeatureStatuses(metadata);
+    List<CapabilityFeatureStatus> statuses =
+        computeCapabilityFeatureStatuses(metadata, ircv3ExtensionCatalog.visibleFeatures());
     if (statuses.isEmpty()) {
       panel.add(new JLabel("No mapped IRCv3 feature requirements."), "growx");
       return panel;
@@ -410,6 +421,12 @@ public final class ServerTreeNetworkInfoDialogBuilder {
 
   static List<CapabilityFeatureStatus> computeCapabilityFeatureStatuses(
       ServerRuntimeMetadata metadata) {
+    return computeCapabilityFeatureStatuses(metadata, Ircv3ExtensionRegistry.visibleFeatures());
+  }
+
+  private static List<CapabilityFeatureStatus> computeCapabilityFeatureStatuses(
+      ServerRuntimeMetadata metadata,
+      List<Ircv3ExtensionRegistry.FeatureDefinition> capabilityFeatures) {
     Set<String> enabled = new LinkedHashSet<>();
     if (metadata != null) {
       for (Map.Entry<String, ServerRuntimeMetadata.CapabilityState> entry :
@@ -424,8 +441,10 @@ public final class ServerTreeNetworkInfoDialogBuilder {
       }
     }
 
-    List<CapabilityFeatureStatus> out = new ArrayList<>(CAPABILITY_FEATURES.size());
-    for (Ircv3ExtensionRegistry.FeatureDefinition feature : CAPABILITY_FEATURES) {
+    List<Ircv3ExtensionRegistry.FeatureDefinition> features =
+        List.copyOf(Objects.requireNonNullElse(capabilityFeatures, List.of()));
+    List<CapabilityFeatureStatus> out = new ArrayList<>(features.size());
+    for (Ircv3ExtensionRegistry.FeatureDefinition feature : features) {
       List<String> missing = new ArrayList<>();
       int satisfiedRequired = 0;
 
@@ -577,7 +596,7 @@ public final class ServerTreeNetworkInfoDialogBuilder {
   }
 
   private boolean isCapabilityRequested(String capability) {
-    String cap = requestTokenForCapability(capability);
+    String cap = requestTokenForCapabilityFromCatalog(capability);
     if (cap.isEmpty()) {
       return false;
     }
@@ -594,6 +613,10 @@ public final class ServerTreeNetworkInfoDialogBuilder {
 
   private static String requestTokenForCapability(String capability) {
     return Ircv3ExtensionRegistry.requestTokenFor(capability);
+  }
+
+  private String requestTokenForCapabilityFromCatalog(String capability) {
+    return ircv3ExtensionCatalog.requestTokenFor(capability);
   }
 
   private String capabilityStatusSummary(ServerRuntimeMetadata metadata) {
