@@ -240,6 +240,7 @@ public class MediatorOutboundUiActionHandler {
   }
 
   private static String normalizeIrcv3CapabilityKey(String capability) {
+    // Keep this mapping local so the app module does not depend on irc::ircv3 internals.
     String key = Objects.toString(capability, "").trim().toLowerCase(java.util.Locale.ROOT);
     return switch (key) {
       case "read-marker", "draft/read-marker" -> "draft/read-marker";

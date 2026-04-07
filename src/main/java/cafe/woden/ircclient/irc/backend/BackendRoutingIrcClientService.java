@@ -500,8 +500,8 @@ public class BackendRoutingIrcClientService
   }
 
   @Override
-  public boolean isMessageEditAvailable(String serverId) {
-    return routeActiveOrConfigured(serverId).isMessageEditAvailable(serverId);
+  public boolean isExperimentalMessageEditAvailable(String serverId) {
+    return routeActiveOrConfigured(serverId).isExperimentalMessageEditAvailable(serverId);
   }
 
   @Override

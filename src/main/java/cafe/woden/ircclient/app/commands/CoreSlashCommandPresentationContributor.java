@@ -77,7 +77,7 @@ public final class CoreSlashCommandPresentationContributor
           new SlashCommandDescriptor("/reply", "Reply to message-id"),
           new SlashCommandDescriptor("/react", "React to message-id"),
           new SlashCommandDescriptor("/unreact", "Remove reaction from message-id"),
-          new SlashCommandDescriptor("/edit", "Edit message-id"),
+          new SlashCommandDescriptor("/edit", "Edit message-id (experimental draft)"),
           new SlashCommandDescriptor("/redact", "Redact message-id"),
           new SlashCommandDescriptor("/delete", "Alias: /redact"),
           new SlashCommandDescriptor("/filter", "Local filtering controls"),

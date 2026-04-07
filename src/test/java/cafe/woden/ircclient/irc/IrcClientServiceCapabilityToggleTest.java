@@ -25,11 +25,11 @@ class IrcClientServiceCapabilityToggleTest {
   @Test
   void disableCapabilitySendsCapReqWithNegativeToken() {
     IrcClientService service = mock(IrcClientService.class, CALLS_REAL_METHODS);
-    when(service.sendRaw("libera", "CAP REQ :-typing")).thenReturn(Completable.complete());
+    when(service.sendRaw("libera", "CAP REQ :-echo-message")).thenReturn(Completable.complete());
 
-    service.setIrcv3CapabilityEnabled("libera", "typing", false).test().assertComplete();
+    service.setIrcv3CapabilityEnabled("libera", "echo-message", false).test().assertComplete();
 
-    verify(service).sendRaw("libera", "CAP REQ :-typing");
+    verify(service).sendRaw("libera", "CAP REQ :-echo-message");
   }
 
   @Test

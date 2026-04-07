@@ -165,12 +165,12 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
       return;
     }
 
-    if (!backendCapabilityPolicy.supportsMessageEdit(at.serverId())) {
+    if (!backendCapabilityPolicy.supportsExperimentalMessageEdit(at.serverId())) {
       ui.appendStatus(
           new TargetRef(at.serverId(), "status"),
           "(edit)",
           featureUnavailableMessage(
-              at.serverId(), "draft/message-edit is not negotiated on this server."));
+              at.serverId(), "Experimental draft/message-edit is not negotiated on this server."));
       return;
     }
 
@@ -232,15 +232,15 @@ public final class OutboundMessageMutationCommandService implements OutboundHelp
   private void appendEditHelp(TargetRef out) {
     TargetRef target = out != null ? out : targetCoordinator.safeStatusTarget();
     String serverId = target.serverId();
-    boolean available = backendCapabilityPolicy.supportsMessageEdit(serverId);
+    boolean available = backendCapabilityPolicy.supportsExperimentalMessageEdit(serverId);
     ui.appendStatus(
         target,
         "(help)",
-        "/edit <msgid> <message>"
+        "/edit <msgid> <message> (experimental draft/message-edit)"
             + (available
                 ? ""
                 : outboundCommandAvailabilitySupport.helpAvailabilitySuffix(
-                    serverId, false, "requires negotiated draft/message-edit or message-edit")));
+                    serverId, false, "requires negotiated experimental draft/message-edit")));
   }
 
   private void appendRedactHelp(TargetRef out) {

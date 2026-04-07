@@ -38,7 +38,7 @@ final class PircbotxAvailabilitySupport {
     return toBoundedInt(max);
   }
 
-  boolean isMessageEditAvailable(PircbotxConnectionState connection) {
+  boolean isExperimentalMessageEditAvailable(PircbotxConnectionState connection) {
     return hasLiveBot(connection) && connection.capabilitySnapshot().draftMessageEditCapAcked();
   }
 

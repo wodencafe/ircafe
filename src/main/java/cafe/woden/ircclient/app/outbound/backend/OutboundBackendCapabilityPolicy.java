@@ -148,12 +148,12 @@ public final class OutboundBackendCapabilityPolicy {
         .supportsDraftUnreact(irc, sid);
   }
 
-  public boolean supportsMessageEdit(String serverId) {
+  public boolean supportsExperimentalMessageEdit(String serverId) {
     String sid = normalizeServerId(serverId);
     if (sid.isEmpty()) return false;
     return outboundBackendFeatureRegistry
         .adapterFor(backendIdForServer(sid))
-        .supportsMessageEdit(irc, sid);
+        .supportsExperimentalMessageEdit(irc, sid);
   }
 
   public boolean supportsMessageRedaction(String serverId) {

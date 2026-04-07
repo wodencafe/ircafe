@@ -172,7 +172,7 @@ class OutboundMessageMutationCommandServiceTest {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
     when(connectionCoordinator.isConnected("libera")).thenReturn(true);
-    when(irc.isMessageEditAvailable("libera")).thenReturn(true);
+    when(irc.isExperimentalMessageEditAvailable("libera")).thenReturn(true);
     when(ui.isOwnMessage(chan, "abc123")).thenReturn(true);
     when(irc.isEchoMessageAvailable("libera")).thenReturn(false);
     when(irc.currentNick("libera")).thenReturn(Optional.of("me"));
@@ -197,7 +197,7 @@ class OutboundMessageMutationCommandServiceTest {
   void editCommandRejectsNonOwnedMessageBeforeSending() {
     TargetRef chan = new TargetRef("libera", "#ircafe");
     when(targetCoordinator.getActiveTarget()).thenReturn(chan);
-    when(irc.isMessageEditAvailable("libera")).thenReturn(true);
+    when(irc.isExperimentalMessageEditAvailable("libera")).thenReturn(true);
     when(ui.isOwnMessage(chan, "abc123")).thenReturn(false);
 
     service.handleEditMessage(disposables, "abc123", "fixed text");

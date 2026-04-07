@@ -288,7 +288,7 @@ public sealed interface ParsedInput
   /**
    * /edit <msgid> <message>
    *
-   * <p>IRCv3 draft/message-edit compose helper.
+   * <p>Experimental IRC draft/message-edit compose helper.
    */
   record EditMessage(String messageId, String body) implements ParsedInput {}
 

@@ -180,6 +180,7 @@ class QuasselCoreIrcClientServiceTest {
 
     service.connect("quassel").blockingAwait();
     events.awaitCount(3);
+    awaitEstablishedSession(service, "quassel");
 
     service.sendToChannel("quassel", "#other", "hello net2").blockingAwait();
 
@@ -223,6 +224,7 @@ class QuasselCoreIrcClientServiceTest {
 
     service.connect("quassel").blockingAwait();
     events.awaitCount(3);
+    awaitEstablishedSession(service, "quassel");
 
     service.sendToChannel("quassel", "#dupe{net:network-2}", "reply net2").blockingAwait();
     service
@@ -287,7 +289,7 @@ class QuasselCoreIrcClientServiceTest {
     assertFalse(service.isDraftReplyAvailable("quassel"));
     assertFalse(service.isDraftReactAvailable("quassel"));
     assertFalse(service.isDraftUnreactAvailable("quassel"));
-    assertFalse(service.isMessageEditAvailable("quassel"));
+    assertFalse(service.isExperimentalMessageEditAvailable("quassel"));
     assertFalse(service.isMessageRedactionAvailable("quassel"));
     assertFalse(service.isTypingAvailable("quassel"));
     assertFalse(service.isReadMarkerAvailable("quassel"));
@@ -295,7 +297,7 @@ class QuasselCoreIrcClientServiceTest {
     assertFalse(service.isStandardRepliesAvailable("quassel"));
     assertFalse(service.isMonitorAvailable("quassel"));
     assertEquals(
-        "typing capability status is not yet available from Quassel backend state",
+        "typing support status is not yet available from Quassel backend state",
         service.typingAvailabilityReason("quassel"));
   }
 
@@ -383,13 +385,16 @@ class QuasselCoreIrcClientServiceTest {
                 "Network".getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 "1".getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 "sync()".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                Map.of("capsEnabled", List.of("message-tags", "typing")))));
+                Map.of("capsEnabled", List.of("message-tags")))));
     long typingReadyDeadline = System.currentTimeMillis() + 2_000L;
     while (!service.isTypingAvailable("quassel")
         && System.currentTimeMillis() < typingReadyDeadline) {
       Thread.sleep(10L);
     }
     assertTrue(service.isTypingAvailable("quassel"));
+    assertTrue(service.isDraftReplyAvailable("quassel"));
+    assertTrue(service.isDraftReactAvailable("quassel"));
+    assertTrue(service.isDraftUnreactAvailable("quassel"));
 
     service.sendTyping("quassel", "#dupe{net:network-2}", "composing").blockingAwait();
 
@@ -3534,6 +3539,16 @@ class QuasselCoreIrcClientServiceTest {
         new QuasselCoreDatastreamCodec.BufferInfoValue(bufferId, 1, 0x02, -1, bufferName),
         sender,
         content);
+  }
+
+  private static void awaitEstablishedSession(QuasselCoreIrcClientService service, String serverId)
+      throws InterruptedException {
+    long deadline = System.currentTimeMillis() + 2_000L;
+    while (!service.hasEstablishedQuasselCoreSession(serverId)
+        && System.currentTimeMillis() < deadline) {
+      Thread.sleep(10L);
+    }
+    assertTrue(service.hasEstablishedQuasselCoreSession(serverId));
   }
 
   private static final class BlockingSocket extends Socket {

@@ -172,22 +172,24 @@ public interface IrcClientService {
   }
 
   /**
-   * @return true if IRCv3 {@code draft/reply} is negotiated on this connection.
+   * @return true if IRCv3 reply tagging is available on this connection via {@code message-tags} or
+   *     equivalent backend support.
    */
   default boolean isDraftReplyAvailable(String serverId) {
     return false;
   }
 
   /**
-   * @return true if IRCv3 {@code draft/react} is negotiated on this connection.
+   * @return true if IRCv3 reaction tagging is available on this connection via {@code message-tags}
+   *     or equivalent backend support.
    */
   default boolean isDraftReactAvailable(String serverId) {
     return false;
   }
 
   /**
-   * @return true if IRCv3 {@code draft/unreact} (or compatible reaction metadata transport) is
-   *     negotiated on this connection.
+   * @return true if IRCv3 reaction-removal tagging is available on this connection via {@code
+   *     message-tags} or equivalent backend support.
    */
   default boolean isDraftUnreactAvailable(String serverId) {
     return false;
@@ -215,10 +217,10 @@ public interface IrcClientService {
   }
 
   /**
-   * @return true if IRCv3 {@code draft/message-edit} (or equivalent) is negotiated on this
+   * @return true if the experimental IRC {@code draft/message-edit} extension is negotiated on this
    *     connection.
    */
-  default boolean isMessageEditAvailable(String serverId) {
+  default boolean isExperimentalMessageEditAvailable(String serverId) {
     return false;
   }
 
@@ -231,7 +233,8 @@ public interface IrcClientService {
   }
 
   /**
-   * @return true if IRCv3 {@code typing} is negotiated on this connection.
+   * @return true if IRCv3 typing indicators are available on this connection, typically via {@code
+   *     message-tags} and an allowed {@code +typing} client-only tag.
    */
   default boolean isTypingAvailable(String serverId) {
     return false;
@@ -321,7 +324,7 @@ public interface IrcClientService {
    * <p>Typical states are {@code active}, {@code paused}, {@code done}.
    */
   default Completable sendTyping(String serverId, String target, String state) {
-    return Completable.error(new UnsupportedOperationException("typing capability not supported"));
+    return Completable.error(new UnsupportedOperationException("typing support not available"));
   }
 
   /** Send an IRCv3 read-marker update for a target. */
@@ -333,7 +336,7 @@ public interface IrcClientService {
   /**
    * Send an IRCv3 capability toggle request via {@code CAP REQ}.
    *
-   * <p>Examples: {@code CAP REQ :message-tags} (enable), {@code CAP REQ :-typing} (disable).
+   * <p>Examples: {@code CAP REQ :message-tags} (enable), {@code CAP REQ :-echo-message} (disable).
    */
   default Completable setIrcv3CapabilityEnabled(
       String serverId, String capability, boolean enabled) {

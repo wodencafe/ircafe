@@ -827,7 +827,7 @@ public class MatrixIrcClientService implements IrcBackendClientService {
   }
 
   @Override
-  public boolean isMessageEditAvailable(String serverId) {
+  public boolean isExperimentalMessageEditAvailable(String serverId) {
     String sid = normalizeServerId(serverId);
     return !sid.isEmpty() && sessionsByServer.containsKey(sid);
   }

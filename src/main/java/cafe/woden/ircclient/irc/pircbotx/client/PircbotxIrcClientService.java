@@ -455,9 +455,9 @@ public class PircbotxIrcClientService
   }
 
   @Override
-  public boolean isMessageEditAvailable(String serverId) {
+  public boolean isExperimentalMessageEditAvailable(String serverId) {
     try {
-      return availabilitySupport.isMessageEditAvailable(conn(serverId));
+      return availabilitySupport.isExperimentalMessageEditAvailable(conn(serverId));
     } catch (Exception e) {
       return false;
     }

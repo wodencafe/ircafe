@@ -132,11 +132,7 @@ final class PircbotxCapabilityCommandSupport {
     if (!caps.messageTagsCapAcked()) {
       return "message-tags not negotiated";
     }
-
-    if (!caps.typingCapAcked() && !caps.typingClientTagPolicyKnown()) {
-      return "typing capability not negotiated";
-    }
-    if (!caps.typingCapAcked() && !caps.typingClientTagAllowed()) {
+    if (caps.typingClientTagPolicyKnown() && !caps.typingClientTagAllowed()) {
       return "server denies +typing via CLIENTTAGDENY";
     }
     return "";

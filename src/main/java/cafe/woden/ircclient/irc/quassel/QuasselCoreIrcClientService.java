@@ -728,7 +728,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
                 String reason = Objects.toString(typingAvailabilityReason(sid), "").trim();
                 String suffix = reason.isEmpty() ? "" : (" (" + reason + ")");
                 throw new IllegalStateException(
-                    "Typing indicators not available (requires message-tags and typing capability)"
+                    "Typing indicators not available (requires message-tags and server allowing +typing)"
                         + suffix
                         + ": "
                         + sid);
@@ -917,19 +917,19 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   @Override
   public boolean isDraftReplyAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, "draft/reply");
+    return capabilityEnabledOrUnknown(session, "message-tags");
   }
 
   @Override
   public boolean isDraftReactAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, "draft/react");
+    return capabilityEnabledOrUnknown(session, "message-tags");
   }
 
   @Override
   public boolean isDraftUnreactAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
-    return capabilityEnabledOrUnknown(session, "draft/unreact", "draft/react");
+    return capabilityEnabledOrUnknown(session, "message-tags");
   }
 
   @Override
@@ -960,7 +960,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   }
 
   @Override
-  public boolean isMessageEditAvailable(String serverId) {
+  public boolean isExperimentalMessageEditAvailable(String serverId) {
     QuasselSession session = findEstablishedSession(serverId);
     return capabilityEnabledOrUnknown(session, "draft/message-edit");
   }
@@ -988,12 +988,12 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
       return "";
     }
     if (!session.capabilitySnapshotObserved.get()) {
-      return "typing capability status is not yet available from Quassel backend state";
+      return "typing support status is not yet available from Quassel backend state";
     }
     if (!hasCapabilityAny(session, "message-tags")) {
       return "message-tags not negotiated in Quassel backend network state";
     }
-    return "typing capability not negotiated in Quassel backend network state";
+    return "server may be blocking +typing via CLIENTTAGDENY";
   }
 
   @Override
@@ -1101,9 +1101,7 @@ public class QuasselCoreIrcClientService implements IrcBackendClientService {
   private boolean typingCapabilityEnabledOrUnknown(QuasselSession session) {
     if (session == null) return false;
     if (!session.capabilitySnapshotObserved.get()) return false;
-    boolean messageTags = hasCapabilityAny(session, "message-tags");
-    boolean typing = hasCapabilityAny(session, "typing", "draft/typing");
-    return messageTags && typing;
+    return hasCapabilityAny(session, "message-tags");
   }
 
   private MonitorSupportState monitorSupportForPreferredNetwork(QuasselSession session) {

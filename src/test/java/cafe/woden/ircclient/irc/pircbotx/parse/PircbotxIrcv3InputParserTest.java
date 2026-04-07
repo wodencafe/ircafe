@@ -45,7 +45,7 @@ class PircbotxIrcv3InputParserTest {
         ImmutableMap.of());
 
     assertTrue(conn.capabilitySnapshot().echoMessageCapAcked());
-    assertTrue(conn.capabilitySnapshot().typingCapAcked());
+    assertFalse(conn.capabilitySnapshot().typingAvailable());
     assertTrue(
         out.stream()
             .map(ServerIrcEvent::event)
@@ -154,12 +154,13 @@ class PircbotxIrcv3InputParserTest {
   }
 
   @Test
-  void capAckTracksDraftTypingAlias() throws Exception {
+  void capAckForDraftTypingEmitsEventWithoutChangingTrackedState() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxIrcv3InputParser parser =
         new PircbotxIrcv3InputParser(
             dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+    PircbotxConnectionState.CapabilitySnapshot before = conn.capabilitySnapshot();
 
     parser.processCommand(
         "*",
@@ -169,7 +170,7 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":draft/typing"),
         ImmutableMap.of());
 
-    assertTrue(conn.capabilitySnapshot().typingCapAcked());
+    assertEquals(before, conn.capabilitySnapshot());
     assertTrue(
         out.stream()
             .map(ServerIrcEvent::event)
@@ -497,12 +498,13 @@ class PircbotxIrcv3InputParserTest {
   }
 
   @Test
-  void capAckUpdatesDraftUnreactAndChannelContextState() throws Exception {
+  void capAckForTagOnlyNamesLeavesTrackedStateUnchanged() throws Exception {
     PircbotxConnectionState conn = new PircbotxConnectionState("libera");
     List<ServerIrcEvent> out = new ArrayList<>();
     PircbotxIrcv3InputParser parser =
         new PircbotxIrcv3InputParser(
             dummyBot(), "libera", conn, out::add, new Ircv3StsPolicyService());
+    PircbotxConnectionState.CapabilitySnapshot before = conn.capabilitySnapshot();
 
     parser.processCommand(
         "*",
@@ -512,8 +514,27 @@ class PircbotxIrcv3InputParserTest {
         List.of("me", "ACK", ":draft/unreact draft/channel-context"),
         ImmutableMap.of());
 
-    assertTrue(conn.capabilitySnapshot().draftUnreactCapAcked());
-    assertTrue(conn.capabilitySnapshot().draftChannelContextCapAcked());
+    assertEquals(before, conn.capabilitySnapshot());
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .filter(IrcEvent.Ircv3CapabilityChanged.class::isInstance)
+            .map(IrcEvent.Ircv3CapabilityChanged.class::cast)
+            .anyMatch(
+                cap ->
+                    "ACK".equalsIgnoreCase(cap.subcommand())
+                        && "draft/unreact".equalsIgnoreCase(cap.capability())
+                        && cap.enabled()));
+    assertTrue(
+        out.stream()
+            .map(ServerIrcEvent::event)
+            .filter(IrcEvent.Ircv3CapabilityChanged.class::isInstance)
+            .map(IrcEvent.Ircv3CapabilityChanged.class::cast)
+            .anyMatch(
+                cap ->
+                    "ACK".equalsIgnoreCase(cap.subcommand())
+                        && "draft/channel-context".equalsIgnoreCase(cap.capability())
+                        && cap.enabled()));
   }
 
   @Test

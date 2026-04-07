@@ -15,13 +15,13 @@ class IrcMessageActionCapabilityPolicyTest {
   void delegatesCapabilitiesPerServer() {
     IrcBackendClientService irc = mock(IrcBackendClientService.class);
     when(irc.isMessageTagsAvailable("matrix")).thenReturn(true);
-    when(irc.isMessageEditAvailable("matrix")).thenReturn(true);
+    when(irc.isExperimentalMessageEditAvailable("matrix")).thenReturn(true);
     when(irc.isMessageRedactionAvailable("matrix")).thenReturn(true);
     when(irc.isChatHistoryAvailable("matrix")).thenReturn(true);
     when(irc.isZncPlaybackAvailable("matrix")).thenReturn(false);
 
     when(irc.isMessageTagsAvailable("irc")).thenReturn(false);
-    when(irc.isMessageEditAvailable("irc")).thenReturn(false);
+    when(irc.isExperimentalMessageEditAvailable("irc")).thenReturn(false);
     when(irc.isMessageRedactionAvailable("irc")).thenReturn(false);
     when(irc.isChatHistoryAvailable("irc")).thenReturn(false);
     when(irc.isZncPlaybackAvailable("irc")).thenReturn(true);

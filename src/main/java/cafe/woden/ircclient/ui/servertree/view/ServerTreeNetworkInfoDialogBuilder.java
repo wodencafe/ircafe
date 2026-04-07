@@ -3,6 +3,7 @@ package cafe.woden.ircclient.ui.servertree.view;
 import cafe.woden.ircclient.app.api.ConnectionState;
 import cafe.woden.ircclient.config.api.IrcSessionRuntimeConfigPort;
 import cafe.woden.ircclient.irc.ircv3.Ircv3CapabilityCatalog;
+import cafe.woden.ircclient.irc.ircv3.Ircv3ExtensionRegistry;
 import cafe.woden.ircclient.ui.servertree.ServerTreeConventions;
 import cafe.woden.ircclient.ui.servertree.state.ServerRuntimeMetadata;
 import cafe.woden.ircclient.ui.servertree.viewmodel.ServerTreeConnectionStateViewModel;
@@ -120,19 +121,8 @@ public final class ServerTreeNetworkInfoDialogBuilder {
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z").withZone(ZoneId.systemDefault());
   private static final DateTimeFormatter CAP_TRANSITION_TIME_FMT =
       DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
-  private static final List<CapabilityFeatureDefinition> CAPABILITY_FEATURES =
-      List.of(
-          new CapabilityFeatureDefinition("Replies", List.of("message-tags"), List.of()),
-          new CapabilityFeatureDefinition("Reactions", List.of("message-tags"), List.of()),
-          new CapabilityFeatureDefinition("Reaction removal", List.of("message-tags"), List.of()),
-          new CapabilityFeatureDefinition("Message edit", List.of("draft/message-edit"), List.of()),
-          new CapabilityFeatureDefinition(
-              "Message redaction", List.of("draft/message-redaction"), List.of()),
-          new CapabilityFeatureDefinition(
-              "History", List.of(), List.of("chathistory", "draft/chathistory", "znc.in/playback")),
-          new CapabilityFeatureDefinition("Typing", List.of("message-tags"), List.of()),
-          new CapabilityFeatureDefinition(
-              "Read markers", List.of(), List.of("read-marker", "draft/read-marker")));
+  private static final List<Ircv3ExtensionRegistry.FeatureDefinition> CAPABILITY_FEATURES =
+      Ircv3ExtensionRegistry.visibleFeatures();
 
   private final IrcSessionRuntimeConfigPort runtimeConfig;
   private final Context context;
@@ -435,7 +425,7 @@ public final class ServerTreeNetworkInfoDialogBuilder {
     }
 
     List<CapabilityFeatureStatus> out = new ArrayList<>(CAPABILITY_FEATURES.size());
-    for (CapabilityFeatureDefinition feature : CAPABILITY_FEATURES) {
+    for (Ircv3ExtensionRegistry.FeatureDefinition feature : CAPABILITY_FEATURES) {
       List<String> missing = new ArrayList<>();
       int satisfiedRequired = 0;
 
@@ -491,9 +481,6 @@ public final class ServerTreeNetworkInfoDialogBuilder {
   static record CapabilityFeatureStatus(String feature, String status, String detail) {}
 
   static record InfoRow(String key, String value) {}
-
-  private record CapabilityFeatureDefinition(
-      String label, List<String> requiredAll, List<String> requiredAny) {}
 
   private JComponent buildCapabilityTransitionsPanel(ServerRuntimeMetadata metadata) {
     JPanel panel =
@@ -606,35 +593,7 @@ public final class ServerTreeNetworkInfoDialogBuilder {
   }
 
   private static String requestTokenForCapability(String capability) {
-    String cap = normalizeCapability(capability);
-    if (cap.isEmpty()) {
-      return "";
-    }
-    return switch (cap) {
-      case "read-marker", "draft/read-marker" -> "draft/read-marker";
-      case "multiline", "draft/multiline" -> "draft/multiline";
-      case "chathistory", "draft/chathistory" -> "draft/chathistory";
-      case "message-redaction", "draft/message-redaction" -> "draft/message-redaction";
-      case "sts",
-          "draft/channel-context",
-          "draft/reply",
-          "draft/react",
-          "draft/unreact",
-          "draft/typing",
-          "typing",
-          "draft/message-edit",
-          "message-edit" ->
-          "";
-      default -> {
-        for (String candidate : Ircv3CapabilityCatalog.requestableCapabilities()) {
-          String normalized = normalizeCapability(candidate);
-          if (cap.equals(normalized)) {
-            yield normalized;
-          }
-        }
-        yield "";
-      }
-    };
+    return Ircv3ExtensionRegistry.requestTokenFor(capability);
   }
 
   private String capabilityStatusSummary(ServerRuntimeMetadata metadata) {

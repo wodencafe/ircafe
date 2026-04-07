@@ -113,8 +113,8 @@ final class PircbotxRegistrationLifecycleHandler {
             + "setname={} chghost={} sts={} multiline={} multiline(final)={} multiline(final,max-bytes)={} "
             + "multiline(final,max-lines)={} multiline(draft)={} multiline(draft,max-bytes)={} "
             + "multiline(draft,max-lines)={} "
-            + "draft/channel-context={} draft/reply={} draft/react={} draft/unreact={} draft/message-edit={} draft/message-redaction={} "
-            + "message-tags={} typing-policy-known={} typing-allowed={} typing-available={} typing(cap)={} read-marker={} "
+            + "experimental(draft/message-edit)={} draft/message-redaction={} "
+            + "message-tags={} typing-policy-known={} typing-allowed={} typing-available={} read-marker={} "
             + "monitor(isupport)={} monitor(cap)={} extended-monitor(cap)={} monitor(max-targets)={} "
             + "chathistory={} batch={} znc.in/playback={}",
         serverId,
@@ -133,17 +133,12 @@ final class PircbotxRegistrationLifecycleHandler {
         caps.draftMultilineCapAcked(),
         caps.draftMultilineMaxBytes(),
         caps.draftMultilineMaxLines(),
-        caps.draftChannelContextCapAcked(),
-        caps.draftReplyCapAcked(),
-        caps.draftReactCapAcked(),
-        caps.draftUnreactCapAcked(),
         caps.draftMessageEditCapAcked(),
         caps.draftMessageRedactionCapAcked(),
         caps.messageTagsCapAcked(),
         caps.typingClientTagPolicyKnown(),
         caps.typingClientTagAllowed(),
         typing,
-        caps.typingCapAcked(),
         caps.readMarkerCapAcked(),
         caps.monitorSupported(),
         caps.monitorCapAcked(),
@@ -165,9 +160,7 @@ final class PircbotxRegistrationLifecycleHandler {
       String reason;
       if (!caps.messageTagsCapAcked()) {
         reason = "message-tags not negotiated";
-      } else if (!caps.typingCapAcked() && !caps.typingClientTagPolicyKnown()) {
-        reason = "typing capability not negotiated";
-      } else if (!caps.typingCapAcked() && !caps.typingClientTagAllowed()) {
+      } else if (caps.typingClientTagPolicyKnown() && !caps.typingClientTagAllowed()) {
         reason = "server denies +typing via CLIENTTAGDENY";
       } else {
         reason = "unknown";

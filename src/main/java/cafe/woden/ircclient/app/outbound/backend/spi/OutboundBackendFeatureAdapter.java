@@ -64,8 +64,8 @@ public interface OutboundBackendFeatureAdapter {
     return irc != null && irc.isDraftUnreactAvailable(serverId);
   }
 
-  default boolean supportsMessageEdit(IrcNegotiatedFeaturePort irc, String serverId) {
-    return irc != null && irc.isMessageEditAvailable(serverId);
+  default boolean supportsExperimentalMessageEdit(IrcNegotiatedFeaturePort irc, String serverId) {
+    return irc != null && irc.isExperimentalMessageEditAvailable(serverId);
   }
 
   default boolean supportsMessageRedaction(IrcNegotiatedFeaturePort irc, String serverId) {

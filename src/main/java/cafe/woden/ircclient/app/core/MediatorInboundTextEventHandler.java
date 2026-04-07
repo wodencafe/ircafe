@@ -1023,7 +1023,7 @@ public class MediatorInboundTextEventHandler {
     if (target == null || target.isUiOnly()) {
       return false;
     }
-    if (!negotiatedFeaturePort.isMessageEditAvailable(sid)) {
+    if (!negotiatedFeaturePort.isExperimentalMessageEditAvailable(sid)) {
       return false;
     }
 

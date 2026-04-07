@@ -41,7 +41,7 @@ public interface IrcNegotiatedFeaturePort {
     return 0;
   }
 
-  default boolean isMessageEditAvailable(String serverId) {
+  default boolean isExperimentalMessageEditAvailable(String serverId) {
     return false;
   }
 
@@ -110,8 +110,8 @@ public interface IrcNegotiatedFeaturePort {
       }
 
       @Override
-      public boolean isMessageEditAvailable(String serverId) {
-        return irc.isMessageEditAvailable(serverId);
+      public boolean isExperimentalMessageEditAvailable(String serverId) {
+        return irc.isExperimentalMessageEditAvailable(serverId);
       }
 
       @Override

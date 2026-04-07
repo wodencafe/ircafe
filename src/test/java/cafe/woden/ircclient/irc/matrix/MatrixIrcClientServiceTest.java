@@ -88,7 +88,7 @@ class MatrixIrcClientServiceTest {
     assertFalse(service.isDraftReplyAvailable("matrix"));
     assertFalse(service.isDraftReactAvailable("matrix"));
     assertFalse(service.isDraftUnreactAvailable("matrix"));
-    assertFalse(service.isMessageEditAvailable("matrix"));
+    assertFalse(service.isExperimentalMessageEditAvailable("matrix"));
     assertFalse(service.isMessageRedactionAvailable("matrix"));
     assertFalse(service.isMultilineAvailable("matrix"));
     assertEquals(0, service.negotiatedMultilineMaxLines("matrix"));
@@ -138,7 +138,7 @@ class MatrixIrcClientServiceTest {
     assertTrue(service.isDraftReplyAvailable("matrix"));
     assertTrue(service.isDraftReactAvailable("matrix"));
     assertTrue(service.isDraftUnreactAvailable("matrix"));
-    assertTrue(service.isMessageEditAvailable("matrix"));
+    assertTrue(service.isExperimentalMessageEditAvailable("matrix"));
     assertTrue(service.isMessageRedactionAvailable("matrix"));
     assertTrue(service.isMultilineAvailable("matrix"));
     assertEquals(0, service.negotiatedMultilineMaxLines("matrix"));

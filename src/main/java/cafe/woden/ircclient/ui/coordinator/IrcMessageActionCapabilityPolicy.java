@@ -39,7 +39,8 @@ public final class IrcMessageActionCapabilityPolicy implements MessageActionCapa
 
   @Override
   public boolean canEdit(String serverId) {
-    return safe(() -> irc != null && irc.isMessageEditAvailable(normalizeServerId(serverId)));
+    return safe(
+        () -> irc != null && irc.isExperimentalMessageEditAvailable(normalizeServerId(serverId)));
   }
 
   @Override

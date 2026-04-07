@@ -595,7 +595,7 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     editMessageItem.setEnabled(editEnabled);
     editMessageItem.setToolTipText(
         editEnabled
-            ? "Edit your message via IRCv3 message-edit."
+            ? "Edit your message via experimental IRC draft/message-edit."
             : messageActionUnavailableReason(
                 hasMessageId, editAvailable, currentPopupOwnMessage, "edit"));
 
@@ -636,6 +636,9 @@ public final class ChatTranscriptContextMenuDecorator implements AutoCloseable {
     if (!available) {
       if ("reply".equals(actionNoun) || "reaction".equals(actionNoun)) {
         return "Unavailable: server did not negotiate IRCv3 message-tags support.";
+      }
+      if ("edit".equals(actionNoun)) {
+        return "Unavailable: server did not negotiate experimental IRC draft/message-edit support.";
       }
       return "Unavailable: server did not negotiate IRCv3 " + actionNoun + " support.";
     }

@@ -1,6 +1,7 @@
 package cafe.woden.ircclient.irc.pircbotx.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -25,11 +26,27 @@ class PircbotxCapabilityCommandSupportTest {
     when(bot.sendRaw()).thenReturn(outputRaw);
     connection.setBot(bot);
     connection.setMessageTagsCapAcked(true);
-    connection.setTypingCapAcked(true);
 
     support.sendTyping("libera", connection, "#ircafe", "composing");
 
     verify(outputRaw).rawLine("@+typing=active TAGMSG #ircafe");
+  }
+
+  @Test
+  void sendTypingRejectsWhenClientTagPolicyBlocksTyping() {
+    PircbotxConnectionState connection = new PircbotxConnectionState("libera");
+    connection.setBot(mock(PircBotX.class));
+    connection.setMessageTagsCapAcked(true);
+    connection.updateTypingClientTagPolicy(false);
+
+    IllegalStateException ex =
+        assertThrows(
+            IllegalStateException.class,
+            () -> support.sendTyping("libera", connection, "#ircafe", "active"));
+
+    assertEquals(
+        "Typing indicators not available (requires message-tags and server allowing +typing) (server denies +typing via CLIENTTAGDENY): libera",
+        ex.getMessage());
   }
 
   @Test
@@ -45,6 +62,15 @@ class PircbotxCapabilityCommandSupportTest {
     assertEquals(
         "Typing indicators not available (requires message-tags and server allowing +typing) (message-tags not negotiated): libera",
         ex.getMessage());
+  }
+
+  @Test
+  void typingAvailabilityRequiresNegotiatedMessageTags() {
+    PircbotxConnectionState connection = new PircbotxConnectionState("libera");
+    connection.setBot(mock(PircBotX.class));
+
+    assertEquals("message-tags not negotiated", support.typingAvailabilityReason(connection));
+    assertFalse(support.isTypingAvailable(connection));
   }
 
   @Test

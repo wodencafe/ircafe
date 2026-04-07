@@ -61,8 +61,8 @@ public class IrcNegotiatedFeaturePortAdapter implements IrcNegotiatedFeaturePort
   }
 
   @Override
-  public boolean isMessageEditAvailable(String serverId) {
-    return delegate.isMessageEditAvailable(serverId);
+  public boolean isExperimentalMessageEditAvailable(String serverId) {
+    return delegate.isExperimentalMessageEditAvailable(serverId);
   }
 
   @Override
