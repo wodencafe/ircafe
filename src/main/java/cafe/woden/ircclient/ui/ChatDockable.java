@@ -89,6 +89,7 @@ import java.util.function.Supplier;
 import javax.swing.*;
 import javax.swing.text.DefaultStyledDocument;
 import org.jmolecules.architecture.layered.InterfaceLayer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -359,6 +360,11 @@ public class ChatDockable extends ChatViewPanel implements Dockable {
     applyMainDockVisualIdentity();
 
     this.monitorCoordinator.bind(disposables);
+  }
+
+  @Autowired
+  void wireExternalBrowserLauncher(ExternalBrowserLauncher externalBrowserLauncher) {
+    super.setExternalBrowserLauncher(externalBrowserLauncher);
   }
 
   @Override

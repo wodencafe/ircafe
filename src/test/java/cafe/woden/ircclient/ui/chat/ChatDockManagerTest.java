@@ -17,6 +17,7 @@ import cafe.woden.ircclient.logging.history.ChatHistoryService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.ui.ExternalBrowserLauncher;
 import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
 import cafe.woden.ircclient.ui.bus.OutboundLineBus;
@@ -75,7 +76,8 @@ class ChatDockManagerTest {
             activeInputRouter,
             slashCommandPresentationCatalog,
             chatHistoryService,
-            commandHistoryStore);
+            commandHistoryStore,
+            mock(ExternalBrowserLauncher.class));
 
     TargetRef target = new TargetRef("libera", "#ircafe");
     PinnedChatDockable pinnedDock = mock(PinnedChatDockable.class);
@@ -130,7 +132,8 @@ class ChatDockManagerTest {
             mock(ActiveInputRouter.class),
             new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty()),
             mock(ChatHistoryService.class),
-            mock(CommandHistoryStore.class));
+            mock(CommandHistoryStore.class),
+            mock(ExternalBrowserLauncher.class));
     openPinned(manager).put(target, pinnedDock);
 
     manager.refreshPinnedInputEnabled(target);
@@ -163,7 +166,8 @@ class ChatDockManagerTest {
             mock(ActiveInputRouter.class),
             new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty()),
             mock(ChatHistoryService.class),
-            mock(CommandHistoryStore.class));
+            mock(CommandHistoryStore.class),
+            mock(ExternalBrowserLauncher.class));
     openPinned(manager).put(target, pinnedDock);
 
     manager.refreshPinnedInputEnabledForServer("libera");
@@ -191,7 +195,8 @@ class ChatDockManagerTest {
             mock(ActiveInputRouter.class),
             new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty()),
             mock(ChatHistoryService.class),
-            mock(CommandHistoryStore.class));
+            mock(CommandHistoryStore.class),
+            mock(ExternalBrowserLauncher.class));
 
     assertNull(manager.dynamicDockableForPersistentId("chat-pinned:invalid"));
     assertNull(manager.dynamicDockableForPersistentId("other:abc"));

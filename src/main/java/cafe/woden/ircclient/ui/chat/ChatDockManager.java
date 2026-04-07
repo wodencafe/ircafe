@@ -10,6 +10,7 @@ import cafe.woden.ircclient.logging.viewer.ChatRedactionAuditService;
 import cafe.woden.ircclient.model.TargetRef;
 import cafe.woden.ircclient.ui.ChatDockable;
 import cafe.woden.ircclient.ui.CommandHistoryStore;
+import cafe.woden.ircclient.ui.ExternalBrowserLauncher;
 import cafe.woden.ircclient.ui.SwingEdt;
 import cafe.woden.ircclient.ui.backend.BackendUiProfileProvider;
 import cafe.woden.ircclient.ui.bus.ActiveInputRouter;
@@ -29,6 +30,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -65,6 +67,7 @@ public class ChatDockManager {
   private final CommandHistoryStore commandHistoryStore;
   private final ChatHistoryService chatHistoryService;
   private final SlashCommandPresentationCatalog slashCommandPresentationCatalog;
+  private final ExternalBrowserLauncher externalBrowserLauncher;
 
   /**
    * Registered pinned dockables.
@@ -101,7 +104,8 @@ public class ChatDockManager {
       ActiveInputRouter activeInputRouter,
       SlashCommandPresentationCatalog slashCommandPresentationCatalog,
       ChatHistoryService chatHistoryService,
-      CommandHistoryStore commandHistoryStore) {
+      CommandHistoryStore commandHistoryStore,
+      ExternalBrowserLauncher externalBrowserLauncher) {
     this.serverTree = serverTree;
     this.mainChat = mainChat;
     this.transcripts = transcripts;
@@ -128,6 +132,8 @@ public class ChatDockManager {
             slashCommandPresentationCatalog, "slashCommandPresentationCatalog");
     this.chatHistoryService = chatHistoryService;
     this.commandHistoryStore = commandHistoryStore;
+    this.externalBrowserLauncher =
+        Objects.requireNonNull(externalBrowserLauncher, "externalBrowserLauncher");
   }
 
   @PostConstruct
@@ -419,6 +425,7 @@ public class ChatDockManager {
               if (t == null) return;
               pinnedDrafts.put(t, draft == null ? "" : draft);
             });
+    created.setExternalBrowserLauncher(externalBrowserLauncher);
     created.setDraftText(initialDraft);
     applyPinnedInputEnabled(target, created);
     created.setTopicPanelHeightPx(mainChat.topicPanelHeightPxFor(target));

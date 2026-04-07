@@ -1,99 +1,53 @@
 package cafe.woden.ircclient.ui.shell;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import cafe.woden.ircclient.config.api.UiShellRuntimeConfigPort;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import cafe.woden.ircclient.ui.ExternalBrowserLauncher;
 import org.junit.jupiter.api.Test;
 
 class UpdateNotifierServiceBrowserRoutingTest {
 
+  private static final String RELEASES_URL = "https://github.com/wodencafe/ircafe/releases";
+
   @Test
-  void linuxPrefersKnownBrowserBeforeDesktopBrowse() {
+  void workerDelegatesToSharedBrowserLauncher() {
+    UiShellRuntimeConfigPort runtimeConfig = mock(UiShellRuntimeConfigPort.class);
     StatusBar statusBar = mock(StatusBar.class);
-    TestableService service = new TestableService(statusBar, "linux");
-    service.succeedCommandPrefix = "firefox";
+    ExternalBrowserLauncher browserLauncher = mock(ExternalBrowserLauncher.class);
+    when(browserLauncher.open(RELEASES_URL)).thenReturn(true);
+    UpdateNotifierService service =
+        new UpdateNotifierService(runtimeConfig, statusBar, browserLauncher);
 
     try {
       service.openReleasesPageOnWorker();
 
-      assertTrue(service.attemptedCommands.stream().anyMatch(cmd -> cmd.startsWith("firefox ")));
-      assertFalse(service.desktopBrowseCalled);
+      verify(browserLauncher).open(RELEASES_URL);
+      verify(statusBar, never()).enqueueNotification("Could not open browser for updates.", null);
     } finally {
       service.shutdown();
     }
   }
 
   @Test
-  void linuxFallsBackToDesktopWhenPlatformOpenFails() {
+  void workerNotifiesWhenSharedBrowserLauncherFails() {
+    UiShellRuntimeConfigPort runtimeConfig = mock(UiShellRuntimeConfigPort.class);
     StatusBar statusBar = mock(StatusBar.class);
-    TestableService service = new TestableService(statusBar, "linux");
-    service.desktopBrowseResult = true;
+    ExternalBrowserLauncher browserLauncher = mock(ExternalBrowserLauncher.class);
+    when(browserLauncher.open(RELEASES_URL)).thenReturn(false);
+    UpdateNotifierService service =
+        new UpdateNotifierService(runtimeConfig, statusBar, browserLauncher);
 
     try {
       service.openReleasesPageOnWorker();
 
-      assertTrue(service.desktopBrowseCalled);
-    } finally {
-      service.shutdown();
-    }
-  }
-
-  @Test
-  void workerNotifiesWhenNoLaunchStrategySucceeds() {
-    StatusBar statusBar = mock(StatusBar.class);
-    TestableService service = new TestableService(statusBar, "linux");
-
-    try {
-      service.openReleasesPageOnWorker();
-
+      verify(browserLauncher).open(RELEASES_URL);
       verify(statusBar).enqueueNotification("Could not open browser for updates.", null);
-      assertTrue(service.desktopBrowseCalled);
-      assertEquals(0, service.openedCommandCount);
     } finally {
       service.shutdown();
-    }
-  }
-
-  private static final class TestableService extends UpdateNotifierService {
-    private final String osLower;
-    private final List<String> attemptedCommands = new ArrayList<>();
-    private boolean desktopBrowseCalled;
-    private boolean desktopBrowseResult;
-    private String succeedCommandPrefix;
-    private int openedCommandCount;
-
-    private TestableService(StatusBar statusBar, String osLower) {
-      super(mock(UiShellRuntimeConfigPort.class), statusBar);
-      this.osLower = osLower;
-    }
-
-    @Override
-    protected String currentOsLowerCase() {
-      return osLower;
-    }
-
-    @Override
-    protected boolean tryDesktopBrowse(String url) {
-      desktopBrowseCalled = true;
-      return desktopBrowseResult;
-    }
-
-    @Override
-    protected boolean tryStart(String... cmd) {
-      String joined = String.join(" ", Arrays.asList(cmd));
-      attemptedCommands.add(joined);
-      if (succeedCommandPrefix != null && cmd.length > 0 && cmd[0].equals(succeedCommandPrefix)) {
-        openedCommandCount++;
-        return true;
-      }
-      return false;
     }
   }
 }
