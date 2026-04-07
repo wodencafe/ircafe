@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class Ircv3ExtensionRegistryTest {
@@ -41,5 +42,35 @@ class Ircv3ExtensionRegistryTest {
             .allMatch(
                 definition ->
                     definition.kind() == Ircv3ExtensionRegistry.ExtensionKind.CAPABILITY));
+  }
+
+  @Test
+  void providerAggregationIncludesBuiltInsAndSpiContributors() {
+    assertEquals(
+        List.of(
+            "core-transport",
+            "read-marker",
+            "multiline",
+            "message-redaction",
+            "core-history",
+            "chathistory",
+            "core-misc"),
+        Ircv3ExtensionRegistry.providerIds());
+  }
+
+  @Test
+  void visibleFeaturesRemainInStableDisplayOrder() {
+    assertEquals(
+        List.of(
+            "Replies",
+            "Reactions",
+            "Reaction removal",
+            "Message redaction",
+            "History",
+            "Typing",
+            "Read markers"),
+        Ircv3ExtensionRegistry.visibleFeatures().stream()
+            .map(Ircv3ExtensionRegistry.FeatureDefinition::label)
+            .toList());
   }
 }
