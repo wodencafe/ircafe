@@ -150,18 +150,8 @@ public class ExternalBrowserLauncher {
 
     while (!s.isEmpty()) {
       char c = s.charAt(s.length() - 1);
-      if (c == '.'
-          || c == ','
-          || c == ')'
-          || c == ']'
-          || c == '}'
-          || c == '>'
-          || c == '!'
-          || c == '?'
-          || c == ';'
-          || c == ':'
-          || c == '\''
-          || c == '"') {
+      if (c == '.' || c == ',' || c == ')' || c == ']' || c == '}' || c == '>' || c == '!'
+          || c == '?' || c == ';' || c == ':' || c == '\'' || c == '"') {
         s = s.substring(0, s.length() - 1).trim();
         continue;
       }

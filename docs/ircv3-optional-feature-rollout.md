@@ -2,9 +2,33 @@
 
 ## Status
 
-- Active follow-on plan
+- Completed rollout checkpoint
 - Scope: finish the remaining optional IRCv3 feature cleanup after the registry and plugin-aware metadata work
 - Goal: move optional feature behavior behind the same small seam without pushing transport-critical logic into opaque plugins
+- Result:
+  - `chathistory` now has a shared feature-support seam across commands, history loading, and message-action gating
+  - `multiline` now has shared availability/limit support at the app layer plus shared backend token/limit helpers
+  - runtime capability normalization is catalog-backed, plugin-aware, and conflict-guarded
+  - plugin IRCv3 metadata conflicts now degrade to built-ins and surface a plugin problem instead of breaking catalog startup
+  - final sweep completed with one last UI alias fix for `reply` and `draft/typing`
+
+## Deliberate Core Boundaries
+
+These stay in core code by design:
+
+- transport semantics:
+  - `message-tags`
+  - `batch`
+  - `server-time`
+  - `echo-message`
+  - `labeled-response`
+  - `standard-replies`
+- backend-negotiated feature ports:
+  - `IrcClientService`
+  - `IrcNegotiatedFeaturePort`
+  - backend-specific availability and limit state in PircbotX, Quassel, and Matrix
+- explicitly experimental behavior:
+  - `message-edit`
 
 ## Current Baseline
 
@@ -34,6 +58,10 @@ This rollout picks up from there and focuses on the remaining optional features 
 - Prefer incremental slices that keep `architectureTest` and focused tests green.
 
 ## Phase 1: Chathistory Command Seam
+
+Status:
+
+- Completed
 
 Purpose:
 
@@ -72,6 +100,10 @@ Verification:
 
 ## Phase 2: Chathistory History Loader Adoption
 
+Status:
+
+- Completed
+
 Purpose:
 
 - reuse the same support seam in history paging services without changing transport semantics
@@ -100,6 +132,10 @@ Verification:
 
 ## Phase 3: Multiline Availability And Planning Seam
 
+Status:
+
+- Completed
+
 Purpose:
 
 - separate multiline availability/limit reasoning from the concrete transport implementation
@@ -127,6 +163,10 @@ Verification:
 - `architectureTest`
 
 ## Phase 4: Multiline Transport Cleanup
+
+Status:
+
+- Completed
 
 Purpose:
 
@@ -157,6 +197,10 @@ Verification:
 
 ## Phase 5: Normalization And Fallback Cleanup
 
+Status:
+
+- Completed
+
 Purpose:
 
 - reduce now-redundant built-in alias helpers after the runtime registry path is proven
@@ -186,6 +230,10 @@ Verification:
 
 ## Phase 6: Final Sweep
 
+Status:
+
+- Completed
+
 Purpose:
 
 - confirm the codebase now models optional IRCv3 features consistently
@@ -202,6 +250,13 @@ Exit criteria:
 - no obvious bypasses remain for the migrated features
 - protocol terminology is consistent across command/help/UI paths
 
+Final sweep notes:
+
+- no further production bypasses were found for migrated `chathistory` or `multiline` behavior
+- the last UI drift fix was to treat `reply` the same as `draft/reply` when normalizing staged drafts
+- typing-state normalization now also reacts to `draft/typing`
+- `message-edit` remains explicitly experimental
+
 Verification:
 
 - `./gradlew spotlessApply architectureTest test`
@@ -217,11 +272,10 @@ Implement in this order:
 5. normalization/fallback cleanup
 6. final sweep
 
-## Immediate Next Slice
+## Recommended Follow-Up
 
-Start with Phase 1 only:
+If follow-on work is needed, the next useful slices are:
 
-- add `Ircv3ChatHistoryFeatureSupport`
-- wire outbound `/chathistory`
-- add focused tests
-- keep history loaders and multiline for the next patches
+- extension-author documentation for the IRCv3 provider SPI
+- one small example plugin/provider fixture beyond the existing tests
+- optional future cleanup of built-in fallback helpers if the default resolver path is no longer needed outside tests

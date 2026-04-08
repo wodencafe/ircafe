@@ -113,6 +113,41 @@ class ChatTypingCoordinatorTest {
   }
 
   @Test
+  void normalizeDraftTypingCapabilityAlsoClearsRemoteIndicatorAndRefreshesAvailability()
+      throws Exception {
+    MessageInputPanel inputPanel = mock(MessageInputPanel.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    MessageActionCapabilityPolicy capabilityPolicy = mock(MessageActionCapabilityPolicy.class);
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    AtomicInteger armTailPinCalls = new AtomicInteger();
+    AtomicInteger scrollToBottomCalls = new AtomicInteger();
+    Map<TargetRef, String> drafts = new HashMap<>();
+
+    when(inputPanel.clearRemoteTypingIndicator()).thenReturn(true);
+    when(irc.isTypingAvailable("libera")).thenReturn(true);
+
+    ChatTypingCoordinator coordinator =
+        new ChatTypingCoordinator(
+            inputPanel,
+            IrcTypingPort.from(irc),
+            capabilityPolicy,
+            () -> channel,
+            () -> true,
+            armTailPinCalls::incrementAndGet,
+            () -> false,
+            scrollToBottomCalls::incrementAndGet,
+            drafts);
+
+    coordinator.normalizeIrcv3CapabilityUiState("libera", "draft/typing");
+    flushEdt();
+
+    verify(inputPanel).clearRemoteTypingIndicator();
+    verify(inputPanel).setTypingSignalAvailable(true);
+    assertEquals(1, armTailPinCalls.get());
+    assertEquals(1, scrollToBottomCalls.get());
+  }
+
+  @Test
   void normalizeDraftCapabilitiesUpdatesStoredDraftsForServer() {
     MessageInputPanel inputPanel = mock(MessageInputPanel.class);
     IrcClientService irc = mock(IrcClientService.class);
@@ -138,6 +173,38 @@ class ChatTypingCoordinatorTest {
             drafts);
 
     coordinator.normalizeIrcv3CapabilityUiState("libera", "draft/reply");
+
+    String expected = MessageInputPanel.normalizeIrcv3DraftForCapabilities(before, false, false);
+    assertEquals(expected, drafts.get(channel));
+    verify(inputPanel).normalizeIrcv3DraftForCapabilities(false, false);
+  }
+
+  @Test
+  void normalizeReplyCapabilitiesUpdatesStoredDraftsForServer() {
+    MessageInputPanel inputPanel = mock(MessageInputPanel.class);
+    IrcClientService irc = mock(IrcClientService.class);
+    MessageActionCapabilityPolicy capabilityPolicy = mock(MessageActionCapabilityPolicy.class);
+    TargetRef channel = new TargetRef("libera", "#ircafe");
+    Map<TargetRef, String> drafts = new HashMap<>();
+    String before = "/quote @+reply=abc PRIVMSG #ircafe :hello";
+    drafts.put(channel, before);
+
+    when(capabilityPolicy.canReply("libera")).thenReturn(false);
+    when(capabilityPolicy.canReact("libera")).thenReturn(false);
+
+    ChatTypingCoordinator coordinator =
+        new ChatTypingCoordinator(
+            inputPanel,
+            IrcTypingPort.from(irc),
+            capabilityPolicy,
+            () -> channel,
+            () -> false,
+            () -> {},
+            () -> false,
+            () -> {},
+            drafts);
+
+    coordinator.normalizeIrcv3CapabilityUiState("libera", "reply");
 
     String expected = MessageInputPanel.normalizeIrcv3DraftForCapabilities(before, false, false);
     assertEquals(expected, drafts.get(channel));

@@ -28,7 +28,8 @@ class ExternalBrowserLauncherTest {
     launcher.succeedCommandPrefix = "firefox";
 
     assertTrue(launcher.open("https://example.com/releases"));
-    assertTrue(indexOfPrefix(launcher.attemptedCommands, "xdg-open ")
+    assertTrue(
+        indexOfPrefix(launcher.attemptedCommands, "xdg-open ")
             < indexOfPrefix(launcher.attemptedCommands, "firefox "));
   }
 

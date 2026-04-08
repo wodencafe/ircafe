@@ -3,7 +3,9 @@ package cafe.woden.ircclient.ui.chat;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -200,6 +202,76 @@ class ChatDockManagerTest {
 
     assertNull(manager.dynamicDockableForPersistentId("chat-pinned:invalid"));
     assertNull(manager.dynamicDockableForPersistentId("other:abc"));
+  }
+
+  @Test
+  void normalizeReplyCapabilityStateUpdatesPinnedDrafts() throws Exception {
+    MessageActionCapabilityPolicy capabilityPolicy = mock(MessageActionCapabilityPolicy.class);
+    PinnedChatDockable pinnedDock = mock(PinnedChatDockable.class);
+    TargetRef target = new TargetRef("libera", "#ircafe");
+    when(capabilityPolicy.canReply("libera")).thenReturn(false);
+    when(capabilityPolicy.canReact("libera")).thenReturn(false);
+
+    ChatDockManager manager =
+        new ChatDockManager(
+            mock(ServerTreeDockable.class),
+            mock(ChatDockable.class),
+            mock(ChatTranscriptStore.class),
+            mock(TargetActivationBus.class),
+            mock(UiSettingsBus.class),
+            mock(SpellcheckSettingsBus.class),
+            mock(OutboundLineBus.class),
+            mock(IrcTypingPort.class),
+            mock(IrcReadMarkerPort.class),
+            mock(IrcCurrentNickPort.class),
+            mock(BackendUiProfileProvider.class),
+            capabilityPolicy,
+            new NoOpChatRedactionAuditService(),
+            mock(ActiveInputRouter.class),
+            new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty()),
+            mock(ChatHistoryService.class),
+            mock(CommandHistoryStore.class),
+            mock(ExternalBrowserLauncher.class));
+    openPinned(manager).put(target, pinnedDock);
+
+    manager.normalizeIrcv3CapabilityUiState("libera", "reply");
+
+    verify(pinnedDock).normalizeIrcv3DraftForCapabilities(false, false);
+    verify(pinnedDock, never()).clearTypingIndicator();
+  }
+
+  @Test
+  void normalizeDraftTypingCapabilityClearsPinnedTypingIndicators() throws Exception {
+    PinnedChatDockable pinnedDock = mock(PinnedChatDockable.class);
+    TargetRef target = new TargetRef("libera", "#ircafe");
+
+    ChatDockManager manager =
+        new ChatDockManager(
+            mock(ServerTreeDockable.class),
+            mock(ChatDockable.class),
+            mock(ChatTranscriptStore.class),
+            mock(TargetActivationBus.class),
+            mock(UiSettingsBus.class),
+            mock(SpellcheckSettingsBus.class),
+            mock(OutboundLineBus.class),
+            mock(IrcTypingPort.class),
+            mock(IrcReadMarkerPort.class),
+            mock(IrcCurrentNickPort.class),
+            mock(BackendUiProfileProvider.class),
+            mock(MessageActionCapabilityPolicy.class),
+            new NoOpChatRedactionAuditService(),
+            mock(ActiveInputRouter.class),
+            new SlashCommandPresentationCatalog(List.of(), BackendNamedCommandCatalog.empty()),
+            mock(ChatHistoryService.class),
+            mock(CommandHistoryStore.class),
+            mock(ExternalBrowserLauncher.class));
+    openPinned(manager).put(target, pinnedDock);
+
+    manager.normalizeIrcv3CapabilityUiState("libera", "draft/typing");
+
+    verify(pinnedDock).clearTypingIndicator();
+    verify(pinnedDock).refreshTypingSignalAvailability();
+    verify(pinnedDock, never()).normalizeIrcv3DraftForCapabilities(anyBoolean(), anyBoolean());
   }
 
   private static String persistentId(TargetRef target) {

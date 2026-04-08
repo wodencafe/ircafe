@@ -79,7 +79,7 @@ public final class ChatTypingCoordinator {
     if (sid.isEmpty() || cap.isEmpty()) return;
 
     boolean messageTagsChanged = "message-tags".equals(cap);
-    if ("typing".equals(cap) || messageTagsChanged) {
+    if ("typing".equals(cap) || "draft/typing".equals(cap) || messageTagsChanged) {
       TargetRef activeTarget = activeTargetSupplier.get();
       if (activeTarget != null && Objects.equals(activeTarget.serverId(), sid)) {
         boolean atBottomBefore = transcriptAtBottomSupplier.getAsBoolean();
@@ -93,6 +93,7 @@ public final class ChatTypingCoordinator {
     }
 
     if (!messageTagsChanged
+        && !"reply".equals(cap)
         && !"draft/reply".equals(cap)
         && !"draft/react".equals(cap)
         && !"draft/unreact".equals(cap)) {

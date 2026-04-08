@@ -208,10 +208,11 @@ public class ChatDockManager {
     }
 
     boolean messageTagsChanged = "message-tags".equals(cap);
-    if ("typing".equals(cap) || messageTagsChanged) {
+    if ("typing".equals(cap) || "draft/typing".equals(cap) || messageTagsChanged) {
       clearTypingIndicatorsForServer(sid);
     }
     if (!messageTagsChanged
+        && !"reply".equals(cap)
         && !"draft/reply".equals(cap)
         && !"draft/react".equals(cap)
         && !"draft/unreact".equals(cap)) return;
