@@ -277,5 +277,6 @@ Implement in this order:
 If follow-on work is needed, the next useful slices are:
 
 - extension-author documentation for the IRCv3 provider SPI
+  - see [ircv3-extension-provider-guide.md](/home/chris/Downloads/ircclient/ircafe/docs/ircv3-extension-provider-guide.md)
 - one small example plugin/provider fixture beyond the existing tests
 - optional future cleanup of built-in fallback helpers if the default resolver path is no longer needed outside tests
